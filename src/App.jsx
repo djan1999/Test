@@ -640,6 +640,8 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 const supabase = hasSupabaseConfig ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const serviceTableKey = value => `t${Number(value)}`;
+const serviceTableId = value => Number(String(value ?? '').replace(/[^0-9]+/g, '')) || 0;
 
 const defaultBoardState = () => ({
   tables: initTables,
@@ -3205,16 +3207,16 @@ export default function App() {
   tablesRef.current = tables;
 
   const mergeRemoteTables = rows => {
-    const byId = new Map((Array.isArray(rows) ? rows : []).map(row => [Number(row.table_id), sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) })]));
+    const byId = new Map((Array.isArray(rows) ? rows : []).map(row => [serviceTableId(row.id), sanitizeTable({ id: serviceTableId(row.id), ...(row.state || {}) })]));
     applyingRemoteRef.current = true;
     setTables(() => initTables.map(base => byId.get(base.id) || base));
     setTimeout(() => { applyingRemoteRef.current = false; }, 0);
   };
 
   const applyRemoteTableRow = row => {
-    const tableId = Number(row?.table_id);
+    const tableId = serviceTableId(row?.id);
     if (!tableId) return;
-    const nextTable = sanitizeTable({ id: tableId, ...(row.data || {}) });
+    const nextTable = sanitizeTable({ id: tableId, ...(row.state || {}) });
     applyingRemoteRef.current = true;
     setTables(prev => prev.map(t => t.id === tableId ? nextTable : t));
     setTimeout(() => { applyingRemoteRef.current = false; }, 0);
@@ -3350,14 +3352,14 @@ export default function App() {
     const nextJsonByIndex = tables.map(t => JSON.stringify(sanitizeTable(t)));
     const changedTables = tables
       .filter((table, idx) => nextJsonByIndex[idx] !== prevTablesJsonRef.current[idx])
-      .map(table => ({ table_id: table.id, data: sanitizeTable(table), updated_at: new Date().toISOString() }));
+      .map(table => ({ id: serviceTableKey(table.id), state: sanitizeTable(table), updated_at: new Date().toISOString() }));
 
     prevTablesJsonRef.current = nextJsonByIndex;
     if (changedTables.length === 0) return;
 
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      const { error } = await supabase.from(SERVICE_TABLES_TABLE).upsert(changedTables, { onConflict: "table_id" });
+      const { error } = await supabase.from(SERVICE_TABLES_TABLE).upsert(changedTables, { onConflict: "id" });
       setSyncStatus(error ? "sync-error" : "live");
     }, 120);
 
@@ -3374,8 +3376,8 @@ export default function App() {
     const loadRemoteTables = async () => {
       const { data, error } = await supabase
         .from(SERVICE_TABLES_TABLE)
-        .select("table_id, data, updated_at")
-        .order("table_id", { ascending: true });
+        .select("id, state, updated_at")
+        .order("id", { ascending: true });
 
       if (!isMounted) return;
       clearTimeout(gateTimeout);
@@ -3389,8 +3391,8 @@ export default function App() {
       if (Array.isArray(data) && data.length > 0) {
         mergeRemoteTables(data);
         prevTablesJsonRef.current = initTables.map(base => {
-          const row = data.find(item => Number(item.table_id) === base.id);
-          return JSON.stringify(row ? sanitizeTable({ id: base.id, ...(row.data || {}) }) : base);
+          const row = data.find(item => serviceTableId(item.id) === base.id);
+          return JSON.stringify(row ? sanitizeTable({ id: base.id, ...(row.state || {}) }) : base);
         });
       }
 
@@ -3404,7 +3406,7 @@ export default function App() {
       .channel("milka-service-tables-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: SERVICE_TABLES_TABLE }, payload => {
         if (payload.eventType === "DELETE") {
-          const tableId = Number(payload.old?.table_id);
+          const tableId = serviceTableId(payload.old?.id);
           if (!tableId) return;
           applyingRemoteRef.current = true;
           setTables(prev => prev.map(t => t.id === tableId ? blankTable(tableId) : t));
@@ -3414,11 +3416,12 @@ export default function App() {
         }
         if (!payload.new) return;
         applyRemoteTableRow(payload.new);
-        prevTablesJsonRef.current = tablesRef.current.map(t => JSON.stringify(sanitizeTable(t.id === Number(payload.new.table_id) ? { id: Number(payload.new.table_id), ...(payload.new.data || {}) } : t)));
+        prevTablesJsonRef.current = tablesRef.current.map(t => JSON.stringify(sanitizeTable(t.id === serviceTableId(payload.new.id) ? { id: serviceTableId(payload.new.id), ...(payload.new.state || {}) } : t)));
         setSyncStatus("live");
       })
       .subscribe(status => {
         if (status === "SUBSCRIBED") setSyncStatus("live");
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") setSyncStatus("sync-error");
       });
 
     return () => {
