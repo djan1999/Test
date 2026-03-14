@@ -63,8 +63,6 @@ const splitMainSubCell = (title, sub = "") => {
   return { name: rawTitle, sub: rawSub };
 };
 
-const RESTRICTION_KEYS = ["veg", "vegan", "pescetarian", "no_red_meat", "no_pork", "no_game", "no_offal", "gluten", "dairy", "nut", "shellfish", "egg_free", "no_garlic_onion", "no_alcohol", "halal", "low_fodmap"];
-
 function normalizeLiveMenuRow(row) {
   const position = Number(firstFilled(row["#"], row.position, row.order_index)) || 0;
   const dish = splitMainSubCell(row.dish, row.description);
@@ -77,6 +75,23 @@ function normalizeLiveMenuRow(row) {
     .replace(/&/g, "and")
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+
+  const reservedKeys = new Set([
+    "#","position","order_index","dish","description","veg","veg_sub",
+    "wp_drink","wp_sub","na_drink","na_sub","os_drink","os_sub",
+    "premium","premium_sub","course_key","key","optional_flag",
+    "section_gap_before","show_on_short","short_order",
+    "force_pairing_title","force_pairing_sub","kitchen_note","snack?","snack"
+  ]);
+
+  const restriction_map = {};
+  Object.entries(row || {}).forEach(([k, v]) => {
+    const nk = String(k || "").trim().toLowerCase();
+    if (reservedKeys.has(nk)) return;
+    const value = String(v ?? "").trim();
+    if (!value) return;
+    restriction_map[nk] = value;
+  });
 
   return {
     position,
@@ -95,9 +110,36 @@ function normalizeLiveMenuRow(row) {
     force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
     force_pairing_sub: String(firstFilled(row.force_pairing_sub)).trim(),
     kitchen_note: String(firstFilled(row.kitchen_note)).trim(),
-    raw_row: row,
-    restriction_cells: Object.fromEntries(RESTRICTION_KEYS.map(key => [key, String(firstFilled(row[key])).trim()])),
+    restriction_map,
+    _raw_row: row,
   };
+}
+
+function getRestrictionReplacement(course, restrictions = []) {
+  const map = course?.restriction_map || {};
+  for (const key of restrictions) {
+    const replacement = String(map[String(key || "").trim().toLowerCase()] || "").trim();
+    if (!replacement) continue;
+    if (replacement.includes("|")) {
+      const parsed = splitMainSubCell(replacement);
+      if (parsed) return parsed;
+    }
+    return {
+      name: course?.menu?.name || "",
+      sub: replacement,
+    };
+  }
+  return null;
+}
+
+function resolveCourseDish(course, restrictions = []) {
+  const replacement = getRestrictionReplacement(course, restrictions);
+  if (replacement) return replacement;
+
+  const isVegRestriction = restrictions.some(r => ["veg","vegan","pescetarian"].includes(String(r || "").trim().toLowerCase()));
+  if (isVegRestriction && course?.veg) return course.veg;
+
+  return course?.menu || { name: "", sub: "" };
 }
 
 async function fetchLiveMenuCourses() {
@@ -276,35 +318,6 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     sub: [w?.producer, w?.vintage].filter(Boolean).join("  "),
   });
 
-  const applyRestrictionsToDish = (course, fallbackDish) => {
-    let dish = { ...(fallbackDish || { name: "", sub: "" }) };
-    const cells = course?.restriction_cells || {};
-
-    const vegLike = restrictions.find(r => r === "veg" || r === "vegan" || r === "pescetarian");
-    const vegCell = vegLike ? String(cells[vegLike] || "").trim() : "";
-    if (vegCell) {
-      const parsed = splitMainSubCell(vegCell, dish.sub || "");
-      if (parsed?.name) dish = parsed;
-      else if (vegCell) dish = { ...dish, sub: vegCell };
-    } else if (vegLike && course?.veg) {
-      dish = { ...(course.veg || dish) };
-    }
-
-    restrictions.forEach(key => {
-      if (key === "veg" || key === "vegan" || key === "pescetarian") return;
-      const raw = String(cells[key] || "").trim();
-      if (!raw) return;
-      if (raw.includes("|")) {
-        const parsed = splitMainSubCell(raw, dish.sub || "");
-        if (parsed?.name) dish = parsed;
-      } else {
-        dish = { ...dish, sub: raw };
-      }
-    });
-
-    return dish;
-  };
-
   const visibleCourses = [];
   menuCourses.forEach((course, i) => {
     const isSnack = course.is_snack ?? (i <= SNACK_END);
@@ -313,7 +326,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     const optionalFlag = String(course?.optional_flag || "").trim().toLowerCase();
 
     if ((optionalFlag === "beetroot" || courseKey === "beetroot" || courseName === "BEETROOT") && !hasBeetroot) return;
-    if ((optionalFlag === "cheese" || courseKey === "cheese" || courseKey === "sheep_cheese" || courseName === "CHEESE" || courseName === "SHEEP CHEESE") && !hasCheese) return;
+    if ((optionalFlag === "cheese" || courseKey === "cheese" || courseName === "CHEESE") && !hasCheese) return;
     if ((optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseName === "PEAR") && !hasCake) return;
 
     const showOnShort = course.show_on_short === true || course.show_on_short === "true" || course.show_on_short === "TRUE" || course.show_on_short === "WAHR";
@@ -349,7 +362,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       insertedPairingLabel = true;
     }
 
-    const dish = applyRestrictionsToDish(course, course.menu);
+    const dish = resolveCourseDish(course, restrictions);
     let drink = pkey ? course[pkey] : null;
 
     if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
