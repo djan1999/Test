@@ -272,26 +272,72 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     sub: [w?.producer, w?.vintage].filter(Boolean).join("  "),
   });
 
+  const shortMenuOrder = [
+    "linzer_eye",
+    "trout_belly",
+    "beetroot",
+    "squash",
+    "rainbow_trout",
+    "brioche",
+    "venison",
+    "pear",
+    "pear_cake",
+    "godlja",
+    "sweet_potato",
+    "sunchoke",
+    "cheese",
+  ];
+
+  const isTruthyCell = (value) => {
+    const s = String(value ?? "").trim().toLowerCase();
+    return s === "true" || s === "yes" || s === "y" || s === "1" || s === "wahr";
+  };
+
+  const normalizeCourseKey = (course, i) => {
+    const rawKey = String(course?.course_key || "").trim().toLowerCase();
+    if (rawKey) return rawKey;
+    const rawName = String(course?.menu?.name || `course_${i + 1}`)
+      .trim()
+      .toLowerCase()
+      .replace(/&/g, "and")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    return rawName;
+  };
+
   const visibleCourses = [];
   menuCourses.forEach((course, i) => {
-    const isSnack = course.is_snack ?? (i <= SNACK_END);
-    const courseKey = String(course?.course_key || "").trim().toLowerCase();
+    const courseKey = normalizeCourseKey(course, i);
     const courseName = String(course?.menu?.name || "").trim().toUpperCase();
     const optionalFlag = String(course?.optional_flag || "").trim().toLowerCase();
 
-    if ((optionalFlag === "beetroot" || courseKey === "beetroot" || courseName === "BEETROOT") && !hasBeetroot) return;
-    if ((optionalFlag === "cheese" || courseKey === "cheese" || courseKey === "sheep_cheese" || courseName === "CHEESE" || courseName === "SHEEP CHEESE") && !hasCheese) return;
-    if ((optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseName === "PEAR") && !hasCake) return;
+    const isOptionalBeetroot = optionalFlag === "beetroot" || courseKey === "beetroot" || courseName === "BEETROOT";
+    const isOptionalCake = optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseName === "PEAR";
+    const isOptionalCheese = optionalFlag === "cheese" || courseKey === "cheese" || courseName === "CHEESE";
 
-    const showOnShort = course.show_on_short === true || course.show_on_short === "true" || course.show_on_short === "TRUE" || course.show_on_short === "WAHR";
-    if (isShort && !showOnShort) return;
+    if (isOptionalBeetroot && !hasBeetroot) return;
+    if (isOptionalCake && !hasCake) return;
+    if (isOptionalCheese && !hasCheese) return;
+
+    if (isShort) {
+      const shortIndex = shortMenuOrder.indexOf(courseKey);
+      if (shortIndex === -1) return;
+      visibleCourses.push({
+        course,
+        i,
+        courseName,
+        courseKey,
+        orderValue: shortIndex + 1,
+      });
+      return;
+    }
 
     visibleCourses.push({
       course,
       i,
       courseName,
       courseKey,
-      orderValue: isShort ? (Number(course.short_order) || 9999) : (Number(course.position) || i + 1),
+      orderValue: Number(course.position) || i + 1,
     });
   });
   visibleCourses.sort((a, b) => a.orderValue - b.orderValue);
@@ -378,21 +424,23 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
 }
 @page{size:A5 portrait;margin:0;}
 html,body{
-  width:var(--page-w);
-  height:var(--page-h);
+  width:148mm;
+  height:210mm;
+  margin:0;
+  padding:0;
   overflow:hidden;
   background:#fff;
   color:#000;
   font-family:'RM', monospace;
-  font-size:6.75pt;
+  font-size:7.2pt;
   line-height:1.08;
   -webkit-print-color-adjust:exact;
   print-color-adjust:exact;
 }
 body{position:relative;}
 #sheet{
-  width:var(--page-w);
-  height:var(--page-h);
+  width:148mm;
+  height:210mm;
   overflow:hidden;
   position:relative;
   background:#fff;
@@ -400,31 +448,30 @@ body{position:relative;}
 #frame{
   position:absolute;
   inset:0;
-  padding:var(--pad-t) var(--pad-r) var(--pad-b) var(--pad-l);
+  padding:12mm 12mm 10mm 12mm;
   overflow:hidden;
 }
 #scaleTarget{
   width:100%;
-  min-height:var(--inner-h);
+  height:100%;
   display:flex;
   flex-direction:column;
-  transform-origin:top left;
 }
 #header{
   display:grid;
   grid-template-columns:minmax(0,1fr) auto;
   align-items:start;
   column-gap:8.6mm;
-  margin-bottom:9.1mm;
+  margin-bottom:8mm;
 }
 #title{
-  font-size:13.9pt;
+  font-size:15.2pt;
   font-weight:700;
   letter-spacing:0.035em;
-  padding-top:7.9mm;
+  padding-top:10mm;
 }
-#logo img{width:18.2mm;display:block;}
-#menu{width:100%;}
+#logo img{width:18.8mm;display:block;}
+#menu{width:100%; flex:1; min-height:0;}
 .menu-row,.menu-section-row{
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
@@ -433,14 +480,14 @@ body{position:relative;}
   break-inside:avoid;
   page-break-inside:avoid;
 }
-.menu-row{margin-bottom:3.15pt;}
-.menu-row.wine-only{margin-bottom:4.5pt;}
+.menu-row{margin-bottom:3.1pt;}
+.menu-row.wine-only{margin-bottom:4.4pt;}
 .menu-row.after-crayfish{margin-bottom:7.2pt;}
-.menu-row.section-gap-before{margin-top:14.5pt;}
+.menu-row.section-gap-before{margin-top:20pt;}
 .menu-col{min-width:0;}
 .menu-main{
   font-weight:700;
-  line-height:1.02;
+  line-height:1.03;
   letter-spacing:0.012em;
   overflow-wrap:anywhere;
 }
@@ -450,7 +497,7 @@ body{position:relative;}
   overflow-wrap:anywhere;
 }
 .menu-section-row{
-  margin:6.8pt 0 6.2pt;
+  margin:10pt 0 6pt;
 }
 .menu-section-label{
   font-weight:700;
@@ -459,14 +506,14 @@ body{position:relative;}
 }
 #footer{
   margin-top:auto;
-  padding-top:9.5pt;
+  padding-top:8pt;
 }
 #thankyou{
-  font-size:6.55pt;
+  font-size:6.7pt;
 }
 #team{
-  margin-top:7.2pt;
-  font-size:5.45pt;
+  margin-top:7pt;
+  font-size:5.6pt;
   line-height:1.2;
   overflow-wrap:anywhere;
 }
@@ -491,44 +538,24 @@ body{position:relative;}
 </div>
 <script>
 (function(){
-  const MIN_SCALE = 0.58;
-  const MAX_TRIES = 80;
   function fitOnePage(){
     const frame = document.getElementById('frame');
     const target = document.getElementById('scaleTarget');
     if (!frame || !target) return;
 
-    target.style.transform = 'scale(1)';
+    target.style.transform = 'none';
     target.style.width = '100%';
-
     const maxH = frame.clientHeight;
-    const maxW = frame.clientWidth;
     const naturalH = target.scrollHeight;
-    const naturalW = target.scrollWidth;
 
-    let scale = Math.min(1, maxH / naturalH, maxW / naturalW);
-    scale = Math.max(Math.min(scale, 1), MIN_SCALE);
-
-    let tries = 0;
-    while (tries < MAX_TRIES) {
-      target.style.transform = 'scale(' + scale + ')';
-      target.style.width = (100 / scale) + '%';
-      const rect = target.getBoundingClientRect();
-      if (rect.height <= maxH - 1 && rect.width <= maxW - 1) break;
-      scale -= 0.01;
-      if (scale <= MIN_SCALE) {
-        scale = MIN_SCALE;
-        target.style.transform = 'scale(' + scale + ')';
-        target.style.width = (100 / scale) + '%';
-        break;
-      }
-      tries += 1;
+    if (naturalH > maxH) {
+      const ratio = Math.max(0.94, maxH / naturalH);
+      target.style.transform = 'scale(' + ratio + ')';
+      target.style.width = (100 / ratio) + '%';
     }
   }
-  window.addEventListener('load', function(){ setTimeout(fitOnePage, 80); });
-  window.addEventListener('resize', fitOnePage);
+  window.addEventListener('load', function(){ setTimeout(fitOnePage, 60); });
   window.addEventListener('beforeprint', fitOnePage);
-  window.addEventListener('afterprint', fitOnePage);
 })();
 </script>
 </body>
@@ -636,12 +663,37 @@ const statusPill = (isLive, label) => ({
 
 const STORAGE_KEY = "milka-service-board-v8";
 const SERVICE_TABLES_TABLE = import.meta.env.VITE_SUPABASE_SERVICE_TABLES || "service_tables";
+
+const SERVICE_SETTINGS_TABLE = import.meta.env.VITE_SUPABASE_SERVICE_SETTINGS || "service_settings";
+
+const makeServiceRowId = tableId => `t${Number(tableId)}`;
+const rowToTableId = row => {
+  if (!row || typeof row !== "object") return null;
+  if (row.table_id !== undefined && row.table_id !== null && row.table_id !== "") {
+    const n = Number(row.table_id);
+    return Number.isFinite(n) ? n : null;
+  }
+  const raw = String(row.id || "").trim();
+  const match = raw.match(/^t(\d+)$/i);
+  if (match) return Number(match[1]);
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+};
+const rowToState = row => {
+  if (!row || typeof row !== "object") return {};
+  if (row.state && typeof row.state === "object") return row.state;
+  if (row.data && typeof row.data === "object") return row.data;
+  return {};
+};
+const buildServiceUpsertRow = (table, shape = "new") => (
+  shape === "old"
+    ? { table_id: Number(table.id), data: sanitizeTable(table), updated_at: new Date().toISOString() }
+    : { id: makeServiceRowId(table.id), state: sanitizeTable(table), updated_at: new Date().toISOString() }
+);
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 const supabase = hasSupabaseConfig ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-const serviceTableKey = value => `t${Number(value)}`;
-const serviceTableId = value => Number(String(value ?? '').replace(/[^0-9]+/g, '')) || 0;
 
 const defaultBoardState = () => ({
   tables: initTables,
@@ -1138,7 +1190,7 @@ function DrinkListEditor({ list, setList, newItem, setNewItem, nextId, label }) 
 }
 
 // ── Admin Panel ───────────────────────────────────────────────────────────────
-function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = [], onUpdateDishes, onUpdateWines, onSaveBeverages, onSyncMenu, onClose }) {
+function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = [], onUpdateDishes, onSaveWines, onSaveBeverages, onSyncMenu, onClose }) {
   const [tab, setTab] = useState("wines");
   const isMobile = useIsMobile(700);
 
@@ -1187,7 +1239,7 @@ function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = []
 
   const handleSave = () => {
     onUpdateDishes(localDishes);
-    onUpdateWines(localWines);
+    onSaveWines(localWines);
     onSaveBeverages({ cocktails: localCocktails, spirits: localSpirits, beers: localBeers });
     onClose();
   };
@@ -2500,7 +2552,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
     w.document.write(html);
     w.document.close();
     w.focus();
-    setTimeout(() => w.print(), 600);
+    setTimeout(() => { w.focus(); w.print(); }, 850);
   };
 
   const generateAll = () => {
@@ -3199,6 +3251,7 @@ export default function App() {
   const saveTimerRef       = useRef(null);
   const prevTablesJsonRef  = useRef((initialState.tables || initTables).map(t => JSON.stringify(sanitizeTable(t))));
   const tablesRef          = useRef(tables);
+  const serviceSchemaRef   = useRef("new");
 
   const boardState = { tables, dishes, cocktails, spirits, beers };
   const boardJson  = JSON.stringify(boardState);
@@ -3207,19 +3260,78 @@ export default function App() {
   tablesRef.current = tables;
 
   const mergeRemoteTables = rows => {
-    const byId = new Map((Array.isArray(rows) ? rows : []).map(row => [serviceTableId(row.id), sanitizeTable({ id: serviceTableId(row.id), ...(row.state || {}) })]));
+    const byId = new Map(
+      (Array.isArray(rows) ? rows : [])
+        .map(row => {
+          const tableId = rowToTableId(row);
+          if (!tableId) return null;
+          return [tableId, sanitizeTable({ id: tableId, ...rowToState(row) })];
+        })
+        .filter(Boolean)
+    );
     applyingRemoteRef.current = true;
     setTables(() => initTables.map(base => byId.get(base.id) || base));
     setTimeout(() => { applyingRemoteRef.current = false; }, 0);
   };
 
   const applyRemoteTableRow = row => {
-    const tableId = serviceTableId(row?.id);
+    const tableId = rowToTableId(row);
     if (!tableId) return;
-    const nextTable = sanitizeTable({ id: tableId, ...(row.state || {}) });
+    const nextTable = sanitizeTable({ id: tableId, ...rowToState(row) });
     applyingRemoteRef.current = true;
     setTables(prev => prev.map(t => t.id === tableId ? nextTable : t));
     setTimeout(() => { applyingRemoteRef.current = false; }, 0);
+  };
+
+  const loadServiceTableRows = async () => {
+    if (!supabase) return { data: null, error: null, shape: "new" };
+    const modern = await supabase
+      .from(SERVICE_TABLES_TABLE)
+      .select("id, state, updated_at")
+      .order("id", { ascending: true });
+
+    if (!modern.error) {
+      serviceSchemaRef.current = "new";
+      return { data: modern.data || [], error: null, shape: "new" };
+    }
+
+    const legacy = await supabase
+      .from(SERVICE_TABLES_TABLE)
+      .select("table_id, data, updated_at")
+      .order("table_id", { ascending: true });
+
+    if (!legacy.error) {
+      serviceSchemaRef.current = "old";
+      return { data: legacy.data || [], error: null, shape: "old" };
+    }
+
+    console.error("service_tables load failed", { modern: modern.error, legacy: legacy.error });
+    return { data: null, error: legacy.error || modern.error, shape: serviceSchemaRef.current };
+  };
+
+  const upsertServiceTableRows = async (rows) => {
+    if (!supabase || !Array.isArray(rows) || rows.length === 0) return { error: null };
+    const shape = serviceSchemaRef.current || "new";
+    const primaryRows = rows.map(table => buildServiceUpsertRow(table, shape));
+    const primary = await supabase
+      .from(SERVICE_TABLES_TABLE)
+      .upsert(primaryRows, { onConflict: shape === "old" ? "table_id" : "id" });
+
+    if (!primary.error) return { error: null };
+
+    const fallbackShape = shape === "old" ? "new" : "old";
+    const fallbackRows = rows.map(table => buildServiceUpsertRow(table, fallbackShape));
+    const fallback = await supabase
+      .from(SERVICE_TABLES_TABLE)
+      .upsert(fallbackRows, { onConflict: fallbackShape === "old" ? "table_id" : "id" });
+
+    if (!fallback.error) {
+      serviceSchemaRef.current = fallbackShape;
+      return { error: null };
+    }
+
+    console.error("service_tables upsert failed", { primary: primary.error, fallback: fallback.error });
+    return { error: fallback.error || primary.error };
   };
 
   const selTable   = tables.find(t => t.id === sel);
@@ -3278,6 +3390,39 @@ export default function App() {
     ];
     await supabase.from("beverages").delete().in("category", ["cocktail", "spirit", "beer"]);
     if (rows.length > 0) await supabase.from("beverages").insert(rows);
+  };
+
+  const saveWines = async (nextWines) => {
+    setWines(nextWines);
+    if (!supabase) return;
+    const rows = (Array.isArray(nextWines) ? nextWines : []).map((item, i) => {
+      const producer = String(item.producer || "").trim();
+      const wineName = String(item.name || item.wine_name || "").trim();
+      const vintage = String(item.vintage || "").trim() || "NV";
+      const region = String(item.region || "").trim();
+      const country = String(item.country || "").trim();
+      const keyBase = [producer || "manual", wineName || `wine-${i + 1}`, vintage, country || region || "manual"].join("|");
+      return {
+        key: keyBase.toLowerCase().replace(/\s+/g, "_"),
+        name: producer && wineName ? `${producer} – ${wineName}` : wineName,
+        wine_name: wineName,
+        producer,
+        vintage,
+        region,
+        country,
+        by_glass: !!item.byGlass,
+      };
+    });
+
+    const { error: deleteError } = await supabase.from("wines").delete().not("id", "is", null);
+    if (deleteError) {
+      console.error("wines delete failed", deleteError);
+      return;
+    }
+    if (rows.length > 0) {
+      const { error: insertError } = await supabase.from("wines").insert(rows);
+      if (insertError) console.error("wines insert failed", insertError);
+    }
   };
 
   const clearAll = () => {
@@ -3350,16 +3495,15 @@ export default function App() {
     if (!supabase) return;
 
     const nextJsonByIndex = tables.map(t => JSON.stringify(sanitizeTable(t)));
-    const changedTables = tables
-      .filter((table, idx) => nextJsonByIndex[idx] !== prevTablesJsonRef.current[idx])
-      .map(table => ({ id: serviceTableKey(table.id), state: sanitizeTable(table), updated_at: new Date().toISOString() }));
+    const changedTables = tables.filter((table, idx) => nextJsonByIndex[idx] !== prevTablesJsonRef.current[idx]);
 
     prevTablesJsonRef.current = nextJsonByIndex;
     if (changedTables.length === 0) return;
 
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      const { error } = await supabase.from(SERVICE_TABLES_TABLE).upsert(changedTables, { onConflict: "id" });
+      const { error } = await upsertServiceTableRows(changedTables);
+      if (error) console.error("service_tables sync error", error);
       setSyncStatus(error ? "sync-error" : "live");
     }, 120);
 
@@ -3371,18 +3515,16 @@ export default function App() {
     if (!supabase) return;
     let isMounted = true;
 
-    const gateTimeout = setTimeout(() => { if (isMounted) setHydrated(true); }, 1000);
+    const gateTimeout = setTimeout(() => { if (isMounted) setHydrated(true); }, 1200);
 
     const loadRemoteTables = async () => {
-      const { data, error } = await supabase
-        .from(SERVICE_TABLES_TABLE)
-        .select("id, state, updated_at")
-        .order("id", { ascending: true });
+      const { data, error } = await loadServiceTableRows();
 
       if (!isMounted) return;
       clearTimeout(gateTimeout);
 
       if (error) {
+        console.error("initial service_tables load failed", error);
         setSyncStatus("sync-error");
         setHydrated(true);
         return;
@@ -3391,8 +3533,8 @@ export default function App() {
       if (Array.isArray(data) && data.length > 0) {
         mergeRemoteTables(data);
         prevTablesJsonRef.current = initTables.map(base => {
-          const row = data.find(item => serviceTableId(item.id) === base.id);
-          return JSON.stringify(row ? sanitizeTable({ id: base.id, ...(row.state || {}) }) : base);
+          const row = data.find(item => rowToTableId(item) === base.id);
+          return JSON.stringify(row ? sanitizeTable({ id: base.id, ...rowToState(row) }) : sanitizeTable(base));
         });
       }
 
@@ -3406,7 +3548,7 @@ export default function App() {
       .channel("milka-service-tables-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: SERVICE_TABLES_TABLE }, payload => {
         if (payload.eventType === "DELETE") {
-          const tableId = serviceTableId(payload.old?.id);
+          const tableId = rowToTableId(payload.old);
           if (!tableId) return;
           applyingRemoteRef.current = true;
           setTables(prev => prev.map(t => t.id === tableId ? blankTable(tableId) : t));
@@ -3416,12 +3558,19 @@ export default function App() {
         }
         if (!payload.new) return;
         applyRemoteTableRow(payload.new);
-        prevTablesJsonRef.current = tablesRef.current.map(t => JSON.stringify(sanitizeTable(t.id === serviceTableId(payload.new.id) ? { id: serviceTableId(payload.new.id), ...(payload.new.state || {}) } : t)));
+        prevTablesJsonRef.current = tablesRef.current.map(t => {
+          const changedId = rowToTableId(payload.new);
+          return JSON.stringify(
+            sanitizeTable(
+              t.id === changedId ? { id: changedId, ...rowToState(payload.new) } : t
+            )
+          );
+        });
         setSyncStatus("live");
       })
       .subscribe(status => {
         if (status === "SUBSCRIBED") setSyncStatus("live");
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") setSyncStatus("sync-error");
+        else if (status === "CHANNEL_ERROR") setSyncStatus("sync-error");
       });
 
     return () => {
@@ -3441,16 +3590,18 @@ export default function App() {
         .from("beverages")
         .select("id, category, name, notes, position")
         .order("position", { ascending: true });
-      if (!mounted || error || !data || data.length === 0) return;
+      if (!mounted) return;
+      if (error) { console.error("beverages load failed", error); return; }
+      if (!data) return;
       const byCat = cat => data
         .filter(r => r.category === cat)
         .map((r, i) => ({ id: r.id, name: r.name, notes: r.notes || "", position: r.position ?? i }));
       const c = byCat("cocktail");
       const s = byCat("spirit");
       const b = byCat("beer");
-      if (c.length) setCocktails(c);
-      if (s.length) setSpirits(s);
-      if (b.length) setBeers(b);
+      setCocktails(c);
+      setSpirits(s);
+      setBeers(b);
       writeLocalBeverages({ cocktails: c, spirits: s, beers: b });
     };
 
@@ -3473,7 +3624,9 @@ export default function App() {
         .from("wines")
         .select("id, name, wine_name, producer, vintage, region, country, by_glass")
         .order("name", { ascending: true });
-      if (!mounted || error || !data || data.length === 0) return;
+      if (!mounted) return;
+      if (error) { console.error("beverages load failed", error); return; }
+      if (!data) return;
       setWines(data.map(r => ({
         id: r.id, name: r.wine_name || r.name,
         producer: r.producer || "", vintage: r.vintage || "",
@@ -3731,7 +3884,7 @@ export default function App() {
       {adminOpen && (
         <AdminPanel
           dishes={dishes} wines={wines} cocktails={cocktails} spirits={spirits} beers={beers} menuCourses={menuCourses}
-          onUpdateDishes={setDishes} onUpdateWines={setWines}
+          onUpdateDishes={setDishes} onSaveWines={saveWines}
           onSaveBeverages={saveBeverages}
           onSyncMenu={syncMenu}
           onClose={() => setAdminOpen(false)}
