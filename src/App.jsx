@@ -93,6 +93,24 @@ function normalizeLiveMenuRow(row) {
     force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
     force_pairing_sub: String(firstFilled(row.force_pairing_sub)).trim(),
     kitchen_note: String(firstFilled(row.kitchen_note)).trim(),
+    restrictions: {
+      veg: String(firstFilled(row.veg)).trim(),
+      gluten_free: String(firstFilled(row.gluten_free, row["gluten_free"])).trim(),
+      dairy_free: String(firstFilled(row.dairy_free, row["dairy_free"])).trim(),
+      nut_free: String(firstFilled(row.nut_free, row["nut_free"])).trim(),
+      shellfish_free: String(firstFilled(row.shellfish_free, row["shellfish_free"])).trim(),
+      vegan: String(firstFilled(row.vegan)).trim(),
+      pescetarian: String(firstFilled(row.pescetarian)).trim(),
+      no_red_meat: String(firstFilled(row.no_red_meat)).trim(),
+      no_pork: String(firstFilled(row.no_pork)).trim(),
+      no_game: String(firstFilled(row.no_game)).trim(),
+      no_offal: String(firstFilled(row.no_offal)).trim(),
+      egg_free: String(firstFilled(row.egg_free)).trim(),
+      no_alcohol: String(firstFilled(row.no_alcohol)).trim(),
+      no_garlic_onion: String(firstFilled(row.no_garlic_onion)).trim(),
+      halal: String(firstFilled(row.halal)).trim(),
+      low_fodmap: String(firstFilled(row.low_fodmap)).trim(),
+    },
   };
 }
 
@@ -233,6 +251,111 @@ const MILKA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 58 
   <path d="M2,66 L2,30 L20,52 L38,24 L38,66 L34,66 L34,27 L20,50 L6,30 L6,66 Z"/>
 </svg>`;
 
+
+const SHORT_MENU_ORDER_KEYS = [
+  "linzer_eye",
+  "trout_belly",
+  "beetroot",
+  "squash",
+  "rainbow_trout",
+  "brioche",
+  "venison",
+  "pear",
+  "godlja",
+  "sweet_potato",
+  "sunchoke",
+  "cheese",
+];
+
+const RESTRICTION_PRIORITY_KEYS = [
+  "vegan",
+  "veg",
+  "pescetarian",
+  "halal",
+  "no_red_meat",
+  "no_pork",
+  "no_game",
+  "no_offal",
+  "gluten",
+  "dairy",
+  "nut",
+  "shellfish",
+  "egg_free",
+  "no_garlic_onion",
+  "low_fodmap",
+  "no_alcohol",
+];
+
+const RESTRICTION_COLUMN_MAP = {
+  vegan: "vegan",
+  veg: "veg",
+  pescetarian: "pescetarian",
+  halal: "halal",
+  no_red_meat: "no_red_meat",
+  no_pork: "no_pork",
+  no_game: "no_game",
+  no_offal: "no_offal",
+  gluten: "gluten_free",
+  dairy: "dairy_free",
+  nut: "nut_free",
+  shellfish: "shellfish_free",
+  egg_free: "egg_free",
+  no_garlic_onion: "no_garlic_onion",
+  low_fodmap: "low_fodmap",
+  no_alcohol: "no_alcohol",
+};
+
+function parseSheetRestrictionCell(value, originalHeader = "", originalSub = "") {
+  let raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  raw = raw.replace(/\s+I\s+/g, " | ").replace(/\s*\|\s*/g, " | ").trim();
+
+  const original = String(originalHeader || "").trim();
+  if (original && raw.toUpperCase().startsWith((original + " |").toUpperCase())) {
+    raw = raw.slice(original.length).trim();
+    if (raw.startsWith("|")) raw = raw.slice(1).trim();
+  }
+
+  if (!raw) return null;
+
+  if (raw.includes("|")) {
+    const [name, ...rest] = raw.split("|");
+    return {
+      name: name.trim() || originalHeader || "",
+      sub: rest.join("|").trim() || originalSub || "",
+    };
+  }
+
+  return {
+    name: originalHeader || "",
+    sub: raw,
+  };
+}
+
+function applyCourseRestriction(course, activeRestrictions) {
+  const baseDish = course.menu || { name: "", sub: "" };
+  const restrictionValues = course.restrictions || {};
+  let parsed = null;
+
+  for (const key of RESTRICTION_PRIORITY_KEYS) {
+    if (!activeRestrictions.includes(key)) continue;
+    const col = RESTRICTION_COLUMN_MAP[key];
+    const cellValue = restrictionValues[col];
+    if (!String(cellValue || "").trim()) continue;
+    parsed = parseSheetRestrictionCell(cellValue, baseDish.name || "", baseDish.sub || "");
+    if (parsed) break;
+  }
+
+  if (parsed) return { name: parsed.name || baseDish.name || "", sub: parsed.sub ?? baseDish.sub ?? "" };
+
+  if (activeRestrictions.some(r => r === "veg" || r === "vegan" || r === "pescetarian") && course.veg) {
+    return course.veg;
+  }
+
+  return baseDish;
+}
+
 function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null }) {
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
   const PAIRING_LABELS = {
@@ -258,6 +381,9 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   const glasses = Array.isArray(seat.glasses)
     ? seat.glasses.filter(w => w && (w.name || w.producer || w.vintage))
     : [];
+  const cocktails = Array.isArray(seat.cocktails)
+    ? seat.cocktails.filter(c => c && (c.name || c.notes))
+    : [];
   const tableBottles = Array.isArray(table.bottleWines)
     ? table.bottleWines.filter(w => w && (w.name || w.producer || w.vintage))
     : [];
@@ -272,9 +398,9 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     sub: [w?.producer, w?.vintage].filter(Boolean).join("  "),
   });
 
+  
   const visibleCourses = [];
   menuCourses.forEach((course, i) => {
-    const isSnack = course.is_snack ?? (i <= SNACK_END);
     const courseKey = String(course?.course_key || "").trim().toLowerCase();
     const courseName = String(course?.menu?.name || "").trim().toUpperCase();
     const optionalFlag = String(course?.optional_flag || "").trim().toLowerCase();
@@ -283,24 +409,32 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     if ((optionalFlag === "cheese" || courseKey === "cheese" || courseName === "CHEESE") && !hasCheese) return;
     if ((optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseName === "PEAR") && !hasCake) return;
 
-    const showOnShort = course.show_on_short === true || course.show_on_short === "true" || course.show_on_short === "TRUE" || course.show_on_short === "WAHR";
-    if (isShort && !showOnShort) return;
+    if (isShort) {
+      const idx = SHORT_MENU_ORDER_KEYS.indexOf(courseKey);
+      if (idx === -1) return;
+      visibleCourses.push({ course, i, courseName, courseKey, orderValue: idx + 1 });
+      return;
+    }
 
     visibleCourses.push({
       course,
       i,
       courseName,
       courseKey,
-      orderValue: isShort ? (Number(course.short_order) || 9999) : (Number(course.position) || i + 1),
+      orderValue: Number(course.position) || i + 1,
     });
   });
   visibleCourses.sort((a, b) => a.orderValue - b.orderValue);
 
+
   const rows = [];
 
   if (pkey === null) {
-    [...glasses, ...tableBottles].forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
+    cocktails.forEach(c => rows.push({ type: "wine-only", right: fmtCocktailParts(c) }));
+    glasses.forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
+    tableBottles.forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
   } else {
+    cocktails.forEach(c => rows.push({ type: "wine-only", right: fmtCocktailParts(c) }));
     glasses.forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
   }
 
@@ -316,7 +450,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       insertedPairingLabel = true;
     }
 
-    const dish = (isVeg && course.veg) ? course.veg : course.menu;
+    const dish = applyCourseRestriction(course, restrictions);
     let drink = pkey ? course[pkey] : null;
 
     if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
@@ -639,6 +773,7 @@ const SERVICE_TABLES_TABLE = import.meta.env.VITE_SUPABASE_SERVICE_TABLES || "se
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+if (!hasSupabaseConfig && typeof console !== "undefined") console.error("Supabase ENV missing", { SUPABASE_URL, SUPABASE_ANON_KEY });
 const supabase = hasSupabaseConfig ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 const serviceTableKey = value => `t${Number(value)}`;
 const serviceTableId = value => Number(String(value ?? '').replace(/[^0-9]+/g, '')) || 0;
@@ -3421,7 +3556,7 @@ export default function App() {
       })
       .subscribe(status => {
         if (status === "SUBSCRIBED") setSyncStatus("live");
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") setSyncStatus("sync-error");
+        if (status === "CHANNEL_ERROR") setSyncStatus("sync-error");
       });
 
     return () => {
