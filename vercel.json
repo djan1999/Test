@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/sync-wines",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/sync-menu?secret=milka2025",
+      "schedule": "0 14 * * *"
+    }
+  ]
+}
