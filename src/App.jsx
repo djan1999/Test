@@ -280,7 +280,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     const optionalFlag = String(course?.optional_flag || "").trim().toLowerCase();
 
     if ((optionalFlag === "beetroot" || courseKey === "beetroot" || courseName === "BEETROOT") && !hasBeetroot) return;
-    if ((optionalFlag === "cheese" || courseKey === "cheese" || courseKey === "sheep_cheese" || courseName === "CHEESE" || courseName === "SHEEP CHEESE") && !hasCheese) return;
+    if ((optionalFlag === "cheese" || courseKey === "cheese" || courseName === "CHEESE") && !hasCheese) return;
     if ((optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseName === "PEAR") && !hasCake) return;
 
     const showOnShort = course.show_on_short === true || course.show_on_short === "true" || course.show_on_short === "TRUE" || course.show_on_short === "WAHR";
