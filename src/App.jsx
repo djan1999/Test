@@ -336,13 +336,10 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
 
   const rows = [];
 
-  if (pkey === null) {
-    [...glasses, ...tableBottles].forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
-  } else {
-    glasses.forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
-  }
+  glasses.forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
 
   let insertedPairingLabel = false;
+  let bottleCursor = 0;
 
   visibleCourses.forEach(({ course, i, courseName, courseKey }) => {
     const insertPairingHere = pkey && !insertedPairingLabel && (
@@ -359,6 +356,9 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
 
     if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
       drink = { name: course.force_pairing_title || "KITCHEN MARTINI", sub: course.force_pairing_sub || "" };
+    } else if (!pkey && i >= DANUBE_SALMON_IDX && bottleCursor < tableBottles.length) {
+      drink = fmtWineParts(tableBottles[bottleCursor]);
+      bottleCursor += 1;
     }
 
     rows.push({
@@ -373,6 +373,11 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       ].filter(Boolean).join(" "),
     });
   });
+
+  while (!pkey && bottleCursor < tableBottles.length) {
+    rows.push({ type: "wine-only", right: fmtWineParts(tableBottles[bottleCursor]) });
+    bottleCursor += 1;
+  }
 
   if (pkey && !insertedPairingLabel) {
     rows.unshift({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING" });
