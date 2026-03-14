@@ -63,6 +63,8 @@ const splitMainSubCell = (title, sub = "") => {
   return { name: rawTitle, sub: rawSub };
 };
 
+const RESTRICTION_KEYS = ["veg", "vegan", "pescetarian", "no_red_meat", "no_pork", "no_game", "no_offal", "gluten", "dairy", "nut", "shellfish", "egg_free", "no_garlic_onion", "no_alcohol", "halal", "low_fodmap"];
+
 function normalizeLiveMenuRow(row) {
   const position = Number(firstFilled(row["#"], row.position, row.order_index)) || 0;
   const dish = splitMainSubCell(row.dish, row.description);
@@ -93,8 +95,8 @@ function normalizeLiveMenuRow(row) {
     force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
     force_pairing_sub: String(firstFilled(row.force_pairing_sub)).trim(),
     kitchen_note: String(firstFilled(row.kitchen_note)).trim(),
-    restriction_cells: Object.fromEntries(RESTRICTIONS.map(r => [r.key, String(row[r.key] ?? "").trim()])),
     raw_row: row,
+    restriction_cells: Object.fromEntries(RESTRICTION_KEYS.map(key => [key, String(firstFilled(row[key])).trim()])),
   };
 }
 
@@ -274,74 +276,68 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     sub: [w?.producer, w?.vintage].filter(Boolean).join("  "),
   });
 
-  const normalizeToken = (value) => String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+  const applyRestrictionsToDish = (course, fallbackDish) => {
+    let dish = { ...(fallbackDish || { name: "", sub: "" }) };
+    const cells = course?.restriction_cells || {};
 
-  const SHORT_MENU_ORDER = [
-    "linzer_eye",
-    "trout_belly",
-    "beetroot",
-    "squash",
-    "rainbow_trout",
-    "brioche",
-    "venison",
-    "pear",
-    "godlja",
-    "sweet_potato",
-    "sunchoke",
-    "cheese",
-  ];
-  const shortRank = Object.fromEntries(SHORT_MENU_ORDER.map((key, idx) => [key, idx + 1]));
+    const vegLike = restrictions.find(r => r === "veg" || r === "vegan" || r === "pescetarian");
+    const vegCell = vegLike ? String(cells[vegLike] || "").trim() : "";
+    if (vegCell) {
+      const parsed = splitMainSubCell(vegCell, dish.sub || "");
+      if (parsed?.name) dish = parsed;
+      else if (vegCell) dish = { ...dish, sub: vegCell };
+    } else if (vegLike && course?.veg) {
+      dish = { ...(course.veg || dish) };
+    }
+
+    restrictions.forEach(key => {
+      if (key === "veg" || key === "vegan" || key === "pescetarian") return;
+      const raw = String(cells[key] || "").trim();
+      if (!raw) return;
+      if (raw.includes("|")) {
+        const parsed = splitMainSubCell(raw, dish.sub || "");
+        if (parsed?.name) dish = parsed;
+      } else {
+        dish = { ...dish, sub: raw };
+      }
+    });
+
+    return dish;
+  };
 
   const visibleCourses = [];
   menuCourses.forEach((course, i) => {
-    const courseKey = normalizeToken(course?.course_key || course?.key || course?.menu?.name);
+    const isSnack = course.is_snack ?? (i <= SNACK_END);
+    const courseKey = String(course?.course_key || "").trim().toLowerCase();
     const courseName = String(course?.menu?.name || "").trim().toUpperCase();
-    const courseNameKey = normalizeToken(course?.menu?.name || "");
-    const optionalFlag = normalizeToken(course?.optional_flag || "");
+    const optionalFlag = String(course?.optional_flag || "").trim().toLowerCase();
 
-    const isBeetrootCourse = optionalFlag === "beetroot" || courseKey === "beetroot" || courseNameKey === "beetroot";
-    const isCakeCourse = optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseNameKey === "pear";
-    const isCheeseExtraCourse = optionalFlag === "cheese" || courseKey === "cheese" || courseNameKey === "cheese";
-    const isSheepCheeseCourse = courseKey === "sheep_cheese" || courseNameKey === "sheep_cheese";
+    if ((optionalFlag === "beetroot" || courseKey === "beetroot" || courseName === "BEETROOT") && !hasBeetroot) return;
+    if ((optionalFlag === "cheese" || courseKey === "cheese" || courseKey === "sheep_cheese" || courseName === "CHEESE" || courseName === "SHEEP CHEESE") && !hasCheese) return;
+    if ((optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseName === "PEAR") && !hasCake) return;
 
-    if (isBeetrootCourse && !hasBeetroot) return;
-    if (isCakeCourse && !hasCake) return;
-    if (isCheeseExtraCourse && !hasCheese) return;
-
-    if (isShort) {
-      const rank = shortRank[courseKey] ?? shortRank[courseNameKey];
-      if (!rank) return;
-      visibleCourses.push({
-        course,
-        i,
-        courseName,
-        courseKey,
-        orderValue: rank,
-      });
-      return;
-    }
+    const showOnShort = course.show_on_short === true || course.show_on_short === "true" || course.show_on_short === "TRUE" || course.show_on_short === "WAHR";
+    if (isShort && !showOnShort) return;
 
     visibleCourses.push({
       course,
       i,
       courseName,
       courseKey,
-      orderValue: Number(course.position) || i + 1,
+      orderValue: isShort ? (Number(course.short_order) || 9999) : (Number(course.position) || i + 1),
     });
   });
   visibleCourses.sort((a, b) => a.orderValue - b.orderValue);
 
   const rows = [];
 
-  glasses.forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
+  if (pkey === null) {
+    [...glasses, ...tableBottles].forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
+  } else {
+    glasses.forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
+  }
 
   let insertedPairingLabel = false;
-  let bottleCursor = 0;
 
   visibleCourses.forEach(({ course, i, courseName, courseKey }) => {
     const insertPairingHere = pkey && !insertedPairingLabel && (
@@ -353,45 +349,11 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       insertedPairingLabel = true;
     }
 
-    let dish = course.menu || { name: "", sub: "" };
-
-    const applyRestrictionCell = (currentDish, rawCell) => {
-      const cell = String(rawCell || "").trim();
-      if (!cell) return currentDish;
-      if (cell.includes("|")) {
-        const parsed = splitMainSubCell(cell, "");
-        return {
-          name: parsed?.name || currentDish?.name || "",
-          sub: parsed?.sub || "",
-        };
-      }
-      return {
-        name: currentDish?.name || "",
-        sub: cell,
-      };
-    };
-
-    if (Array.isArray(restrictions) && restrictions.length) {
-      restrictions.forEach((rk) => {
-        const key = normalizeToken(rk);
-        const cell = course?.restriction_cells?.[key] ?? course?.raw_row?.[key] ?? "";
-        if (String(cell || "").trim()) {
-          dish = applyRestrictionCell(dish, cell);
-        } else if ((key === "veg" || key === "vegan" || key === "pescetarian") && course.veg) {
-          dish = { name: course.veg?.name || dish?.name || "", sub: course.veg?.sub || "" };
-        }
-      });
-    } else if (isVeg && course.veg) {
-      dish = { name: course.veg?.name || dish?.name || "", sub: course.veg?.sub || "" };
-    }
-
+    const dish = applyRestrictionsToDish(course, course.menu);
     let drink = pkey ? course[pkey] : null;
 
     if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
       drink = { name: course.force_pairing_title || "KITCHEN MARTINI", sub: course.force_pairing_sub || "" };
-    } else if (!pkey && i >= DANUBE_SALMON_IDX && bottleCursor < tableBottles.length) {
-      drink = fmtWineParts(tableBottles[bottleCursor]);
-      bottleCursor += 1;
     }
 
     rows.push({
@@ -400,17 +362,10 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
       rowClass: [
         (pkey && (courseKey === "crayfish" || i === CRAYFISH_IDX)) ? "after-crayfish" : "",
-        (isShort && (courseKey === "trout_belly" || courseName === "TROUT BELLY")) ? "short-after-trout-belly" : "",
-        (isShort && (courseKey === "venison" || courseName === "VENISON")) ? "short-after-venison" : "",
         course.section_gap_before ? "section-gap-before" : "",
       ].filter(Boolean).join(" "),
     });
   });
-
-  while (!pkey && bottleCursor < tableBottles.length) {
-    rows.push({ type: "wine-only", right: fmtWineParts(tableBottles[bottleCursor]) });
-    bottleCursor += 1;
-  }
 
   if (pkey && !insertedPairingLabel) {
     rows.unshift({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING" });
@@ -514,8 +469,6 @@ body{position:relative;}
 .menu-row{margin-bottom:3.15pt;}
 .menu-row.wine-only{margin-bottom:4.5pt;}
 .menu-row.after-crayfish{margin-bottom:7.2pt;}
-.menu-row.short-after-trout-belly{margin-bottom:7.2pt;}
-.menu-row.short-after-venison{margin-bottom:14.5pt;}
 .menu-row.section-gap-before{margin-top:14.5pt;}
 .menu-col{min-width:0;}
 .menu-main{
