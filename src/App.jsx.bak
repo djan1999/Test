@@ -634,8 +634,7 @@ const statusPill = (isLive, label) => ({
   whiteSpace: "nowrap",
 });
 
-const STORAGE_KEY = "milka-service-board-v8";
-const SERVICE_TABLES_TABLE = import.meta.env.VITE_SUPABASE_SERVICE_TABLES || "service_tables";
+const STORAGE_KEY = "milka-service-board-v7";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
@@ -3194,29 +3193,24 @@ export default function App() {
   });
 
   const applyingRemoteRef  = useRef(false);
+  const lastRemoteJsonRef  = useRef("");
   const saveTimerRef       = useRef(null);
-  const prevTablesJsonRef  = useRef((initialState.tables || initTables).map(t => JSON.stringify(sanitizeTable(t))));
-  const tablesRef          = useRef(tables);
 
   const boardState = { tables, dishes, cocktails, spirits, beers };
   const boardJson  = JSON.stringify(boardState);
   const boardStateRef = useRef(boardState);
   boardStateRef.current = boardState;
-  tablesRef.current = tables;
 
-  const mergeRemoteTables = rows => {
-    const byId = new Map((Array.isArray(rows) ? rows : []).map(row => [Number(row.table_id), sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) })]));
+  const applyBoardState = payload => {
+    if (!payload || typeof payload !== "object") return;
     applyingRemoteRef.current = true;
-    setTables(() => initTables.map(base => byId.get(base.id) || base));
-    setTimeout(() => { applyingRemoteRef.current = false; }, 0);
-  };
-
-  const applyRemoteTableRow = row => {
-    const tableId = Number(row?.table_id);
-    if (!tableId) return;
-    const nextTable = sanitizeTable({ id: tableId, ...(row.data || {}) });
-    applyingRemoteRef.current = true;
-    setTables(prev => prev.map(t => t.id === tableId ? nextTable : t));
+    lastRemoteJsonRef.current = JSON.stringify(payload);
+    setTables(Array.isArray(payload.tables) ? payload.tables.map(sanitizeTable) : initTables);
+    setDishes(mergeDishes(Array.isArray(payload.dishes) ? payload.dishes : initDishes));
+    // wines loaded separately from wines table
+    setCocktails(Array.isArray(payload.cocktails) ? payload.cocktails : initCocktails);
+    setSpirits(Array.isArray(payload.spirits)  ? payload.spirits   : initSpirits);
+    setBeers(Array.isArray(payload.beers)      ? payload.beers     : initBeers);
     setTimeout(() => { applyingRemoteRef.current = false; }, 0);
   };
 
@@ -3338,8 +3332,10 @@ export default function App() {
 
   const switchMode = () => { changeMode(null); setSel(null); };
 
-  // ── Persist locally + sync changed tables to Supabase ─────────────────────
+  // ── Persist + sync to Supabase ────────────────────────────────────────────
   useEffect(() => {
+    // Don't write anything until we've loaded remote state — avoids stomping Supabase
+    // with a stale localStorage snapshot before the initial fetch resolves.
     if (!hydrated) return;
 
     writeLocalBoardState(boardStateRef.current);
@@ -3347,74 +3343,60 @@ export default function App() {
     if (applyingRemoteRef.current) return;
     if (!supabase) return;
 
-    const nextJsonByIndex = tables.map(t => JSON.stringify(sanitizeTable(t)));
-    const changedTables = tables
-      .filter((table, idx) => nextJsonByIndex[idx] !== prevTablesJsonRef.current[idx])
-      .map(table => ({ table_id: table.id, data: sanitizeTable(table), updated_at: new Date().toISOString() }));
-
-    prevTablesJsonRef.current = nextJsonByIndex;
-    if (changedTables.length === 0) return;
-
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      const { error } = await supabase.from(SERVICE_TABLES_TABLE).upsert(changedTables, { onConflict: "table_id" });
+      const { error } = await supabase.from("board_state").upsert({
+        id: "main",
+        state: boardStateRef.current,
+        updated_at: new Date().toISOString(),
+      });
       setSyncStatus(error ? "sync-error" : "live");
-    }, 120);
+    }, 200);
 
     return () => clearTimeout(saveTimerRef.current);
-  }, [boardJson, hydrated, tables]);
+  }, [boardJson, hydrated]);
 
-  // ── Load service tables from Supabase + subscribe realtime ────────────────
+  // ── Load from Supabase + subscribe realtime ───────────────────────────────
   useEffect(() => {
     if (!supabase) return;
     let isMounted = true;
 
-    const gateTimeout = setTimeout(() => { if (isMounted) setHydrated(true); }, 1000);
+    // Fallback: open gate after 800ms for cold starts
+    const gateTimeout = setTimeout(() => { if (isMounted) setHydrated(true); }, 800);
 
-    const loadRemoteTables = async () => {
+    const loadRemote = async () => {
       const { data, error } = await supabase
-        .from(SERVICE_TABLES_TABLE)
-        .select("table_id, data, updated_at")
-        .order("table_id", { ascending: true });
+        .from("board_state")
+        .select("state, updated_at")
+        .eq("id", "main")
+        .maybeSingle();
 
       if (!isMounted) return;
       clearTimeout(gateTimeout);
 
-      if (error) {
-        setSyncStatus("sync-error");
-        setHydrated(true);
-        return;
-      }
+      if (error) { setSyncStatus("sync-error"); setHydrated(true); return; }
 
-      if (Array.isArray(data) && data.length > 0) {
-        mergeRemoteTables(data);
-        prevTablesJsonRef.current = initTables.map(base => {
-          const row = data.find(item => Number(item.table_id) === base.id);
-          return JSON.stringify(row ? sanitizeTable({ id: base.id, ...(row.data || {}) }) : base);
-        });
+      if (data?.state && Object.keys(data.state).length > 0) {
+        applyBoardState(data.state);
+        setSyncStatus("live");
+      } else {
+        // No remote state yet — just mark live, don't seed
+        setSyncStatus("live");
       }
-
-      setSyncStatus("live");
       setHydrated(true);
     };
 
-    loadRemoteTables();
+    loadRemote();
 
     const channel = supabase
-      .channel("milka-service-tables-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: SERVICE_TABLES_TABLE }, payload => {
-        if (payload.eventType === "DELETE") {
-          const tableId = Number(payload.old?.table_id);
-          if (!tableId) return;
-          applyingRemoteRef.current = true;
-          setTables(prev => prev.map(t => t.id === tableId ? blankTable(tableId) : t));
-          setTimeout(() => { applyingRemoteRef.current = false; }, 0);
-          setSyncStatus("live");
-          return;
-        }
-        if (!payload.new) return;
-        applyRemoteTableRow(payload.new);
-        prevTablesJsonRef.current = tablesRef.current.map(t => JSON.stringify(sanitizeTable(t.id === Number(payload.new.table_id) ? { id: Number(payload.new.table_id), ...(payload.new.data || {}) } : t)));
+      .channel("milka-board-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "board_state", filter: "id=eq.main" }, payload => {
+        const nextState = payload.new?.state;
+        if (!nextState) return;
+        const nextJson = JSON.stringify(nextState);
+        if (nextJson === lastRemoteJsonRef.current) return;
+        lastRemoteJsonRef.current = nextJson;
+        applyBoardState(nextState);
         setSyncStatus("live");
       })
       .subscribe(status => {
