@@ -370,9 +370,9 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
 :root{
   --page-w:148mm;
   --page-h:210mm;
-  --pad-t:8.4mm;
+  --pad-t:11.2mm;
   --pad-r:12mm;
-  --pad-b:8.2mm;
+  --pad-b:6.8mm;
   --pad-l:12mm;
   --inner-h:calc(var(--page-h) - var(--pad-t) - var(--pad-b));
 }
@@ -384,7 +384,7 @@ html,body{
   background:#fff;
   color:#000;
   font-family:'RM', monospace;
-  font-size:6.75pt;
+  font-size:7.35pt;
   line-height:1.08;
   -webkit-print-color-adjust:exact;
   print-color-adjust:exact;
@@ -415,15 +415,15 @@ body{position:relative;}
   grid-template-columns:minmax(0,1fr) auto;
   align-items:start;
   column-gap:8.6mm;
-  margin-bottom:9.1mm;
+  margin-bottom:7.2mm;
 }
 #title{
   font-size:13.9pt;
   font-weight:700;
   letter-spacing:0.035em;
-  padding-top:7.9mm;
+  padding-top:10.4mm;
 }
-#logo img{width:18.2mm;display:block;}
+#logo img{width:19.2mm;display:block;}
 #menu{width:100%;}
 .menu-row,.menu-section-row{
   display:grid;
@@ -433,10 +433,10 @@ body{position:relative;}
   break-inside:avoid;
   page-break-inside:avoid;
 }
-.menu-row{margin-bottom:3.15pt;}
-.menu-row.wine-only{margin-bottom:4.5pt;}
-.menu-row.after-crayfish{margin-bottom:7.2pt;}
-.menu-row.section-gap-before{margin-top:14.5pt;}
+.menu-row{margin-bottom:2.85pt;}
+.menu-row.wine-only{margin-bottom:4.0pt;}
+.menu-row.after-crayfish{margin-bottom:6.0pt;}
+.menu-row.section-gap-before{margin-top:20.5pt;}
 .menu-col{min-width:0;}
 .menu-main{
   font-weight:700;
@@ -450,7 +450,7 @@ body{position:relative;}
   overflow-wrap:anywhere;
 }
 .menu-section-row{
-  margin:6.8pt 0 6.2pt;
+  margin:8.6pt 0 6.4pt;
 }
 .menu-section-label{
   font-weight:700;
@@ -459,14 +459,14 @@ body{position:relative;}
 }
 #footer{
   margin-top:auto;
-  padding-top:9.5pt;
+  padding-top:7.0pt;
 }
 #thankyou{
-  font-size:6.55pt;
+  font-size:6.8pt;
 }
 #team{
   margin-top:7.2pt;
-  font-size:5.45pt;
+  font-size:5.9pt;
   line-height:1.2;
   overflow-wrap:anywhere;
 }
@@ -491,8 +491,8 @@ body{position:relative;}
 </div>
 <script>
 (function(){
-  const MIN_SCALE = 0.58;
-  const MAX_TRIES = 80;
+  const MIN_SCALE = 0.90;
+  const MAX_TRIES = 18;
   function fitOnePage(){
     const frame = document.getElementById('frame');
     const target = document.getElementById('scaleTarget');
@@ -506,6 +506,9 @@ body{position:relative;}
     const naturalH = target.scrollHeight;
     const naturalW = target.scrollWidth;
 
+    const needsScale = naturalH > (maxH + 2) || naturalW > (maxW + 2);
+    if (!needsScale) return;
+
     let scale = Math.min(1, maxH / naturalH, maxW / naturalW);
     scale = Math.max(Math.min(scale, 1), MIN_SCALE);
 
@@ -515,7 +518,7 @@ body{position:relative;}
       target.style.width = (100 / scale) + '%';
       const rect = target.getBoundingClientRect();
       if (rect.height <= maxH - 1 && rect.width <= maxW - 1) break;
-      scale -= 0.01;
+      scale -= 0.005;
       if (scale <= MIN_SCALE) {
         scale = MIN_SCALE;
         target.style.transform = 'scale(' + scale + ')';
@@ -528,7 +531,6 @@ body{position:relative;}
   window.addEventListener('load', function(){ setTimeout(fitOnePage, 80); });
   window.addEventListener('resize', fitOnePage);
   window.addEventListener('beforeprint', fitOnePage);
-  window.addEventListener('afterprint', fitOnePage);
 })();
 </script>
 </body>
@@ -2499,8 +2501,9 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
     if (!w) { alert("Pop-up blocked — allow pop-ups for this site."); return; }
     w.document.write(html);
     w.document.close();
+    try { w.document.title = menuTitle || "WINTER MENU"; } catch {}
     w.focus();
-    setTimeout(() => w.print(), 600);
+    setTimeout(() => w.print(), 900);
   };
 
   const generateAll = () => {
@@ -3384,7 +3387,7 @@ export default function App() {
       clearTimeout(gateTimeout);
 
       if (error) {
-        console.error("service_tables initial load failed", error);
+        console.error("service_tables load failed", error);
         setSyncStatus("sync-error");
         setHydrated(true);
         return;
@@ -3422,21 +3425,8 @@ export default function App() {
         setSyncStatus("live");
       })
       .subscribe(status => {
-        if (status === "SUBSCRIBED") {
-          setSyncStatus("live");
-          return;
-        }
-        if (status === "CHANNEL_ERROR") {
-          setSyncStatus("sync-error");
-          return;
-        }
-        if (status === "TIMED_OUT") {
-          setSyncStatus(prev => (prev === "live" ? "live" : "connecting"));
-          return;
-        }
-        if (status === "CLOSED") {
-          setSyncStatus(prev => (prev === "live" ? "live" : "connecting"));
-        }
+        if (status === "SUBSCRIBED") setSyncStatus("live");
+        if (status === "CHANNEL_ERROR") setSyncStatus("sync-error");
       });
 
     return () => {
