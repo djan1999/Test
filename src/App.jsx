@@ -3360,6 +3360,7 @@ export default function App() {
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       const { error } = await supabase.from(SERVICE_TABLES_TABLE).upsert(changedTables, { onConflict: "id" });
+      if (error) console.error("service_tables upsert failed", error);
       setSyncStatus(error ? "sync-error" : "live");
     }, 120);
 
@@ -3383,6 +3384,7 @@ export default function App() {
       clearTimeout(gateTimeout);
 
       if (error) {
+        console.error("service_tables initial load failed", error);
         setSyncStatus("sync-error");
         setHydrated(true);
         return;
@@ -3420,8 +3422,21 @@ export default function App() {
         setSyncStatus("live");
       })
       .subscribe(status => {
-        if (status === "SUBSCRIBED") setSyncStatus("live");
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") setSyncStatus("sync-error");
+        if (status === "SUBSCRIBED") {
+          setSyncStatus("live");
+          return;
+        }
+        if (status === "CHANNEL_ERROR") {
+          setSyncStatus("sync-error");
+          return;
+        }
+        if (status === "TIMED_OUT") {
+          setSyncStatus(prev => (prev === "live" ? "live" : "connecting"));
+          return;
+        }
+        if (status === "CLOSED") {
+          setSyncStatus(prev => (prev === "live" ? "live" : "connecting"));
+        }
       });
 
     return () => {
