@@ -367,6 +367,8 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
       rowClass: [
         (pkey && (courseKey === "crayfish" || i === CRAYFISH_IDX)) ? "after-crayfish" : "",
+        (isShort && (courseKey === "trout_belly" || courseName === "TROUT BELLY")) ? "short-after-trout-belly" : "",
+        (isShort && (courseKey === "venison" || courseName === "VENISON")) ? "short-after-venison" : "",
         course.section_gap_before ? "section-gap-before" : "",
       ].filter(Boolean).join(" "),
     });
@@ -474,6 +476,8 @@ body{position:relative;}
 .menu-row{margin-bottom:3.15pt;}
 .menu-row.wine-only{margin-bottom:4.5pt;}
 .menu-row.after-crayfish{margin-bottom:7.2pt;}
+.menu-row.short-after-trout-belly{margin-bottom:7.2pt;}
+.menu-row.short-after-venison{margin-bottom:14.5pt;}
 .menu-row.section-gap-before{margin-top:14.5pt;}
 .menu-col{min-width:0;}
 .menu-main{
