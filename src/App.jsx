@@ -63,6 +63,50 @@ const splitMainSubCell = (title, sub = "") => {
   return { name: rawTitle, sub: rawSub };
 };
 
+const RESTRICTION_COLUMN_MAP = {
+  veg: ["veg"],
+  vegan: ["vegan"],
+  pescetarian: ["pescetarian"],
+  no_red_meat: ["no_red_meat"],
+  no_pork: ["no_pork"],
+  no_game: ["no_game"],
+  no_offal: ["no_offal"],
+  gluten: ["gluten_free", "gluten"],
+  dairy: ["dairy_free", "dairy"],
+  nut: ["nut_free", "nut"],
+  shellfish: ["shellfish_free", "shellfish"],
+  egg_free: ["egg_free"],
+  no_alcohol: ["no_alcohol"],
+  no_garlic_onion: ["no_garlic/onion", "no_garlic_onion"],
+  halal: ["halal"],
+  low_fodmap: ["low_fodmap"],
+};
+
+const parseRestrictionCell = (value, originalTitle = "", originalSub = "") => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  const normalizedOriginal = String(originalTitle || "").trim().toUpperCase();
+  const pipeIdx = raw.indexOf("|");
+  const iSepIdx = raw.indexOf(" I ");
+  const sepIdx = pipeIdx >= 0 ? pipeIdx : iSepIdx;
+  const sepLen = pipeIdx >= 0 ? 1 : 3;
+
+  if (sepIdx >= 0) {
+    const left = raw.slice(0, sepIdx).trim();
+    const right = raw.slice(sepIdx + sepLen).trim();
+    if (!left && !right) return null;
+
+    if (left.toUpperCase() === normalizedOriginal) {
+      return { name: originalTitle || "", sub: right || originalSub || "" };
+    }
+
+    return { name: left || originalTitle || "", sub: right || originalSub || "" };
+  }
+
+  return { name: originalTitle || "", sub: raw };
+};
+
 function normalizeLiveMenuRow(row) {
   const position = Number(firstFilled(row["#"], row.position, row.order_index)) || 0;
   const dish = splitMainSubCell(row.dish, row.description);
@@ -76,21 +120,9 @@ function normalizeLiveMenuRow(row) {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
-  const reservedKeys = new Set([
-    "#","position","order_index","dish","description","veg","veg_sub",
-    "wp_drink","wp_sub","na_drink","na_sub","os_drink","os_sub",
-    "premium","premium_sub","course_key","key","optional_flag",
-    "section_gap_before","show_on_short","short_order",
-    "force_pairing_title","force_pairing_sub","kitchen_note","snack?","snack"
-  ]);
-
-  const restriction_map = {};
-  Object.entries(row || {}).forEach(([k, v]) => {
-    const nk = String(k || "").trim().toLowerCase();
-    if (reservedKeys.has(nk)) return;
-    const value = String(v ?? "").trim();
-    if (!value) return;
-    restriction_map[nk] = value;
+  const restrictions = {};
+  Object.entries(RESTRICTION_COLUMN_MAP).forEach(([key, headers]) => {
+    restrictions[key] = firstFilled(...headers.map(h => row[h]));
   });
 
   return {
@@ -102,6 +134,7 @@ function normalizeLiveMenuRow(row) {
     na: splitMainSubCell(row.na_drink, row.na_sub),
     os: splitMainSubCell(row.os_drink, row.os_sub),
     premium: splitMainSubCell(row.premium, row.premium_sub),
+    restrictions,
     course_key: courseKey,
     optional_flag: String(firstFilled(row.optional_flag)).trim().toLowerCase(),
     section_gap_before: truthyCell(firstFilled(row.section_gap_before)),
@@ -110,36 +143,7 @@ function normalizeLiveMenuRow(row) {
     force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
     force_pairing_sub: String(firstFilled(row.force_pairing_sub)).trim(),
     kitchen_note: String(firstFilled(row.kitchen_note)).trim(),
-    restriction_map,
-    _raw_row: row,
   };
-}
-
-function getRestrictionReplacement(course, restrictions = []) {
-  const map = course?.restriction_map || {};
-  for (const key of restrictions) {
-    const replacement = String(map[String(key || "").trim().toLowerCase()] || "").trim();
-    if (!replacement) continue;
-    if (replacement.includes("|")) {
-      const parsed = splitMainSubCell(replacement);
-      if (parsed) return parsed;
-    }
-    return {
-      name: course?.menu?.name || "",
-      sub: replacement,
-    };
-  }
-  return null;
-}
-
-function resolveCourseDish(course, restrictions = []) {
-  const replacement = getRestrictionReplacement(course, restrictions);
-  if (replacement) return replacement;
-
-  const isVegRestriction = restrictions.some(r => ["veg","vegan","pescetarian"].includes(String(r || "").trim().toLowerCase()));
-  if (isVegRestriction && course?.veg) return course.veg;
-
-  return course?.menu || { name: "", sub: "" };
 }
 
 async function fetchLiveMenuCourses() {
@@ -326,7 +330,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     const optionalFlag = String(course?.optional_flag || "").trim().toLowerCase();
 
     if ((optionalFlag === "beetroot" || courseKey === "beetroot" || courseName === "BEETROOT") && !hasBeetroot) return;
-    if ((optionalFlag === "cheese" || courseKey === "cheese" || courseName === "CHEESE") && !hasCheese) return;
+    if ((optionalFlag === "cheese" || courseKey === "cheese" || courseKey === "sheep_cheese" || courseName === "CHEESE" || courseName === "SHEEP CHEESE") && !hasCheese) return;
     if ((optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseName === "PEAR") && !hasCake) return;
 
     const showOnShort = course.show_on_short === true || course.show_on_short === "true" || course.show_on_short === "TRUE" || course.show_on_short === "WAHR";
@@ -362,7 +366,31 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       insertedPairingLabel = true;
     }
 
-    const dish = resolveCourseDish(course, restrictions);
+    let dish = course.menu;
+    const originalTitle = dish?.name || "";
+    const originalSub = dish?.sub || "";
+
+    const restrictionPriority = [
+      "vegan", "veg", "pescetarian", "halal", "no_red_meat", "no_pork", "no_game", "no_offal",
+      "gluten", "dairy", "nut", "shellfish", "egg_free", "no_garlic_onion", "low_fodmap", "no_alcohol"
+    ];
+
+    for (const key of restrictionPriority) {
+      if (!restrictions.includes(key)) continue;
+      const cell = course?.restrictions?.[key];
+      const parsed = parseRestrictionCell(cell, originalTitle, originalSub);
+      if (parsed) {
+        dish = parsed;
+        break;
+      }
+      if (key === "veg" || key === "vegan" || key === "pescetarian") {
+        if (course.veg?.name || course.veg?.sub) {
+          dish = course.veg;
+          break;
+        }
+      }
+    }
+
     let drink = pkey ? course[pkey] : null;
 
     if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
