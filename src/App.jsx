@@ -63,50 +63,6 @@ const splitMainSubCell = (title, sub = "") => {
   return { name: rawTitle, sub: rawSub };
 };
 
-const RESTRICTION_COLUMN_MAP = {
-  veg: ["veg"],
-  vegan: ["vegan"],
-  pescetarian: ["pescetarian"],
-  no_red_meat: ["no_red_meat"],
-  no_pork: ["no_pork"],
-  no_game: ["no_game"],
-  no_offal: ["no_offal"],
-  gluten: ["gluten_free", "gluten"],
-  dairy: ["dairy_free", "dairy"],
-  nut: ["nut_free", "nut"],
-  shellfish: ["shellfish_free", "shellfish"],
-  egg_free: ["egg_free"],
-  no_alcohol: ["no_alcohol"],
-  no_garlic_onion: ["no_garlic/onion", "no_garlic_onion"],
-  halal: ["halal"],
-  low_fodmap: ["low_fodmap"],
-};
-
-const parseRestrictionCell = (value, originalTitle = "", originalSub = "") => {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-
-  const normalizedOriginal = String(originalTitle || "").trim().toUpperCase();
-  const pipeIdx = raw.indexOf("|");
-  const iSepIdx = raw.indexOf(" I ");
-  const sepIdx = pipeIdx >= 0 ? pipeIdx : iSepIdx;
-  const sepLen = pipeIdx >= 0 ? 1 : 3;
-
-  if (sepIdx >= 0) {
-    const left = raw.slice(0, sepIdx).trim();
-    const right = raw.slice(sepIdx + sepLen).trim();
-    if (!left && !right) return null;
-
-    if (left.toUpperCase() === normalizedOriginal) {
-      return { name: originalTitle || "", sub: right || originalSub || "" };
-    }
-
-    return { name: left || originalTitle || "", sub: right || originalSub || "" };
-  }
-
-  return { name: originalTitle || "", sub: raw };
-};
-
 function normalizeLiveMenuRow(row) {
   const position = Number(firstFilled(row["#"], row.position, row.order_index)) || 0;
   const dish = splitMainSubCell(row.dish, row.description);
@@ -120,11 +76,6 @@ function normalizeLiveMenuRow(row) {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
-  const restrictions = {};
-  Object.entries(RESTRICTION_COLUMN_MAP).forEach(([key, headers]) => {
-    restrictions[key] = firstFilled(...headers.map(h => row[h]));
-  });
-
   return {
     position,
     is_snack: truthyCell(firstFilled(row["snack?"], row.snack)),
@@ -134,7 +85,6 @@ function normalizeLiveMenuRow(row) {
     na: splitMainSubCell(row.na_drink, row.na_sub),
     os: splitMainSubCell(row.os_drink, row.os_sub),
     premium: splitMainSubCell(row.premium, row.premium_sub),
-    restrictions,
     course_key: courseKey,
     optional_flag: String(firstFilled(row.optional_flag)).trim().toLowerCase(),
     section_gap_before: truthyCell(firstFilled(row.section_gap_before)),
@@ -322,39 +272,74 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     sub: [w?.producer, w?.vintage].filter(Boolean).join("  "),
   });
 
+  const normalizeToken = (value) => String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  const SHORT_MENU_ORDER = [
+    "linzer_eye",
+    "trout_belly",
+    "beetroot",
+    "squash",
+    "rainbow_trout",
+    "brioche",
+    "venison",
+    "pear",
+    "godlja",
+    "sweet_potato",
+    "sunchoke",
+    "cheese",
+  ];
+  const shortRank = Object.fromEntries(SHORT_MENU_ORDER.map((key, idx) => [key, idx + 1]));
+
   const visibleCourses = [];
   menuCourses.forEach((course, i) => {
-    const isSnack = course.is_snack ?? (i <= SNACK_END);
-    const courseKey = String(course?.course_key || "").trim().toLowerCase();
+    const courseKey = normalizeToken(course?.course_key || course?.key || course?.menu?.name);
     const courseName = String(course?.menu?.name || "").trim().toUpperCase();
-    const optionalFlag = String(course?.optional_flag || "").trim().toLowerCase();
+    const courseNameKey = normalizeToken(course?.menu?.name || "");
+    const optionalFlag = normalizeToken(course?.optional_flag || "");
 
-    if ((optionalFlag === "beetroot" || courseKey === "beetroot" || courseName === "BEETROOT") && !hasBeetroot) return;
-    if ((optionalFlag === "cheese" || courseKey === "cheese" || courseKey === "sheep_cheese" || courseName === "CHEESE" || courseName === "SHEEP CHEESE") && !hasCheese) return;
-    if ((optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseName === "PEAR") && !hasCake) return;
+    const isBeetrootCourse = optionalFlag === "beetroot" || courseKey === "beetroot" || courseNameKey === "beetroot";
+    const isCakeCourse = optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseNameKey === "pear";
+    const isCheeseExtraCourse = optionalFlag === "cheese" || courseKey === "cheese" || courseNameKey === "cheese";
+    const isSheepCheeseCourse = courseKey === "sheep_cheese" || courseNameKey === "sheep_cheese";
 
-    const showOnShort = course.show_on_short === true || course.show_on_short === "true" || course.show_on_short === "TRUE" || course.show_on_short === "WAHR";
-    if (isShort && !showOnShort) return;
+    if (isBeetrootCourse && !hasBeetroot) return;
+    if (isCakeCourse && !hasCake) return;
+    if (isCheeseExtraCourse && !hasCheese) return;
+
+    if (isShort) {
+      const rank = shortRank[courseKey] ?? shortRank[courseNameKey];
+      if (!rank) return;
+      visibleCourses.push({
+        course,
+        i,
+        courseName,
+        courseKey,
+        orderValue: rank,
+      });
+      return;
+    }
 
     visibleCourses.push({
       course,
       i,
       courseName,
       courseKey,
-      orderValue: isShort ? (Number(course.short_order) || 9999) : (Number(course.position) || i + 1),
+      orderValue: Number(course.position) || i + 1,
     });
   });
   visibleCourses.sort((a, b) => a.orderValue - b.orderValue);
 
   const rows = [];
 
-  if (pkey === null) {
-    [...glasses, ...tableBottles].forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
-  } else {
-    glasses.forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
-  }
+  glasses.forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
 
   let insertedPairingLabel = false;
+  let bottleCursor = 0;
 
   visibleCourses.forEach(({ course, i, courseName, courseKey }) => {
     const insertPairingHere = pkey && !insertedPairingLabel && (
@@ -366,35 +351,14 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       insertedPairingLabel = true;
     }
 
-    let dish = course.menu;
-    const originalTitle = dish?.name || "";
-    const originalSub = dish?.sub || "";
-
-    const restrictionPriority = [
-      "vegan", "veg", "pescetarian", "halal", "no_red_meat", "no_pork", "no_game", "no_offal",
-      "gluten", "dairy", "nut", "shellfish", "egg_free", "no_garlic_onion", "low_fodmap", "no_alcohol"
-    ];
-
-    for (const key of restrictionPriority) {
-      if (!restrictions.includes(key)) continue;
-      const cell = course?.restrictions?.[key];
-      const parsed = parseRestrictionCell(cell, originalTitle, originalSub);
-      if (parsed) {
-        dish = parsed;
-        break;
-      }
-      if (key === "veg" || key === "vegan" || key === "pescetarian") {
-        if (course.veg?.name || course.veg?.sub) {
-          dish = course.veg;
-          break;
-        }
-      }
-    }
-
+    const dish = (isVeg && course.veg) ? course.veg : course.menu;
     let drink = pkey ? course[pkey] : null;
 
     if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
       drink = { name: course.force_pairing_title || "KITCHEN MARTINI", sub: course.force_pairing_sub || "" };
+    } else if (!pkey && i >= DANUBE_SALMON_IDX && bottleCursor < tableBottles.length) {
+      drink = fmtWineParts(tableBottles[bottleCursor]);
+      bottleCursor += 1;
     }
 
     rows.push({
@@ -403,10 +367,17 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
       rowClass: [
         (pkey && (courseKey === "crayfish" || i === CRAYFISH_IDX)) ? "after-crayfish" : "",
+        (isShort && (courseKey === "trout_belly" || courseName === "TROUT BELLY")) ? "short-after-trout-belly" : "",
+        (isShort && (courseKey === "venison" || courseName === "VENISON")) ? "short-after-venison" : "",
         course.section_gap_before ? "section-gap-before" : "",
       ].filter(Boolean).join(" "),
     });
   });
+
+  while (!pkey && bottleCursor < tableBottles.length) {
+    rows.push({ type: "wine-only", right: fmtWineParts(tableBottles[bottleCursor]) });
+    bottleCursor += 1;
+  }
 
   if (pkey && !insertedPairingLabel) {
     rows.unshift({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING" });
@@ -510,6 +481,8 @@ body{position:relative;}
 .menu-row{margin-bottom:3.15pt;}
 .menu-row.wine-only{margin-bottom:4.5pt;}
 .menu-row.after-crayfish{margin-bottom:7.2pt;}
+.menu-row.short-after-trout-belly{margin-bottom:7.2pt;}
+.menu-row.short-after-venison{margin-bottom:14.5pt;}
 .menu-row.section-gap-before{margin-top:14.5pt;}
 .menu-col{min-width:0;}
 .menu-main{
