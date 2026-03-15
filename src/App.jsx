@@ -204,7 +204,7 @@ const waterStyle = v => {
 };
 
 // ── Pairings ──────────────────────────────────────────────────────────────────
-const PAIRINGS = ["Wine", "Non-Alc", "Premium", "Our Story"];
+const PAIRINGS = ["—", "Wine", "Non-Alc", "Premium", "Our Story"];
 
 // ── Winter Menu Data (from FOOD N PAIRINGS JAN26) ────────────────────────────
 const MENU_DATA = [{"menu":{"name":"SOUR SOUP","sub":"cabbage, yeast butter"},"veg":{"name":"SOUR SOUP","sub":"cabbage, yeast butter"},"hazards":"Lactose, chicken stock, pork","na":null,"wp":null,"os":null,"premium":null,"aperitivo":{"name":"So fresh, So clean","sub":"jasmine, redcurrant"}},{"menu":{"name":"LINZER EYE","sub":"chicken liver, barberry"},"veg":{"name":"LINZER EYE","sub":"mushroom parfait, crisp of rye"},"hazards":"Lactose, berries, chicken, gluten","na":null,"wp":null,"os":null,"premium":null,"aperitivo":{"name":"Domaine Slapšak ZC","sub":"Dolenjska, Slovenija"}},{"menu":{"name":"TROUT BELLY","sub":"trdinka corn, horseradish"},"veg":{"name":"CARROT","sub":"trdinka corn, horseradish"},"hazards":"Fish, gluten, eggs","na":null,"wp":null,"os":null,"premium":null,"aperitivo":{"name":"Clandestin, Les Revers '22","sub":"Côte de Bars de Reims, France"}},{"menu":{"name":"CHAMOIS","sub":"smoked ricotta, leek"},"veg":{"name":"CHAMOIS","sub":"brussels sprout, algae caviar"},"hazards":"Alliums, lactose, gluten","na":null,"wp":null,"os":null,"premium":null,"aperitivo":{"name":"Krug 173ème edition","sub":"Montagne de Reims, France"}},{"menu":{"name":"CRAYFISH","sub":"bozner sauce, porkhead"},"veg":{"name":"CELERIAC","sub":"ricotta"},"hazards":"Shellfish, eggs, lactose, gluten, pork","na":null,"wp":null,"os":null,"premium":null,"aperitivo":null},{"menu":{"name":"DANUBE SALMON","sub":"potato, walnut leaf"},"veg":{"name":"DANUBE SALMON","sub":"parsley root"},"hazards":null,"na":{"name":"TARRAGON","sub":"lavender, fennel seeds"},"wp":{"name":"Marko Fon Vitovska Selekcija '21","sub":"Kras, Slovenia"},"os":{"name":"TARRAGON","sub":"lavender, fennel seeds"},"premium":{"name":"J. Recchione Hautes Côtes de Nuits Blanc '23","sub":"Côte de Nuits, France"},"aperitivo":{"name":"Pickle Martini","sub":""}},{"menu":{"name":"BEETROOT","sub":"bear fat, caviar"},"veg":{"name":"BEETROOT","sub":"smoked cream, algae caviar"},"hazards":"Hazelnut, lactose, meat","na":{"name":"RED CURRANT","sub":"walnut, lilac"},"wp":null,"os":{"name":"Champagne Chavost, Paradoxe '19","sub":"Vallée de la Marne, France"},"premium":{"name":"Champagne Chavost, Paradoxe '19","sub":"Vallée de la Marne, France"},"aperitivo":null},{"menu":{"name":"SQUASH","sub":"quince, pork cracklings"},"veg":{"name":"SQUASH","sub":"quince, potato cracklings"},"hazards":"shellfish/crustaceans, lactose","na":{"name":"FIG LEAF","sub":"carrot, miso"},"wp":{"name":"Lucien Aviet, Cuvée des Docteurs '23","sub":"Jura, France"},"os":{"name":"FIG LEAF","sub":"carrot, miso washed cognac"},"premium":{"name":"Théo Dancer, Jurassique '23","sub":"Jura, France"},"aperitivo":null},{"menu":{"name":"RAINBOW TROUT","sub":"sauerkraut, chanterelles"},"veg":null,"hazards":"lactose, alliums-onion, trout roe","na":{"name":"MUSTARD SEEDS","sub":"buckwheat, lemongrass"},"wp":{"name":"Renesansa, Renski rizling '21","sub":"Maribor, Slovenia"},"os":{"name":"Renesansa, Renski rizling '21","sub":"Maribor, Slovenia"},"premium":{"name":"Antoine Jobard, Mersault Les Gouttes d'or '22","sub":"Mersault, France"},"aperitivo":null},{"menu":{"name":"CHICKEN GIZZARD","sub":"fermented potato, bell pepper"},"veg":{"name":"MUSHROOM DUMPLING","sub":"fermented potato, kohlrabi"},"hazards":"gluten, lactose","na":{"name":"SPENT BREAD KOMBUCHA","sub":"malt, hops"},"wp":{"name":"Reservoir Dogs, Crazy Sister","sub":"Nova Gorica, Slovenia"},"os":{"name":"Reservoir Dogs, Crazy Sister","sub":"Nova Gorica, Slovenia"},"premium":{"name":"Reservoir Dogs, Crazy Sister","sub":"Nova Gorica, Slovenia"},"aperitivo":null},{"menu":{"name":"BRIOCHE","sub":"wild boar, cream cheese"},"veg":{"name":"BRIOCHE","sub":"seed crunch, cream cheese"},"hazards":"gluten, lactose","na":null,"wp":null,"os":null,"premium":null,"aperitivo":null},{"menu":{"name":"VENISON","sub":"preserved berries, Perigord truffle"},"veg":{"name":"VENISON","sub":"celeriac roll, caramelised onion reduction"},"hazards":"berries, stone fruits, lactose","na":{"name":"LINGONBERRY","sub":"shiitake, carob"},"wp":{"name":"Aleks Klinec, Mora '12","sub":"Goriška Brda, Slovenia"},"os":{"name":"Aleks Klinec, Mora '12","sub":"Goriška Brda, Slovenia"},"premium":{"name":"Dard & Ribo Hermitage '17","sub":"Rhône, France"},"aperitivo":null},{"menu":{"name":"SHEEP CHEESE","sub":"juniper, green tomato"},"veg":null,"hazards":"lactose","na":{"name":"SPRUCE","sub":"apple, gentian"},"wp":{"name":"Floribunda Apple Cider","sub":"Udine, Italy"},"os":{"name":"SPRUCE","sub":"apple, gin"},"premium":{"name":"Egly-Ouriet Les Vignes de Bisseuil","sub":"Montagne de Reims, France"},"aperitivo":null},{"menu":{"name":"PEAR","sub":"walnut, whiskey caramel"},"veg":null,"hazards":"gluten, lactose","na":null,"wp":null,"os":null,"premium":null,"aperitivo":null},{"menu":{"name":"SUNCHOKE","sub":"sea buckthorn, rosehip"},"veg":null,"hazards":"gluten, lactose","na":null,"wp":null,"os":null,"premium":null,"aperitivo":null},{"menu":{"name":"GODLJA","sub":"bread caramel, grains"},"veg":{"name":"GODLJA","sub":"no blood"},"hazards":"stone fruits, gluten","na":{"name":"ARONIA","sub":"meadowsweet, barley"},"wp":{"name":"Domaine Rolet, Macvin du Jura","sub":"Jura, France"},"os":{"name":"Domaine Rolet, Macvin du Jura","sub":"Jura, France"},"premium":{"name":"Domaine Rolet Macvin du Jura '12","sub":"Arbois, France"},"aperitivo":null},{"menu":{"name":"SWEET POTATO","sub":"star anise, egg yolk"},"veg":null,"hazards":"nuts, eggs, berries, gluten","na":null,"wp":null,"os":null,"premium":null,"aperitivo":null},{"menu":{"name":"CHEESE","sub":"condiments, sourdough crackers"},"veg":null,"hazards":null,"na":null,"wp":null,"os":null,"premium":null,"aperitivo":null},{"menu":{"name":"BUHTELJ","sub":"deer fat, lingonberry"},"veg":{"name":"BUHTELJ","sub":"brown butter, lingonberry"},"hazards":"gluten, lactose","na":null,"wp":null,"os":null,"premium":null,"aperitivo":null}];
@@ -366,7 +366,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   };
 
   const seatId = seat.id;
-  const pairingLabel = seat.pairing || "";
+  const pairingLabel = (seat.pairing && seat.pairing !== "—") ? seat.pairing : "";
   const pkey = PAIRING_MAP[pairingLabel] || null;
 
   const restrictions = (table.restrictions || []).filter(r => !r.pos || r.pos === seatId).map(r => r.note);
@@ -385,7 +385,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     ? seat.cocktails.filter(c => c && (c.name || c.notes))
     : [];
   const tableBottles = Array.isArray(table.bottleWines)
-    ? table.bottleWines.filter(w => w && (w.name || w.producer || w.vintage))
+    ? table.bottleWines.filter(w => w && (w.name || w.producer || w.vintage || w.notes))
     : [];
 
   const SNACK_END = 4;
@@ -397,6 +397,12 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     title: w?.name || "",
     sub: [w?.producer, w?.vintage].filter(Boolean).join("  "),
   });
+  const fmtAperitivoParts = item => {
+    if (!item) return { title: "", sub: "" };
+    const type = item.__type || item.type || item.category || "";
+    if (type === "cocktail") return { title: item.name || "", sub: item.notes || "" };
+    return fmtWineParts(item);
+  };
 
   
   const visibleCourses = [];
@@ -428,15 +434,10 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
 
 
   const rows = [];
+  const bottleQueue = [...tableBottles];
 
-  if (pkey === null) {
-    cocktails.forEach(c => rows.push({ type: "wine-only", right: fmtCocktailParts(c) }));
-    glasses.forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
-    tableBottles.forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
-  } else {
-    cocktails.forEach(c => rows.push({ type: "wine-only", right: fmtCocktailParts(c) }));
-    glasses.forEach(w => rows.push({ type: "wine-only", right: fmtWineParts(w) }));
-  }
+  cocktails.forEach(c => rows.push({ type: "wine-only", right: fmtAperitivoParts({ ...c, __type: "cocktail" }) }));
+  glasses.forEach(w => rows.push({ type: "wine-only", right: fmtAperitivoParts({ ...w, __type: "wine" }) }));
 
   let insertedPairingLabel = false;
 
@@ -457,6 +458,11 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       drink = { name: course.force_pairing_title || "KITCHEN MARTINI", sub: course.force_pairing_sub || "" };
     }
 
+    if (!pkey && i >= DANUBE_SALMON_IDX && bottleQueue.length > 0) {
+      const nextBottle = bottleQueue.shift();
+      drink = fmtAperitivoParts(nextBottle);
+    }
+
     rows.push({
       type: "course",
       left: { title: dish?.name || "", sub: dish?.sub || "" },
@@ -470,6 +476,10 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
 
   if (pkey && !insertedPairingLabel) {
     rows.unshift({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING" });
+  }
+
+  if (!pkey && bottleQueue.length > 0) {
+    bottleQueue.forEach(item => rows.push({ type: "wine-only", right: fmtAperitivoParts(item) }));
   }
 
   const renderBlock = (block, cls = "") => {
@@ -671,6 +681,7 @@ body{position:relative;}
 
 
 const pairingStyle = {
+  "—":         { color: "#666", border: "#d8d8d888", bg: "#f6f6f6" },
   "Non-Alc":  { color: "#1f5f73", border: "#7fc6db88", bg: "#7fc6db12" },
   "Wine":      { color: "#8a6030", border: "#c8a06088", bg: "#c8a06008" },
   "Premium":   { color: "#5a5a8a", border: "#8888bb88", bg: "#8888bb08" },
@@ -2118,24 +2129,44 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
 
       {/* Table-wide fields */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 24 }}>
-        <div>
-          <div style={fieldLabel}>🍾 Bottles</div>
-          {(table.bottleWines || []).map((w, i) => (
-            <div key={i} style={{ marginBottom: 6 }}>
-              <WineSearch
-                wineObj={w} wines={wines} byGlass={false} placeholder="search bottle…"
-                onChange={val => {
-                  const next = (table.bottleWines || []).map((b, idx) => idx === i ? val : b).filter(Boolean);
-                  upd("bottleWines", next);
-                }}
-              />
-            </div>
-          ))}
-          <WineSearch
-            wineObj={null} wines={wines} byGlass={false} placeholder="add bottle…"
-            onChange={w => { if (w) upd("bottleWines", [...(table.bottleWines || []), w]); }}
-          />
+        
+<div>
+  <div style={fieldLabel}>🍾 By the Bottle</div>
+  <div style={{ fontFamily: FONT, fontSize: 9, color: "#777", marginBottom: 8 }}>
+    Wines, cocktails, and by-the-glass items added here print from Danube Salmon downward.
+  </div>
+  <BeverageSearch
+    wines={wines}
+    cocktails={cocktails}
+    spirits={[]}
+    beers={[]}
+    onAdd={({ type, item }) => {
+      const tagged = { ...item, __type: type === "wine" ? "wine" : "cocktail" };
+      upd("bottleWines", [...(table.bottleWines || []), tagged]);
+    }}
+  />
+  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+    {(table.bottleWines || []).map((item, i) => {
+      const type = item?.__type || item?.type || item?.category || (item?.producer || item?.vintage ? "wine" : "cocktail");
+      const sub = type === "cocktail" ? (item?.notes || "") : [item?.producer, item?.vintage].filter(Boolean).join(" · ");
+      return (
+        <div key={i} style={{
+          border: "1px solid #e2e2e2", borderRadius: 2, padding: "6px 8px",
+          display: "flex", alignItems: "center", gap: 8, background: "#fafafa"
+        }}>
+          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#666", textTransform: "uppercase" }}>
+            {type === "cocktail" ? "cocktail" : "bottle"}
+          </span>
+          <span style={{ fontFamily: FONT, fontSize: 11 }}>{item?.name || ""}</span>
+          {sub ? <span style={{ fontFamily: FONT, fontSize: 10, color: "#888" }}>{sub}</span> : null}
+          <button onClick={() => upd("bottleWines", (table.bottleWines || []).filter((_, idx) => idx !== i))} style={{
+            background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: 14, lineHeight: 1
+          }}>×</button>
         </div>
+      );
+    })}
+  </div>
+</div>
         <div>
           <div style={fieldLabel}>Menu</div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -2613,12 +2644,12 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
   const setBeer = (seatId, val) => setBeerChoices(prev => ({ ...prev, [seatId]: val }));
 
   // A seat is printable if it has a pairing, or has by-glass wines, or table has bottles
-  const isPrintable = (s) => !!s.pairing || (s.glasses || []).length > 0 || tableBottles.length > 0;
+  const isPrintable = (s) => !!(s.pairing && s.pairing !== "—") || (s.glasses || []).length > 0 || (s.cocktails || []).length > 0 || tableBottles.length > 0;
 
   // Bottles to show on menu for a given seat (no-pairing only)
   const seatBottles = (s) => {
-    if (s.pairing) return []; // pairing menus already show course drinks
-    return [...(s.glasses || []), ...tableBottles];
+    if (s.pairing && s.pairing !== "—") return []; // pairing menus already show course drinks
+    return [...(s.cocktails || []), ...(s.glasses || []), ...tableBottles];
   };
 
   const openPrint = (seat) => {
