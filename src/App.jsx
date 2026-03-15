@@ -69,6 +69,9 @@ function normalizeLiveMenuRow(row) {
   if (!dish?.name) return null;
 
   const vegParsed = splitMainSubCell(row.veg, row.veg_sub);
+const vegFinal = vegParsed
+  ? { name: vegParsed.name || dish.name, sub: vegParsed.sub || dish.sub }
+  : null;
   const courseKey = String(firstFilled(row.course_key, row.key, row.dish) || "")
     .trim()
     .toLowerCase()
