@@ -69,9 +69,6 @@ function normalizeLiveMenuRow(row) {
   if (!dish?.name) return null;
 
   const vegParsed = splitMainSubCell(row.veg, row.veg_sub);
-const vegFinal = vegParsed
-  ? { name: vegParsed.name || dish.name, sub: vegParsed.sub || dish.sub }
-  : null;
   const courseKey = String(firstFilled(row.course_key, row.key, row.dish) || "")
     .trim()
     .toLowerCase()
@@ -83,7 +80,7 @@ const vegFinal = vegParsed
     position,
     is_snack: truthyCell(firstFilled(row["snack?"], row.snack)),
     menu: dish,
-    veg: vegParsed,
+    veg: vegFinal,
     wp: splitMainSubCell(row.wp_drink, row.wp_sub),
     na: splitMainSubCell(row.na_drink, row.na_sub),
     os: splitMainSubCell(row.os_drink, row.os_sub),
