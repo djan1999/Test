@@ -233,66 +233,6 @@ const MILKA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 58 
   <path d="M2,66 L2,30 L20,52 L38,24 L38,66 L34,66 L34,27 L20,50 L6,30 L6,66 Z"/>
 </svg>`;
 
-
-function mapRestrictionColumnKey(key) {
-  const map = {
-    veg: "veg",
-    vegan: "vegan",
-    pescetarian: "pescetarian",
-    gluten: "gluten_free",
-    dairy: "dairy_free",
-    nut: "nut_free",
-    shellfish: "shellfish_free",
-    egg_free: "egg_free",
-    no_alcohol: "no_alcohol",
-    no_garlic_onion: "no_garlic_onion",
-    halal: "halal",
-    low_fodmap: "low_fodmap",
-    no_red_meat: "no_red_meat",
-    no_pork: "no_pork",
-    no_game: "no_game",
-    no_offal: "no_offal",
-  };
-  return map[key] || key;
-}
-
-function parseRestrictionDish(rawValue, baseDish) {
-  const raw = String(rawValue || "").trim();
-  if (!raw) return null;
-
-  if (raw.includes("|")) {
-    const [name, ...rest] = raw.split("|");
-    return {
-      name: String(name || "").trim() || String(baseDish?.name || "").trim(),
-      sub: rest.join("|").trim(),
-    };
-  }
-
-  return {
-    name: String(baseDish?.name || "").trim(),
-    sub: raw,
-  };
-}
-
-function resolveDishForRestrictions(course, activeRestrictions) {
-  const baseDish = course?.menu || null;
-  if (!baseDish) return null;
-
-  for (const key of (activeRestrictions || [])) {
-    const mappedKey = mapRestrictionColumnKey(key);
-    const raw = course?.restrictions?.[mappedKey];
-    const parsed = parseRestrictionDish(raw, baseDish);
-    if (parsed) return parsed;
-  }
-
-  if ((activeRestrictions || []).some(r => r === "veg" || r === "vegan" || r === "pescetarian") && course?.veg) {
-    return course.veg;
-  }
-
-  return baseDish;
-}
-
-
 function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null }) {
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
   const PAIRING_LABELS = {
@@ -384,7 +324,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       insertedPairingLabel = true;
     }
 
-    const dish = resolveDishForRestrictions(course, restrictions);
+    const dish = (isVeg && course.veg) ? course.veg : course.menu;
     let drink = pkey ? course[pkey] : null;
 
     if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
