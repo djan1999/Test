@@ -2817,11 +2817,15 @@ function KitchenTicket({ table, menuCourses, upd }) {
                   {extraLabel && (
                     <span style={{ fontFamily: FONT, fontSize: 10, color: "#bbb", marginLeft: 6 }}>{extraLabel}</span>
                   )}
-                  {!extraLabel && seatMods.length > 0 && !fired && seatMods.map(({ seat, dish }) => (
-                    <span key={seat.id} style={{ fontFamily: FONT, fontSize: 10, color: "#b04040", marginLeft: 6 }}>
-                      <span style={{ fontWeight: 700 }}>P{seat.id}</span>:{dish.name}
-                    </span>
-                  ))}
+                  {!extraLabel && seatMods.length > 0 && !fired && (() => {
+                    const groups = {};
+                    seatMods.forEach(({ dish }) => { groups[dish.name] = (groups[dish.name] || 0) + 1; });
+                    return Object.entries(groups).map(([name, count]) => (
+                      <span key={name} style={{ fontFamily: FONT, fontSize: 10, color: "#b04040", marginLeft: 6 }}>
+                        {count}x {name}
+                      </span>
+                    ));
+                  })()}
                 </div>
                 {firedAt && <span style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", fontWeight: 600, flexShrink: 0 }}>{firedAt}</span>}
               </div>
