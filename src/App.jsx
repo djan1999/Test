@@ -652,6 +652,7 @@ const blankTable = id => ({
   id, active: false, guests: 2, resName: "", resTime: "", guestType: "", room: "",
   arrivedAt: null, menuType: "", pace: "", bottleWines: [],
   restrictions: [], birthday: false, notes: "", seats: makeSeats(2),
+  kitchenLog: {},
 });
 
 const initTables = Array.from({ length: 10 }, (_, i) => blankTable(i + 1));
@@ -666,6 +667,7 @@ const sanitizeTable = t => ({
     Array.isArray(t.seats) ? t.seats : []
   ),
   restrictions: Array.isArray(t.restrictions) ? t.restrictions : [],
+  kitchenLog: t.kitchenLog && typeof t.kitchenLog === "object" ? t.kitchenLog : {},
 });
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -2677,131 +2679,205 @@ function ServiceQuickView({ tables, updSeat, setSel }) {
   );
 }
 
-// ── Kitchen Board ──────────────────────────────────────────────────────────────
-function KitchenDocket({ table }) {
+// ── Kitchen Board (KDS) ────────────────────────────────────────────────────────
+function KitchenTicket({ table, menuCourses, upd }) {
   const seats = table.seats || [];
   const restrictions = table.restrictions || [];
+  const log = table.kitchenLog || {};
 
-  // Pairing counts
-  const pairCounts = {};
-  seats.forEach(s => {
-    const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
-    if (p) pairCounts[p] = (pairCounts[p] || 0) + 1;
-  });
-  const noPairingCount = seats.filter(s => !s.pairing || s.pairing === "—").length;
+  const fire = (courseKey) => {
+    const now = fmt(new Date());
+    const newLog = { ...log, [courseKey]: { firedAt: now } };
+    upd(table.id, "kitchenLog", newLog);
+  };
+  const unfire = (courseKey) => {
+    const newLog = { ...log };
+    delete newLog[courseKey];
+    upd(table.id, "kitchenLog", newLog);
+  };
 
-  // Extras
+  // Seat restriction keys per seat (for course substitution lookup)
+  const seatRestrKeys = (seat) =>
+    (restrictions || [])
+      .filter(r => !r.pos || r.pos === seat.id)
+      .map(r => {
+        const mapped = RESTRICTION_COLUMN_MAP[r.note] || r.note;
+        return mapped;
+      });
+
+  const pairingColor = { Wine: "#7a5020", "Non-Alc": "#1f5f73", Premium: "#5a5a8a", "Our Story": "#3a7a5a" };
+  const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#e8f5fa", Premium: "#f0eeff", "Our Story": "#eaf5ee" };
+
+  // Courses to show: non-snack courses in order
+  const courses = (menuCourses || []).filter(c => !c.is_snack);
+
+  // Extras as pseudo-courses
   const beetSeats   = seats.filter(s => s.extras?.[1]?.ordered || s.extras?.["1"]?.ordered);
   const cheeseSeats = seats.filter(s => s.extras?.[2]?.ordered || s.extras?.["2"]?.ordered);
   const cakeSeats   = seats.filter(s => s.extras?.[3]?.ordered || s.extras?.["3"]?.ordered);
   const hasCake     = table.birthday || cakeSeats.length > 0;
 
-  // Water counts
-  const waterMap = {};
-  seats.forEach(s => { if (s.water && s.water !== "—") waterMap[s.water] = (waterMap[s.water] || 0) + 1; });
-
-  const pairingColor = { Wine: "#7a5020", "Non-Alc": "#1f5f73", Premium: "#5a5a8a", "Our Story": "#3a7a5a" };
-  const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#e8f5fa", Premium: "#f0eeff", "Our Story": "#eaf5ee" };
+  const firedCount = Object.keys(log).length;
+  const totalCourses = courses.length + (beetSeats.length > 0 ? 1 : 0) + (cheeseSeats.length > 0 ? 1 : 0) + (hasCake ? 1 : 0);
 
   return (
     <div style={{ border: "1.5px solid #e0e0e0", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
       {/* Header */}
-      <div style={{ background: "#1a1a1a", padding: "9px 14px", display: "flex", alignItems: "baseline", gap: 10 }}>
+      <div style={{ background: "#1a1a1a", padding: "9px 14px", display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: "#fff", lineHeight: 1 }}>T{table.id}</span>
         {table.resName && <span style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, color: "#ddd" }}>{table.resName}</span>}
         {table.resTime && <span style={{ fontFamily: FONT, fontSize: 10, color: "#888" }}>{table.resTime}</span>}
-        <span style={{ fontFamily: FONT, fontSize: 10, color: "#777", marginLeft: "auto" }}>{seats.length} pax</span>
-      </div>
-
-      {/* Pairings summary */}
-      <div style={{ padding: "9px 14px", borderBottom: "1px solid #f4f4f4", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-        {Object.entries(pairCounts).map(([pairing, count]) => (
-          <span key={pairing} style={{
-            fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "3px 8px", borderRadius: 2,
-            background: pairingBg[pairing] || "#f5f5f5", color: pairingColor[pairing] || "#555",
-            border: `1px solid ${pairingColor[pairing] || "#ddd"}44`,
-          }}>{count}× {pairing}</span>
-        ))}
-        {noPairingCount > 0 && (
-          <span style={{ fontFamily: FONT, fontSize: 10, color: "#bbb" }}>{noPairingCount}× —</span>
-        )}
-      </div>
-
-      {/* Water */}
-      {Object.keys(waterMap).length > 0 && (
-        <div style={{ padding: "7px 14px", borderBottom: "1px solid #f4f4f4", display: "flex", gap: 6, alignItems: "center" }}>
-          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", minWidth: 40 }}>WATER</span>
-          {Object.entries(waterMap).map(([w, c]) => (
-            <span key={w} style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>{c}× {w}</span>
-          ))}
-        </div>
-      )}
-
-      {/* Extras */}
-      {(beetSeats.length > 0 || cheeseSeats.length > 0 || hasCake) && (
-        <div style={{ padding: "8px 14px", borderBottom: "1px solid #f4f4f4", display: "flex", flexDirection: "column", gap: 4 }}>
-          {beetSeats.length > 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#5a8a3a" }}>Beetroot ×{beetSeats.length}</span>
-              {beetSeats.map(s => {
-                const p = s.extras?.[1]?.pairing || s.extras?.["1"]?.pairing || "—";
-                return (
-                  <span key={s.id} style={{ fontFamily: FONT, fontSize: 9, color: "#666", padding: "1px 5px", background: "#f4f4f4", borderRadius: 2 }}>
-                    P{s.id}: {p}
-                  </span>
-                );
-              })}
-            </div>
-          )}
-          {cheeseSeats.length > 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#a06830" }}>Cheese ×{cheeseSeats.length}</span>
-              {cheeseSeats.map(s => (
-                <span key={s.id} style={{ fontFamily: FONT, fontSize: 9, color: "#666", padding: "1px 5px", background: "#f4f4f4", borderRadius: 2 }}>P{s.id}</span>
-              ))}
-            </div>
-          )}
-          {hasCake && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#b04888" }}>🎂 Cake</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Restrictions per seat */}
-      {restrictions.length > 0 && (
-        <div style={{ padding: "8px 14px", display: "flex", flexDirection: "column", gap: 5 }}>
-          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb" }}>DIETARY / ALLERGY</span>
-          {seats.map(seat => {
-            const seatRestr = restrictions.filter(r => !r.pos || r.pos === seat.id);
-            if (seatRestr.length === 0) return null;
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          {seats.map(s => {
+            const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
             return (
-              <div key={seat.id} style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 1, color: "#888", minWidth: 22 }}>P{seat.id}</span>
-                {seatRestr.map((r, i) => (
-                  <span key={i} style={{
-                    fontFamily: FONT, fontSize: 9, padding: "2px 6px", borderRadius: 2,
-                    background: "#fef0f0", border: "1px solid #e09090", color: "#b04040",
-                  }}>{restrLabel(r.note)}</span>
-                ))}
-              </div>
+              <span key={s.id} style={{
+                fontFamily: FONT, fontSize: 9, padding: "2px 6px", borderRadius: 2,
+                background: p ? (pairingBg[p] || "#f5f5f5") : "#333",
+                color: p ? (pairingColor[p] || "#555") : "#aaa",
+              }}>P{s.id}{p ? ` ${p === "Non-Alc" ? "N/A" : p === "Our Story" ? "OS" : p === "Premium" ? "Prem" : "W"}` : ""}</span>
             );
           })}
+          <span style={{ fontFamily: FONT, fontSize: 9, color: firedCount === totalCourses && totalCourses > 0 ? "#4a9a6a" : "#666" }}>
+            {firedCount}/{totalCourses}
+          </span>
         </div>
-      )}
+      </div>
+
+      {/* Course rows */}
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {courses.map((course, idx) => {
+          const key = course.course_key || `course_${idx}`;
+          const fired = !!log[key];
+          const firedAt = log[key]?.firedAt;
+
+          // Per-seat restriction substitutions
+          const seatMods = seats
+            .map(seat => {
+              const restrKeys = seatRestrKeys(seat);
+              if (!restrKeys.length) return null;
+              const modified = applyCourseRestriction(course, restrKeys);
+              const base = course.menu;
+              if (!modified) return null;
+              // Only show if dish name or sub actually changes
+              const changed = modified.name !== base?.name || modified.sub !== base?.sub;
+              if (!changed) return null;
+              return { seat, dish: modified };
+            })
+            .filter(Boolean);
+
+          return (
+            <div key={key} style={{
+              display: "flex", flexDirection: "column",
+              borderBottom: "1px solid #f0f0f0",
+              background: fired ? "#f6fff6" : "#fff",
+              opacity: fired ? 0.75 : 1,
+              transition: "background 0.2s",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", padding: "9px 14px", gap: 10 }}>
+                {/* Fire button */}
+                <button
+                  onClick={() => fired ? unfire(key) : fire(key)}
+                  style={{
+                    width: 28, height: 28, borderRadius: "50%", border: "none",
+                    background: fired ? "#4a9a6a" : "#f0f0f0",
+                    color: fired ? "#fff" : "#aaa",
+                    cursor: "pointer", fontSize: 14, lineHeight: 1,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >{fired ? "✓" : "○"}</button>
+
+                {/* Dish name */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: FONT, fontSize: 11, fontWeight: 600,
+                    color: fired ? "#888" : "#1a1a1a",
+                    textDecoration: fired ? "line-through" : "none",
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>{course.menu?.name || key}</div>
+                  {course.menu?.sub && !fired && (
+                    <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginTop: 1 }}>{course.menu.sub}</div>
+                  )}
+                </div>
+
+                {/* Fired time */}
+                {firedAt && (
+                  <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 600, flexShrink: 0 }}>{firedAt}</span>
+                )}
+              </div>
+
+              {/* Seat-specific modifications */}
+              {seatMods.length > 0 && !fired && (
+                <div style={{ padding: "0 14px 8px 52px", display: "flex", flexDirection: "column", gap: 3 }}>
+                  {seatMods.map(({ seat, dish }) => (
+                    <div key={seat.id} style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                      <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: 1, color: "#b04040", minWidth: 18 }}>P{seat.id}</span>
+                      <span style={{ fontFamily: FONT, fontSize: 9, color: "#b04040" }}>{dish.name}{dish.sub ? ` — ${dish.sub}` : ""}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Extras as special rows */}
+        {beetSeats.length > 0 && (() => {
+          const key = "__beet__";
+          const fired = !!log[key];
+          return (
+            <div key={key} style={{ display: "flex", alignItems: "center", padding: "9px 14px", gap: 10, borderBottom: "1px solid #f0f0f0", background: fired ? "#f6fff6" : "#fff", opacity: fired ? 0.75 : 1 }}>
+              <button onClick={() => fired ? unfire(key) : fire(key)} style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: fired ? "#4a9a6a" : "#f0f0f0", color: fired ? "#fff" : "#aaa", cursor: "pointer", fontSize: 14, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fired ? "✓" : "○"}</button>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: fired ? "#888" : "#5a8a3a", textDecoration: fired ? "line-through" : "none" }}>Beetroot</div>
+                <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa" }}>{beetSeats.map(s => { const p = s.extras?.[1]?.pairing || s.extras?.["1"]?.pairing || "—"; return `P${s.id}: ${p}`; }).join(" · ")}</div>
+              </div>
+              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 600 }}>{log[key].firedAt}</span>}
+            </div>
+          );
+        })()}
+
+        {cheeseSeats.length > 0 && (() => {
+          const key = "__cheese__";
+          const fired = !!log[key];
+          return (
+            <div key={key} style={{ display: "flex", alignItems: "center", padding: "9px 14px", gap: 10, borderBottom: "1px solid #f0f0f0", background: fired ? "#f6fff6" : "#fff", opacity: fired ? 0.75 : 1 }}>
+              <button onClick={() => fired ? unfire(key) : fire(key)} style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: fired ? "#4a9a6a" : "#f0f0f0", color: fired ? "#fff" : "#aaa", cursor: "pointer", fontSize: 14, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fired ? "✓" : "○"}</button>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: fired ? "#888" : "#a06830", textDecoration: fired ? "line-through" : "none" }}>Cheese</div>
+                <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa" }}>{cheeseSeats.map(s => `P${s.id}`).join(" · ")}</div>
+              </div>
+              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 600 }}>{log[key].firedAt}</span>}
+            </div>
+          );
+        })()}
+
+        {hasCake && (() => {
+          const key = "__cake__";
+          const fired = !!log[key];
+          return (
+            <div key={key} style={{ display: "flex", alignItems: "center", padding: "9px 14px", gap: 10, background: fired ? "#f6fff6" : "#fff", opacity: fired ? 0.75 : 1 }}>
+              <button onClick={() => fired ? unfire(key) : fire(key)} style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: fired ? "#4a9a6a" : "#f0f0f0", color: fired ? "#fff" : "#aaa", cursor: "pointer", fontSize: 14, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fired ? "✓" : "○"}</button>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: fired ? "#888" : "#b04888", textDecoration: fired ? "line-through" : "none" }}>🎂 Cake</div>
+              </div>
+              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 600 }}>{log[key].firedAt}</span>}
+            </div>
+          );
+        })()}
+      </div>
     </div>
   );
 }
 
-function KitchenBoard({ tables }) {
+function KitchenBoard({ tables, menuCourses, upd }) {
   const activeTables = tables.filter(t => t.active);
   if (activeTables.length === 0) return (
     <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
       No active tables
     </div>
   );
-  // Group by sitting time
   const byTime = {};
   activeTables.forEach(t => {
     const time = t.resTime || "—";
@@ -2819,8 +2895,8 @@ function KitchenBoard({ tables }) {
               {timeTables.reduce((sum, t) => sum + (t.seats?.length || 0), 0)} covers
             </span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
-            {timeTables.map(t => <KitchenDocket key={t.id} table={t} />)}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
+            {timeTables.map(t => <KitchenTicket key={t.id} table={t} menuCourses={menuCourses} upd={upd} />)}
           </div>
         </div>
       ))}
@@ -4045,7 +4121,7 @@ export default function App() {
                     );
                   })}
                 </div>
-                {subView === "kitchen" ? <KitchenBoard tables={tables} /> : (() => {
+                {subView === "kitchen" ? <KitchenBoard tables={tables} menuCourses={menuCourses} upd={upd} /> : (() => {
             const visibleTables = tables.filter(t => mode === "admin" || t.active || t.resName || t.resTime);
             const cardProps = t => ({
               key: t.id, table: t, mode,
