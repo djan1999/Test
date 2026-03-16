@@ -399,7 +399,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
 
     const isBeetrootCourse = optionalFlag === "beetroot" || courseKey === "beetroot" || courseNameKey === "beetroot";
     const isCakeCourse = optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseNameKey === "pear";
-    const isCheeseExtraCourse = optionalFlag === "cheese" || courseKey === "cheese" || courseNameKey === "cheese" || courseKey === "sheep_cheese" || courseNameKey === "sheep_cheese";
+    const isCheeseExtraCourse = optionalFlag === "cheese" || courseKey === "cheese" || courseNameKey === "cheese";
 
     if (isBeetrootCourse && !hasBeetroot) return;
     if (isCakeCourse && !hasCake) return;
