@@ -2585,33 +2585,56 @@ function ServiceQuickCard({ table, updSeat, onDetails }) {
         const beetExtra = seat.extras?.[1] || seat.extras?.["1"] || { ordered: false, pairing: "—" };
         const hasBeet = !!beetExtra.ordered;
         const hasCheese = !!(seat.extras?.[2]?.ordered || seat.extras?.["2"]?.ordered);
+        const hasCake = !!(seat.extras?.[3]?.ordered || seat.extras?.["3"]?.ordered || table.birthday);
         const setBeetPairing = (p) => updSeat(table.id, seat.id, "extras", { ...seat.extras, 1: { ...beetExtra, pairing: p } });
+        const pairingColor = { Wine: "#7a5020", "Non-Alc": "#3a6a2a", Premium: "#4a3a7a", "Our Story": "#2a5a6a" };
+        const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#edf8e8", Premium: "#f0eeff", "Our Story": "#e8f5f8" };
+        const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
         return (
-          <div key={seat.id} style={{
-            display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
-            padding: "7px 14px", borderBottom: "1px solid #f8f8f8",
-          }}>
-            <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: "#999", minWidth: 22, letterSpacing: 1 }}>P{seat.id}</span>
-            <div style={{ display: "flex", gap: 4 }}>
-              {WATER_QUICK.map(opt => waterBtn(opt, seat.water === opt, () => updSeat(table.id, seat.id, "water", opt)))}
+          <div key={seat.id} style={{ borderBottom: "1px solid #f8f8f8" }}>
+            {/* Water + extras row */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", padding: "7px 14px 4px" }}>
+              <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: "#999", minWidth: 22, letterSpacing: 1 }}>P{seat.id}</span>
+              <div style={{ display: "flex", gap: 4 }}>
+                {WATER_QUICK.map(opt => waterBtn(opt, seat.water === opt, () => updSeat(table.id, seat.id, "water", opt)))}
+              </div>
+              <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
+                {extraBtn("Beet", hasBeet, "#5a8a3a", () => toggleExtra(seat, 1))}
+                {hasBeet && ["—", "Champ", "N/A"].map(p => {
+                  const val = p === "Champ" ? "Champagne" : p;
+                  const active = (beetExtra.pairing || "—") === val;
+                  return (
+                    <button key={p} onClick={() => setBeetPairing(val)} style={{
+                      fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
+                      padding: "4px 7px", border: "1px solid",
+                      borderColor: active ? "#5a8a3a" : "#e0e0e0",
+                      borderRadius: 2, cursor: "pointer", lineHeight: 1,
+                      background: active ? "#edf8e8" : "#fff",
+                      color: active ? "#5a8a3a" : "#aaa",
+                    }}>{p}</button>
+                  );
+                })}
+                {extraBtn("Chse", hasCheese, "#a06830", () => toggleExtra(seat, 2))}
+                {extraBtn("Cake", hasCake, "#b06080", () => toggleExtra(seat, 3))}
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
-              {extraBtn("Beet", hasBeet, "#5a8a3a", () => toggleExtra(seat, 1))}
-              {hasBeet && ["—", "Champ", "N/A"].map(p => {
-                const val = p === "Champ" ? "Champagne" : p;
-                const active = (beetExtra.pairing || "—") === val;
+            {/* Pairing row */}
+            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 14px 7px 46px" }}>
+              {PAIRING_OPTS.map(([val, label]) => {
+                const active = seat.pairing === val || (val === "—" && !seat.pairing);
+                const col = pairingColor[val];
+                const bg = pairingBg[val];
                 return (
-                  <button key={p} onClick={() => setBeetPairing(val)} style={{
+                  <button key={val} onClick={() => updSeat(table.id, seat.id, "pairing", val)} style={{
                     fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
-                    padding: "4px 7px", border: "1px solid",
-                    borderColor: active ? "#5a8a3a" : "#e0e0e0",
+                    padding: "4px 8px", border: "1px solid",
+                    borderColor: active && val !== "—" ? col : active ? "#1a1a1a" : "#e0e0e0",
                     borderRadius: 2, cursor: "pointer", lineHeight: 1,
-                    background: active ? "#edf8e8" : "#fff",
-                    color: active ? "#5a8a3a" : "#aaa",
-                  }}>{p}</button>
+                    background: active && val !== "—" ? bg : active ? "#1a1a1a" : "#fff",
+                    color: active && val !== "—" ? col : active ? "#fff" : "#bbb",
+                  }}>{label}</button>
                 );
               })}
-              {extraBtn("Chse", hasCheese, "#a06830", () => toggleExtra(seat, 2))}
             </div>
           </div>
         );
@@ -3501,7 +3524,11 @@ export default function App() {
       // Clear old table if user picked a different one
       if (t.id === id && id !== targetId) return { ...t, resName: "", resTime: "", menuType: "", guestType: "", room: "", guests: 2, birthday: false, restrictions: [], notes: "" };
       if (t.id !== targetId) return t;
-      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: makeSeats(guests, t.seats), birthday, restrictions, notes };
+      const newSeats = makeSeats(guests, t.seats).map(s => ({
+        ...s,
+        extras: { ...s.extras, ...(birthday ? { 3: { ordered: true, pairing: "—" } } : {}) },
+      }));
+      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, restrictions, notes };
     }));
     setResModal(null);
   };
