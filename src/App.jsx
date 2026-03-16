@@ -2742,22 +2742,22 @@ function KitchenTicket({ table, menuCourses, upd }) {
   })();
 
   return (
-    <div style={{ border: "1.5px solid #e0e0e0", borderRadius: 4, overflow: "hidden", background: "#fff" }}>
-      {/* Header row 1: table + progress */}
-      <div style={{ background: "#1a1a1a", padding: "4px 8px", display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: "#fff", lineHeight: 1 }}>T{table.id}</span>
-        {table.resName && <span style={{ fontFamily: FONT, fontSize: 9, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 55 }}>{table.resName}</span>}
-        <span style={{ fontFamily: FONT, fontSize: 8, color: allDone ? "#4a9a6a" : "#666", marginLeft: "auto" }}>{firedCount}/{totalCourses}</span>
+    <div style={{ border: "1.5px solid #e0e0e0", borderRadius: 5, overflow: "hidden", background: "#fff" }}>
+      {/* Header row 1: table + name + progress */}
+      <div style={{ background: "#1a1a1a", padding: "7px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: "#fff", lineHeight: 1 }}>T{table.id}</span>
+        {table.resName && <span style={{ fontFamily: FONT, fontSize: 12, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{table.resName}</span>}
+        <span style={{ fontFamily: FONT, fontSize: 11, color: allDone ? "#4a9a6a" : "#888", marginLeft: "auto", fontWeight: allDone ? 700 : 400 }}>{firedCount}/{totalCourses}</span>
       </div>
       {/* Header row 2: seat pairings + restrictions */}
-      <div style={{ background: "#2a2a2a", padding: "3px 8px", display: "flex", flexWrap: "wrap", gap: "3px 6px" }}>
+      <div style={{ background: "#2a2a2a", padding: "5px 14px", display: "flex", flexWrap: "wrap", gap: "4px 8px" }}>
         {seats.map(s => {
           const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
           const restrList = restrictions.filter(r => !r.pos || r.pos === s.id).map(r => r.note).filter(Boolean);
           const pInit = p ? (p === "Non-Alc" ? "N" : p === "Our Story" ? "O" : p === "Premium" ? "P" : "W") : null;
           return (
             <span key={s.id} style={{
-              fontFamily: FONT, fontSize: 8, padding: "1px 4px", borderRadius: 2,
+              fontFamily: FONT, fontSize: 11, padding: "2px 7px", borderRadius: 3,
               background: p ? (pairingBg[p] || "#f5f5f5") : "#383838",
               color: p ? (pairingColor[p] || "#555") : "#888",
             }}>
@@ -2806,37 +2806,36 @@ function KitchenTicket({ table, menuCourses, upd }) {
                 transition: "background 0.15s",
                 borderLeft: fired ? "3px solid #4a9a6a" : "3px solid transparent",
               }}>
-              <div style={{ display: "flex", alignItems: "center", padding: "6px 8px 6px 6px", gap: 4, minWidth: 0 }}>
-                <span style={{ fontFamily: FONT, fontSize: 9, color: fired ? "#4a9a6a" : "#ccc", flexShrink: 0 }}>{fired ? "✓" : "·"}</span>
-                {/* Dish name + inline extras label or restriction mods */}
+              <div style={{ display: "flex", alignItems: "center", padding: "9px 14px 9px 10px", gap: 6, minWidth: 0 }}>
+                <span style={{ fontFamily: FONT, fontSize: 12, color: fired ? "#4a9a6a" : "#ccc", flexShrink: 0 }}>{fired ? "✓" : "·"}</span>
                 <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
                   <span style={{
-                    fontFamily: FONT, fontSize: 10, fontWeight: 600,
-                    color: fired ? "#888" : "#1a1a1a",
+                    fontFamily: FONT, fontSize: 13, fontWeight: 600,
+                    color: fired ? "#999" : "#1a1a1a",
                     textDecoration: fired ? "line-through" : "none",
                   }}>{course.menu?.name || key}</span>
                   {extraLabel && (
-                    <span style={{ fontFamily: FONT, fontSize: 8, color: "#bbb", marginLeft: 4 }}>{extraLabel}</span>
+                    <span style={{ fontFamily: FONT, fontSize: 10, color: "#bbb", marginLeft: 6 }}>{extraLabel}</span>
                   )}
                   {!extraLabel && seatMods.length > 0 && !fired && seatMods.map(({ seat, dish }) => (
-                    <span key={seat.id} style={{ fontFamily: FONT, fontSize: 8, color: "#b04040", marginLeft: 4 }}>
+                    <span key={seat.id} style={{ fontFamily: FONT, fontSize: 10, color: "#b04040", marginLeft: 6 }}>
                       <span style={{ fontWeight: 700 }}>P{seat.id}</span>:{dish.name}
                     </span>
                   ))}
                 </div>
-                {firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600, flexShrink: 0 }}>{firedAt}</span>}
+                {firedAt && <span style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", fontWeight: 600, flexShrink: 0 }}>{firedAt}</span>}
               </div>
             </div>
           );
         })}
-
       </div>
+
       {/* Duration footer — shown when all courses are fired */}
       {allDone && (
         <div style={{
           background: "#f0faf0", borderTop: "1px solid #c8eac8",
-          padding: "4px 8px", textAlign: "center",
-          fontFamily: FONT, fontSize: 9, color: "#4a9a6a", letterSpacing: 1,
+          padding: "6px 14px", textAlign: "center",
+          fontFamily: FONT, fontSize: 11, color: "#4a9a6a", letterSpacing: 1, fontWeight: 600,
         }}>
           {durationMins != null ? `${durationMins} min` : "✓ complete"}
         </div>
@@ -2861,22 +2860,22 @@ function KitchenBoard({ tables, menuCourses, upd }) {
   const groups = Object.entries(byTime).sort(([a], [b]) => a.localeCompare(b));
   return (
     <div style={{ overflowX: "auto", paddingBottom: 8 }}>
-      <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-start", gap: 6, minWidth: "max-content" }}>
+      <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-start", gap: 12, minWidth: "max-content" }}>
         {groups.flatMap(([time, timeTables], gi) => [
           gi > 0 && (
-            <div key={`sep-${time}`} style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, padding: "4px 2px" }}>
-              <div style={{ width: 1, background: "#e0e0e0", height: 40 }} />
-              <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", writingMode: "vertical-rl", textOrientation: "mixed" }}>{time}</span>
-              <div style={{ width: 1, background: "#e0e0e0", flex: 1, minHeight: 40 }} />
+            <div key={`sep-${time}`} style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, padding: "4px 4px" }}>
+              <div style={{ width: 1, background: "#e0e0e0", height: 50 }} />
+              <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, color: "#bbb", writingMode: "vertical-rl", textOrientation: "mixed" }}>{time}</span>
+              <div style={{ width: 1, background: "#e0e0e0", flex: 1, minHeight: 50 }} />
             </div>
           ),
           gi === 0 && (
-            <div key={`label-${time}`} style={{ flexShrink: 0, display: "flex", alignItems: "center", padding: "4px 4px 4px 0" }}>
-              <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", writingMode: "vertical-rl", textOrientation: "mixed" }}>{time}</span>
+            <div key={`label-${time}`} style={{ flexShrink: 0, display: "flex", alignItems: "center", padding: "4px 6px 4px 0" }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, color: "#bbb", writingMode: "vertical-rl", textOrientation: "mixed" }}>{time}</span>
             </div>
           ),
           ...timeTables.map(t => (
-            <div key={t.id} style={{ flexShrink: 0, width: 165 }}>
+            <div key={t.id} style={{ flexShrink: 0, width: 355 }}>
               <KitchenTicket table={t} menuCourses={menuCourses} upd={upd} />
             </div>
           )),
