@@ -69,6 +69,10 @@ function normalizeLiveMenuRow(row) {
   if (!dish?.name) return null;
 
   const vegParsed = splitMainSubCell(row.veg, row.veg_sub);
+  const vegFinal = vegParsed
+    ? { name: vegParsed.name || dish.name, sub: vegParsed.sub || dish.sub || "" }
+    : null;
+
   const courseKey = String(firstFilled(row.course_key, row.key, row.dish) || "")
     .trim()
     .toLowerCase()
@@ -76,11 +80,22 @@ function normalizeLiveMenuRow(row) {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
+  const restrictionKeys = [
+    "veg","vegan","pescetarian","no_red_meat","no_pork","no_game","no_offal",
+    "gluten_free","dairy_free","nut_free","shellfish_free","egg_free",
+    "no_garlic_onion","no_alcohol","halal","low_fodmap"
+  ];
+  const restrictions = {};
+  restrictionKeys.forEach((key) => {
+    restrictions[key] = String(firstFilled(row[key])).trim();
+    restrictions[`${key}_sub`] = String(firstFilled(row[`${key}_sub`])).trim();
+  });
+
   return {
     position,
     is_snack: truthyCell(firstFilled(row["snack?"], row.snack)),
     menu: dish,
-    veg: vegParsed,
+    veg: vegFinal,
     wp: splitMainSubCell(row.wp_drink, row.wp_sub),
     na: splitMainSubCell(row.na_drink, row.na_sub),
     os: splitMainSubCell(row.os_drink, row.os_sub),
@@ -93,6 +108,7 @@ function normalizeLiveMenuRow(row) {
     force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
     force_pairing_sub: String(firstFilled(row.force_pairing_sub)).trim(),
     kitchen_note: String(firstFilled(row.kitchen_note)).trim(),
+    restrictions,
   };
 }
 
@@ -283,7 +299,10 @@ function applyCourseRestriction(course, activeRestrictions) {
   const baseDish = course?.menu || { name: "", sub: "" };
   const values = course?.restrictions || {};
 
-  let dish = { name: String(baseDish.name || "").trim(), sub: String(baseDish.sub || "").trim() };
+  let dish = {
+    name: String(baseDish.name || "").trim(),
+    sub: String(baseDish.sub || "").trim(),
+  };
 
   for (const key of RESTRICTION_PRIORITY_KEYS) {
     if (!(activeRestrictions || []).includes(key)) continue;
@@ -347,18 +366,16 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   const fmtDrinkParts = item => {
     if (!item) return { title: "", sub: "" };
     const type = item.__type || item.type || item.category || "";
-    if (type === "cocktail") return { title: item.name || "", sub: item.notes || "" };
-    if (type === "beer") return { title: item.name || "", sub: item.notes || "" };
+    if (type === "cocktail" || type === "beer") return { title: item.name || "", sub: item.notes || "" };
     return fmtWineParts(item);
   };
 
   const selectedBeer = (() => {
-    if (beers.length === 0) return { title: beerChoice === "nonalc" ? "NON-ALCOHOLIC BEER" : "BEER", sub: "" };
+    if (beers.length === 0) return null;
     const chosen = beers.find(b => {
       const hay = `${b?.name || ""} ${b?.notes || ""}`.toLowerCase();
-      return beerChoice === "nonalc"
-        ? /na|non|zero|free|0\.0/.test(hay)
-        : !/na|non|zero|free|0\.0/.test(hay);
+      const isNA = hay.includes(' 0.0') || hay.includes('0.0') || hay.includes('non') || hay.includes('zero') || hay.includes('free') || hay.includes(' n/a') || hay.startsWith('na')
+      return beerChoice === "nonalc" ? isNA : !isNA;
     }) || beers[0];
     return fmtDrinkParts({ ...chosen, __type: "beer" });
   })();
@@ -442,17 +459,18 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       drink = { name: course.force_pairing_title || "KITCHEN MARTINI", sub: course.force_pairing_sub || "" };
     }
 
-    if (courseKey === "chicken_gizzard" || courseName === "CHICKEN GIZZARD") {
+    if ((courseKey === "chicken_gizzard" || courseName === "CHICKEN GIZZARD") && selectedBeer) {
       drink = { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
     } else if (!hasPairing && i >= DANUBE_SALMON_IDX && bottleQueue.length > 0) {
       const nextBottle = bottleQueue.shift();
-      drink = fmtDrinkParts(nextBottle);
+      const d = fmtDrinkParts(nextBottle);
+      drink = { name: d.title || "", sub: d.sub || "" };
     }
 
     rows.push({
       type: "course",
       left: { title: dish?.name || "", sub: dish?.sub || "" },
-      right: drink ? { title: drink.name || drink.title || "", sub: drink.sub || "" } : null,
+      right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
       rowClass: [
         (hasPairing && (courseKey === "crayfish" || i === CRAYFISH_IDX)) ? "after-crayfish" : "",
         (isShort && (courseKey === "trout_belly" || courseName === "TROUT BELLY")) ? "short-after-trout-belly" : "",
@@ -2616,7 +2634,8 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
   const restrictions = table.restrictions || [];
   const tableBottles = table.bottleWines  || [];
 
-  // Beer choice is used only for the Chicken Gizzard course.
+  // Determine default beer choice per seat:
+  // pairing na → nonalc, pairing wp/os/premium → alco, no pairing → alco (they're drinking wine)
   const defaultBeer = (s) => {
     if (s.pairing === "Non-Alc") return "nonalc";
     if (s.pairing)               return "alco";
@@ -2632,13 +2651,10 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
   const setBeer = (seatId, val) => setBeerChoices(prev => ({ ...prev, [seatId]: val }));
 
   // A seat is printable if it has a pairing, or has by-glass wines, or table has bottles
-  const isPrintable = (s) => !!s.pairing || (s.glasses || []).length > 0 || tableBottles.length > 0;
+  const isPrintable = () => true;
 
   // Bottles to show on menu for a given seat (no-pairing only)
-  const seatBottles = (s) => {
-    if (s.pairing) return []; // pairing menus already show course drinks
-    return [...(s.glasses || []), ...tableBottles];
-  };
+  const seatBottles = () => tableBottles;
 
   const openPrint = (seat) => {
     const html = generateMenuHTML({
@@ -2658,7 +2674,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
   };
 
   const generateAll = () => {
-    seats.filter(s => isPrintable(s)).forEach((s, i) => {
+    seats.forEach((s, i) => {
       setTimeout(() => openPrint(s), i * 900);
     });
   };
@@ -2669,7 +2685,6 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
   const BEER_OPTS = [
     { val: "alco",   label: "ALCO" },
     { val: "nonalc", label: "N/A" },
-    { val: "none",   label: "NONE" },
   ];
 
   return (
@@ -2700,8 +2715,8 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
           const extras     = Object.entries(s.extras || {}).filter(([,v]) => v?.ordered).map(([k]) => +k);
           const glasses    = s.glasses || [];
           const bottles    = seatBottles(s);
-          const hasBeer    = !s.pairing; // show beer choice only for no-pairing seats
-          const beerFixed  = !!s.pairing; // pairing seats — beer is automatic, no choice needed
+          const hasBeer    = true;
+          const beerFixed  = false
 
           return (
             <div key={s.id} style={{
@@ -2726,7 +2741,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
                   <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fef0f0", color: "#b04040", border: "1px solid #e09090" }}>⚠ {restrLabel(r.note)}</span>
                 ))}
 
-                {/* Beer selector — only for no-pairing seats */}
+                {/* Beer choice for Chicken Gizzard */}
                 {hasBeer && printable && (
                   <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
                     <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#bbb", textTransform: "uppercase" }}>beer</span>
@@ -2742,13 +2757,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
                   </div>
                 )}
 
-                {/* Auto beer badge for pairing seats */}
-                {beerFixed && (
-                  <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#bbb" }}>
-                    beer: {s.pairing === "Non-Alc" ? "n/a" : "alco"}
-                  </span>
-                )}
-
+                
                 <button onClick={() => openPrint(s)} disabled={!printable} style={{
                   marginLeft: "auto", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
                   padding: "8px 16px", border: `1px solid ${printable ? "#c8a96e" : "#e0e0e0"}`,
