@@ -95,6 +95,15 @@ create table if not exists public.menu_courses (
   os jsonb,
   premium jsonb,
   is_snack boolean not null default false,
+  gluten_free jsonb,
+  dairy_free jsonb,
+  nut_free jsonb,
+  pescetarian jsonb,
+  no_red_meat jsonb,
+  no_pork jsonb,
+  no_game jsonb,
+  no_offal jsonb,
+  egg_free jsonb,
   updated_at timestamptz not null default now()
 );
 
