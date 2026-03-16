@@ -4006,18 +4006,16 @@ export default function App() {
 
       {sel === null ? (
         <div style={{ padding: "28px 24px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
-          {/* View toggle */}
+          {/* Top toggle: DISPLAY / SERVICE */}
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
-            {[["DISPLAY","board"],["KITCHEN","kitchen"],["SERVICE","service"]].map(([label, key], i, arr) => {
-              const active = quickView === key;
-              const isFirst = i === 0;
-              const isLast  = i === arr.length - 1;
+            {[["DISPLAY","board"],["SERVICE","service"]].map(([label, key], i, arr) => {
+              const active = quickView === key || (key === "board" && quickView === "kitchen");
               return (
                 <button key={key} onClick={() => setQuickView(key)} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
                   border: "1px solid", borderColor: active ? "#1a1a1a" : "#e0e0e0",
                   background: active ? "#1a1a1a" : "#fff", color: active ? "#fff" : "#888",
-                  borderRadius: isFirst ? "2px 0 0 2px" : isLast ? "0 2px 2px 0" : "0",
+                  borderRadius: i === 0 ? "2px 0 0 2px" : "0 2px 2px 0",
                   borderLeft: i > 0 ? "none" : undefined,
                   cursor: "pointer",
                 }}>{label}</button>
@@ -4027,9 +4025,27 @@ export default function App() {
 
           {quickView === "service" ? (
             <ServiceQuickView tables={tables} updSeat={updSeat} setSel={t => { setSel(t); setQuickView("board"); }} />
-          ) : quickView === "kitchen" ? (
-            <KitchenBoard tables={tables} />
           ) : (() => {
+            // Sub-toggle: BOARD / KITCHEN inside the display section
+            const subView = quickView === "kitchen" ? "kitchen" : "board";
+            return (
+              <>
+                <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 18 }}>
+                  {[["BOARD","board"],["KITCHEN","kitchen"]].map(([label, key], i) => {
+                    const active = subView === key;
+                    return (
+                      <button key={key} onClick={() => setQuickView(key)} style={{
+                        fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px",
+                        border: "1px solid", borderColor: active ? "#555" : "#e8e8e8",
+                        background: active ? "#555" : "#fafafa", color: active ? "#fff" : "#aaa",
+                        borderRadius: i === 0 ? "2px 0 0 2px" : "0 2px 2px 0",
+                        borderLeft: i > 0 ? "none" : undefined,
+                        cursor: "pointer",
+                      }}>{label}</button>
+                    );
+                  })}
+                </div>
+                {subView === "kitchen" ? <KitchenBoard tables={tables} /> : (() => {
             const visibleTables = tables.filter(t => mode === "admin" || t.active || t.resName || t.resTime);
             const cardProps = t => ({
               key: t.id, table: t, mode,
@@ -4108,6 +4124,9 @@ export default function App() {
                   );
                 })}
               </div>
+            );
+          })()}
+              </>
             );
           })()}
         </div>
