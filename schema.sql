@@ -176,8 +176,23 @@ create policy "beverages_delete" on public.beverages
   for delete to anon, authenticated using (true);
 
 -- ── Realtime ─────────────────────────────────────────────────
-alter publication supabase_realtime add table public.service_tables;
-alter publication supabase_realtime add table public.service_settings;
-alter publication supabase_realtime add table public.menu_courses;
-alter publication supabase_realtime add table public.wines;
-alter publication supabase_realtime add table public.beverages;
+do $$
+declare
+  t text;
+begin
+  foreach t in array array[
+    'public.service_tables',
+    'public.service_settings',
+    'public.menu_courses',
+    'public.wines',
+    'public.beverages'
+  ] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname || '.' || tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table %s', t);
+    end if;
+  end loop;
+end $$;
