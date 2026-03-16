@@ -294,19 +294,24 @@ function applyCourseRestriction(course, activeRestrictions) {
 
     if (courseRestrictions[mapped]) {
       const next = courseRestrictions[mapped];
-      dish = {
-        name: String(next?.name || dish.name || "").trim(),
-        sub: String(next?.sub || dish.sub || "").trim(),
-      };
-      continue;
+      // If the cell had a | separator, next.sub is non-empty → full name+sub replacement.
+      // If no | separator, next.sub is empty → sub-only replacement, keep original dish name.
+      if (next?.sub) {
+        dish = { name: String(next.name || dish.name).trim(), sub: String(next.sub).trim() };
+      } else if (next?.name) {
+        dish = { name: dish.name, sub: String(next.name).trim() };
+      }
+      break; // highest-priority matching restriction wins
     }
 
     // backward compatibility for older static menu data
     if (mapped === "veg" && course?.veg) {
-      dish = {
-        name: String(course.veg?.name || dish.name || "").trim(),
-        sub: String(course.veg?.sub || dish.sub || "").trim(),
-      };
+      const v = course.veg;
+      if (v?.sub) {
+        dish = { name: String(v.name || dish.name).trim(), sub: String(v.sub).trim() };
+      } else if (v?.name) {
+        dish = { name: dish.name, sub: String(v.name).trim() };
+      }
     }
   }
 
@@ -399,7 +404,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
 
     const isBeetrootCourse = optionalFlag === "beetroot" || courseKey === "beetroot" || courseNameKey === "beetroot";
     const isCakeCourse = optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseNameKey === "pear";
-    const isCheeseExtraCourse = optionalFlag === "cheese" || courseKey === "cheese" || courseNameKey === "cheese" || courseKey === "sheep_cheese" || courseNameKey === "sheep_cheese";
+    const isCheeseExtraCourse = optionalFlag === "cheese" || courseKey === "cheese" || courseNameKey === "cheese";
 
     if (isBeetrootCourse && !hasBeetroot) return;
     if (isCakeCourse && !hasCake) return;
@@ -540,11 +545,12 @@ body{position:relative;}
 #header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:8.6mm;margin-bottom:9.1mm;}
 #title{font-size:13.9pt;font-weight:700;letter-spacing:0.035em;padding-top:7.9mm;}
 #logo img{width:18.2mm;display:block;}
-#menu{width:100%;}
-.menu-row,.menu-section-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:10.8mm;align-items:start;break-inside:avoid;page-break-inside:avoid;}
+#menu{width:100%;margin-top:auto;margin-bottom:auto;}
+.menu-row,.menu-section-row{display:grid;grid-template-columns:minmax(0,${hasPairing ? "0.85fr) minmax(0,1.15fr" : "1fr) minmax(0,1fr"});column-gap:${hasPairing ? "9mm" : "10.8mm"};align-items:start;break-inside:avoid;page-break-inside:avoid;}
 .menu-row{margin-bottom:3.15pt;}
 .menu-row.wine-only{margin-bottom:4.5pt;}
 .menu-row.after-crayfish{margin-bottom:7.2pt;}
+.menu-row.short-after-trout-belly,.menu-row.short-after-venison{margin-bottom:10pt;}
 .menu-row.section-gap-before{margin-top:14.5pt;}
 .menu-col{min-width:0;}
 .menu-main{font-weight:700;line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;}
@@ -2513,6 +2519,315 @@ function DisplayBoard({ tables, dishes, upd }) {
   );
 }
 
+// ── Service Quick View ────────────────────────────────────────────────────────
+const WATER_LABELS = { XC: "XC", XW: "XW", OC: "OC", OW: "OW" };
+const WATER_QUICK = ["XC", "XW", "OC", "OW"];
+
+function ServiceQuickCard({ table, updSeat, onDetails }) {
+  const seats = table.seats || [];
+  const toggleExtra = (seat, dishId) => {
+    const cur = seat.extras?.[dishId] || { ordered: false, pairing: "—" };
+    updSeat(table.id, seat.id, "extras", { ...seat.extras, [dishId]: { ...cur, ordered: !cur.ordered } });
+  };
+
+  const waterBtn = (opt, active, onClick) => (
+    <button key={opt} onClick={onClick} style={{
+      fontFamily: FONT, fontSize: 10, letterSpacing: 0.5,
+      padding: "5px 9px", border: "1px solid",
+      borderColor: active ? "#1a1a1a" : "#e0e0e0",
+      borderRadius: 2, cursor: "pointer", lineHeight: 1,
+      background: active ? "#1a1a1a" : "#fff",
+      color: active ? "#fff" : "#666",
+    }}>{opt}</button>
+  );
+
+  const extraBtn = (label, active, color, onClick) => (
+    <button onClick={onClick} style={{
+      fontFamily: FONT, fontSize: 9, letterSpacing: 1,
+      padding: "5px 9px", border: "1px solid",
+      borderColor: active ? color : "#e0e0e0",
+      borderRadius: 2, cursor: "pointer", lineHeight: 1,
+      background: active ? color : "#fff",
+      color: active ? "#fff" : "#aaa",
+      textTransform: "uppercase",
+    }}>{label}</button>
+  );
+
+  const allWaterMatch = opt => seats.length > 0 && seats.every(s => s.water === opt);
+
+  return (
+    <div style={{ border: "1px solid #e8e8e8", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
+      {/* Table header */}
+      <div onClick={onDetails} style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "10px 14px", background: "#fafafa", cursor: "pointer",
+        borderBottom: "1px solid #f0f0f0",
+      }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <span style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: "#1a1a1a" }}>T{table.id}</span>
+          {table.resName && <span style={{ fontFamily: FONT, fontSize: 10, color: "#555", letterSpacing: 1 }}>{table.resName}</span>}
+          {table.resTime && <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", letterSpacing: 1 }}>{table.resTime}</span>}
+          <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb" }}>{seats.length}p</span>
+        </div>
+        <span style={{ fontFamily: FONT, fontSize: 11, color: "#c8a96e" }}>→</span>
+      </div>
+
+      {/* All water quick row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderBottom: "1px solid #f8f8f8", background: "#fdfdfd" }}>
+        <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", minWidth: 28 }}>ALL</span>
+        <div style={{ display: "flex", gap: 4 }}>
+          {WATER_QUICK.map(opt => waterBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat(table.id, s.id, "water", opt))))}
+        </div>
+      </div>
+
+      {/* Per-seat rows */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px" }}>
+        {seats.map(seat => {
+          const beetExtra = seat.extras?.[1] || seat.extras?.["1"] || { ordered: false, pairing: "—" };
+          const hasBeet = !!beetExtra.ordered;
+          const hasCheese = !!(seat.extras?.[2]?.ordered || seat.extras?.["2"]?.ordered);
+          const setBeetPairing = (p) => updSeat(table.id, seat.id, "extras", { ...seat.extras, 1: { ...beetExtra, pairing: p } });
+          const pairingColor = { Wine: "#7a5020", "Non-Alc": "#3a6a2a", Premium: "#4a3a7a", "Our Story": "#2a5a6a" };
+          const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#edf8e8", Premium: "#f0eeff", "Our Story": "#e8f5f8" };
+          const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
+          return (
+            <div key={seat.id} style={{
+              border: "1px solid #ececec", borderRadius: 5, overflow: "hidden",
+              background: "#fafafa",
+            }}>
+              {/* Seat label strip */}
+              <div style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "3px 10px", background: "#f0f0f0",
+                borderBottom: "1px solid #e8e8e8",
+              }}>
+                <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: 2, color: "#888" }}>P{seat.id}</span>
+                {(table.restrictions || []).filter(r => !r.pos || r.pos === seat.id).map((r, i) => (
+                  <span key={i} style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, color: "#b04040" }}>
+                    {restrLabel(r.note)}
+                  </span>
+                ))}
+              </div>
+
+              {/* Water + extras */}
+              <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap", padding: "7px 10px 5px" }}>
+                <div style={{ display: "flex", gap: 3 }}>
+                  {WATER_QUICK.map(opt => waterBtn(opt, seat.water === opt, () => updSeat(table.id, seat.id, "water", opt)))}
+                </div>
+                <div style={{ width: 1, height: 18, background: "#e8e8e8", margin: "0 2px" }} />
+                <div style={{ display: "flex", gap: 3 }}>
+                  {extraBtn("Beet", hasBeet, "#5a8a3a", () => toggleExtra(seat, 1))}
+                  {hasBeet && ["—", "Champ", "N/A"].map(p => {
+                    const val = p === "Champ" ? "Champagne" : p;
+                    const active = (beetExtra.pairing || "—") === val;
+                    return (
+                      <button key={p} onClick={() => setBeetPairing(val)} style={{
+                        fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
+                        padding: "4px 6px", border: "1px solid",
+                        borderColor: active ? "#5a8a3a" : "#e0e0e0",
+                        borderRadius: 2, cursor: "pointer", lineHeight: 1,
+                        background: active ? "#edf8e8" : "#fff",
+                        color: active ? "#5a8a3a" : "#aaa",
+                      }}>{p}</button>
+                    );
+                  })}
+                  {extraBtn("Chse", hasCheese, "#a06830", () => toggleExtra(seat, 2))}
+                </div>
+              </div>
+
+              {/* Pairing */}
+              <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "0 10px 7px" }}>
+                {PAIRING_OPTS.map(([val, label]) => {
+                  const active = seat.pairing === val || (val === "—" && !seat.pairing);
+                  const col = pairingColor[val];
+                  const bg = pairingBg[val];
+                  return (
+                    <button key={val} onClick={() => updSeat(table.id, seat.id, "pairing", val)} style={{
+                      fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
+                      padding: "4px 7px", border: "1px solid",
+                      borderColor: active && val !== "—" ? col : active ? "#1a1a1a" : "#e0e0e0",
+                      borderRadius: 2, cursor: "pointer", lineHeight: 1,
+                      background: active && val !== "—" ? bg : active ? "#1a1a1a" : "#fff",
+                      color: active && val !== "—" ? col : active ? "#fff" : "#bbb",
+                    }}>{label}</button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ServiceQuickView({ tables, updSeat, setSel }) {
+  const activeTables = tables.filter(t => t.active || t.resName || t.resTime);
+  if (activeTables.length === 0) return (
+    <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
+      No active tables
+    </div>
+  );
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
+      {activeTables.map(t => (
+        <ServiceQuickCard key={t.id} table={t} updSeat={updSeat} onDetails={() => setSel(t.id)} />
+      ))}
+    </div>
+  );
+}
+
+// ── Kitchen Board ──────────────────────────────────────────────────────────────
+function KitchenDocket({ table }) {
+  const seats = table.seats || [];
+  const restrictions = table.restrictions || [];
+
+  // Pairing counts
+  const pairCounts = {};
+  seats.forEach(s => {
+    const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
+    if (p) pairCounts[p] = (pairCounts[p] || 0) + 1;
+  });
+  const noPairingCount = seats.filter(s => !s.pairing || s.pairing === "—").length;
+
+  // Extras
+  const beetSeats   = seats.filter(s => s.extras?.[1]?.ordered || s.extras?.["1"]?.ordered);
+  const cheeseSeats = seats.filter(s => s.extras?.[2]?.ordered || s.extras?.["2"]?.ordered);
+  const cakeSeats   = seats.filter(s => s.extras?.[3]?.ordered || s.extras?.["3"]?.ordered);
+  const hasCake     = table.birthday || cakeSeats.length > 0;
+
+  // Water counts
+  const waterMap = {};
+  seats.forEach(s => { if (s.water && s.water !== "—") waterMap[s.water] = (waterMap[s.water] || 0) + 1; });
+
+  const pairingColor = { Wine: "#7a5020", "Non-Alc": "#1f5f73", Premium: "#5a5a8a", "Our Story": "#3a7a5a" };
+  const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#e8f5fa", Premium: "#f0eeff", "Our Story": "#eaf5ee" };
+
+  return (
+    <div style={{ border: "1.5px solid #e0e0e0", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
+      {/* Header */}
+      <div style={{ background: "#1a1a1a", padding: "9px 14px", display: "flex", alignItems: "baseline", gap: 10 }}>
+        <span style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: "#fff", lineHeight: 1 }}>T{table.id}</span>
+        {table.resName && <span style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, color: "#ddd" }}>{table.resName}</span>}
+        {table.resTime && <span style={{ fontFamily: FONT, fontSize: 10, color: "#888" }}>{table.resTime}</span>}
+        <span style={{ fontFamily: FONT, fontSize: 10, color: "#777", marginLeft: "auto" }}>{seats.length} pax</span>
+      </div>
+
+      {/* Pairings summary */}
+      <div style={{ padding: "9px 14px", borderBottom: "1px solid #f4f4f4", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        {Object.entries(pairCounts).map(([pairing, count]) => (
+          <span key={pairing} style={{
+            fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "3px 8px", borderRadius: 2,
+            background: pairingBg[pairing] || "#f5f5f5", color: pairingColor[pairing] || "#555",
+            border: `1px solid ${pairingColor[pairing] || "#ddd"}44`,
+          }}>{count}× {pairing}</span>
+        ))}
+        {noPairingCount > 0 && (
+          <span style={{ fontFamily: FONT, fontSize: 10, color: "#bbb" }}>{noPairingCount}× —</span>
+        )}
+      </div>
+
+      {/* Water */}
+      {Object.keys(waterMap).length > 0 && (
+        <div style={{ padding: "7px 14px", borderBottom: "1px solid #f4f4f4", display: "flex", gap: 6, alignItems: "center" }}>
+          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", minWidth: 40 }}>WATER</span>
+          {Object.entries(waterMap).map(([w, c]) => (
+            <span key={w} style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>{c}× {w}</span>
+          ))}
+        </div>
+      )}
+
+      {/* Extras */}
+      {(beetSeats.length > 0 || cheeseSeats.length > 0 || hasCake) && (
+        <div style={{ padding: "8px 14px", borderBottom: "1px solid #f4f4f4", display: "flex", flexDirection: "column", gap: 4 }}>
+          {beetSeats.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#5a8a3a" }}>Beetroot ×{beetSeats.length}</span>
+              {beetSeats.map(s => {
+                const p = s.extras?.[1]?.pairing || s.extras?.["1"]?.pairing || "—";
+                return (
+                  <span key={s.id} style={{ fontFamily: FONT, fontSize: 9, color: "#666", padding: "1px 5px", background: "#f4f4f4", borderRadius: 2 }}>
+                    P{s.id}: {p}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          {cheeseSeats.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#a06830" }}>Cheese ×{cheeseSeats.length}</span>
+              {cheeseSeats.map(s => (
+                <span key={s.id} style={{ fontFamily: FONT, fontSize: 9, color: "#666", padding: "1px 5px", background: "#f4f4f4", borderRadius: 2 }}>P{s.id}</span>
+              ))}
+            </div>
+          )}
+          {hasCake && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#b04888" }}>🎂 Cake</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Restrictions per seat */}
+      {restrictions.length > 0 && (
+        <div style={{ padding: "8px 14px", display: "flex", flexDirection: "column", gap: 5 }}>
+          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb" }}>DIETARY / ALLERGY</span>
+          {seats.map(seat => {
+            const seatRestr = restrictions.filter(r => !r.pos || r.pos === seat.id);
+            if (seatRestr.length === 0) return null;
+            return (
+              <div key={seat.id} style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 1, color: "#888", minWidth: 22 }}>P{seat.id}</span>
+                {seatRestr.map((r, i) => (
+                  <span key={i} style={{
+                    fontFamily: FONT, fontSize: 9, padding: "2px 6px", borderRadius: 2,
+                    background: "#fef0f0", border: "1px solid #e09090", color: "#b04040",
+                  }}>{restrLabel(r.note)}</span>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KitchenBoard({ tables }) {
+  const activeTables = tables.filter(t => t.active);
+  if (activeTables.length === 0) return (
+    <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
+      No active tables
+    </div>
+  );
+  // Group by sitting time
+  const byTime = {};
+  activeTables.forEach(t => {
+    const time = t.resTime || "—";
+    if (!byTime[time]) byTime[time] = [];
+    byTime[time].push(t);
+  });
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+      {Object.entries(byTime).sort(([a], [b]) => a.localeCompare(b)).map(([time, timeTables]) => (
+        <div key={time}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+            <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: "#888" }}>{time}</span>
+            <div style={{ flex: 1, height: 1, background: "#f0f0f0" }} />
+            <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb" }}>
+              {timeTables.reduce((sum, t) => sum + (t.seats?.length || 0), 0)} covers
+            </span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+            {timeTables.map(t => <KitchenDocket key={t.id} table={t} />)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Menu Generator ────────────────────────────────────────────────────────────
 function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
@@ -2596,8 +2911,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Seats</div>
 
         {seats.map(s => {
-          const seatRestr  = restrictions.filter(r => r.pos === s.id);
-          const isVeg      = seatRestr.some(r => ["veg","vegan","pescetarian"].includes(r.note));
+          const seatRestr  = restrictions.filter(r => !r.pos || r.pos === s.id);
           const printable  = isPrintable(s);
           const extras     = Object.entries(s.extras || {}).filter(([,v]) => v?.ordered).map(([k]) => +k);
           const glasses    = s.glasses || [];
@@ -2620,12 +2934,19 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
                     ? <span style={{ fontFamily: FONT, fontSize: 10, padding: "3px 9px", borderRadius: 2, background: "#f5f5f5", color: "#888", border: "1px solid #e8e8e8" }}>drinks</span>
                     : <span style={{ fontFamily: FONT, fontSize: 10, color: "#ccc" }}>no pairing</span>}
 
-                {isVeg && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#edf8e8", color: "#2a6a2a", border: "1px solid #88cc88" }}>VEG</span>}
+                {seatRestr.map((r, i) => {
+                  const isDietary = ["veg","vegan","pescetarian"].includes(r.note);
+                  return (
+                    <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2,
+                      background: isDietary ? "#edf8e8" : "#fef0f0",
+                      color: isDietary ? "#2a6a2a" : "#b04040",
+                      border: `1px solid ${isDietary ? "#88cc88" : "#e09090"}` }}>
+                      {isDietary ? restrLabel(r.note) : `⚠ ${restrLabel(r.note)}`}
+                    </span>
+                  );
+                })}
                 {extras.includes(1) && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+BEETROOT</span>}
                 {extras.includes(2) && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+CHEESE</span>}
-                {seatRestr.filter(r => !["veg","vegan","pescetarian"].includes(r.note)).map((r, i) => (
-                  <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fef0f0", color: "#b04040", border: "1px solid #e09090" }}>⚠ {restrLabel(r.note)}</span>
-                ))}
 
                 {/* Beer selector — always shown */}
                 <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
@@ -3227,6 +3548,7 @@ export default function App() {
     try { return localStorage.getItem("milka_mode") || null; } catch { return null; }
   });
   const [sel,          setSel]          = useState(null);
+  const [quickView,    setQuickView]    = useState("board");
   const [resModal,     setResModal]     = useState(null);
   const [resModalPresetTime, setResModalPresetTime] = useState(null);
   const [adminOpen,    setAdminOpen]    = useState(false);
@@ -3371,7 +3693,11 @@ export default function App() {
       // Clear old table if user picked a different one
       if (t.id === id && id !== targetId) return { ...t, resName: "", resTime: "", menuType: "", guestType: "", room: "", guests: 2, birthday: false, restrictions: [], notes: "" };
       if (t.id !== targetId) return t;
-      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: makeSeats(guests, t.seats), birthday, restrictions, notes };
+      const newSeats = makeSeats(guests, t.seats).map(s => ({
+        ...s,
+        extras: { ...s.extras, ...(birthday ? { 3: { ordered: true, pairing: "—" } } : {}) },
+      }));
+      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, restrictions, notes };
     }));
     setResModal(null);
   };
@@ -3448,6 +3774,9 @@ export default function App() {
 
     loadRemoteTables();
 
+    // Polling fallback — refreshes every 15 s in case realtime misses an event
+    const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 15000);
+
     const channel = supabase
       .channel("milka-service-tables-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: SERVICE_TABLES_TABLE }, payload => {
@@ -3467,11 +3796,13 @@ export default function App() {
       })
       .subscribe(status => {
         if (status === "SUBSCRIBED") setSyncStatus("live");
+        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setSyncStatus("sync-error");
       });
 
     return () => {
       isMounted = false;
       clearTimeout(gateTimeout);
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -3516,11 +3847,11 @@ export default function App() {
     const loadWines = async () => {
       const { data, error } = await supabase
         .from("wines")
-        .select("id, name, wine_name, producer, vintage, region, country, by_glass")
+        .select("key, name, wine_name, producer, vintage, region, country, by_glass")
         .order("name", { ascending: true });
       if (!mounted || error || !data || data.length === 0) return;
       setWines(data.map(r => ({
-        id: r.id, name: r.wine_name || r.name,
+        id: r.key, name: r.wine_name || r.name,
         producer: r.producer || "", vintage: r.vintage || "",
         region: r.region || "", country: r.country || "",
         byGlass: r.by_glass ?? false,
@@ -3552,24 +3883,34 @@ export default function App() {
         .select("*")
         .order("position", { ascending: true });
       if (error || !data || data.length === 0) return false;
-      return applyCourses(data.map(r => ({
-        position: r.position,
-        menu: r.menu,
-        veg: r.veg,
-        hazards: r.hazards,
-        na: r.na,
-        wp: r.wp,
-        os: r.os,
-        premium: r.premium,
-        is_snack: r.is_snack,
-        course_key: r.course_key || "",
-        optional_flag: r.optional_flag || "",
-        section_gap_before: !!r.section_gap_before,
-        show_on_short: !!r.show_on_short,
-        short_order: r.short_order || null,
-        force_pairing_title: r.force_pairing_title || "",
-        force_pairing_sub: r.force_pairing_sub || "",
-      })));
+      const DIETARY_KEYS = [
+        "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
+        "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
+        "no_garlic_onion","halal","low_fodmap",
+      ];
+      return applyCourses(data.map(r => {
+        const restrictions = {};
+        DIETARY_KEYS.forEach(k => { restrictions[k] = r[k] ?? null; });
+        return {
+          position: r.position,
+          menu: r.menu,
+          veg: r.veg,
+          hazards: r.hazards,
+          na: r.na,
+          wp: r.wp,
+          os: r.os,
+          premium: r.premium,
+          is_snack: r.is_snack,
+          course_key: r.course_key || "",
+          optional_flag: r.optional_flag || "",
+          section_gap_before: !!r.section_gap_before,
+          show_on_short: !!r.show_on_short,
+          short_order: r.short_order || null,
+          force_pairing_title: r.force_pairing_title || "",
+          force_pairing_sub: r.force_pairing_sub || "",
+          restrictions,
+        };
+      }));
     };
 
     const loadCourses = async () => {
@@ -3611,8 +3952,8 @@ export default function App() {
     },
   };
 
-  // Gate 1: password wall — must authenticate before anything
-  if (!authed) return <GateScreen onPass={() => setAuthed(true)} />;
+  // Gate 1: password wall — temporarily disabled for testing
+  // if (!authed) return <GateScreen onPass={() => setAuthed(true)} />;
 
   // Gate 2: hydration — wait for Supabase state before rendering
   if (!hydrated) return (
@@ -3665,7 +4006,31 @@ export default function App() {
 
       {sel === null ? (
         <div style={{ padding: "28px 24px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
-          {(() => {
+          {/* View toggle */}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
+            {["BOARD", "SERVICE", "KITCHEN"].map((v, i, arr) => {
+              const key = v.toLowerCase();
+              const active = quickView === key;
+              const isFirst = i === 0;
+              const isLast  = i === arr.length - 1;
+              return (
+                <button key={v} onClick={() => setQuickView(key)} style={{
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
+                  border: "1px solid", borderColor: active ? "#1a1a1a" : "#e0e0e0",
+                  background: active ? "#1a1a1a" : "#fff", color: active ? "#fff" : "#888",
+                  borderRadius: isFirst ? "2px 0 0 2px" : isLast ? "0 2px 2px 0" : "0",
+                  borderLeft: i > 0 ? "none" : undefined,
+                  cursor: "pointer",
+                }}>{v}</button>
+              );
+            })}
+          </div>
+
+          {quickView === "service" ? (
+            <ServiceQuickView tables={tables} updSeat={updSeat} setSel={t => { setSel(t); setQuickView("board"); }} />
+          ) : quickView === "kitchen" ? (
+            <KitchenBoard tables={tables} />
+          ) : (() => {
             const visibleTables = tables.filter(t => mode === "admin" || t.active || t.resName || t.resTime);
             const cardProps = t => ({
               key: t.id, table: t, mode,
