@@ -2863,8 +2863,12 @@ function KitchenBoard({ tables, menuCourses, upd }) {
               {timeTables.reduce((sum, t) => sum + (t.seats?.length || 0), 0)} covers
             </span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8 }}>
-            {timeTables.map(t => <KitchenTicket key={t.id} table={t} menuCourses={menuCourses} upd={upd} />)}
+          <div style={{ display: "flex", flexDirection: "row", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+            {timeTables.map(t => (
+              <div key={t.id} style={{ flexShrink: 0, width: 170 }}>
+                <KitchenTicket table={t} menuCourses={menuCourses} upd={upd} />
+              </div>
+            ))}
           </div>
         </div>
       ))}
@@ -4025,37 +4029,16 @@ export default function App() {
 
   if (!mode) return <LoginScreen onEnter={m => { changeMode(m); setSel(null); }} />;
 
-  // Display mode
-  if (mode === "display") {
-    const displaySubView = quickView === "kitchen" ? "kitchen" : "board";
-    return (
-      <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
-        <GlobalStyle />
-        <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={false} {...hProps} />
-        <div style={{ padding: "20px 24px" }}>
-          <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 16 }}>
-            {[["BOARD","board"],["KITCHEN","kitchen"]].map(([label, key], i) => {
-              const isActive = displaySubView === key;
-              return (
-                <button key={key} onClick={() => setQuickView(key)} style={{
-                  fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px",
-                  border: "1px solid", borderColor: isActive ? "#555" : "#e8e8e8",
-                  background: isActive ? "#555" : "#fafafa", color: isActive ? "#fff" : "#aaa",
-                  borderRadius: i === 0 ? "2px 0 0 2px" : "0 2px 2px 0",
-                  borderLeft: i > 0 ? "none" : undefined,
-                  cursor: "pointer",
-                }}>{label}</button>
-              );
-            })}
-          </div>
-          {displaySubView === "kitchen"
-            ? <KitchenBoard tables={tables} menuCourses={menuCourses} upd={upd} />
-            : <DisplayBoard tables={tables} dishes={dishes} upd={upd} />
-          }
-        </div>
+  // Display mode — unified board+kitchen view
+  if (mode === "display") return (
+    <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+      <GlobalStyle />
+      <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={false} {...hProps} />
+      <div style={{ padding: "20px 24px" }}>
+        <KitchenBoard tables={tables} menuCourses={menuCourses} upd={upd} />
       </div>
-    );
-  }
+    </div>
+  );
 
   // Service + Admin modes
   return (
