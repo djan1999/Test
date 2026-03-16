@@ -68,7 +68,6 @@ function normalizeLiveMenuRow(row) {
   const dish = splitMainSubCell(row.dish, row.description);
   if (!dish?.name) return null;
 
-  const vegParsed = splitMainSubCell(row.veg, row.veg_sub);
   const courseKey = String(firstFilled(row.course_key, row.key, row.dish) || "")
     .trim()
     .toLowerCase()
@@ -76,11 +75,20 @@ function normalizeLiveMenuRow(row) {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
+  const restrictionKeys = [
+    "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
+    "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
+    "no_garlic_onion","halal","low_fodmap"
+  ];
+  const restrictions = {};
+  restrictionKeys.forEach((key) => {
+    restrictions[key] = splitMainSubCell(row[key], row[`${key}_sub`]);
+  });
+
   return {
     position,
     is_snack: truthyCell(firstFilled(row["snack?"], row.snack)),
     menu: dish,
-    veg: vegParsed,
     wp: splitMainSubCell(row.wp_drink, row.wp_sub),
     na: splitMainSubCell(row.na_drink, row.na_sub),
     os: splitMainSubCell(row.os_drink, row.os_sub),
@@ -93,6 +101,7 @@ function normalizeLiveMenuRow(row) {
     force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
     force_pairing_sub: String(firstFilled(row.force_pairing_sub)).trim(),
     kitchen_note: String(firstFilled(row.kitchen_note)).trim(),
+    restrictions,
   };
 }
 
@@ -242,6 +251,67 @@ const MILKA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 58 
   <path d="M2,66 L2,30 L20,52 L38,24 L38,66 L34,66 L34,27 L20,50 L6,30 L6,66 Z"/>
 </svg>`;
 
+
+const RESTRICTION_PRIORITY_KEYS = [
+  "vegan","veg","pescetarian","gluten","dairy","nut","shellfish",
+  "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
+  "no_garlic_onion","halal","low_fodmap"
+];
+
+const RESTRICTION_COLUMN_MAP = {
+  veg: "veg",
+  vegan: "vegan",
+  pescetarian: "pescetarian",
+  gluten: "gluten_free",
+  dairy: "dairy_free",
+  nut: "nut_free",
+  shellfish: "shellfish_free",
+  no_red_meat: "no_red_meat",
+  no_pork: "no_pork",
+  no_game: "no_game",
+  no_offal: "no_offal",
+  egg_free: "egg_free",
+  no_alcohol: "no_alcohol",
+  no_garlic_onion: "no_garlic_onion",
+  halal: "halal",
+  low_fodmap: "low_fodmap",
+};
+
+function applyCourseRestriction(course, activeRestrictions) {
+  const baseDish = course?.menu || null;
+  if (!baseDish) return null;
+
+  let dish = {
+    name: String(baseDish.name || "").trim(),
+    sub: String(baseDish.sub || "").trim(),
+  };
+
+  const courseRestrictions = course?.restrictions || {};
+  for (const key of RESTRICTION_PRIORITY_KEYS) {
+    if (!(activeRestrictions || []).includes(key)) continue;
+    const mapped = RESTRICTION_COLUMN_MAP[key] || key;
+    const next = courseRestrictions[mapped];
+    if (!next || (!next.name && !next.sub)) continue;
+    dish = {
+      name: String(next?.name || dish.name || "").trim(),
+      sub: String(next?.sub || dish.sub || "").trim(),
+    };
+  }
+
+  // Backward compatibility for older static data.
+  if ((activeRestrictions || []).includes("veg") || (activeRestrictions || []).includes("vegan") || (activeRestrictions || []).includes("pescetarian")) {
+    if (!courseRestrictions.veg && course?.veg) {
+      dish = {
+        name: String(course.veg?.name || dish.name || "").trim(),
+        sub: String(course.veg?.sub || dish.sub || "").trim(),
+      };
+    }
+  }
+
+  return dish;
+}
+
+
 function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null }) {
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
   const PAIRING_LABELS = {
@@ -313,11 +383,10 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
-  const SHORT_MENU_ORDER = [
-    "linzer_eye","trout_belly","beetroot","squash","rainbow_trout","brioche",
-    "venison","pear","godlja","sweet_potato","sunchoke","cheese",
-  ];
-  const shortRank = Object.fromEntries(SHORT_MENU_ORDER.map((key, idx) => [key, idx + 1]));
+  const isTruthyShort = (value) => {
+    const v = String(value ?? "").trim().toLowerCase();
+    return v === "true" || v === "1" || v === "yes" || v === "y" || v === "x" || v === "wahr";
+  };
 
   const visibleCourses = [];
   menuCourses.forEach((course, i) => {
@@ -335,8 +404,8 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     if (isCheeseExtraCourse && !hasCheese) return;
 
     if (isShort) {
-      const rank = shortRank[courseKey] ?? shortRank[courseNameKey];
-      if (!rank) return;
+      if (!isTruthyShort(course?.show_on_short)) return;
+      const rank = Number(course?.short_order) || 9999;
       visibleCourses.push({ course, i, courseName, courseKey, optionalFlag, orderValue: rank });
       return;
     }
@@ -379,9 +448,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       insertedPairingLabel = true;
     }
 
-    const dish = typeof applyCourseRestriction === "function"
-      ? applyCourseRestriction(course, restrictions)
-      : (course.menu || null);
+    const dish = applyCourseRestriction(course, restrictions);
     let drink = pkey ? course[pkey] : null;
 
     if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
@@ -2639,7 +2706,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
           <div style={{ fontFamily: FONT, fontSize: 11, color: "#ccc", textAlign: "center", padding: "40px 0" }}>No seats yet</div>
         )}
 
-        {seats.some(s => isPrintable(s)) && (
+        {seats.length > 0 && (
           <button onClick={generateAll} style={{
             marginTop: 16, width: "100%", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
             padding: "12px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
