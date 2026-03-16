@@ -2774,18 +2774,17 @@ function KitchenTicket({ table, menuCourses, upd }) {
           const fired = !!log[key];
           const firedAt = log[key]?.firedAt;
 
-          const seatMods = seats
-            .map(seat => {
-              const restrKeys = seatRestrKeys(seat);
-              if (!restrKeys.length) return null;
+          // Resolve every seat's actual dish name (modified or original)
+          const allSeatDishes = seats.map(seat => {
+            const restrKeys = seatRestrKeys(seat);
+            if (restrKeys.length) {
               const modified = applyCourseRestriction(course, restrKeys);
-              const base = course.menu;
-              if (!modified) return null;
-              const changed = modified.name !== base?.name;
-              if (!changed) return null;
-              return { seat, dish: modified };
-            })
-            .filter(Boolean);
+              if (modified && modified.name !== course.menu?.name) return modified.name;
+            }
+            return course.menu?.name || key;
+          });
+          const anyMod = allSeatDishes.some(n => n !== (course.menu?.name || key));
+          const seatMods = anyMod ? allSeatDishes : [];
 
           // For optional extra courses, show which seats have it
           const extraLabel = (() => {
@@ -2819,9 +2818,13 @@ function KitchenTicket({ table, menuCourses, upd }) {
                   )}
                   {!extraLabel && seatMods.length > 0 && !fired && (() => {
                     const groups = {};
-                    seatMods.forEach(({ dish }) => { groups[dish.name] = (groups[dish.name] || 0) + 1; });
+                    seatMods.forEach(name => { groups[name] = (groups[name] || 0) + 1; });
+                    const baseName = course.menu?.name || key;
                     return Object.entries(groups).map(([name, count]) => (
-                      <span key={name} style={{ fontFamily: FONT, fontSize: 10, color: "#b04040", marginLeft: 6 }}>
+                      <span key={name} style={{
+                        fontFamily: FONT, fontSize: 10, marginLeft: 6,
+                        color: name === baseName ? "#888" : "#b04040",
+                      }}>
                         {count}x {name}
                       </span>
                     ));
