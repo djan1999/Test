@@ -2677,6 +2677,157 @@ function ServiceQuickView({ tables, updSeat, setSel }) {
   );
 }
 
+// ── Kitchen Board ──────────────────────────────────────────────────────────────
+function KitchenDocket({ table }) {
+  const seats = table.seats || [];
+  const restrictions = table.restrictions || [];
+
+  // Pairing counts
+  const pairCounts = {};
+  seats.forEach(s => {
+    const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
+    if (p) pairCounts[p] = (pairCounts[p] || 0) + 1;
+  });
+  const noPairingCount = seats.filter(s => !s.pairing || s.pairing === "—").length;
+
+  // Extras
+  const beetSeats   = seats.filter(s => s.extras?.[1]?.ordered || s.extras?.["1"]?.ordered);
+  const cheeseSeats = seats.filter(s => s.extras?.[2]?.ordered || s.extras?.["2"]?.ordered);
+  const cakeSeats   = seats.filter(s => s.extras?.[3]?.ordered || s.extras?.["3"]?.ordered);
+  const hasCake     = table.birthday || cakeSeats.length > 0;
+
+  // Water counts
+  const waterMap = {};
+  seats.forEach(s => { if (s.water && s.water !== "—") waterMap[s.water] = (waterMap[s.water] || 0) + 1; });
+
+  const pairingColor = { Wine: "#7a5020", "Non-Alc": "#1f5f73", Premium: "#5a5a8a", "Our Story": "#3a7a5a" };
+  const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#e8f5fa", Premium: "#f0eeff", "Our Story": "#eaf5ee" };
+
+  return (
+    <div style={{ border: "1.5px solid #e0e0e0", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
+      {/* Header */}
+      <div style={{ background: "#1a1a1a", padding: "9px 14px", display: "flex", alignItems: "baseline", gap: 10 }}>
+        <span style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: "#fff", lineHeight: 1 }}>T{table.id}</span>
+        {table.resName && <span style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, color: "#ddd" }}>{table.resName}</span>}
+        {table.resTime && <span style={{ fontFamily: FONT, fontSize: 10, color: "#888" }}>{table.resTime}</span>}
+        <span style={{ fontFamily: FONT, fontSize: 10, color: "#777", marginLeft: "auto" }}>{seats.length} pax</span>
+      </div>
+
+      {/* Pairings summary */}
+      <div style={{ padding: "9px 14px", borderBottom: "1px solid #f4f4f4", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        {Object.entries(pairCounts).map(([pairing, count]) => (
+          <span key={pairing} style={{
+            fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "3px 8px", borderRadius: 2,
+            background: pairingBg[pairing] || "#f5f5f5", color: pairingColor[pairing] || "#555",
+            border: `1px solid ${pairingColor[pairing] || "#ddd"}44`,
+          }}>{count}× {pairing}</span>
+        ))}
+        {noPairingCount > 0 && (
+          <span style={{ fontFamily: FONT, fontSize: 10, color: "#bbb" }}>{noPairingCount}× —</span>
+        )}
+      </div>
+
+      {/* Water */}
+      {Object.keys(waterMap).length > 0 && (
+        <div style={{ padding: "7px 14px", borderBottom: "1px solid #f4f4f4", display: "flex", gap: 6, alignItems: "center" }}>
+          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", minWidth: 40 }}>WATER</span>
+          {Object.entries(waterMap).map(([w, c]) => (
+            <span key={w} style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>{c}× {w}</span>
+          ))}
+        </div>
+      )}
+
+      {/* Extras */}
+      {(beetSeats.length > 0 || cheeseSeats.length > 0 || hasCake) && (
+        <div style={{ padding: "8px 14px", borderBottom: "1px solid #f4f4f4", display: "flex", flexDirection: "column", gap: 4 }}>
+          {beetSeats.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#5a8a3a" }}>Beetroot ×{beetSeats.length}</span>
+              {beetSeats.map(s => {
+                const p = s.extras?.[1]?.pairing || s.extras?.["1"]?.pairing || "—";
+                return (
+                  <span key={s.id} style={{ fontFamily: FONT, fontSize: 9, color: "#666", padding: "1px 5px", background: "#f4f4f4", borderRadius: 2 }}>
+                    P{s.id}: {p}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          {cheeseSeats.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#a06830" }}>Cheese ×{cheeseSeats.length}</span>
+              {cheeseSeats.map(s => (
+                <span key={s.id} style={{ fontFamily: FONT, fontSize: 9, color: "#666", padding: "1px 5px", background: "#f4f4f4", borderRadius: 2 }}>P{s.id}</span>
+              ))}
+            </div>
+          )}
+          {hasCake && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#b04888" }}>🎂 Cake</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Restrictions per seat */}
+      {restrictions.length > 0 && (
+        <div style={{ padding: "8px 14px", display: "flex", flexDirection: "column", gap: 5 }}>
+          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb" }}>DIETARY / ALLERGY</span>
+          {seats.map(seat => {
+            const seatRestr = restrictions.filter(r => !r.pos || r.pos === seat.id);
+            if (seatRestr.length === 0) return null;
+            return (
+              <div key={seat.id} style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 1, color: "#888", minWidth: 22 }}>P{seat.id}</span>
+                {seatRestr.map((r, i) => (
+                  <span key={i} style={{
+                    fontFamily: FONT, fontSize: 9, padding: "2px 6px", borderRadius: 2,
+                    background: "#fef0f0", border: "1px solid #e09090", color: "#b04040",
+                  }}>{restrLabel(r.note)}</span>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KitchenBoard({ tables }) {
+  const activeTables = tables.filter(t => t.active);
+  if (activeTables.length === 0) return (
+    <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
+      No active tables
+    </div>
+  );
+  // Group by sitting time
+  const byTime = {};
+  activeTables.forEach(t => {
+    const time = t.resTime || "—";
+    if (!byTime[time]) byTime[time] = [];
+    byTime[time].push(t);
+  });
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+      {Object.entries(byTime).sort(([a], [b]) => a.localeCompare(b)).map(([time, timeTables]) => (
+        <div key={time}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+            <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: "#888" }}>{time}</span>
+            <div style={{ flex: 1, height: 1, background: "#f0f0f0" }} />
+            <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb" }}>
+              {timeTables.reduce((sum, t) => sum + (t.seats?.length || 0), 0)} covers
+            </span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+            {timeTables.map(t => <KitchenDocket key={t.id} table={t} />)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Menu Generator ────────────────────────────────────────────────────────────
 function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
@@ -3397,7 +3548,7 @@ export default function App() {
     try { return localStorage.getItem("milka_mode") || null; } catch { return null; }
   });
   const [sel,          setSel]          = useState(null);
-  const [quickView,    setQuickView]    = useState(false);
+  const [quickView,    setQuickView]    = useState("board");
   const [resModal,     setResModal]     = useState(null);
   const [resModalPresetTime, setResModalPresetTime] = useState(null);
   const [adminOpen,    setAdminOpen]    = useState(false);
@@ -3857,22 +4008,28 @@ export default function App() {
         <div style={{ padding: "28px 24px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
           {/* View toggle */}
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
-            {["BOARD", "SERVICE"].map(v => {
-              const active = (v === "SERVICE") === quickView;
+            {["BOARD", "SERVICE", "KITCHEN"].map((v, i, arr) => {
+              const key = v.toLowerCase();
+              const active = quickView === key;
+              const isFirst = i === 0;
+              const isLast  = i === arr.length - 1;
               return (
-                <button key={v} onClick={() => setQuickView(v === "SERVICE")} style={{
+                <button key={v} onClick={() => setQuickView(key)} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
                   border: "1px solid", borderColor: active ? "#1a1a1a" : "#e0e0e0",
                   background: active ? "#1a1a1a" : "#fff", color: active ? "#fff" : "#888",
-                  borderRadius: v === "BOARD" ? "2px 0 0 2px" : "0 2px 2px 0",
+                  borderRadius: isFirst ? "2px 0 0 2px" : isLast ? "0 2px 2px 0" : "0",
+                  borderLeft: i > 0 ? "none" : undefined,
                   cursor: "pointer",
                 }}>{v}</button>
               );
             })}
           </div>
 
-          {quickView ? (
-            <ServiceQuickView tables={tables} updSeat={updSeat} setSel={t => { setSel(t); setQuickView(false); }} />
+          {quickView === "service" ? (
+            <ServiceQuickView tables={tables} updSeat={updSeat} setSel={t => { setSel(t); setQuickView("board"); }} />
+          ) : quickView === "kitchen" ? (
+            <KitchenBoard tables={tables} />
           ) : (() => {
             const visibleTables = tables.filter(t => mode === "admin" || t.active || t.resName || t.resTime);
             const cardProps = t => ({
