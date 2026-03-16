@@ -119,7 +119,7 @@ const initWines = [];
 
 // ── Initial extra dishes ──────────────────────────────────────────────────────
 const initDishes = [
-  { id: 1, name: "Beetroot",  pairings: ["—", "Wine", "Non-Alc"] },
+  { id: 1, name: "Beetroot",  pairings: ["—", "Champagne", "N/A"] },
   { id: 2, name: "Cheese",    pairings: ["—", "Wine", "Non-Alc"] },
   { id: 3, name: "Cake",      pairings: ["—"] },
 ];
@@ -127,8 +127,17 @@ const initDishes = [
 // ── Cocktails & Spirits & Beers ───────────────────────────────────────────────
 function mergeDishes(list) {
   const base = Array.isArray(list) ? list : [];
-  const seen = new Set(base.map(x => String(x?.id ?? "")));
-  const merged = [...base];
+  const builtinById = new Map(initDishes.map(d => [String(d.id), d]));
+  const merged = base.map(item => {
+    const builtin = builtinById.get(String(item?.id ?? ""));
+    if (!builtin) return item;
+    return {
+      ...item,
+      name: builtin.name,
+      pairings: [...builtin.pairings],
+    };
+  });
+  const seen = new Set(merged.map(x => String(x?.id ?? "")));
   initDishes.forEach(d => {
     if (!seen.has(String(d.id))) merged.push({ ...d, pairings: [...d.pairings] });
   });
@@ -260,6 +269,9 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   const cocktails = Array.isArray(seat.cocktails)
     ? seat.cocktails.filter(c => c && (c.name || c.notes))
     : [];
+  const beers = Array.isArray(seat.beers)
+    ? seat.beers.filter(b => b && (b.name || b.notes))
+    : [];
   const tableBottles = Array.isArray(table.bottleWines)
     ? table.bottleWines.filter(w => w && (w.name || w.producer || w.vintage || w.notes))
     : [];
@@ -268,17 +280,31 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   const DANUBE_SALMON_IDX = 5;
   const PAIRING_INSERT_IDX = DANUBE_SALMON_IDX;
 
+  const fmtWineParts = w => ({
+    title: w?.name || "",
+    sub: [w?.producer, w?.vintage].filter(Boolean).join("  ") || w?.notes || "",
+  });
+
   const fmtDrinkParts = item => {
     if (!item) return { title: "", sub: "" };
     const type = item.__type || item.type || item.category || "";
-    if (type === "cocktail" || type === "beer") {
-      return { title: item.name || "", sub: item.notes || "" };
-    }
-    return {
-      title: item?.name || "",
-      sub: [item?.producer, item?.vintage].filter(Boolean).join("  ") || item?.notes || "",
-    };
+    if (type === "cocktail" || type === "beer") return { title: item.name || "", sub: item.notes || "" };
+    return fmtWineParts(item);
   };
+
+  const selectedBeer = (() => {
+    if (beers.length === 0) {
+      return beerChoice === "nonalc"
+        ? { title: "SPENT BREAD KOMBUCHA", sub: "malt, hops" }
+        : { title: "Reservoir Dogs, Crazy Sister", sub: "Nova Gorica, Slovenia" };
+    }
+    const chosen = beers.find(b => {
+      const hay = `${b?.name || ""} ${b?.notes || ""}`.toLowerCase();
+      const isNA = hay.includes("0.0") || hay.includes("non") || hay.includes("zero") || hay.includes("free") || hay.includes("n/a") || hay.startsWith("na");
+      return beerChoice === "nonalc" ? isNA : !isNA;
+    }) || beers[0];
+    return fmtDrinkParts({ ...chosen, __type: "beer" });
+  })();
 
   const normalizeToken = (value) => String(value || "")
     .trim()
@@ -327,22 +353,26 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   visibleCourses.sort((a, b) => a.orderValue - b.orderValue);
 
   const rows = [];
-  const hasPairing = !!pkey;
+  const hasPairing = !!(pairingLabel && pairingLabel !== "—");
+  const bottleQueue = hasPairing ? [] : [...tableBottles];
 
   const topRightItems = [
-    ...cocktails.map(item => ({ ...item, __type: "cocktail" })),
-    ...glasses.map(item => ({ ...item, __type: item.__type || (item.byGlass ? "wine_glass" : "wine_bottle") })),
-    ...(hasPairing ? tableBottles : []),
+    ...cocktails.map(c => ({ ...c, __type: "cocktail" })),
+    ...glasses.map(w => ({ ...w, __type: "wine" })),
+    ...(hasPairing ? tableBottles.map(item => ({
+      ...item,
+      __type: item?.__type || item?.type || item?.category || ((item?.notes && !item?.producer && !item?.vintage) ? "cocktail" : "wine"),
+    })) : []),
   ];
   topRightItems.forEach(item => rows.push({ type: "wine-only", right: fmtDrinkParts(item) }));
 
-  let bottleCursor = 0;
   let insertedPairingLabel = false;
+  let courseRowsSeen = 0;
 
   visibleCourses.forEach(({ course, i, courseName, courseKey, optionalFlag }) => {
     const insertPairingHere = hasPairing && !insertedPairingLabel && (
       (!isShort && i === PAIRING_INSERT_IDX) ||
-      (isShort && rows.filter(r => r.type === "course").length === 0)
+      (isShort && courseRowsSeen === 0)
     );
     if (insertPairingHere) {
       rows.push({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING" });
@@ -352,10 +382,9 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     const dish = typeof applyCourseRestriction === "function"
       ? applyCourseRestriction(course, restrictions)
       : (course.menu || null);
-
     let drink = pkey ? course[pkey] : null;
 
-    if (hasPairing && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
+    if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
       drink = { name: course.force_pairing_title || "KITCHEN MARTINI", sub: course.force_pairing_sub || "" };
     }
 
@@ -372,19 +401,18 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       }
     }
 
-    if (!hasPairing && (courseKey === "chicken_gizzard" || courseName === "CHICKEN GIZZARD")) {
-      drink = beerChoice === "nonalc"
-        ? (course.na || { name: "SPENT BREAD KOMBUCHA", sub: "malt, hops" })
-        : (course.wp || course.os || course.premium || { name: "Reservoir Dogs, Crazy Sister", sub: "Nova Gorica, Slovenia" });
-    } else if (!hasPairing && i >= DANUBE_SALMON_IDX && bottleCursor < tableBottles.length) {
-      drink = fmtDrinkParts(tableBottles[bottleCursor]);
-      bottleCursor += 1;
+    if ((courseKey === "chicken_gizzard" || courseName === "CHICKEN GIZZARD") && selectedBeer) {
+      drink = { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
+    } else if (!hasPairing && i >= DANUBE_SALMON_IDX && bottleQueue.length > 0) {
+      const nextBottle = bottleQueue.shift();
+      const d = fmtDrinkParts(nextBottle);
+      drink = { name: d.title || "", sub: d.sub || "" };
     }
 
     rows.push({
       type: "course",
       left: { title: dish?.name || "", sub: dish?.sub || "" },
-      right: drink ? { title: drink.name || drink.title || "", sub: drink.sub || "" } : null,
+      right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
       rowClass: [
         (hasPairing && (courseKey === "crayfish" || i === CRAYFISH_IDX)) ? "after-crayfish" : "",
         (isShort && (courseKey === "trout_belly" || courseName === "TROUT BELLY")) ? "short-after-trout-belly" : "",
@@ -392,11 +420,12 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
         course.section_gap_before ? "section-gap-before" : "",
       ].filter(Boolean).join(" "),
     });
+    courseRowsSeen += 1;
   });
 
-  while (!hasPairing && bottleCursor < tableBottles.length) {
-    rows.push({ type: "wine-only", right: fmtDrinkParts(tableBottles[bottleCursor]) });
-    bottleCursor += 1;
+  while (!hasPairing && bottleQueue.length > 0) {
+    const d = fmtDrinkParts(bottleQueue.shift());
+    rows.push({ type: "wine-only", right: d });
   }
 
   if (hasPairing && !insertedPairingLabel) {
@@ -460,21 +489,7 @@ body{position:relative;}
 </style>
 </head>
 <body>
-<div id="sheet">
-  <div id="frame">
-    <div id="scaleTarget">
-      <div id="header">
-        <div id="title">${safeTitle}</div>
-        <div id="logo"><img src="data:image/png;base64,${MENU_LOGO}" alt="Milka"></div>
-      </div>
-      <div id="menu">${rowsHtml}</div>
-      <div id="footer">
-        <div id="thankyou">Thank you for your visit.</div>
-        <div id="team"><div class="menu-main">TEAM:</div><div>${esc(teamNames)}</div></div>
-      </div>
-    </div>
-  </div>
-</div>
+<div id="sheet"><div id="frame"><div id="scaleTarget"><div id="header"><div id="title">${safeTitle}</div><div id="logo"><img src="data:image/png;base64,${MENU_LOGO}" alt="Milka"></div></div><div id="menu">${rowsHtml}</div><div id="footer"><div id="thankyou">Thank you for your visit.</div><div id="team"><div class="menu-main">TEAM:</div><div>${esc(teamNames)}</div></div></div></div></div></div>
 <script>
 (function(){
   const MIN_SCALE = 0.58;
@@ -2102,7 +2117,7 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
 // ── Table Seat Detail (read-only, used in DisplayBoard) ───────────────────────
 function TableSeatDetail({ table, dishes, isMobile }) {
   const pairingColors = {
-    "—":        { color: "#666", bg: "#f5f5f5", border: "#d8d8d8" },
+    "—":        { color: "#666", bg: "#f5f5f5",  border: "#d8d8d8" },
     "Non-Alc":  { color: "#1f5f73", bg: "#e8f7fb",  border: "#7fc6db" },
     "Wine":      { color: "#7a5020", bg: "#f5ead8",  border: "#c8a060" },
     "Premium":   { color: "#3a3a7a", bg: "#eaeaf5",  border: "#8888bb" },
@@ -2590,6 +2605,13 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
                   </div>
                 )}
 
+                {/* Auto beer badge for pairing seats */}
+                {beerFixed && (
+                  <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#bbb" }}>
+                    beer: {s.pairing === "Non-Alc" ? "n/a" : "alco"}
+                  </span>
+                )}
+
                 <button onClick={() => openPrint(s)} disabled={!printable} style={{
                   marginLeft: "auto", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
                   padding: "8px 16px", border: `1px solid ${printable ? "#c8a96e" : "#e0e0e0"}`,
@@ -2617,7 +2639,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
           <div style={{ fontFamily: FONT, fontSize: 11, color: "#ccc", textAlign: "center", padding: "40px 0" }}>No seats yet</div>
         )}
 
-        {seats.length > 0 && (
+        {seats.some(s => isPrintable(s)) && (
           <button onClick={generateAll} style={{
             marginTop: 16, width: "100%", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
             padding: "12px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
