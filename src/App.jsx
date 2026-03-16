@@ -3552,24 +3552,34 @@ export default function App() {
         .select("*")
         .order("position", { ascending: true });
       if (error || !data || data.length === 0) return false;
-      return applyCourses(data.map(r => ({
-        position: r.position,
-        menu: r.menu,
-        veg: r.veg,
-        hazards: r.hazards,
-        na: r.na,
-        wp: r.wp,
-        os: r.os,
-        premium: r.premium,
-        is_snack: r.is_snack,
-        course_key: r.course_key || "",
-        optional_flag: r.optional_flag || "",
-        section_gap_before: !!r.section_gap_before,
-        show_on_short: !!r.show_on_short,
-        short_order: r.short_order || null,
-        force_pairing_title: r.force_pairing_title || "",
-        force_pairing_sub: r.force_pairing_sub || "",
-      })));
+      const DIETARY_KEYS = [
+        "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
+        "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
+        "no_garlic_onion","halal","low_fodmap",
+      ];
+      return applyCourses(data.map(r => {
+        const restrictions = {};
+        DIETARY_KEYS.forEach(k => { restrictions[k] = r[k] ?? null; });
+        return {
+          position: r.position,
+          menu: r.menu,
+          veg: r.veg,
+          hazards: r.hazards,
+          na: r.na,
+          wp: r.wp,
+          os: r.os,
+          premium: r.premium,
+          is_snack: r.is_snack,
+          course_key: r.course_key || "",
+          optional_flag: r.optional_flag || "",
+          section_gap_before: !!r.section_gap_before,
+          show_on_short: !!r.show_on_short,
+          short_order: r.short_order || null,
+          force_pairing_title: r.force_pairing_title || "",
+          force_pairing_sub: r.force_pairing_sub || "",
+          restrictions,
+        };
+      }));
     };
 
     const loadCourses = async () => {
