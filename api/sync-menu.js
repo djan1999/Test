@@ -102,10 +102,10 @@ export default async function handler(req, res) {
     const courses = parseRows(parseCSV(csvText));
     if (courses.length === 0) throw new Error("No courses parsed from sheet");
 
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_KEY
-    );
+    const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+    const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) throw new Error("Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_KEY)");
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { error } = await supabase
       .from("menu_courses")
