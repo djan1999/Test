@@ -4008,20 +4008,19 @@ export default function App() {
         <div style={{ padding: "28px 24px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
           {/* View toggle */}
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
-            {["BOARD", "SERVICE", "KITCHEN"].map((v, i, arr) => {
-              const key = v.toLowerCase();
+            {[["DISPLAY","board"],["KITCHEN","kitchen"],["SERVICE","service"]].map(([label, key], i, arr) => {
               const active = quickView === key;
               const isFirst = i === 0;
               const isLast  = i === arr.length - 1;
               return (
-                <button key={v} onClick={() => setQuickView(key)} style={{
+                <button key={key} onClick={() => setQuickView(key)} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
                   border: "1px solid", borderColor: active ? "#1a1a1a" : "#e0e0e0",
                   background: active ? "#1a1a1a" : "#fff", color: active ? "#fff" : "#888",
                   borderRadius: isFirst ? "2px 0 0 2px" : isLast ? "0 2px 2px 0" : "0",
                   borderLeft: i > 0 ? "none" : undefined,
                   cursor: "pointer",
-                }}>{v}</button>
+                }}>{label}</button>
               );
             })}
           </div>
