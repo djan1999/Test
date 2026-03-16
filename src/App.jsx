@@ -69,6 +69,10 @@ function normalizeLiveMenuRow(row) {
   if (!dish?.name) return null;
 
   const vegParsed = splitMainSubCell(row.veg, row.veg_sub);
+  const vegFinal = vegParsed
+    ? { name: vegParsed.name || dish.name, sub: vegParsed.sub || dish.sub || "" }
+    : null;
+
   const courseKey = String(firstFilled(row.course_key, row.key, row.dish) || "")
     .trim()
     .toLowerCase()
@@ -76,11 +80,22 @@ function normalizeLiveMenuRow(row) {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
+  const restrictionKeys = [
+    "veg","vegan","pescetarian","no_red_meat","no_pork","no_game","no_offal",
+    "gluten_free","dairy_free","nut_free","shellfish_free","egg_free",
+    "no_garlic_onion","no_alcohol","halal","low_fodmap"
+  ];
+  const restrictions = {};
+  restrictionKeys.forEach((key) => {
+    restrictions[key] = String(firstFilled(row[key])).trim();
+    restrictions[`${key}_sub`] = String(firstFilled(row[`${key}_sub`])).trim();
+  });
+
   return {
     position,
     is_snack: truthyCell(firstFilled(row["snack?"], row.snack)),
     menu: dish,
-    veg: vegParsed,
+    veg: vegFinal,
     wp: splitMainSubCell(row.wp_drink, row.wp_sub),
     na: splitMainSubCell(row.na_drink, row.na_sub),
     os: splitMainSubCell(row.os_drink, row.os_sub),
@@ -93,6 +108,7 @@ function normalizeLiveMenuRow(row) {
     force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
     force_pairing_sub: String(firstFilled(row.force_pairing_sub)).trim(),
     kitchen_note: String(firstFilled(row.kitchen_note)).trim(),
+    restrictions,
   };
 }
 
@@ -233,6 +249,87 @@ const MILKA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 58 
   <path d="M2,66 L2,30 L20,52 L38,24 L38,66 L34,66 L34,27 L20,50 L6,30 L6,66 Z"/>
 </svg>`;
 
+
+const RESTRICTION_PRIORITY_KEYS = [
+  "vegan","veg","pescetarian","halal","no_red_meat","no_pork","no_game","no_offal",
+  "gluten","dairy","nut","shellfish","egg_free","no_garlic_onion","low_fodmap","no_alcohol",
+];
+
+const RESTRICTION_COLUMN_MAP = {
+  vegan: "vegan",
+  veg: "veg",
+  pescetarian: "pescetarian",
+  halal: "halal",
+  no_red_meat: "no_red_meat",
+  no_pork: "no_pork",
+  no_game: "no_game",
+  no_offal: "no_offal",
+  gluten: "gluten_free",
+  dairy: "dairy_free",
+  nut: "nut_free",
+  shellfish: "shellfish_free",
+  egg_free: "egg_free",
+  no_garlic_onion: "no_garlic_onion",
+  low_fodmap: "low_fodmap",
+  no_alcohol: "no_alcohol",
+};
+
+function parseSheetRestrictionCell(rawTitle, rawSub, originalHeader = "", originalSub = "") {
+  const title = String(rawTitle ?? "").trim();
+  const sub = String(rawSub ?? "").trim();
+  if (!title && !sub) return null;
+
+  if (title.includes("|")) {
+    const [name, ...rest] = title.split("|");
+    return {
+      name: name.trim() || originalHeader || "",
+      sub: rest.join("|").trim() || sub || originalSub || "",
+    };
+  }
+
+  if (title && sub) {
+    return { name: title, sub };
+  }
+
+  if (!title && sub) {
+    return { name: originalHeader || "", sub };
+  }
+
+  return {
+    name: originalHeader || "",
+    sub: title || originalSub || "",
+  };
+}
+
+function applyCourseRestriction(course, activeRestrictions) {
+  const baseDish = course?.menu || { name: "", sub: "" };
+  const restrictionValues = course?.restrictions || {};
+
+  let dish = {
+    name: baseDish.name || "",
+    sub: baseDish.sub || "",
+  };
+
+  for (const key of RESTRICTION_PRIORITY_KEYS) {
+    if (!(activeRestrictions || []).includes(key)) continue;
+    const col = RESTRICTION_COLUMN_MAP[key];
+    const parsed = parseSheetRestrictionCell(
+      restrictionValues[col],
+      restrictionValues[`${col}_sub`],
+      dish.name || "",
+      dish.sub || "",
+    );
+    if (!parsed) continue;
+    dish = {
+      name: parsed.name || dish.name || "",
+      sub: parsed.sub ?? dish.sub ?? "",
+    };
+  }
+
+  return dish;
+}
+
+
 function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null }) {
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
   const PAIRING_LABELS = {
@@ -243,11 +340,10 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   };
 
   const seatId = seat.id;
-  const pairingLabel = (seat.pairing === "—" ? "" : (seat.pairing || ""));
+  const pairingLabel = seat.pairing === "—" ? "" : (seat.pairing || "");
   const pkey = PAIRING_MAP[pairingLabel] || null;
 
   const restrictions = (table.restrictions || []).filter(r => !r.pos || r.pos === seatId).map(r => r.note);
-  const isVeg = restrictions.some(r => r === "veg" || r === "vegan" || r === "pescetarian");
   const isShort = String(table.menuType || "").toLowerCase() === "short";
 
   const extras = seat.extras || {};
@@ -273,61 +369,103 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   const DANUBE_SALMON_IDX = 5;
   const PAIRING_INSERT_IDX = DANUBE_SALMON_IDX;
 
-  const fmtDrinkParts = w => ({
-    title: w?.name || "",
-    sub: [w?.producer, w?.vintage].filter(Boolean).join("  ") || w?.notes || "",
-  });
+  const fmtDrinkParts = (item) => {
+    if (!item) return { title: "", sub: "" };
+    const type = item.__type || item.type || item.category || "";
+    if (type === "cocktail" || type === "beer") return { title: item.name || "", sub: item.notes || "" };
+    return {
+      title: item?.name || "",
+      sub: [item?.producer, item?.vintage].filter(Boolean).join("  ") || item?.notes || "",
+    };
+  };
+
+  const selectedBeer = (() => {
+    if (beers.length === 0) {
+      return beerChoice === "nonalc"
+        ? { title: "NON-ALCOHOLIC BEER", sub: "" }
+        : { title: "BEER", sub: "" };
+    }
+    const chosen = beers.find(b => {
+      const hay = `${b?.name || ""} ${b?.notes || ""}`.toLowerCase();
+      const isNA = /na|non|zero|free|0\.0/.test(hay);
+      return beerChoice === "nonalc" ? isNA : !isNA;
+    }) || beers[0];
+    return fmtDrinkParts({ ...chosen, __type: "beer" });
+  })();
+
+  const normalizeToken = (value) => String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  const SHORT_MENU_ORDER = [
+    "linzer_eye","trout_belly","beetroot","squash","rainbow_trout","brioche",
+    "venison","pear","godlja","sweet_potato","sunchoke","cheese",
+  ];
+  const shortRank = Object.fromEntries(SHORT_MENU_ORDER.map((key, idx) => [key, idx + 1]));
 
   const visibleCourses = [];
   menuCourses.forEach((course, i) => {
-    const isSnack = course.is_snack ?? (i <= SNACK_END);
-    const courseKey = String(course?.course_key || "").trim().toLowerCase();
+    const courseKey = normalizeToken(course?.course_key || course?.key || course?.menu?.name);
     const courseName = String(course?.menu?.name || "").trim().toUpperCase();
-    const optionalFlag = String(course?.optional_flag || "").trim().toLowerCase();
+    const courseNameKey = normalizeToken(course?.menu?.name || "");
+    const optionalFlag = normalizeToken(course?.optional_flag || "");
 
-    if ((optionalFlag === "beetroot" || courseKey === "beetroot" || courseName === "BEETROOT") && !hasBeetroot) return;
-    if ((optionalFlag === "cheese" || courseKey === "cheese" || courseName === "CHEESE") && !hasCheese) return;
-    if ((optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseName === "PEAR") && !hasCake) return;
+    const isBeetrootCourse = optionalFlag === "beetroot" || courseKey === "beetroot" || courseNameKey === "beetroot";
+    const isCakeCourse = optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseNameKey === "pear";
+    const isCheeseExtraCourse = optionalFlag === "cheese" || courseKey === "cheese" || courseNameKey === "cheese";
 
-    const showOnShort = course.show_on_short === true || course.show_on_short === "true" || course.show_on_short === "TRUE" || course.show_on_short === "WAHR";
-    if (isShort && !showOnShort) return;
+    if (isBeetrootCourse && !hasBeetroot) return;
+    if (isCakeCourse && !hasCake) return;
+    if (isCheeseExtraCourse && !hasCheese) return;
+
+    if (isShort) {
+      const rank = shortRank[courseKey] ?? shortRank[courseNameKey];
+      if (!rank) return;
+      visibleCourses.push({ course, i, courseName, courseKey, optionalFlag, orderValue: rank });
+      return;
+    }
 
     visibleCourses.push({
       course,
       i,
       courseName,
       courseKey,
-      orderValue: isShort ? (Number(course.short_order) || 9999) : (Number(course.position) || i + 1),
+      optionalFlag,
+      orderValue: Number(course.position) || i + 1,
     });
   });
   visibleCourses.sort((a, b) => a.orderValue - b.orderValue);
 
   const rows = [];
-
+  const hasPairing = !!pkey;
   const topRightItems = [
-    ...cocktails,
-    ...glasses,
-    ...(pkey ? tableBottles : []),
+    ...cocktails.map(item => ({ ...item, __type: "cocktail" })),
+    ...glasses.map(item => ({ ...item, __type: "wine_glass" })),
+    ...(hasPairing ? tableBottles : []),
   ];
   topRightItems.forEach(item => rows.push({ type: "wine-only", right: fmtDrinkParts(item) }));
 
-  const bottleQueue = !pkey ? [...tableBottles] : [];
+  const bottleQueue = hasPairing ? [] : [...tableBottles];
   let insertedPairingLabel = false;
+  let courseRowsSeen = 0;
 
-  visibleCourses.forEach(({ course, i, courseName, courseKey }) => {
-    const insertPairingHere = pkey && !insertedPairingLabel && (
+  visibleCourses.forEach(({ course, i, courseName, courseKey, optionalFlag }) => {
+    const insertPairingHere = hasPairing && !insertedPairingLabel && (
       (!isShort && i === PAIRING_INSERT_IDX) ||
-      (isShort && rows.filter(r => r.type === "course").length === 0)
+      (isShort && courseRowsSeen === 0)
     );
     if (insertPairingHere) {
       rows.push({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING" });
       insertedPairingLabel = true;
     }
 
-    const dish = (isVeg && course.veg) ? course.veg : course.menu;
+    const dish = applyCourseRestriction(course, restrictions);
     let drink = pkey ? course[pkey] : null;
 
-    if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
+    if (hasPairing && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
       drink = { name: course.force_pairing_title || "KITCHEN MARTINI", sub: course.force_pairing_sub || "" };
     }
 
@@ -339,10 +477,11 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       drink = beetPKey ? course[beetPKey] : null;
     }
 
-    if (!pkey && (courseKey === "chicken_gizzard" || courseName === "CHICKEN GIZZARD")) {
-      drink = { name: selectedBeer.title || selectedBeer.name || "", sub: selectedBeer.sub || "" };
-    } else if (!pkey && i >= DANUBE_SALMON_IDX && bottleQueue.length > 0) {
-      drink = fmtDrinkParts(bottleQueue.shift());
+    if (!hasPairing && (courseKey === "chicken_gizzard" || courseName === "CHICKEN GIZZARD")) {
+      drink = { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
+    } else if (!hasPairing && i >= DANUBE_SALMON_IDX && bottleQueue.length > 0) {
+      const d = fmtDrinkParts(bottleQueue.shift());
+      drink = { name: d.title || "", sub: d.sub || "" };
     }
 
     rows.push({
@@ -350,17 +489,19 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       left: { title: dish?.name || "", sub: dish?.sub || "" },
       right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
       rowClass: [
-        (pkey && (courseKey === "crayfish" || i === CRAYFISH_IDX)) ? "after-crayfish" : "",
+        (hasPairing && (courseKey === "crayfish" || i === CRAYFISH_IDX)) ? "after-crayfish" : "",
         course.section_gap_before ? "section-gap-before" : "",
       ].filter(Boolean).join(" "),
     });
+    courseRowsSeen += 1;
   });
 
-  while (!pkey && bottleQueue.length > 0) {
-    rows.push({ type: "wine-only", right: fmtDrinkParts(bottleQueue.shift()) });
+  while (!hasPairing && bottleQueue.length > 0) {
+    const d = fmtDrinkParts(bottleQueue.shift());
+    rows.push({ type: "wine-only", right: d });
   }
 
-  if (pkey && !insertedPairingLabel) {
+  if (hasPairing && !insertedPairingLabel) {
     rows.unshift({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING" });
   }
 
@@ -563,7 +704,6 @@ body{position:relative;}
 
 
 const pairingStyle = {
-  "—":        { color: "#666", border: "#d8d8d8", bg: "#f5f5f5" },
   "Non-Alc":  { color: "#1f5f73", border: "#7fc6db88", bg: "#7fc6db12" },
   "Wine":      { color: "#8a6030", border: "#c8a06088", bg: "#c8a06008" },
   "Premium":   { color: "#5a5a8a", border: "#8888bb88", bg: "#8888bb08" },
@@ -667,8 +807,6 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 const supabase = hasSupabaseConfig ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-const serviceTableKey = value => `t${Number(value)}`;
-const serviceTableId = value => Number(String(value ?? '').replace(/[^0-9]+/g, '')) || 0;
 
 const defaultBoardState = () => ({
   tables: initTables,
@@ -949,7 +1087,7 @@ const BEV_TYPES = {
 };
 
 // ── BeverageSearch — unified single-search across all drink types ──────────────
-function BeverageSearch({ wines, cocktails, spirits, beers, onAdd }) {
+function BeverageSearch({ wines, cocktails, spirits, beers, onAdd, includeAllWines = false }) {
   const [q, setQ]           = useState("");
   const [results, setResults] = useState([]);
   const [open, setOpen]     = useState(false);
@@ -967,7 +1105,7 @@ function BeverageSearch({ wines, cocktails, spirits, beers, onAdd }) {
     if (!val.trim()) { setResults([]); setOpen(false); return; }
     const lq = val.toLowerCase();
     const r = [];
-    wines.filter(w => w.byGlass).forEach(w => {
+    (includeAllWines ? wines : wines.filter(w => w.byGlass)).forEach(w => {
       if (w.name.toLowerCase().includes(lq) || w.producer?.toLowerCase().includes(lq) || w.vintage?.includes(lq))
         r.push({ type: "wine",     item: w, label: w.name, sub: `${w.producer} · ${w.vintage}` });
     });
@@ -2012,15 +2150,14 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 24 }}>
         <div>
           <div style={fieldLabel}>🍾 Bottles</div>
-          <div style={{ fontFamily: FONT, fontSize: 9, color: "#777", marginBottom: 8 }}>
-            Bottles, by-the-glass wines, and cocktails added here print from Danube downward, or move to the top-right drinks area if the seat has a pairing.
-          </div>
           <BeverageSearch
             wines={wines}
             cocktails={cocktails}
             spirits={[]}
             beers={[]}
+            includeAllWines={true}
             onAdd={({ type, item }) => {
+              if (type !== "wine" && type !== "cocktail") return;
               const tagged = {
                 ...item,
                 __type: type === "wine" ? (item?.byGlass ? "wine_glass" : "wine_bottle") : "cocktail",
@@ -2028,28 +2165,16 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
               upd("bottleWines", [...(table.bottleWines || []), tagged]);
             }}
           />
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
-            {(table.bottleWines || []).map((item, i) => {
-              const type = item?.__type || (item?.notes && !item?.producer && !item?.vintage ? "cocktail" : (item?.byGlass ? "wine_glass" : "wine_bottle"));
-              const sub = item?.notes || [item?.producer, item?.vintage].filter(Boolean).join(" · ");
-              return (
-                <div key={i} style={{
-                  border: "1px solid #e2e2e2", borderRadius: 2, padding: "6px 8px",
-                  display: "flex", alignItems: "center", gap: 8, background: "#fafafa"
-                }}>
-                  <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#666", textTransform: "uppercase" }}>
-                    {type === "cocktail" ? "cocktail" : type === "wine_glass" ? "glass" : "bottle"}
-                  </span>
-                  <span style={{ fontFamily: FONT, fontSize: 11 }}>{item?.name || ""}</span>
-                  {sub ? <span style={{ fontFamily: FONT, fontSize: 10, color: "#777" }}>{sub}</span> : null}
-                  <button onClick={() => upd("bottleWines", (table.bottleWines || []).filter((_, idx) => idx !== i))} style={{
-                    border: "none", background: "none", cursor: "pointer",
-                    fontFamily: FONT, fontSize: 12, color: "#999", lineHeight: 1
-                  }}>×</button>
-                </div>
-              );
-            })}
-          </div>
+          {(table.bottleWines || []).length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+              {(table.bottleWines || []).map((item, i) => (
+                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: FONT, fontSize: 10, padding: "5px 8px", border: "1px solid #ddd", borderRadius: 2, background: "#fafafa", color: "#555" }}>
+                  <span>{item?.name || "Untitled"}</span>
+                  <button onClick={() => upd("bottleWines", (table.bottleWines || []).filter((_, idx) => idx !== i))} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#999", fontFamily: FONT, fontSize: 10, padding: 0 }}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <div style={fieldLabel}>Menu</div>
@@ -2147,7 +2272,6 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
 // ── Table Seat Detail (read-only, used in DisplayBoard) ───────────────────────
 function TableSeatDetail({ table, dishes, isMobile }) {
   const pairingColors = {
-    "—":        { color: "#666", bg: "#f5f5f5", border: "#d8d8d8" },
     "Non-Alc":  { color: "#1f5f73", bg: "#e8f7fb",  border: "#7fc6db" },
     "Wine":      { color: "#7a5020", bg: "#f5ead8",  border: "#c8a060" },
     "Premium":   { color: "#3a3a7a", bg: "#eaeaf5",  border: "#8888bb" },
@@ -2210,7 +2334,7 @@ function TableSeatDetail({ table, dishes, isMobile }) {
                     background: seat.water === "—" ? "#f5f5f5" : (ws.bg || "#f0f0f0"),
                     color: seat.water === "—" ? "#666" : "#1a1a1a", border: "1px solid #e0e0e0",
                   }}>{seat.water}</span>
-                  {seat.pairing && seat.pairing !== "—" && <span style={{
+                  {seat.pairing && <span style={{
                     fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.4,
                     padding: "4px 10px", borderRadius: 999,
                     background: pc.bg, border: `1px solid ${pc.border}`, color: pc.color,
@@ -2528,10 +2652,10 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
 
   const setBeer = (seatId, val) => setBeerChoices(prev => ({ ...prev, [seatId]: val }));
 
-  // A seat is printable if it has a pairing, or has by-glass wines, or table has bottles
+  // Every seat should always be printable.
   const isPrintable = () => true;
 
-  // Bottles to show on menu for a given seat (no-pairing only)
+  // Bottles are table-wide by default. Pairing seats move them to aperitivo in the print layout.
   const seatBottles = () => tableBottles;
 
   const openPrint = (seat) => {
@@ -2592,9 +2716,8 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
           const printable  = isPrintable(s);
           const extras     = Object.entries(s.extras || {}).filter(([,v]) => v?.ordered).map(([k]) => +k);
           const glasses    = s.glasses || [];
+          const cocktails  = s.cocktails || [];
           const bottles    = seatBottles(s);
-          const hasBeer    = true;
-          const beerFixed  = false
 
           return (
             <div key={s.id} style={{
@@ -2606,10 +2729,10 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
                 <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#999", minWidth: 28 }}>P{s.id}</span>
 
                 {/* Pairing badge */}
-                {s.pairing
+                {s.pairing && s.pairing !== "—"
                   ? <span style={{ fontFamily: FONT, fontSize: 10, padding: "3px 9px", borderRadius: 2, background: pairingBg[s.pairing] || "#f5f5f5", color: pairingColor[s.pairing] || "#555", border: "1px solid #e0e0e0", fontWeight: 500 }}>{s.pairing}</span>
-                  : glasses.length > 0 || tableBottles.length > 0
-                    ? <span style={{ fontFamily: FONT, fontSize: 10, padding: "3px 9px", borderRadius: 2, background: "#f5f5f5", color: "#888", border: "1px solid #e8e8e8" }}>bottles</span>
+                  : glasses.length > 0 || cocktails.length > 0 || tableBottles.length > 0
+                    ? <span style={{ fontFamily: FONT, fontSize: 10, padding: "3px 9px", borderRadius: 2, background: "#f5f5f5", color: "#888", border: "1px solid #e8e8e8" }}>drinks</span>
                     : <span style={{ fontFamily: FONT, fontSize: 10, color: "#ccc" }}>no pairing</span>}
 
                 {isVeg && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#edf8e8", color: "#2a6a2a", border: "1px solid #88cc88" }}>VEG</span>}
@@ -2619,40 +2742,31 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
                   <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fef0f0", color: "#b04040", border: "1px solid #e09090" }}>⚠ {restrLabel(r.note)}</span>
                 ))}
 
-                {/* Beer selector — only for no-pairing seats */}
-                {hasBeer && printable && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
-                    <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#bbb", textTransform: "uppercase" }}>beer</span>
-                    {BEER_OPTS.map(opt => (
-                      <button key={opt.val} onClick={() => setBeer(s.id, opt.val)} style={{
-                        fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "3px 7px",
-                        border: `1px solid ${beerChoices[s.id] === opt.val ? "#c8a96e" : "#e8e8e8"}`,
-                        borderRadius: 2, cursor: "pointer",
-                        background: beerChoices[s.id] === opt.val ? "#fdf4e8" : "#fff",
-                        color: beerChoices[s.id] === opt.val ? "#7a5020" : "#bbb",
-                      }}>{opt.label}</button>
-                    ))}
-                  </div>
-                )}
+                {/* Beer selector — always shown */}
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#bbb", textTransform: "uppercase" }}>beer</span>
+                  {BEER_OPTS.map(opt => (
+                    <button key={opt.val} onClick={() => setBeer(s.id, opt.val)} style={{
+                      fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "3px 7px",
+                      border: `1px solid ${beerChoices[s.id] === opt.val ? "#c8a96e" : "#e8e8e8"}`,
+                      borderRadius: 2, cursor: "pointer",
+                      background: beerChoices[s.id] === opt.val ? "#fdf4e8" : "#fff",
+                      color: beerChoices[s.id] === opt.val ? "#7a5020" : "#bbb",
+                    }}>{opt.label}</button>
+                  ))}
+                </div>
 
-                {/* Auto beer badge for pairing seats */}
-                {beerFixed && (
-                  <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#bbb" }}>
-                    beer: {s.pairing === "Non-Alc" ? "n/a" : "alco"}
-                  </span>
-                )}
-
-                <button onClick={() => openPrint(s)} disabled={!printable} style={{
+                <button onClick={() => openPrint(s)} style={{
                   marginLeft: "auto", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
-                  padding: "8px 16px", border: `1px solid ${printable ? "#c8a96e" : "#e0e0e0"}`,
-                  borderRadius: 2, cursor: printable ? "pointer" : "not-allowed",
-                  background: printable ? "#c8a96e" : "#fafafa",
-                  color: printable ? "#fff" : "#ccc",
+                  padding: "8px 16px", border: "1px solid #c8a96e",
+                  borderRadius: 2, cursor: "pointer",
+                  background: "#c8a96e",
+                  color: "#fff",
                 }}>PDF</button>
               </div>
 
-              {/* Bottles preview for no-pairing seats */}
-              {!s.pairing && bottles.length > 0 && (
+              {/* Bottles preview — table-wide */}
+              {bottles.length > 0 && (
                 <div style={{ padding: "0 16px 10px", display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {bottles.map((b, i) => (
                     <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 8px", borderRadius: 2, border: "1px solid #ddd", color: "#555", background: "#fafafa" }}>
@@ -2669,7 +2783,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
           <div style={{ fontFamily: FONT, fontSize: 11, color: "#ccc", textAlign: "center", padding: "40px 0" }}>No seats yet</div>
         )}
 
-        {seats.some(s => isPrintable(s)) && (
+        {seats.length > 0 && (
           <button onClick={generateAll} style={{
             marginTop: 16, width: "100%", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
             padding: "12px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
@@ -3254,16 +3368,16 @@ export default function App() {
   tablesRef.current = tables;
 
   const mergeRemoteTables = rows => {
-    const byId = new Map((Array.isArray(rows) ? rows : []).map(row => [serviceTableId(row.id), sanitizeTable({ id: serviceTableId(row.id), ...(row.state || {}) })]));
+    const byId = new Map((Array.isArray(rows) ? rows : []).map(row => [Number(row.table_id), sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) })]));
     applyingRemoteRef.current = true;
     setTables(() => initTables.map(base => byId.get(base.id) || base));
     setTimeout(() => { applyingRemoteRef.current = false; }, 0);
   };
 
   const applyRemoteTableRow = row => {
-    const tableId = serviceTableId(row?.id);
+    const tableId = Number(row?.table_id);
     if (!tableId) return;
-    const nextTable = sanitizeTable({ id: tableId, ...(row.state || {}) });
+    const nextTable = sanitizeTable({ id: tableId, ...(row.data || {}) });
     applyingRemoteRef.current = true;
     setTables(prev => prev.map(t => t.id === tableId ? nextTable : t));
     setTimeout(() => { applyingRemoteRef.current = false; }, 0);
@@ -3399,14 +3513,14 @@ export default function App() {
     const nextJsonByIndex = tables.map(t => JSON.stringify(sanitizeTable(t)));
     const changedTables = tables
       .filter((table, idx) => nextJsonByIndex[idx] !== prevTablesJsonRef.current[idx])
-      .map(table => ({ id: serviceTableKey(table.id), state: sanitizeTable(table), updated_at: new Date().toISOString() }));
+      .map(table => ({ table_id: table.id, data: sanitizeTable(table), updated_at: new Date().toISOString() }));
 
     prevTablesJsonRef.current = nextJsonByIndex;
     if (changedTables.length === 0) return;
 
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      const { error } = await supabase.from(SERVICE_TABLES_TABLE).upsert(changedTables, { onConflict: "id" });
+      const { error } = await supabase.from(SERVICE_TABLES_TABLE).upsert(changedTables, { onConflict: "table_id" });
       setSyncStatus(error ? "sync-error" : "live");
     }, 120);
 
@@ -3423,8 +3537,8 @@ export default function App() {
     const loadRemoteTables = async () => {
       const { data, error } = await supabase
         .from(SERVICE_TABLES_TABLE)
-        .select("id, state, updated_at")
-        .order("id", { ascending: true });
+        .select("table_id, data, updated_at")
+        .order("table_id", { ascending: true });
 
       if (!isMounted) return;
       clearTimeout(gateTimeout);
@@ -3438,8 +3552,8 @@ export default function App() {
       if (Array.isArray(data) && data.length > 0) {
         mergeRemoteTables(data);
         prevTablesJsonRef.current = initTables.map(base => {
-          const row = data.find(item => serviceTableId(item.id) === base.id);
-          return JSON.stringify(row ? sanitizeTable({ id: base.id, ...(row.state || {}) }) : base);
+          const row = data.find(item => Number(item.table_id) === base.id);
+          return JSON.stringify(row ? sanitizeTable({ id: base.id, ...(row.data || {}) }) : base);
         });
       }
 
@@ -3453,7 +3567,7 @@ export default function App() {
       .channel("milka-service-tables-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: SERVICE_TABLES_TABLE }, payload => {
         if (payload.eventType === "DELETE") {
-          const tableId = serviceTableId(payload.old?.id);
+          const tableId = Number(payload.old?.table_id);
           if (!tableId) return;
           applyingRemoteRef.current = true;
           setTables(prev => prev.map(t => t.id === tableId ? blankTable(tableId) : t));
@@ -3463,12 +3577,11 @@ export default function App() {
         }
         if (!payload.new) return;
         applyRemoteTableRow(payload.new);
-        prevTablesJsonRef.current = tablesRef.current.map(t => JSON.stringify(sanitizeTable(t.id === serviceTableId(payload.new.id) ? { id: serviceTableId(payload.new.id), ...(payload.new.state || {}) } : t)));
+        prevTablesJsonRef.current = tablesRef.current.map(t => JSON.stringify(sanitizeTable(t.id === Number(payload.new.table_id) ? { id: Number(payload.new.table_id), ...(payload.new.data || {}) } : t)));
         setSyncStatus("live");
       })
       .subscribe(status => {
         if (status === "SUBSCRIBED") setSyncStatus("live");
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") setSyncStatus("sync-error");
       });
 
     return () => {
