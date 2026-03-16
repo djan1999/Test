@@ -5,7 +5,7 @@
       "schedule": "0 2 * * *"
     },
     {
-      "path": "/api/sync-menu?secret=milka2025",
+      "path": "/api/sync-menu",
       "schedule": "0 14 * * *"
     }
   ]

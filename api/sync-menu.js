@@ -1,13 +1,14 @@
 // api/sync-menu.js — Vercel serverless function
 // Fetches MILKA MENU V2 sheet from Google Sheets CSV and upserts into menu_courses.
 
-const { createClient } = require("@supabase/supabase-js");
+import { createClient } from "@supabase/supabase-js";
 
-const SHEET_ID  = process.env.VITE_MENU_SHEET_ID || process.env.MENU_SHEET_ID || "1aPVGmKNcvDOFzyr3jSPT_KL5lKEYKPgkad3y0_E_Vl4";
-const SHEET_TAB = process.env.VITE_MENU_SHEET_TAB || process.env.MENU_SHEET_TAB || "MILKA MENU V2";
+const SHEET_ID  = process.env.MENU_SHEET_ID || process.env.VITE_MENU_SHEET_ID || "1aPVGmKNcvDOFzyr3jSPT_KL5lKEYKPgkad3y0_E_Vl4";
+const SHEET_TAB = process.env.MENU_SHEET_TAB || process.env.VITE_MENU_SHEET_TAB || "MILKA MENU V2";
 const CSV_URL   = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_TAB)}`;
 
-const SECRET = process.env.SYNC_SECRET || "milka2025";
+const SYNC_SECRET = process.env.SYNC_SECRET;
+const CRON_SECRET = process.env.CRON_SECRET;
 
 function parseCSV(text) {
   const rows = [];
@@ -76,14 +77,22 @@ function parseRows(rows) {
   }).filter(Boolean).sort((a, b) => a.position - b.position);
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(204).end();
 
-  const secret = req.query.secret || req.headers["x-sync-secret"];
-  if (secret !== SECRET) return res.status(401).json({ error: "Unauthorized" });
+  // Support Vercel cron auth (Authorization: Bearer <CRON_SECRET>),
+  // manual trigger via x-sync-secret header, or ?secret= query param.
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const provided = bearerToken || req.headers["x-sync-secret"] || req.query.secret;
+
+  const validSecrets = [CRON_SECRET, SYNC_SECRET].filter(Boolean);
+  if (validSecrets.length > 0 && !validSecrets.includes(provided)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
   try {
     const response = await fetch(CSV_URL);
@@ -94,8 +103,8 @@ module.exports = async (req, res) => {
     if (courses.length === 0) throw new Error("No courses parsed from sheet");
 
     const supabase = createClient(
-      process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_KEY
     );
 
     const { error } = await supabase
@@ -113,6 +122,6 @@ module.exports = async (req, res) => {
     return res.status(200).json({ ok: true, synced: courses.length });
   } catch (err) {
     console.error("sync-menu error:", err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ ok: false, error: err.message });
   }
-};
+}
