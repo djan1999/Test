@@ -3621,8 +3621,8 @@ export default function App() {
     },
   };
 
-  // Gate 1: password wall — must authenticate before anything
-  if (!authed) return <GateScreen onPass={() => setAuthed(true)} />;
+  // Gate 1: password wall — temporarily disabled for testing
+  // if (!authed) return <GateScreen onPass={() => setAuthed(true)} />;
 
   // Gate 2: hydration — wait for Supabase state before rendering
   if (!hydrated) return (
