@@ -2708,46 +2708,63 @@ function KitchenTicket({ table, menuCourses, upd }) {
   const pairingColor = { Wine: "#7a5020", "Non-Alc": "#1f5f73", Premium: "#5a5a8a", "Our Story": "#3a7a5a" };
   const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#e8f5fa", Premium: "#f0eeff", "Our Story": "#eaf5ee" };
 
-  // Courses to show: non-snack courses in order
-  const courses = (menuCourses || []).filter(c => !c.is_snack);
+  const normFlag = s => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const isBeetCourse   = c => { const f = normFlag(c.optional_flag), k = normFlag(c.course_key || c.menu?.name); return f === "beetroot" || k === "beetroot"; };
+  const isCheeseCourse = c => { const f = normFlag(c.optional_flag), k = normFlag(c.course_key || c.menu?.name); return f === "cheese"   || k === "cheese";   };
+  const isCakeCourse   = c => { const f = normFlag(c.optional_flag), k = normFlag(c.course_key || c.menu?.name); return f === "cake"     || k === "pear" || k === "pear_cake"; };
 
-  // Extras as pseudo-courses
+  // Extras ordered per seat — must come before courses filter
   const beetSeats   = seats.filter(s => s.extras?.[1]?.ordered || s.extras?.["1"]?.ordered);
   const cheeseSeats = seats.filter(s => s.extras?.[2]?.ordered || s.extras?.["2"]?.ordered);
   const cakeSeats   = seats.filter(s => s.extras?.[3]?.ordered || s.extras?.["3"]?.ordered);
   const hasCake     = cakeSeats.length > 0;
 
-  const firedCount = Object.keys(log).length;
-  const totalCourses = courses.length + (beetSeats.length > 0 ? 1 : 0) + (cheeseSeats.length > 0 ? 1 : 0) + (hasCake ? 1 : 0);
+  // Courses to show: non-snack, optional extras only when ordered
+  const courses = (menuCourses || []).filter(c => {
+    if (c.is_snack) return false;
+    if (isBeetCourse(c)   && beetSeats.length   === 0) return false;
+    if (isCheeseCourse(c) && cheeseSeats.length === 0) return false;
+    if (isCakeCourse(c)   && cakeSeats.length   === 0) return false;
+    return true;
+  });
 
-  // Build unified row list: menu courses + selected extras at end
-  const extraRows = [
-    ...(beetSeats.length > 0  ? [{ key: "__beet__",   label: "Beetroot", extraSeats: beetSeats,   accent: "#5a8a3a" }] : []),
-    ...(cheeseSeats.length > 0 ? [{ key: "__cheese__", label: "Cheese",   extraSeats: cheeseSeats, accent: "#a06830" }] : []),
-    ...(hasCake               ? [{ key: "__cake__",   label: "🎂 Cake",  extraSeats: cakeSeats,   accent: "#b04888" }] : []),
-  ];
+  const firedCount   = Object.keys(log).length;
+  const totalCourses = courses.length; // extras are now included in courses
+
+  // Duration: arrivedAt → last firedAt when all done
+  const allDone = totalCourses > 0 && firedCount >= totalCourses;
+  const parseHHMM = s => { if (!s) return null; const [h,m] = s.split(":").map(Number); return isNaN(h)||isNaN(m) ? null : h*60+m; };
+  const lastFiredAt = allDone ? Object.values(log).map(e => e.firedAt).filter(Boolean).sort().pop() : null;
+  const durationMins = (() => {
+    const start = parseHHMM(table.arrivedAt), end = parseHHMM(lastFiredAt);
+    if (start == null || end == null) return null;
+    const d = end - start; return d >= 0 ? d : d + 1440;
+  })();
 
   return (
     <div style={{ border: "1.5px solid #e0e0e0", borderRadius: 4, overflow: "hidden", background: "#fff" }}>
-      {/* Header */}
-      <div style={{ background: "#1a1a1a", padding: "5px 8px", display: "flex", alignItems: "center", gap: 6 }}>
+      {/* Header row 1: table + progress */}
+      <div style={{ background: "#1a1a1a", padding: "4px 8px", display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: "#fff", lineHeight: 1 }}>T{table.id}</span>
-        {table.resName && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 60 }}>{table.resName}</span>}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4 }}>
-          {seats.map(s => {
-            const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
-            return (
-              <span key={s.id} style={{
-                fontFamily: FONT, fontSize: 8, padding: "1px 4px", borderRadius: 2,
-                background: p ? (pairingBg[p] || "#f5f5f5") : "#333",
-                color: p ? (pairingColor[p] || "#555") : "#aaa",
-              }}>P{s.id}{p ? `·${p === "Non-Alc" ? "N" : p === "Our Story" ? "O" : p === "Premium" ? "P" : "W"}` : ""}</span>
-            );
-          })}
-          <span style={{ fontFamily: FONT, fontSize: 8, color: firedCount === totalCourses && totalCourses > 0 ? "#4a9a6a" : "#666", marginLeft: 2 }}>
-            {firedCount}/{totalCourses}
-          </span>
-        </div>
+        {table.resName && <span style={{ fontFamily: FONT, fontSize: 9, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 55 }}>{table.resName}</span>}
+        <span style={{ fontFamily: FONT, fontSize: 8, color: allDone ? "#4a9a6a" : "#666", marginLeft: "auto" }}>{firedCount}/{totalCourses}</span>
+      </div>
+      {/* Header row 2: seat pairings + restrictions */}
+      <div style={{ background: "#2a2a2a", padding: "3px 8px", display: "flex", flexWrap: "wrap", gap: "3px 6px" }}>
+        {seats.map(s => {
+          const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
+          const restrList = restrictions.filter(r => !r.pos || r.pos === s.id).map(r => r.note).filter(Boolean);
+          const pInit = p ? (p === "Non-Alc" ? "N" : p === "Our Story" ? "O" : p === "Premium" ? "P" : "W") : null;
+          return (
+            <span key={s.id} style={{
+              fontFamily: FONT, fontSize: 8, padding: "1px 4px", borderRadius: 2,
+              background: p ? (pairingBg[p] || "#f5f5f5") : "#383838",
+              color: p ? (pairingColor[p] || "#555") : "#888",
+            }}>
+              P{s.id}{pInit ? `·${pInit}` : ""}{restrList.length > 0 ? `·${restrList.join("·")}` : ""}
+            </span>
+          );
+        })}
       </div>
 
       {/* Course rows — whole row is clickable */}
@@ -2770,11 +2787,18 @@ function KitchenTicket({ table, menuCourses, upd }) {
             })
             .filter(Boolean);
 
+          // For optional extra courses, show which seats have it
+          const extraLabel = (() => {
+            if (isBeetCourse(course))   return beetSeats.map(s => `P${s.id}`).join(" ");
+            if (isCheeseCourse(course)) return cheeseSeats.map(s => `P${s.id}`).join(" ");
+            if (isCakeCourse(course))   return cakeSeats.map(s => `P${s.id}`).join(" ");
+            return null;
+          })();
+
           return (
             <div key={key}
               onClick={() => fired ? unfire(key) : fire(key)}
               style={{
-                display: "flex", flexDirection: "column",
                 borderBottom: "1px solid #f0f0f0",
                 background: fired ? "#f0faf0" : "#fff",
                 opacity: fired ? 0.72 : 1,
@@ -2782,59 +2806,41 @@ function KitchenTicket({ table, menuCourses, upd }) {
                 transition: "background 0.15s",
                 borderLeft: fired ? "3px solid #4a9a6a" : "3px solid transparent",
               }}>
-              <div style={{ display: "flex", alignItems: "center", padding: "6px 8px 6px 6px", gap: 6 }}>
-                <span style={{ fontFamily: FONT, fontSize: 9, color: fired ? "#4a9a6a" : "#ccc", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "·"}</span>
-                <div style={{ flex: 1, minWidth: 0,
-                  fontFamily: FONT, fontSize: 10, fontWeight: 600,
-                  color: fired ? "#888" : "#1a1a1a",
-                  textDecoration: fired ? "line-through" : "none",
-                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                }}>{course.menu?.name || key}</div>
-                {firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600, flexShrink: 0 }}>{firedAt}</span>}
-              </div>
-              {seatMods.length > 0 && !fired && (
-                <div style={{ padding: "0 8px 4px 20px", display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
-                  {seatMods.map(({ seat, dish }) => (
-                    <span key={seat.id} style={{ fontFamily: FONT, fontSize: 9, color: "#b04040" }}>
-                      <span style={{ fontWeight: 700 }}>P{seat.id}</span> {dish.name}
+              <div style={{ display: "flex", alignItems: "center", padding: "6px 8px 6px 6px", gap: 4, minWidth: 0 }}>
+                <span style={{ fontFamily: FONT, fontSize: 9, color: fired ? "#4a9a6a" : "#ccc", flexShrink: 0 }}>{fired ? "✓" : "·"}</span>
+                {/* Dish name + inline extras label or restriction mods */}
+                <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+                  <span style={{
+                    fontFamily: FONT, fontSize: 10, fontWeight: 600,
+                    color: fired ? "#888" : "#1a1a1a",
+                    textDecoration: fired ? "line-through" : "none",
+                  }}>{course.menu?.name || key}</span>
+                  {extraLabel && (
+                    <span style={{ fontFamily: FONT, fontSize: 8, color: "#bbb", marginLeft: 4 }}>{extraLabel}</span>
+                  )}
+                  {!extraLabel && seatMods.length > 0 && !fired && seatMods.map(({ seat, dish }) => (
+                    <span key={seat.id} style={{ fontFamily: FONT, fontSize: 8, color: "#b04040", marginLeft: 4 }}>
+                      <span style={{ fontWeight: 700 }}>P{seat.id}</span>:{dish.name}
                     </span>
                   ))}
                 </div>
-              )}
+                {firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600, flexShrink: 0 }}>{firedAt}</span>}
+              </div>
             </div>
           );
         })}
 
-        {/* Extras — only shown when ordered, merged into course list */}
-        {extraRows.map(({ key, label, extraSeats, accent }, i) => {
-          const fired = !!log[key];
-          const isLast = i === extraRows.length - 1 && courses.length === 0;
-          return (
-            <div key={key}
-              onClick={() => fired ? unfire(key) : fire(key)}
-              style={{
-                display: "flex", alignItems: "center", padding: "6px 8px 6px 6px", gap: 6,
-                borderBottom: isLast ? "none" : "1px solid #f0f0f0",
-                background: fired ? "#f0faf0" : "#fff",
-                opacity: fired ? 0.72 : 1,
-                cursor: "pointer",
-                transition: "background 0.15s",
-                borderLeft: fired ? "3px solid #4a9a6a" : "3px solid transparent",
-              }}>
-              <span style={{ fontFamily: FONT, fontSize: 9, color: fired ? "#4a9a6a" : "#ccc", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "·"}</span>
-              <div style={{ flex: 1, minWidth: 0,
-                fontFamily: FONT, fontSize: 10, fontWeight: 600,
-                color: fired ? "#888" : accent,
-                textDecoration: fired ? "line-through" : "none",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              }}>
-                {label} <span style={{ fontWeight: 400, color: "#bbb", fontSize: 9 }}>{extraSeats.map(s => `P${s.id}`).join(" ")}</span>
-              </div>
-              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600, flexShrink: 0 }}>{log[key].firedAt}</span>}
-            </div>
-          );
-        })}
       </div>
+      {/* Duration footer — shown when all courses are fired */}
+      {allDone && (
+        <div style={{
+          background: "#f0faf0", borderTop: "1px solid #c8eac8",
+          padding: "4px 8px", textAlign: "center",
+          fontFamily: FONT, fontSize: 9, color: "#4a9a6a", letterSpacing: 1,
+        }}>
+          {durationMins != null ? `${durationMins} min` : "✓ complete"}
+        </div>
+      )}
     </div>
   );
 }
@@ -2852,26 +2858,30 @@ function KitchenBoard({ tables, menuCourses, upd }) {
     if (!byTime[time]) byTime[time] = [];
     byTime[time].push(t);
   });
+  const groups = Object.entries(byTime).sort(([a], [b]) => a.localeCompare(b));
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-      {Object.entries(byTime).sort(([a], [b]) => a.localeCompare(b)).map(([time, timeTables]) => (
-        <div key={time}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-            <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: "#888" }}>{time}</span>
-            <div style={{ flex: 1, height: 1, background: "#f0f0f0" }} />
-            <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb" }}>
-              {timeTables.reduce((sum, t) => sum + (t.seats?.length || 0), 0)} covers
-            </span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "row", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-            {timeTables.map(t => (
-              <div key={t.id} style={{ flexShrink: 0, width: 170 }}>
-                <KitchenTicket table={t} menuCourses={menuCourses} upd={upd} />
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
+    <div style={{ overflowX: "auto", paddingBottom: 8 }}>
+      <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-start", gap: 6, minWidth: "max-content" }}>
+        {groups.flatMap(([time, timeTables], gi) => [
+          gi > 0 && (
+            <div key={`sep-${time}`} style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, padding: "4px 2px" }}>
+              <div style={{ width: 1, background: "#e0e0e0", height: 40 }} />
+              <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", writingMode: "vertical-rl", textOrientation: "mixed" }}>{time}</span>
+              <div style={{ width: 1, background: "#e0e0e0", flex: 1, minHeight: 40 }} />
+            </div>
+          ),
+          gi === 0 && (
+            <div key={`label-${time}`} style={{ flexShrink: 0, display: "flex", alignItems: "center", padding: "4px 4px 4px 0" }}>
+              <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", writingMode: "vertical-rl", textOrientation: "mixed" }}>{time}</span>
+            </div>
+          ),
+          ...timeTables.map(t => (
+            <div key={t.id} style={{ flexShrink: 0, width: 165 }}>
+              <KitchenTicket table={t} menuCourses={menuCourses} upd={upd} />
+            </div>
+          )),
+        ].filter(Boolean))}
+      </div>
     </div>
   );
 }
