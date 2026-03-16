@@ -294,19 +294,24 @@ function applyCourseRestriction(course, activeRestrictions) {
 
     if (courseRestrictions[mapped]) {
       const next = courseRestrictions[mapped];
-      dish = {
-        name: String(next?.name || dish.name || "").trim(),
-        sub: String(next?.sub || dish.sub || "").trim(),
-      };
+      // If the cell had a | separator, next.sub is non-empty → full name+sub replacement.
+      // If no | separator, next.sub is empty → sub-only replacement, keep original dish name.
+      if (next?.sub) {
+        dish = { name: String(next.name || dish.name).trim(), sub: String(next.sub).trim() };
+      } else if (next?.name) {
+        dish = { name: dish.name, sub: String(next.name).trim() };
+      }
       continue;
     }
 
     // backward compatibility for older static menu data
     if (mapped === "veg" && course?.veg) {
-      dish = {
-        name: String(course.veg?.name || dish.name || "").trim(),
-        sub: String(course.veg?.sub || dish.sub || "").trim(),
-      };
+      const v = course.veg;
+      if (v?.sub) {
+        dish = { name: String(v.name || dish.name).trim(), sub: String(v.sub).trim() };
+      } else if (v?.name) {
+        dish = { name: dish.name, sub: String(v.name).trim() };
+      }
     }
   }
 
