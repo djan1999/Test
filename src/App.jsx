@@ -2715,30 +2715,29 @@ function KitchenTicket({ table, menuCourses, upd }) {
   const beetSeats   = seats.filter(s => s.extras?.[1]?.ordered || s.extras?.["1"]?.ordered);
   const cheeseSeats = seats.filter(s => s.extras?.[2]?.ordered || s.extras?.["2"]?.ordered);
   const cakeSeats   = seats.filter(s => s.extras?.[3]?.ordered || s.extras?.["3"]?.ordered);
-  const hasCake     = table.birthday || cakeSeats.length > 0;
+  const hasCake     = cakeSeats.length > 0;
 
   const firedCount = Object.keys(log).length;
   const totalCourses = courses.length + (beetSeats.length > 0 ? 1 : 0) + (cheeseSeats.length > 0 ? 1 : 0) + (hasCake ? 1 : 0);
 
   return (
-    <div style={{ border: "1.5px solid #e0e0e0", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
+    <div style={{ border: "1.5px solid #e0e0e0", borderRadius: 4, overflow: "hidden", background: "#fff" }}>
       {/* Header */}
-      <div style={{ background: "#1a1a1a", padding: "9px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: "#fff", lineHeight: 1 }}>T{table.id}</span>
-        {table.resName && <span style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, color: "#ddd" }}>{table.resName}</span>}
-        {table.resTime && <span style={{ fontFamily: FONT, fontSize: 10, color: "#888" }}>{table.resTime}</span>}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ background: "#1a1a1a", padding: "5px 8px", display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: "#fff", lineHeight: 1 }}>T{table.id}</span>
+        {table.resName && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 60 }}>{table.resName}</span>}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4 }}>
           {seats.map(s => {
             const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
             return (
               <span key={s.id} style={{
-                fontFamily: FONT, fontSize: 9, padding: "2px 6px", borderRadius: 2,
+                fontFamily: FONT, fontSize: 8, padding: "1px 4px", borderRadius: 2,
                 background: p ? (pairingBg[p] || "#f5f5f5") : "#333",
                 color: p ? (pairingColor[p] || "#555") : "#aaa",
-              }}>P{s.id}{p ? ` ${p === "Non-Alc" ? "N/A" : p === "Our Story" ? "OS" : p === "Premium" ? "Prem" : "W"}` : ""}</span>
+              }}>P{s.id}{p ? `·${p === "Non-Alc" ? "N" : p === "Our Story" ? "O" : p === "Premium" ? "P" : "W"}` : ""}</span>
             );
           })}
-          <span style={{ fontFamily: FONT, fontSize: 9, color: firedCount === totalCourses && totalCourses > 0 ? "#4a9a6a" : "#666" }}>
+          <span style={{ fontFamily: FONT, fontSize: 8, color: firedCount === totalCourses && totalCourses > 0 ? "#4a9a6a" : "#666", marginLeft: 2 }}>
             {firedCount}/{totalCourses}
           </span>
         </div>
@@ -2759,8 +2758,8 @@ function KitchenTicket({ table, menuCourses, upd }) {
               const modified = applyCourseRestriction(course, restrKeys);
               const base = course.menu;
               if (!modified) return null;
-              // Only show if dish name or sub actually changes
-              const changed = modified.name !== base?.name || modified.sub !== base?.sub;
+              // Only show if dish name actually changes
+              const changed = modified.name !== base?.name;
               if (!changed) return null;
               return { seat, dish: modified };
             })
@@ -2774,47 +2773,43 @@ function KitchenTicket({ table, menuCourses, upd }) {
               opacity: fired ? 0.75 : 1,
               transition: "background 0.2s",
             }}>
-              <div style={{ display: "flex", alignItems: "center", padding: "9px 14px", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", padding: "5px 8px", gap: 6 }}>
                 {/* Fire button */}
                 <button
                   onClick={() => fired ? unfire(key) : fire(key)}
                   style={{
-                    width: 28, height: 28, borderRadius: "50%", border: "none",
+                    width: 20, height: 20, borderRadius: "50%", border: "none",
                     background: fired ? "#4a9a6a" : "#f0f0f0",
                     color: fired ? "#fff" : "#aaa",
-                    cursor: "pointer", fontSize: 14, lineHeight: 1,
+                    cursor: "pointer", fontSize: 11, lineHeight: 1,
                     display: "flex", alignItems: "center", justifyContent: "center",
                     flexShrink: 0,
                   }}
                 >{fired ? "✓" : "○"}</button>
 
-                {/* Dish name */}
+                {/* Dish name only */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
-                    fontFamily: FONT, fontSize: 11, fontWeight: 600,
+                    fontFamily: FONT, fontSize: 10, fontWeight: 600,
                     color: fired ? "#888" : "#1a1a1a",
                     textDecoration: fired ? "line-through" : "none",
                     whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                   }}>{course.menu?.name || key}</div>
-                  {course.menu?.sub && !fired && (
-                    <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginTop: 1 }}>{course.menu.sub}</div>
-                  )}
                 </div>
 
                 {/* Fired time */}
                 {firedAt && (
-                  <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 600, flexShrink: 0 }}>{firedAt}</span>
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600, flexShrink: 0 }}>{firedAt}</span>
                 )}
               </div>
 
-              {/* Seat-specific modifications */}
+              {/* Seat-specific modifications — only changed dish name */}
               {seatMods.length > 0 && !fired && (
-                <div style={{ padding: "0 14px 8px 52px", display: "flex", flexDirection: "column", gap: 3 }}>
+                <div style={{ padding: "0 8px 4px 34px", display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
                   {seatMods.map(({ seat, dish }) => (
-                    <div key={seat.id} style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                      <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: 1, color: "#b04040", minWidth: 18 }}>P{seat.id}</span>
-                      <span style={{ fontFamily: FONT, fontSize: 9, color: "#b04040" }}>{dish.name}{dish.sub ? ` — ${dish.sub}` : ""}</span>
-                    </div>
+                    <span key={seat.id} style={{ fontFamily: FONT, fontSize: 9, color: "#b04040" }}>
+                      <span style={{ fontWeight: 700 }}>P{seat.id}</span> {dish.name}
+                    </span>
                   ))}
                 </div>
               )}
@@ -2827,13 +2822,12 @@ function KitchenTicket({ table, menuCourses, upd }) {
           const key = "__beet__";
           const fired = !!log[key];
           return (
-            <div key={key} style={{ display: "flex", alignItems: "center", padding: "9px 14px", gap: 10, borderBottom: "1px solid #f0f0f0", background: fired ? "#f6fff6" : "#fff", opacity: fired ? 0.75 : 1 }}>
-              <button onClick={() => fired ? unfire(key) : fire(key)} style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: fired ? "#4a9a6a" : "#f0f0f0", color: fired ? "#fff" : "#aaa", cursor: "pointer", fontSize: 14, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fired ? "✓" : "○"}</button>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: fired ? "#888" : "#5a8a3a", textDecoration: fired ? "line-through" : "none" }}>Beetroot</div>
-                <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa" }}>{beetSeats.map(s => { const p = s.extras?.[1]?.pairing || s.extras?.["1"]?.pairing || "—"; return `P${s.id}: ${p}`; }).join(" · ")}</div>
+            <div key={key} style={{ display: "flex", alignItems: "center", padding: "5px 8px", gap: 6, borderBottom: "1px solid #f0f0f0", background: fired ? "#f6fff6" : "#fff", opacity: fired ? 0.75 : 1 }}>
+              <button onClick={() => fired ? unfire(key) : fire(key)} style={{ width: 20, height: 20, borderRadius: "50%", border: "none", background: fired ? "#4a9a6a" : "#f0f0f0", color: fired ? "#fff" : "#aaa", cursor: "pointer", fontSize: 11, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fired ? "✓" : "○"}</button>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: fired ? "#888" : "#5a8a3a", textDecoration: fired ? "line-through" : "none" }}>Beetroot <span style={{ fontWeight: 400, color: "#aaa" }}>{beetSeats.map(s => `P${s.id}`).join(" ")}</span></div>
               </div>
-              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 600 }}>{log[key].firedAt}</span>}
+              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600 }}>{log[key].firedAt}</span>}
             </div>
           );
         })()}
@@ -2842,13 +2836,12 @@ function KitchenTicket({ table, menuCourses, upd }) {
           const key = "__cheese__";
           const fired = !!log[key];
           return (
-            <div key={key} style={{ display: "flex", alignItems: "center", padding: "9px 14px", gap: 10, borderBottom: "1px solid #f0f0f0", background: fired ? "#f6fff6" : "#fff", opacity: fired ? 0.75 : 1 }}>
-              <button onClick={() => fired ? unfire(key) : fire(key)} style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: fired ? "#4a9a6a" : "#f0f0f0", color: fired ? "#fff" : "#aaa", cursor: "pointer", fontSize: 14, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fired ? "✓" : "○"}</button>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: fired ? "#888" : "#a06830", textDecoration: fired ? "line-through" : "none" }}>Cheese</div>
-                <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa" }}>{cheeseSeats.map(s => `P${s.id}`).join(" · ")}</div>
+            <div key={key} style={{ display: "flex", alignItems: "center", padding: "5px 8px", gap: 6, borderBottom: "1px solid #f0f0f0", background: fired ? "#f6fff6" : "#fff", opacity: fired ? 0.75 : 1 }}>
+              <button onClick={() => fired ? unfire(key) : fire(key)} style={{ width: 20, height: 20, borderRadius: "50%", border: "none", background: fired ? "#4a9a6a" : "#f0f0f0", color: fired ? "#fff" : "#aaa", cursor: "pointer", fontSize: 11, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fired ? "✓" : "○"}</button>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: fired ? "#888" : "#a06830", textDecoration: fired ? "line-through" : "none" }}>Cheese <span style={{ fontWeight: 400, color: "#aaa" }}>{cheeseSeats.map(s => `P${s.id}`).join(" ")}</span></div>
               </div>
-              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 600 }}>{log[key].firedAt}</span>}
+              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600 }}>{log[key].firedAt}</span>}
             </div>
           );
         })()}
@@ -2857,12 +2850,12 @@ function KitchenTicket({ table, menuCourses, upd }) {
           const key = "__cake__";
           const fired = !!log[key];
           return (
-            <div key={key} style={{ display: "flex", alignItems: "center", padding: "9px 14px", gap: 10, background: fired ? "#f6fff6" : "#fff", opacity: fired ? 0.75 : 1 }}>
-              <button onClick={() => fired ? unfire(key) : fire(key)} style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: fired ? "#4a9a6a" : "#f0f0f0", color: fired ? "#fff" : "#aaa", cursor: "pointer", fontSize: 14, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fired ? "✓" : "○"}</button>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: fired ? "#888" : "#b04888", textDecoration: fired ? "line-through" : "none" }}>🎂 Cake</div>
+            <div key={key} style={{ display: "flex", alignItems: "center", padding: "5px 8px", gap: 6, background: fired ? "#f6fff6" : "#fff", opacity: fired ? 0.75 : 1 }}>
+              <button onClick={() => fired ? unfire(key) : fire(key)} style={{ width: 20, height: 20, borderRadius: "50%", border: "none", background: fired ? "#4a9a6a" : "#f0f0f0", color: fired ? "#fff" : "#aaa", cursor: "pointer", fontSize: 11, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fired ? "✓" : "○"}</button>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: fired ? "#888" : "#b04888", textDecoration: fired ? "line-through" : "none" }}>🎂 Cake <span style={{ fontWeight: 400, color: "#aaa" }}>{cakeSeats.map(s => `P${s.id}`).join(" ")}</span></div>
               </div>
-              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 600 }}>{log[key].firedAt}</span>}
+              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600 }}>{log[key].firedAt}</span>}
             </div>
           );
         })()}
@@ -2895,7 +2888,7 @@ function KitchenBoard({ tables, menuCourses, upd }) {
               {timeTables.reduce((sum, t) => sum + (t.seats?.length || 0), 0)} covers
             </span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8 }}>
             {timeTables.map(t => <KitchenTicket key={t.id} table={t} menuCourses={menuCourses} upd={upd} />)}
           </div>
         </div>
@@ -4058,13 +4051,36 @@ export default function App() {
   if (!mode) return <LoginScreen onEnter={m => { changeMode(m); setSel(null); }} />;
 
   // Display mode
-  if (mode === "display") return (
-    <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
-      <GlobalStyle />
-      <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={false} {...hProps} />
-      <DisplayBoard tables={tables} dishes={dishes} upd={upd} />
-    </div>
-  );
+  if (mode === "display") {
+    const displaySubView = quickView === "kitchen" ? "kitchen" : "board";
+    return (
+      <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+        <GlobalStyle />
+        <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={false} {...hProps} />
+        <div style={{ padding: "20px 24px" }}>
+          <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 16 }}>
+            {[["BOARD","board"],["KITCHEN","kitchen"]].map(([label, key], i) => {
+              const isActive = displaySubView === key;
+              return (
+                <button key={key} onClick={() => setQuickView(key)} style={{
+                  fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px",
+                  border: "1px solid", borderColor: isActive ? "#555" : "#e8e8e8",
+                  background: isActive ? "#555" : "#fafafa", color: isActive ? "#fff" : "#aaa",
+                  borderRadius: i === 0 ? "2px 0 0 2px" : "0 2px 2px 0",
+                  borderLeft: i > 0 ? "none" : undefined,
+                  cursor: "pointer",
+                }}>{label}</button>
+              );
+            })}
+          </div>
+          {displaySubView === "kitchen"
+            ? <KitchenBoard tables={tables} menuCourses={menuCourses} upd={upd} />
+            : <DisplayBoard tables={tables} dishes={dishes} upd={upd} />
+          }
+        </div>
+      </div>
+    );
+  }
 
   // Service + Admin modes
   return (
@@ -4102,26 +4118,7 @@ export default function App() {
           {quickView === "service" ? (
             <ServiceQuickView tables={tables} updSeat={updSeat} setSel={t => { setSel(t); setQuickView("board"); }} />
           ) : (() => {
-            // Sub-toggle: BOARD / KITCHEN inside the display section
-            const subView = quickView === "kitchen" ? "kitchen" : "board";
-            return (
-              <>
-                <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 18 }}>
-                  {[["BOARD","board"],["KITCHEN","kitchen"]].map(([label, key], i) => {
-                    const active = subView === key;
-                    return (
-                      <button key={key} onClick={() => setQuickView(key)} style={{
-                        fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px",
-                        border: "1px solid", borderColor: active ? "#555" : "#e8e8e8",
-                        background: active ? "#555" : "#fafafa", color: active ? "#fff" : "#aaa",
-                        borderRadius: i === 0 ? "2px 0 0 2px" : "0 2px 2px 0",
-                        borderLeft: i > 0 ? "none" : undefined,
-                        cursor: "pointer",
-                      }}>{label}</button>
-                    );
-                  })}
-                </div>
-                {subView === "kitchen" ? <KitchenBoard tables={tables} menuCourses={menuCourses} upd={upd} /> : (() => {
+            // DISPLAY section: board only (kitchen is in Display mode)
             const visibleTables = tables.filter(t => mode === "admin" || t.active || t.resName || t.resTime);
             const cardProps = t => ({
               key: t.id, table: t, mode,
@@ -4200,9 +4197,6 @@ export default function App() {
                   );
                 })}
               </div>
-            );
-          })()}
-              </>
             );
           })()}
         </div>
