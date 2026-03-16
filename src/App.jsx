@@ -546,7 +546,7 @@ body{position:relative;}
 #title{font-size:13.9pt;font-weight:700;letter-spacing:0.035em;padding-top:7.9mm;}
 #logo img{width:18.2mm;display:block;}
 #menu{width:100%;}
-.menu-row,.menu-section-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:10.8mm;align-items:start;break-inside:avoid;page-break-inside:avoid;}
+.menu-row,.menu-section-row{display:grid;grid-template-columns:minmax(0,${hasPairing ? "0.85fr) minmax(0,1.15fr" : "1fr) minmax(0,1fr"});column-gap:${hasPairing ? "9mm" : "10.8mm"};align-items:start;break-inside:avoid;page-break-inside:avoid;}
 .menu-row{margin-bottom:3.15pt;}
 .menu-row.wine-only{margin-bottom:4.5pt;}
 .menu-row.after-crayfish{margin-bottom:7.2pt;}
