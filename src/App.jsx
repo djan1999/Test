@@ -550,6 +550,7 @@ body{position:relative;}
 .menu-row{margin-bottom:3.15pt;}
 .menu-row.wine-only{margin-bottom:4.5pt;}
 .menu-row.after-crayfish{margin-bottom:7.2pt;}
+.menu-row.short-after-trout-belly,.menu-row.short-after-venison{margin-bottom:10pt;}
 .menu-row.section-gap-before{margin-top:14.5pt;}
 .menu-col{min-width:0;}
 .menu-main{font-weight:700;line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;}
