@@ -127,10 +127,14 @@ async function fetchBeveragePage({ url, category, label }) {
 }
 
 export default async function handler(req, res) {
-  const secret   = process.env.CRON_SECRET;
-  const provided = req.headers["x-cron-secret"] ||
+  const secret = process.env.CRON_SECRET;
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const provided = bearerToken ||
+    req.headers["x-cron-secret"] ||
     new URL(req.url, "http://localhost").searchParams.get("secret");
-  if (secret && provided !== secret) return res.status(401).json({ error: "Unauthorized" });
+  if (!secret) return res.status(500).json({ error: "CRON_SECRET not configured" });
+  if (provided !== secret) return res.status(401).json({ error: "Unauthorized" });
 
   const dry = new URL(req.url, "http://localhost").searchParams.get("dry") === "true";
 
@@ -159,7 +163,10 @@ export default async function handler(req, res) {
       });
     }
 
-    const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+    const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) throw new Error("Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_KEY)");
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Sync wines
     let winesUpserted = 0;
