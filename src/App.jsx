@@ -3532,11 +3532,11 @@ export default function App() {
     const loadWines = async () => {
       const { data, error } = await supabase
         .from("wines")
-        .select("id, name, wine_name, producer, vintage, region, country, by_glass")
+        .select("key, name, wine_name, producer, vintage, region, country, by_glass")
         .order("name", { ascending: true });
       if (!mounted || error || !data || data.length === 0) return;
       setWines(data.map(r => ({
-        id: r.id, name: r.wine_name || r.name,
+        id: r.key, name: r.wine_name || r.name,
         producer: r.producer || "", vintage: r.vintage || "",
         region: r.region || "", country: r.country || "",
         byGlass: r.by_glass ?? false,
