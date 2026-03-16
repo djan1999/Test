@@ -2582,8 +2582,10 @@ function ServiceQuickCard({ table, updSeat, onDetails }) {
 
       {/* Per-seat rows */}
       {seats.map(seat => {
-        const hasBeet = !!(seat.extras?.[1]?.ordered || seat.extras?.["1"]?.ordered);
+        const beetExtra = seat.extras?.[1] || seat.extras?.["1"] || { ordered: false, pairing: "—" };
+        const hasBeet = !!beetExtra.ordered;
         const hasCheese = !!(seat.extras?.[2]?.ordered || seat.extras?.["2"]?.ordered);
+        const setBeetPairing = (p) => updSeat(table.id, seat.id, "extras", { ...seat.extras, 1: { ...beetExtra, pairing: p } });
         return (
           <div key={seat.id} style={{
             display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
@@ -2595,6 +2597,20 @@ function ServiceQuickCard({ table, updSeat, onDetails }) {
             </div>
             <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
               {extraBtn("Beet", hasBeet, "#5a8a3a", () => toggleExtra(seat, 1))}
+              {hasBeet && ["—", "Champ", "N/A"].map(p => {
+                const val = p === "Champ" ? "Champagne" : p;
+                const active = (beetExtra.pairing || "—") === val;
+                return (
+                  <button key={p} onClick={() => setBeetPairing(val)} style={{
+                    fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
+                    padding: "4px 7px", border: "1px solid",
+                    borderColor: active ? "#5a8a3a" : "#e0e0e0",
+                    borderRadius: 2, cursor: "pointer", lineHeight: 1,
+                    background: active ? "#edf8e8" : "#fff",
+                    color: active ? "#5a8a3a" : "#aaa",
+                  }}>{p}</button>
+                );
+              })}
               {extraBtn("Chse", hasCheese, "#a06830", () => toggleExtra(seat, 2))}
             </div>
           </div>
