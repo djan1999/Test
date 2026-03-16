@@ -3453,6 +3453,9 @@ export default function App() {
 
     loadRemoteTables();
 
+    // Polling fallback — refreshes every 15 s in case realtime misses an event
+    const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 15000);
+
     const channel = supabase
       .channel("milka-service-tables-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: SERVICE_TABLES_TABLE }, payload => {
@@ -3472,11 +3475,13 @@ export default function App() {
       })
       .subscribe(status => {
         if (status === "SUBSCRIBED") setSyncStatus("live");
+        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setSyncStatus("sync-error");
       });
 
     return () => {
       isMounted = false;
       clearTimeout(gateTimeout);
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
