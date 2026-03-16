@@ -2720,6 +2720,13 @@ function KitchenTicket({ table, menuCourses, upd }) {
   const firedCount = Object.keys(log).length;
   const totalCourses = courses.length + (beetSeats.length > 0 ? 1 : 0) + (cheeseSeats.length > 0 ? 1 : 0) + (hasCake ? 1 : 0);
 
+  // Build unified row list: menu courses + selected extras at end
+  const extraRows = [
+    ...(beetSeats.length > 0  ? [{ key: "__beet__",   label: "Beetroot", extraSeats: beetSeats,   accent: "#5a8a3a" }] : []),
+    ...(cheeseSeats.length > 0 ? [{ key: "__cheese__", label: "Cheese",   extraSeats: cheeseSeats, accent: "#a06830" }] : []),
+    ...(hasCake               ? [{ key: "__cake__",   label: "🎂 Cake",  extraSeats: cakeSeats,   accent: "#b04888" }] : []),
+  ];
+
   return (
     <div style={{ border: "1.5px solid #e0e0e0", borderRadius: 4, overflow: "hidden", background: "#fff" }}>
       {/* Header */}
@@ -2743,14 +2750,13 @@ function KitchenTicket({ table, menuCourses, upd }) {
         </div>
       </div>
 
-      {/* Course rows */}
+      {/* Course rows — whole row is clickable */}
       <div style={{ display: "flex", flexDirection: "column" }}>
         {courses.map((course, idx) => {
           const key = course.course_key || `course_${idx}`;
           const fired = !!log[key];
           const firedAt = log[key]?.firedAt;
 
-          // Per-seat restriction substitutions
           const seatMods = seats
             .map(seat => {
               const restrKeys = seatRestrKeys(seat);
@@ -2758,7 +2764,6 @@ function KitchenTicket({ table, menuCourses, upd }) {
               const modified = applyCourseRestriction(course, restrKeys);
               const base = course.menu;
               if (!modified) return null;
-              // Only show if dish name actually changes
               const changed = modified.name !== base?.name;
               if (!changed) return null;
               return { seat, dish: modified };
@@ -2766,46 +2771,29 @@ function KitchenTicket({ table, menuCourses, upd }) {
             .filter(Boolean);
 
           return (
-            <div key={key} style={{
-              display: "flex", flexDirection: "column",
-              borderBottom: "1px solid #f0f0f0",
-              background: fired ? "#f6fff6" : "#fff",
-              opacity: fired ? 0.75 : 1,
-              transition: "background 0.2s",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", padding: "5px 8px", gap: 6 }}>
-                {/* Fire button */}
-                <button
-                  onClick={() => fired ? unfire(key) : fire(key)}
-                  style={{
-                    width: 20, height: 20, borderRadius: "50%", border: "none",
-                    background: fired ? "#4a9a6a" : "#f0f0f0",
-                    color: fired ? "#fff" : "#aaa",
-                    cursor: "pointer", fontSize: 11, lineHeight: 1,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >{fired ? "✓" : "○"}</button>
-
-                {/* Dish name only */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontFamily: FONT, fontSize: 10, fontWeight: 600,
-                    color: fired ? "#888" : "#1a1a1a",
-                    textDecoration: fired ? "line-through" : "none",
-                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                  }}>{course.menu?.name || key}</div>
-                </div>
-
-                {/* Fired time */}
-                {firedAt && (
-                  <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600, flexShrink: 0 }}>{firedAt}</span>
-                )}
+            <div key={key}
+              onClick={() => fired ? unfire(key) : fire(key)}
+              style={{
+                display: "flex", flexDirection: "column",
+                borderBottom: "1px solid #f0f0f0",
+                background: fired ? "#f0faf0" : "#fff",
+                opacity: fired ? 0.72 : 1,
+                cursor: "pointer",
+                transition: "background 0.15s",
+                borderLeft: fired ? "3px solid #4a9a6a" : "3px solid transparent",
+              }}>
+              <div style={{ display: "flex", alignItems: "center", padding: "6px 8px 6px 6px", gap: 6 }}>
+                <span style={{ fontFamily: FONT, fontSize: 9, color: fired ? "#4a9a6a" : "#ccc", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "·"}</span>
+                <div style={{ flex: 1, minWidth: 0,
+                  fontFamily: FONT, fontSize: 10, fontWeight: 600,
+                  color: fired ? "#888" : "#1a1a1a",
+                  textDecoration: fired ? "line-through" : "none",
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>{course.menu?.name || key}</div>
+                {firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600, flexShrink: 0 }}>{firedAt}</span>}
               </div>
-
-              {/* Seat-specific modifications — only changed dish name */}
               {seatMods.length > 0 && !fired && (
-                <div style={{ padding: "0 8px 4px 34px", display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
+                <div style={{ padding: "0 8px 4px 20px", display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
                   {seatMods.map(({ seat, dish }) => (
                     <span key={seat.id} style={{ fontFamily: FONT, fontSize: 9, color: "#b04040" }}>
                       <span style={{ fontWeight: 700 }}>P{seat.id}</span> {dish.name}
@@ -2817,48 +2805,35 @@ function KitchenTicket({ table, menuCourses, upd }) {
           );
         })}
 
-        {/* Extras as special rows */}
-        {beetSeats.length > 0 && (() => {
-          const key = "__beet__";
+        {/* Extras — only shown when ordered, merged into course list */}
+        {extraRows.map(({ key, label, extraSeats, accent }, i) => {
           const fired = !!log[key];
+          const isLast = i === extraRows.length - 1 && courses.length === 0;
           return (
-            <div key={key} style={{ display: "flex", alignItems: "center", padding: "5px 8px", gap: 6, borderBottom: "1px solid #f0f0f0", background: fired ? "#f6fff6" : "#fff", opacity: fired ? 0.75 : 1 }}>
-              <button onClick={() => fired ? unfire(key) : fire(key)} style={{ width: 20, height: 20, borderRadius: "50%", border: "none", background: fired ? "#4a9a6a" : "#f0f0f0", color: fired ? "#fff" : "#aaa", cursor: "pointer", fontSize: 11, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fired ? "✓" : "○"}</button>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: fired ? "#888" : "#5a8a3a", textDecoration: fired ? "line-through" : "none" }}>Beetroot <span style={{ fontWeight: 400, color: "#aaa" }}>{beetSeats.map(s => `P${s.id}`).join(" ")}</span></div>
+            <div key={key}
+              onClick={() => fired ? unfire(key) : fire(key)}
+              style={{
+                display: "flex", alignItems: "center", padding: "6px 8px 6px 6px", gap: 6,
+                borderBottom: isLast ? "none" : "1px solid #f0f0f0",
+                background: fired ? "#f0faf0" : "#fff",
+                opacity: fired ? 0.72 : 1,
+                cursor: "pointer",
+                transition: "background 0.15s",
+                borderLeft: fired ? "3px solid #4a9a6a" : "3px solid transparent",
+              }}>
+              <span style={{ fontFamily: FONT, fontSize: 9, color: fired ? "#4a9a6a" : "#ccc", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "·"}</span>
+              <div style={{ flex: 1, minWidth: 0,
+                fontFamily: FONT, fontSize: 10, fontWeight: 600,
+                color: fired ? "#888" : accent,
+                textDecoration: fired ? "line-through" : "none",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}>
+                {label} <span style={{ fontWeight: 400, color: "#bbb", fontSize: 9 }}>{extraSeats.map(s => `P${s.id}`).join(" ")}</span>
               </div>
-              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600 }}>{log[key].firedAt}</span>}
+              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600, flexShrink: 0 }}>{log[key].firedAt}</span>}
             </div>
           );
-        })()}
-
-        {cheeseSeats.length > 0 && (() => {
-          const key = "__cheese__";
-          const fired = !!log[key];
-          return (
-            <div key={key} style={{ display: "flex", alignItems: "center", padding: "5px 8px", gap: 6, borderBottom: "1px solid #f0f0f0", background: fired ? "#f6fff6" : "#fff", opacity: fired ? 0.75 : 1 }}>
-              <button onClick={() => fired ? unfire(key) : fire(key)} style={{ width: 20, height: 20, borderRadius: "50%", border: "none", background: fired ? "#4a9a6a" : "#f0f0f0", color: fired ? "#fff" : "#aaa", cursor: "pointer", fontSize: 11, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fired ? "✓" : "○"}</button>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: fired ? "#888" : "#a06830", textDecoration: fired ? "line-through" : "none" }}>Cheese <span style={{ fontWeight: 400, color: "#aaa" }}>{cheeseSeats.map(s => `P${s.id}`).join(" ")}</span></div>
-              </div>
-              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600 }}>{log[key].firedAt}</span>}
-            </div>
-          );
-        })()}
-
-        {hasCake && (() => {
-          const key = "__cake__";
-          const fired = !!log[key];
-          return (
-            <div key={key} style={{ display: "flex", alignItems: "center", padding: "5px 8px", gap: 6, background: fired ? "#f6fff6" : "#fff", opacity: fired ? 0.75 : 1 }}>
-              <button onClick={() => fired ? unfire(key) : fire(key)} style={{ width: 20, height: 20, borderRadius: "50%", border: "none", background: fired ? "#4a9a6a" : "#f0f0f0", color: fired ? "#fff" : "#aaa", cursor: "pointer", fontSize: 11, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fired ? "✓" : "○"}</button>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: fired ? "#888" : "#b04888", textDecoration: fired ? "line-through" : "none" }}>🎂 Cake <span style={{ fontWeight: 400, color: "#aaa" }}>{cakeSeats.map(s => `P${s.id}`).join(" ")}</span></div>
-              </div>
-              {log[key]?.firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 600 }}>{log[key].firedAt}</span>}
-            </div>
-          );
-        })()}
+        })}
       </div>
     </div>
   );
