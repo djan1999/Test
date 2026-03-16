@@ -2597,11 +2597,17 @@ function ServiceQuickCard({ table, updSeat, onDetails }) {
             }}>
               {/* Seat label strip */}
               <div style={{
+                display: "flex", alignItems: "center", gap: 6,
                 padding: "3px 10px", background: "#f0f0f0",
                 borderBottom: "1px solid #e8e8e8",
-                fontFamily: FONT, fontSize: 8, fontWeight: 700,
-                letterSpacing: 2, color: "#888",
-              }}>P{seat.id}</div>
+              }}>
+                <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: 2, color: "#888" }}>P{seat.id}</span>
+                {(table.restrictions || []).filter(r => !r.pos || r.pos === seat.id).map((r, i) => (
+                  <span key={i} style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, color: "#b04040" }}>
+                    {restrLabel(r.note)}
+                  </span>
+                ))}
+              </div>
 
               {/* Water + extras */}
               <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap", padding: "7px 10px 5px" }}>
