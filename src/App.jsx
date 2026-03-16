@@ -2519,6 +2519,107 @@ function DisplayBoard({ tables, dishes, upd }) {
   );
 }
 
+// ── Service Quick View ────────────────────────────────────────────────────────
+const WATER_LABELS = { XC: "XC", XW: "XW", OC: "OC", OW: "OW" };
+const WATER_QUICK = ["XC", "XW", "OC", "OW"];
+
+function ServiceQuickCard({ table, updSeat, onDetails }) {
+  const seats = table.seats || [];
+  const toggleExtra = (seat, dishId) => {
+    const cur = seat.extras?.[dishId] || { ordered: false, pairing: "—" };
+    updSeat(table.id, seat.id, "extras", { ...seat.extras, [dishId]: { ...cur, ordered: !cur.ordered } });
+  };
+
+  const waterBtn = (opt, active, onClick) => (
+    <button key={opt} onClick={onClick} style={{
+      fontFamily: FONT, fontSize: 10, letterSpacing: 0.5,
+      padding: "5px 9px", border: "1px solid",
+      borderColor: active ? "#1a1a1a" : "#e0e0e0",
+      borderRadius: 2, cursor: "pointer", lineHeight: 1,
+      background: active ? "#1a1a1a" : "#fff",
+      color: active ? "#fff" : "#666",
+    }}>{opt}</button>
+  );
+
+  const extraBtn = (label, active, color, onClick) => (
+    <button onClick={onClick} style={{
+      fontFamily: FONT, fontSize: 9, letterSpacing: 1,
+      padding: "5px 9px", border: "1px solid",
+      borderColor: active ? color : "#e0e0e0",
+      borderRadius: 2, cursor: "pointer", lineHeight: 1,
+      background: active ? color : "#fff",
+      color: active ? "#fff" : "#aaa",
+      textTransform: "uppercase",
+    }}>{label}</button>
+  );
+
+  const allWaterMatch = opt => seats.length > 0 && seats.every(s => s.water === opt);
+
+  return (
+    <div style={{ border: "1px solid #e8e8e8", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
+      {/* Table header */}
+      <div onClick={onDetails} style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "10px 14px", background: "#fafafa", cursor: "pointer",
+        borderBottom: "1px solid #f0f0f0",
+      }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <span style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: "#1a1a1a" }}>T{table.id}</span>
+          {table.resName && <span style={{ fontFamily: FONT, fontSize: 10, color: "#555", letterSpacing: 1 }}>{table.resName}</span>}
+          {table.resTime && <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", letterSpacing: 1 }}>{table.resTime}</span>}
+          <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb" }}>{seats.length}p</span>
+        </div>
+        <span style={{ fontFamily: FONT, fontSize: 11, color: "#c8a96e" }}>→</span>
+      </div>
+
+      {/* All water quick row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderBottom: "1px solid #f8f8f8", background: "#fdfdfd" }}>
+        <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", minWidth: 28 }}>ALL</span>
+        <div style={{ display: "flex", gap: 4 }}>
+          {WATER_QUICK.map(opt => waterBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat(table.id, s.id, "water", opt))))}
+        </div>
+      </div>
+
+      {/* Per-seat rows */}
+      {seats.map(seat => {
+        const hasBeet = !!(seat.extras?.[1]?.ordered || seat.extras?.["1"]?.ordered);
+        const hasCheese = !!(seat.extras?.[2]?.ordered || seat.extras?.["2"]?.ordered);
+        return (
+          <div key={seat.id} style={{
+            display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
+            padding: "7px 14px", borderBottom: "1px solid #f8f8f8",
+          }}>
+            <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: "#999", minWidth: 22, letterSpacing: 1 }}>P{seat.id}</span>
+            <div style={{ display: "flex", gap: 4 }}>
+              {WATER_QUICK.map(opt => waterBtn(opt, seat.water === opt, () => updSeat(table.id, seat.id, "water", opt)))}
+            </div>
+            <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
+              {extraBtn("Beet", hasBeet, "#5a8a3a", () => toggleExtra(seat, 1))}
+              {extraBtn("Chse", hasCheese, "#a06830", () => toggleExtra(seat, 2))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ServiceQuickView({ tables, updSeat, setSel }) {
+  const activeTables = tables.filter(t => t.active || t.resName || t.resTime);
+  if (activeTables.length === 0) return (
+    <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
+      No active tables
+    </div>
+  );
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
+      {activeTables.map(t => (
+        <ServiceQuickCard key={t.id} table={t} updSeat={updSeat} onDetails={() => setSel(t.id)} />
+      ))}
+    </div>
+  );
+}
+
 // ── Menu Generator ────────────────────────────────────────────────────────────
 function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
@@ -3239,6 +3340,7 @@ export default function App() {
     try { return localStorage.getItem("milka_mode") || null; } catch { return null; }
   });
   const [sel,          setSel]          = useState(null);
+  const [quickView,    setQuickView]    = useState(false);
   const [resModal,     setResModal]     = useState(null);
   const [resModalPresetTime, setResModalPresetTime] = useState(null);
   const [adminOpen,    setAdminOpen]    = useState(false);
@@ -3692,7 +3794,25 @@ export default function App() {
 
       {sel === null ? (
         <div style={{ padding: "28px 24px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
-          {(() => {
+          {/* View toggle */}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
+            {["BOARD", "SERVICE"].map(v => {
+              const active = (v === "SERVICE") === quickView;
+              return (
+                <button key={v} onClick={() => setQuickView(v === "SERVICE")} style={{
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
+                  border: "1px solid", borderColor: active ? "#1a1a1a" : "#e0e0e0",
+                  background: active ? "#1a1a1a" : "#fff", color: active ? "#fff" : "#888",
+                  borderRadius: v === "BOARD" ? "2px 0 0 2px" : "0 2px 2px 0",
+                  cursor: "pointer",
+                }}>{v}</button>
+              );
+            })}
+          </div>
+
+          {quickView ? (
+            <ServiceQuickView tables={tables} updSeat={updSeat} setSel={t => { setSel(t); setQuickView(false); }} />
+          ) : (() => {
             const visibleTables = tables.filter(t => mode === "admin" || t.active || t.resName || t.resTime);
             const cardProps = t => ({
               key: t.id, table: t, mode,
@@ -3772,7 +3892,7 @@ export default function App() {
                 })}
               </div>
             );
-          })()}
+          })())}
         </div>
       ) : (
         <Detail
