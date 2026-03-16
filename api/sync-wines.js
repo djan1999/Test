@@ -52,6 +52,7 @@ function extractCells(row) {
   while ((m = tdRe.exec(row)) !== null) {
     cells.push(
       m[1].replace(/<[^>]+>/g, "")
+        .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
         .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
         .replace(/&nbsp;/g, " ").replace(/&#039;/g, "'").replace(/&quot;/g, '"')
         .trim()
