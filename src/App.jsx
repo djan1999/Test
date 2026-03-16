@@ -301,7 +301,7 @@ function applyCourseRestriction(course, activeRestrictions) {
       } else if (next?.name) {
         dish = { name: dish.name, sub: String(next.name).trim() };
       }
-      continue;
+      break; // highest-priority matching restriction wins
     }
 
     // backward compatibility for older static menu data
@@ -2601,8 +2601,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Seats</div>
 
         {seats.map(s => {
-          const seatRestr  = restrictions.filter(r => r.pos === s.id);
-          const isVeg      = seatRestr.some(r => ["veg","vegan","pescetarian"].includes(r.note));
+          const seatRestr  = restrictions.filter(r => !r.pos || r.pos === s.id);
           const printable  = isPrintable(s);
           const extras     = Object.entries(s.extras || {}).filter(([,v]) => v?.ordered).map(([k]) => +k);
           const glasses    = s.glasses || [];
@@ -2625,12 +2624,19 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
                     ? <span style={{ fontFamily: FONT, fontSize: 10, padding: "3px 9px", borderRadius: 2, background: "#f5f5f5", color: "#888", border: "1px solid #e8e8e8" }}>drinks</span>
                     : <span style={{ fontFamily: FONT, fontSize: 10, color: "#ccc" }}>no pairing</span>}
 
-                {isVeg && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#edf8e8", color: "#2a6a2a", border: "1px solid #88cc88" }}>VEG</span>}
+                {seatRestr.map((r, i) => {
+                  const isDietary = ["veg","vegan","pescetarian"].includes(r.note);
+                  return (
+                    <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2,
+                      background: isDietary ? "#edf8e8" : "#fef0f0",
+                      color: isDietary ? "#2a6a2a" : "#b04040",
+                      border: `1px solid ${isDietary ? "#88cc88" : "#e09090"}` }}>
+                      {isDietary ? restrLabel(r.note) : `⚠ ${restrLabel(r.note)}`}
+                    </span>
+                  );
+                })}
                 {extras.includes(1) && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+BEETROOT</span>}
                 {extras.includes(2) && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+CHEESE</span>}
-                {seatRestr.filter(r => !["veg","vegan","pescetarian"].includes(r.note)).map((r, i) => (
-                  <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fef0f0", color: "#b04040", border: "1px solid #e09090" }}>⚠ {restrLabel(r.note)}</span>
-                ))}
 
                 {/* Beer selector — always shown */}
                 <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
