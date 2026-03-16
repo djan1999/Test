@@ -5,8 +5,8 @@
 
 -- ── service_tables ──────────────────────────────────────────
 create table if not exists public.service_tables (
-  id text primary key,
-  state jsonb not null default '{}'::jsonb,
+  table_id integer primary key check (table_id between 1 and 10),
+  data jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now()
 );
 
@@ -28,13 +28,10 @@ drop policy if exists "service_tables_delete" on public.service_tables;
 create policy "service_tables_delete" on public.service_tables
   for delete to anon, authenticated using (true);
 
-insert into public.service_tables (id, state)
-values
-  ('t1', '{}'::jsonb), ('t2', '{}'::jsonb), ('t3', '{}'::jsonb),
-  ('t4', '{}'::jsonb), ('t5', '{}'::jsonb), ('t6', '{}'::jsonb),
-  ('t7', '{}'::jsonb), ('t8', '{}'::jsonb), ('t9', '{}'::jsonb),
-  ('t10', '{}'::jsonb)
-on conflict (id) do nothing;
+insert into public.service_tables (table_id, data)
+select gs, '{}'::jsonb
+from generate_series(1, 10) as gs
+on conflict (table_id) do nothing;
 
 -- ── service_settings ────────────────────────────────────────
 create table if not exists public.service_settings (
