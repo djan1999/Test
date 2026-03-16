@@ -2719,13 +2719,20 @@ function KitchenTicket({ table, menuCourses, upd }) {
   const cakeSeats   = seats.filter(s => s.extras?.[3]?.ordered || s.extras?.["3"]?.ordered);
   const hasCake     = cakeSeats.length > 0;
 
-  // Courses to show: non-snack, optional extras only when ordered
+  const isShort = String(table.menuType || "").trim().toLowerCase() === "short";
+  const isTruthyShort = v => { const s = String(v ?? "").trim().toLowerCase(); return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr"; };
+
+  // Courses to show: non-snack, optional extras only when ordered, short menu filtered
   const courses = (menuCourses || []).filter(c => {
     if (c.is_snack) return false;
     if (isBeetCourse(c)   && beetSeats.length   === 0) return false;
     if (isCheeseCourse(c) && cheeseSeats.length === 0) return false;
     if (isCakeCourse(c)   && cakeSeats.length   === 0) return false;
+    if (isShort && !isTruthyShort(c.show_on_short)) return false;
     return true;
+  }).sort((a, b) => {
+    if (isShort) return ((Number(a.short_order) || 9999) - (Number(b.short_order) || 9999));
+    return (Number(a.position) || 0) - (Number(b.position) || 0);
   });
 
   const firedCount   = Object.keys(log).length;
