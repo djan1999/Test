@@ -87,11 +87,15 @@ const splitMainSubCell = (title, sub = "") => {
 };
 
 // Parse a two-line bilingual cell: line 1 = EN, line 2 = SI (Alt+Enter in sheet).
+// Line 3+ is reserved for kitchen notes and is NEVER used for menu generation.
 // rawSubCol is the optional separate sub/description column (also potentially two-line).
 // Returns { en: {name, sub} | null, si: {name, sub} | null }
+//
+// IMPORTANT: We split on a single \n (not \n+) to preserve blank-line positions.
+// A blank line 2 means "no SI content" — it must not shift line 3 up into the SI slot.
 const parseBilingual = (rawCell, rawSubCol = "") => {
-  const lines    = String(rawCell   ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
-  const subLines = String(rawSubCol ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const lines    = String(rawCell   ?? "").split("\n").map(s => s.trim());
+  const subLines = String(rawSubCol ?? "").split("\n").map(s => s.trim());
   const en = splitMainSubCell(lines[0] || "", subLines[0] || "");
   const si = (lines[1] || subLines[1])
     ? splitMainSubCell(lines[1] || "", subLines[1] || "")
@@ -102,10 +106,10 @@ const parseBilingual = (rawCell, rawSubCol = "") => {
 function normalizeLiveMenuRow(row) {
   const position = Number(firstFilled(row["#"], row.position, row.order_index)) || 0;
 
-  // Google Sheets cells may contain two lines: line 1 = EN, line 2 = SI (Alt+Enter in the cell).
-  // Split on newlines so each language ends up in the right field.
-  const dishLines = String(row.dish ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
-  const descLines = String(row.description ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+  // Google Sheets cells may contain up to 3 lines: line 1 = EN, line 2 = SI, line 3 = kitchen note only.
+  // Split on single \n to preserve blank-line positions — a blank line 2 must NOT shift line 3 into SI slot.
+  const dishLines = String(row.dish ?? "").split("\n").map(s => s.trim());
+  const descLines = String(row.description ?? "").split("\n").map(s => s.trim());
   const dishEnRaw = dishLines[0] || "";
   const descEnRaw = descLines[0] || "";
   // Line 2 = SI name (menu gen only). Line 3 = kitchen note fallback.
@@ -399,7 +403,7 @@ function applyCourseRestriction(course, activeRestrictions, lang = "en") {
 }
 
 
-function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null, lang = "en" }) {
+function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null, lang = "en", seatOutputOverrides = {} }) {
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
   const PAIRING_LABELS = lang === "si"
     ? { wp: "VINSKA SPREMLJAVA", na: "BREZALKOHOLNA SPREMLJAVA", os: "OUR STORY SPREMLJAVA", premium: "PREMIUM SPREMLJAVA" }
@@ -550,20 +554,37 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     if (isBeetrootOptionalCourse && beetrootExtra?.ordered) {
       const beetPair = String(beetrootExtra.pairing || "—").trim();
       if (beetPair === "N/A" || beetPair === "Non-Alc") {
-        drink = course.na || null;
+        const naVariant = lang === "si" ? (course.na_si || course.na) : course.na;
+        drink = naVariant || null;
       } else if (beetPair === "Champagne" || beetPair === "Wine") {
-        drink = course.os || course.premium || course.wp || null;
+        drink = (lang === "si"
+          ? (course.os_si || course.os || course.premium_si || course.premium || course.wp_si || course.wp)
+          : (course.os || course.premium || course.wp)) || null;
       } else {
         drink = null;
       }
     }
 
     if ((courseKey === "chicken_gizzard" || courseName === "CHICKEN GIZZARD") && selectedBeer) {
-      drink = { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
+      // For SI menus with default beer list, prefer the course's SI pairing variants
+      if (lang === "si" && beers.length === 0) {
+        const siKey = beerChoice === "nonalc" ? "na" : "wp";
+        const siDrink = course[`${siKey}_si`] || course[siKey];
+        drink = siDrink ? { name: siDrink.name || "", sub: siDrink.sub || "" } : { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
+      } else {
+        drink = { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
+      }
     } else if (!hasPairing && i >= DANUBE_SALMON_IDX && bottleQueue.length > 0) {
       const nextBottle = bottleQueue.shift();
       const d = fmtDrinkParts(nextBottle);
       drink = { name: d.title || "", sub: d.sub || "" };
+    }
+
+    // Apply ephemeral per-seat output overrides (applied after restrictions)
+    const outputOv = seatOutputOverrides[courseKey];
+    if (outputOv) {
+      if (typeof outputOv.name === "string") dish = { ...(dish || {}), name: outputOv.name };
+      if (typeof outputOv.sub  === "string") dish = { ...(dish || {}), sub:  outputOv.sub  };
     }
 
     rows.push({
@@ -3300,7 +3321,10 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState("WINTER MENU");
   const [lang, setLang] = useState("en");
-  const [showEdits, setShowEdits] = useState(false);
+  // Per-seat ephemeral one-time edits — { [seatId]: { [courseKey]: { name?, sub? } } }
+  // Cleared automatically after the PDF for that seat is generated.
+  const [seatEdits, setSeatEdits] = useState({});
+  const [expandedSeatId, setExpandedSeatId] = useState(null);
 
   useEffect(() => {
     writeTeamNames(teamNames);
@@ -3310,47 +3334,39 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
   const restrictions = table.restrictions || [];
   const tableBottles = table.bottleWines  || [];
 
-  // Per-table course overrides (stored in table.courseOverrides, synced to Supabase)
+  // Table-wide persistent overrides (applied silently, managed via Admin panel)
   const courseOverrides = table.courseOverrides || {};
-  const hasEdits = Object.keys(courseOverrides).some(k => Object.keys(courseOverrides[k] || {}).length > 0);
 
-  const setCourseOverride = (courseKey, field, value) => {
-    const next = {
-      ...courseOverrides,
-      [courseKey]: { ...(courseOverrides[courseKey] || {}), [field]: value },
-    };
-    upd("courseOverrides", next);
+  // Get the restriction+override-applied dish text for a course as it would appear for a seat.
+  // Used to pre-populate the per-seat editor with the already-adjusted menu.
+  const getSeatDish = (course, seatId) => {
+    const withOv = applyMenuOverride(course, courseOverrides, seatId);
+    const seatRestrKeys = restrictions.filter(r => !r.pos || r.pos === seatId).map(r => r.note);
+    const resolved = lang === "si" && withOv.menu_si?.name ? { ...withOv, menu: withOv.menu_si } : withOv;
+    return applyCourseRestriction(resolved, seatRestrKeys, lang) || { name: withOv.menu?.name || "", sub: withOv.menu?.sub || "" };
   };
-  const clearCourseOverride = courseKey => {
-    const next = { ...courseOverrides };
-    delete next[courseKey];
-    upd("courseOverrides", next);
-  };
-  const setSeatOverride = (courseKey, seatId, field, value) => {
-    const next = {
-      ...courseOverrides,
-      [courseKey]: {
-        ...(courseOverrides[courseKey] || {}),
-        seats: {
-          ...((courseOverrides[courseKey] || {}).seats || {}),
-          [seatId]: { ...((courseOverrides[courseKey]?.seats?.[seatId]) || {}), [field]: value },
-        },
-      },
-    };
-    upd("courseOverrides", next);
-  };
-  const clearSeatOverride = (courseKey, seatId) => {
-    const base = { ...(courseOverrides[courseKey] || {}) };
-    const seats = { ...(base.seats || {}) };
-    delete seats[seatId];
-    const next = { ...courseOverrides, [courseKey]: { ...base, seats } };
-    upd("courseOverrides", next);
-  };
-  const clearAllOverrides = () => upd("courseOverrides", {});
 
-  // Apply per-table + per-seat overrides on top of the global-overridden menuCourses
-  // (seat-level applied at print time, table-level used for preview)
-  const effectiveCourses = menuCourses.map(c => applyMenuOverride(c, courseOverrides));
+  const setSeatEditField = (seatId, courseKey, field, value) => {
+    setSeatEdits(prev => {
+      const seatData = { ...(prev[seatId] || {}) };
+      const courseEdit = { ...(seatData[courseKey] || {}) };
+      if (value === "") {
+        delete courseEdit[field];
+      } else {
+        courseEdit[field] = value;
+      }
+      if (Object.keys(courseEdit).length === 0) {
+        delete seatData[courseKey];
+      } else {
+        seatData[courseKey] = courseEdit;
+      }
+      return { ...prev, [seatId]: seatData };
+    });
+  };
+
+  const clearSeatAllEdits = (seatId) => {
+    setSeatEdits(prev => { const n = { ...prev }; delete n[seatId]; return n; });
+  };
 
   const defaultBeer = (s) => {
     if (s.pairing === "Non-Alc") return "nonalc";
@@ -3370,7 +3386,6 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
   const seatBottles = () => tableBottles;
 
   const openPrint = (seat) => {
-    // Apply seat-specific overrides on top of table-wide overrides for this seat's menu
     const seatCourses = menuCourses.map(c => applyMenuOverride(c, courseOverrides, seat.id));
     const html = generateMenuHTML({
       seat,
@@ -3380,6 +3395,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
       menuCourses: seatCourses,
       beerChoice: beerChoices[seat.id] || defaultBeer(seat),
       lang,
+      seatOutputOverrides: seatEdits[seat.id] || {},
     });
     const w = window.open("", "_blank", "width=620,height=880");
     if (!w) { alert("Pop-up blocked — allow pop-ups for this site."); return; }
@@ -3387,6 +3403,9 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
     w.document.close();
     w.focus();
     setTimeout(() => w.print(), 600);
+    // One-time: clear this seat's edits and collapse its editor after printing
+    clearSeatAllEdits(seat.id);
+    setExpandedSeatId(null);
   };
 
   const generateAll = () => {
@@ -3447,10 +3466,13 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
           const cocktails  = s.cocktails || [];
           const bottles    = seatBottles(s);
 
+          const seatHasEdits = Object.keys(seatEdits[s.id] || {}).length > 0;
+          const isExpanded = expandedSeatId === s.id;
+
           return (
             <div key={s.id} style={{
-              border: "1px solid #f0f0f0", borderRadius: 4, marginBottom: 8,
-              background: printable ? "#fff" : "#fafafa",
+              border: `1px solid ${seatHasEdits ? "#f0c060" : "#f0f0f0"}`, borderRadius: 4, marginBottom: 8,
+              background: seatHasEdits ? "#fffdf4" : "#fff",
             }}>
               {/* Main row */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", flexWrap: "wrap" }}>
@@ -3477,7 +3499,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
                 {extras.includes(1) && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+BEETROOT</span>}
                 {extras.includes(2) && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+CHEESE</span>}
 
-                {/* Beer selector — always shown */}
+                {/* Beer selector */}
                 <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
                   <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#bbb", textTransform: "uppercase" }}>beer</span>
                   {BEER_OPTS.map(opt => (
@@ -3491,16 +3513,82 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
                   ))}
                 </div>
 
+                {/* Edit button — opens per-seat ephemeral course editor */}
+                <button onClick={() => setExpandedSeatId(isExpanded ? null : s.id)} style={{
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
+                  border: `1px solid ${seatHasEdits ? "#f0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                  background: seatHasEdits ? "#fff8e0" : "#fafafa",
+                  color: seatHasEdits ? "#a07020" : "#aaa",
+                }}>{isExpanded ? "▲" : (seatHasEdits ? "✎ EDITED" : "✎")}</button>
+
                 <button onClick={() => openPrint(s)} style={{
                   marginLeft: "auto", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
                   padding: "8px 16px", border: "1px solid #c8a96e",
                   borderRadius: 2, cursor: "pointer",
-                  background: "#c8a96e",
-                  color: "#fff",
+                  background: "#c8a96e", color: "#fff",
                 }}>PDF</button>
               </div>
 
-              {/* Bottles preview — table-wide */}
+              {/* Per-seat ephemeral course editor — shows restriction-applied menu for this position */}
+              {isExpanded && (
+                <div style={{ borderTop: "1px solid #f5f5f5", padding: "10px 16px 14px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#aaa", textTransform: "uppercase" }}>
+                      Menu edit for P{s.id} — one-time, auto-cleared on PDF
+                    </span>
+                    {seatHasEdits && (
+                      <button onClick={() => clearSeatAllEdits(s.id)} style={{
+                        fontFamily: FONT, fontSize: 9, padding: "2px 8px",
+                        border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
+                        background: "#fff9f9", color: "#c04040",
+                      }}>clear all</button>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    {menuCourses.filter(c => !c.is_snack).map(course => {
+                      const key = course.course_key;
+                      const baseDish = getSeatDish(course, s.id);
+                      const edit = seatEdits[s.id]?.[key] || {};
+                      const hasEdit = "name" in edit || "sub" in edit;
+                      const inpStyle = { ...baseInp, padding: "3px 6px", fontSize: 11 };
+                      return (
+                        <div key={key} style={{
+                          display: "grid", gridTemplateColumns: "120px 1fr 1.6fr 20px",
+                          gap: 5, alignItems: "center",
+                          borderRadius: 2, padding: "2px 4px",
+                          background: hasEdit ? "#fffdf0" : "transparent",
+                        }}>
+                          <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: hasEdit ? "#a07020" : "#bbb",
+                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {baseDish?.name || "—"}
+                          </span>
+                          <BlurInput
+                            committedValue={"name" in edit ? edit.name : ""}
+                            onCommit={v => setSeatEditField(s.id, key, "name", v)}
+                            placeholder={"name" in edit ? "" : (baseDish?.name || "")}
+                            style={inpStyle}
+                          />
+                          <BlurInput
+                            committedValue={"sub" in edit ? edit.sub : ""}
+                            onCommit={v => setSeatEditField(s.id, key, "sub", v)}
+                            placeholder={"sub" in edit ? "" : (baseDish?.sub || "—")}
+                            style={inpStyle}
+                          />
+                          {hasEdit
+                            ? <button onClick={() => setSeatEdits(prev => {
+                                const sd = { ...(prev[s.id] || {}) };
+                                delete sd[key];
+                                return { ...prev, [s.id]: Object.keys(sd).length ? sd : undefined };
+                              })} style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                            : <span />}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Bottles preview */}
               {bottles.length > 0 && (
                 <div style={{ padding: "0 16px 10px", display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {bottles.map((b, i) => (
@@ -3524,111 +3612,6 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
             padding: "12px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
             background: "#1a1a1a", color: "#fff",
           }}>GENERATE ALL</button>
-        )}
-
-        {/* ── Course edits for this reservation ── */}
-        {upd && (
-          <div style={{ marginTop: 24, borderTop: "1px solid #f0f0f0", paddingTop: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <button onClick={() => setShowEdits(v => !v)} style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px",
-                border: `1px solid ${hasEdits ? "#f0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                background: hasEdits ? "#fffdf4" : "#fff", color: hasEdits ? "#a07020" : "#888",
-              }}>
-                {showEdits ? "▲" : "▼"} COURSE EDITS {hasEdits ? `(${Object.keys(courseOverrides).length} changed)` : ""}
-              </button>
-              {hasEdits && (
-                <button onClick={clearAllOverrides} style={{
-                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-                  border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
-                  background: "#fff9f9", color: "#c04040",
-                }}>RESET ALL</button>
-              )}
-            </div>
-
-            {showEdits && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {menuCourses.filter(c => !c.is_snack).map(course => {
-                  const key = course.course_key;
-                  const ov = courseOverrides[key] || {};
-                  const hasOv = Object.keys(ov).length > 0;
-                  const origName   = course.menu?.name || key;
-                  const origSub    = course.menu?.sub  || "";
-                  const origSiName = course.menu_si?.name || "";
-                  const origSiSub  = course.menu_si?.sub  || "";
-                  const inpStyle   = { ...baseInp, padding: "4px 7px", fontSize: 11 };
-                  // Always show SI fields when generating a SL menu
-                  const showSi = lang === "si" || origSiName || origSiSub;
-                  return (
-                    <div key={key} style={{
-                      border: `1px solid ${hasOv ? "#f0c060" : "#f0f0f0"}`,
-                      borderRadius: 3, padding: "10px 12px",
-                      background: hasOv ? "#fffdf4" : "#fafafa",
-                    }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#333" }}>
-                          {origName}{origSub ? <span style={{ fontWeight: 400, color: "#bbb" }}> | {origSub}</span> : ""}
-                        </span>
-                        {hasOv && (
-                          <button onClick={() => clearCourseOverride(key)} style={{
-                            fontFamily: FONT, fontSize: 9, padding: "2px 8px",
-                            border: "1px solid #e8c878", borderRadius: 2, cursor: "pointer",
-                            background: "#fff", color: "#a07020",
-                          }}>reset</button>
-                        )}
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                        <div>
-                          <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginBottom: 2 }}>NAME (EN)</div>
-                          <BlurInput committedValue={"name" in ov ? ov.name : ""} onCommit={v => setCourseOverride(key, "name", v)} placeholder={origName} style={inpStyle} />
-                        </div>
-                        <div>
-                          <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginBottom: 2 }}>SUB (EN)</div>
-                          <BlurInput committedValue={"sub" in ov ? ov.sub : ""} onCommit={v => setCourseOverride(key, "sub", v)} placeholder={origSub || "—"} style={inpStyle} />
-                        </div>
-                        {showSi && (<>
-                          <div>
-                            <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginBottom: 2 }}>NAME (SI)</div>
-                            <BlurInput committedValue={"name_si" in ov ? ov.name_si : ""} onCommit={v => setCourseOverride(key, "name_si", v)} placeholder={origSiName || "—"} style={inpStyle} />
-                          </div>
-                          <div>
-                            <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginBottom: 2 }}>SUB (SI)</div>
-                            <BlurInput committedValue={"sub_si" in ov ? ov.sub_si : ""} onCommit={v => setCourseOverride(key, "sub_si", v)} placeholder={origSiSub || "—"} style={inpStyle} />
-                          </div>
-                        </>)}
-                      </div>
-
-                      {/* Per-seat sub overrides */}
-                      {seats.length > 0 && (
-                        <div style={{ marginTop: 8, borderTop: "1px solid #f0f0f0", paddingTop: 8 }}>
-                          <div style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", letterSpacing: 1, marginBottom: 6 }}>SEAT-SPECIFIC SUB</div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                            {seats.map(s => {
-                              const seatOv = ov.seats?.[s.id] || {};
-                              return (
-                                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                  <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#888", minWidth: 24 }}>P{s.id}</span>
-                                  <BlurInput
-                                    committedValue={"sub" in seatOv ? seatOv.sub : ""}
-                                    onCommit={v => v ? setSeatOverride(key, s.id, "sub", v) : clearSeatOverride(key, s.id)}
-                                    placeholder={("sub" in ov ? ov.sub : origSub) || "same as above"}
-                                    style={{ ...inpStyle, flex: 1 }}
-                                  />
-                                  {"sub" in seatOv && (
-                                    <button onClick={() => clearSeatOverride(key, s.id)} style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         )}
       </div>
     </FullModal>
