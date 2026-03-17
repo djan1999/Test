@@ -3015,46 +3015,11 @@ function KitchenTicket({ table, menuCourses, upd }) {
           const baseSubSi   = course.menu_si?.sub  || "";
           const kitchenNote = course.kitchen_note || "";
           const line1 = baseName + (baseSub ? ` | ${baseSub}` : "");
-          const line2 = baseNameSi ? (baseNameSi + (baseSubSi ? ` | ${baseSubSi}` : "")) : null;
-          const subDiff = (modSub) => {
-            const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
-            const modTokens  = modSub.split(/[,·]+/).map(s => s.trim()).filter(Boolean);
-            const newOnes    = modTokens.filter(t => !baseTokens.has(t.toLowerCase()));
-            return newOnes.length > 0 ? newOnes[0] : modSub; // only the primary changed ingredient
-          };
-          const allSeatDishes = seats.map(seat => {
-            const restrKeys = seatRestrKeys(seat);
-            if (restrKeys.length) {
-              // Check for explicit chef ticket note in sheet data (e.g. veg_note column)
-              for (const key of RESTRICTION_PRIORITY_KEYS) {
-                if (!restrKeys.includes(key)) continue;
-                const mapped = RESTRICTION_COLUMN_MAP[key] || key;
-                const note = course.restrictions?.[`${mapped}_note`];
-                if (note) return note.toUpperCase();
-              }
-              const modified = applyCourseRestriction(course, restrKeys);
-              if (modified) {
-                if (modified.name !== baseName) return modified.name;
-                if (modified.sub  !== baseSub)  return subDiff(modified.sub).toUpperCase();
-              }
-            }
-            return baseName;
-          });
-          const anyMod = allSeatDishes.some(n => n !== baseName);
-          const seatMods = anyMod ? allSeatDishes : [];
-
           const extraLabel = (() => {
             if (isBeetCourse(course))   return beetSeats.map(s => `P${s.id}`).join(" ");
             if (isCheeseCourse(course)) return cheeseSeats.map(s => `P${s.id}`).join(" ");
             if (isCakeCourse(course))   return cakeSeats.map(s => `P${s.id}`).join(" ");
             return null;
-          })();
-
-          const modGroups = (() => {
-            if (!seatMods.length || fired) return null;
-            const g = {};
-            seatMods.forEach(n => { g[n] = (g[n] || 0) + 1; });
-            return g;
           })();
 
           return (
@@ -3082,16 +3047,6 @@ function KitchenTicket({ table, menuCourses, upd }) {
                   {/* Kitchen note */}
                   {kitchenNote && !fired && (
                     <div style={{ fontFamily: FONT, fontSize: 10, color: "#b07030", fontStyle: "italic", marginTop: 2 }}>{kitchenNote}</div>
-                  )}
-                  {modGroups && (
-                    <div style={{ marginTop: 3, display: "flex", flexWrap: "wrap", gap: "2px 10px" }}>
-                      {Object.entries(modGroups).map(([name, count]) => (
-                        <span key={name} style={{
-                          fontFamily: FONT, fontSize: 12,
-                          color: name === baseName ? "#aaa" : "#c04040", fontWeight: name === baseName ? 400 : 600,
-                        }}>{count}× {name}</span>
-                      ))}
-                    </div>
                   )}
                 </div>
                 {firedAt && <span style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
