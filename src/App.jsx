@@ -2781,16 +2781,22 @@ function KitchenTicket({ table, menuCourses, upd }) {
           const fired = !!log[key];
           const firedAt = log[key]?.firedAt;
 
-          // Resolve every seat's actual dish name (modified or original)
+          // Resolve every seat's display label — name change takes label from name,
+          // sub-only change (e.g. ingredient swap) takes label from modified sub
+          const baseName = course.menu?.name || key;
+          const baseSub  = course.menu?.sub  || "";
           const allSeatDishes = seats.map(seat => {
             const restrKeys = seatRestrKeys(seat);
             if (restrKeys.length) {
               const modified = applyCourseRestriction(course, restrKeys);
-              if (modified && modified.name !== course.menu?.name) return modified.name;
+              if (modified) {
+                if (modified.name !== baseName) return modified.name;
+                if (modified.sub  !== baseSub)  return modified.sub;
+              }
             }
-            return course.menu?.name || key;
+            return baseName;
           });
-          const anyMod = allSeatDishes.some(n => n !== (course.menu?.name || key));
+          const anyMod = allSeatDishes.some(n => n !== baseName);
           const seatMods = anyMod ? allSeatDishes : [];
 
           // For optional extra courses, show which seats have it
@@ -2826,7 +2832,6 @@ function KitchenTicket({ table, menuCourses, upd }) {
                   {!extraLabel && seatMods.length > 0 && !fired && (() => {
                     const groups = {};
                     seatMods.forEach(name => { groups[name] = (groups[name] || 0) + 1; });
-                    const baseName = course.menu?.name || key;
                     return Object.entries(groups).map(([name, count]) => (
                       <span key={name} style={{
                         fontFamily: FONT, fontSize: 10, marginLeft: 6,
