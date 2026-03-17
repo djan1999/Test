@@ -2465,17 +2465,17 @@ function TableSeatDetail({ table, dishes, isMobile }) {
 }
 
 // ── Display Board ─────────────────────────────────────────────────────────────
-function DisplayBoard({ tables, dishes, upd }) {
+function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardClick }) {
   const isMobile = useIsMobile(700);
 
-  const pairingColors = {
+  const PC = {
     "Wine":      { color: "#7a5020", bg: "#f5ead8", border: "#c8a060" },
     "Non-Alc":   { color: "#1f5f73", bg: "#e8f7fb", border: "#7fc6db" },
     "Premium":   { color: "#3a3a7a", bg: "#eaeaf5", border: "#8888bb" },
     "Our Story": { color: "#2a6a4a", bg: "#e0f5ea", border: "#5aaa7a" },
   };
+  const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
 
-  // Group by sitting time (19:15 folds into 19:00)
   const visible = tables.filter(t => t.active || t.resTime || t.resName);
   const rowsData = SITTING_TIMES.map(time => ({
     time,
@@ -2489,213 +2489,292 @@ function DisplayBoard({ tables, dishes, upd }) {
   const hasAny = rowsData.some(r => r.tables.length > 0);
 
   const TableCard = ({ t }) => {
-    const isSeated   = t.active;
-    const allRestr   = (t.restrictions || []).filter(r => r.note);
-    const [assigningIdx, setAssigningIdx] = useState(null); // index in t.restrictions of the one being assigned
+    const isSeated = t.active;
+    const allRestr = (t.restrictions || []).filter(r => r.note);
+    const [assigningIdx, setAssigningIdx] = useState(null);
+    const seats = t.seats || [];
 
-    const unassigned = (t.restrictions || [])
-      .map((r, i) => ({ ...r, _i: i }))
-      .filter(r => !r.pos && r.note);
+    const unassigned = allRestr.map((r, i) => ({ ...r, _i: i })).filter(r => !r.pos);
 
     const assignTo = (seatId) => {
       if (assigningIdx === null || !upd) return;
-      const updated = (t.restrictions || []).map((r, i) =>
-        i === assigningIdx ? { ...r, pos: seatId } : r
-      );
-      upd(t.id, "restrictions", updated);
+      upd(t.id, "restrictions", allRestr.map((r, i) => i === assigningIdx ? { ...r, pos: seatId } : r));
       setAssigningIdx(null);
     };
+
+    const allWaterMatch = opt => seats.length > 0 && seats.every(s => s.water === opt);
+
+    const wBtn = (opt, active, onClick) => (
+      <button key={opt} onClick={onClick} style={{
+        fontFamily: FONT, fontSize: 10, letterSpacing: 0.3, padding: "4px 8px",
+        border: `1px solid ${active ? (opt === "OC" || opt === "OW" ? "#c8a060" : "#555") : "#e8e8e8"}`,
+        borderRadius: 3, cursor: "pointer", lineHeight: 1,
+        background: active ? (opt === "OC" || opt === "OW" ? "#fdf4e8" : "#1a1a1a") : "#fff",
+        color: active ? (opt === "OC" || opt === "OW" ? "#7a5020" : "#fff") : "#aaa",
+        transition: "all 0.1s",
+      }}>{opt}</button>
+    );
+
+    const pBtn = (val, label, active) => {
+      const col = PC[val];
+      return (
+        <button key={val} onClick={() => updSeat && updSeat(t.id, seats[0]?.id, "pairing", val)} style={{
+          fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "3px 7px",
+          border: `1px solid ${active && val !== "—" ? col?.border : active ? "#333" : "#e8e8e8"}`,
+          borderRadius: 3, cursor: "pointer", lineHeight: 1,
+          background: active && val !== "—" ? col?.bg : active ? "#1a1a1a" : "#fff",
+          color: active && val !== "—" ? col?.color : active ? "#fff" : "#bbb",
+          transition: "all 0.1s",
+        }}>{label}</button>
+      );
+    };
+
+    const accentColor = isSeated ? "#5aaa70" : "#88a8c8";
 
     return (
       <div style={{
         background: "#fff",
-        border: `1px solid ${isSeated ? "#b8ddc8" : "#dde8f5"}`,
-        borderRadius: 6,
+        border: "1px solid #e8e8e8",
+        borderRadius: 8,
         overflow: "hidden",
-        boxShadow: isSeated ? "0 2px 8px rgba(74,154,106,0.10)" : "none",
+        boxShadow: isSeated ? "0 2px 12px rgba(74,154,106,0.10)" : "0 1px 4px rgba(0,0,0,0.04)",
+        transition: "box-shadow 0.15s",
       }}>
-        {/* Top colour bar */}
-        <div style={{ height: 3, background: isSeated ? "#6ab882" : "#a0bcd8" }} />
+        {/* Accent bar */}
+        <div style={{ height: 3, background: accentColor }} />
 
-        {/* Table header */}
-        <div style={{
-          padding: "12px 14px 10px",
-          borderBottom: "1px solid #f0f0f0",
-          display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8,
-        }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: FONT, fontSize: 22, fontWeight: 300, color: "#1a1a1a", letterSpacing: 1, lineHeight: 1 }}>
+        {/* Header */}
+        <div
+          onClick={() => onCardClick && isSeated && onCardClick(t.id)}
+          style={{
+            padding: "12px 14px 10px",
+            borderBottom: "1px solid #f0f0f0",
+            display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8,
+            cursor: onCardClick && isSeated ? "pointer" : "default",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: FONT, fontSize: 20, fontWeight: 300, color: "#1a1a1a", letterSpacing: 1, lineHeight: 1 }}>
               {String(t.id).padStart(2, "0")}
             </span>
             {t.resName && (
-              <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: "#1a1a1a", letterSpacing: 0.2 }}>
+              <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: "#1a1a1a" }}>
                 {t.resName}
               </span>
             )}
             {t.arrivedAt
-              ? <span style={{ fontFamily: FONT, fontSize: 11, color: "#3a8a5a", fontWeight: 600 }}>arr. {t.arrivedAt}</span>
+              ? <span style={{ fontFamily: FONT, fontSize: 10, color: "#3a8a5a", fontWeight: 600 }}>arr. {t.arrivedAt}</span>
               : t.resTime
-                ? <span style={{ fontFamily: FONT, fontSize: 11, color: "#888" }}>res. {t.resTime}</span>
+                ? <span style={{ fontFamily: FONT, fontSize: 10, color: "#aaa" }}>res. {t.resTime}</span>
                 : null
             }
           </div>
-          <div style={{ display: "flex", gap: 5, alignItems: "center", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {isSeated
-              ? <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "3px 7px", borderRadius: 2, background: "#e8f7ee", border: "1px solid #9bd0aa", color: "#2f7a45", fontWeight: 700 }}>SEATED</span>
-              : <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "3px 7px", borderRadius: 2, background: "#eef5fb", border: "1px solid #c6d7ea", color: "#2f5f8a", fontWeight: 700 }}>RESERVED</span>
-            }
-            {t.menuType && <span style={{ fontFamily: FONT, fontSize: 9, padding: "3px 7px", borderRadius: 2, border: "1px solid #e8e8e8", color: "#555" }}>{t.menuType}</span>}
+          <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <span style={{
+              fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "3px 8px", borderRadius: 3,
+              background: isSeated ? "#e8f7ee" : "#eef4fb",
+              border: `1px solid ${isSeated ? "#9bd0aa" : "#c0d4ea"}`,
+              color: isSeated ? "#2f7a45" : "#2f5f8a", fontWeight: 700,
+            }}>{isSeated ? "SEATED" : "RESERVED"}</span>
+            {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 3, border: "1px solid #e8e8e8", color: "#666" }}>{t.menuType}</span>}
             {t.pace && (() => {
               const pc = { Slow: { color: "#7a5020", bg: "#fdf4e8", border: "#c8a060" }, Fast: { color: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" } }[t.pace] || {};
-              return <span style={{ fontFamily: FONT, fontSize: 9, padding: "3px 7px", borderRadius: 2, border: `1px solid ${pc.border}`, background: pc.bg, color: pc.color, fontWeight: 600 }}>{t.pace}</span>;
+              return <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 3, border: `1px solid ${pc.border}`, background: pc.bg, color: pc.color, fontWeight: 700 }}>{t.pace}</span>;
             })()}
-            {t.guestType === "hotel" && t.room && <span style={{ fontFamily: FONT, fontSize: 9, padding: "3px 7px", borderRadius: 2, border: "1px solid #d4b888", color: "#a07040", background: "#fffaf2", fontWeight: 600 }}>#{t.room}</span>}
-            {t.birthday && <span style={{ fontSize: 13 }}>🎂</span>}
+            {t.guestType === "hotel" && t.room && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 3, border: "1px solid #d4b888", color: "#a07040", background: "#fffaf2", fontWeight: 600 }}>#{t.room}</span>}
+            {t.birthday && <span style={{ fontSize: 12 }}>🎂</span>}
           </div>
         </div>
 
-        {/* Notes row */}
+        {/* Notes */}
         {t.notes && (
-          <div style={{ padding: "8px 14px", borderBottom: "1px solid #f5f5f5", background: "#fafafa" }}>
-            <span style={{ fontFamily: FONT, fontSize: 11, color: "#777", fontStyle: "italic" }}>{t.notes}</span>
+          <div style={{ padding: "7px 14px", borderBottom: "1px solid #f5f5f5", background: "#fafafa" }}>
+            <span style={{ fontFamily: FONT, fontSize: 11, color: "#888", fontStyle: "italic" }}>{t.notes}</span>
           </div>
         )}
 
-        {/* Pace selector — visible on all tables, usable directly from display */}
-        <div style={{ padding: "8px 14px", borderBottom: "1px solid #f5f5f5", display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", flexShrink: 0 }}>Pace</span>
+        {/* Pace selector */}
+        <div style={{ padding: "7px 14px", borderBottom: "1px solid #f0f0f0", display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#ccc", textTransform: "uppercase", flexShrink: 0, minWidth: 30 }}>Pace</span>
           {["Slow", "Fast"].map(p => {
-            const colors = {
-              Slow:   { on: "#7a5020", bg: "#fdf4e8", border: "#c8a060" },
-              Normal: { on: "#2a5a2a", bg: "#edf8e8", border: "#88bb70" },
-              Fast:   { on: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" },
-            };
-            const sel = t.pace === p;
+            const colors = { Slow: { on: "#7a5020", bg: "#fdf4e8", border: "#c8a060" }, Fast: { on: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" } };
+            const active = t.pace === p;
             const col = colors[p];
             return (
-              <button key={p} onClick={() => upd && upd(t.id, "pace", sel ? "" : p)} style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px",
-                border: `1px solid ${sel ? col.border : "#e8e8e8"}`,
-                borderRadius: 2, cursor: upd ? "pointer" : "default",
-                background: sel ? col.bg : "#fff",
-                color: sel ? col.on : "#aaa",
+              <button key={p} onClick={() => upd && upd(t.id, "pace", active ? "" : p)} style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "3px 10px",
+                border: `1px solid ${active ? col.border : "#ececec"}`,
+                borderRadius: 3, cursor: upd ? "pointer" : "default",
+                background: active ? col.bg : "#fff", color: active ? col.on : "#ccc",
                 transition: "all 0.1s",
               }}>{p}</button>
             );
           })}
         </div>
 
-        {/* Unassigned restrictions warning — tap a chip to assign it to a seat */}
+        {/* Unassigned restrictions */}
         {unassigned.length > 0 && (
-          <div style={{ padding: "8px 14px", borderBottom: "1px solid #f5f5f5", background: "#fff8f8", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ padding: "7px 14px", borderBottom: "1px solid #f5f5f5", background: "#fff8f8", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#b04040", textTransform: "uppercase", flexShrink: 0 }}>⚠ Unassigned</span>
-            {unassigned.map((r) => (
+            {unassigned.map(r => (
               <span key={r._i} onClick={() => setAssigningIdx(assigningIdx === r._i ? null : r._i)} style={{
-                fontFamily: FONT, fontSize: 10, color: assigningIdx === r._i ? "#fff" : "#b04040",
+                fontFamily: FONT, fontSize: 10,
+                color: assigningIdx === r._i ? "#fff" : "#b04040",
                 background: assigningIdx === r._i ? "#b04040" : "#fef0f0",
-                border: "1px solid #e09090", borderRadius: 2, padding: "2px 8px",
+                border: "1px solid #e09090", borderRadius: 3, padding: "2px 8px",
                 fontWeight: 500, cursor: "pointer", userSelect: "none",
               }}>{restrLabel(r.note)} {assigningIdx === r._i ? "→ pick seat" : "→"}</span>
             ))}
           </div>
         )}
 
-        {/* Seat assignment prompt */}
         {assigningIdx !== null && (
-          <div style={{ padding: "8px 14px", borderBottom: "1px solid #f5f5f5", background: "#fff3f3", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ padding: "7px 14px", borderBottom: "1px solid #f5f5f5", background: "#fff3f3", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#b04040", flexShrink: 0 }}>Assign to:</span>
-            {(t.seats || []).map(s => (
+            {seats.map(s => (
               <button key={s.id} onClick={() => assignTo(s.id)} style={{
                 fontFamily: FONT, fontSize: 10, fontWeight: 700, padding: "4px 10px",
-                border: "1px solid #e09090", borderRadius: 2, cursor: "pointer",
+                border: "1px solid #e09090", borderRadius: 3, cursor: "pointer",
                 background: "#fff", color: "#b04040",
               }}>P{s.id}</button>
             ))}
             <button onClick={() => setAssigningIdx(null)} style={{
-              fontFamily: FONT, fontSize: 9, padding: "4px 8px", marginLeft: 4,
-              border: "1px solid #eee", borderRadius: 2, cursor: "pointer",
-              background: "#fff", color: "#aaa",
+              fontFamily: FONT, fontSize: 9, padding: "3px 8px", marginLeft: 4,
+              border: "1px solid #eee", borderRadius: 3, cursor: "pointer",
+              background: "#fff", color: "#bbb",
             }}>cancel</button>
           </div>
         )}
 
-        {/* Seats — always visible, one row per seat */}
-        {isSeated && t.seats && t.seats.length > 0 ? (
-          <div style={{ padding: "8px 0 6px" }}>
-            {t.seats.map(s => {
-              const ws     = waterStyle(s.water);
-              const pc     = pairingColors[s.pairing];
-              const restr  = allRestr.filter(r => r.pos === s.id);
-              const extras = dishes.filter(d => s.extras?.[d.id]?.ordered);
+        {/* Quick mode — ALL water row */}
+        {quickMode && isSeated && seats.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderBottom: "1px solid #f0f0f0", background: "#fafafa" }}>
+            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#ccc", textTransform: "uppercase", minWidth: 30 }}>ALL</span>
+            <div style={{ display: "flex", gap: 4 }}>
+              {WATER_QUICK.map(opt => wBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat && updSeat(t.id, s.id, "water", opt))))}
+            </div>
+          </div>
+        )}
+
+        {/* Seat rows */}
+        {isSeated && seats.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: quickMode ? 6 : 0, padding: quickMode ? "8px 10px" : "6px 0" }}>
+            {seats.map(s => {
+              const ws      = waterStyle(s.water);
+              const pc      = PC[s.pairing];
+              const restr   = allRestr.filter(r => r.pos === s.id);
+              const extras  = dishes.filter(d => s.extras?.[d.id]?.ordered);
+              const beetExtra = s.extras?.[1] || s.extras?.["1"] || { ordered: false, pairing: "—" };
+              const hasBeet   = !!beetExtra.ordered;
+              const hasCheese = !!(s.extras?.[2]?.ordered || s.extras?.["2"]?.ordered);
               const hasContent = (s.water && s.water !== "—") || s.pairing || restr.length > 0 || extras.length > 0;
 
+              if (quickMode) {
+                return (
+                  <div key={s.id} style={{
+                    border: `1px solid ${restr.length ? "#f0d0d0" : "#ececec"}`,
+                    borderRadius: 6, overflow: "hidden",
+                    background: restr.length ? "#fffaf9" : "#fafafa",
+                  }}>
+                    {/* Seat label + restrictions */}
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
+                      padding: "4px 10px", background: restr.length ? "#fff0f0" : "#f2f2f2",
+                      borderBottom: "1px solid #e8e8e8",
+                    }}>
+                      <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: restr.length ? "#b04040" : "#777" }}>P{s.id}</span>
+                      {restr.map((r, i) => (
+                        <span key={i} style={{ fontFamily: FONT, fontSize: 9, color: "#b04040", fontWeight: 500 }}>
+                          ⚠ {restrLabel(r.note)}
+                        </span>
+                      ))}
+                    </div>
+                    {/* Water */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", padding: "6px 10px 4px" }}>
+                      <div style={{ display: "flex", gap: 3 }}>
+                        {WATER_QUICK.map(opt => wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt)))}
+                      </div>
+                      <div style={{ width: 1, height: 16, background: "#e0e0e0", margin: "0 2px" }} />
+                      {/* Extras */}
+                      <button onClick={() => { const cur = s.extras?.[1] || { ordered: false }; updSeat && updSeat(t.id, s.id, "extras", { ...s.extras, 1: { ...cur, ordered: !cur.ordered } }); }} style={{
+                        fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "3px 8px",
+                        border: `1px solid ${hasBeet ? "#5a8a3a" : "#e0e0e0"}`,
+                        borderRadius: 3, cursor: "pointer",
+                        background: hasBeet ? "#edf8e8" : "#fff", color: hasBeet ? "#5a8a3a" : "#bbb",
+                      }}>Beet</button>
+                      <button onClick={() => { const cur = s.extras?.[2] || { ordered: false }; updSeat && updSeat(t.id, s.id, "extras", { ...s.extras, 2: { ...cur, ordered: !cur.ordered } }); }} style={{
+                        fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "3px 8px",
+                        border: `1px solid ${hasCheese ? "#a06830" : "#e0e0e0"}`,
+                        borderRadius: 3, cursor: "pointer",
+                        background: hasCheese ? "#fdf4e8" : "#fff", color: hasCheese ? "#a06830" : "#bbb",
+                      }}>Chse</button>
+                    </div>
+                    {/* Pairing */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", padding: "2px 10px 7px" }}>
+                      {PAIRING_OPTS.map(([val, label]) => {
+                        const active = s.pairing === val || (val === "—" && !s.pairing);
+                        const col = PC[val];
+                        return (
+                          <button key={val} onClick={() => updSeat && updSeat(t.id, s.id, "pairing", val)} style={{
+                            fontFamily: FONT, fontSize: 8, letterSpacing: 0.3, padding: "3px 7px",
+                            border: `1px solid ${active && val !== "—" ? col?.border : active ? "#333" : "#e8e8e8"}`,
+                            borderRadius: 3, cursor: "pointer",
+                            background: active && val !== "—" ? col?.bg : active ? "#1a1a1a" : "#fff",
+                            color: active && val !== "—" ? col?.color : active ? "#fff" : "#ccc",
+                          }}>{label}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }
+
+              // Normal display mode
               return (
                 <div key={s.id} style={{
                   display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap",
                   padding: "5px 14px", borderBottom: "1px solid #f8f8f8",
                   background: restr.length ? "#fffaf9" : "transparent",
                 }}>
-                  <span style={{
-                    fontFamily: FONT, fontSize: 10, fontWeight: 700, minWidth: 22,
-                    color: restr.length ? "#b04040" : "#999", letterSpacing: 0.5,
-                  }}>P{s.id}</span>
-
-                  {!hasContent && <span style={{ fontFamily: FONT, fontSize: 10, color: "#e0e0e0" }}>—</span>}
-
+                  <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, minWidth: 22, color: restr.length ? "#b04040" : "#aaa", letterSpacing: 0.5 }}>P{s.id}</span>
+                  {!hasContent && <span style={{ fontFamily: FONT, fontSize: 10, color: "#e8e8e8" }}>—</span>}
                   {s.water && s.water !== "—" && (
-                    <span style={{
-                      fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2,
-                      background: ws.bg || "#f0f0f0", color: "#333", border: "1px solid #e0e0e0",
-                    }}>{s.water}</span>
+                    <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, background: ws.bg || "#f5f5f5", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>
                   )}
                   {s.pairing && pc && (
-                    <span style={{
-                      fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2,
-                      background: pc.bg, border: `1px solid ${pc.border}`, color: pc.color, fontWeight: 500,
-                    }}>{s.pairing}</span>
+                    <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, background: pc.bg, border: `1px solid ${pc.border}`, color: pc.color, fontWeight: 500 }}>{s.pairing}</span>
                   )}
                   {extras.map(d => {
                     const ex = s.extras[d.id];
                     return (
-                      <span key={d.id} style={{
-                        fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2,
-                        border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8",
-                      }}>{d.name}{ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}</span>
+                      <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>
+                        {d.name}{ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}
+                      </span>
                     );
                   })}
                   {restr.map((r, i) => (
-                    <span key={i} style={{
-                      fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2,
-                      border: "1px solid #e09090", color: "#b04040", background: "#fef0f0", fontWeight: 500,
-                    }}>⚠ {restrLabel(r.note)}</span>
+                    <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0", fontWeight: 500 }}>⚠ {restrLabel(r.note)}</span>
                   ))}
                 </div>
               );
             })}
           </div>
         ) : !isSeated ? (
-          /* Reserved but not yet seated — show guest count */
-          <div style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontFamily: FONT, fontSize: 11, color: "#aaa" }}>{t.guests} guest{t.guests !== 1 ? "s" : ""}</span>
-            {allRestr.length > 0 && allRestr.map((r, i) => (
-              <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0", fontWeight: 500 }}>⚠ {restrLabel(r.note)}</span>
+          <div style={{ padding: "11px 14px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: FONT, fontSize: 11, color: "#bbb" }}>{t.guests} guest{t.guests !== 1 ? "s" : ""}</span>
+            {allRestr.map((r, i) => (
+              <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0", fontWeight: 500 }}>⚠ {restrLabel(r.note)}</span>
             ))}
           </div>
         ) : null}
-
-
       </div>
     );
   };
 
   return (
-    <div style={{
-      overflowY: "auto", overflowX: "hidden",
-      padding: isMobile ? "16px 12px 40px" : "24px 24px 48px",
-      background: "#fafafa", minHeight: "calc(100vh - 52px)",
-    }}>
+    <div style={{ overflowY: "auto", overflowX: "hidden", padding: isMobile ? "16px 12px 40px" : "20px 0 48px" }}>
       {!hasAny && (
-        <div style={{ fontFamily: FONT, fontSize: 10, color: "#aaa", textAlign: "center", marginTop: 80, letterSpacing: 2 }}>
+        <div style={{ fontFamily: FONT, fontSize: 10, color: "#ccc", textAlign: "center", marginTop: 80, letterSpacing: 2 }}>
           no reservations
         </div>
       )}
@@ -2704,18 +2783,16 @@ function DisplayBoard({ tables, dishes, upd }) {
         const seatedCount = rowTables.filter(t => t.active).length;
         return (
           <div key={time} style={{ marginBottom: 32 }}>
-            {/* Row label */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-              <span style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 3, color: "#666", textTransform: "uppercase" }}>{time}</span>
-              <div style={{ flex: 1, height: 1, background: "#e0e0e0" }} />
-              <span style={{ fontFamily: FONT, fontSize: 10, color: "#aaa" }}>
-                {seatedCount}/{rowTables.length} seated · {rowTables.reduce((a,t) => a + (t.guests||0), 0)} guests
+              <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: "#aaa", textTransform: "uppercase" }}>{time}</span>
+              <div style={{ flex: 1, height: 1, background: "#efefef" }} />
+              <span style={{ fontFamily: FONT, fontSize: 9, color: "#ccc" }}>
+                {seatedCount}/{rowTables.length} seated · {rowTables.reduce((a, t) => a + (t.guests || 0), 0)} guests
               </span>
             </div>
-            {/* Cards — 2 columns on desktop, 1 on mobile */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(320px, 1fr))",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(340px, 1fr))",
               gap: isMobile ? 10 : 14,
             }}>
               {rowTables.map(t => <TableCard key={t.id} t={t} />)}
@@ -2890,6 +2967,7 @@ function KitchenTicket({ table, menuCourses, upd }) {
   const seats = table.seats || [];
   const restrictions = table.restrictions || [];
   const log = table.kitchenLog || {};
+  const [assigningRestrIdx, setAssigningRestrIdx] = useState(null);
 
   const fire = (courseKey) => {
     const now = fmt(new Date());
@@ -2900,6 +2978,15 @@ function KitchenTicket({ table, menuCourses, upd }) {
     const newLog = { ...log };
     delete newLog[courseKey];
     upd(table.id, "kitchenLog", newLog);
+  };
+
+  const assignRestrToSeat = (seatId) => {
+    if (assigningRestrIdx === null) return;
+    const updated = restrictions.map((r, i) =>
+      i === assigningRestrIdx ? { ...r, pos: seatId } : r
+    );
+    upd(table.id, "restrictions", updated);
+    setAssigningRestrIdx(null);
   };
 
   // Seat restriction keys per seat (for course substitution lookup).
@@ -2982,24 +3069,69 @@ function KitchenTicket({ table, menuCourses, upd }) {
       </div>
 
       {/* ── Seats ── */}
-      <div style={{ background: "#f6f6f6", borderBottom: "1px solid #e8e8e8", padding: "7px 14px", display: "flex", flexWrap: "wrap", gap: "5px 10px" }}>
-        {seats.map(s => {
-          const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
-          const restrList = restrictions.filter(r => !r.pos || r.pos === s.id).map(r => r.note).filter(Boolean);
-          const restrShort = k => { const d = RESTRICTIONS.find(r => r.key === k); return d ? d.label : k; };
+      <div style={{ background: "#f6f6f6", borderBottom: "1px solid #e8e8e8", padding: "7px 14px" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "5px 10px" }}>
+          {seats.map(s => {
+            const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
+            const restrList = restrictions.filter(r => r.pos === s.id).map(r => r.note).filter(Boolean);
+            const restrShort = k => { const d = RESTRICTIONS.find(r => r.key === k); return d ? d.label : k; };
+            return (
+              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span style={{
+                  fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 3,
+                  background: p ? (pairingBg[p] || "#f0f0f0") : "#e8e8e8",
+                  color: p ? (pairingColor[p] || "#555") : "#666",
+                }}>P{s.id}{p ? ` · ${pLabel(p)}` : ""}</span>
+                {restrList.length > 0 && (
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: "#b03030", letterSpacing: 0.2, fontWeight: 600 }}>{restrList.map(restrShort).join(" · ")}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Unassigned restrictions — tap to assign to a seat */}
+        {(() => {
+          const unassigned = restrictions.map((r, i) => ({ ...r, _i: i })).filter(r => !r.pos && r.note);
+          if (unassigned.length === 0) return null;
           return (
-            <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{
-                fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 3,
-                background: p ? (pairingBg[p] || "#f0f0f0") : "#e8e8e8",
-                color: p ? (pairingColor[p] || "#555") : "#666",
-              }}>P{s.id}{p ? ` · ${pLabel(p)}` : ""}</span>
-              {restrList.length > 0 && (
-                <span style={{ fontFamily: FONT, fontSize: 9, color: "#b03030", letterSpacing: 0.2, fontWeight: 600 }}>{restrList.map(restrShort).join(" · ")}</span>
+            <div style={{ marginTop: 7, paddingTop: 7, borderTop: "1px solid #e8e8e8" }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#b04040", textTransform: "uppercase", flexShrink: 0 }}>⚠ Unassigned</span>
+                {unassigned.map(r => (
+                  <span
+                    key={r._i}
+                    onClick={() => setAssigningRestrIdx(assigningRestrIdx === r._i ? null : r._i)}
+                    style={{
+                      fontFamily: FONT, fontSize: 9, padding: "2px 8px", borderRadius: 3,
+                      border: "1px solid #e09090",
+                      background: assigningRestrIdx === r._i ? "#b04040" : "#fef0f0",
+                      color: assigningRestrIdx === r._i ? "#fff" : "#b04040",
+                      fontWeight: 500, cursor: "pointer", userSelect: "none",
+                    }}
+                  >{restrLabel(r.note)} {assigningRestrIdx === r._i ? "→ pick seat" : "→"}</span>
+                ))}
+              </div>
+              {assigningRestrIdx !== null && (
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", marginTop: 5 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: "#b04040", flexShrink: 0 }}>Assign to:</span>
+                  {seats.map(s => (
+                    <button key={s.id} onClick={() => assignRestrToSeat(s.id)} style={{
+                      fontFamily: FONT, fontSize: 10, fontWeight: 700, padding: "3px 10px",
+                      border: "1px solid #e09090", borderRadius: 3, cursor: "pointer",
+                      background: "#fff", color: "#b04040",
+                    }}>P{s.id}</button>
+                  ))}
+                  <button onClick={() => setAssigningRestrIdx(null)} style={{
+                    fontFamily: FONT, fontSize: 9, padding: "3px 8px",
+                    border: "1px solid #eee", borderRadius: 3, cursor: "pointer",
+                    background: "#fff", color: "#bbb",
+                  }}>cancel</button>
+                </div>
               )}
             </div>
           );
-        })}
+        })()}
       </div>
 
       {/* ── Courses ── */}
@@ -4555,85 +4687,89 @@ export default function App() {
       />
 
       {sel === null ? (
-        <div style={{ padding: "28px 24px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
-          {/* Top toggle: DISPLAY / SERVICE */}
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
-            {[["DISPLAY","board"],["SERVICE","service"]].map(([label, key], i, arr) => {
-              const active = quickView === key || (key === "board" && quickView === "kitchen");
-              return (
-                <button key={key} onClick={() => setQuickView(key)} style={{
-                  fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
-                  border: "1px solid", borderColor: active ? "#1a1a1a" : "#e0e0e0",
-                  background: active ? "#1a1a1a" : "#fff", color: active ? "#fff" : "#888",
-                  borderRadius: i === 0 ? "2px 0 0 2px" : "0 2px 2px 0",
-                  borderLeft: i > 0 ? "none" : undefined,
-                  cursor: "pointer",
-                }}>{label}</button>
-              );
-            })}
+        <div style={{ padding: "20px 24px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
+          {/* Top bar: stats + Quick Access toggle */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+            <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+              {(() => {
+                const seatedNow = tables.filter(t => t.active).length;
+                const guestsNow = tables.filter(t => t.active).reduce((a, t) => a + (t.guests || 0), 0);
+                const resvNow   = tables.filter(t => !t.active && (t.resName || t.resTime)).length;
+                return (
+                  <>
+                    {seatedNow > 0 && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#3a8a5a", textTransform: "uppercase" }}>{seatedNow} tables · {guestsNow} guests</span>}
+                    {resvNow   > 0 && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#aaa",    textTransform: "uppercase" }}>{resvNow} reserved</span>}
+                  </>
+                );
+              })()}
+            </div>
+            <button
+              onClick={() => setQuickView(v => v === "service" ? "board" : "service")}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "7px 16px",
+                border: `1.5px solid ${quickView === "service" ? "#1a1a1a" : "#d8d8d8"}`,
+                background: quickView === "service" ? "#1a1a1a" : "#fff",
+                color: quickView === "service" ? "#fff" : "#999",
+                borderRadius: 20, cursor: "pointer",
+                transition: "all 0.15s",
+                display: "flex", alignItems: "center", gap: 6,
+              }}
+            >
+              <span style={{ fontSize: 10 }}>◈</span> QUICK ACCESS
+            </button>
           </div>
 
-          {quickView === "service" ? (
-            <ServiceQuickView tables={tables} updSeat={updSeat} setSel={t => { setSel(t); setQuickView("board"); }} />
-          ) : (() => {
-            // DISPLAY section: board only (kitchen is in Display mode)
+          {/* Unified DisplayBoard — quickMode shows inline service controls */}
+          {(() => {
             const visibleTables = tables.filter(t => mode === "admin" || t.active || t.resName || t.resTime);
-            const cardProps = t => ({
-              key: t.id, table: t, mode,
-              onClick: () => t.active && setSel(t.id),
-              onSeat: () => seatTable(t.id),
-              onUnseat: () => unseatTable(t.id),
-              onClear: () => clear(t.id),
-              onEditRes: () => { if (mode === "admin") { setResModalPresetTime(null); setResModal(t.id); } },
-            });
 
-            // Group tables by sitting time
-            const rows = SITTING_TIMES.map(time => ({
-              time,
-              tables: visibleTables.filter(t => {
-                if (t.resTime === time) return true;
-                // 19:15 falls into 19:00 row
-                if (time === "19:00" && t.resTime === "19:15") return true;
-                return false;
-              }),
-            }));
-
-            const hasAnyInRows = rows.some(r => r.tables.length > 0);
-
-            if (!hasAnyInRows) {
+            // Admin mode: also show empty slot cards
+            if (mode === "admin" && quickView !== "service") {
+              // Group tables by sitting time for admin (with empty slot placeholders)
+              const rows = SITTING_TIMES.map(time => ({
+                time,
+                tables: visibleTables.filter(t => {
+                  if (t.resTime === time) return true;
+                  if (time === "19:00" && t.resTime === "19:15") return true;
+                  return false;
+                }),
+              }));
+              const hasAnyInRows = rows.some(r => r.tables.length > 0);
+              if (!hasAnyInRows) {
+                return (
+                  <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
+                    No reservations yet — add them in Admin
+                  </div>
+                );
+              }
               return (
-                <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
-                  No reservations yet — add them in Admin
-                </div>
-              );
-            }
-
-            return (
-              <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
-                {rows.map(({ time, tables: rowTables }) => {
-                  if (rowTables.length === 0 && mode !== "admin") return null;
-                  return (
-                    <div key={time}>
-                      {/* Row label */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-                        <span style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>
-                          {time === "19:00" ? "19:00 / 19:15" : time}
-                        </span>
-                        <div style={{ flex: 1, height: 1, background: "#f0f0f0" }} />
-                        <span style={{ fontFamily: FONT, fontSize: 10, color: "#bbb" }}>
-                          {rowTables.length} / 4
-                        </span>
-                      </div>
-                      {/* Cards — max 4, fixed grid */}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-                        {rowTables.slice(0, 4).map(t => <Card {...cardProps(t)} />)}
-                        {/* Empty slot placeholders for admin — clickable to add reservation */}
-                        {mode === "admin" && rowTables.length < 4 && Array.from({ length: 4 - rowTables.length }).map((_, i) => {
-                          // Find next table with no reservation and not active
-                          const freeTable = tables.find(t => !t.active && !t.resName && !t.resTime);
-                          return (
-                            <div key={`empty-${time}-${i}`}
-                              onClick={() => { if (freeTable) { setResModalPresetTime(time); setResModal(freeTable.id); } }}
+                <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+                  {rows.map(({ time, tables: rowTables }) => {
+                    if (rowTables.length === 0 && mode !== "admin") return null;
+                    const cardProps = t => ({
+                      key: t.id, table: t, mode,
+                      onClick: () => t.active && setSel(t.id),
+                      onSeat: () => seatTable(t.id),
+                      onUnseat: () => unseatTable(t.id),
+                      onClear: () => clear(t.id),
+                      onEditRes: () => { if (mode === "admin") { setResModalPresetTime(null); setResModal(t.id); } },
+                    });
+                    return (
+                      <div key={time}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                          <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: "#aaa", textTransform: "uppercase" }}>
+                            {time === "19:00" ? "19:00 / 19:15" : time}
+                          </span>
+                          <div style={{ flex: 1, height: 1, background: "#f0f0f0" }} />
+                          <span style={{ fontFamily: FONT, fontSize: 9, color: "#ccc" }}>{rowTables.length} / 4</span>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+                          {rowTables.slice(0, 4).map(t => <Card {...cardProps(t)} />)}
+                          {rowTables.length < 4 && Array.from({ length: 4 - rowTables.length }).map((_, i) => {
+                            const freeTable = tables.find(t => !t.active && !t.resName && !t.resTime);
+                            return (
+                              <div key={`empty-${time}-${i}`}
+                                onClick={() => { if (freeTable) { setResModalPresetTime(time); setResModal(freeTable.id); } }}
                               style={{
                                 border: "1px dashed #e0e0e0", borderRadius: 4, minHeight: 190,
                                 display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -4656,7 +4792,19 @@ export default function App() {
                 })}
               </div>
             );
-          })()}
+          }
+          // Service mode (and admin in quick mode): unified DisplayBoard
+          return (
+            <DisplayBoard
+              tables={visibleTables}
+              dishes={dishes}
+              upd={upd}
+              quickMode={quickView === "service"}
+              updSeat={updSeat}
+              onCardClick={id => setSel(id)}
+            />
+          );
+        })()}
         </div>
       ) : (
         <Detail
