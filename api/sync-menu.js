@@ -3,60 +3,13 @@
 // Prefers service-account auth (GOOGLE_SERVICE_ACCOUNT_KEY env var) and falls
 // back to the public CSV export URL when no key is configured.
 
-import { createSign } from "crypto";
 import { createClient } from "@supabase/supabase-js";
+import { getSheetsToken, sheetsGet, SHEET_ID, SHEET_TAB } from "./_sheets-auth.js";
 
-const SHEET_ID  = process.env.MENU_SHEET_ID || process.env.VITE_MENU_SHEET_ID || "1aPVGmKNcvDOFzyr3jSPT_KL5lKEYKPgkad3y0_E_Vl4";
-const SHEET_TAB = process.env.MENU_SHEET_TAB || process.env.VITE_MENU_SHEET_TAB || "MILKA MENU V2";
-const CSV_URL   = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_TAB)}`;
+const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_TAB)}`;
 
 const SYNC_SECRET = process.env.SYNC_SECRET;
 const CRON_SECRET = process.env.CRON_SECRET;
-
-// ── Service-account JWT helpers ───────────────────────────────────────────────
-
-function makeJWT(clientEmail, privateKey) {
-  const now = Math.floor(Date.now() / 1000);
-  const header  = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
-  const payload = Buffer.from(JSON.stringify({
-    iss:   clientEmail,
-    scope: "https://www.googleapis.com/auth/spreadsheets.readonly",
-    aud:   "https://oauth2.googleapis.com/token",
-    exp:   now + 3600,
-    iat:   now,
-  })).toString("base64url");
-  const msg  = `${header}.${payload}`;
-  const sign = createSign("RSA-SHA256");
-  sign.update(msg);
-  const sig = sign.sign(privateKey, "base64url");
-  return `${msg}.${sig}`;
-}
-
-async function getAccessToken(key) {
-  const jwt = makeJWT(key.client_email, key.private_key);
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method:  "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body:    new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion:  jwt,
-    }),
-  });
-  const data = await res.json();
-  if (!data.access_token) throw new Error("Failed to obtain access token: " + JSON.stringify(data));
-  return data.access_token;
-}
-
-async function fetchRowsViaAPI(token) {
-  const range = encodeURIComponent(`'${SHEET_TAB}'`);
-  const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${range}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  if (!res.ok) throw new Error(`Sheets API error: ${res.status}`);
-  const data = await res.json();
-  return data.values || [];
-}
 
 // ── CSV parser (fallback path) ────────────────────────────────────────────────
 
@@ -80,7 +33,7 @@ function parseCSV(text) {
   return rows;
 }
 
-// ── Row normalisation (shared) ────────────────────────────────────────────────
+// ── Row normalisation ─────────────────────────────────────────────────────────
 
 const normHeader = value => String(value || "")
   .trim()
@@ -146,8 +99,6 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(204).end();
 
-  // Support Vercel cron auth (Authorization: Bearer <CRON_SECRET>),
-  // manual trigger via x-sync-secret header, or ?secret= query param.
   const authHeader = req.headers.authorization;
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const provided = bearerToken || req.headers["x-sync-secret"] || req.query.secret;
@@ -160,18 +111,13 @@ export default async function handler(req, res) {
   try {
     let rows;
 
-    // Prefer service-account authentication when a key is configured.
-    const rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
-    if (rawKey) {
-      const key = typeof rawKey === "string" ? JSON.parse(rawKey) : rawKey;
-      const token = await getAccessToken(key);
-      rows = await fetchRowsViaAPI(token);
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+      const token = await getSheetsToken();
+      rows = await sheetsGet(token, `'${SHEET_TAB}'`);
     } else {
-      // Fallback: fetch the sheet as a CSV (requires the sheet to be publicly accessible).
       const response = await fetch(CSV_URL);
       if (!response.ok) throw new Error(`Google Sheets CSV fetch failed: ${response.status}`);
-      const csvText = await response.text();
-      rows = parseCSV(csvText);
+      rows = parseCSV(await response.text());
     }
 
     const courses = parseRows(rows);
@@ -179,20 +125,14 @@ export default async function handler(req, res) {
 
     const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
     const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseKey) throw new Error("Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_KEY)");
+    if (!supabaseUrl || !supabaseKey) throw new Error("Supabase env vars not configured");
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { error } = await supabase
-      .from("menu_courses")
-      .upsert(courses, { onConflict: "position" });
-
+    const { error } = await supabase.from("menu_courses").upsert(courses, { onConflict: "position" });
     if (error) throw new Error("Supabase upsert failed: " + error.message);
 
     const positions = courses.map(c => c.position);
-    await supabase
-      .from("menu_courses")
-      .delete()
-      .not("position", "in", `(${positions.join(",")})`);
+    await supabase.from("menu_courses").delete().not("position", "in", `(${positions.join(",")})`);
 
     return res.status(200).json({ ok: true, synced: courses.length });
   } catch (err) {
