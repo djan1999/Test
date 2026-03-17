@@ -3014,7 +3014,7 @@ function KitchenTicket({ table, menuCourses, upd }) {
           const baseNameSi  = course.menu_si?.name || null;
           const baseSubSi   = course.menu_si?.sub  || "";
           const kitchenNote = course.kitchen_note || "";
-          const line1 = baseName + (baseSub ? ` | ${baseSub}` : "");
+          const line1 = baseName;
           const extraLabel = (() => {
             if (isBeetCourse(course))   return beetSeats.map(s => `P${s.id}`).join(" ");
             if (isCheeseCourse(course)) return cheeseSeats.map(s => `P${s.id}`).join(" ");
