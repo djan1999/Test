@@ -2465,7 +2465,7 @@ function TableSeatDetail({ table, dishes, isMobile }) {
 }
 
 // ── Display Board ─────────────────────────────────────────────────────────────
-function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardClick }) {
+function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat }) {
   const isMobile = useIsMobile(700);
 
   const PC = {
@@ -2760,13 +2760,31 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
             })}
           </div>
         ) : !isSeated ? (
-          <div style={{ padding: "11px 14px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: FONT, fontSize: 11, color: "#bbb" }}>{t.guests} guest{t.guests !== 1 ? "s" : ""}</span>
-            {allRestr.map((r, i) => (
-              <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0", fontWeight: 500 }}>⚠ {restrLabel(r.note)}</span>
-            ))}
+          <div style={{ padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: FONT, fontSize: 11, color: "#bbb" }}>{t.guests} guest{t.guests !== 1 ? "s" : ""}</span>
+              {allRestr.map((r, i) => (
+                <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0", fontWeight: 500 }}>⚠ {restrLabel(r.note)}</span>
+              ))}
+            </div>
+            {onSeat && (
+              <button onClick={() => onSeat(t.id)} style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 14px",
+                border: "1px solid #b8ddb8", borderRadius: 3, cursor: "pointer",
+                background: "#f4fbf4", color: "#4a8a4a", fontWeight: 600, textTransform: "uppercase",
+              }}>Seat</button>
+            )}
           </div>
         ) : null}
+        {isSeated && onUnseat && (
+          <div style={{ padding: "6px 14px", borderTop: "1px solid #f5f5f5", display: "flex", justifyContent: "flex-end" }}>
+            <button onClick={() => onUnseat(t.id)} style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 12px",
+              border: "1px solid #d8d8d8", borderRadius: 3, cursor: "pointer",
+              background: "#fff", color: "#999", textTransform: "uppercase",
+            }}>Unseat</button>
+          </div>
+        )}
       </div>
     );
   };
@@ -2800,6 +2818,25 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
           </div>
         );
       })}
+      {(() => {
+        const walkIns = tables.filter(t => !t.active && !t.resTime && !t.resName);
+        if (walkIns.length === 0 || !onSeat) return null;
+        return (
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: "#ccc", textTransform: "uppercase" }}>Walk-in</span>
+              <div style={{ flex: 1, height: 1, background: "#f5f5f5" }} />
+            </div>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(340px, 1fr))",
+              gap: isMobile ? 10 : 14,
+            }}>
+              {walkIns.map(t => <TableCard key={t.id} t={t} />)}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -4721,7 +4758,7 @@ export default function App() {
 
           {/* Unified DisplayBoard — quickMode shows inline service controls */}
           {(() => {
-            const visibleTables = tables.filter(t => mode === "admin" || t.active || t.resName || t.resTime);
+            const visibleTables = tables.filter(t => mode === "admin" || mode === "service" || t.active || t.resName || t.resTime);
 
             // Admin mode: also show empty slot cards
             if (mode === "admin" && quickView !== "service") {
@@ -4802,6 +4839,8 @@ export default function App() {
               quickMode={quickView === "service"}
               updSeat={updSeat}
               onCardClick={id => setSel(id)}
+              onSeat={seatTable}
+              onUnseat={unseatTable}
             />
           );
         })()}
