@@ -2818,25 +2818,6 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
           </div>
         );
       })}
-      {(() => {
-        const walkIns = tables.filter(t => !t.active && !t.resTime && !t.resName);
-        if (walkIns.length === 0 || !onSeat) return null;
-        return (
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: "#ccc", textTransform: "uppercase" }}>Walk-in</span>
-              <div style={{ flex: 1, height: 1, background: "#f5f5f5" }} />
-            </div>
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(340px, 1fr))",
-              gap: isMobile ? 10 : 14,
-            }}>
-              {walkIns.map(t => <TableCard key={t.id} t={t} />)}
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 }
@@ -4758,7 +4739,7 @@ export default function App() {
 
           {/* Unified DisplayBoard — quickMode shows inline service controls */}
           {(() => {
-            const visibleTables = tables.filter(t => mode === "admin" || mode === "service" || t.active || t.resName || t.resTime);
+            const visibleTables = tables.filter(t => mode === "admin" || t.active || t.resName || t.resTime);
 
             // Admin mode: also show empty slot cards
             if (mode === "admin" && quickView !== "service") {
