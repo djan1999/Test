@@ -234,7 +234,6 @@ const RESTRICTIONS = [
 ];
 const RESTRICTION_GROUPS = { dietary: "Dietary", allergy: "Allergies & Intolerances", other: "Lifestyle & Religious" };
 const restrLabel = (key) => { const d = RESTRICTIONS.find(r => r.key === key); return d ? `${d.emoji} ${d.label}` : key; };
-const restrKey   = (note) => note; // note IS the key now
 
 
 // ── Embedded assets for menu PDF generation ───────────────────────────────────
@@ -2696,14 +2695,12 @@ function KitchenTicket({ table, menuCourses, upd }) {
     upd(table.id, "kitchenLog", newLog);
   };
 
-  // Seat restriction keys per seat (for course substitution lookup)
+  // Seat restriction keys per seat (for course substitution lookup).
+  // Return raw r.note — applyCourseRestriction does its own RESTRICTION_COLUMN_MAP lookup internally.
   const seatRestrKeys = (seat) =>
     (restrictions || [])
       .filter(r => !r.pos || r.pos === seat.id)
-      .map(r => {
-        const mapped = RESTRICTION_COLUMN_MAP[r.note] || r.note;
-        return mapped;
-      });
+      .map(r => r.note);
 
   const pairingColor = { Wine: "#7a5020", "Non-Alc": "#1f5f73", Premium: "#5a5a8a", "Our Story": "#3a7a5a" };
   const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#e8f5fa", Premium: "#f0eeff", "Our Story": "#eaf5ee" };
@@ -2931,7 +2928,7 @@ function KitchenBoard({ tables, menuCourses, upd }) {
 // ── Menu Generator ────────────────────────────────────────────────────────────
 function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
-  const [menuTitle, setMenuTitle] = useState("WINTER  MENU");
+  const [menuTitle, setMenuTitle] = useState("WINTER MENU");
 
   useEffect(() => {
     writeTeamNames(teamNames);
