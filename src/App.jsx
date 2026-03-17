@@ -3077,8 +3077,8 @@ function KitchenTicket({ table, menuCourses, upd }) {
                   {/* Restriction labels + kitchen note (line 3) — both in red */}
                   {(modGroups || kitchenNote) && !fired && (
                     <div style={{ marginTop: 3, display: "flex", flexWrap: "wrap", gap: "2px 10px" }}>
-                      {modGroups && Object.entries(modGroups).map(([name, count]) => (
-                        <span key={name} style={{ fontFamily: FONT, fontSize: 12, color: name === baseName ? "#aaa" : "#c04040", fontWeight: name === baseName ? 400 : 600 }}>{count}× {name}</span>
+                      {modGroups && Object.entries(modGroups).sort(([a], [b]) => (a === baseName ? -1 : 1) - (b === baseName ? -1 : 1)).map(([name, count]) => (
+                        <span key={name} style={{ fontFamily: FONT, fontSize: 12, color: name === baseName ? "#444" : "#c04040", fontWeight: 600 }}>{count}× {name}</span>
                       ))}
                       {kitchenNote && <span style={{ fontFamily: FONT, fontSize: 12, color: "#c04040", fontWeight: 600 }}>{kitchenNote}</span>}
                     </div>
