@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const LIVE_MENU_SHEET_ID = import.meta.env.VITE_MENU_SHEET_ID || "1aPVGmKNcvDOFzyr3jSPT_KL5lKEYKPgkad3y0_E_Vl4";
@@ -44,10 +44,16 @@ const csvRowsToObjects = (rows) => {
 
 const firstFilled = (...vals) => vals.find(v => String(v ?? "").trim()) ?? "";
 
-// Apply a service-level menu override to a course without mutating the original
-const applyMenuOverride = (course, overrides) => {
-  const ov = overrides?.[course.course_key];
-  if (!ov || !Object.keys(ov).length) return course;
+// Apply a service-level menu override to a course.
+// overrides[courseKey] = { name?, sub?, name_si?, sub_si?, seats?: { [seatId]: { name?, sub? } } }
+// seatId: if provided, seat-specific overrides take precedence over table-wide ones.
+const applyMenuOverride = (course, overrides, seatId = null) => {
+  const base = overrides?.[course.course_key];
+  if (!base) return course;
+  // Merge table-wide + seat-specific (seat wins)
+  const seatOv = seatId != null ? (base.seats?.[seatId] || {}) : {};
+  const ov = { ...base, ...seatOv };
+  if (!Object.keys(ov).filter(k => k !== "seats").length) return course;
   return {
     ...course,
     menu: {
@@ -355,10 +361,11 @@ function applyCourseRestriction(course, activeRestrictions) {
 function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null, lang = "en" }) {
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
   const PAIRING_LABELS = lang === "si"
-    ? { wp: "VINSKA POSTREŽBA", na: "BREZALKOHOLNA POSTREŽBA", os: "OUR STORY POSTREŽBA", premium: "PREMIUM POSTREŽBA" }
+    ? { wp: "VINSKA SPREMLJAVA", na: "BREZALKOHOLNA SPREMLJAVA", os: "OUR STORY SPREMLJAVA", premium: "PREMIUM SPREMLJAVA" }
     : { wp: "WINE PAIRING", na: "NON-ALCO PAIRING", os: "OUR STORY PAIRING", premium: "PREMIUM PAIRING" };
-  // For Slovenian menus, use menu_si fields when available
-  const getDish = (course) => (lang === "si" && course.menu_si) ? course.menu_si : course.menu;
+  // For SI menus, swap menu_si into the menu field so applyCourseRestriction uses the right base
+  const resolveCourse = (course) =>
+    (lang === "si" && course.menu_si?.name) ? { ...course, menu: course.menu_si } : course;
 
   const seatId = seat.id;
   const pairingLabel = seat.pairing === "—" ? "" : (seat.pairing || "");
@@ -487,11 +494,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       insertedPairingLabel = true;
     }
 
-    let dish = applyCourseRestriction(course, restrictions);
-    // Slovenian: override dish name/sub with menu_si when no restriction has renamed the dish
-    if (lang === "si" && course.menu_si && dish && dish.name === (course.menu?.name || "")) {
-      dish = { name: course.menu_si.name || dish.name, sub: course.menu_si.sub || dish.sub };
-    }
+    let dish = applyCourseRestriction(resolveCourse(course), restrictions);
     let drink = pkey ? course[pkey] : null;
 
     if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
@@ -1255,23 +1258,36 @@ function DrinkListEditor({ list, setList, newItem, setNewItem, nextId, label }) 
 
 // ── Admin Panel ───────────────────────────────────────────────────────────────
 // ── Manual Menu Overrides Tab ─────────────────────────────────────────────────
+// BlurInput: keeps typed value local, only calls onCommit when focus leaves.
+// Prevents parent state updates (and re-renders) on every keystroke.
+function BlurInput({ committedValue, onCommit, placeholder, style }) {
+  const [local, setLocal] = useState(committedValue ?? "");
+  // Sync if the committed value changes from outside (e.g. reset)
+  const prev = useRef(committedValue);
+  if (prev.current !== committedValue) { prev.current = committedValue; setLocal(committedValue ?? ""); }
+  return (
+    <input
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={() => { if (local !== committedValue) onCommit(local); }}
+      placeholder={placeholder}
+      style={style}
+    />
+  );
+}
+
 function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides }) {
   const hasAny = Object.keys(overrides).some(k => Object.keys(overrides[k] || {}).length > 0);
 
-  const setField = (courseKey, field, value) => {
-    onSetOverrides(prev => {
-      const existing = prev[courseKey] || {};
-      const updated = { ...existing, [field]: value };
-      return { ...prev, [courseKey]: updated };
-    });
+  const commitField = (courseKey, field, value) => {
+    onSetOverrides(prev => ({
+      ...prev,
+      [courseKey]: { ...(prev[courseKey] || {}), [field]: value },
+    }));
   };
 
   const clearCourse = courseKey => {
-    onSetOverrides(prev => {
-      const next = { ...prev };
-      delete next[courseKey];
-      return next;
-    });
+    onSetOverrides(prev => { const next = { ...prev }; delete next[courseKey]; return next; });
   };
 
   const clearAll = () => onSetOverrides({});
@@ -1280,7 +1296,7 @@ function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides }) 
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
         <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>
-          SERVICE OVERRIDES — changes apply to menus & kitchen ticket for tonight only
+          SERVICE OVERRIDES — changes apply to all menus & kitchen tickets tonight
         </div>
         {hasAny && (
           <button onClick={clearAll} style={{
@@ -1300,12 +1316,12 @@ function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides }) 
           const origSub    = course.menu?.sub  || "";
           const origSiName = course.menu_si?.name || "";
           const origSiSub  = course.menu_si?.sub  || "";
+          const inpStyle   = { ...baseInp, padding: "5px 8px", fontSize: 11 };
 
           return (
             <div key={key} style={{
               border: `1px solid ${hasOv ? "#f0c060" : "#f0f0f0"}`,
-              borderRadius: 3,
-              padding: "12px 14px",
+              borderRadius: 3, padding: "12px 14px",
               background: hasOv ? "#fffdf4" : "#fff",
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -1325,40 +1341,20 @@ function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides }) 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <div>
                   <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", letterSpacing: 1, marginBottom: 3 }}>NAME (EN)</div>
-                  <input
-                    value={"name" in ov ? ov.name : ""}
-                    onChange={e => setField(key, "name", e.target.value)}
-                    placeholder={origName}
-                    style={{ ...baseInp, padding: "5px 8px", fontSize: 11 }}
-                  />
+                  <BlurInput committedValue={"name" in ov ? ov.name : ""} onCommit={v => commitField(key, "name", v)} placeholder={origName} style={inpStyle} />
                 </div>
                 <div>
                   <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", letterSpacing: 1, marginBottom: 3 }}>SUB (EN)</div>
-                  <input
-                    value={"sub" in ov ? ov.sub : ""}
-                    onChange={e => setField(key, "sub", e.target.value)}
-                    placeholder={origSub || "—"}
-                    style={{ ...baseInp, padding: "5px 8px", fontSize: 11 }}
-                  />
+                  <BlurInput committedValue={"sub" in ov ? ov.sub : ""} onCommit={v => commitField(key, "sub", v)} placeholder={origSub || "—"} style={inpStyle} />
                 </div>
                 {(origSiName || origSiSub) && (<>
                   <div>
                     <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", letterSpacing: 1, marginBottom: 3 }}>NAME (SI)</div>
-                    <input
-                      value={"name_si" in ov ? ov.name_si : ""}
-                      onChange={e => setField(key, "name_si", e.target.value)}
-                      placeholder={origSiName || "—"}
-                      style={{ ...baseInp, padding: "5px 8px", fontSize: 11 }}
-                    />
+                    <BlurInput committedValue={"name_si" in ov ? ov.name_si : ""} onCommit={v => commitField(key, "name_si", v)} placeholder={origSiName || "—"} style={inpStyle} />
                   </div>
                   <div>
                     <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", letterSpacing: 1, marginBottom: 3 }}>SUB (SI)</div>
-                    <input
-                      value={"sub_si" in ov ? ov.sub_si : ""}
-                      onChange={e => setField(key, "sub_si", e.target.value)}
-                      placeholder={origSiSub || "—"}
-                      style={{ ...baseInp, padding: "5px 8px", fontSize: 11 }}
-                    />
+                    <BlurInput committedValue={"sub_si" in ov ? ov.sub_si : ""} onCommit={v => commitField(key, "sub_si", v)} placeholder={origSiSub || "—"} style={inpStyle} />
                   </div>
                 </>)}
               </div>
@@ -3152,9 +3148,30 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
     delete next[courseKey];
     upd("courseOverrides", next);
   };
+  const setSeatOverride = (courseKey, seatId, field, value) => {
+    const next = {
+      ...courseOverrides,
+      [courseKey]: {
+        ...(courseOverrides[courseKey] || {}),
+        seats: {
+          ...((courseOverrides[courseKey] || {}).seats || {}),
+          [seatId]: { ...((courseOverrides[courseKey]?.seats?.[seatId]) || {}), [field]: value },
+        },
+      },
+    };
+    upd("courseOverrides", next);
+  };
+  const clearSeatOverride = (courseKey, seatId) => {
+    const base = { ...(courseOverrides[courseKey] || {}) };
+    const seats = { ...(base.seats || {}) };
+    delete seats[seatId];
+    const next = { ...courseOverrides, [courseKey]: { ...base, seats } };
+    upd("courseOverrides", next);
+  };
   const clearAllOverrides = () => upd("courseOverrides", {});
 
-  // Apply per-table overrides on top of the global-overridden menuCourses
+  // Apply per-table + per-seat overrides on top of the global-overridden menuCourses
+  // (seat-level applied at print time, table-level used for preview)
   const effectiveCourses = menuCourses.map(c => applyMenuOverride(c, courseOverrides));
 
   const defaultBeer = (s) => {
@@ -3175,12 +3192,14 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
   const seatBottles = () => tableBottles;
 
   const openPrint = (seat) => {
+    // Apply seat-specific overrides on top of table-wide overrides for this seat's menu
+    const seatCourses = menuCourses.map(c => applyMenuOverride(c, courseOverrides, seat.id));
     const html = generateMenuHTML({
       seat,
       table: { menuType: table.menuType || "", restrictions, bottleWines: tableBottles, birthday: table.birthday || false },
       menuTitle,
       teamNames,
-      menuCourses: effectiveCourses,
+      menuCourses: seatCourses,
       beerChoice: beerChoices[seat.id] || defaultBeer(seat),
       lang,
     });
@@ -3359,6 +3378,9 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
                   const origSub    = course.menu?.sub  || "";
                   const origSiName = course.menu_si?.name || "";
                   const origSiSub  = course.menu_si?.sub  || "";
+                  const inpStyle   = { ...baseInp, padding: "4px 7px", fontSize: 11 };
+                  // Always show SI fields when generating a SL menu
+                  const showSi = lang === "si" || origSiName || origSiSub;
                   return (
                     <div key={key} style={{
                       border: `1px solid ${hasOv ? "#f0c060" : "#f0f0f0"}`,
@@ -3380,27 +3402,49 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                         <div>
                           <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginBottom: 2 }}>NAME (EN)</div>
-                          <input value={"name" in ov ? ov.name : ""} onChange={e => setCourseOverride(key, "name", e.target.value)}
-                            placeholder={origName} style={{ ...baseInp, padding: "4px 7px", fontSize: 11 }} />
+                          <BlurInput committedValue={"name" in ov ? ov.name : ""} onCommit={v => setCourseOverride(key, "name", v)} placeholder={origName} style={inpStyle} />
                         </div>
                         <div>
                           <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginBottom: 2 }}>SUB (EN)</div>
-                          <input value={"sub" in ov ? ov.sub : ""} onChange={e => setCourseOverride(key, "sub", e.target.value)}
-                            placeholder={origSub || "—"} style={{ ...baseInp, padding: "4px 7px", fontSize: 11 }} />
+                          <BlurInput committedValue={"sub" in ov ? ov.sub : ""} onCommit={v => setCourseOverride(key, "sub", v)} placeholder={origSub || "—"} style={inpStyle} />
                         </div>
-                        {(origSiName || origSiSub) && (<>
+                        {showSi && (<>
                           <div>
                             <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginBottom: 2 }}>NAME (SI)</div>
-                            <input value={"name_si" in ov ? ov.name_si : ""} onChange={e => setCourseOverride(key, "name_si", e.target.value)}
-                              placeholder={origSiName || "—"} style={{ ...baseInp, padding: "4px 7px", fontSize: 11 }} />
+                            <BlurInput committedValue={"name_si" in ov ? ov.name_si : ""} onCommit={v => setCourseOverride(key, "name_si", v)} placeholder={origSiName || "—"} style={inpStyle} />
                           </div>
                           <div>
                             <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginBottom: 2 }}>SUB (SI)</div>
-                            <input value={"sub_si" in ov ? ov.sub_si : ""} onChange={e => setCourseOverride(key, "sub_si", e.target.value)}
-                              placeholder={origSiSub || "—"} style={{ ...baseInp, padding: "4px 7px", fontSize: 11 }} />
+                            <BlurInput committedValue={"sub_si" in ov ? ov.sub_si : ""} onCommit={v => setCourseOverride(key, "sub_si", v)} placeholder={origSiSub || "—"} style={inpStyle} />
                           </div>
                         </>)}
                       </div>
+
+                      {/* Per-seat sub overrides */}
+                      {seats.length > 0 && (
+                        <div style={{ marginTop: 8, borderTop: "1px solid #f0f0f0", paddingTop: 8 }}>
+                          <div style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", letterSpacing: 1, marginBottom: 6 }}>SEAT-SPECIFIC SUB</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            {seats.map(s => {
+                              const seatOv = ov.seats?.[s.id] || {};
+                              return (
+                                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#888", minWidth: 24 }}>P{s.id}</span>
+                                  <BlurInput
+                                    committedValue={"sub" in seatOv ? seatOv.sub : ""}
+                                    onCommit={v => v ? setSeatOverride(key, s.id, "sub", v) : clearSeatOverride(key, s.id)}
+                                    placeholder={("sub" in ov ? ov.sub : origSub) || "same as above"}
+                                    style={{ ...inpStyle, flex: 1 }}
+                                  />
+                                  {"sub" in seatOv && (
+                                    <button onClick={() => clearSeatOverride(key, s.id)} style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -4182,7 +4226,11 @@ export default function App() {
   }, [menuOverrides]);
 
   // ── Effective menu courses (overrides applied on top of sheet data) ─────────
-  const effectiveMenuCourses = menuCourses.map(c => applyMenuOverride(c, menuOverrides));
+  // useMemo so this doesn't recompute on every render (e.g. while typing elsewhere)
+  const effectiveMenuCourses = useMemo(
+    () => menuCourses.map(c => applyMenuOverride(c, menuOverrides)),
+    [menuCourses, menuOverrides]
+  );
 
   // ── Load service tables from Supabase + subscribe realtime ────────────────
   useEffect(() => {
