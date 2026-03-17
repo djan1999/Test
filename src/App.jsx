@@ -2748,41 +2748,53 @@ function KitchenTicket({ table, menuCourses, upd }) {
     const d = end - start; return d >= 0 ? d : d + 1440;
   })();
 
+  const pLabel = p => p === "Non-Alc" ? "N/A" : p === "Our Story" ? "O.S." : p === "Premium" ? "Prem" : p === "Wine" ? "Wine" : p;
+
   return (
-    <div style={{ border: "1.5px solid #e0e0e0", borderRadius: 5, overflow: "hidden", background: "#fff" }}>
-      {/* Header row 1: table + name + progress */}
-      <div style={{ background: "#1a1a1a", padding: "7px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ fontFamily: FONT, fontSize: 22, fontWeight: 700, color: "#fff", lineHeight: 1 }}>T{table.id}</span>
-        {table.resName && <span style={{ fontFamily: FONT, fontSize: 12, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{table.resName}</span>}
-        <span style={{ fontFamily: FONT, fontSize: 11, color: allDone ? "#4a9a6a" : "#888", marginLeft: "auto", fontWeight: allDone ? 700 : 400 }}>{firedCount}/{totalCourses}</span>
+    <div style={{ border: "2px solid #e8e8e8", borderRadius: 6, overflow: "hidden", background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}>
+
+      {/* ── Header ── */}
+      <div style={{ background: "#1a1a1a", padding: "12px 16px", display: "flex", alignItems: "flex-start", gap: 12 }}>
+        <span style={{ fontFamily: FONT, fontSize: 32, fontWeight: 800, color: "#fff", lineHeight: 1, letterSpacing: -1, flexShrink: 0 }}>T{table.id}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {table.resName && <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: "#eee", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</div>}
+          <div style={{ fontFamily: FONT, fontSize: 11, color: "#666", marginTop: 2 }}>
+            {table.resTime || ""}{table.arrivedAt ? `  ·  arr. ${table.arrivedAt}` : ""}
+          </div>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: allDone ? "#4a9a6a" : "#fff", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 13, color: "#555", fontWeight: 400 }}>/{totalCourses}</span></div>
+          {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", marginTop: 3, letterSpacing: 0.5 }}>{durationMins} min</div>}
+        </div>
       </div>
-      {/* Header row 2: seat pairings + restrictions */}
-      <div style={{ background: "#2a2a2a", padding: "5px 14px", display: "flex", flexWrap: "wrap", gap: "4px 8px" }}>
+
+      {/* ── Seats ── */}
+      <div style={{ background: "#242424", padding: "10px 16px", display: "flex", flexWrap: "wrap", gap: 8 }}>
         {seats.map(s => {
           const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
           const restrList = restrictions.filter(r => !r.pos || r.pos === s.id).map(r => r.note).filter(Boolean);
-          const pInit = p ? (p === "Non-Alc" ? "N" : p === "Our Story" ? "O" : p === "Premium" ? "P" : "W") : null;
           return (
-            <span key={s.id} style={{
-              fontFamily: FONT, fontSize: 11, padding: "2px 7px", borderRadius: 3,
-              background: p ? (pairingBg[p] || "#f5f5f5") : "#383838",
-              color: p ? (pairingColor[p] || "#555") : "#888",
-            }}>
-              P{s.id}{pInit ? `·${pInit}` : ""}{restrList.length > 0 ? `·${restrList.join("·")}` : ""}
-            </span>
+            <div key={s.id} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <span style={{
+                fontFamily: FONT, fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 4,
+                background: p ? (pairingBg[p] || "#f5f5f5") : "#383838",
+                color: p ? (pairingColor[p] || "#555") : "#777",
+              }}>P{s.id}{p ? ` · ${pLabel(p)}` : ""}</span>
+              {restrList.length > 0 && (
+                <span style={{ fontFamily: FONT, fontSize: 10, color: "#e08080", paddingLeft: 2, letterSpacing: 0.2 }}>{restrList.join(", ")}</span>
+              )}
+            </div>
           );
         })}
       </div>
 
-      {/* Course rows — whole row is clickable */}
+      {/* ── Courses ── */}
       <div style={{ display: "flex", flexDirection: "column" }}>
         {courses.map((course, idx) => {
           const key = course.course_key || `course_${idx}`;
           const fired = !!log[key];
           const firedAt = log[key]?.firedAt;
 
-          // Resolve every seat's display label — name change → new name,
-          // sub-only change → only the ingredient(s) that are NEW vs base sub
           const baseName = course.menu?.name || key;
           const baseSub  = course.menu?.sub  || "";
           const subDiff = (modSub) => {
@@ -2805,7 +2817,6 @@ function KitchenTicket({ table, menuCourses, upd }) {
           const anyMod = allSeatDishes.some(n => n !== baseName);
           const seatMods = anyMod ? allSeatDishes : [];
 
-          // For optional extra courses, show which seats have it
           const extraLabel = (() => {
             if (isBeetCourse(course))   return beetSeats.map(s => `P${s.id}`).join(" ");
             if (isCheeseCourse(course)) return cheeseSeats.map(s => `P${s.id}`).join(" ");
@@ -2813,56 +2824,62 @@ function KitchenTicket({ table, menuCourses, upd }) {
             return null;
           })();
 
+          const modGroups = (() => {
+            if (!seatMods.length || fired) return null;
+            const g = {};
+            seatMods.forEach(n => { g[n] = (g[n] || 0) + 1; });
+            return g;
+          })();
+
           return (
             <div key={key}
               onClick={() => fired ? unfire(key) : fire(key)}
               style={{
-                borderBottom: "1px solid #f0f0f0",
-                background: fired ? "#f0faf0" : "#fff",
-                opacity: fired ? 0.72 : 1,
-                cursor: "pointer",
-                transition: "background 0.15s",
-                borderLeft: fired ? "3px solid #4a9a6a" : "3px solid transparent",
+                borderBottom: "1px solid #f2f2f2",
+                background: fired ? "#f3fcf5" : "#fff",
+                borderLeft: fired ? "4px solid #4a9a6a" : "4px solid transparent",
+                cursor: "pointer", transition: "background 0.15s",
               }}>
-              <div style={{ display: "flex", alignItems: "center", padding: "9px 14px 9px 10px", gap: 6, minWidth: 0 }}>
-                <span style={{ fontFamily: FONT, fontSize: 12, color: fired ? "#4a9a6a" : "#ccc", flexShrink: 0 }}>{fired ? "✓" : "·"}</span>
-                <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
-                  <span style={{
-                    fontFamily: FONT, fontSize: 13, fontWeight: 600,
-                    color: fired ? "#999" : "#1a1a1a",
+              <div style={{ display: "flex", alignItems: "center", padding: "11px 16px 11px 12px", gap: 10 }}>
+                <span style={{ fontFamily: FONT, fontSize: 16, color: fired ? "#4a9a6a" : "#d8d8d8", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: FONT, fontSize: 15, fontWeight: 600, lineHeight: 1.2,
+                    color: fired ? "#aaa" : "#1a1a1a",
                     textDecoration: fired ? "line-through" : "none",
-                  }}>{course.menu?.name || key}</span>
-                  {extraLabel && (
-                    <span style={{ fontFamily: FONT, fontSize: 10, color: "#bbb", marginLeft: 6 }}>{extraLabel}</span>
+                  }}>
+                    {baseName}
+                    {extraLabel && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 400, color: "#bbb", marginLeft: 8 }}>{extraLabel}</span>}
+                  </div>
+                  {modGroups && (
+                    <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: "2px 10px" }}>
+                      {Object.entries(modGroups).map(([name, count]) => (
+                        <span key={name} style={{
+                          fontFamily: FONT, fontSize: 12,
+                          color: name === baseName ? "#999" : "#c04040", fontWeight: name === baseName ? 400 : 500,
+                        }}>{count}× {name}</span>
+                      ))}
+                    </div>
                   )}
-                  {!extraLabel && seatMods.length > 0 && !fired && (() => {
-                    const groups = {};
-                    seatMods.forEach(name => { groups[name] = (groups[name] || 0) + 1; });
-                    return Object.entries(groups).map(([name, count]) => (
-                      <span key={name} style={{
-                        fontFamily: FONT, fontSize: 10, marginLeft: 6,
-                        color: name === baseName ? "#888" : "#b04040",
-                      }}>
-                        {count}x {name}
-                      </span>
-                    ));
-                  })()}
                 </div>
-                {firedAt && <span style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", fontWeight: 600, flexShrink: 0 }}>{firedAt}</span>}
+                {firedAt && <span style={{ fontFamily: FONT, fontSize: 12, color: "#4a9a6a", fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
               </div>
             </div>
           );
         })}
+        {/* Thank you row — always last */}
+        <div style={{ borderTop: "1px dashed #e8e8e8", padding: "9px 16px 9px 32px" }}>
+          <span style={{ fontFamily: FONT, fontSize: 12, color: "#bbb", fontStyle: "italic", letterSpacing: 0.3 }}>Thank you for your visit.</span>
+        </div>
       </div>
 
-      {/* Duration footer — shown when all courses are fired */}
+      {/* ── Done footer ── */}
       {allDone && (
-        <div style={{
-          background: "#f0faf0", borderTop: "1px solid #c8eac8",
-          padding: "6px 14px", textAlign: "center",
-          fontFamily: FONT, fontSize: 11, color: "#4a9a6a", letterSpacing: 1, fontWeight: 600,
-        }}>
-          {durationMins != null ? `${durationMins} min` : "✓ complete"}
+        <div style={{ background: "#eaf7ee", borderTop: "2px solid #b8e8c4", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+          <span style={{ fontFamily: FONT, fontSize: 18, color: "#4a9a6a" }}>✓</span>
+          <span style={{ fontFamily: FONT, fontSize: 13, color: "#4a9a6a", fontWeight: 700, letterSpacing: 1 }}>
+            {durationMins != null ? `${durationMins} MIN` : "COMPLETE"}
+          </span>
         </div>
       )}
     </div>
