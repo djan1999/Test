@@ -2781,17 +2781,23 @@ function KitchenTicket({ table, menuCourses, upd }) {
           const fired = !!log[key];
           const firedAt = log[key]?.firedAt;
 
-          // Resolve every seat's display label — name change takes label from name,
-          // sub-only change (e.g. ingredient swap) takes label from modified sub
+          // Resolve every seat's display label — name change → new name,
+          // sub-only change → only the ingredient(s) that are NEW vs base sub
           const baseName = course.menu?.name || key;
           const baseSub  = course.menu?.sub  || "";
+          const subDiff = (modSub) => {
+            const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
+            const modTokens  = modSub.split(/[,·]+/).map(s => s.trim()).filter(Boolean);
+            const newOnes    = modTokens.filter(t => !baseTokens.has(t.toLowerCase()));
+            return newOnes.length > 0 ? newOnes.join(", ") : modSub;
+          };
           const allSeatDishes = seats.map(seat => {
             const restrKeys = seatRestrKeys(seat);
             if (restrKeys.length) {
               const modified = applyCourseRestriction(course, restrKeys);
               if (modified) {
                 if (modified.name !== baseName) return modified.name;
-                if (modified.sub  !== baseSub)  return modified.sub;
+                if (modified.sub  !== baseSub)  return subDiff(modified.sub);
               }
             }
             return baseName;
