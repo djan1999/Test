@@ -44,6 +44,23 @@ const csvRowsToObjects = (rows) => {
 
 const firstFilled = (...vals) => vals.find(v => String(v ?? "").trim()) ?? "";
 
+// Apply a service-level menu override to a course without mutating the original
+const applyMenuOverride = (course, overrides) => {
+  const ov = overrides?.[course.course_key];
+  if (!ov || !Object.keys(ov).length) return course;
+  return {
+    ...course,
+    menu: {
+      name: "name" in ov ? ov.name : course.menu?.name,
+      sub:  "sub"  in ov ? ov.sub  : course.menu?.sub,
+    },
+    menu_si: ("name_si" in ov || "sub_si" in ov) ? {
+      name: "name_si" in ov ? ov.name_si : (course.menu_si?.name || ""),
+      sub:  "sub_si"  in ov ? ov.sub_si  : (course.menu_si?.sub  || ""),
+    } : course.menu_si,
+  };
+};
+
 const truthyCell = value => {
   const s = String(value ?? "").trim().toLowerCase();
   return s === "true" || s === "yes" || s === "y" || s === "1" || s === "wahr";
@@ -1236,7 +1253,123 @@ function DrinkListEditor({ list, setList, newItem, setNewItem, nextId, label }) 
 }
 
 // ── Admin Panel ───────────────────────────────────────────────────────────────
-function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = [], onUpdateDishes, onUpdateWines, onSaveBeverages, onSyncMenu, onClose }) {
+// ── Manual Menu Overrides Tab ─────────────────────────────────────────────────
+function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides }) {
+  const hasAny = Object.keys(overrides).some(k => Object.keys(overrides[k] || {}).length > 0);
+
+  const setField = (courseKey, field, value) => {
+    onSetOverrides(prev => {
+      const existing = prev[courseKey] || {};
+      const updated = { ...existing, [field]: value };
+      return { ...prev, [courseKey]: updated };
+    });
+  };
+
+  const clearCourse = courseKey => {
+    onSetOverrides(prev => {
+      const next = { ...prev };
+      delete next[courseKey];
+      return next;
+    });
+  };
+
+  const clearAll = () => onSetOverrides({});
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+        <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>
+          SERVICE OVERRIDES — changes apply to menus & kitchen ticket for tonight only
+        </div>
+        {hasAny && (
+          <button onClick={clearAll} style={{
+            fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
+            border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
+            background: "#fff9f9", color: "#c04040",
+          }}>RESET ALL</button>
+        )}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {menuCourses.map(course => {
+          const key = course.course_key;
+          const ov = overrides[key] || {};
+          const hasOv = Object.keys(ov).length > 0;
+          const origName   = course.menu?.name || key;
+          const origSub    = course.menu?.sub  || "";
+          const origSiName = course.menu_si?.name || "";
+          const origSiSub  = course.menu_si?.sub  || "";
+
+          return (
+            <div key={key} style={{
+              border: `1px solid ${hasOv ? "#f0c060" : "#f0f0f0"}`,
+              borderRadius: 3,
+              padding: "12px 14px",
+              background: hasOv ? "#fffdf4" : "#fff",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div>
+                  <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a1a1a", letterSpacing: 0.3 }}>{origName}</span>
+                  {origSub && <span style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginLeft: 8 }}>{origSub}</span>}
+                </div>
+                {hasOv && (
+                  <button onClick={() => clearCourse(key)} style={{
+                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 9px",
+                    border: "1px solid #e8c878", borderRadius: 2, cursor: "pointer",
+                    background: "#fff", color: "#a07020",
+                  }}>RESET</button>
+                )}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div>
+                  <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", letterSpacing: 1, marginBottom: 3 }}>NAME (EN)</div>
+                  <input
+                    value={"name" in ov ? ov.name : ""}
+                    onChange={e => setField(key, "name", e.target.value)}
+                    placeholder={origName}
+                    style={{ ...baseInp, padding: "5px 8px", fontSize: 11 }}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", letterSpacing: 1, marginBottom: 3 }}>SUB (EN)</div>
+                  <input
+                    value={"sub" in ov ? ov.sub : ""}
+                    onChange={e => setField(key, "sub", e.target.value)}
+                    placeholder={origSub || "—"}
+                    style={{ ...baseInp, padding: "5px 8px", fontSize: 11 }}
+                  />
+                </div>
+                {(origSiName || origSiSub) && (<>
+                  <div>
+                    <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", letterSpacing: 1, marginBottom: 3 }}>NAME (SI)</div>
+                    <input
+                      value={"name_si" in ov ? ov.name_si : ""}
+                      onChange={e => setField(key, "name_si", e.target.value)}
+                      placeholder={origSiName || "—"}
+                      style={{ ...baseInp, padding: "5px 8px", fontSize: 11 }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", letterSpacing: 1, marginBottom: 3 }}>SUB (SI)</div>
+                    <input
+                      value={"sub_si" in ov ? ov.sub_si : ""}
+                      onChange={e => setField(key, "sub_si", e.target.value)}
+                      placeholder={origSiSub || "—"}
+                      style={{ ...baseInp, padding: "5px 8px", fontSize: 11 }}
+                    />
+                  </div>
+                </>)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = [], menuOverrides = {}, onSetMenuOverrides, onUpdateDishes, onUpdateWines, onSaveBeverages, onSyncMenu, onClose }) {
   const [tab, setTab] = useState("wines");
   const isMobile = useIsMobile(700);
 
@@ -1290,7 +1423,7 @@ function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = []
     onClose();
   };
 
-  const TABS = ["wines", "cocktails", "spirits", "beers", "dishes", "menu"];
+  const TABS = ["wines", "cocktails", "spirits", "beers", "dishes", "overrides", "menu"];
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "9px 18px",
     border: "none", cursor: "pointer", textTransform: "uppercase", transition: "all 0.1s",
@@ -1423,6 +1556,14 @@ function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = []
             </>
           )}
 
+
+          {tab === "overrides" && (
+            <MenuOverridesTab
+              menuCourses={menuCourses}
+              overrides={menuOverrides}
+              onSetOverrides={onSetMenuOverrides}
+            />
+          )}
 
           {tab === "menu" && (
             <MenuSyncTab menuCourses={menuCourses} onSyncMenu={onSyncMenu} />
@@ -2892,9 +3033,11 @@ function KitchenTicket({ table, menuCourses, upd }) {
                     {baseName}
                     {extraLabel && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 400, color: "#bbb", marginLeft: 8 }}>{extraLabel}</span>}
                   </div>
-                  {baseNameSi && !fired && (
-                    <div style={{ fontFamily: FONT, fontSize: 11, color: "#888", marginTop: 1, letterSpacing: 0.1 }}>{baseNameSi}</div>
+                  {/* Line 2: dish sub-description */}
+                  {baseSub && !fired && (
+                    <div style={{ fontFamily: FONT, fontSize: 11, color: "#888", marginTop: 1, letterSpacing: 0.1 }}>{baseSub}</div>
                   )}
+                  {/* Line 3: kitchen note */}
                   {kitchenNote && !fired && (
                     <div style={{ fontFamily: FONT, fontSize: 10, color: "#b07030", fontStyle: "italic", marginTop: 2 }}>{kitchenNote}</div>
                   )}
@@ -3698,6 +3841,9 @@ export default function App() {
 
   const [tables,    setTables]    = useState(initialState.tables);
   const [menuCourses, setMenuCourses] = useState(MENU_DATA); // live from Supabase
+  const [menuOverrides, setMenuOverrides] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("milka_menu_overrides") || "{}"); } catch { return {}; }
+  });
   const [dishes,    setDishes]    = useState(mergeDishes(initialState.dishes));
   const [wines,     setWines]     = useState(initialState.wines);
   const [cocktails, setCocktails] = useState(localBev?.cocktails ?? initialState.cocktails ?? initCocktails);
@@ -3896,6 +4042,14 @@ export default function App() {
 
     return () => clearTimeout(saveTimerRef.current);
   }, [boardJson, hydrated, tables]);
+
+  // ── Persist menu overrides to localStorage ─────────────────────────────────
+  useEffect(() => {
+    try { localStorage.setItem("milka_menu_overrides", JSON.stringify(menuOverrides)); } catch {}
+  }, [menuOverrides]);
+
+  // ── Effective menu courses (overrides applied on top of sheet data) ─────────
+  const effectiveMenuCourses = menuCourses.map(c => applyMenuOverride(c, menuOverrides));
 
   // ── Load service tables from Supabase + subscribe realtime ────────────────
   useEffect(() => {
@@ -4155,7 +4309,7 @@ export default function App() {
       <GlobalStyle />
       <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={false} {...hProps} />
       <div style={{ padding: "20px 24px" }}>
-        <KitchenBoard tables={tables} menuCourses={menuCourses} upd={upd} />
+        <KitchenBoard tables={tables} menuCourses={effectiveMenuCourses} upd={upd} />
       </div>
     </div>
   );
@@ -4286,7 +4440,7 @@ export default function App() {
           cocktails={cocktails}
           spirits={spirits}
           beers={beers}
-          menuCourses={menuCourses}
+          menuCourses={effectiveMenuCourses}
           mode={mode}
           onBack={() => setSel(null)}
           upd={(f, v) => upd(sel, f, v)}
@@ -4306,7 +4460,10 @@ export default function App() {
       )}
       {adminOpen && (
         <AdminPanel
-          dishes={dishes} wines={wines} cocktails={cocktails} spirits={spirits} beers={beers} menuCourses={menuCourses}
+          dishes={dishes} wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
+          menuCourses={menuCourses}
+          menuOverrides={menuOverrides}
+          onSetMenuOverrides={setMenuOverrides}
           onUpdateDishes={setDishes} onUpdateWines={setWines}
           onSaveBeverages={saveBeverages}
           onSyncMenu={syncMenu}
