@@ -2801,7 +2801,7 @@ function KitchenTicket({ table, menuCourses, upd }) {
             const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
             const modTokens  = modSub.split(/[,·]+/).map(s => s.trim()).filter(Boolean);
             const newOnes    = modTokens.filter(t => !baseTokens.has(t.toLowerCase()));
-            return newOnes.length > 0 ? newOnes.join(", ") : modSub;
+            return newOnes.length > 0 ? newOnes[0] : modSub; // only the primary changed ingredient
           };
           const allSeatDishes = seats.map(seat => {
             const restrKeys = seatRestrKeys(seat);
@@ -2840,29 +2840,30 @@ function KitchenTicket({ table, menuCourses, upd }) {
                 borderLeft: fired ? "4px solid #4a9a6a" : "4px solid transparent",
                 cursor: "pointer", transition: "background 0.15s",
               }}>
-              <div style={{ display: "flex", alignItems: "center", padding: "11px 16px 11px 12px", gap: 10 }}>
-                <span style={{ fontFamily: FONT, fontSize: 16, color: fired ? "#4a9a6a" : "#d8d8d8", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
+              <div style={{ display: "flex", alignItems: "center", padding: "14px 16px 14px 14px", gap: 12 }}>
+                <span style={{ fontFamily: FONT, fontSize: 20, color: fired ? "#4a9a6a" : "#ddd", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
-                    fontFamily: FONT, fontSize: 15, fontWeight: 600, lineHeight: 1.2,
-                    color: fired ? "#aaa" : "#1a1a1a",
+                    fontFamily: FONT, fontSize: 16, fontWeight: 700, lineHeight: 1.2,
+                    color: fired ? "#bbb" : "#111",
                     textDecoration: fired ? "line-through" : "none",
+                    letterSpacing: 0.2,
                   }}>
                     {baseName}
-                    {extraLabel && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 400, color: "#bbb", marginLeft: 8 }}>{extraLabel}</span>}
+                    {extraLabel && <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 400, color: "#bbb", marginLeft: 10 }}>{extraLabel}</span>}
                   </div>
                   {modGroups && (
-                    <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: "2px 10px" }}>
+                    <div style={{ marginTop: 5, display: "flex", flexWrap: "wrap", gap: "3px 12px" }}>
                       {Object.entries(modGroups).map(([name, count]) => (
                         <span key={name} style={{
-                          fontFamily: FONT, fontSize: 12,
-                          color: name === baseName ? "#999" : "#c04040", fontWeight: name === baseName ? 400 : 500,
+                          fontFamily: FONT, fontSize: 13,
+                          color: name === baseName ? "#aaa" : "#c04040", fontWeight: name === baseName ? 400 : 600,
                         }}>{count}× {name}</span>
                       ))}
                     </div>
                   )}
                 </div>
-                {firedAt && <span style={{ fontFamily: FONT, fontSize: 12, color: "#4a9a6a", fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
+                {firedAt && <span style={{ fontFamily: FONT, fontSize: 13, color: "#4a9a6a", fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
               </div>
             </div>
           );
