@@ -56,6 +56,17 @@ const splitMainSubCell = (title, sub = "") => {
   return { name: rawTitle, sub: rawSub };
 };
 
+// Parse a two-line bilingual cell: line 1 = EN, line 2 = SI (Alt+Enter in sheet).
+const parseBilingual = (rawCell, rawSubCol = "") => {
+  const lines    = String(rawCell   ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const subLines = String(rawSubCol ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const en = splitMainSubCell(lines[0] || "", subLines[0] || "");
+  const si = (lines[1] || subLines[1])
+    ? splitMainSubCell(lines[1] || "", subLines[1] || "")
+    : null;
+  return { en: en?.name ? en : null, si: si?.name ? si : null };
+};
+
 const RESTRICTION_KEYS = [
   "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
   "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
@@ -88,22 +99,39 @@ function parseRows(rows) {
       .trim().toLowerCase()
       .replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 
-    // Per-restriction columns + optional _sub and _note columns
+    // Per-restriction columns + optional _sub and _note columns (bilingual: line 1 EN, line 2 SI)
     const restrictionCols = {};
+    const restrictionColsSi = {};
     RESTRICTION_KEYS.forEach(k => {
-      restrictionCols[k] = splitMainSubCell(row[k], row[`${k}_sub`]);
+      const { en, si } = parseBilingual(row[k], row[`${k}_sub`]);
+      restrictionCols[k] = en;
+      if (si) restrictionColsSi[k] = si;
     });
+
+    // Pairings — bilingual (line 1 = EN, line 2 = SI)
+    const wpBi   = parseBilingual(row.wp_drink,  row.wp_sub);
+    const naBi   = parseBilingual(row.na_drink,  row.na_sub);
+    const osBi   = parseBilingual(row.os_drink,  row.os_sub);
+    const premBi = parseBilingual(row.premium,   row.premium_sub);
+
+    const menuSi = splitMainSubCell(dishSiRaw, descSiRaw);
+    // Line 3 of dish cell = kitchen note fallback
+    const kitchenNoteFallback = dishLines[2] || "";
 
     return {
       position:            Number(firstFilled(row["#"], row.position, row.order_index)) || 0,
       menu,
-      menu_si:             splitMainSubCell(dishSiRaw, descSiRaw) || null,
+      menu_si:             menuSi?.name ? menuSi : null,
       veg:                 restrictionCols.veg,
       hazards:             null,
-      na:                  splitMainSubCell(row.na_drink,  row.na_sub),
-      wp:                  splitMainSubCell(row.wp_drink,  row.wp_sub),
-      os:                  splitMainSubCell(row.os_drink,  row.os_sub),
-      premium:             splitMainSubCell(row.premium,   row.premium_sub),
+      na:                  naBi.en,
+      na_si:               naBi.si || null,
+      wp:                  wpBi.en,
+      wp_si:               wpBi.si || null,
+      os:                  osBi.en,
+      os_si:               osBi.si || null,
+      premium:             premBi.en,
+      premium_si:          premBi.si || null,
       is_snack:            truthyCell(firstFilled(row["snack?"], row.snack)),
       course_key:          courseKey,
       optional_flag:       String(firstFilled(row.optional_flag)).trim().toLowerCase(),
@@ -112,7 +140,9 @@ function parseRows(rows) {
       short_order:         Number(firstFilled(row.short_order)) || null,
       force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
       force_pairing_sub:   String(firstFilled(row.force_pairing_sub)).trim(),
-      kitchen_note:        String(firstFilled(row.kitchen_note)).trim(),
+      kitchen_note:        String(firstFilled(row.kitchen_note, kitchenNoteFallback)).trim(),
+      // Slovenian restriction substitutes (stored as a single jsonb map)
+      restrictions_si:     Object.keys(restrictionColsSi).length ? restrictionColsSi : null,
       // Original restriction columns (always present in schema)
       vegan:        restrictionCols.vegan,
       pescetarian:  restrictionCols.pescetarian,
@@ -182,6 +212,7 @@ export default async function handler(req, res) {
       "menu_si","course_key","optional_flag","section_gap_before","show_on_short",
       "short_order","force_pairing_title","force_pairing_sub","kitchen_note",
       "vegan","shellfish_free","no_alcohol","no_garlic_onion","halal","low_fodmap",
+      "wp_si","na_si","os_si","premium_si","restrictions_si",
     ];
 
     const pick = (obj, keys) => Object.fromEntries(keys.map(k => [k, obj[k] ?? null]));
