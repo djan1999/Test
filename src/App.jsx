@@ -83,12 +83,18 @@ function normalizeLiveMenuRow(row) {
   const restrictions = {};
   restrictionKeys.forEach((key) => {
     restrictions[key] = splitMainSubCell(row[key], row[`${key}_sub`]);
+    // Optional per-course chef ticket note: column "{key}_note" (e.g. "veg_note")
+    const note = String(firstFilled(row[`${key}_note`]) || "").trim();
+    if (note) restrictions[`${key}_note`] = note;
   });
+
+  const menuSi = splitMainSubCell(row.dish_si, row.dish_si_sub);
 
   return {
     position,
     is_snack: truthyCell(firstFilled(row["snack?"], row.snack)),
     menu: dish,
+    menu_si: menuSi?.name ? menuSi : null,
     wp: splitMainSubCell(row.wp_drink, row.wp_sub),
     na: splitMainSubCell(row.na_drink, row.na_sub),
     os: splitMainSubCell(row.os_drink, row.os_sub),
@@ -318,14 +324,13 @@ function applyCourseRestriction(course, activeRestrictions) {
 }
 
 
-function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null }) {
+function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null, lang = "en" }) {
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
-  const PAIRING_LABELS = {
-    wp: "WINE PAIRING",
-    na: "NON-ALCO PAIRING",
-    os: "OUR STORY PAIRING",
-    premium: "PREMIUM PAIRING",
-  };
+  const PAIRING_LABELS = lang === "si"
+    ? { wp: "VINSKA POSTREŽBA", na: "BREZALKOHOLNA POSTREŽBA", os: "OUR STORY POSTREŽBA", premium: "PREMIUM POSTREŽBA" }
+    : { wp: "WINE PAIRING", na: "NON-ALCO PAIRING", os: "OUR STORY PAIRING", premium: "PREMIUM PAIRING" };
+  // For Slovenian menus, use menu_si fields when available
+  const getDish = (course) => (lang === "si" && course.menu_si) ? course.menu_si : course.menu;
 
   const seatId = seat.id;
   const pairingLabel = seat.pairing === "—" ? "" : (seat.pairing || "");
@@ -454,7 +459,11 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       insertedPairingLabel = true;
     }
 
-    const dish = applyCourseRestriction(course, restrictions);
+    let dish = applyCourseRestriction(course, restrictions);
+    // Slovenian: override dish name/sub with menu_si when no restriction has renamed the dish
+    if (lang === "si" && course.menu_si && dish && dish.name === (course.menu?.name || "")) {
+      dish = { name: course.menu_si.name || dish.name, sub: course.menu_si.sub || dish.sub };
+    }
     let drink = pkey ? course[pkey] : null;
 
     if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
@@ -2756,40 +2765,41 @@ function KitchenTicket({ table, menuCourses, upd }) {
     <div style={{ border: "2px solid #e8e8e8", borderRadius: 6, overflow: "hidden", background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}>
 
       {/* ── Header ── */}
-      <div style={{ background: "#1a1a1a", padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
-        <span style={{ fontFamily: FONT, fontSize: 26, fontWeight: 800, color: "#fff", lineHeight: 1, letterSpacing: -1, flexShrink: 0 }}>T{table.id}</span>
+      <div style={{ background: "#fff", borderBottom: "1px solid #e8e8e8", padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <span style={{ fontFamily: FONT, fontSize: 26, fontWeight: 800, color: "#111", lineHeight: 1, letterSpacing: -1, flexShrink: 0 }}>T{table.id}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
-            {table.resName && <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: "#eee", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
-            <span style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>{seats.length} pax</span>
+            {table.resName && <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
+            <span style={{ fontFamily: FONT, fontSize: 10, color: "#888" }}>{seats.length} pax</span>
             {table.birthday && <span style={{ fontSize: 11 }}>🎂</span>}
-            {table.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 9, color: "#b08840", letterSpacing: 0.5 }}>{table.room ? `#${table.room}` : "Hotel"}</span>}
+            {table.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 9, color: "#9a6a20", letterSpacing: 0.5 }}>{table.room ? `#${table.room}` : "Hotel"}</span>}
           </div>
-          <div style={{ fontFamily: FONT, fontSize: 10, color: "#555", marginTop: 1 }}>
+          <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", marginTop: 1 }}>
             {table.resTime || ""}{table.arrivedAt ? `  ·  arr. ${table.arrivedAt}` : ""}
           </div>
-          {table.notes && <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", fontStyle: "italic", marginTop: 2, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.notes}</div>}
+          {table.notes && <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", fontStyle: "italic", marginTop: 2, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.notes}</div>}
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
-          <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: allDone ? "#4a9a6a" : "#fff", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 12, color: "#555", fontWeight: 400 }}>/{totalCourses}</span></div>
+          <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: allDone ? "#4a9a6a" : "#111", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 12, color: "#aaa", fontWeight: 400 }}>/{totalCourses}</span></div>
           {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", marginTop: 2 }}>{durationMins} min</div>}
         </div>
       </div>
 
       {/* ── Seats ── */}
-      <div style={{ background: "#242424", padding: "7px 14px", display: "flex", flexWrap: "wrap", gap: "5px 10px" }}>
+      <div style={{ background: "#f6f6f6", borderBottom: "1px solid #e8e8e8", padding: "7px 14px", display: "flex", flexWrap: "wrap", gap: "5px 10px" }}>
         {seats.map(s => {
           const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
           const restrList = restrictions.filter(r => !r.pos || r.pos === s.id).map(r => r.note).filter(Boolean);
+          const restrShort = k => { const d = RESTRICTIONS.find(r => r.key === k); return d ? d.label : k; };
           return (
             <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
               <span style={{
                 fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 3,
-                background: p ? (pairingBg[p] || "#f5f5f5") : "#383838",
-                color: p ? (pairingColor[p] || "#555") : "#777",
+                background: p ? (pairingBg[p] || "#f0f0f0") : "#e8e8e8",
+                color: p ? (pairingColor[p] || "#555") : "#666",
               }}>P{s.id}{p ? ` · ${pLabel(p)}` : ""}</span>
               {restrList.length > 0 && (
-                <span style={{ fontFamily: FONT, fontSize: 9, color: "#e08080", letterSpacing: 0.2 }}>{restrList.join(" · ")}</span>
+                <span style={{ fontFamily: FONT, fontSize: 9, color: "#b03030", letterSpacing: 0.2, fontWeight: 600 }}>{restrList.map(restrShort).join(" · ")}</span>
               )}
             </div>
           );
@@ -2814,10 +2824,17 @@ function KitchenTicket({ table, menuCourses, upd }) {
           const allSeatDishes = seats.map(seat => {
             const restrKeys = seatRestrKeys(seat);
             if (restrKeys.length) {
+              // Check for explicit chef ticket note in sheet data (e.g. veg_note column)
+              for (const key of RESTRICTION_PRIORITY_KEYS) {
+                if (!restrKeys.includes(key)) continue;
+                const mapped = RESTRICTION_COLUMN_MAP[key] || key;
+                const note = course.restrictions?.[`${mapped}_note`];
+                if (note) return note.toUpperCase();
+              }
               const modified = applyCourseRestriction(course, restrKeys);
               if (modified) {
                 if (modified.name !== baseName) return modified.name;
-                if (modified.sub  !== baseSub)  return subDiff(modified.sub);
+                if (modified.sub  !== baseSub)  return subDiff(modified.sub).toUpperCase();
               }
             }
             return baseName;
@@ -2936,6 +2953,7 @@ function KitchenBoard({ tables, menuCourses, upd }) {
 function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState("WINTER MENU");
+  const [lang, setLang] = useState("en");
 
   useEffect(() => {
     writeTeamNames(teamNames);
@@ -2970,6 +2988,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
       teamNames,
       menuCourses,
       beerChoice: beerChoices[seat.id] || defaultBeer(seat),
+      lang,
     });
     const w = window.open("", "_blank", "width=620,height=880");
     if (!w) { alert("Pop-up blocked — allow pop-ups for this site."); return; }
@@ -2997,7 +3016,22 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
     <FullModal title="Generate Menus" onClose={onClose}>
       <div style={{ maxWidth: 580, margin: "0 auto" }}>
 
-        {/* Title + Team */}
+        {/* Language + Title + Team */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
+          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>Language</div>
+          {[{val:"en",label:"EN"},{val:"si",label:"SLO"}].map(opt => (
+            <button key={opt.val} onClick={() => {
+              setLang(opt.val);
+              setMenuTitle(opt.val === "si" ? "ZIMSKI MENI" : "WINTER MENU");
+            }} style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
+              border: `1px solid ${lang === opt.val ? "#1a1a1a" : "#e0e0e0"}`,
+              borderRadius: 2, cursor: "pointer",
+              background: lang === opt.val ? "#1a1a1a" : "#fff",
+              color: lang === opt.val ? "#fff" : "#aaa",
+            }}>{opt.label}</button>
+          ))}
+        </div>
         <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 160 }}>
             <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Menu Title</div>
