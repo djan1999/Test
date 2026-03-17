@@ -505,6 +505,8 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     rows.unshift({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING" });
   }
 
+  rows.push({ type: "thankyou" });
+
   const renderBlock = (block, cls = "") => {
     if (!block || (!block.title && !block.sub)) return `<div class="menu-col ${cls}"></div>`;
     return `<div class="menu-col ${cls}">
@@ -519,6 +521,9 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     }
     if (row.type === "wine-only") {
       return `<div class="menu-row wine-only">${renderBlock(null, "left")}${renderBlock(row.right, "right")}</div>`;
+    }
+    if (row.type === "thankyou") {
+      return `<div class="menu-thankyou">Thank you for your visit.</div>`;
     }
     return `<div class="menu-row ${row.rowClass || ""}">${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
   }).join("");
@@ -556,14 +561,14 @@ body{position:relative;}
 .menu-sub{line-height:1.08;margin-top:0.75pt;overflow-wrap:anywhere;}
 .menu-section-row{margin:6.8pt 0 6.2pt;}
 .menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;}
+.menu-thankyou{margin-top:7pt;font-size:6.55pt;font-style:italic;}
 #footer{margin-top:auto;padding-top:9.5pt;}
-#thankyou{font-size:6.55pt;}
-#team{margin-top:7.2pt;font-size:5.45pt;line-height:1.2;overflow-wrap:anywhere;}
+#team{font-size:5.45pt;line-height:1.2;overflow-wrap:anywhere;}
 #team .menu-main{margin-bottom:1.4pt;}
 </style>
 </head>
 <body>
-<div id="sheet"><div id="frame"><div id="scaleTarget"><div id="header"><div id="title">${safeTitle}</div><div id="logo"><img src="data:image/png;base64,${MENU_LOGO}" alt="Milka"></div></div><div id="menu">${rowsHtml}</div><div id="footer"><div id="thankyou">Thank you for your visit.</div><div id="team"><div class="menu-main">TEAM:</div><div>${esc(teamNames)}</div></div></div></div></div></div>
+<div id="sheet"><div id="frame"><div id="scaleTarget"><div id="header"><div id="title">${safeTitle}</div><div id="logo"><img src="data:image/png;base64,${MENU_LOGO}" alt="Milka"></div></div><div id="menu">${rowsHtml}</div><div id="footer"><div id="team"><div class="menu-main">TEAM:</div><div>${esc(teamNames)}</div></div></div></div></div></div>
 <script>
 (function(){
   const MIN_SCALE = 0.58;
@@ -2751,34 +2756,40 @@ function KitchenTicket({ table, menuCourses, upd }) {
     <div style={{ border: "2px solid #e8e8e8", borderRadius: 6, overflow: "hidden", background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}>
 
       {/* ── Header ── */}
-      <div style={{ background: "#1a1a1a", padding: "12px 16px", display: "flex", alignItems: "flex-start", gap: 12 }}>
-        <span style={{ fontFamily: FONT, fontSize: 32, fontWeight: 800, color: "#fff", lineHeight: 1, letterSpacing: -1, flexShrink: 0 }}>T{table.id}</span>
+      <div style={{ background: "#1a1a1a", padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <span style={{ fontFamily: FONT, fontSize: 26, fontWeight: 800, color: "#fff", lineHeight: 1, letterSpacing: -1, flexShrink: 0 }}>T{table.id}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {table.resName && <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: "#eee", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</div>}
-          <div style={{ fontFamily: FONT, fontSize: 11, color: "#666", marginTop: 2 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+            {table.resName && <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: "#eee", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
+            <span style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>{seats.length} pax</span>
+            {table.birthday && <span style={{ fontSize: 11 }}>🎂</span>}
+            {table.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 9, color: "#b08840", letterSpacing: 0.5 }}>{table.room ? `#${table.room}` : "Hotel"}</span>}
+          </div>
+          <div style={{ fontFamily: FONT, fontSize: 10, color: "#555", marginTop: 1 }}>
             {table.resTime || ""}{table.arrivedAt ? `  ·  arr. ${table.arrivedAt}` : ""}
           </div>
+          {table.notes && <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", fontStyle: "italic", marginTop: 2, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.notes}</div>}
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
-          <div style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: allDone ? "#4a9a6a" : "#fff", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 13, color: "#555", fontWeight: 400 }}>/{totalCourses}</span></div>
-          {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", marginTop: 3, letterSpacing: 0.5 }}>{durationMins} min</div>}
+          <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: allDone ? "#4a9a6a" : "#fff", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 12, color: "#555", fontWeight: 400 }}>/{totalCourses}</span></div>
+          {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", marginTop: 2 }}>{durationMins} min</div>}
         </div>
       </div>
 
       {/* ── Seats ── */}
-      <div style={{ background: "#242424", padding: "10px 16px", display: "flex", flexWrap: "wrap", gap: 8 }}>
+      <div style={{ background: "#242424", padding: "7px 14px", display: "flex", flexWrap: "wrap", gap: "5px 10px" }}>
         {seats.map(s => {
           const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
           const restrList = restrictions.filter(r => !r.pos || r.pos === s.id).map(r => r.note).filter(Boolean);
           return (
-            <div key={s.id} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
               <span style={{
-                fontFamily: FONT, fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 4,
+                fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 3,
                 background: p ? (pairingBg[p] || "#f5f5f5") : "#383838",
                 color: p ? (pairingColor[p] || "#555") : "#777",
               }}>P{s.id}{p ? ` · ${pLabel(p)}` : ""}</span>
               {restrList.length > 0 && (
-                <span style={{ fontFamily: FONT, fontSize: 10, color: "#e08080", paddingLeft: 2, letterSpacing: 0.2 }}>{restrList.join(", ")}</span>
+                <span style={{ fontFamily: FONT, fontSize: 9, color: "#e08080", letterSpacing: 0.2 }}>{restrList.join(" · ")}</span>
               )}
             </div>
           );
@@ -2837,38 +2848,34 @@ function KitchenTicket({ table, menuCourses, upd }) {
                 borderLeft: fired ? "4px solid #4a9a6a" : "4px solid transparent",
                 cursor: "pointer", transition: "background 0.15s",
               }}>
-              <div style={{ display: "flex", alignItems: "center", padding: "14px 16px 14px 14px", gap: 12 }}>
-                <span style={{ fontFamily: FONT, fontSize: 20, color: fired ? "#4a9a6a" : "#ddd", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
+              <div style={{ display: "flex", alignItems: "center", padding: "10px 14px 10px 12px", gap: 10 }}>
+                <span style={{ fontFamily: FONT, fontSize: 16, color: fired ? "#4a9a6a" : "#ddd", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
-                    fontFamily: FONT, fontSize: 16, fontWeight: 700, lineHeight: 1.2,
+                    fontFamily: FONT, fontSize: 14, fontWeight: 700, lineHeight: 1.2,
                     color: fired ? "#bbb" : "#111",
                     textDecoration: fired ? "line-through" : "none",
                     letterSpacing: 0.2,
                   }}>
                     {baseName}
-                    {extraLabel && <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 400, color: "#bbb", marginLeft: 10 }}>{extraLabel}</span>}
+                    {extraLabel && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 400, color: "#bbb", marginLeft: 8 }}>{extraLabel}</span>}
                   </div>
                   {modGroups && (
-                    <div style={{ marginTop: 5, display: "flex", flexWrap: "wrap", gap: "3px 12px" }}>
+                    <div style={{ marginTop: 3, display: "flex", flexWrap: "wrap", gap: "2px 10px" }}>
                       {Object.entries(modGroups).map(([name, count]) => (
                         <span key={name} style={{
-                          fontFamily: FONT, fontSize: 13,
+                          fontFamily: FONT, fontSize: 12,
                           color: name === baseName ? "#aaa" : "#c04040", fontWeight: name === baseName ? 400 : 600,
                         }}>{count}× {name}</span>
                       ))}
                     </div>
                   )}
                 </div>
-                {firedAt && <span style={{ fontFamily: FONT, fontSize: 13, color: "#4a9a6a", fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
+                {firedAt && <span style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
               </div>
             </div>
           );
         })}
-        {/* Thank you row — always last */}
-        <div style={{ borderTop: "1px dashed #e8e8e8", padding: "9px 16px 9px 32px" }}>
-          <span style={{ fontFamily: FONT, fontSize: 12, color: "#bbb", fontStyle: "italic", letterSpacing: 0.3 }}>Thank you for your visit.</span>
-        </div>
       </div>
 
       {/* ── Done footer ── */}
