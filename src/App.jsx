@@ -3044,9 +3044,9 @@ function KitchenTicket({ table, menuCourses, upd }) {
                     {line1}
                     {extraLabel && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 400, color: "#bbb", marginLeft: 8 }}>{extraLabel}</span>}
                   </div>
-                  {/* Kitchen note */}
+                  {/* Kitchen note (line 3 of dish cell) */}
                   {kitchenNote && !fired && (
-                    <div style={{ fontFamily: FONT, fontSize: 10, color: "#b07030", fontStyle: "italic", marginTop: 2 }}>{kitchenNote}</div>
+                    <div style={{ fontFamily: FONT, fontSize: 12, color: "#c04040", fontWeight: 600, marginTop: 3 }}>{kitchenNote}</div>
                   )}
                 </div>
                 {firedAt && <span style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
