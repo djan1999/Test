@@ -101,8 +101,31 @@ create table if not exists public.menu_courses (
   no_game jsonb,
   no_offal jsonb,
   egg_free jsonb,
+  -- Slovenian dish name (for SLO menu generator)
+  menu_si jsonb,
+  -- Kitchen / display metadata
+  course_key text not null default '',
+  optional_flag text not null default '',
+  section_gap_before boolean not null default false,
+  show_on_short boolean not null default false,
+  short_order integer,
+  force_pairing_title text not null default '',
+  force_pairing_sub text not null default '',
+  kitchen_note text not null default '',
   updated_at timestamptz not null default now()
 );
+
+-- Migration: add new columns if upgrading an existing table
+alter table public.menu_courses
+  add column if not exists menu_si jsonb,
+  add column if not exists course_key text not null default '',
+  add column if not exists optional_flag text not null default '',
+  add column if not exists section_gap_before boolean not null default false,
+  add column if not exists show_on_short boolean not null default false,
+  add column if not exists short_order integer,
+  add column if not exists force_pairing_title text not null default '',
+  add column if not exists force_pairing_sub text not null default '',
+  add column if not exists kitchen_note text not null default '';
 
 alter table public.menu_courses enable row level security;
 
