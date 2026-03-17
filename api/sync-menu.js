@@ -1,6 +1,9 @@
 // api/sync-menu.js — Vercel serverless function
-// Fetches MILKA MENU V2 sheet from Google Sheets CSV and upserts into menu_courses.
+// Fetches MILKA MENU V2 sheet from Google Sheets and upserts into menu_courses.
+// Prefers service-account auth (GOOGLE_SERVICE_ACCOUNT_KEY env var) and falls
+// back to the public CSV export URL when no key is configured.
 
+import { createSign } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 
 const SHEET_ID  = process.env.MENU_SHEET_ID || process.env.VITE_MENU_SHEET_ID || "1aPVGmKNcvDOFzyr3jSPT_KL5lKEYKPgkad3y0_E_Vl4";
@@ -9,6 +12,53 @@ const CSV_URL   = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tq
 
 const SYNC_SECRET = process.env.SYNC_SECRET;
 const CRON_SECRET = process.env.CRON_SECRET;
+
+// ── Service-account JWT helpers ───────────────────────────────────────────────
+
+function makeJWT(clientEmail, privateKey) {
+  const now = Math.floor(Date.now() / 1000);
+  const header  = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({
+    iss:   clientEmail,
+    scope: "https://www.googleapis.com/auth/spreadsheets.readonly",
+    aud:   "https://oauth2.googleapis.com/token",
+    exp:   now + 3600,
+    iat:   now,
+  })).toString("base64url");
+  const msg  = `${header}.${payload}`;
+  const sign = createSign("RSA-SHA256");
+  sign.update(msg);
+  const sig = sign.sign(privateKey, "base64url");
+  return `${msg}.${sig}`;
+}
+
+async function getAccessToken(key) {
+  const jwt = makeJWT(key.client_email, key.private_key);
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method:  "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body:    new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion:  jwt,
+    }),
+  });
+  const data = await res.json();
+  if (!data.access_token) throw new Error("Failed to obtain access token: " + JSON.stringify(data));
+  return data.access_token;
+}
+
+async function fetchRowsViaAPI(token) {
+  const range = encodeURIComponent(`'${SHEET_TAB}'`);
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${range}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) throw new Error(`Sheets API error: ${res.status}`);
+  const data = await res.json();
+  return data.values || [];
+}
+
+// ── CSV parser (fallback path) ────────────────────────────────────────────────
 
 function parseCSV(text) {
   const rows = [];
@@ -29,6 +79,8 @@ function parseCSV(text) {
   if (field || row.length) { row.push(field); rows.push(row); }
   return rows;
 }
+
+// ── Row normalisation (shared) ────────────────────────────────────────────────
 
 const normHeader = value => String(value || "")
   .trim()
@@ -86,6 +138,8 @@ function parseRows(rows) {
   }).filter(Boolean).sort((a, b) => a.position - b.position);
 }
 
+// ── Handler ───────────────────────────────────────────────────────────────────
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -104,11 +158,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(CSV_URL);
-    if (!response.ok) throw new Error(`Google Sheets fetch failed: ${response.status}`);
-    const csvText = await response.text();
+    let rows;
 
-    const courses = parseRows(parseCSV(csvText));
+    // Prefer service-account authentication when a key is configured.
+    const rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+    if (rawKey) {
+      const key = typeof rawKey === "string" ? JSON.parse(rawKey) : rawKey;
+      const token = await getAccessToken(key);
+      rows = await fetchRowsViaAPI(token);
+    } else {
+      // Fallback: fetch the sheet as a CSV (requires the sheet to be publicly accessible).
+      const response = await fetch(CSV_URL);
+      if (!response.ok) throw new Error(`Google Sheets CSV fetch failed: ${response.status}`);
+      const csvText = await response.text();
+      rows = parseCSV(csvText);
+    }
+
+    const courses = parseRows(rows);
     if (courses.length === 0) throw new Error("No courses parsed from sheet");
 
     const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
