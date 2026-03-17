@@ -88,10 +88,22 @@ const splitMainSubCell = (title, sub = "") => {
 
 function normalizeLiveMenuRow(row) {
   const position = Number(firstFilled(row["#"], row.position, row.order_index)) || 0;
-  const dish = splitMainSubCell(row.dish, row.description);
+
+  // Google Sheets cells may contain two lines: line 1 = EN, line 2 = SI (Alt+Enter in the cell).
+  // Split on newlines so each language ends up in the right field.
+  const dishLines = String(row.dish ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const descLines = String(row.description ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const dishEnRaw = dishLines[0] || "";
+  const descEnRaw = descLines[0] || "";
+  // Prefer an explicit dish_si column; fall back to line 2 of the dish cell.
+  const dishSiRaw = String(row.dish_si ?? "").trim() || dishLines[1] || "";
+  const descSiRaw = String(row.dish_si_sub ?? "").trim() || descLines[1] || "";
+
+  const dish = splitMainSubCell(dishEnRaw, descEnRaw);
   if (!dish?.name) return null;
 
-  const courseKey = String(firstFilled(row.course_key, row.key, row.dish) || "")
+  // course_key derived from the EN dish name only (not the combined cell)
+  const courseKey = String(firstFilled(row.course_key, row.key, dishEnRaw) || "")
     .trim()
     .toLowerCase()
     .replace(/&/g, "and")
@@ -111,7 +123,7 @@ function normalizeLiveMenuRow(row) {
     if (note) restrictions[`${key}_note`] = note;
   });
 
-  const menuSi = splitMainSubCell(row.dish_si, row.dish_si_sub);
+  const menuSi = splitMainSubCell(dishSiRaw, descSiRaw);
 
   return {
     position,
