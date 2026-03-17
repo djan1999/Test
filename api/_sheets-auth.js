@@ -79,6 +79,37 @@ export async function sheetsBatchUpdate(token, data, valueInputOption = "USER_EN
   return await res.json();
 }
 
+/** Get spreadsheet metadata (sheet titles + numeric IDs). */
+export async function sheetsMetadata(token) {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) throw new Error(`Sheets metadata error ${res.status}: ${await res.text()}`);
+  return await res.json();
+}
+
+/** Expand a sheet's column count via batchUpdate. */
+export async function sheetsExpandColumns(token, sheetId, totalColumns) {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`,
+    {
+      method:  "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        requests: [{
+          updateSheetProperties: {
+            properties: { sheetId, gridProperties: { columnCount: totalColumns } },
+            fields: "gridProperties.columnCount",
+          }
+        }]
+      }),
+    }
+  );
+  if (!res.ok) throw new Error(`Sheets expandColumns error ${res.status}: ${await res.text()}`);
+  return await res.json();
+}
+
 /** Append rows below existing data in a range. */
 export async function sheetsAppend(token, range, values, valueInputOption = "USER_ENTERED") {
   const res = await fetch(
