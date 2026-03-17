@@ -8,7 +8,7 @@
 //
 // All requests require secret via ?secret=, x-sync-secret header, or Bearer token.
 
-import { getSheetsToken, sheetsGet, sheetsUpdate, sheetsBatchUpdate, sheetsAppend, SHEET_TAB } from "./_sheets-auth.js";
+import { getSheetsToken, sheetsGet, sheetsUpdate, sheetsBatchUpdate, sheetsAppend, sheetsMetadata, sheetsExpandColumns, SHEET_TAB } from "./_sheets-auth.js";
 
 const SYNC_SECRET = process.env.SYNC_SECRET;
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -42,6 +42,15 @@ export default async function handler(req, res) {
     // ── POST: write ───────────────────────────────────────────────────────────
     if (req.method === "POST") {
       const body = req.body || {};
+
+      // Expand columns: { expandColumns: N } — sets sheet column count to N
+      if (body.expandColumns) {
+        const meta = await sheetsMetadata(token);
+        const sheet = meta.sheets.find(s => s.properties.title === SHEET_TAB);
+        if (!sheet) throw new Error(`Sheet tab "${SHEET_TAB}" not found`);
+        const result = await sheetsExpandColumns(token, sheet.properties.sheetId, body.expandColumns);
+        return res.status(200).json({ ok: true, result });
+      }
 
       // Batch update: { batch: [{ range, values }, ...] }
       if (body.batch) {
