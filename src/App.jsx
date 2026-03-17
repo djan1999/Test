@@ -2867,6 +2867,10 @@ function KitchenTicket({ table, menuCourses, upd }) {
             </div>
           );
         })}
+        {/* Thank you row — always last */}
+        <div style={{ borderTop: "1px dashed #e8e8e8", padding: "9px 16px 9px 32px" }}>
+          <span style={{ fontFamily: FONT, fontSize: 12, color: "#bbb", fontStyle: "italic", letterSpacing: 0.3 }}>Thank you for your visit.</span>
+        </div>
       </div>
 
       {/* ── Done footer ── */}
