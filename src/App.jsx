@@ -2545,12 +2545,12 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
 
         {/* Header */}
         <div
-          onClick={() => onCardClick && isSeated && onCardClick(t.id)}
+          onClick={() => onCardClick && onCardClick(t.id)}
           style={{
             padding: "12px 14px 10px",
             borderBottom: "1px solid #f0f0f0",
             display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8,
-            cursor: onCardClick && isSeated ? "pointer" : "default",
+            cursor: onCardClick ? "pointer" : "default",
           }}
         >
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
