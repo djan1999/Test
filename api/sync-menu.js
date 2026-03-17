@@ -56,6 +56,12 @@ const splitMainSubCell = (title, sub = "") => {
   return { name: rawTitle, sub: rawSub };
 };
 
+const RESTRICTION_KEYS = [
+  "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
+  "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
+  "no_garlic_onion","halal","low_fodmap",
+];
+
 function parseRows(rows) {
   if (rows.length < 2) return [];
   const headers = rows[0].map(normHeader);
@@ -68,25 +74,38 @@ function parseRows(rows) {
   return records.map((row) => {
     const menu = splitMainSubCell(row.dish, row.description);
     if (!menu?.name) return null;
+
+    const courseKey = String(firstFilled(row.course_key, row.key, row.dish) || "")
+      .trim().toLowerCase()
+      .replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+    // Per-restriction columns + optional _sub and _note columns
+    const restrictionCols = {};
+    RESTRICTION_KEYS.forEach(k => {
+      restrictionCols[k] = splitMainSubCell(row[k], row[`${k}_sub`]);
+    });
+
     return {
-      position: Number(firstFilled(row["#"], row.position, row.order_index)) || 0,
+      position:            Number(firstFilled(row["#"], row.position, row.order_index)) || 0,
       menu,
-      veg:          splitMainSubCell(row.veg),
-      hazards:      null,
-      na:           splitMainSubCell(row.na_drink,  row.na_sub),
-      wp:           splitMainSubCell(row.wp_drink,  row.wp_sub),
-      os:           splitMainSubCell(row.os_drink,  row.os_sub),
-      premium:      splitMainSubCell(row.premium,   row.premium_sub),
-      is_snack:     truthyCell(firstFilled(row["snack?"], row.snack)),
-      gluten_free:  splitMainSubCell(row.gluten_free),
-      dairy_free:   splitMainSubCell(row.dairy_free),
-      nut_free:     splitMainSubCell(row.nut_free),
-      pescetarian:  splitMainSubCell(row.pescetarian),
-      no_red_meat:  splitMainSubCell(row.no_red_meat),
-      no_pork:      splitMainSubCell(row.no_pork),
-      no_game:      splitMainSubCell(row.no_game),
-      no_offal:     splitMainSubCell(row.no_offal),
-      egg_free:     splitMainSubCell(row.egg_free),
+      menu_si:             splitMainSubCell(row.dish_si, row.dish_si_sub) || null,
+      veg:                 restrictionCols.veg,
+      hazards:             null,
+      na:                  splitMainSubCell(row.na_drink,  row.na_sub),
+      wp:                  splitMainSubCell(row.wp_drink,  row.wp_sub),
+      os:                  splitMainSubCell(row.os_drink,  row.os_sub),
+      premium:             splitMainSubCell(row.premium,   row.premium_sub),
+      is_snack:            truthyCell(firstFilled(row["snack?"], row.snack)),
+      course_key:          courseKey,
+      optional_flag:       String(firstFilled(row.optional_flag)).trim().toLowerCase(),
+      section_gap_before:  truthyCell(firstFilled(row.section_gap_before)),
+      show_on_short:       truthyCell(firstFilled(row.show_on_short)),
+      short_order:         Number(firstFilled(row.short_order)) || null,
+      force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
+      force_pairing_sub:   String(firstFilled(row.force_pairing_sub)).trim(),
+      kitchen_note:        String(firstFilled(row.kitchen_note)).trim(),
+      // Individual restriction columns (for Supabase flat storage)
+      ...Object.fromEntries(RESTRICTION_KEYS.map(k => [k, restrictionCols[k]])),
     };
   }).filter(Boolean).sort((a, b) => a.position - b.position);
 }

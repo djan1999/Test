@@ -2813,8 +2813,10 @@ function KitchenTicket({ table, menuCourses, upd }) {
           const fired = !!log[key];
           const firedAt = log[key]?.firedAt;
 
-          const baseName = course.menu?.name || key;
-          const baseSub  = course.menu?.sub  || "";
+          const baseName   = course.menu?.name || key;
+          const baseSub    = course.menu?.sub  || "";
+          const baseNameSi = course.menu_si?.name || null;
+          const kitchenNote = course.kitchen_note || "";
           const subDiff = (modSub) => {
             const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
             const modTokens  = modSub.split(/[,·]+/).map(s => s.trim()).filter(Boolean);
@@ -2877,6 +2879,12 @@ function KitchenTicket({ table, menuCourses, upd }) {
                     {baseName}
                     {extraLabel && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 400, color: "#bbb", marginLeft: 8 }}>{extraLabel}</span>}
                   </div>
+                  {baseNameSi && !fired && (
+                    <div style={{ fontFamily: FONT, fontSize: 11, color: "#888", marginTop: 1, letterSpacing: 0.1 }}>{baseNameSi}</div>
+                  )}
+                  {kitchenNote && !fired && (
+                    <div style={{ fontFamily: FONT, fontSize: 10, color: "#b07030", fontStyle: "italic", marginTop: 2 }}>{kitchenNote}</div>
+                  )}
                   {modGroups && (
                     <div style={{ marginTop: 3, display: "flex", flexWrap: "wrap", gap: "2px 10px" }}>
                       {Object.entries(modGroups).map(([name, count]) => (
@@ -4039,6 +4047,7 @@ export default function App() {
           os: r.os,
           premium: r.premium,
           is_snack: r.is_snack,
+          menu_si: r.menu_si || null,
           course_key: r.course_key || "",
           optional_flag: r.optional_flag || "",
           section_gap_before: !!r.section_gap_before,
@@ -4046,6 +4055,7 @@ export default function App() {
           short_order: r.short_order || null,
           force_pairing_title: r.force_pairing_title || "",
           force_pairing_sub: r.force_pairing_sub || "",
+          kitchen_note: r.kitchen_note || "",
           restrictions,
         };
       }));
