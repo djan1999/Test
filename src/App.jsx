@@ -104,8 +104,19 @@ function normalizeLiveMenuRow(row) {
     section_gap_before: truthyCell(firstFilled(row.section_gap_before)),
     show_on_short: truthyCell(firstFilled(row.show_on_short)),
     short_order: Number(firstFilled(row.short_order)) || null,
-    force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
-    force_pairing_sub: String(firstFilled(row.force_pairing_sub)).trim(),
+    // Bilingual force pairing: same column, line 1 = EN "TITLE | sub", line 2 = SI "TITLE | sub"
+    ...(() => {
+      const raw = String(firstFilled(row.force_pairing_title)).trim();
+      const [enLine, siLine] = raw.split("\n").map(l => l.trim());
+      const en = splitMainSubCell(enLine, String(firstFilled(row.force_pairing_sub)).trim());
+      const si = siLine ? splitMainSubCell(siLine) : null;
+      return {
+        force_pairing_title: en?.name || "",
+        force_pairing_sub: en?.sub || "",
+        force_pairing_title_si: si?.name || "",
+        force_pairing_sub_si: si?.sub || "",
+      };
+    })(),
     kitchen_note: String(firstFilled(row.kitchen_note)).trim(),
     restrictions,
   };
@@ -467,7 +478,9 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     let drink = pkey ? course[pkey] : null;
 
     if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
-      drink = { name: course.force_pairing_title || "KITCHEN MARTINI", sub: course.force_pairing_sub || "" };
+      const fpName = (lang === "si" && course.force_pairing_title_si) ? course.force_pairing_title_si : (course.force_pairing_title || "KITCHEN MARTINI");
+      const fpSub  = (lang === "si" && course.force_pairing_sub_si)   ? course.force_pairing_sub_si   : (course.force_pairing_sub   || "");
+      drink = { name: fpName, sub: fpSub };
     }
 
     const beetrootExtra = extras[1] || extras["1"];
@@ -3920,8 +3933,12 @@ export default function App() {
 
     loadRemoteTables();
 
-    // Polling fallback — refreshes every 15 s in case realtime misses an event
-    const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 15000);
+    // Polling fallback — refreshes every 5 s in case realtime misses an event
+    const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 5000);
+
+    // Immediately re-fetch when the tab/screen becomes visible (e.g. kitchen display wakes up)
+    const onVisibilityChange = () => { if (!document.hidden && isMounted) loadRemoteTables(); };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     const channel = supabase
       .channel("milka-service-tables-realtime")
@@ -3949,6 +3966,7 @@ export default function App() {
       isMounted = false;
       clearTimeout(gateTimeout);
       clearInterval(pollInterval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       supabase.removeChannel(channel);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -4055,6 +4073,8 @@ export default function App() {
           short_order: r.short_order || null,
           force_pairing_title: r.force_pairing_title || "",
           force_pairing_sub: r.force_pairing_sub || "",
+          force_pairing_title_si: r.force_pairing_title_si || "",
+          force_pairing_sub_si: r.force_pairing_sub_si || "",
           kitchen_note: r.kitchen_note || "",
           restrictions,
         };
