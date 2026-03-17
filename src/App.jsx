@@ -711,6 +711,7 @@ const sanitizeTable = t => ({
   ),
   restrictions: Array.isArray(t.restrictions) ? t.restrictions : [],
   kitchenLog: t.kitchenLog && typeof t.kitchenLog === "object" ? t.kitchenLog : {},
+  courseOverrides: t.courseOverrides && typeof t.courseOverrides === "object" ? t.courseOverrides : {},
 });
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -1991,7 +1992,7 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
         )}
       </div>
 
-      {showMenuGen && <MenuGenerator table={table} menuCourses={menuCourses} onClose={() => setShowMenuGen(false)} />}
+      {showMenuGen && <MenuGenerator table={table} menuCourses={menuCourses} upd={upd} onClose={() => setShowMenuGen(false)} />}
 
       {/* Table number + guest count */}
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 12, gap: 16, flexWrap: "wrap" }}>
@@ -2887,8 +2888,11 @@ function KitchenTicket({ table, menuCourses, upd }) {
   const isShort = String(table.menuType || "").trim().toLowerCase() === "short";
   const isTruthyShort = v => { const s = String(v ?? "").trim().toLowerCase(); return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr"; };
 
+  // Apply per-table course overrides on top of the (already globally-overridden) menuCourses
+  const tableOverriddenCourses = (menuCourses || []).map(c => applyMenuOverride(c, table.courseOverrides || {}));
+
   // Courses to show: non-snack, optional extras only when ordered, short menu filtered
-  const courses = (menuCourses || []).filter(c => {
+  const courses = tableOverriddenCourses.filter(c => {
     if (c.is_snack) return false;
     if (isBeetCourse(c)   && beetSeats.length   === 0) return false;
     if (isCheeseCourse(c) && cheeseSeats.length === 0) return false;
@@ -2967,10 +2971,13 @@ function KitchenTicket({ table, menuCourses, upd }) {
           const fired = !!log[key];
           const firedAt = log[key]?.firedAt;
 
-          const baseName   = course.menu?.name || key;
-          const baseSub    = course.menu?.sub  || "";
-          const baseNameSi = course.menu_si?.name || null;
+          const baseName    = course.menu?.name || key;
+          const baseSub     = course.menu?.sub  || "";
+          const baseNameSi  = course.menu_si?.name || null;
+          const baseSubSi   = course.menu_si?.sub  || "";
           const kitchenNote = course.kitchen_note || "";
+          const line1 = baseName + (baseSub ? ` | ${baseSub}` : "");
+          const line2 = baseNameSi ? (baseNameSi + (baseSubSi ? ` | ${baseSubSi}` : "")) : null;
           const subDiff = (modSub) => {
             const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
             const modTokens  = modSub.split(/[,·]+/).map(s => s.trim()).filter(Boolean);
@@ -3024,18 +3031,19 @@ function KitchenTicket({ table, menuCourses, upd }) {
               <div style={{ display: "flex", alignItems: "center", padding: "10px 14px 10px 12px", gap: 10 }}>
                 <span style={{ fontFamily: FONT, fontSize: 16, color: fired ? "#4a9a6a" : "#ddd", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
+                  {/* Line 1: CELERIAC | pork head, bozner sauce */}
                   <div style={{
-                    fontFamily: FONT, fontSize: 14, fontWeight: 700, lineHeight: 1.2,
+                    fontFamily: FONT, fontSize: 13, fontWeight: 700, lineHeight: 1.25,
                     color: fired ? "#bbb" : "#111",
                     textDecoration: fired ? "line-through" : "none",
                     letterSpacing: 0.2,
                   }}>
-                    {baseName}
+                    {line1}
                     {extraLabel && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 400, color: "#bbb", marginLeft: 8 }}>{extraLabel}</span>}
                   </div>
-                  {/* Line 2: dish sub-description */}
-                  {baseSub && !fired && (
-                    <div style={{ fontFamily: FONT, fontSize: 11, color: "#888", marginTop: 1, letterSpacing: 0.1 }}>{baseSub}</div>
+                  {/* Line 2: Slovenian version */}
+                  {line2 && !fired && (
+                    <div style={{ fontFamily: FONT, fontSize: 11, color: "#888", fontStyle: "italic", marginTop: 1, letterSpacing: 0.1 }}>{line2}</div>
                   )}
                   {/* Line 3: kitchen note */}
                   {kitchenNote && !fired && (
@@ -3114,10 +3122,11 @@ function KitchenBoard({ tables, menuCourses, upd }) {
 }
 
 // ── Menu Generator ────────────────────────────────────────────────────────────
-function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
+function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState("WINTER MENU");
   const [lang, setLang] = useState("en");
+  const [showEdits, setShowEdits] = useState(false);
 
   useEffect(() => {
     writeTeamNames(teamNames);
@@ -3126,6 +3135,27 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
   const seats        = table.seats        || [];
   const restrictions = table.restrictions || [];
   const tableBottles = table.bottleWines  || [];
+
+  // Per-table course overrides (stored in table.courseOverrides, synced to Supabase)
+  const courseOverrides = table.courseOverrides || {};
+  const hasEdits = Object.keys(courseOverrides).some(k => Object.keys(courseOverrides[k] || {}).length > 0);
+
+  const setCourseOverride = (courseKey, field, value) => {
+    const next = {
+      ...courseOverrides,
+      [courseKey]: { ...(courseOverrides[courseKey] || {}), [field]: value },
+    };
+    upd("courseOverrides", next);
+  };
+  const clearCourseOverride = courseKey => {
+    const next = { ...courseOverrides };
+    delete next[courseKey];
+    upd("courseOverrides", next);
+  };
+  const clearAllOverrides = () => upd("courseOverrides", {});
+
+  // Apply per-table overrides on top of the global-overridden menuCourses
+  const effectiveCourses = menuCourses.map(c => applyMenuOverride(c, courseOverrides));
 
   const defaultBeer = (s) => {
     if (s.pairing === "Non-Alc") return "nonalc";
@@ -3150,7 +3180,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
       table: { menuType: table.menuType || "", restrictions, bottleWines: tableBottles, birthday: table.birthday || false },
       menuTitle,
       teamNames,
-      menuCourses,
+      menuCourses: effectiveCourses,
       beerChoice: beerChoices[seat.id] || defaultBeer(seat),
       lang,
     });
@@ -3297,6 +3327,86 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, onClose }) {
             padding: "12px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
             background: "#1a1a1a", color: "#fff",
           }}>GENERATE ALL</button>
+        )}
+
+        {/* ── Course edits for this reservation ── */}
+        {upd && (
+          <div style={{ marginTop: 24, borderTop: "1px solid #f0f0f0", paddingTop: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <button onClick={() => setShowEdits(v => !v)} style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px",
+                border: `1px solid ${hasEdits ? "#f0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                background: hasEdits ? "#fffdf4" : "#fff", color: hasEdits ? "#a07020" : "#888",
+              }}>
+                {showEdits ? "▲" : "▼"} COURSE EDITS {hasEdits ? `(${Object.keys(courseOverrides).length} changed)` : ""}
+              </button>
+              {hasEdits && (
+                <button onClick={clearAllOverrides} style={{
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
+                  border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
+                  background: "#fff9f9", color: "#c04040",
+                }}>RESET ALL</button>
+              )}
+            </div>
+
+            {showEdits && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {menuCourses.filter(c => !c.is_snack).map(course => {
+                  const key = course.course_key;
+                  const ov = courseOverrides[key] || {};
+                  const hasOv = Object.keys(ov).length > 0;
+                  const origName   = course.menu?.name || key;
+                  const origSub    = course.menu?.sub  || "";
+                  const origSiName = course.menu_si?.name || "";
+                  const origSiSub  = course.menu_si?.sub  || "";
+                  return (
+                    <div key={key} style={{
+                      border: `1px solid ${hasOv ? "#f0c060" : "#f0f0f0"}`,
+                      borderRadius: 3, padding: "10px 12px",
+                      background: hasOv ? "#fffdf4" : "#fafafa",
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#333" }}>
+                          {origName}{origSub ? <span style={{ fontWeight: 400, color: "#bbb" }}> | {origSub}</span> : ""}
+                        </span>
+                        {hasOv && (
+                          <button onClick={() => clearCourseOverride(key)} style={{
+                            fontFamily: FONT, fontSize: 9, padding: "2px 8px",
+                            border: "1px solid #e8c878", borderRadius: 2, cursor: "pointer",
+                            background: "#fff", color: "#a07020",
+                          }}>reset</button>
+                        )}
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                        <div>
+                          <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginBottom: 2 }}>NAME (EN)</div>
+                          <input value={"name" in ov ? ov.name : ""} onChange={e => setCourseOverride(key, "name", e.target.value)}
+                            placeholder={origName} style={{ ...baseInp, padding: "4px 7px", fontSize: 11 }} />
+                        </div>
+                        <div>
+                          <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginBottom: 2 }}>SUB (EN)</div>
+                          <input value={"sub" in ov ? ov.sub : ""} onChange={e => setCourseOverride(key, "sub", e.target.value)}
+                            placeholder={origSub || "—"} style={{ ...baseInp, padding: "4px 7px", fontSize: 11 }} />
+                        </div>
+                        {(origSiName || origSiSub) && (<>
+                          <div>
+                            <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginBottom: 2 }}>NAME (SI)</div>
+                            <input value={"name_si" in ov ? ov.name_si : ""} onChange={e => setCourseOverride(key, "name_si", e.target.value)}
+                              placeholder={origSiName || "—"} style={{ ...baseInp, padding: "4px 7px", fontSize: 11 }} />
+                          </div>
+                          <div>
+                            <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginBottom: 2 }}>SUB (SI)</div>
+                            <input value={"sub_si" in ov ? ov.sub_si : ""} onChange={e => setCourseOverride(key, "sub_si", e.target.value)}
+                              placeholder={origSiSub || "—"} style={{ ...baseInp, padding: "4px 7px", fontSize: 11 }} />
+                          </div>
+                        </>)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </FullModal>
@@ -3608,6 +3718,29 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose }
                           </div>
                         );
                       })}
+                      {/* Kitchen log for this table */}
+                      {(() => {
+                        const klog = t.kitchenLog || {};
+                        const fired = Object.entries(klog)
+                          .map(([courseKey, v]) => {
+                            const course = (entry.state?.menuCourses || []).find(c => c.course_key === courseKey);
+                            const name = course?.menu?.name || courseKey;
+                            return { name, firedAt: v.firedAt || "" };
+                          })
+                          .filter(e => e.firedAt)
+                          .sort((a, b) => a.firedAt.localeCompare(b.firedAt));
+                        if (!fired.length) return null;
+                        return (
+                          <div style={{ padding: "6px 4px 2px", display: "flex", flexWrap: "wrap", gap: "4px 10px", alignItems: "center" }}>
+                            <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", letterSpacing: 1, textTransform: "uppercase" }}>Kitchen</span>
+                            {fired.map((e, i) => (
+                              <span key={i} style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a" }}>
+                                {e.firedAt} <span style={{ color: "#888" }}>{e.name}</span>
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -3969,7 +4102,7 @@ export default function App() {
       const { error } = await supabase.from("service_archive").insert({
         date: new Date().toISOString().slice(0, 10),
         label: dateStr,
-        state: { ...snap, tables: activeTables },
+        state: { ...snap, tables: activeTables, menuCourses: effectiveMenuCourses },
       });
       if (error) {
         window.alert("Archive failed: " + error.message);
