@@ -103,6 +103,13 @@ create table if not exists public.menu_courses (
   egg_free jsonb,
   -- Slovenian dish name (for SLO menu generator)
   menu_si jsonb,
+  -- Slovenian pairing drink variants (line 2 of bilingual sheet cells)
+  wp_si jsonb,
+  na_si jsonb,
+  os_si jsonb,
+  premium_si jsonb,
+  -- Slovenian restriction substitutes (keyed by restriction name, e.g. {"veg": {name, sub}})
+  restrictions_si jsonb,
   -- Kitchen / display metadata
   course_key text not null default '',
   optional_flag text not null default '',
@@ -118,6 +125,11 @@ create table if not exists public.menu_courses (
 -- Migration: add new columns if upgrading an existing table
 alter table public.menu_courses
   add column if not exists menu_si jsonb,
+  add column if not exists wp_si jsonb,
+  add column if not exists na_si jsonb,
+  add column if not exists os_si jsonb,
+  add column if not exists premium_si jsonb,
+  add column if not exists restrictions_si jsonb,
   add column if not exists course_key text not null default '',
   add column if not exists optional_flag text not null default '',
   add column if not exists section_gap_before boolean not null default false,

@@ -86,6 +86,19 @@ const splitMainSubCell = (title, sub = "") => {
   return { name: rawTitle, sub: rawSub };
 };
 
+// Parse a two-line bilingual cell: line 1 = EN, line 2 = SI (Alt+Enter in sheet).
+// rawSubCol is the optional separate sub/description column (also potentially two-line).
+// Returns { en: {name, sub} | null, si: {name, sub} | null }
+const parseBilingual = (rawCell, rawSubCol = "") => {
+  const lines    = String(rawCell   ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const subLines = String(rawSubCol ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const en = splitMainSubCell(lines[0] || "", subLines[0] || "");
+  const si = (lines[1] || subLines[1])
+    ? splitMainSubCell(lines[1] || "", subLines[1] || "")
+    : null;
+  return { en: en?.name ? en : null, si: si?.name ? si : null };
+};
+
 function normalizeLiveMenuRow(row) {
   const position = Number(firstFilled(row["#"], row.position, row.order_index)) || 0;
 
@@ -95,9 +108,11 @@ function normalizeLiveMenuRow(row) {
   const descLines = String(row.description ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
   const dishEnRaw = dishLines[0] || "";
   const descEnRaw = descLines[0] || "";
+  // Line 2 = SI name (menu gen only). Line 3 = kitchen note fallback.
   // Prefer an explicit dish_si column; fall back to line 2 of the dish cell.
   const dishSiRaw = String(row.dish_si ?? "").trim() || dishLines[1] || "";
   const descSiRaw = String(row.dish_si_sub ?? "").trim() || descLines[1] || "";
+  const kitchenNoteFallback = dishLines[2] || "";
 
   const dish = splitMainSubCell(dishEnRaw, descEnRaw);
   if (!dish?.name) return null;
@@ -117,7 +132,9 @@ function normalizeLiveMenuRow(row) {
   ];
   const restrictions = {};
   restrictionKeys.forEach((key) => {
-    restrictions[key] = splitMainSubCell(row[key], row[`${key}_sub`]);
+    const { en, si } = parseBilingual(row[key], row[`${key}_sub`]);
+    restrictions[key] = en;
+    if (si) restrictions[`${key}_si`] = si;
     // Optional per-course chef ticket note: column "{key}_note" (e.g. "veg_note")
     const note = String(firstFilled(row[`${key}_note`]) || "").trim();
     if (note) restrictions[`${key}_note`] = note;
@@ -125,15 +142,25 @@ function normalizeLiveMenuRow(row) {
 
   const menuSi = splitMainSubCell(dishSiRaw, descSiRaw);
 
+  // Pairings — bilingual (line 1 = EN, line 2 = SI)
+  const wpBi   = parseBilingual(row.wp_drink,  row.wp_sub);
+  const naBi   = parseBilingual(row.na_drink,  row.na_sub);
+  const osBi   = parseBilingual(row.os_drink,  row.os_sub);
+  const premBi = parseBilingual(row.premium,   row.premium_sub);
+
   return {
     position,
     is_snack: truthyCell(firstFilled(row["snack?"], row.snack)),
     menu: dish,
     menu_si: menuSi?.name ? menuSi : null,
-    wp: splitMainSubCell(row.wp_drink, row.wp_sub),
-    na: splitMainSubCell(row.na_drink, row.na_sub),
-    os: splitMainSubCell(row.os_drink, row.os_sub),
-    premium: splitMainSubCell(row.premium, row.premium_sub),
+    wp: wpBi.en,
+    wp_si: wpBi.si || null,
+    na: naBi.en,
+    na_si: naBi.si || null,
+    os: osBi.en,
+    os_si: osBi.si || null,
+    premium: premBi.en,
+    premium_si: premBi.si || null,
     course_key: courseKey,
     optional_flag: String(firstFilled(row.optional_flag)).trim().toLowerCase(),
     section_gap_before: truthyCell(firstFilled(row.section_gap_before)),
@@ -152,7 +179,7 @@ function normalizeLiveMenuRow(row) {
         force_pairing_sub_si: si?.sub || "",
       };
     })(),
-    kitchen_note: String(firstFilled(row.kitchen_note)).trim(),
+    kitchen_note: String(firstFilled(row.kitchen_note, kitchenNoteFallback)).trim(),
     restrictions,
   };
 }
@@ -328,7 +355,7 @@ const RESTRICTION_COLUMN_MAP = {
   low_fodmap: "low_fodmap",
 };
 
-function applyCourseRestriction(course, activeRestrictions) {
+function applyCourseRestriction(course, activeRestrictions, lang = "en") {
   const baseDish = course?.menu || null;
   if (!baseDish) return null;
 
@@ -342,9 +369,11 @@ function applyCourseRestriction(course, activeRestrictions) {
   for (const key of RESTRICTION_PRIORITY_KEYS) {
     if (!(activeRestrictions || []).includes(key)) continue;
     const mapped = RESTRICTION_COLUMN_MAP[key] || key;
+    // Prefer SI variant when generating a Slovenian menu
+    const siMapped = lang === "si" ? `${mapped}_si` : null;
 
     if (courseRestrictions[mapped]) {
-      const next = courseRestrictions[mapped];
+      const next = (siMapped && courseRestrictions[siMapped]) ? courseRestrictions[siMapped] : courseRestrictions[mapped];
       // If the cell had a | separator, next.sub is non-empty → full name+sub replacement.
       // If no | separator, next.sub is empty → sub-only replacement, keep original dish name.
       if (next?.sub) {
@@ -506,8 +535,9 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       insertedPairingLabel = true;
     }
 
-    let dish = applyCourseRestriction(resolveCourse(course), restrictions);
-    let drink = pkey ? course[pkey] : null;
+    let dish = applyCourseRestriction(resolveCourse(course), restrictions, lang);
+    // For SI menus, prefer the SI pairing variant when available
+    let drink = pkey ? (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]) : null;
 
     if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
       const fpName = (lang === "si" && course.force_pairing_title_si) ? course.force_pairing_title_si : (course.force_pairing_title || "KITCHEN MARTINI");
@@ -3049,11 +3079,7 @@ function KitchenTicket({ table, menuCourses, upd }) {
                     {line1}
                     {extraLabel && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 400, color: "#bbb", marginLeft: 8 }}>{extraLabel}</span>}
                   </div>
-                  {/* Line 2: Slovenian version */}
-                  {line2 && !fired && (
-                    <div style={{ fontFamily: FONT, fontSize: 11, color: "#888", fontStyle: "italic", marginTop: 1, letterSpacing: 0.1 }}>{line2}</div>
-                  )}
-                  {/* Line 3: kitchen note */}
+                  {/* Kitchen note */}
                   {kitchenNote && !fired && (
                     <div style={{ fontFamily: FONT, fontSize: 10, color: "#b07030", fontStyle: "italic", marginTop: 2 }}>{kitchenNote}</div>
                   )}
@@ -4402,6 +4428,9 @@ export default function App() {
       return applyCourses(data.map(r => {
         const restrictions = {};
         DIETARY_KEYS.forEach(k => { restrictions[k] = r[k] ?? null; });
+        // Merge SI restriction variants from the restrictions_si column
+        const rSi = r.restrictions_si || {};
+        Object.entries(rSi).forEach(([k, v]) => { if (v) restrictions[`${k}_si`] = v; });
         // Legacy data may have menu.name = "EN NAME\nSI NAME" (two-line cell not split at sync time).
         // Split it here so the correct language is shown for each menu type.
         let menu = r.menu || null;
@@ -4418,9 +4447,13 @@ export default function App() {
           veg: r.veg,
           hazards: r.hazards,
           na: r.na,
+          na_si: r.na_si || null,
           wp: r.wp,
+          wp_si: r.wp_si || null,
           os: r.os,
+          os_si: r.os_si || null,
           premium: r.premium,
+          premium_si: r.premium_si || null,
           is_snack: r.is_snack,
           menu_si,
           course_key: r.course_key || "",
