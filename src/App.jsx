@@ -1815,7 +1815,7 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
           background: "none", border: "none", cursor: "pointer",
           fontFamily: FONT, fontSize: 11, color: "#666", letterSpacing: 1, padding: 0,
         }}>← all tables</button>
-        {mode === "admin" && table.active && (
+        {(mode === "admin" || mode === "service") && table.active && (
           <button onClick={() => setShowMenuGen(true)} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "7px 14px",
             border: "1px solid #c8a96e", borderRadius: 2, cursor: "pointer",
