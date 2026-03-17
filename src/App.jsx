@@ -4402,9 +4402,19 @@ export default function App() {
       return applyCourses(data.map(r => {
         const restrictions = {};
         DIETARY_KEYS.forEach(k => { restrictions[k] = r[k] ?? null; });
+        // Legacy data may have menu.name = "EN NAME\nSI NAME" (two-line cell not split at sync time).
+        // Split it here so the correct language is shown for each menu type.
+        let menu = r.menu || null;
+        let menu_si = r.menu_si || null;
+        if (menu?.name?.includes("\n")) {
+          const nameParts = menu.name.split(/\n+/).map(s => s.trim()).filter(Boolean);
+          const subParts  = (menu.sub || "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+          menu    = { name: nameParts[0] || "", sub: subParts[0] || "" };
+          if (!menu_si && nameParts[1]) menu_si = { name: nameParts[1], sub: subParts[1] || "" };
+        }
         return {
           position: r.position,
-          menu: r.menu,
+          menu,
           veg: r.veg,
           hazards: r.hazards,
           na: r.na,
@@ -4412,7 +4422,7 @@ export default function App() {
           os: r.os,
           premium: r.premium,
           is_snack: r.is_snack,
-          menu_si: r.menu_si || null,
+          menu_si,
           course_key: r.course_key || "",
           optional_flag: r.optional_flag || "",
           section_gap_before: !!r.section_gap_before,
