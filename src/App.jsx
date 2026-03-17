@@ -3015,6 +3015,36 @@ function KitchenTicket({ table, menuCourses, upd }) {
           const baseSubSi   = course.menu_si?.sub  || "";
           const kitchenNote = course.kitchen_note || "";
           const line1 = baseName;
+          const subDiff = (modSub) => {
+            const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
+            const modTokens  = modSub.split(/[,·]+/).map(s => s.trim()).filter(Boolean);
+            const newOnes    = modTokens.filter(t => !baseTokens.has(t.toLowerCase()));
+            return newOnes.length > 0 ? newOnes[0] : modSub;
+          };
+          const allSeatDishes = seats.map(seat => {
+            const restrKeys = seatRestrKeys(seat);
+            if (restrKeys.length) {
+              for (const key of RESTRICTION_PRIORITY_KEYS) {
+                if (!restrKeys.includes(key)) continue;
+                const mapped = RESTRICTION_COLUMN_MAP[key] || key;
+                const note = course.restrictions?.[`${mapped}_note`];
+                if (note) return note.toUpperCase();
+              }
+              const modified = applyCourseRestriction(course, restrKeys);
+              if (modified) {
+                if (modified.name !== baseName) return modified.name;
+                if (modified.sub  !== baseSub)  return subDiff(modified.sub).toUpperCase();
+              }
+            }
+            return baseName;
+          });
+          const anyMod = allSeatDishes.some(n => n !== baseName);
+          const modGroups = (() => {
+            if (!anyMod || fired) return null;
+            const g = {};
+            allSeatDishes.forEach(n => { g[n] = (g[n] || 0) + 1; });
+            return g;
+          })();
           const extraLabel = (() => {
             if (isBeetCourse(course))   return beetSeats.map(s => `P${s.id}`).join(" ");
             if (isCheeseCourse(course)) return cheeseSeats.map(s => `P${s.id}`).join(" ");
@@ -3044,9 +3074,14 @@ function KitchenTicket({ table, menuCourses, upd }) {
                     {line1}
                     {extraLabel && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 400, color: "#bbb", marginLeft: 8 }}>{extraLabel}</span>}
                   </div>
-                  {/* Kitchen note (line 3 of dish cell) */}
-                  {kitchenNote && !fired && (
-                    <div style={{ fontFamily: FONT, fontSize: 12, color: "#c04040", fontWeight: 600, marginTop: 3 }}>{kitchenNote}</div>
+                  {/* Restriction labels + kitchen note (line 3) — both in red */}
+                  {(modGroups || kitchenNote) && !fired && (
+                    <div style={{ marginTop: 3, display: "flex", flexWrap: "wrap", gap: "2px 10px" }}>
+                      {modGroups && Object.entries(modGroups).map(([name, count]) => (
+                        <span key={name} style={{ fontFamily: FONT, fontSize: 12, color: name === baseName ? "#aaa" : "#c04040", fontWeight: name === baseName ? 400 : 600 }}>{count}× {name}</span>
+                      ))}
+                      {kitchenNote && <span style={{ fontFamily: FONT, fontSize: 12, color: "#c04040", fontWeight: 600 }}>{kitchenNote}</span>}
+                    </div>
                   )}
                 </div>
                 {firedAt && <span style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
