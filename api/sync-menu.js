@@ -104,8 +104,23 @@ function parseRows(rows) {
       force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
       force_pairing_sub:   String(firstFilled(row.force_pairing_sub)).trim(),
       kitchen_note:        String(firstFilled(row.kitchen_note)).trim(),
-      // Individual restriction columns (for Supabase flat storage)
-      ...Object.fromEntries(RESTRICTION_KEYS.map(k => [k, restrictionCols[k]])),
+      // Original restriction columns (always present in schema)
+      vegan:        restrictionCols.vegan,
+      pescetarian:  restrictionCols.pescetarian,
+      gluten_free:  restrictionCols.gluten_free,
+      dairy_free:   restrictionCols.dairy_free,
+      nut_free:     restrictionCols.nut_free,
+      no_red_meat:  restrictionCols.no_red_meat,
+      no_pork:      restrictionCols.no_pork,
+      no_game:      restrictionCols.no_game,
+      no_offal:     restrictionCols.no_offal,
+      egg_free:     restrictionCols.egg_free,
+      // Extended restriction columns (added via migration)
+      shellfish_free:   restrictionCols.shellfish_free,
+      no_alcohol:       restrictionCols.no_alcohol,
+      no_garlic_onion:  restrictionCols.no_garlic_onion,
+      halal:            restrictionCols.halal,
+      low_fodmap:       restrictionCols.low_fodmap,
     };
   }).filter(Boolean).sort((a, b) => a.position - b.position);
 }
@@ -147,13 +162,38 @@ export default async function handler(req, res) {
     if (!supabaseUrl || !supabaseKey) throw new Error("Supabase env vars not configured");
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { error } = await supabase.from("menu_courses").upsert(courses, { onConflict: "position" });
+    // Base columns — always present in schema
+    const BASE_KEYS = [
+      "position","menu","veg","hazards","na","wp","os","premium","is_snack",
+      "gluten_free","dairy_free","nut_free","pescetarian","no_red_meat",
+      "no_pork","no_game","no_offal","egg_free",
+    ];
+    // Extended columns — present after migration
+    const EXTENDED_KEYS = [
+      "menu_si","course_key","optional_flag","section_gap_before","show_on_short",
+      "short_order","force_pairing_title","force_pairing_sub","kitchen_note",
+      "vegan","shellfish_free","no_alcohol","no_garlic_onion","halal","low_fodmap",
+    ];
+
+    const pick = (obj, keys) => Object.fromEntries(keys.map(k => [k, obj[k] ?? null]));
+
+    // Always upsert base columns
+    const { error } = await supabase
+      .from("menu_courses")
+      .upsert(courses.map(c => pick(c, BASE_KEYS)), { onConflict: "position" });
     if (error) throw new Error("Supabase upsert failed: " + error.message);
+
+    // Attempt extended upsert — silently skip if columns don't exist yet
+    const extendedCourses = courses.map(c => ({ position: c.position, ...pick(c, EXTENDED_KEYS) }));
+    const { error: extError } = await supabase
+      .from("menu_courses")
+      .upsert(extendedCourses, { onConflict: "position" });
+    const extendedOk = !extError;
 
     const positions = courses.map(c => c.position);
     await supabase.from("menu_courses").delete().not("position", "in", `(${positions.join(",")})`);
 
-    return res.status(200).json({ ok: true, synced: courses.length });
+    return res.status(200).json({ ok: true, synced: courses.length, extended: extendedOk });
   } catch (err) {
     console.error("sync-menu error:", err);
     return res.status(500).json({ ok: false, error: err.message });
