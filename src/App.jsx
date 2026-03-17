@@ -3065,7 +3065,7 @@ function KitchenTicket({ table, menuCourses, upd }) {
                 <span style={{ fontFamily: FONT, fontSize: 16, color: fired ? "#4a9a6a" : "#ddd", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {/* Line 1: CELERIAC | pork head, bozner sauce */}
-                  <div style={{
+                  {!modGroups && <div style={{
                     fontFamily: FONT, fontSize: 13, fontWeight: 700, lineHeight: 1.25,
                     color: fired ? "#bbb" : "#111",
                     textDecoration: fired ? "line-through" : "none",
@@ -3073,7 +3073,8 @@ function KitchenTicket({ table, menuCourses, upd }) {
                   }}>
                     {line1}
                     {extraLabel && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 400, color: "#bbb", marginLeft: 8 }}>{extraLabel}</span>}
-                  </div>
+                  </div>}
+                  {modGroups && extraLabel && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 400, color: "#bbb" }}>{extraLabel}</span>}
                   {/* Restriction labels + kitchen note (line 3) — both in red */}
                   {(modGroups || kitchenNote) && !fired && (
                     <div style={{ marginTop: 3, display: "flex", flexWrap: "wrap", gap: "2px 10px" }}>
