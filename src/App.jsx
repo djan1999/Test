@@ -4299,6 +4299,31 @@ function GlobalStyle() {
   );
 }
 
+// ── Error Boundary ────────────────────────────────────────────────────────────
+import { Component } from "react";
+export class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div style={{ fontFamily: "monospace", padding: 40, textAlign: "center", marginTop: "20vh" }}>
+        <div style={{ fontSize: 32, marginBottom: 16 }}>⚠</div>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Something went wrong</div>
+        <div style={{ fontSize: 11, color: "#888", marginBottom: 32, maxWidth: 320, margin: "0 auto 32px" }}>
+          {String(this.state.error?.message || this.state.error)}
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          style={{ fontFamily: "monospace", fontSize: 12, letterSpacing: 2, padding: "12px 28px", background: "#1a1a1a", color: "#fff", border: "none", borderRadius: 3, cursor: "pointer" }}
+        >
+          RELOAD
+        </button>
+      </div>
+    );
+  }
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
   const localSnapshot = readLocalBoardState();
@@ -4513,8 +4538,15 @@ export default function App() {
 
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      const { error } = await supabase.from(SERVICE_TABLES_TABLE).upsert(changedTables, { onConflict: "table_id" });
-      setSyncStatus(error ? "sync-error" : "live");
+      let lastError;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 500 * attempt));
+        const { error } = await supabase.from(SERVICE_TABLES_TABLE).upsert(changedTables, { onConflict: "table_id" });
+        if (!error) { setSyncStatus("live"); return; }
+        lastError = error;
+      }
+      setSyncStatus("sync-error");
+      console.error("Save failed after 4 attempts:", lastError);
     }, 50);
 
     return () => clearTimeout(saveTimerRef.current);
@@ -4597,8 +4629,12 @@ export default function App() {
         setSyncStatus("live");
       })
       .subscribe(status => {
-        if (status === "SUBSCRIBED") setSyncStatus("live");
-        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setSyncStatus("sync-error");
+        if (status === "SUBSCRIBED") { setSyncStatus("live"); }
+        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setSyncStatus("sync-error");
+          // Force a full re-fetch so we don't miss anything while disconnected
+          if (isMounted) loadRemoteTables();
+        }
       });
 
     return () => {
