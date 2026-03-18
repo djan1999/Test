@@ -557,11 +557,14 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   const hasPairing = !!pkey;
   const bottleQueue = hasPairing ? [] : [...tableBottles];
   // Non-pairing: cocktails fill early course right columns; glasses distribute from Danube like bottles
-  const aperitivoQueue = hasPairing ? [] : [...cocktails.map(c => ({ ...c, __type: "cocktail" }))];
+  // Include aperitif quick-select (seat.aperitif) as the first cocktail/aperitivo entry
+  const aprEntry = seat.aperitif ? [{ name: seat.aperitif, __type: "cocktail" }] : [];
+  const aperitivoQueue = hasPairing ? [] : [...aprEntry, ...cocktails.map(c => ({ ...c, __type: "cocktail" }))];
   const glassByGlassQueue = hasPairing ? [] : [...glasses.map(w => ({ ...w, __type: "wine" }))];
 
   // Pairing case: keep existing behaviour (all aperitivos/glasses/bottles as wine-only rows at top)
   const topRightItems = hasPairing ? [
+    ...aprEntry,
     ...cocktails.map(c => ({ ...c, __type: "cocktail" })),
     ...glasses.map(w => ({ ...w, __type: "wine" })),
     ...tableBottles.map(item => ({
@@ -2978,6 +2981,7 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
               display: "grid",
               gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(340px, 1fr))",
               gap: isMobile ? 10 : 14,
+              alignItems: "start",
             }}>
               {rowTables.map(t => (
                 <DisplayBoardCard
@@ -3242,7 +3246,7 @@ function KitchenTicket({ table, menuCourses, upd }) {
   const pLabel = p => p === "Non-Alc" ? "N/A" : p === "Our Story" ? "O.S." : p === "Premium" ? "Prem" : p === "Wine" ? "Wine" : p;
 
   return (
-    <div style={{ border: "2px solid #e8e8e8", borderRadius: 6, overflow: "hidden", background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}>
+    <div style={{ border: "2px solid #cc3333", borderRadius: 6, overflow: "hidden", background: "#fff", boxShadow: "0 2px 8px rgba(180,30,30,0.10)" }}>
 
       {/* ── Header ── */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e8e8e8", padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8 }}>
@@ -3252,26 +3256,26 @@ function KitchenTicket({ table, menuCourses, upd }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
             {table.resName && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
+            {table.menuType && <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 3, background: isShort ? "#fff4e0" : "#e8f0ff", color: isShort ? "#a06000" : "#2a50a0" }}>{isShort ? "SHORT" : "LONG"}</span>}
             {table.birthday && <span style={{ fontSize: 10 }}>🎂</span>}
             {table.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 8, color: "#9a6a20", letterSpacing: 0.5 }}>{table.room ? `#${table.room}` : "Hotel"}</span>}
           </div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 1, flexWrap: "wrap" }}>
             <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#111" }}>{seats.length} <span style={{ fontWeight: 600, fontSize: 10, letterSpacing: 0.5 }}>PAX</span></span>
-            {table.resTime && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: "#555" }}>{table.resTime}</span>}
+            {table.resTime && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: "#333" }}>{table.resTime}</span>}
             {table.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: "#4a9a6a" }}>arr. {table.arrivedAt}</span>}
-            {table.menuType && <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 3, background: isShort ? "#fff4e0" : "#e8f0ff", color: isShort ? "#a06000" : "#2a50a0" }}>{isShort ? "SHORT" : "LONG"}</span>}
           </div>
-          {table.notes && <div style={{ fontFamily: FONT, fontSize: 8, color: "#999", fontStyle: "italic", marginTop: 1, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.notes}</div>}
+          {table.notes && <div style={{ fontFamily: FONT, fontSize: 8, color: "#555", fontStyle: "italic", marginTop: 1, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.notes}</div>}
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
-          <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: allDone ? "#4a9a6a" : "#111", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 10, color: "#aaa", fontWeight: 400 }}>/{totalCourses}</span></div>
+          <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: allDone ? "#4a9a6a" : "#111", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 10, color: "#666", fontWeight: 400 }}>/{totalCourses}</span></div>
           {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", marginTop: 2 }}>{durationMins} min</div>}
         </div>
       </div>
 
       {/* ── Pace ── */}
       <div style={{ borderBottom: "1px solid #e8e8e8", padding: "5px 10px", display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#ccc", textTransform: "uppercase", flexShrink: 0 }}>Pace</span>
+        <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", flexShrink: 0 }}>Pace</span>
         {["Slow", "Fast"].map(p => {
           const colors = { Slow: { on: "#7a5020", bg: "#fdf4e8", border: "#c8a060" }, Fast: { on: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" } };
           const active = table.pace === p;
@@ -3295,13 +3299,17 @@ function KitchenTicket({ table, menuCourses, upd }) {
             const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
             const restrList = restrictions.filter(r => r.pos === s.id).map(r => r.note).filter(Boolean);
             const restrShort = k => { const d = RESTRICTIONS.find(r => r.key === k); return d ? d.label : k; };
+            const hasBeet = !!(s.extras?.[1]?.ordered || s.extras?.["1"]?.ordered);
             return (
               <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 3 }}>
                 <span style={{
                   fontFamily: FONT, fontSize: 9, fontWeight: 700, padding: "2px 5px", borderRadius: 2,
                   background: p ? (pairingBg[p] || "#f0f0f0") : "#e8e8e8",
-                  color: p ? (pairingColor[p] || "#555") : "#666",
+                  color: p ? (pairingColor[p] || "#444") : "#444",
                 }}>P{s.id}{p ? ` · ${pLabel(p)}` : ""}</span>
+                {hasBeet && (
+                  <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 700, padding: "1px 4px", borderRadius: 2, background: "#edf8e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>BEET</span>
+                )}
                 {restrList.length > 0 && (
                   <span style={{ fontFamily: FONT, fontSize: 8, color: "#b03030", letterSpacing: 0.2, fontWeight: 600 }}>{restrList.map(restrShort).join(" · ")}</span>
                 )}
@@ -3531,7 +3539,6 @@ function KitchenAlertOverlay({ alerts, onConfirm }) {
         const pairSeats   = seats.filter(s => s.pairing && s.pairing !== "—");
         const beetSeats   = seats.filter(s => s.beet);
         const cheeseSeats = seats.filter(s => s.cheese);
-        const aprSeats    = seats.filter(s => s.aperitif);
         const ts = new Date(alert.timestamp);
         const timeStr = `${String(ts.getHours()).padStart(2,"0")}:${String(ts.getMinutes()).padStart(2,"0")}`;
         return (
@@ -3556,7 +3563,7 @@ function KitchenAlertOverlay({ alerts, onConfirm }) {
             <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
               {pairSeats.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#aaa", minWidth: 60 }}>PAIRING</span>
+                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#666", minWidth: 60 }}>PAIRING</span>
                   {pairSeats.map(s => {
                     const c = PAIR_COLORS[s.pairing] || {};
                     return (
@@ -3569,7 +3576,7 @@ function KitchenAlertOverlay({ alerts, onConfirm }) {
               )}
               {beetSeats.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#aaa", minWidth: 60 }}>BEETROOT</span>
+                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#666", minWidth: 60 }}>BEETROOT</span>
                   {beetSeats.map(s => (
                     <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "#edf8e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>
                       P{s.id}{s.beet.pairing && s.beet.pairing !== "—" ? ` · ${s.beet.pairing}` : ""}
@@ -3579,7 +3586,7 @@ function KitchenAlertOverlay({ alerts, onConfirm }) {
               )}
               {cheeseSeats.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#aaa", minWidth: 60 }}>CHEESE</span>
+                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#666", minWidth: 60 }}>CHEESE</span>
                   {cheeseSeats.map(s => (
                     <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "#fdf4e8", border: "1px solid #c8a060", color: "#7a5020" }}>
                       P{s.id}
@@ -3587,17 +3594,7 @@ function KitchenAlertOverlay({ alerts, onConfirm }) {
                   ))}
                 </div>
               )}
-              {aprSeats.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#aaa", minWidth: 60 }}>APERITIF</span>
-                  {aprSeats.map(s => (
-                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "#fdf4e8", border: "1px solid #c8a060", color: "#7a5020" }}>
-                      P{s.id} {s.aperitif}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {pairSeats.length === 0 && beetSeats.length === 0 && cheeseSeats.length === 0 && aprSeats.length === 0 && (
+              {pairSeats.length === 0 && beetSeats.length === 0 && cheeseSeats.length === 0 && (
                 <span style={{ fontFamily: FONT, fontSize: 11, color: "#bbb" }}>No extras noted</span>
               )}
             </div>
@@ -4146,6 +4143,7 @@ function SummaryModal({ tables, dishes = [], onClose }) {
         const cs = (s.cocktails || []).map(c => c?.name).filter(Boolean);
         const sp = (s.spirits   || []).map(x => x?.name).filter(Boolean);
         const bs = (s.beers     || []).map(x => x?.name).filter(Boolean);
+        if (s.aperitif) parts.push("apr:" + s.aperitif);
         if (gs.length) parts.push("glass:"    + gs.join(","));
         if (cs.length) parts.push("cocktail:" + cs.join(","));
         if (sp.length) parts.push("spirit:"   + sp.join(","));
@@ -4195,6 +4193,7 @@ function SummaryModal({ tables, dishes = [], onClose }) {
                     <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: restr.length ? "#b04040" : "#999", minWidth: 28, letterSpacing: 0.5 }}>P{s.id}</span>
                     {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, background: ws.bg || "#f5f5f5", color: "#333", border: "1px solid #e0e0e0" }}>{s.water}</span>}
                     {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, border: "1px solid #e0e0e0", color: pairingColor[s.pairing] || "#555", background: pairingBg[s.pairing] || "#fafafa" }}>{s.pairing}</span>}
+                    {s.aperitif && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #c8a060", color: "#7a5020", background: "#fdf4e8" }}>apr: {s.aperitif}</span>}
                     {extras.map(d => { const ex = s.extras[d.id]; return <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}{ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}</span>; })}
                     {allBevs.map((b, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
                     {restr.map((r, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
