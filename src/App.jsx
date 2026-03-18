@@ -4343,7 +4343,8 @@ export default function App() {
   const tablesRef          = useRef(tables);
 
   const boardState = { tables, dishes, cocktails, spirits, beers };
-  const boardJson  = JSON.stringify(boardState);
+  const tablesJson = useMemo(() => JSON.stringify(tables), [tables]);
+  const boardJson  = useMemo(() => JSON.stringify(boardState), [tablesJson, dishes, cocktails, spirits, beers]); // eslint-disable-line react-hooks/exhaustive-deps
   const boardStateRef = useRef(boardState);
   boardStateRef.current = boardState;
   tablesRef.current = tables;
@@ -4516,10 +4517,10 @@ export default function App() {
     saveTimerRef.current = setTimeout(async () => {
       const { error } = await supabase.from(SERVICE_TABLES_TABLE).upsert(changedTables, { onConflict: "table_id" });
       setSyncStatus(error ? "sync-error" : "live");
-    }, 120);
+    }, 50);
 
     return () => clearTimeout(saveTimerRef.current);
-  }, [boardJson, hydrated, tables]);
+  }, [tablesJson, hydrated]);
 
   // ── Persist menu overrides to localStorage ─────────────────────────────────
   useEffect(() => {
@@ -4556,11 +4557,15 @@ export default function App() {
       }
 
       if (Array.isArray(data) && data.length > 0) {
-        mergeRemoteTables(data);
-        prevTablesJsonRef.current = initTables.map(base => {
+        const nextJson = initTables.map(base => {
           const row = data.find(item => Number(item.table_id) === base.id);
           return JSON.stringify(row ? sanitizeTable({ id: base.id, ...(row.data || {}) }) : base);
         });
+        const hasChanges = nextJson.some((j, i) => j !== prevTablesJsonRef.current[i]);
+        if (hasChanges) {
+          mergeRemoteTables(data);
+          prevTablesJsonRef.current = nextJson;
+        }
       }
 
       setSyncStatus("live");
@@ -4570,7 +4575,7 @@ export default function App() {
     loadRemoteTables();
 
     // Polling fallback — refreshes every 5 s in case realtime misses an event
-    const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 5000);
+    const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 15000);
 
     // Immediately re-fetch when the tab/screen becomes visible (e.g. kitchen display wakes up)
     const onVisibilityChange = () => { if (!document.hidden && isMounted) loadRemoteTables(); };
