@@ -3803,13 +3803,18 @@ function SummaryModal({ tables, dishes = [], onClose }) {
             {(t.bottleWines || []).length > 0 && (
               <div style={{ padding: "10px 16px 14px", borderTop: "1px solid #f5f5f5", display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 2 }}>Bottles</div>
-                {(t.bottleWines || []).map((w, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500, color: "#1a1a1a" }}>🍾 {w.name}</span>
-                    {w.producer && <span style={{ fontFamily: FONT, fontSize: 11, color: "#888" }}>{w.producer}</span>}
-                    {w.vintage  && <span style={{ fontFamily: FONT, fontSize: 11, color: "#aaa", letterSpacing: 0.5 }}>{w.vintage}</span>}
-                  </div>
-                ))}
+                {(t.bottleWines || []).map((w, i) => {
+                  const rawVintage = String(w?.vintage || "").trim();
+                  const vintage = rawVintage.match(/^\d{4}$/) ? `'${rawVintage.slice(2)}` : rawVintage;
+                  const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
+                  const sub = [w?.region, w?.country].filter(Boolean).join(", ") || w?.notes || "";
+                  return (
+                    <div key={i} style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a1a1a", textTransform: "uppercase", letterSpacing: 0.3 }}>🍾 {title}</span>
+                      {sub && <span style={{ fontFamily: FONT, fontSize: 11, color: "#5a8fc4" }}>{sub}</span>}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
