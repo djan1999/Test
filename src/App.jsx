@@ -3309,7 +3309,9 @@ function KitchenBoard({ tables, menuCourses, upd }) {
 
   const [order, setOrder] = useState(() => activeTables.map(t => t.id));
   const [draggingId, setDraggingId] = useState(null);
-  const dragRef = useRef(null);
+  const dragRef = useRef(null);       // id being dragged (null = not dragging)
+  const longPressTimer = useRef(null);
+  const touchStart = useRef(null);    // { x, y } to detect accidental movement
 
   // Keep order in sync when tables are added/removed
   useEffect(() => {
@@ -3321,12 +3323,22 @@ function KitchenBoard({ tables, menuCourses, upd }) {
     });
   }, [activeIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Document-level touch handlers so drag works even when finger leaves the card
+  // Document-level touch handlers
   useEffect(() => {
     const onMove = e => {
+      const touch = e.touches[0];
+      // Cancel long-press if finger moved more than 8px before it fired
+      if (!dragRef.current && touchStart.current) {
+        const dx = Math.abs(touch.clientX - touchStart.current.x);
+        const dy = Math.abs(touch.clientY - touchStart.current.y);
+        if (dx > 8 || dy > 8) {
+          clearTimeout(longPressTimer.current);
+          touchStart.current = null;
+        }
+        return;
+      }
       if (!dragRef.current) return;
       e.preventDefault();
-      const touch = e.touches[0];
       const el = document.elementFromPoint(touch.clientX, touch.clientY);
       const ticketEl = el?.closest("[data-ticket-id]");
       if (!ticketEl) return;
@@ -3343,6 +3355,8 @@ function KitchenBoard({ tables, menuCourses, upd }) {
       });
     };
     const onEnd = () => {
+      clearTimeout(longPressTimer.current);
+      touchStart.current = null;
       dragRef.current = null;
       setDraggingId(null);
     };
@@ -3371,16 +3385,21 @@ function KitchenBoard({ tables, menuCourses, upd }) {
             data-ticket-id={String(t.id)}
             style={{
               flexShrink: 0, width: 355,
-              touchAction: "none",
+              touchAction: draggingId ? "none" : "pan-x pan-y",
+              userSelect: "none",
+              WebkitUserSelect: "none",
               opacity: draggingId === t.id ? 0.4 : 1,
               transition: "opacity 0.15s, transform 0.15s",
               transform: draggingId === t.id ? "scale(0.97)" : "scale(1)",
-              cursor: "grab",
+              cursor: draggingId ? "grabbing" : "grab",
             }}
             onTouchStart={e => {
-              dragRef.current = t.id;
-              setDraggingId(t.id);
-              e.stopPropagation();
+              touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+              longPressTimer.current = setTimeout(() => {
+                dragRef.current = t.id;
+                setDraggingId(t.id);
+                touchStart.current = null;
+              }, 350);
             }}
           >
             <KitchenTicket table={t} menuCourses={menuCourses} upd={upd} />
