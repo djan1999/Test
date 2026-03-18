@@ -3120,7 +3120,7 @@ function KitchenTicket({ table, menuCourses, upd }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
             {table.resName && <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
-            <span style={{ fontFamily: FONT, fontSize: 10, color: "#888" }}>{seats.length} pax</span>
+            <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 700, color: "#111" }}>{seats.length} <span style={{ fontWeight: 400, fontSize: 12, color: "#555" }}>pax</span></span>
             {table.birthday && <span style={{ fontSize: 11 }}>🎂</span>}
             {table.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 9, color: "#9a6a20", letterSpacing: 0.5 }}>{table.room ? `#${table.room}` : "Hotel"}</span>}
           </div>
