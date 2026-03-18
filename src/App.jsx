@@ -546,15 +546,19 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   const rows = [];
   const hasPairing = !!pkey;
   const bottleQueue = hasPairing ? [] : [...tableBottles];
+  // Non-pairing: cocktails fill early course right columns; glasses distribute from Danube like bottles
+  const aperitivoQueue = hasPairing ? [] : [...cocktails.map(c => ({ ...c, __type: "cocktail" }))];
+  const glassByGlassQueue = hasPairing ? [] : [...glasses.map(w => ({ ...w, __type: "wine" }))];
 
-  const topRightItems = [
+  // Pairing case: keep existing behaviour (all aperitivos/glasses/bottles as wine-only rows at top)
+  const topRightItems = hasPairing ? [
     ...cocktails.map(c => ({ ...c, __type: "cocktail" })),
     ...glasses.map(w => ({ ...w, __type: "wine" })),
-    ...(hasPairing ? tableBottles.map(item => ({
+    ...tableBottles.map(item => ({
       ...item,
       __type: item?.__type || item?.type || item?.category || ((item?.notes && !item?.producer && !item?.vintage) ? "cocktail" : "wine"),
-    })) : []),
-  ];
+    })),
+  ] : [];
   topRightItems.forEach(item => rows.push({ type: "wine-only", right: fmtDrinkParts(item) }));
 
   let insertedPairingLabel = false;
@@ -596,6 +600,12 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       }
     }
 
+    // Before the very first course row, insert the first aperitivo as a wine-only row
+    // so it appears visually "above" the first course (one slot above Sour Soup)
+    if (courseRowsSeen === 0 && aperitivoQueue.length > 0) {
+      rows.push({ type: "wine-only", right: fmtDrinkParts(aperitivoQueue.shift()) });
+    }
+
     if ((courseKey === "chicken_gizzard" || courseName === "CHICKEN GIZZARD") && selectedBeer) {
       // For SI menus with default beer list, prefer the course's SI pairing variants
       if (lang === "si" && beers.length === 0) {
@@ -605,6 +615,14 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       } else {
         drink = { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
       }
+    } else if (aperitivoQueue.length > 0) {
+      // Fill empty right column with next aperitivo (cocktail)
+      const d = fmtDrinkParts(aperitivoQueue.shift());
+      drink = { name: d.title || "", sub: d.sub || "" };
+    } else if (i >= DANUBE_SALMON_IDX && glassByGlassQueue.length > 0) {
+      // From Danube onwards: by-the-glass wines fill right column
+      const d = fmtDrinkParts(glassByGlassQueue.shift());
+      drink = { name: d.title || "", sub: d.sub || "" };
     } else if (!hasPairing && i >= DANUBE_SALMON_IDX && bottleQueue.length > 0) {
       const nextBottle = bottleQueue.shift();
       const d = fmtDrinkParts(nextBottle);
@@ -632,6 +650,12 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     courseRowsSeen += 1;
   });
 
+  while (aperitivoQueue.length > 0) {
+    rows.push({ type: "wine-only", right: fmtDrinkParts(aperitivoQueue.shift()) });
+  }
+  while (glassByGlassQueue.length > 0) {
+    rows.push({ type: "wine-only", right: fmtDrinkParts(glassByGlassQueue.shift()) });
+  }
   while (!hasPairing && bottleQueue.length > 0) {
     const d = fmtDrinkParts(bottleQueue.shift());
     rows.push({ type: "wine-only", right: d });
@@ -3365,7 +3389,7 @@ function SortableTicket({ table, menuCourses, upd, isDragging }) {
       style={{
         flexShrink: 0, width: 248,
         transform: CSS.Transform.toString(transform),
-        transition: 'none',
+        transition: isDragging ? 'none' : transition,
         willChange: 'transform',
         cursor: isDragging ? "grabbing" : "grab",
         userSelect: "none", WebkitUserSelect: "none",
