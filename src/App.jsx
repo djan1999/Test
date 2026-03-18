@@ -3497,7 +3497,7 @@ function KitchenBoard({ tables, menuCourses, upd }) {
   }, [activeIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
     useSensor(TouchSensor,   { activationConstraint: { delay: 250, tolerance: 8 } }),
   );
 
@@ -3543,14 +3543,12 @@ function KitchenBoard({ tables, menuCourses, upd }) {
           </div>
         </div>
       </SortableContext>
-      <DragOverlay dropAnimation={{ duration: 200, easing: "cubic-bezier(0.18,0.67,0.6,1.22)" }}>
+      <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>
         {activeTable && (
           <div style={{
             width: 248, borderRadius: 6,
-            boxShadow: "0 12px 40px rgba(0,0,0,0.20), 0 2px 8px rgba(0,0,0,0.10)",
-            transform: "rotate(1deg) scale(1.02)",
-            transition: "box-shadow 0.15s",
-            willChange: "transform",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+            opacity: 0.97,
           }}>
             <KitchenTicket table={activeTable} menuCourses={menuCourses} upd={upd} />
           </div>
