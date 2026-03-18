@@ -2602,7 +2602,7 @@ const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","P
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
 // cards on every DisplayBoard re-render (which caused the visual overlap animation glitch).
-function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onUnseat, dishes, aperitifOptions }) {
+function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onUnseat, dishes, aperitifOptions, wines = [] }) {
     const isSeated = t.active;
     const allRestr = (t.restrictions || []).filter(r => r.note);
     const [assigningIdx, setAssigningIdx] = useState(null);
@@ -2827,14 +2827,30 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                         );
                       })}
                     </div>
-                    {/* Aperitif */}
+                    {/* Aperitif quick-add — same behaviour as Beverages section buttons */}
                     {aperitifOptions && aperitifOptions.length > 0 && (
                       <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", padding: "2px 10px 8px" }}>
                         <span style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", marginRight: 2 }}>APR</span>
                         {aperitifOptions.map(opt => {
-                          const active = s.aperitif === opt;
+                          const lk = opt.toLowerCase();
+                          const inGlasses = (s.glasses || []).some(w => w?.name?.toLowerCase().includes(lk) || w?.producer?.toLowerCase().includes(lk));
+                          const inCocktails = (s.cocktails || []).some(c => c?.name?.toLowerCase().includes(lk));
+                          const active = inGlasses || inCocktails;
                           return (
-                            <button key={opt} onClick={() => updSeat && updSeat(t.id, s.id, "aperitif", active ? null : opt)} style={{
+                            <button key={opt} onClick={() => {
+                              if (!updSeat) return;
+                              if (active) {
+                                // Remove from whichever list it's in
+                                updSeat(t.id, s.id, "glasses",   (s.glasses   || []).filter(w => !w?.name?.toLowerCase().includes(lk) && !w?.producer?.toLowerCase().includes(lk)));
+                                updSeat(t.id, s.id, "cocktails", (s.cocktails || []).filter(c => !c?.name?.toLowerCase().includes(lk)));
+                              } else {
+                                const found = wines.filter(w => w.byGlass).find(w =>
+                                  w.name?.toLowerCase().includes(lk) || w.producer?.toLowerCase().includes(lk)
+                                );
+                                if (found) updSeat(t.id, s.id, "glasses",   [...(s.glasses   || []), found]);
+                                else       updSeat(t.id, s.id, "cocktails", [...(s.cocktails || []), { name: opt, notes: "" }]);
+                              }
+                            }} style={{
                               fontFamily: FONT, fontSize: 8, letterSpacing: 0.3, padding: "3px 7px",
                               border: `1px solid ${active ? "#7a5020" : "#e8e8e8"}`,
                               borderRadius: 3, cursor: "pointer",
@@ -2939,7 +2955,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
     );
 }
 
-function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [] }) {
+function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [] }) {
   const isMobile = useIsMobile(700);
 
   const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
@@ -2992,6 +3008,7 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
                   onUnseat={onUnseat}
                   dishes={dishes}
                   aperitifOptions={aperitifOptions}
+                  wines={wines}
                 />
               ))}
             </div>
@@ -5385,6 +5402,7 @@ export default function App() {
               onSeat={seatTable}
               onUnseat={unseatTable}
               aperitifOptions={aperitifOptions}
+              wines={wines}
             />
           );
         })()}
