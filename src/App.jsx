@@ -2790,8 +2790,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                       </div>
                       <div style={{ width: 1, height: 16, background: "#e0e0e0", margin: "0 2px" }} />
                       {/* Beetroot quick-pair */}
-                      {[["Champagne", "Champ", "#7a5020", "#fdf4e8", "#c8a060"], ["N/A", "N/A", "#1f5f73", "#e8f7fb", "#7fc6db"]].map(([pairing, label, col, bg, border]) => {
-                        const active = beetExtra.ordered && beetExtra.pairing === pairing;
+                      {[["—", "—", "#4a4a4a", "#f5f5f5", "#c0c0c0"], ["Champagne", "Champ", "#7a5020", "#fdf4e8", "#c8a060"], ["N/A", "N/A", "#1f5f73", "#e8f7fb", "#7fc6db"]].map(([pairing, label, col, bg, border]) => {
+                        const active = pairing === "—" ? (beetExtra.ordered && (!beetExtra.pairing || beetExtra.pairing === "—")) : (beetExtra.ordered && beetExtra.pairing === pairing);
                         return (
                           <button key={pairing} onClick={() => updSeat && updSeat(t.id, s.id, "extras", {
                             ...s.extras, 1: active ? { ordered: false, pairing: "—" } : { ordered: true, pairing },
@@ -4793,16 +4793,11 @@ export default function App() {
   );
 
   // ── Aperitif quick-button options (read from sheet aperitif_btn column) ──────
-  // Falls back to the 4 embedded aperitivos from MENU_DATA if sheet column not yet added.
+  // Falls back to APERITIF_OPTIONS labels (SFSC, Slapšak, …) if sheet column not yet added.
   const aperitifOptions = useMemo(() => {
     const fromSheet = [...new Set(menuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
     if (fromSheet.length > 0) return fromSheet;
-    // Fallback: derive short labels from embedded MENU_DATA aperitivos
-    return MENU_DATA.filter(c => c.aperitivo?.name).map(c => {
-      const n = c.aperitivo.name;
-      // Use the part before the first comma, truncated to 10 chars
-      return n.split(",")[0].trim().slice(0, 10);
-    }).slice(0, 4);
+    return APERITIF_OPTIONS.map(a => a.label);
   }, [menuCourses]);
 
   // ── Load service tables from Supabase + subscribe realtime ────────────────
