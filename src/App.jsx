@@ -4377,14 +4377,18 @@ export default function App() {
 
   const seatTable = id => {
     const now = fmt(new Date());
+    const group = tables.find(t => t.id === id)?.tableGroup;
+    const ids = group?.length > 1 ? group : [id];
     setTables(p => p.map(t =>
-      t.id !== id ? t : { ...t, active: true, arrivedAt: now, seats: makeSeats(t.guests, t.seats) }
+      !ids.includes(t.id) ? t : { ...t, active: true, arrivedAt: now, seats: makeSeats(t.guests, t.seats) }
     ));
   };
 
   const unseatTable = id => {
+    const group = tables.find(t => t.id === id)?.tableGroup;
+    const ids = group?.length > 1 ? group : [id];
     setTables(p => p.map(t =>
-      t.id !== id ? t : { ...t, active: false, arrivedAt: null }
+      !ids.includes(t.id) ? t : { ...t, active: false, arrivedAt: null }
     ));
   };
 
@@ -4863,7 +4867,9 @@ export default function App() {
 
           {/* Unified DisplayBoard — quickMode shows inline service controls */}
           {(() => {
-            const visibleTables = tables.filter(t => mode === "admin" || t.active || t.resName || t.resTime);
+            const visibleTables = tables
+              .filter(t => mode === "admin" || t.active || t.resName || t.resTime)
+              .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
 
             // Admin mode: also show empty slot cards
             if (mode === "admin" && quickView !== "service") {
