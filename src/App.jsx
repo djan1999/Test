@@ -3124,8 +3124,9 @@ function KitchenTicket({ table, menuCourses, upd }) {
             {table.birthday && <span style={{ fontSize: 11 }}>🎂</span>}
             {table.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 9, color: "#9a6a20", letterSpacing: 0.5 }}>{table.room ? `#${table.room}` : "Hotel"}</span>}
           </div>
-          <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", marginTop: 1 }}>
-            {table.resTime || ""}{table.arrivedAt ? `  ·  arr. ${table.arrivedAt}` : ""}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 2, flexWrap: "wrap" }}>
+            {table.resTime && <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: "#555" }}>{table.resTime}</span>}
+            {table.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: "#4a9a6a" }}>arr. {table.arrivedAt}</span>}
           </div>
           {table.notes && <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", fontStyle: "italic", marginTop: 2, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.notes}</div>}
         </div>
