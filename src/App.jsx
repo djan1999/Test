@@ -2548,7 +2548,8 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
   };
   const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
 
-  const visible = tables.filter(t => t.active || t.resTime || t.resName);
+  const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
+  const visible = tables.filter(t => t.active || t.resTime || t.resName).filter(isPrimary);
   const rowsData = SITTING_TIMES.map(time => ({
     time,
     tables: visible
@@ -4811,9 +4812,11 @@ export default function App() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const active   = tables.filter(t => t.active);
+  // Only count primary tables in groups (secondaries have same guest count stamped on them)
+  const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
+  const active   = tables.filter(t => t.active).filter(isPrimary);
   const seated   = active.reduce((a, t) => a + t.guests, 0);
-  const reserved = tables.filter(t => !t.active && (t.resName || t.resTime)).length;
+  const reserved = tables.filter(t => !t.active && (t.resName || t.resTime)).filter(isPrimary).length;
 
   const syncLabel = syncStatus === "live" ? "SYNC" : syncStatus === "local-only" ? "LOCAL" : syncStatus === "connecting" ? "LINK" : "ERROR";
   const syncLive  = syncStatus === "live";
@@ -4892,9 +4895,9 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
             <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
               {(() => {
-                const seatedNow = tables.filter(t => t.active).length;
-                const guestsNow = tables.filter(t => t.active).reduce((a, t) => a + (t.guests || 0), 0);
-                const resvNow   = tables.filter(t => !t.active && (t.resName || t.resTime)).length;
+                const seatedNow = tables.filter(t => t.active).filter(isPrimary).length;
+                const guestsNow = tables.filter(t => t.active).filter(isPrimary).reduce((a, t) => a + (t.guests || 0), 0);
+                const resvNow   = tables.filter(t => !t.active && (t.resName || t.resTime)).filter(isPrimary).length;
                 return (
                   <>
                     {seatedNow > 0 && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#3a8a5a", textTransform: "uppercase" }}>{seatedNow} tables · {guestsNow} guests</span>}
