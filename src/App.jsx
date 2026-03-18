@@ -789,7 +789,7 @@ const blankTable = id => ({
   id, active: false, guests: 2, resName: "", resTime: "", guestType: "", room: "",
   arrivedAt: null, menuType: "", pace: "", bottleWines: [],
   restrictions: [], birthday: false, notes: "", seats: makeSeats(2),
-  kitchenLog: {},
+  kitchenLog: {}, tableGroup: [],
 });
 
 const initTables = Array.from({ length: 10 }, (_, i) => blankTable(i + 1));
@@ -806,6 +806,7 @@ const sanitizeTable = t => ({
   restrictions: Array.isArray(t.restrictions) ? t.restrictions : [],
   kitchenLog: t.kitchenLog && typeof t.kitchenLog === "object" ? t.kitchenLog : {},
   courseOverrides: t.courseOverrides && typeof t.courseOverrides === "object" ? t.courseOverrides : {},
+  tableGroup: Array.isArray(t.tableGroup) ? t.tableGroup : [],
 });
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -1670,7 +1671,7 @@ function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = []
 // ── Reservation Modal ─────────────────────────────────────────────────────────
 function ReservationModal({ table, tables = [], onSave, onClose }) {
   const isMobile = useIsMobile(700);
-  const [tableId, setTableId]     = useState(table.id);
+  const [tableIds, setTableIds]   = useState(table.tableGroup?.length > 1 ? table.tableGroup : [table.id]);
   const [name, setName]           = useState(table.resName || "");
   const [time, setTime]           = useState(table.resTime || "");
   const [menuType, setMenuType]   = useState(table.menuType || "");
@@ -1704,19 +1705,32 @@ function ReservationModal({ table, tables = [], onSave, onClose }) {
           TABLE · RESERVATION
         </div>
 
-        {/* Table picker */}
+        {/* Table picker — multi-select for combined tables */}
         <div style={{ marginBottom: 20 }}>
-          <div style={fieldLabel}>Table</div>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+            <div style={fieldLabel}>Table</div>
+            {tableIds.length > 1 && (
+              <span style={{ fontFamily: FONT, fontSize: 10, color: "#555", letterSpacing: 1 }}>
+                T{[...tableIds].sort((a,b)=>a-b).join("-")} · combined
+              </span>
+            )}
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
             {Array.from({ length: 10 }, (_, i) => i + 1).map(tid => {
-              const tObj    = tables.find(t => t.id === tid);
-              const isActive   = tObj?.active;
-              const isBooked   = tObj && (tObj.resName || tObj.resTime) && tObj.id !== table.id;
-              const isSel   = tableId === tid;
+              const tObj     = tables.find(t => t.id === tid);
+              const isActive = tObj?.active;
+              const isBooked = tObj && (tObj.resName || tObj.resTime) && !table.tableGroup?.includes(tid) && tid !== table.id;
+              const isSel    = tableIds.includes(tid);
+              const toggle   = () => {
+                if (isActive) return;
+                setTableIds(prev =>
+                  prev.includes(tid)
+                    ? prev.length > 1 ? prev.filter(x => x !== tid) : prev  // keep at least one
+                    : [...prev, tid]
+                );
+              };
               return (
-                <button key={tid}
-                  onClick={() => { if (!isActive) setTableId(tid); }}
-                  disabled={isActive}
+                <button key={tid} onClick={toggle} disabled={isActive}
                   title={isActive ? "Table is currently seated" : isBooked ? `Reserved: ${tObj.resName || tObj.resTime}` : ""}
                   style={{
                     fontFamily: FONT, fontSize: 13, fontWeight: 500, letterSpacing: 1,
@@ -1732,9 +1746,9 @@ function ReservationModal({ table, tables = [], onSave, onClose }) {
               );
             })}
           </div>
-          {tables.find(t => t.id === tableId && (t.resName || t.resTime) && t.id !== table.id) && (
-            <div style={{ fontFamily: FONT, fontSize: 10, color: "#c07840", marginTop: 6, letterSpacing: 0.5 }}>
-              ⚠ This table already has a reservation — saving will overwrite it
+          {tableIds.length === 1 && (
+            <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginTop: 5, letterSpacing: 0.5 }}>
+              Tap multiple tables to combine (e.g. T2-3)
             </div>
           )}
         </div>
@@ -1925,7 +1939,7 @@ function ReservationModal({ table, tables = [], onSave, onClose }) {
             flex: 1, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
             padding: "14px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#444",
           }}>CANCEL</button>
-          <button onClick={() => onSave({ tableId, name, time, menuType, guests, guestType, room, birthday, restrictions, notes })} style={{
+          <button onClick={() => onSave({ tableIds, name, time, menuType, guests, guestType, room, birthday, restrictions, notes })} style={{
             flex: 2, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
             padding: "14px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff",
           }}>SAVE</button>
@@ -1959,10 +1973,10 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
       {/* ── Top row: table number + status badges ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <span style={{
-          fontFamily: FONT, fontSize: 28, fontWeight: 300, letterSpacing: 1,
+          fontFamily: FONT, fontSize: table.tableGroup?.length > 1 ? 20 : 28, fontWeight: 300, letterSpacing: 1,
           color: table.active ? "#1a1a1a" : "#888", lineHeight: 1,
         }}>
-          {String(table.id).padStart(2, "0")}
+          {table.tableGroup?.length > 1 ? `T${table.tableGroup.join("-")}` : String(table.id).padStart(2, "0")}
         </span>
         <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", maxWidth: "65%" }}>
           {table.birthday && <span style={{ fontSize: 13 }}>🎂</span>}
@@ -3116,7 +3130,9 @@ function KitchenTicket({ table, menuCourses, upd }) {
 
       {/* ── Header ── */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e8e8e8", padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8 }}>
-        <span style={{ fontFamily: FONT, fontSize: 21, fontWeight: 800, color: "#111", lineHeight: 1, letterSpacing: -1, flexShrink: 0 }}>T{table.id}</span>
+        <span style={{ fontFamily: FONT, fontSize: table.tableGroup?.length > 1 ? 16 : 21, fontWeight: 800, color: "#111", lineHeight: 1, letterSpacing: -1, flexShrink: 0 }}>
+          {table.tableGroup?.length > 1 ? `T${table.tableGroup.join("-")}` : `T${table.id}`}
+        </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
             {table.resName && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
@@ -3139,20 +3155,20 @@ function KitchenTicket({ table, menuCourses, upd }) {
 
       {/* ── Seats ── */}
       <div style={{ background: "#f6f6f6", borderBottom: "1px solid #e8e8e8", padding: "5px 10px" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "5px 10px" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 6px" }}>
           {seats.map(s => {
             const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
             const restrList = restrictions.filter(r => r.pos === s.id).map(r => r.note).filter(Boolean);
             const restrShort = k => { const d = RESTRICTIONS.find(r => r.key === k); return d ? d.label : k; };
             return (
-              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 3 }}>
                 <span style={{
-                  fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 3,
+                  fontFamily: FONT, fontSize: 9, fontWeight: 700, padding: "2px 5px", borderRadius: 2,
                   background: p ? (pairingBg[p] || "#f0f0f0") : "#e8e8e8",
                   color: p ? (pairingColor[p] || "#555") : "#666",
                 }}>P{s.id}{p ? ` · ${pLabel(p)}` : ""}</span>
                 {restrList.length > 0 && (
-                  <span style={{ fontFamily: FONT, fontSize: 9, color: "#b03030", letterSpacing: 0.2, fontWeight: 600 }}>{restrList.map(restrShort).join(" · ")}</span>
+                  <span style={{ fontFamily: FONT, fontSize: 8, color: "#b03030", letterSpacing: 0.2, fontWeight: 600 }}>{restrList.map(restrShort).join(" · ")}</span>
                 )}
               </div>
             );
@@ -4443,17 +4459,22 @@ export default function App() {
     })};
   }));
 
-  const saveRes = (id, { tableId, name, time, menuType, guests, guestType, room, birthday, restrictions, notes }) => {
-    const targetId = tableId ?? id;
+  const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, birthday, restrictions, notes }) => {
+    const group = tableIds ?? (tableId ? [tableId] : [id]);
+    const sortedGroup = [...group].sort((a, b) => a - b);
+    // Find old group to clear tables that are no longer part of it
+    const oldGroup = tables.find(t => t.id === id)?.tableGroup || [id];
     setTables(p => p.map(t => {
-      // Clear old table if user picked a different one
-      if (t.id === id && id !== targetId) return { ...t, resName: "", resTime: "", menuType: "", guestType: "", room: "", guests: 2, birthday: false, restrictions: [], notes: "" };
-      if (t.id !== targetId) return t;
+      // Clear tables that were in the old group but aren't in the new group
+      if (oldGroup.includes(t.id) && !sortedGroup.includes(t.id)) {
+        return { ...blankTable(t.id), active: t.active, arrivedAt: t.arrivedAt, kitchenLog: t.kitchenLog };
+      }
+      if (!sortedGroup.includes(t.id)) return t;
       const newSeats = makeSeats(guests, t.seats).map(s => ({
         ...s,
         extras: { ...s.extras, ...(birthday ? { 3: { ordered: true, pairing: "—" } } : {}) },
       }));
-      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, restrictions, notes };
+      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, restrictions, notes, tableGroup: sortedGroup };
     }));
     setResModal(null);
   };
