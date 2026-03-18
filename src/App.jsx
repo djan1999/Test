@@ -3115,29 +3115,29 @@ function KitchenTicket({ table, menuCourses, upd }) {
     <div style={{ border: "2px solid #e8e8e8", borderRadius: 6, overflow: "hidden", background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}>
 
       {/* ── Header ── */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #e8e8e8", padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
-        <span style={{ fontFamily: FONT, fontSize: 26, fontWeight: 800, color: "#111", lineHeight: 1, letterSpacing: -1, flexShrink: 0 }}>T{table.id}</span>
+      <div style={{ background: "#fff", borderBottom: "1px solid #e8e8e8", padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <span style={{ fontFamily: FONT, fontSize: 21, fontWeight: 800, color: "#111", lineHeight: 1, letterSpacing: -1, flexShrink: 0 }}>T{table.id}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
-            {table.resName && <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
-            {table.birthday && <span style={{ fontSize: 11 }}>🎂</span>}
-            {table.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 9, color: "#9a6a20", letterSpacing: 0.5 }}>{table.room ? `#${table.room}` : "Hotel"}</span>}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
+            {table.resName && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
+            {table.birthday && <span style={{ fontSize: 10 }}>🎂</span>}
+            {table.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 8, color: "#9a6a20", letterSpacing: 0.5 }}>{table.room ? `#${table.room}` : "Hotel"}</span>}
           </div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 2, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: "#111" }}>{seats.length} <span style={{ fontWeight: 600, fontSize: 12, letterSpacing: 0.5 }}>PAX</span></span>
-            {table.resTime && <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: "#555" }}>{table.resTime}</span>}
-            {table.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: "#4a9a6a" }}>arr. {table.arrivedAt}</span>}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 1, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#111" }}>{seats.length} <span style={{ fontWeight: 600, fontSize: 10, letterSpacing: 0.5 }}>PAX</span></span>
+            {table.resTime && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: "#555" }}>{table.resTime}</span>}
+            {table.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: "#4a9a6a" }}>arr. {table.arrivedAt}</span>}
           </div>
-          {table.notes && <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", fontStyle: "italic", marginTop: 2, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.notes}</div>}
+          {table.notes && <div style={{ fontFamily: FONT, fontSize: 8, color: "#999", fontStyle: "italic", marginTop: 1, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.notes}</div>}
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
-          <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: allDone ? "#4a9a6a" : "#111", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 12, color: "#aaa", fontWeight: 400 }}>/{totalCourses}</span></div>
-          {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", marginTop: 2 }}>{durationMins} min</div>}
+          <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: allDone ? "#4a9a6a" : "#111", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 10, color: "#aaa", fontWeight: 400 }}>/{totalCourses}</span></div>
+          {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", marginTop: 2 }}>{durationMins} min</div>}
         </div>
       </div>
 
       {/* ── Seats ── */}
-      <div style={{ background: "#f6f6f6", borderBottom: "1px solid #e8e8e8", padding: "7px 14px" }}>
+      <div style={{ background: "#f6f6f6", borderBottom: "1px solid #e8e8e8", padding: "5px 10px" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "5px 10px" }}>
           {seats.map(s => {
             const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
@@ -3261,30 +3261,30 @@ function KitchenTicket({ table, menuCourses, upd }) {
                 borderLeft: fired ? "4px solid #4a9a6a" : "4px solid transparent",
                 cursor: "pointer", transition: "background 0.15s",
               }}>
-              <div style={{ display: "flex", alignItems: "center", padding: "10px 14px 10px 12px", gap: 10 }}>
-                <span style={{ fontFamily: FONT, fontSize: 16, color: fired ? "#4a9a6a" : "#ddd", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
+              <div style={{ display: "flex", alignItems: "center", padding: "7px 10px 7px 8px", gap: 7 }}>
+                <span style={{ fontFamily: FONT, fontSize: 13, color: fired ? "#4a9a6a" : "#ddd", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {/* Line 1: CELERIAC | pork head, bozner sauce */}
                   <div style={{
-                    fontFamily: FONT, fontSize: 13, fontWeight: 700, lineHeight: 1.25,
+                    fontFamily: FONT, fontSize: 11, fontWeight: 700, lineHeight: 1.25,
                     color: fired ? "#bbb" : "#111",
                     textDecoration: fired ? "line-through" : "none",
                     letterSpacing: 0.2,
                   }}>
                     {line1}
-                    {extraLabel && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 400, color: "#bbb", marginLeft: 8 }}>{extraLabel}</span>}
+                    {extraLabel && <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 400, color: "#bbb", marginLeft: 6 }}>{extraLabel}</span>}
                   </div>
                   {/* Restriction labels + kitchen note (line 3) — both in red */}
                   {(modGroups || kitchenNote) && !fired && (
-                    <div style={{ marginTop: 3, display: "flex", flexWrap: "wrap", gap: "2px 10px" }}>
+                    <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
                       {modGroups && Object.entries(modGroups).sort(([a], [b]) => (a === baseName ? -1 : 1) - (b === baseName ? -1 : 1)).map(([name, count]) => (
-                        <span key={name} style={{ fontFamily: FONT, fontSize: 12, color: name === baseName ? "#444" : "#c04040", fontWeight: 600 }}>{count}× {name}</span>
+                        <span key={name} style={{ fontFamily: FONT, fontSize: 10, color: name === baseName ? "#444" : "#c04040", fontWeight: 600 }}>{count}× {name}</span>
                       ))}
-                      {kitchenNote && <span style={{ fontFamily: FONT, fontSize: 12, color: "#c04040", fontWeight: 600 }}>{kitchenNote}</span>}
+                      {kitchenNote && <span style={{ fontFamily: FONT, fontSize: 10, color: "#c04040", fontWeight: 600 }}>{kitchenNote}</span>}
                     </div>
                   )}
                 </div>
-                {firedAt && <span style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
+                {firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
               </div>
             </div>
           );
@@ -3293,9 +3293,9 @@ function KitchenTicket({ table, menuCourses, upd }) {
 
       {/* ── Done footer ── */}
       {allDone && (
-        <div style={{ background: "#eaf7ee", borderTop: "2px solid #b8e8c4", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-          <span style={{ fontFamily: FONT, fontSize: 18, color: "#4a9a6a" }}>✓</span>
-          <span style={{ fontFamily: FONT, fontSize: 13, color: "#4a9a6a", fontWeight: 700, letterSpacing: 1 }}>
+        <div style={{ background: "#eaf7ee", borderTop: "2px solid #b8e8c4", padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <span style={{ fontFamily: FONT, fontSize: 14, color: "#4a9a6a" }}>✓</span>
+          <span style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", fontWeight: 700, letterSpacing: 1 }}>
             {durationMins != null ? `${durationMins} MIN` : "COMPLETE"}
           </span>
         </div>
@@ -3378,14 +3378,14 @@ function KitchenBoard({ tables, menuCourses, upd }) {
   const orderedTables = order.map(id => activeTables.find(t => t.id === id)).filter(Boolean);
 
   return (
-    <div style={{ overflowX: "auto", paddingBottom: 8 }}>
-      <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-start", gap: 12, minWidth: "max-content" }}>
+    <div style={{ paddingBottom: 8 }}>
+      <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 12 }}>
         {orderedTables.map(t => (
           <div
             key={t.id}
             data-ticket-id={String(t.id)}
             style={{
-              flexShrink: 0, width: 355,
+              flexShrink: 0, width: 248,
               touchAction: draggingId ? "none" : "pan-x pan-y",
               userSelect: "none",
               WebkitUserSelect: "none",
