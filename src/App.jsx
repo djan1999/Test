@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
-  DndContext, closestCenter, PointerSensor, TouchSensor,
-  useSensor, useSensors, DragOverlay,
+  DndContext, PointerSensor, TouchSensor,
+  useSensor, useSensors, DragOverlay, rectIntersection,
+  MeasuringStrategy,
 } from "@dnd-kit/core";
 import {
   SortableContext, useSortable, rectSortingStrategy, arrayMove,
@@ -3389,7 +3390,8 @@ function KitchenBoard({ tables, menuCourses, upd }) {
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={rectIntersection}
+      measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
       onDragStart={({ active }) => setActiveId(active.id)}
       onDragEnd={({ active, over }) => {
         setActiveId(null);
@@ -4218,6 +4220,17 @@ function LoginScreen({ onEnter }) {
       }
     }
   };
+
+  useEffect(() => {
+    if (!picking) return;
+    const onKey = e => {
+      if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
+      else if (e.key === "Backspace") setPin(p => p.slice(0, -1));
+      else if (e.key === "Escape") { setPicking(null); setPin(""); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [picking, pin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={{ minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
