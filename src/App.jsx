@@ -3746,6 +3746,9 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
           const cocktails  = s.cocktails || [];
           const bottles    = seatBottles(s);
 
+          const spirits    = s.spirits  || [];
+          const beers      = s.beers    || [];
+
           const seatHasEdits = Object.keys(seatEdits[s.id] || {}).length > 0;
           const isExpanded = expandedSeatId === s.id;
 
@@ -3778,6 +3781,28 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
                 })}
                 {extras.includes(1) && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+BEETROOT</span>}
                 {extras.includes(2) && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+CHEESE</span>}
+
+                {/* Manually added beverages */}
+                {glasses.map((w, i) => (
+                  <span key={`g${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #c8a060", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    🍷 {w.name}
+                  </span>
+                ))}
+                {cocktails.map((c, i) => (
+                  <span key={`c${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#f5eeff", color: "#5a3878", border: "1px solid #b898d8", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    🍹 {c.name}
+                  </span>
+                ))}
+                {spirits.map((sp, i) => (
+                  <span key={`s${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fff3e0", color: "#7a5020", border: "1px solid #d4a870", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    🥃 {sp.name}
+                  </span>
+                ))}
+                {beers.map((b, i) => (
+                  <span key={`b${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#edf8e8", color: "#3a6a2a", border: "1px solid #88bb70", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    🍺 {b.name}
+                  </span>
+                ))}
 
                 {/* Beer selector */}
                 <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
