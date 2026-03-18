@@ -58,8 +58,8 @@ const splitMainSubCell = (title, sub = "") => {
 
 // Parse a two-line bilingual cell: line 1 = EN, line 2 = SI (Alt+Enter in sheet).
 const parseBilingual = (rawCell, rawSubCol = "") => {
-  const lines    = String(rawCell   ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
-  const subLines = String(rawSubCol ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const lines    = String(rawCell   ?? "").split("\n").map(s => s.trim());
+  const subLines = String(rawSubCol ?? "").split("\n").map(s => s.trim());
   const en = splitMainSubCell(lines[0] || "", subLines[0] || "");
   const si = (lines[1] || subLines[1])
     ? splitMainSubCell(lines[1] || "", subLines[1] || "")
@@ -83,9 +83,10 @@ function parseRows(rows) {
   });
 
   return records.map((row) => {
-    // Google Sheets cells may have two lines (Alt+Enter): line 1 = EN, line 2 = SI.
-    const dishLines = String(row.dish ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
-    const descLines = String(row.description ?? "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+    // Google Sheets cells may contain up to 3 lines: line 1 = EN, line 2 = SI, line 3 = kitchen note only.
+    // Split on single \n to preserve blank-line positions — a blank line 2 must NOT shift line 3 into SI slot.
+    const dishLines = String(row.dish ?? "").split("\n").map(s => s.trim());
+    const descLines = String(row.description ?? "").split("\n").map(s => s.trim());
     const dishEnRaw = dishLines[0] || "";
     const descEnRaw = descLines[0] || "";
     // Prefer an explicit dish_si / dish_si_sub column; fall back to line 2 of dish/description.
