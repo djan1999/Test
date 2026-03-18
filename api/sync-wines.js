@@ -45,6 +45,23 @@ async function fetchHtml(url) {
   return res.text();
 }
 
+async function withRetry(fn, label, maxAttempts = 4) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      if (attempt < maxAttempts) {
+        const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+        console.warn(`[sync] ${label} attempt ${attempt} failed (${e.message}), retrying in ${delay}ms…`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 function extractCells(row) {
   const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
   const cells = [];
@@ -110,7 +127,10 @@ function parseBeveragesFromHtml(html, category, subcategoryLabel) {
 }
 
 async function fetchWineCountry({ param, label }) {
-  const html = await fetchHtml(`${BASE}/category/vino/?drzava=${param}`);
+  const html = await withRetry(
+    () => fetchHtml(`${BASE}/category/vino/?drzava=${param}`),
+    `wines ${label}`
+  );
   const wines = parseWinesFromHtml(html, label);
   console.log(`[sync] wines ${label} → ${wines.length}`);
   return { label, wines };
@@ -118,11 +138,11 @@ async function fetchWineCountry({ param, label }) {
 
 async function fetchBeveragePage({ url, category, label }) {
   try {
-    const html = await fetchHtml(url);
+    const html = await withRetry(() => fetchHtml(url), label);
     const items = parseBeveragesFromHtml(html, category, label);
     console.log(`[sync] ${label} → ${items.length}`);
     return items;
-  } catch (e) { console.warn(`[sync] ${label} failed: ${e.message}`); return []; }
+  } catch (e) { console.warn(`[sync] ${label} failed after retries: ${e.message}`); return []; }
 }
 
 export default async function handler(req, res) {
