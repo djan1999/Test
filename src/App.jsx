@@ -307,11 +307,14 @@ const MENU_DATA = [{"menu":{"name":"SOUR SOUP","sub":"cabbage, yeast butter"},"v
 
 const PAIRING_KEY = { "Wine": "wp", "Non-Alc": "na", "Premium": "premium", "Our Story": "os" };
 
-// ── Aperitif quick-add options (derived from MENU_DATA aperitivo entries) ─────
-const APERITIF_OPTIONS = MENU_DATA.filter(c => c.aperitivo?.name).slice(0, 4).map(c => ({
-  name: c.aperitivo.name,
-  notes: c.aperitivo.sub || "",
-}));
+// ── Aperitif quick-add options — label shown on button, searchKey used to find
+//    the real item in wines (byGlass) or cocktails list, type determines bucket.
+const APERITIF_OPTIONS = [
+  { label: "SFSC",       searchKey: "SFSC",         type: "cocktail" },
+  { label: "Slapšak",    searchKey: "Slapšak",      type: "wine" },
+  { label: "Clandestin", searchKey: "Clandestin",   type: "wine" },
+  { label: "Krug",       searchKey: "Krug",          type: "wine" },
+];
 
 const COUNTRY_NAMES = {
   FR: "France", IT: "Italy", ES: "Spain", DE: "Germany", AT: "Austria",
@@ -2285,14 +2288,27 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
               {/* Unified beverage search */}
               <div style={{ background: "#fcfcfc", border: "1px solid #ececec", borderRadius: 8, padding: isMobile ? "10px" : "12px" }}>
                 <div style={{ ...fieldLabel, marginBottom: 8, color: "#444" }}>Beverages</div>
-                {/* Aperitif quick-add buttons */}
+                {/* Aperitif quick-add buttons — look up the real item from the beverage lists */}
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                   {APERITIF_OPTIONS.map(ap => (
-                    <button key={ap.name} onClick={() => updSeat(seat.id, "cocktails", [...(seat.cocktails || []), ap])} style={{
+                    <button key={ap.label} onClick={() => {
+                      const lk = ap.searchKey.toLowerCase();
+                      if (ap.type === "wine") {
+                        const found = wines.filter(w => w.byGlass).find(w =>
+                          w.name?.toLowerCase().includes(lk) || w.producer?.toLowerCase().includes(lk)
+                        );
+                        if (found) updSeat(seat.id, "glasses", [...(seat.glasses || []), found]);
+                        else updSeat(seat.id, "cocktails", [...(seat.cocktails || []), { name: ap.searchKey, notes: "" }]);
+                      } else {
+                        const found = cocktails.find(c => c.name?.toLowerCase().includes(lk));
+                        if (found) updSeat(seat.id, "cocktails", [...(seat.cocktails || []), found]);
+                        else updSeat(seat.id, "cocktails", [...(seat.cocktails || []), { name: ap.searchKey, notes: "" }]);
+                      }
+                    }} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
                       border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
                       background: "#fdf8f0", color: "#7a5020", transition: "all 0.1s",
-                    }}>{ap.name}</button>
+                    }}>{ap.label}</button>
                   ))}
                 </div>
                 <BeverageSearch
@@ -3427,7 +3443,7 @@ function KitchenTicket({ table, menuCourses, upd }) {
   );
 }
 
-function SortableTicket({ table, menuCourses, upd, isDragging }) {
+function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
@@ -3438,9 +3454,10 @@ function SortableTicket({ table, menuCourses, upd, isDragging }) {
       {...listeners}
       style={{
         flexShrink: 0, width: 248,
-        transform: transform ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : undefined,
-        transition: isDragging ? 'none' : transition,
-        willChange: 'transform',
+        // Only apply transform while a drag is active — prevents stale transforms
+        // from persisting after drag ends and causing cards to appear displaced.
+        transform: anyDragging && transform ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : undefined,
+        transition: isDragging ? 'none' : (anyDragging ? transition : undefined),
         cursor: isDragging ? "grabbing" : "grab",
         userSelect: "none", WebkitUserSelect: "none",
         touchAction: "none",
@@ -3520,6 +3537,7 @@ function KitchenBoard({ tables, menuCourses, upd }) {
                 menuCourses={menuCourses}
                 upd={upd}
                 isDragging={activeId === t.id}
+                anyDragging={activeId !== null}
               />
             ))}
           </div>
