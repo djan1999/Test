@@ -56,7 +56,8 @@ const splitMainSubCell = (title, sub = "") => {
   return { name: rawTitle, sub: rawSub };
 };
 
-// Parse a two-line bilingual cell: line 1 = EN, line 2 = SI (Alt+Enter in sheet).
+// Parse a bilingual cell with optional kitchen note:
+//   Line 1 = EN (menu generator), Line 2 = SI (menu generator), Line 3 = kitchen note.
 const parseBilingual = (rawCell, rawSubCol = "") => {
   const lines    = String(rawCell   ?? "").split("\n").map(s => s.trim());
   const subLines = String(rawSubCol ?? "").split("\n").map(s => s.trim());
@@ -64,7 +65,8 @@ const parseBilingual = (rawCell, rawSubCol = "") => {
   const si = (lines[1] || subLines[1])
     ? splitMainSubCell(lines[1] || "", subLines[1] || "")
     : null;
-  return { en: en?.name ? en : null, si: si?.name ? si : null };
+  const note = lines[2] || subLines[2] || "";
+  return { en: en?.name ? en : null, si: si?.name ? si : null, note };
 };
 
 const RESTRICTION_KEYS = [
@@ -100,13 +102,17 @@ function parseRows(rows) {
       .trim().toLowerCase()
       .replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 
-    // Per-restriction columns + optional _sub and _note columns (bilingual: line 1 EN, line 2 SI)
+    // Per-restriction columns: line 1 = EN (menu gen), line 2 = SI (menu gen), line 3 = kitchen note.
     const restrictionCols = {};
     const restrictionColsSi = {};
+    const restrictionNotes = {};
     RESTRICTION_KEYS.forEach(k => {
-      const { en, si } = parseBilingual(row[k], row[`${k}_sub`]);
+      const { en, si, note } = parseBilingual(row[k], row[`${k}_sub`]);
       restrictionCols[k] = en;
       if (si) restrictionColsSi[k] = si;
+      // Kitchen note: prefer explicit "{k}_note" column, fall back to line 3 of the restriction cell.
+      const resolvedNote = String(firstFilled(row[`${k}_note`], note) || "").trim();
+      if (resolvedNote) restrictionNotes[k] = resolvedNote;
     });
 
     // Pairings — bilingual (line 1 = EN, line 2 = SI)
@@ -142,8 +148,13 @@ function parseRows(rows) {
       force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
       force_pairing_sub:   String(firstFilled(row.force_pairing_sub)).trim(),
       kitchen_note:        String(firstFilled(row.kitchen_note, kitchenNoteFallback)).trim(),
-      // Slovenian restriction substitutes (stored as a single jsonb map)
-      restrictions_si:     Object.keys(restrictionColsSi).length ? restrictionColsSi : null,
+      // Slovenian restriction substitutes + kitchen notes stored in one jsonb map.
+      // Notes are stored with a "__note" suffix key (e.g. "no_pork__note": "no guanciale").
+      restrictions_si: (() => {
+        const combined = { ...restrictionColsSi };
+        Object.entries(restrictionNotes).forEach(([k, v]) => { combined[`${k}__note`] = v; });
+        return Object.keys(combined).length ? combined : null;
+      })(),
       // Original restriction columns (always present in schema)
       vegan:        restrictionCols.vegan,
       pescetarian:  restrictionCols.pescetarian,

@@ -86,10 +86,12 @@ const splitMainSubCell = (title, sub = "") => {
   return { name: rawTitle, sub: rawSub };
 };
 
-// Parse a two-line bilingual cell: line 1 = EN, line 2 = SI (Alt+Enter in sheet).
-// Line 3+ is reserved for kitchen notes and is NEVER used for menu generation.
-// rawSubCol is the optional separate sub/description column (also potentially two-line).
-// Returns { en: {name, sub} | null, si: {name, sub} | null }
+// Parse a bilingual cell with optional kitchen note:
+//   Line 1 = EN  (menu generator)
+//   Line 2 = SI  (menu generator)
+//   Line 3 = kitchen ticket note (never used for menu generation)
+// rawSubCol is the optional separate sub/description column (same 3-line structure).
+// Returns { en: {name, sub} | null, si: {name, sub} | null, note: string }
 //
 // IMPORTANT: We split on a single \n (not \n+) to preserve blank-line positions.
 // A blank line 2 means "no SI content" — it must not shift line 3 up into the SI slot.
@@ -100,7 +102,8 @@ const parseBilingual = (rawCell, rawSubCol = "") => {
   const si = (lines[1] || subLines[1])
     ? splitMainSubCell(lines[1] || "", subLines[1] || "")
     : null;
-  return { en: en?.name ? en : null, si: si?.name ? si : null };
+  const note = lines[2] || subLines[2] || "";
+  return { en: en?.name ? en : null, si: si?.name ? si : null, note };
 };
 
 function normalizeLiveMenuRow(row) {
@@ -136,11 +139,11 @@ function normalizeLiveMenuRow(row) {
   ];
   const restrictions = {};
   restrictionKeys.forEach((key) => {
-    const { en, si } = parseBilingual(row[key], row[`${key}_sub`]);
+    const { en, si, note: cellNote } = parseBilingual(row[key], row[`${key}_sub`]);
     restrictions[key] = en;
     if (si) restrictions[`${key}_si`] = si;
-    // Optional per-course chef ticket note: column "{key}_note" (e.g. "veg_note")
-    const note = String(firstFilled(row[`${key}_note`]) || "").trim();
+    // Kitchen note: prefer explicit "{key}_note" column, fall back to line 3 of the restriction cell.
+    const note = String(firstFilled(row[`${key}_note`], cellNote) || "").trim();
     if (note) restrictions[`${key}_note`] = note;
   });
 
@@ -4551,9 +4554,16 @@ export default function App() {
       return applyCourses(data.map(r => {
         const restrictions = {};
         DIETARY_KEYS.forEach(k => { restrictions[k] = r[k] ?? null; });
-        // Merge SI restriction variants from the restrictions_si column
+        // Merge SI restriction variants and kitchen notes from the restrictions_si column.
+        // Notes are stored with "__note" suffix (e.g. "no_pork__note" → restrictions["no_pork_note"]).
         const rSi = r.restrictions_si || {};
-        Object.entries(rSi).forEach(([k, v]) => { if (v) restrictions[`${k}_si`] = v; });
+        Object.entries(rSi).forEach(([k, v]) => {
+          if (k.endsWith("__note")) {
+            if (v) restrictions[k.slice(0, -"__note".length) + "_note"] = v;
+          } else {
+            if (v) restrictions[`${k}_si`] = v;
+          }
+        });
         // Legacy data may have menu.name = "EN NAME\nSI NAME" (two-line cell not split at sync time).
         // Split it here so the correct language is shown for each menu type.
         let menu = r.menu || null;
