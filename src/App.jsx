@@ -448,7 +448,9 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     const rawVintage = String(w?.vintage || "").trim();
     const vintage = rawVintage.match(/^\d{4}$/) ? `'${rawVintage.slice(2)}` : rawVintage;
     const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
-    const subParts = [w?.region, w?.country].filter(Boolean);
+    const region = w?.region || "";
+    const country = w?.country || "";
+    const subParts = [region, country && !region.includes(country) ? country : ""].filter(Boolean);
     return {
       title: title || "",
       sub: subParts.join(", ") || w?.notes || "",
@@ -3807,7 +3809,9 @@ function SummaryModal({ tables, dishes = [], onClose }) {
                   const rawVintage = String(w?.vintage || "").trim();
                   const vintage = rawVintage.match(/^\d{4}$/) ? `'${rawVintage.slice(2)}` : rawVintage;
                   const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
-                  const sub = [w?.region, w?.country].filter(Boolean).join(", ") || w?.notes || "";
+                  const region = w?.region || "";
+                  const country = w?.country || "";
+                  const sub = [region, country && !region.includes(country) ? country : ""].filter(Boolean).join(", ") || w?.notes || "";
                   return (
                     <div key={i} style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                       <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a1a1a", textTransform: "uppercase", letterSpacing: 0.3 }}>🍾 {title}</span>
