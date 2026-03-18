@@ -671,7 +671,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
 @font-face{font-family:'RM';font-weight:700;src:url('data:font/truetype;base64,${MENU_FONT_BOLD}') format('truetype');}
 @font-face{font-family:'RM';font-weight:400;src:url('data:font/truetype;base64,${MENU_FONT_REG}') format('truetype');}
 *{margin:0;padding:0;box-sizing:border-box;}
-:root{--page-w:148mm;--page-h:210mm;--pad-t:8.4mm;--pad-r:12mm;--pad-b:8.2mm;--pad-l:12mm;--inner-h:calc(var(--page-h) - var(--pad-t) - var(--pad-b));}
+:root{--page-w:148mm;--page-h:210mm;--pad-t:14mm;--pad-r:12mm;--pad-b:8.2mm;--pad-l:12mm;--inner-h:calc(var(--page-h) - var(--pad-t) - var(--pad-b));}
 @page{size:A5 portrait;margin:0;}
 html,body{width:var(--page-w);height:var(--page-h);overflow:hidden;background:#fff;color:#000;font-family:'RM', monospace;font-size:6.75pt;line-height:1.08;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 body{position:relative;}
@@ -679,7 +679,7 @@ body{position:relative;}
 #frame{position:absolute;inset:0;padding:var(--pad-t) var(--pad-r) var(--pad-b) var(--pad-l);overflow:hidden;}
 #scaleTarget{width:100%;min-height:var(--inner-h);display:flex;flex-direction:column;transform-origin:top left;}
 #header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:8.6mm;margin-bottom:9.1mm;}
-#title{font-size:13.9pt;font-weight:700;letter-spacing:0.035em;padding-top:10.5mm;}
+#title{font-size:13.9pt;font-weight:700;letter-spacing:0.035em;padding-top:22mm;}
 #menu-date{font-size:5.8pt;font-weight:400;letter-spacing:0.02em;margin-top:0.8mm;}
 #logo img{width:18.2mm;display:block;}
 #menu{width:100%;margin-top:auto;margin-bottom:auto;}
