@@ -406,7 +406,7 @@ function applyCourseRestriction(course, activeRestrictions, lang = "en") {
 }
 
 
-function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null, lang = "en", seatOutputOverrides = {} }) {
+function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null, lang = "en", seatOutputOverrides = {}, thankYouNote = "Thank you for your visit." }) {
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
   const PAIRING_LABELS = lang === "si"
     ? { wp: "VINSKA SPREMLJAVA", na: "BREZALKOHOLNA SPREMLJAVA", os: "OUR STORY SPREMLJAVA", premium: "PREMIUM SPREMLJAVA" }
@@ -444,10 +444,16 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   const DANUBE_SALMON_IDX = 5;
   const PAIRING_INSERT_IDX = DANUBE_SALMON_IDX;
 
-  const fmtWineParts = w => ({
-    title: w?.name || "",
-    sub: [w?.producer, w?.vintage].filter(Boolean).join("  ") || w?.notes || "",
-  });
+  const fmtWineParts = w => {
+    const rawVintage = String(w?.vintage || "").trim();
+    const vintage = rawVintage.match(/^\d{4}$/) ? `'${rawVintage.slice(2)}` : rawVintage;
+    const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
+    const subParts = [w?.region, w?.country].filter(Boolean);
+    return {
+      title: title || "",
+      sub: subParts.join(", ") || w?.notes || "",
+    };
+  };
 
   const fmtDrinkParts = item => {
     if (!item) return { title: "", sub: "" };
@@ -631,12 +637,18 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       return `<div class="menu-row wine-only">${renderBlock(null, "left")}${renderBlock(row.right, "right")}</div>`;
     }
     if (row.type === "thankyou") {
-      return `<div class="menu-thankyou">Thank you for your visit.</div>`;
+      return `<div class="menu-thankyou">${esc(thankYouNote)}</div>`;
     }
     return `<div class="menu-row ${row.rowClass || ""}">${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
   }).join("");
 
   const safeTitle = esc((menuTitle || "WINTER MENU").replace(/\s+/g, " ").trim());
+
+  const _today = new Date();
+  const _d = _today.getDate();
+  const _suffix = [11, 12, 13].includes(_d) ? "th" : _d % 10 === 1 ? "st" : _d % 10 === 2 ? "nd" : _d % 10 === 3 ? "rd" : "th";
+  const _MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const menuDate = `${_d}${_suffix} of ${_MONTHS[_today.getMonth()]}, ${_today.getFullYear()}`;
 
   return `<!DOCTYPE html>
 <html>
@@ -655,7 +667,8 @@ body{position:relative;}
 #frame{position:absolute;inset:0;padding:var(--pad-t) var(--pad-r) var(--pad-b) var(--pad-l);overflow:hidden;}
 #scaleTarget{width:100%;min-height:var(--inner-h);display:flex;flex-direction:column;transform-origin:top left;}
 #header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:8.6mm;margin-bottom:9.1mm;}
-#title{font-size:13.9pt;font-weight:700;letter-spacing:0.035em;padding-top:7.9mm;}
+#title{font-size:13.9pt;font-weight:700;letter-spacing:0.035em;padding-top:10.5mm;}
+#menu-date{font-size:6.9pt;font-weight:400;letter-spacing:0.02em;margin-top:2mm;}
 #logo img{width:18.2mm;display:block;}
 #menu{width:100%;margin-top:auto;margin-bottom:auto;}
 .menu-row,.menu-section-row{display:grid;grid-template-columns:minmax(0,${hasPairing ? "0.85fr) minmax(0,1.15fr" : "1fr) minmax(0,1fr"});column-gap:${hasPairing ? "9mm" : "10.8mm"};align-items:start;break-inside:avoid;page-break-inside:avoid;}
@@ -668,15 +681,15 @@ body{position:relative;}
 .menu-main{font-weight:700;line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;}
 .menu-sub{line-height:1.08;margin-top:0.75pt;overflow-wrap:anywhere;}
 .menu-section-row{margin:6.8pt 0 6.2pt;}
-.menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;}
+.menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;text-transform:uppercase;}
 .menu-thankyou{margin-top:7pt;font-size:6.55pt;font-style:italic;}
 #footer{margin-top:auto;padding-top:9.5pt;}
-#team{font-size:5.45pt;line-height:1.2;overflow-wrap:anywhere;}
+#team{font-size:6.5pt;line-height:1.2;overflow-wrap:anywhere;}
 #team .menu-main{margin-bottom:1.4pt;}
 </style>
 </head>
 <body>
-<div id="sheet"><div id="frame"><div id="scaleTarget"><div id="header"><div id="title">${safeTitle}</div><div id="logo"><img src="data:image/png;base64,${MENU_LOGO}" alt="Milka"></div></div><div id="menu">${rowsHtml}</div><div id="footer"><div id="team"><div class="menu-main">TEAM:</div><div>${esc(teamNames)}</div></div></div></div></div></div>
+<div id="sheet"><div id="frame"><div id="scaleTarget"><div id="header"><div id="title">${safeTitle}<div id="menu-date">${esc(menuDate)}</div></div><div id="logo"><img src="data:image/png;base64,${MENU_LOGO}" alt="Milka"></div></div><div id="menu">${rowsHtml}</div><div id="footer"><div id="team"><div class="menu-main">TEAM:</div><div>${esc(teamNames)}</div></div></div></div></div></div>
 <script>
 (function(){
   const MIN_SCALE = 0.58;
@@ -3323,6 +3336,7 @@ function KitchenBoard({ tables, menuCourses, upd }) {
 function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState("WINTER MENU");
+  const [thankYouNote, setThankYouNote] = useState("Thank you for your visit.");
   const [lang, setLang] = useState("en");
   // Per-seat ephemeral one-time edits — { [seatId]: { [courseKey]: { name?, sub? } } }
   // Cleared automatically after the PDF for that seat is generated.
@@ -3399,6 +3413,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
       beerChoice: beerChoices[seat.id] || defaultBeer(seat),
       lang,
       seatOutputOverrides: seatEdits[seat.id] || {},
+      thankYouNote,
     });
     const w = window.open("", "_blank", "width=620,height=880");
     if (!w) { alert("Pop-up blocked — allow pop-ups for this site."); return; }
@@ -3454,6 +3469,13 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
           <div style={{ flex: 2, minWidth: 220 }}>
             <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Team</div>
             <input value={teamNames} onChange={e => setTeamNames(e.target.value)}
+              style={{ fontFamily: FONT, fontSize: 11, padding: "8px 10px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }} />
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Thank You Note</div>
+            <input value={thankYouNote} onChange={e => setThankYouNote(e.target.value)}
               style={{ fontFamily: FONT, fontSize: 11, padding: "8px 10px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }} />
           </div>
         </div>
