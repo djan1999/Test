@@ -110,12 +110,10 @@ function parseBeveragesFromHtml(html, category, subcategoryLabel) {
 }
 
 async function fetchWineCountry({ param, label }) {
-  try {
-    const html = await fetchHtml(`${BASE}/category/vino/?drzava=${param}`);
-    const wines = parseWinesFromHtml(html, label);
-    console.log(`[sync] wines ${label} → ${wines.length}`);
-    return wines;
-  } catch (e) { console.warn(`[sync] wines ${label} failed: ${e.message}`); return []; }
+  const html = await fetchHtml(`${BASE}/category/vino/?drzava=${param}`);
+  const wines = parseWinesFromHtml(html, label);
+  console.log(`[sync] wines ${label} → ${wines.length}`);
+  return { label, wines };
 }
 
 async function fetchBeveragePage({ url, category, label }) {
@@ -145,7 +143,12 @@ export default async function handler(req, res) {
       Promise.allSettled(BEVERAGE_PAGES.map(fetchBeveragePage)),
     ]);
 
-    const allWines     = wineResults.flatMap(r => r.status === "fulfilled" ? r.value : []);
+    const successfulCountries = wineResults.filter(r => r.status === "fulfilled").map(r => r.value);
+    const failedCountries = WINE_COUNTRIES.filter((_, i) => wineResults[i].status !== "fulfilled");
+    if (failedCountries.length > 0) {
+      console.warn(`[sync] failed countries: ${failedCountries.map(c => c.label).join(", ")}`);
+    }
+    const allWines     = successfulCountries.flatMap(r => r.wines);
     const allBeverages = bevResults.flatMap(r  => r.status === "fulfilled" ? r.value : []);
 
     const byGlassCount  = allWines.filter(w => w.by_glass).length;
@@ -158,6 +161,7 @@ export default async function handler(req, res) {
         ok: true, dry: true,
         wines: allWines.length, byGlass: byGlassCount,
         cocktails: cocktailCount, beers: beerCount, spirits: spiritCount,
+        failedCountries: failedCountries.map(c => c.label),
         sampleCocktail: allBeverages.find(b => b.category === "cocktail"),
         sampleSpirit:   allBeverages.find(b => b.category === "spirit"),
         sampleBeer:     allBeverages.find(b => b.category === "beer"),
@@ -181,7 +185,15 @@ export default async function handler(req, res) {
         winesUpserted += uniqueWines.slice(i, i + BATCH).length;
       }
       const freshKeys = uniqueWines.map(w => w.key);
-      await supabase.from("wines").delete().not("key", "in", `(${freshKeys.map(k => `"${k}"`).join(",")})`);
+      const syncedCountryLabels = successfulCountries.map(r => r.label);
+      // Only delete stale wines from countries we successfully fetched.
+      // This prevents wiping a country's wines when its page fails to load.
+      const { error: deleteError } = await supabase
+        .from("wines")
+        .delete()
+        .in("country", syncedCountryLabels)
+        .not("key", "in", `(${freshKeys.map(k => `"${k}"`).join(",")})`);
+      if (deleteError) console.warn("[sync] wines delete error:", deleteError.message);
     }
 
     // Sync beverages — replace all 3 categories fresh every run
@@ -205,6 +217,7 @@ export default async function handler(req, res) {
       ok: true,
       wines: winesUpserted, byGlass: byGlassCount,
       cocktails: cocktailCount, beers: beerCount, spirits: spiritCount,
+      failedCountries: failedCountries.map(c => c.label),
       timestamp: new Date().toISOString(),
     });
 
