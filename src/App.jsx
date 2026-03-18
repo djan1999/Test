@@ -557,14 +557,11 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   const hasPairing = !!pkey;
   const bottleQueue = hasPairing ? [] : [...tableBottles];
   // Non-pairing: cocktails fill early course right columns; glasses distribute from Danube like bottles
-  // Include aperitif quick-select (seat.aperitif) as the first cocktail/aperitivo entry
-  const aprEntry = seat.aperitif ? [{ name: seat.aperitif, __type: "cocktail" }] : [];
-  const aperitivoQueue = hasPairing ? [] : [...aprEntry, ...cocktails.map(c => ({ ...c, __type: "cocktail" }))];
+  const aperitivoQueue = hasPairing ? [] : [...cocktails.map(c => ({ ...c, __type: "cocktail" }))];
   const glassByGlassQueue = hasPairing ? [] : [...glasses.map(w => ({ ...w, __type: "wine" }))];
 
   // Pairing case: keep existing behaviour (all aperitivos/glasses/bottles as wine-only rows at top)
   const topRightItems = hasPairing ? [
-    ...aprEntry,
     ...cocktails.map(c => ({ ...c, __type: "cocktail" })),
     ...glasses.map(w => ({ ...w, __type: "wine" })),
     ...tableBottles.map(item => ({
@@ -3246,7 +3243,7 @@ function KitchenTicket({ table, menuCourses, upd }) {
   const pLabel = p => p === "Non-Alc" ? "N/A" : p === "Our Story" ? "O.S." : p === "Premium" ? "Prem" : p === "Wine" ? "Wine" : p;
 
   return (
-    <div style={{ border: "2px solid #cc3333", borderRadius: 6, overflow: "hidden", background: "#fff", boxShadow: "0 2px 8px rgba(180,30,30,0.10)" }}>
+    <div style={{ border: "2px solid #e8e8e8", borderRadius: 6, overflow: "hidden", background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}>
 
       {/* ── Header ── */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e8e8e8", padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8 }}>
@@ -4143,7 +4140,6 @@ function SummaryModal({ tables, dishes = [], onClose }) {
         const cs = (s.cocktails || []).map(c => c?.name).filter(Boolean);
         const sp = (s.spirits   || []).map(x => x?.name).filter(Boolean);
         const bs = (s.beers     || []).map(x => x?.name).filter(Boolean);
-        if (s.aperitif) parts.push("apr:" + s.aperitif);
         if (gs.length) parts.push("glass:"    + gs.join(","));
         if (cs.length) parts.push("cocktail:" + cs.join(","));
         if (sp.length) parts.push("spirit:"   + sp.join(","));
@@ -4193,7 +4189,6 @@ function SummaryModal({ tables, dishes = [], onClose }) {
                     <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: restr.length ? "#b04040" : "#999", minWidth: 28, letterSpacing: 0.5 }}>P{s.id}</span>
                     {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, background: ws.bg || "#f5f5f5", color: "#333", border: "1px solid #e0e0e0" }}>{s.water}</span>}
                     {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, border: "1px solid #e0e0e0", color: pairingColor[s.pairing] || "#555", background: pairingBg[s.pairing] || "#fafafa" }}>{s.pairing}</span>}
-                    {s.aperitif && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #c8a060", color: "#7a5020", background: "#fdf4e8" }}>apr: {s.aperitif}</span>}
                     {extras.map(d => { const ex = s.extras[d.id]; return <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}{ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}</span>; })}
                     {allBevs.map((b, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
                     {restr.map((r, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
