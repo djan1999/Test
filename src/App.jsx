@@ -3127,6 +3127,7 @@ function KitchenTicket({ table, menuCourses, upd }) {
             <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#111" }}>{seats.length} <span style={{ fontWeight: 600, fontSize: 10, letterSpacing: 0.5 }}>PAX</span></span>
             {table.resTime && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: "#555" }}>{table.resTime}</span>}
             {table.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: "#4a9a6a" }}>arr. {table.arrivedAt}</span>}
+            {table.menuType && <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 3, background: isShort ? "#fff4e0" : "#e8f0ff", color: isShort ? "#a06000" : "#2a50a0" }}>{isShort ? "SHORT" : "LONG"}</span>}
           </div>
           {table.notes && <div style={{ fontFamily: FONT, fontSize: 8, color: "#999", fontStyle: "italic", marginTop: 1, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.notes}</div>}
         </div>
