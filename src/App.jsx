@@ -823,7 +823,6 @@ const makeSeats = (n, ex = []) =>
     beers:     ex[i]?.beers     ?? [],
     pairing:   ex[i]?.pairing   ?? "",
     extras:    ex[i]?.extras    ?? {},
-    aperitif:  ex[i]?.aperitif  ?? null,
   }));
 
 const fmt = d => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
@@ -2626,20 +2625,6 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
       }}>{opt}</button>
     );
 
-    const pBtn = (val, label, active) => {
-      const col = PC[val];
-      return (
-        <button key={val} onClick={() => updSeat && updSeat(t.id, seats[0]?.id, "pairing", val)} style={{
-          fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "3px 7px",
-          border: `1px solid ${active && val !== "—" ? col?.border : active ? "#333" : "#e8e8e8"}`,
-          borderRadius: 3, cursor: "pointer", lineHeight: 1,
-          background: active && val !== "—" ? col?.bg : active ? "#1a1a1a" : "#fff",
-          color: active && val !== "—" ? col?.color : active ? "#fff" : "#bbb",
-          transition: "all 0.1s",
-        }}>{label}</button>
-      );
-    };
-
     const accentColor = isSeated ? "#5aaa70" : "#88a8c8";
 
     return (
@@ -2759,7 +2744,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
               const beetExtra = s.extras?.[1] || s.extras?.["1"] || { ordered: false, pairing: "—" };
               const hasBeet   = !!beetExtra.ordered;
               const hasCheese = !!(s.extras?.[2]?.ordered || s.extras?.["2"]?.ordered);
-              const hasContent = (s.water && s.water !== "—") || s.pairing || restr.length > 0 || extras.length > 0 || s.aperitif;
+              const hasContent = (s.water && s.water !== "—") || s.pairing || restr.length > 0 || extras.length > 0;
 
               if (quickMode) {
                 return (
@@ -2885,9 +2870,6 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                       </span>
                     );
                   })}
-                  {s.aperitif && (
-                    <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 6px", borderRadius: 3, border: "1px solid #c8a060", color: "#7a5020", background: "#fdf4e8" }}>{s.aperitif}</span>
-                  )}
                   {restr.map((r, i) => (
                     <span key={i} style={{ fontFamily: FONT, fontSize: 8, padding: "1px 5px", borderRadius: 3, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0", fontWeight: 500 }}>⚠ {restrCompact(r.note)}</span>
                   ))}
@@ -2924,7 +2906,6 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                     pairing: s.pairing || null,
                     beet: beetExtra?.ordered ? { pairing: beetExtra.pairing || "—" } : null,
                     cheese: !!(s.extras?.[2]?.ordered || s.extras?.["2"]?.ordered),
-                    aperitif: s.aperitif || null,
                   };
                 });
                 upd(t.id, "kitchenAlert", {
