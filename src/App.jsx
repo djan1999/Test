@@ -702,9 +702,11 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
 
   const _today = new Date();
   const _d = _today.getDate();
-  const _suffix = [11, 12, 13].includes(_d) ? "th" : _d % 10 === 1 ? "st" : _d % 10 === 2 ? "nd" : _d % 10 === 3 ? "rd" : "th";
-  const _MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  const menuDate = `${_d}${_suffix} of ${_MONTHS[_today.getMonth()]}, ${_today.getFullYear()}`;
+  const _MONTHS_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const _MONTHS_SI = ["Januar","Februar","Marec","April","Maj","Junij","Julij","Avgust","September","Oktober","November","December"];
+  const menuDate = lang === "si"
+    ? `${_d}. ${_MONTHS_SI[_today.getMonth()]} ${_today.getFullYear()}`
+    : (() => { const _suffix = [11,12,13].includes(_d) ? "th" : _d%10===1 ? "st" : _d%10===2 ? "nd" : _d%10===3 ? "rd" : "th"; return `${_d}${_suffix} of ${_MONTHS_EN[_today.getMonth()]}, ${_today.getFullYear()}`; })();
 
   return `<!DOCTYPE html>
 <html>
