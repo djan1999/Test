@@ -3320,14 +3320,35 @@ function KitchenTicket({ table, menuCourses, upd }) {
       </div>
 
       {/* ── Done footer ── */}
-      {allDone && (
-        <div style={{ background: "#eaf7ee", borderTop: "2px solid #b8e8c4", padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          <span style={{ fontFamily: FONT, fontSize: 14, color: "#4a9a6a" }}>✓</span>
-          <span style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", fontWeight: 700, letterSpacing: 1 }}>
-            {durationMins != null ? `${durationMins} MIN` : "COMPLETE"}
-          </span>
-        </div>
-      )}
+      {allDone && (() => {
+        const fmtDuration = (mins) => {
+          if (mins == null) return null;
+          const h = Math.floor(mins / 60), m = mins % 60;
+          return h > 0 ? `${h}h ${m}m` : `${m}m`;
+        };
+        const timeRange = table.arrivedAt && lastFiredAt ? `${table.arrivedAt}–${lastFiredAt}` : null;
+        const durLabel  = fmtDuration(durationMins);
+        return (
+          <div style={{ background: "#eaf7ee", borderTop: "2px solid #b8e8c4", padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: FONT, fontSize: 13, color: "#4a9a6a" }}>✓</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {durLabel && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 700, letterSpacing: 0.5 }}>{durLabel}</span>}
+                {timeRange && <span style={{ fontFamily: FONT, fontSize: 9, color: "#6ab88a", letterSpacing: 0.3 }}>{timeRange}</span>}
+                {!durLabel && !timeRange && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 700, letterSpacing: 1 }}>COMPLETE</span>}
+              </div>
+            </div>
+            <button
+              onClick={e => { e.stopPropagation(); upd && upd(table.id, "kitchenArchived", true); }}
+              style={{
+                fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "4px 10px",
+                border: "1px solid #a8d8b8", borderRadius: 3, cursor: "pointer",
+                background: "#fff", color: "#4a9a6a", textTransform: "uppercase",
+              }}
+            >Archive</button>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -3358,7 +3379,7 @@ function SortableTicket({ table, menuCourses, upd, isDragging }) {
 
 function KitchenBoard({ tables, menuCourses, upd }) {
   const activeTables = tables
-    .filter(t => t.active)
+    .filter(t => t.active && !t.kitchenArchived)
     .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
   const activeIds = activeTables.map(t => t.id).join(",");
 
@@ -3928,7 +3949,7 @@ function SummaryModal({ tables, dishes = [], onClose }) {
 }
 
 // ── Archive Modal ─────────────────────────────────────────────────────────────
-function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose }) {
+function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, onRestoreTicket }) {
   const [entries, setEntries]   = useState([]);
   const [loading, setLoading]   = useState(true);
   const [expanded, setExpanded] = useState(null);
@@ -3986,12 +4007,52 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose }
     </div>
   );
 
+  const archivedTickets = (tables || []).filter(t => t.kitchenArchived);
+  const fmtDuration = (mins) => { if (mins == null) return null; const h = Math.floor(mins / 60), m = mins % 60; return h > 0 ? `${h}h ${m}m` : `${m}m`; };
+  const parseHHMM = s => { if (!s) return null; const [h, m] = s.split(":").map(Number); return isNaN(h) || isNaN(m) ? null : h * 60 + m; };
+
   return (
     <FullModal title="Archive · End of Day" onClose={onClose} actions={archiveActions}>
       <div style={{ maxWidth: 800, margin: "0 auto" }}>
+
+        {/* ── Today's archived tickets ── */}
+        {archivedTickets.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 3, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Today · Archived Tickets</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {archivedTickets.map(t => {
+                const klog = t.kitchenLog || {};
+                const lastFiredAt = Object.values(klog).map(e => e.firedAt).filter(Boolean).sort().pop();
+                const start = parseHHMM(t.arrivedAt), end = parseHHMM(lastFiredAt);
+                const durMins = (start != null && end != null) ? (end >= start ? end - start : end - start + 1440) : null;
+                const timeRange = t.arrivedAt && lastFiredAt ? `${t.arrivedAt}–${lastFiredAt}` : null;
+                return (
+                  <div key={t.id} style={{ border: "1px solid #d8edd8", borderRadius: 4, padding: "10px 14px", background: "#f6fbf6", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <span style={{ fontFamily: FONT, fontSize: 18, fontWeight: 300, color: "#2a6a4a", letterSpacing: 1 }}>{String(t.id).padStart(2, "0")}</span>
+                      {t.resName && <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{t.resName}</span>}
+                      <span style={{ fontFamily: FONT, fontSize: 10, color: "#6a9a7a" }}>{t.guests} guests</span>
+                      {durMins != null && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 600 }}>{fmtDuration(durMins)}</span>}
+                      {timeRange && <span style={{ fontFamily: FONT, fontSize: 9, color: "#8ab89a" }}>{timeRange}</span>}
+                    </div>
+                    <button
+                      onClick={() => onRestoreTicket && onRestoreTicket(t.id)}
+                      style={{
+                        fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "4px 12px",
+                        border: "1px solid #a8d8b8", borderRadius: 3, cursor: "pointer",
+                        background: "#fff", color: "#4a9a6a", textTransform: "uppercase",
+                      }}
+                    >Restore</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {!supabase && <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", padding: "60px 0", textAlign: "center" }}>Supabase not connected</div>}
         {supabase && loading && <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", padding: "60px 0", textAlign: "center" }}>Loading…</div>}
-        {supabase && !loading && entries.length === 0 && <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", padding: "60px 0", textAlign: "center" }}>No archived services yet</div>}
+        {supabase && !loading && entries.length === 0 && archivedTickets.length === 0 && <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", padding: "60px 0", textAlign: "center" }}>No archived services yet</div>}
         {supabase && !loading && entries.length > 0 && (
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
             <button onClick={deleteAll} disabled={deleting === "all"} style={{
@@ -5061,6 +5122,7 @@ export default function App() {
           onArchiveAndClear={archiveAndClearAll}
           onClearAll={clearAll}
           onClose={() => setArchiveOpen(false)}
+          onRestoreTicket={id => upd(id, "kitchenArchived", false)}
         />
       )}
     </div>
