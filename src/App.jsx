@@ -3322,7 +3322,9 @@ function KitchenTicket({ table, menuCourses, upd }) {
 }
 
 function KitchenBoard({ tables, menuCourses, upd }) {
-  const activeTables = tables.filter(t => t.active);
+  const activeTables = tables
+    .filter(t => t.active)
+    .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
   const activeIds = activeTables.map(t => t.id).join(",");
 
   const [order, setOrder] = useState(() => activeTables.map(t => t.id));
