@@ -338,6 +338,7 @@ const RESTRICTIONS = [
 ];
 const RESTRICTION_GROUPS = { dietary: "Dietary", allergy: "Allergies & Intolerances", other: "Lifestyle & Religious" };
 const restrLabel = (key) => { const d = RESTRICTIONS.find(r => r.key === key); return d ? `${d.emoji} ${d.label}` : key; };
+const restrCompact = (key) => { const d = RESTRICTIONS.find(r => r.key === key); return d ? d.label : key; };
 
 
 // ── Embedded assets for menu PDF generation ───────────────────────────────────
@@ -2666,37 +2667,18 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
           </div>
         )}
 
-        {/* Pace selector */}
-        <div style={{ padding: "7px 14px", borderBottom: "1px solid #f0f0f0", display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#ccc", textTransform: "uppercase", flexShrink: 0, minWidth: 30 }}>Pace</span>
-          {["Slow", "Fast"].map(p => {
-            const colors = { Slow: { on: "#7a5020", bg: "#fdf4e8", border: "#c8a060" }, Fast: { on: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" } };
-            const active = t.pace === p;
-            const col = colors[p];
-            return (
-              <button key={p} onClick={() => upd && upd(t.id, "pace", active ? "" : p)} style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "3px 10px",
-                border: `1px solid ${active ? col.border : "#ececec"}`,
-                borderRadius: 3, cursor: upd ? "pointer" : "default",
-                background: active ? col.bg : "#fff", color: active ? col.on : "#ccc",
-                transition: "all 0.1s",
-              }}>{p}</button>
-            );
-          })}
-        </div>
-
         {/* Unassigned restrictions */}
         {unassigned.length > 0 && (
-          <div style={{ padding: "7px 14px", borderBottom: "1px solid #f5f5f5", background: "#fff8f8", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#b04040", textTransform: "uppercase", flexShrink: 0 }}>⚠ Unassigned</span>
+          <div style={{ padding: "5px 14px", borderBottom: "1px solid #f5f5f5", background: "#fff8f8", display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#b04040", textTransform: "uppercase", flexShrink: 0 }}>⚠</span>
             {unassigned.map(r => (
               <span key={r._i} onClick={() => setAssigningIdx(assigningIdx === r._i ? null : r._i)} style={{
-                fontFamily: FONT, fontSize: 10,
+                fontFamily: FONT, fontSize: 8,
                 color: assigningIdx === r._i ? "#fff" : "#b04040",
                 background: assigningIdx === r._i ? "#b04040" : "#fef0f0",
-                border: "1px solid #e09090", borderRadius: 3, padding: "2px 8px",
+                border: "1px solid #e09090", borderRadius: 3, padding: "1px 6px",
                 fontWeight: 500, cursor: "pointer", userSelect: "none",
-              }}>{restrLabel(r.note)} {assigningIdx === r._i ? "→ pick seat" : "→"}</span>
+              }}>{restrCompact(r.note)} {assigningIdx === r._i ? "→ seat" : "→"}</span>
             ))}
           </div>
         )}
@@ -2826,7 +2808,7 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
                     );
                   })}
                   {restr.map((r, i) => (
-                    <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0", fontWeight: 500 }}>⚠ {restrLabel(r.note)}</span>
+                    <span key={i} style={{ fontFamily: FONT, fontSize: 8, padding: "1px 5px", borderRadius: 3, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0", fontWeight: 500 }}>⚠ {restrCompact(r.note)}</span>
                   ))}
                 </div>
               );
@@ -2837,7 +2819,7 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ fontFamily: FONT, fontSize: 11, color: "#bbb" }}>{t.guests} guest{t.guests !== 1 ? "s" : ""}</span>
               {allRestr.map((r, i) => (
-                <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0", fontWeight: 500 }}>⚠ {restrLabel(r.note)}</span>
+                <span key={i} style={{ fontFamily: FONT, fontSize: 8, padding: "1px 5px", borderRadius: 3, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0", fontWeight: 500 }}>⚠ {restrCompact(r.note)}</span>
               ))}
             </div>
             {onSeat && (
@@ -3163,6 +3145,25 @@ function KitchenTicket({ table, menuCourses, upd }) {
         </div>
       </div>
 
+      {/* ── Pace ── */}
+      <div style={{ borderBottom: "1px solid #e8e8e8", padding: "5px 10px", display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#ccc", textTransform: "uppercase", flexShrink: 0 }}>Pace</span>
+        {["Slow", "Fast"].map(p => {
+          const colors = { Slow: { on: "#7a5020", bg: "#fdf4e8", border: "#c8a060" }, Fast: { on: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" } };
+          const active = table.pace === p;
+          const col = colors[p];
+          return (
+            <button key={p} onClick={() => upd && upd(table.id, "pace", active ? "" : p)} style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "3px 10px",
+              border: `1px solid ${active ? col.border : "#ececec"}`,
+              borderRadius: 3, cursor: upd ? "pointer" : "default",
+              background: active ? col.bg : "#fff", color: active ? col.on : "#ccc",
+              transition: "all 0.1s",
+            }}>{p}</button>
+          );
+        })}
+      </div>
+
       {/* ── Seats ── */}
       <div style={{ background: "#f6f6f6", borderBottom: "1px solid #e8e8e8", padding: "5px 10px" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 6px" }}>
@@ -3343,8 +3344,8 @@ function SortableTicket({ table, menuCourses, upd, isDragging }) {
       style={{
         flexShrink: 0, width: 248,
         transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.35 : 1,
+        transition: isDragging ? 'none' : transition,
+        opacity: isDragging ? 0 : 1,
         cursor: isDragging ? "grabbing" : "grab",
         userSelect: "none", WebkitUserSelect: "none",
         touchAction: "none",
@@ -3420,9 +3421,9 @@ function KitchenBoard({ tables, menuCourses, upd }) {
           </div>
         </div>
       </SortableContext>
-      <DragOverlay>
+      <DragOverlay dropAnimation={{ duration: 180, easing: "ease" }}>
         {activeTable && (
-          <div style={{ width: 248, opacity: 0.9, transform: "scale(1.03)", boxShadow: "0 8px 32px rgba(0,0,0,0.18)", borderRadius: 6 }}>
+          <div style={{ width: 248, opacity: 1, boxShadow: "0 8px 32px rgba(0,0,0,0.22)", borderRadius: 6 }}>
             <KitchenTicket table={activeTable} menuCourses={menuCourses} upd={upd} />
           </div>
         )}
@@ -4868,7 +4869,7 @@ export default function App() {
   if (mode === "display") return (
     <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
-      <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={false} {...hProps} />
+      <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={true} {...hProps} />
       <div style={{ padding: "20px 24px" }}>
         <KitchenBoard tables={tables} menuCourses={effectiveMenuCourses} upd={upd} />
       </div>
