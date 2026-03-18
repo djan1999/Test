@@ -3366,13 +3366,22 @@ function SortableTicket({ table, menuCourses, upd, isDragging }) {
         flexShrink: 0, width: 248,
         transform: CSS.Transform.toString(transform),
         transition: isDragging ? 'none' : transition,
-        opacity: isDragging ? 0 : 1,
+        willChange: 'transform',
         cursor: isDragging ? "grabbing" : "grab",
         userSelect: "none", WebkitUserSelect: "none",
         touchAction: "none",
       }}
     >
-      <KitchenTicket table={table} menuCourses={menuCourses} upd={upd} />
+      {isDragging ? (
+        // Ghost placeholder — dashed outline so the layout slot stays visible
+        <div style={{
+          width: 248, height: "100%", minHeight: 120,
+          border: "2px dashed #d0e8d8", borderRadius: 6,
+          background: "#f4fbf6",
+        }} />
+      ) : (
+        <KitchenTicket table={table} menuCourses={menuCourses} upd={upd} />
+      )}
     </div>
   );
 }
@@ -3442,9 +3451,15 @@ function KitchenBoard({ tables, menuCourses, upd }) {
           </div>
         </div>
       </SortableContext>
-      <DragOverlay dropAnimation={{ duration: 180, easing: "ease" }}>
+      <DragOverlay dropAnimation={{ duration: 200, easing: "cubic-bezier(0.18,0.67,0.6,1.22)" }}>
         {activeTable && (
-          <div style={{ width: 248, opacity: 1, boxShadow: "0 8px 32px rgba(0,0,0,0.22)", borderRadius: 6 }}>
+          <div style={{
+            width: 248, borderRadius: 6,
+            boxShadow: "0 12px 40px rgba(0,0,0,0.20), 0 2px 8px rgba(0,0,0,0.10)",
+            transform: "rotate(1deg) scale(1.02)",
+            transition: "box-shadow 0.15s",
+            willChange: "transform",
+          }}>
             <KitchenTicket table={activeTable} menuCourses={menuCourses} upd={upd} />
           </div>
         )}
