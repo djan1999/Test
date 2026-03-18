@@ -556,14 +556,17 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   const rows = [];
   const hasPairing = !!pkey;
   const bottleQueue = hasPairing ? [] : [...tableBottles];
-  // Non-pairing: cocktails fill early course right columns; glasses distribute from Danube like bottles
-  const aperitivoQueue = hasPairing ? [] : [...cocktails.map(c => ({ ...c, __type: "cocktail" }))];
+  // Aperitivos (cocktails + byGlass wines for pairing) fill course right columns from course 0.
+  // For pairing: only fills where drink is null (early courses before pairing kicks in).
+  // For non-pairing: cocktails fill from course 0; byGlass wines distribute from Danube.
+  const aperitivoQueue = [
+    ...cocktails.map(c => ({ ...c, __type: "cocktail" })),
+    ...(hasPairing ? glasses.map(w => ({ ...w, __type: "wine" })) : []),
+  ];
   const glassByGlassQueue = hasPairing ? [] : [...glasses.map(w => ({ ...w, __type: "wine" }))];
 
-  // Pairing case: keep existing behaviour (all aperitivos/glasses/bottles as wine-only rows at top)
+  // Pairing case: only table bottles as wine-only rows at top (aperitivos now go into course columns)
   const topRightItems = hasPairing ? [
-    ...cocktails.map(c => ({ ...c, __type: "cocktail" })),
-    ...glasses.map(w => ({ ...w, __type: "wine" })),
     ...tableBottles.map(item => ({
       ...item,
       __type: item?.__type || item?.type || item?.category || ((item?.notes && !item?.producer && !item?.vintage) ? "cocktail" : "wine"),
@@ -610,12 +613,6 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       }
     }
 
-    // Before the very first course row, insert the first aperitivo as a wine-only row
-    // so it appears visually "above" the first course (one slot above Sour Soup)
-    if (courseRowsSeen === 0 && aperitivoQueue.length > 0) {
-      rows.push({ type: "wine-only", right: fmtDrinkParts(aperitivoQueue.shift()) });
-    }
-
     if ((courseKey === "chicken_gizzard" || courseName === "CHICKEN GIZZARD") && selectedBeer) {
       // For SI menus with default beer list, prefer the course's SI pairing variants
       if (lang === "si" && beers.length === 0) {
@@ -625,8 +622,8 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       } else {
         drink = { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
       }
-    } else if (aperitivoQueue.length > 0) {
-      // Fill empty right column with next aperitivo (cocktail)
+    } else if (!drink && aperitivoQueue.length > 0) {
+      // Fill empty right column with next aperitivo (only when right column is empty)
       const d = fmtDrinkParts(aperitivoQueue.shift());
       drink = { name: d.title || "", sub: d.sub || "" };
     } else if (i >= DANUBE_SALMON_IDX && glassByGlassQueue.length > 0) {
@@ -3313,7 +3310,6 @@ function KitchenTicket({ table, menuCourses, upd }) {
             const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
             const restrList = restrictions.filter(r => r.pos === s.id).map(r => r.note).filter(Boolean);
             const restrShort = k => { const d = RESTRICTIONS.find(r => r.key === k); return d ? d.label : k; };
-            const hasBeet = !!(s.extras?.[1]?.ordered || s.extras?.["1"]?.ordered);
             return (
               <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 3 }}>
                 <span style={{
@@ -3321,9 +3317,6 @@ function KitchenTicket({ table, menuCourses, upd }) {
                   background: p ? (pairingBg[p] || "#f0f0f0") : "#e8e8e8",
                   color: p ? (pairingColor[p] || "#444") : "#444",
                 }}>P{s.id}{p ? ` · ${pLabel(p)}` : ""}</span>
-                {hasBeet && (
-                  <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 700, padding: "1px 4px", borderRadius: 2, background: "#edf8e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>BEET</span>
-                )}
                 {restrList.length > 0 && (
                   <span style={{ fontFamily: FONT, fontSize: 8, color: "#b03030", letterSpacing: 0.2, fontWeight: 600 }}>{restrList.map(restrShort).join(" · ")}</span>
                 )}
