@@ -3438,7 +3438,7 @@ function SortableTicket({ table, menuCourses, upd, isDragging }) {
       {...listeners}
       style={{
         flexShrink: 0, width: 248,
-        transform: CSS.Transform.toString(transform),
+        transform: transform ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : undefined,
         transition: isDragging ? 'none' : transition,
         willChange: 'transform',
         cursor: isDragging ? "grabbing" : "grab",
