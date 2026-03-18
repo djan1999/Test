@@ -826,6 +826,7 @@ const makeSeats = (n, ex = []) =>
     beers:     ex[i]?.beers     ?? [],
     pairing:   ex[i]?.pairing   ?? "",
     extras:    ex[i]?.extras    ?? {},
+    aperitif:  ex[i]?.aperitif  ?? null,
   }));
 
 const fmt = d => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
@@ -835,7 +836,7 @@ const blankTable = id => ({
   id, active: false, guests: 2, resName: "", resTime: "", guestType: "", room: "",
   arrivedAt: null, menuType: "", pace: "", bottleWines: [],
   restrictions: [], birthday: false, notes: "", seats: makeSeats(2),
-  kitchenLog: {}, tableGroup: [],
+  kitchenLog: {}, tableGroup: [], kitchenAlert: null,
 });
 
 const initTables = Array.from({ length: 10 }, (_, i) => blankTable(i + 1));
@@ -2761,7 +2762,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
               const beetExtra = s.extras?.[1] || s.extras?.["1"] || { ordered: false, pairing: "—" };
               const hasBeet   = !!beetExtra.ordered;
               const hasCheese = !!(s.extras?.[2]?.ordered || s.extras?.["2"]?.ordered);
-              const hasContent = (s.water && s.water !== "—") || s.pairing || restr.length > 0 || extras.length > 0;
+              const hasContent = (s.water && s.water !== "—") || s.pairing || restr.length > 0 || extras.length > 0 || s.aperitif;
 
               if (quickMode) {
                 return (
@@ -2871,6 +2872,9 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                       </span>
                     );
                   })}
+                  {s.aperitif && (
+                    <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 6px", borderRadius: 3, border: "1px solid #c8a060", color: "#7a5020", background: "#fdf4e8" }}>{s.aperitif}</span>
+                  )}
                   {restr.map((r, i) => (
                     <span key={i} style={{ fontFamily: FONT, fontSize: 8, padding: "1px 5px", borderRadius: 3, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0", fontWeight: 500 }}>⚠ {restrCompact(r.note)}</span>
                   ))}
@@ -2895,13 +2899,40 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
             )}
           </div>
         ) : null}
-        {isSeated && onUnseat && (
-          <div style={{ padding: "6px 14px", borderTop: "1px solid #f5f5f5", display: "flex", justifyContent: "flex-end" }}>
-            <button onClick={() => onUnseat(t.id)} style={{
-              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 12px",
-              border: "1px solid #d8d8d8", borderRadius: 3, cursor: "pointer",
-              background: "#fff", color: "#999", textTransform: "uppercase",
-            }}>Unseat</button>
+        {isSeated && (quickMode || onUnseat) && (
+          <div style={{ padding: "6px 14px", borderTop: "1px solid #f5f5f5", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            {quickMode && upd ? (
+              <button onClick={() => {
+                const seats = t.seats || [];
+                const alertSeats = seats.map(s => {
+                  const beetExtra = s.extras?.[1] || s.extras?.["1"];
+                  return {
+                    id: s.id,
+                    pairing: s.pairing || null,
+                    beet: beetExtra?.ordered ? { pairing: beetExtra.pairing || "—" } : null,
+                    cheese: !!(s.extras?.[2]?.ordered || s.extras?.["2"]?.ordered),
+                    aperitif: s.aperitif || null,
+                  };
+                });
+                upd(t.id, "kitchenAlert", {
+                  timestamp: new Date().toISOString(),
+                  tableName: t.resName || null,
+                  seats: alertSeats,
+                  confirmed: false,
+                });
+              }} style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 16px",
+                border: "1px solid #1a1a1a", borderRadius: 3, cursor: "pointer",
+                background: "#1a1a1a", color: "#fff", fontWeight: 700, textTransform: "uppercase",
+              }}>Send</button>
+            ) : <span />}
+            {onUnseat && (
+              <button onClick={() => onUnseat(t.id)} style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 12px",
+                border: "1px solid #d8d8d8", borderRadius: 3, cursor: "pointer",
+                background: "#fff", color: "#999", textTransform: "uppercase",
+              }}>Unseat</button>
+            )}
           </div>
         )}
       </div>
@@ -3480,6 +3511,111 @@ function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging }) {
   );
 }
 
+function KitchenAlertOverlay({ alerts, onConfirm }) {
+  if (alerts.length === 0) return null;
+  const PAIR_COLORS = {
+    Wine:      { color: "#7a5020", bg: "#fdf4e8", border: "#c8a060" },
+    "Non-Alc": { color: "#1f5f73", bg: "#e8f7fb", border: "#7fc6db" },
+    Premium:   { color: "#5a5a8a", bg: "#f0eeff", border: "#aaaacc" },
+    "Our Story":{ color: "#3a7a5a", bg: "#eaf5ee", border: "#7abf9a" },
+  };
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 9999,
+      background: "rgba(0,0,0,0.72)",
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      gap: 16, padding: "24px 16px", overflowY: "auto",
+    }}>
+      {alerts.map(({ tableId, alert }) => {
+        const seats = alert.seats || [];
+        const pairSeats   = seats.filter(s => s.pairing && s.pairing !== "—");
+        const beetSeats   = seats.filter(s => s.beet);
+        const cheeseSeats = seats.filter(s => s.cheese);
+        const aprSeats    = seats.filter(s => s.aperitif);
+        const ts = new Date(alert.timestamp);
+        const timeStr = `${String(ts.getHours()).padStart(2,"0")}:${String(ts.getMinutes()).padStart(2,"0")}`;
+        return (
+          <div key={tableId} style={{
+            background: "#fff", borderRadius: 10, maxWidth: 480, width: "100%",
+            boxShadow: "0 16px 48px rgba(0,0,0,0.4)",
+            overflow: "hidden",
+          }}>
+            {/* Header */}
+            <div style={{
+              background: "#1a1a1a", padding: "14px 20px",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <div>
+                <span style={{ fontFamily: FONT, fontSize: 16, fontWeight: 700, letterSpacing: 2, color: "#fff" }}>
+                  TABLE {tableId}{alert.tableName ? ` — ${alert.tableName}` : ""}
+                </span>
+              </div>
+              <span style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>{timeStr}</span>
+            </div>
+            {/* Body */}
+            <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+              {pairSeats.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#aaa", minWidth: 60 }}>PAIRING</span>
+                  {pairSeats.map(s => {
+                    const c = PAIR_COLORS[s.pairing] || {};
+                    return (
+                      <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: c.bg || "#f5f5f5", border: `1px solid ${c.border || "#ddd"}`, color: c.color || "#444" }}>
+                        P{s.id} {s.pairing}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              {beetSeats.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#aaa", minWidth: 60 }}>BEETROOT</span>
+                  {beetSeats.map(s => (
+                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "#edf8e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>
+                      P{s.id}{s.beet.pairing && s.beet.pairing !== "—" ? ` · ${s.beet.pairing}` : ""}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {cheeseSeats.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#aaa", minWidth: 60 }}>CHEESE</span>
+                  {cheeseSeats.map(s => (
+                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "#fdf4e8", border: "1px solid #c8a060", color: "#7a5020" }}>
+                      P{s.id}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {aprSeats.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#aaa", minWidth: 60 }}>APERITIF</span>
+                  {aprSeats.map(s => (
+                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "#fdf4e8", border: "1px solid #c8a060", color: "#7a5020" }}>
+                      P{s.id} {s.aperitif}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {pairSeats.length === 0 && beetSeats.length === 0 && cheeseSeats.length === 0 && aprSeats.length === 0 && (
+                <span style={{ fontFamily: FONT, fontSize: 11, color: "#bbb" }}>No extras noted</span>
+              )}
+            </div>
+            {/* Confirm */}
+            <div style={{ padding: "12px 20px", borderTop: "1px solid #f0f0f0", display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={() => onConfirm(tableId)} style={{
+                fontFamily: FONT, fontSize: 11, letterSpacing: 1.5, padding: "10px 28px",
+                border: "none", borderRadius: 4, cursor: "pointer",
+                background: "#1a1a1a", color: "#fff", fontWeight: 700, textTransform: "uppercase",
+              }}>Confirm</button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function KitchenBoard({ tables, menuCourses, upd }) {
   const activeTables = tables
     .filter(t => t.active && !t.kitchenArchived)
@@ -3504,16 +3640,27 @@ function KitchenBoard({ tables, menuCourses, upd }) {
     useSensor(TouchSensor,   { activationConstraint: { delay: 250, tolerance: 8 } }),
   );
 
+  const pendingAlerts = tables
+    .filter(t => t.kitchenAlert && !t.kitchenAlert.confirmed)
+    .map(t => ({ tableId: t.id, alert: t.kitchenAlert }));
+
+  const confirmAlert = (tableId) => upd(tableId, "kitchenAlert", null);
+
   if (activeTables.length === 0) return (
-    <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
-      No active tables
-    </div>
+    <>
+      <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
+        No active tables
+      </div>
+      <KitchenAlertOverlay alerts={pendingAlerts} onConfirm={confirmAlert} />
+    </>
   );
 
   const orderedTables = order.map(id => activeTables.find(t => t.id === id)).filter(Boolean);
   const activeTable  = activeId ? activeTables.find(t => t.id === activeId) : null;
 
   return (
+    <>
+    <KitchenAlertOverlay alerts={pendingAlerts} onConfirm={confirmAlert} />
     <DndContext
       sensors={sensors}
       collisionDetection={rectIntersection}
@@ -3558,6 +3705,7 @@ function KitchenBoard({ tables, menuCourses, upd }) {
         )}
       </DragOverlay>
     </DndContext>
+    </>
   );
 }
 
