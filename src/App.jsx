@@ -3305,40 +3305,87 @@ function KitchenTicket({ table, menuCourses, upd }) {
 
 function KitchenBoard({ tables, menuCourses, upd }) {
   const activeTables = tables.filter(t => t.active);
+  const activeIds = activeTables.map(t => t.id).join(",");
+
+  const [order, setOrder] = useState(() => activeTables.map(t => t.id));
+  const [draggingId, setDraggingId] = useState(null);
+  const dragRef = useRef(null);
+
+  // Keep order in sync when tables are added/removed
+  useEffect(() => {
+    setOrder(prev => {
+      const activeIdSet = new Set(activeTables.map(t => t.id));
+      const kept = prev.filter(id => activeIdSet.has(id));
+      const added = activeTables.map(t => t.id).filter(id => !kept.includes(id));
+      return [...kept, ...added];
+    });
+  }, [activeIds]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Document-level touch handlers so drag works even when finger leaves the card
+  useEffect(() => {
+    const onMove = e => {
+      if (!dragRef.current) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      const ticketEl = el?.closest("[data-ticket-id]");
+      if (!ticketEl) return;
+      const overId = Number(ticketEl.dataset.ticketId);
+      if (!overId || overId === dragRef.current) return;
+      setOrder(prev => {
+        const from = prev.indexOf(dragRef.current);
+        const to = prev.indexOf(overId);
+        if (from === -1 || to === -1) return prev;
+        const next = [...prev];
+        next.splice(from, 1);
+        next.splice(to, 0, dragRef.current);
+        return next;
+      });
+    };
+    const onEnd = () => {
+      dragRef.current = null;
+      setDraggingId(null);
+    };
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", onEnd);
+    return () => {
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onEnd);
+    };
+  }, []);
+
   if (activeTables.length === 0) return (
     <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
       No active tables
     </div>
   );
-  const byTime = {};
-  activeTables.forEach(t => {
-    const time = t.resTime || "—";
-    if (!byTime[time]) byTime[time] = [];
-    byTime[time].push(t);
-  });
-  const groups = Object.entries(byTime).sort(([a], [b]) => a.localeCompare(b));
+
+  const orderedTables = order.map(id => activeTables.find(t => t.id === id)).filter(Boolean);
+
   return (
     <div style={{ overflowX: "auto", paddingBottom: 8 }}>
       <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-start", gap: 12, minWidth: "max-content" }}>
-        {groups.flatMap(([time, timeTables], gi) => [
-          gi > 0 && (
-            <div key={`sep-${time}`} style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, padding: "4px 4px" }}>
-              <div style={{ width: 1, background: "#e0e0e0", height: 50 }} />
-              <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, color: "#bbb", writingMode: "vertical-rl", textOrientation: "mixed" }}>{time}</span>
-              <div style={{ width: 1, background: "#e0e0e0", flex: 1, minHeight: 50 }} />
-            </div>
-          ),
-          gi === 0 && (
-            <div key={`label-${time}`} style={{ flexShrink: 0, display: "flex", alignItems: "center", padding: "4px 6px 4px 0" }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, color: "#bbb", writingMode: "vertical-rl", textOrientation: "mixed" }}>{time}</span>
-            </div>
-          ),
-          ...timeTables.map(t => (
-            <div key={t.id} style={{ flexShrink: 0, width: 355 }}>
-              <KitchenTicket table={t} menuCourses={menuCourses} upd={upd} />
-            </div>
-          )),
-        ].filter(Boolean))}
+        {orderedTables.map(t => (
+          <div
+            key={t.id}
+            data-ticket-id={String(t.id)}
+            style={{
+              flexShrink: 0, width: 355,
+              touchAction: "none",
+              opacity: draggingId === t.id ? 0.4 : 1,
+              transition: "opacity 0.15s, transform 0.15s",
+              transform: draggingId === t.id ? "scale(0.97)" : "scale(1)",
+              cursor: "grab",
+            }}
+            onTouchStart={e => {
+              dragRef.current = t.id;
+              setDraggingId(t.id);
+              e.stopPropagation();
+            }}
+          >
+            <KitchenTicket table={t} menuCourses={menuCourses} upd={upd} />
+          </div>
+        ))}
       </div>
     </div>
   );
