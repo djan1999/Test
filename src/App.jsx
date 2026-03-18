@@ -307,6 +307,12 @@ const MENU_DATA = [{"menu":{"name":"SOUR SOUP","sub":"cabbage, yeast butter"},"v
 
 const PAIRING_KEY = { "Wine": "wp", "Non-Alc": "na", "Premium": "premium", "Our Story": "os" };
 
+// ── Aperitif quick-add options (derived from MENU_DATA aperitivo entries) ─────
+const APERITIF_OPTIONS = MENU_DATA.filter(c => c.aperitivo?.name).slice(0, 4).map(c => ({
+  name: c.aperitivo.name,
+  notes: c.aperitivo.sub || "",
+}));
+
 const COUNTRY_NAMES = {
   FR: "France", IT: "Italy", ES: "Spain", DE: "Germany", AT: "Austria",
   SI: "Slovenia", PT: "Portugal", GR: "Greece", HU: "Hungary", HR: "Croatia",
@@ -2279,6 +2285,16 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
               {/* Unified beverage search */}
               <div style={{ background: "#fcfcfc", border: "1px solid #ececec", borderRadius: 8, padding: isMobile ? "10px" : "12px" }}>
                 <div style={{ ...fieldLabel, marginBottom: 8, color: "#444" }}>Beverages</div>
+                {/* Aperitif quick-add buttons */}
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
+                  {APERITIF_OPTIONS.map(ap => (
+                    <button key={ap.name} onClick={() => updSeat(seat.id, "cocktails", [...(seat.cocktails || []), ap])} style={{
+                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
+                      border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
+                      background: "#fdf8f0", color: "#7a5020", transition: "all 0.1s",
+                    }}>{ap.name}</button>
+                  ))}
+                </div>
                 <BeverageSearch
                   wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
                   onAdd={({ type, item }) => {
