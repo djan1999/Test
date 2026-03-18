@@ -704,7 +704,7 @@ body{position:relative;}
 .menu-sub{line-height:1.08;margin-top:0.75pt;overflow-wrap:anywhere;}
 .menu-section-row{margin:6.8pt 0 6.2pt;}
 .menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;text-transform:uppercase;}
-.menu-thankyou{margin-top:7pt;font-size:6.55pt;font-style:italic;font-family:'RM',monospace;}
+.menu-thankyou{margin-top:7pt;font-size:6.55pt;font-style:normal;font-family:'RM',monospace;}
 #footer{margin-top:auto;padding-top:9.5pt;}
 #team{font-size:6.5pt;line-height:1.2;overflow-wrap:anywhere;}
 #team .menu-main{margin-bottom:1.4pt;}
@@ -3949,7 +3949,7 @@ function SummaryModal({ tables, dishes = [], onClose }) {
 }
 
 // ── Archive Modal ─────────────────────────────────────────────────────────────
-function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, onRestoreTicket }) {
+function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, onRestoreTicket, menuCourses }) {
   const [entries, setEntries]   = useState([]);
   const [loading, setLoading]   = useState(true);
   const [expanded, setExpanded] = useState(null);
@@ -4008,6 +4008,7 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
   );
 
   const archivedTickets = (tables || []).filter(t => t.kitchenArchived);
+  const [expandedTicket, setExpandedTicket] = useState(null);
   const fmtDuration = (mins) => { if (mins == null) return null; const h = Math.floor(mins / 60), m = mins % 60; return h > 0 ? `${h}h ${m}m` : `${m}m`; };
   const parseHHMM = s => { if (!s) return null; const [h, m] = s.split(":").map(Number); return isNaN(h) || isNaN(m) ? null : h * 60 + m; };
 
@@ -4019,30 +4020,48 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
         {archivedTickets.length > 0 && (
           <div style={{ marginBottom: 24 }}>
             <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 3, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Today · Archived Tickets</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {archivedTickets.map(t => {
                 const klog = t.kitchenLog || {};
                 const lastFiredAt = Object.values(klog).map(e => e.firedAt).filter(Boolean).sort().pop();
                 const start = parseHHMM(t.arrivedAt), end = parseHHMM(lastFiredAt);
                 const durMins = (start != null && end != null) ? (end >= start ? end - start : end - start + 1440) : null;
                 const timeRange = t.arrivedAt && lastFiredAt ? `${t.arrivedAt}–${lastFiredAt}` : null;
+                const isOpen = expandedTicket === t.id;
                 return (
-                  <div key={t.id} style={{ border: "1px solid #d8edd8", borderRadius: 4, padding: "10px 14px", background: "#f6fbf6", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                      <span style={{ fontFamily: FONT, fontSize: 18, fontWeight: 300, color: "#2a6a4a", letterSpacing: 1 }}>{String(t.id).padStart(2, "0")}</span>
-                      {t.resName && <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{t.resName}</span>}
-                      <span style={{ fontFamily: FONT, fontSize: 10, color: "#6a9a7a" }}>{t.guests} guests</span>
-                      {durMins != null && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 600 }}>{fmtDuration(durMins)}</span>}
-                      {timeRange && <span style={{ fontFamily: FONT, fontSize: 9, color: "#8ab89a" }}>{timeRange}</span>}
+                  <div key={t.id} style={{ border: "1px solid #d8edd8", borderRadius: 6, overflow: "hidden", background: "#f6fbf6" }}>
+                    {/* Header row — click to expand */}
+                    <div
+                      onClick={() => setExpandedTicket(isOpen ? null : t.id)}
+                      style={{ padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", cursor: "pointer" }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <span style={{ fontFamily: FONT, fontSize: 18, fontWeight: 300, color: "#2a6a4a", letterSpacing: 1 }}>{String(t.id).padStart(2, "0")}</span>
+                        {t.resName && <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{t.resName}</span>}
+                        <span style={{ fontFamily: FONT, fontSize: 10, color: "#6a9a7a" }}>{t.guests} guests</span>
+                        {durMins != null && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 600 }}>{fmtDuration(durMins)}</span>}
+                        {timeRange && <span style={{ fontFamily: FONT, fontSize: 9, color: "#8ab89a" }}>{timeRange}</span>}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <button
+                          onClick={e => { e.stopPropagation(); onRestoreTicket && onRestoreTicket(t.id); }}
+                          style={{
+                            fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "4px 12px",
+                            border: "1px solid #a8d8b8", borderRadius: 3, cursor: "pointer",
+                            background: "#fff", color: "#4a9a6a", textTransform: "uppercase",
+                          }}
+                        >Restore</button>
+                        <span style={{ fontFamily: FONT, fontSize: 14, color: "#8ab89a", transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s", display: "inline-block" }}>⌄</span>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => onRestoreTicket && onRestoreTicket(t.id)}
-                      style={{
-                        fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "4px 12px",
-                        border: "1px solid #a8d8b8", borderRadius: 3, cursor: "pointer",
-                        background: "#fff", color: "#4a9a6a", textTransform: "uppercase",
-                      }}
-                    >Restore</button>
+                    {/* Expanded: full KitchenTicket */}
+                    {isOpen && (
+                      <div style={{ borderTop: "1px solid #d8edd8", padding: "12px 14px", background: "#fff" }}>
+                        <div style={{ width: 248 }}>
+                          <KitchenTicket table={t} menuCourses={menuCourses} upd={null} />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -4934,6 +4953,16 @@ export default function App() {
       <div style={{ padding: "20px 24px" }}>
         <KitchenBoard tables={tables} menuCourses={effectiveMenuCourses} upd={upd} />
       </div>
+      {archiveOpen && (
+        <ArchiveModal
+          tables={tables} dishes={dishes}
+          onArchiveAndClear={archiveAndClearAll}
+          onClearAll={clearAll}
+          onClose={() => setArchiveOpen(false)}
+          onRestoreTicket={id => upd(id, "kitchenArchived", false)}
+          menuCourses={effectiveMenuCourses}
+        />
+      )}
     </div>
   );
 
@@ -5123,6 +5152,7 @@ export default function App() {
           onClearAll={clearAll}
           onClose={() => setArchiveOpen(false)}
           onRestoreTicket={id => upd(id, "kitchenArchived", false)}
+          menuCourses={effectiveMenuCourses}
         />
       )}
     </div>
