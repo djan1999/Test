@@ -196,6 +196,7 @@ function normalizeLiveMenuRow(row) {
       };
     })(),
     kitchen_note: String(firstFilled(row.kitchen_note, kitchenNoteFallback)).trim(),
+    aperitif_btn: String(firstFilled(row.aperitif_btn, row.aperitif) || "").trim() || null,
     restrictions,
   };
 }
@@ -2562,31 +2563,17 @@ function TableSeatDetail({ table, dishes, isMobile }) {
 }
 
 // ── Display Board ─────────────────────────────────────────────────────────────
-function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat }) {
-  const isMobile = useIsMobile(700);
+const PC = {
+  "Wine":      { color: "#7a5020", bg: "#f5ead8", border: "#c8a060" },
+  "Non-Alc":   { color: "#1f5f73", bg: "#e8f7fb", border: "#7fc6db" },
+  "Premium":   { color: "#3a3a7a", bg: "#eaeaf5", border: "#8888bb" },
+  "Our Story": { color: "#2a6a4a", bg: "#e0f5ea", border: "#5aaa7a" },
+};
+const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
 
-  const PC = {
-    "Wine":      { color: "#7a5020", bg: "#f5ead8", border: "#c8a060" },
-    "Non-Alc":   { color: "#1f5f73", bg: "#e8f7fb", border: "#7fc6db" },
-    "Premium":   { color: "#3a3a7a", bg: "#eaeaf5", border: "#8888bb" },
-    "Our Story": { color: "#2a6a4a", bg: "#e0f5ea", border: "#5aaa7a" },
-  };
-  const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
-
-  const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
-  const visible = tables.filter(t => t.active || t.resTime || t.resName).filter(isPrimary);
-  const rowsData = SITTING_TIMES.map(time => ({
-    time,
-    tables: visible
-      .filter(t => t.resTime === time || (time === "19:00" && t.resTime === "19:15"))
-      .sort((a, b) => {
-        if (a.active !== b.active) return a.active ? -1 : 1;
-        return (a.arrivedAt || a.resTime || "99").localeCompare(b.arrivedAt || b.resTime || "99");
-      }),
-  }));
-  const hasAny = rowsData.some(r => r.tables.length > 0);
-
-  const TableCard = ({ t }) => {
+// Extracted as a stable module-level component to prevent React from unmounting/remounting
+// cards on every DisplayBoard re-render (which caused the visual overlap animation glitch).
+function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onUnseat, dishes, aperitifOptions }) {
     const isSeated = t.active;
     const allRestr = (t.restrictions || []).filter(r => r.note);
     const [assigningIdx, setAssigningIdx] = useState(null);
@@ -2804,6 +2791,24 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
                         );
                       })}
                     </div>
+                    {/* Aperitif */}
+                    {aperitifOptions && aperitifOptions.length > 0 && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", padding: "2px 10px 8px" }}>
+                        <span style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", marginRight: 2 }}>APR</span>
+                        {aperitifOptions.map(opt => {
+                          const active = s.aperitif === opt;
+                          return (
+                            <button key={opt} onClick={() => updSeat && updSeat(t.id, s.id, "aperitif", active ? null : opt)} style={{
+                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.3, padding: "3px 7px",
+                              border: `1px solid ${active ? "#7a5020" : "#e8e8e8"}`,
+                              borderRadius: 3, cursor: "pointer",
+                              background: active ? "#fdf4e8" : "#fff",
+                              color: active ? "#7a5020" : "#bbb",
+                            }}>{opt}</button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               }
@@ -2866,7 +2871,23 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
         )}
       </div>
     );
-  };
+}
+
+function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [] }) {
+  const isMobile = useIsMobile(700);
+
+  const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
+  const visible = tables.filter(t => t.active || t.resTime || t.resName).filter(isPrimary);
+  const rowsData = SITTING_TIMES.map(time => ({
+    time,
+    tables: visible
+      .filter(t => t.resTime === time || (time === "19:00" && t.resTime === "19:15"))
+      .sort((a, b) => {
+        if (a.active !== b.active) return a.active ? -1 : 1;
+        return (a.arrivedAt || a.resTime || "99").localeCompare(b.arrivedAt || b.resTime || "99");
+      }),
+  }));
+  const hasAny = rowsData.some(r => r.tables.length > 0);
 
   return (
     <div style={{ overflowY: "auto", overflowX: "hidden", padding: isMobile ? "16px 12px 40px" : "20px 0 48px" }}>
@@ -2892,7 +2913,20 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
               gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(340px, 1fr))",
               gap: isMobile ? 10 : 14,
             }}>
-              {rowTables.map(t => <TableCard key={t.id} t={t} />)}
+              {rowTables.map(t => (
+                <DisplayBoardCard
+                  key={t.id}
+                  t={t}
+                  quickMode={quickMode}
+                  upd={upd}
+                  updSeat={updSeat}
+                  onCardClick={onCardClick}
+                  onSeat={onSeat}
+                  onUnseat={onUnseat}
+                  dishes={dishes}
+                  aperitifOptions={aperitifOptions}
+                />
+              ))}
             </div>
           </div>
         );
@@ -4698,6 +4732,19 @@ export default function App() {
     [menuCourses, menuOverrides]
   );
 
+  // ── Aperitif quick-button options (read from sheet aperitif_btn column) ──────
+  // Falls back to the 4 embedded aperitivos from MENU_DATA if sheet column not yet added.
+  const aperitifOptions = useMemo(() => {
+    const fromSheet = [...new Set(menuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
+    if (fromSheet.length > 0) return fromSheet;
+    // Fallback: derive short labels from embedded MENU_DATA aperitivos
+    return MENU_DATA.filter(c => c.aperitivo?.name).map(c => {
+      const n = c.aperitivo.name;
+      // Use the part before the first comma, truncated to 10 chars
+      return n.split(",")[0].trim().slice(0, 10);
+    }).slice(0, 4);
+  }, [menuCourses]);
+
   // ── Load service tables from Supabase + subscribe realtime ────────────────
   useEffect(() => {
     if (!supabase) return;
@@ -4909,6 +4956,7 @@ export default function App() {
           force_pairing_title_si: r.force_pairing_title_si || "",
           force_pairing_sub_si: r.force_pairing_sub_si || "",
           kitchen_note: r.kitchen_note || "",
+          aperitif_btn: r.aperitif_btn || null,
           restrictions,
         };
       }));
@@ -5139,6 +5187,7 @@ export default function App() {
               onCardClick={id => setSel(id)}
               onSeat={seatTable}
               onUnseat={unseatTable}
+              aperitifOptions={aperitifOptions}
             />
           );
         })()}

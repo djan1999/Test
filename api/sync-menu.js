@@ -148,6 +148,7 @@ function parseRows(rows) {
       force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
       force_pairing_sub:   String(firstFilled(row.force_pairing_sub)).trim(),
       kitchen_note:        String(firstFilled(row.kitchen_note, kitchenNoteFallback)).trim(),
+      aperitif_btn:        String(firstFilled(row.aperitif_btn, row.aperitif) || "").trim() || null,
       // Slovenian restriction substitutes + kitchen notes stored in one jsonb map.
       // Notes are stored with a "__note" suffix key (e.g. "no_pork__note": "no guanciale").
       restrictions_si: (() => {
@@ -224,7 +225,7 @@ export default async function handler(req, res) {
       "menu_si","course_key","optional_flag","section_gap_before","show_on_short",
       "short_order","force_pairing_title","force_pairing_sub","kitchen_note",
       "vegan","shellfish_free","no_alcohol","no_garlic_onion","halal","low_fodmap",
-      "wp_si","na_si","os_si","premium_si","restrictions_si",
+      "wp_si","na_si","os_si","premium_si","restrictions_si","aperitif_btn",
     ];
 
     const pick = (obj, keys) => Object.fromEntries(keys.map(k => [k, obj[k] ?? null]));
