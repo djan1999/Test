@@ -2288,28 +2288,55 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
               {/* Unified beverage search */}
               <div style={{ background: "#fcfcfc", border: "1px solid #ececec", borderRadius: 8, padding: isMobile ? "10px" : "12px" }}>
                 <div style={{ ...fieldLabel, marginBottom: 8, color: "#444" }}>Beverages</div>
-                {/* Aperitif quick-add buttons — look up the real item from the beverage lists */}
-                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-                  {APERITIF_OPTIONS.map(ap => (
-                    <button key={ap.label} onClick={() => {
-                      const lk = ap.searchKey.toLowerCase();
-                      if (ap.type === "wine") {
-                        const found = wines.filter(w => w.byGlass).find(w =>
-                          w.name?.toLowerCase().includes(lk) || w.producer?.toLowerCase().includes(lk)
+                {/* ── Quick add ─────────────────────────────────────────────── */}
+                <div style={{ background: "#f7f7f7", borderRadius: 6, padding: "8px 10px", marginBottom: 10 }}>
+                  <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#c0c0c0", marginBottom: 7, textTransform: "uppercase" }}>Quick add</div>
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                    {/* Aperitifs */}
+                    {APERITIF_OPTIONS.map(ap => (
+                      <button key={ap.label} onClick={() => {
+                        const lk = ap.searchKey.toLowerCase();
+                        if (ap.type === "wine") {
+                          const found = wines.filter(w => w.byGlass).find(w =>
+                            w.name?.toLowerCase().includes(lk) || w.producer?.toLowerCase().includes(lk)
+                          );
+                          if (found) updSeat(seat.id, "glasses", [...(seat.glasses || []), found]);
+                          else updSeat(seat.id, "cocktails", [...(seat.cocktails || []), { name: ap.searchKey, notes: "" }]);
+                        } else {
+                          const found = cocktails.find(c =>
+                            c.name?.toLowerCase().includes(lk) || c.notes?.toLowerCase().includes(lk)
+                          );
+                          if (found) updSeat(seat.id, "cocktails", [...(seat.cocktails || []), found]);
+                          else updSeat(seat.id, "cocktails", [...(seat.cocktails || []), { name: ap.searchKey, notes: "" }]);
+                        }
+                      }} style={{
+                        fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 11px",
+                        border: "1px solid #d8ccc0", borderRadius: 20, cursor: "pointer",
+                        background: "#fff", color: "#7a5020", transition: "all 0.12s",
+                      }}>{ap.label}</button>
+                    ))}
+                    {/* Divider */}
+                    <div style={{ width: 1, height: 18, background: "#e0e0e0", margin: "0 3px", flexShrink: 0 }} />
+                    {/* Beetroot quick-pair buttons */}
+                    {(() => {
+                      const beet = dishes.find(d => String(d.id) === "1" || d.name === "Beetroot");
+                      if (!beet) return null;
+                      const extra = seat.extras?.[beet.id] || { ordered: false, pairing: "—" };
+                      return [["Champagne", "Champ", "#7a5020", "#fdf4e8", "#c8a060"], ["N/A", "N/A", "#1f5f73", "#e8f7fb", "#7fc6db"]].map(([pairing, label, col, bg, border]) => {
+                        const active = extra.ordered && extra.pairing === pairing;
+                        return (
+                          <button key={pairing} onClick={() => updSeat(seat.id, "extras", {
+                            ...seat.extras, [beet.id]: active ? { ordered: false, pairing: "—" } : { ordered: true, pairing },
+                          })} style={{
+                            fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 11px",
+                            border: `1px solid ${active ? border : "#e0e0e0"}`, borderRadius: 20, cursor: "pointer",
+                            background: active ? bg : "#fff", color: active ? col : "#aaa",
+                            transition: "all 0.12s",
+                          }}>Beet {label}</button>
                         );
-                        if (found) updSeat(seat.id, "glasses", [...(seat.glasses || []), found]);
-                        else updSeat(seat.id, "cocktails", [...(seat.cocktails || []), { name: ap.searchKey, notes: "" }]);
-                      } else {
-                        const found = cocktails.find(c => c.name?.toLowerCase().includes(lk));
-                        if (found) updSeat(seat.id, "cocktails", [...(seat.cocktails || []), found]);
-                        else updSeat(seat.id, "cocktails", [...(seat.cocktails || []), { name: ap.searchKey, notes: "" }]);
-                      }
-                    }} style={{
-                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
-                      border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
-                      background: "#fdf8f0", color: "#7a5020", transition: "all 0.1s",
-                    }}>{ap.label}</button>
-                  ))}
+                      });
+                    })()}
+                  </div>
                 </div>
                 <BeverageSearch
                   wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
@@ -2351,10 +2378,10 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
                 })()}
               </div>
 
-              {/* Extra dishes */}
-              {dishes.length > 0 && (
+              {/* Extra dishes — Beetroot handled by quick buttons above; show Cheese/Cake etc. here */}
+              {dishes.filter(d => String(d.id) !== "1" && d.name !== "Beetroot").length > 0 && (
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  {dishes.map(dish => {
+                  {dishes.filter(d => String(d.id) !== "1" && d.name !== "Beetroot").map(dish => {
                     const extra = seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
                     return (
                       <div key={dish.id} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
