@@ -1,5 +1,13 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor,
+  useSensor, useSensors, DragOverlay,
+} from "@dnd-kit/core";
+import {
+  SortableContext, useSortable, rectSortingStrategy, arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const LIVE_MENU_SHEET_ID = import.meta.env.VITE_MENU_SHEET_ID || "1aPVGmKNcvDOFzyr3jSPT_KL5lKEYKPgkad3y0_E_Vl4";
 const LIVE_MENU_SHEET_TAB = import.meta.env.VITE_MENU_SHEET_TAB || "MILKA MENU V2";
@@ -3321,6 +3329,30 @@ function KitchenTicket({ table, menuCourses, upd }) {
   );
 }
 
+function SortableTicket({ table, menuCourses, upd, isDragging }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+    id: table.id,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      style={{
+        flexShrink: 0, width: 248,
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.35 : 1,
+        cursor: isDragging ? "grabbing" : "grab",
+        userSelect: "none", WebkitUserSelect: "none",
+        touchAction: "none",
+      }}
+    >
+      <KitchenTicket table={table} menuCourses={menuCourses} upd={upd} />
+    </div>
+  );
+}
+
 function KitchenBoard({ tables, menuCourses, upd }) {
   const activeTables = tables
     .filter(t => t.active)
@@ -3328,10 +3360,7 @@ function KitchenBoard({ tables, menuCourses, upd }) {
   const activeIds = activeTables.map(t => t.id).join(",");
 
   const [order, setOrder] = useState(() => activeTables.map(t => t.id));
-  const [draggingId, setDraggingId] = useState(null);
-  const dragRef = useRef(null);       // id being dragged (null = not dragging)
-  const longPressTimer = useRef(null);
-  const touchStart = useRef(null);    // { x, y } to detect accidental movement
+  const [activeId, setActiveId] = useState(null);
 
   // Keep order in sync when tables are added/removed
   useEffect(() => {
@@ -3343,50 +3372,10 @@ function KitchenBoard({ tables, menuCourses, upd }) {
     });
   }, [activeIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Document-level touch handlers
-  useEffect(() => {
-    const onMove = e => {
-      const touch = e.touches[0];
-      // Cancel long-press if finger moved more than 8px before it fired
-      if (!dragRef.current && touchStart.current) {
-        const dx = Math.abs(touch.clientX - touchStart.current.x);
-        const dy = Math.abs(touch.clientY - touchStart.current.y);
-        if (dx > 8 || dy > 8) {
-          clearTimeout(longPressTimer.current);
-          touchStart.current = null;
-        }
-        return;
-      }
-      if (!dragRef.current) return;
-      e.preventDefault();
-      const el = document.elementFromPoint(touch.clientX, touch.clientY);
-      const ticketEl = el?.closest("[data-ticket-id]");
-      if (!ticketEl) return;
-      const overId = Number(ticketEl.dataset.ticketId);
-      if (!overId || overId === dragRef.current) return;
-      setOrder(prev => {
-        const from = prev.indexOf(dragRef.current);
-        const to = prev.indexOf(overId);
-        if (from === -1 || to === -1) return prev;
-        const next = [...prev];
-        next.splice(from, 1);
-        next.splice(to, 0, dragRef.current);
-        return next;
-      });
-    };
-    const onEnd = () => {
-      clearTimeout(longPressTimer.current);
-      touchStart.current = null;
-      dragRef.current = null;
-      setDraggingId(null);
-    };
-    document.addEventListener("touchmove", onMove, { passive: false });
-    document.addEventListener("touchend", onEnd);
-    return () => {
-      document.removeEventListener("touchmove", onMove);
-      document.removeEventListener("touchend", onEnd);
-    };
-  }, []);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor,   { activationConstraint: { delay: 250, tolerance: 8 } }),
+  );
 
   if (activeTables.length === 0) return (
     <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
@@ -3395,38 +3384,47 @@ function KitchenBoard({ tables, menuCourses, upd }) {
   );
 
   const orderedTables = order.map(id => activeTables.find(t => t.id === id)).filter(Boolean);
+  const activeTable  = activeId ? activeTables.find(t => t.id === activeId) : null;
 
   return (
-    <div style={{ paddingBottom: 8 }}>
-      <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 12 }}>
-        {orderedTables.map(t => (
-          <div
-            key={t.id}
-            data-ticket-id={String(t.id)}
-            style={{
-              flexShrink: 0, width: 248,
-              touchAction: draggingId ? "none" : "pan-x pan-y",
-              userSelect: "none",
-              WebkitUserSelect: "none",
-              opacity: draggingId === t.id ? 0.4 : 1,
-              transition: "opacity 0.15s, transform 0.15s",
-              transform: draggingId === t.id ? "scale(0.97)" : "scale(1)",
-              cursor: draggingId ? "grabbing" : "grab",
-            }}
-            onTouchStart={e => {
-              touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-              longPressTimer.current = setTimeout(() => {
-                dragRef.current = t.id;
-                setDraggingId(t.id);
-                touchStart.current = null;
-              }, 350);
-            }}
-          >
-            <KitchenTicket table={t} menuCourses={menuCourses} upd={upd} />
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={({ active }) => setActiveId(active.id)}
+      onDragEnd={({ active, over }) => {
+        setActiveId(null);
+        if (!over || active.id === over.id) return;
+        setOrder(prev => {
+          const from = prev.indexOf(active.id);
+          const to   = prev.indexOf(over.id);
+          return arrayMove(prev, from, to);
+        });
+      }}
+      onDragCancel={() => setActiveId(null)}
+    >
+      <SortableContext items={order} strategy={rectSortingStrategy}>
+        <div style={{ paddingBottom: 8 }}>
+          <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 12 }}>
+            {orderedTables.map(t => (
+              <SortableTicket
+                key={t.id}
+                table={t}
+                menuCourses={menuCourses}
+                upd={upd}
+                isDragging={activeId === t.id}
+              />
+            ))}
           </div>
-        ))}
-      </div>
-    </div>
+        </div>
+      </SortableContext>
+      <DragOverlay>
+        {activeTable && (
+          <div style={{ width: 248, opacity: 0.9, transform: "scale(1.03)", boxShadow: "0 8px 32px rgba(0,0,0,0.18)", borderRadius: 6 }}>
+            <KitchenTicket table={activeTable} menuCourses={menuCourses} upd={upd} />
+          </div>
+        )}
+      </DragOverlay>
+    </DndContext>
   );
 }
 
