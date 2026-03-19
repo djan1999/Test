@@ -3191,7 +3191,21 @@ function KitchenBoard({ tables, menuCourses, upd }) {
 }
 
 // ── Menu Generator ────────────────────────────────────────────────────────────
-function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
+const LAYOUT_PROPS = [
+  { key: "rowSpacing",      label: "Row spacing",       def: 3.15, step: 0.25, unit: "pt", dir: "v" },
+  { key: "wineRowSpacing",  label: "Wine row spacing",  def: 4.5,  step: 0.25, unit: "pt", dir: "v" },
+  { key: "sectionSpacing",  label: "Section gap",       def: 6.8,  step: 0.5,  unit: "pt", dir: "v" },
+  { key: "headerSpacing",   label: "Header gap",        def: 7,    step: 0.5,  unit: "mm", dir: "v" },
+  { key: "padTop",          label: "Pad top",           def: 8.4,  step: 0.5,  unit: "mm", dir: "v" },
+  { key: "padBottom",       label: "Pad bottom",        def: 8.2,  step: 0.5,  unit: "mm", dir: "v" },
+  { key: "padLeft",         label: "Pad left",          def: 12,   step: 0.5,  unit: "mm", dir: "h" },
+  { key: "padRight",        label: "Pad right",         def: 12,   step: 0.5,  unit: "mm", dir: "h" },
+  { key: "logoSize",        label: "Logo size",         def: 18.2, step: 0.5,  unit: "mm", dir: "h" },
+  { key: "fontSize",        label: "Font size",         def: 6.75, step: 0.05, unit: "pt", dir: "v" },
+  { key: "thankYouSpacing", label: "Thank-you gap",     def: 7,    step: 0.5,  unit: "pt", dir: "v" },
+];
+
+function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLayoutStyles = {} }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState("WINTER MENU");
   const [thankYouNote, setThankYouNote] = useState("Thank you for your visit.");
@@ -3284,23 +3298,9 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
 
   const setBeer = (seatId, val) => setBeerChoices(prev => ({ ...prev, [seatId]: val }));
 
-  // ── Layout styles (persistent per table) ──────────────────────────────────
-  const [layoutStyles, setLayoutStyles] = useState(() => table.menuLayoutStyles || {});
+  // ── Layout styles (per-table, falls back to global defaults) ──────────────
+  const [layoutStyles, setLayoutStyles] = useState(() => table.menuLayoutStyles || defaultLayoutStyles || {});
   const [layoutOpen, setLayoutOpen] = useState(false);
-
-  const LAYOUT_PROPS = [
-    { key: "rowSpacing",      label: "Row spacing",       def: 3.15, step: 0.25, unit: "pt", dir: "v" },
-    { key: "wineRowSpacing",  label: "Wine row spacing",  def: 4.5,  step: 0.25, unit: "pt", dir: "v" },
-    { key: "sectionSpacing",  label: "Section gap",       def: 6.8,  step: 0.5,  unit: "pt", dir: "v" },
-    { key: "headerSpacing",   label: "Header gap",        def: 7,    step: 0.5,  unit: "mm", dir: "v" },
-    { key: "padTop",          label: "Pad top",           def: 8.4,  step: 0.5,  unit: "mm", dir: "v" },
-    { key: "padBottom",       label: "Pad bottom",        def: 8.2,  step: 0.5,  unit: "mm", dir: "v" },
-    { key: "padLeft",         label: "Pad left",          def: 12,   step: 0.5,  unit: "mm", dir: "h" },
-    { key: "padRight",        label: "Pad right",         def: 12,   step: 0.5,  unit: "mm", dir: "h" },
-    { key: "logoSize",        label: "Logo size",         def: 18.2, step: 0.5,  unit: "mm", dir: "h" },
-    { key: "fontSize",        label: "Font size",         def: 6.75, step: 0.05, unit: "pt", dir: "v" },
-    { key: "thankYouSpacing", label: "Thank-you gap",     def: 7,    step: 0.5,  unit: "pt", dir: "v" },
-  ];
 
   const adjust = (key, def, step) => (dir) => {
     setLayoutStyles(prev => {
@@ -4191,10 +4191,48 @@ function GateScreen({ onPass }) {
 
 // ── Menu Page ─────────────────────────────────────────────────────────────────
 function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSaveMenuOverrides, onSyncMenu, upd, onExit }) {
-  const [tab, setTab]               = useState("overrides");
+  const [tab, setTab]                   = useState("print");
   const [menuGenTable, setMenuGenTable] = useState(null);
+  const [globalLayout, setGlobalLayout] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("milka_menu_layout") || "{}"); } catch { return {}; }
+  });
+  const [layoutSaving, setLayoutSaving] = useState(false);
+  const [layoutSaved,  setLayoutSaved]  = useState(false);
+  const layoutLoaded = useRef(false);
 
-  const TABS = ["overrides", "print", "sync"];
+  // Load global layout from Supabase on mount
+  useEffect(() => {
+    if (!supabase) { layoutLoaded.current = true; return; }
+    supabase.from("service_settings").select("state").eq("id", "menu_layout_global").single()
+      .then(({ data }) => {
+        if (data?.state && Object.keys(data.state).length > 0) setGlobalLayout(data.state);
+        layoutLoaded.current = true;
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist to localStorage whenever layout changes
+  useEffect(() => {
+    try { localStorage.setItem("milka_menu_layout", JSON.stringify(globalLayout)); } catch {}
+  }, [globalLayout]);
+
+  const saveGlobalLayout = async () => {
+    setLayoutSaving(true); setLayoutSaved(false);
+    if (supabase) {
+      await supabase.from("service_settings")
+        .upsert({ id: "menu_layout_global", state: globalLayout, updated_at: new Date().toISOString() }, { onConflict: "id" });
+    }
+    setLayoutSaving(false); setLayoutSaved(true);
+    setTimeout(() => setLayoutSaved(false), 2500);
+  };
+
+  const adjustGlobal = (key, def, step) => (dir) => {
+    setGlobalLayout(prev => {
+      const cur = key in prev ? prev[key] : def;
+      return { ...prev, [key]: Math.round((cur + dir * step) * 1000) / 1000 };
+    });
+  };
+
+  const TABS = ["print", "layout", "sync", "overrides"];
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 20px",
     border: "none", cursor: "pointer", textTransform: "uppercase", transition: "all 0.1s",
@@ -4218,16 +4256,6 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: "auto", padding: "28px 24px", maxWidth: 740, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>
-
-        {/* ── OVERRIDES ── */}
-        {tab === "overrides" && (
-          <MenuOverridesTab
-            menuCourses={menuCourses}
-            overrides={menuOverrides}
-            onSetOverrides={onSetMenuOverrides}
-            onSave={onSaveMenuOverrides}
-          />
-        )}
 
         {/* ── PRINT ── */}
         {tab === "print" && (
@@ -4262,9 +4290,72 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
           </div>
         )}
 
+        {/* ── LAYOUT ── */}
+        {tab === "layout" && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div>
+                <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>
+                  PRINT LAYOUT — global defaults applied to all menu prints
+                </div>
+                {Object.keys(globalLayout).length > 0 && (
+                  <span style={{ fontFamily: FONT, fontSize: 8, padding: "2px 6px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898", display: "inline-block", marginTop: 4 }}>
+                    {Object.keys(globalLayout).length} custom
+                  </span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {Object.keys(globalLayout).length > 0 && (
+                  <button onClick={() => setGlobalLayout({})} style={{
+                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
+                    border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
+                    background: "#fff9f9", color: "#c04040",
+                  }}>RESET</button>
+                )}
+                <button onClick={saveGlobalLayout} disabled={layoutSaving} style={{
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
+                  border: `1px solid ${layoutSaved ? "#4a9a6a" : "#1a1a1a"}`, borderRadius: 2,
+                  cursor: layoutSaving ? "default" : "pointer",
+                  background: layoutSaved ? "#4a9a6a" : "#1a1a1a", color: "#fff",
+                }}>{layoutSaving ? "SAVING…" : layoutSaved ? "SAVED ✓" : "SAVE AS DEFAULT"}</button>
+              </div>
+            </div>
+
+            <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, padding: "16px 14px", background: "#fff" }}>
+              {LAYOUT_PROPS.map(({ key, label, def, step, unit, dir }) => {
+                const val = key in globalLayout ? globalLayout[key] : def;
+                const isCustom = key in globalLayout;
+                const dec = dir === "h" ? "←" : "↓";
+                const inc = dir === "h" ? "→" : "↑";
+                const btnStyle = { fontFamily: FONT, fontSize: 11, width: 28, height: 28, border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fafafa", color: "#555", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
+                return (
+                  <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontFamily: FONT, fontSize: 10, color: "#999", flex: "0 0 130px", whiteSpace: "nowrap" }}>{label}</span>
+                    <button style={btnStyle} onClick={() => adjustGlobal(key, def, step)(-1)}>{dec}</button>
+                    <span style={{ fontFamily: FONT, fontSize: 11, minWidth: 60, textAlign: "center", color: isCustom ? "#7a5020" : "#aaa", fontWeight: isCustom ? 700 : 400 }}>
+                      {val} {unit}
+                    </span>
+                    <button style={btnStyle} onClick={() => adjustGlobal(key, def, step)(+1)}>{inc}</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ── SYNC ── */}
         {tab === "sync" && (
           <MenuSyncTab menuCourses={menuCourses} onSyncMenu={onSyncMenu} />
+        )}
+
+        {/* ── OVERRIDES ── */}
+        {tab === "overrides" && (
+          <MenuOverridesTab
+            menuCourses={menuCourses}
+            overrides={menuOverrides}
+            onSetOverrides={onSetMenuOverrides}
+            onSave={onSaveMenuOverrides}
+          />
         )}
       </div>
 
@@ -4274,6 +4365,7 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
           table={menuGenTable}
           menuCourses={menuCourses}
           upd={upd}
+          defaultLayoutStyles={globalLayout}
           onClose={() => setMenuGenTable(null)}
         />
       )}
