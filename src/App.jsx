@@ -146,8 +146,8 @@ function writeLocalBeverages(bev) {
 }
 
 
-const TEAM_STORAGE_KEY = "milka-menu-team-v1";
-const DEFAULT_TEAM_NAMES = "Daniel Polyakov, David Žefran, Djan Meglič, Jakob Zarnik, Joel Gomez, Juan Galindo, Nar Bahadur, Živa Kralj";
+const TEAM_STORAGE_KEY = "milka-menu-team-v2";
+const DEFAULT_TEAM_NAMES = "Daniel Polyakov, David Žefran, Djan Meglič, Eva Carlotta Schlier, Jela Šaban, Joel Gomez, Juan Galindo, James Masatoshi Muroyama, Nar Bahadur, Neža Jeromel, Tamara Sodja";
 function readTeamNames() {
   if (typeof window === "undefined") return DEFAULT_TEAM_NAMES;
   try {
@@ -869,8 +869,18 @@ function BlurInput({ committedValue, onCommit, placeholder, style }) {
   );
 }
 
-function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides }) {
+function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides, onSave }) {
   const hasAny = Object.keys(overrides).some(k => Object.keys(overrides[k] || {}).length > 0);
+  const [saving, setSaving] = useState(false);
+  const [saved,  setSaved]  = useState(false);
+
+  const handleSave = async () => {
+    if (!onSave) return;
+    setSaving(true); setSaved(false);
+    await onSave(overrides);
+    setSaving(false); setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
 
   const commitField = (courseKey, field, value) => {
     onSetOverrides(prev => ({
@@ -891,13 +901,22 @@ function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides }) 
         <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>
           SERVICE OVERRIDES — changes apply to all menus & kitchen tickets tonight
         </div>
-        {hasAny && (
-          <button onClick={clearAll} style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-            border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
-            background: "#fff9f9", color: "#c04040",
-          }}>RESET ALL</button>
-        )}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {onSave && (
+            <button onClick={handleSave} disabled={saving} style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
+              border: `1px solid ${saved ? "#4a9a6a" : "#1a1a1a"}`, borderRadius: 2, cursor: saving ? "default" : "pointer",
+              background: saved ? "#4a9a6a" : "#1a1a1a", color: "#fff",
+            }}>{saving ? "SAVING…" : saved ? "SAVED ✓" : "SAVE TO ALL SCREENS"}</button>
+          )}
+          {hasAny && (
+            <button onClick={clearAll} style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
+              border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
+              background: "#fff9f9", color: "#c04040",
+            }}>RESET ALL</button>
+          )}
+        </div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -959,7 +978,7 @@ function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides }) 
   );
 }
 
-function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = [], menuOverrides = {}, onSetMenuOverrides, onUpdateDishes, onUpdateWines, onSaveBeverages, onSyncMenu, onClose }) {
+function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = [], menuOverrides = {}, onSetMenuOverrides, onSaveMenuOverrides, onUpdateDishes, onUpdateWines, onSaveBeverages, onSyncMenu, onClose }) {
   const [tab, setTab] = useState("wines");
   const isMobile = useIsMobile(700);
 
@@ -1010,6 +1029,7 @@ function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = []
     onUpdateDishes(localDishes);
     onUpdateWines(localWines);
     onSaveBeverages({ cocktails: localCocktails, spirits: localSpirits, beers: localBeers });
+    if (onSaveMenuOverrides) onSaveMenuOverrides(menuOverrides);
     onClose();
   };
 
@@ -1152,6 +1172,7 @@ function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = []
               menuCourses={menuCourses}
               overrides={menuOverrides}
               onSetOverrides={onSetMenuOverrides}
+              onSave={onSaveMenuOverrides}
             />
           )}
 
@@ -3202,10 +3223,37 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
   // Cleared automatically after the PDF for that seat is generated.
   const [seatEdits, setSeatEdits] = useState({});
   const [expandedSeatId, setExpandedSeatId] = useState(null);
+  const genLoaded = useRef(false);
 
+  // Load team names + menu title from Supabase on mount
+  useEffect(() => {
+    if (!supabase) { genLoaded.current = true; return; }
+    Promise.all([
+      supabase.from("service_settings").select("state").eq("id", "menu_gen_team").single(),
+      supabase.from("service_settings").select("state").eq("id", "menu_gen_title").single(),
+    ]).then(([teamRes, titleRes]) => {
+      if (teamRes.data?.state?.value) setTeamNames(teamRes.data.state.value);
+      if (titleRes.data?.state?.value) setMenuTitle(titleRes.data.state.value);
+      genLoaded.current = true;
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save team names to localStorage + Supabase when changed
   useEffect(() => {
     writeTeamNames(teamNames);
+    if (!genLoaded.current || !supabase) return;
+    supabase.from("service_settings")
+      .upsert({ id: "menu_gen_team", state: { value: teamNames }, updated_at: new Date().toISOString() }, { onConflict: "id" })
+      .then(() => {});
   }, [teamNames]);
+
+  // Save menu title to Supabase when changed
+  useEffect(() => {
+    if (!genLoaded.current || !supabase) return;
+    supabase.from("service_settings")
+      .upsert({ id: "menu_gen_title", state: { value: menuTitle }, updated_at: new Date().toISOString() }, { onConflict: "id" })
+      .then(() => {});
+  }, [menuTitle]);
 
   const seats        = table.seats        || [];
   const restrictions = table.restrictions || [];
@@ -4545,6 +4593,29 @@ export default function App() {
     try { localStorage.setItem("milka_menu_overrides", JSON.stringify(menuOverrides)); } catch {}
   }, [menuOverrides]);
 
+  // ── Load menu overrides from Supabase on startup + realtime sync ────────────
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.from("service_settings").select("state").eq("id", "menu_overrides").single()
+      .then(({ data }) => {
+        if (data?.state && Object.keys(data.state).length > 0) setMenuOverrides(data.state);
+      });
+    const ch = supabase.channel("milka-menu-overrides")
+      .on("postgres_changes", { event: "*", schema: "public", table: "service_settings" }, payload => {
+        if (payload.new?.id === "menu_overrides") setMenuOverrides(payload.new?.state || {});
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveMenuOverrides = async (overrides) => {
+    if (!supabase) return { ok: false };
+    const { error } = await supabase
+      .from("service_settings")
+      .upsert({ id: "menu_overrides", state: overrides, updated_at: new Date().toISOString() }, { onConflict: "id" });
+    return { ok: !error };
+  };
+
   // ── Effective menu courses (overrides applied on top of sheet data) ─────────
   // useMemo so this doesn't recompute on every render (e.g. while typing elsewhere)
   const effectiveMenuCourses = useMemo(
@@ -5040,6 +5111,7 @@ export default function App() {
           menuCourses={menuCourses}
           menuOverrides={menuOverrides}
           onSetMenuOverrides={setMenuOverrides}
+          onSaveMenuOverrides={saveMenuOverrides}
           onUpdateDishes={setDishes} onUpdateWines={setWines}
           onSaveBeverages={saveBeverages}
           onSyncMenu={syncMenu}
