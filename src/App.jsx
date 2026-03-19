@@ -2660,7 +2660,7 @@ function ServiceQuickView({ tables, updSeat, setSel }) {
 }
 
 // ── Kitchen Board (KDS) ────────────────────────────────────────────────────────
-function KitchenTicket({ table, menuCourses, upd }) {
+function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }) {
   const seats = table.seats || [];
   const restrictions = table.restrictions || [];
   const log = table.kitchenLog || {};
@@ -2753,8 +2753,8 @@ function KitchenTicket({ table, menuCourses, upd }) {
   return (
     <div style={{ border: "2px solid #e8e8e8", borderRadius: 6, overflow: "hidden", background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}>
 
-      {/* ── Header ── */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #e8e8e8", padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8 }}>
+      {/* ── Header (drag handle) ── */}
+      <div ref={dragHandleRef} {...dragListeners} style={{ background: "#fff", borderBottom: "1px solid #e8e8e8", padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8, cursor: dragListeners ? "grab" : undefined, touchAction: "none" }}>
         <span style={{ fontFamily: FONT, fontSize: table.tableGroup?.length > 1 ? 16 : 21, fontWeight: 800, color: "#111", lineHeight: 1, letterSpacing: -1, flexShrink: 0 }}>
           {table.tableGroup?.length > 1 ? `T${table.tableGroup.join("-")}` : `T${table.id}`}
         </span>
@@ -2988,23 +2988,21 @@ function KitchenTicket({ table, menuCourses, upd }) {
 }
 
 function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging }) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
   return (
     <div
       ref={setNodeRef}
       {...attributes}
-      {...listeners}
       style={{
         flexShrink: 0, width: 248,
         // Only apply transform while a drag is active — prevents stale transforms
         // from persisting after drag ends and causing cards to appear displaced.
         transform: anyDragging && transform ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : undefined,
         transition: isDragging ? 'none' : (anyDragging ? transition : undefined),
-        cursor: isDragging ? "grabbing" : "grab",
         userSelect: "none", WebkitUserSelect: "none",
-        touchAction: "none",
+        touchAction: "pan-y",
       }}
     >
       {isDragging ? (
@@ -3015,7 +3013,7 @@ function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging }) {
           background: "#f4fbf6",
         }} />
       ) : (
-        <KitchenTicket table={table} menuCourses={menuCourses} upd={upd} />
+        <KitchenTicket table={table} menuCourses={menuCourses} upd={upd} dragHandleRef={setActivatorNodeRef} dragListeners={listeners} />
       )}
     </div>
   );
