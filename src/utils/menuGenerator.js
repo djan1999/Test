@@ -32,11 +32,13 @@ export function generateMenuHTML({
   lang = "en",
   seatOutputOverrides = {},
   thankYouNote = "Thank you for your visit.",
+  layoutStyles = {},
   // Font/logo assets — empty strings are fine for tests (no rendering needed)
   _fontBold = "",
   _fontReg = "",
   _logo = "",
 }) {
+  const s = (key, def) => key in layoutStyles ? layoutStyles[key] : def;
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
   const PAIRING_LABELS = lang === "si"
     ? { wp: "VINSKA SPREMLJAVA", na: "BREZALKOHOLNA SPREMLJAVA", os: "OUR STORY SPREMLJAVA", premium: "PREMIUM SPREMLJAVA" }
@@ -306,30 +308,30 @@ export function generateMenuHTML({
 @font-face{font-family:'RM';font-weight:700;src:url('data:font/truetype;base64,${_fontBold}') format('truetype');}
 @font-face{font-family:'RM';font-weight:400;src:url('data:font/truetype;base64,${_fontReg}') format('truetype');}
 *{margin:0;padding:0;box-sizing:border-box;}
-:root{--page-w:148mm;--page-h:210mm;--pad-t:8.4mm;--pad-r:12mm;--pad-b:8.2mm;--pad-l:12mm;--inner-h:calc(var(--page-h) - var(--pad-t) - var(--pad-b));}
+:root{--page-w:148mm;--page-h:210mm;--pad-t:${s("padTop",8.4)}mm;--pad-r:${s("padRight",12)}mm;--pad-b:${s("padBottom",8.2)}mm;--pad-l:${s("padLeft",12)}mm;--inner-h:calc(var(--page-h) - var(--pad-t) - var(--pad-b));}
 @page{size:A5 portrait;margin:0;}
-html,body{width:var(--page-w);height:var(--page-h);overflow:hidden;background:#fff;color:#000;font-family:'RM', monospace;font-size:6.75pt;line-height:1.08;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+html,body{width:var(--page-w);height:var(--page-h);overflow:hidden;background:#fff;color:#000;font-family:'RM', monospace;font-size:${s("fontSize",6.75)}pt;line-height:1.08;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 body{position:relative;}
 #sheet{width:var(--page-w);height:var(--page-h);overflow:hidden;position:relative;background:#fff;}
 #frame{position:absolute;inset:0;padding:var(--pad-t) var(--pad-r) var(--pad-b) var(--pad-l);overflow:hidden;}
 #scaleTarget{width:100%;min-height:var(--inner-h);display:flex;flex-direction:column;transform-origin:top left;}
-#header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8.6mm;margin-bottom:7mm;}
+#header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8.6mm;margin-bottom:${s("headerSpacing",7)}mm;}
 #title{font-size:13.9pt;font-weight:700;letter-spacing:0.035em;}
 #menu-date{font-size:5.8pt;font-weight:400;letter-spacing:0.02em;margin-top:0.8mm;}
-#logo img{width:18.2mm;display:block;}
+#logo img{width:${s("logoSize",18.2)}mm;display:block;}
 #menu{width:100%;}
 .menu-row,.menu-section-row{display:grid;grid-template-columns:minmax(0,${hasPairing ? "0.85fr) minmax(0,1.15fr" : "1fr) minmax(0,1fr"});column-gap:${hasPairing ? "9mm" : "10.8mm"};align-items:start;break-inside:avoid;page-break-inside:avoid;}
-.menu-row{margin-bottom:3.15pt;}
-.menu-row.wine-only{margin-bottom:4.5pt;}
+.menu-row{margin-bottom:${s("rowSpacing",3.15)}pt;}
+.menu-row.wine-only{margin-bottom:${s("wineRowSpacing",4.5)}pt;}
 .menu-row.after-crayfish{margin-bottom:7.2pt;}
 .menu-row.short-after-trout-belly,.menu-row.short-after-venison{margin-bottom:10pt;}
 .menu-row.section-gap-before{margin-top:14.5pt;}
 .menu-col{min-width:0;}
 .menu-main{font-weight:700;line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;text-transform:uppercase;}
 .menu-sub{line-height:1.08;margin-top:0.75pt;overflow-wrap:anywhere;}
-.menu-section-row{margin:6.8pt 0 6.2pt;}
+.menu-section-row{margin:${s("sectionSpacing",6.8)}pt 0 ${(s("sectionSpacing",6.8)-0.6).toFixed(2)}pt;}
 .menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;text-transform:uppercase;}
-.menu-thankyou{margin-top:7pt;font-size:6.55pt;font-style:normal;font-family:'RM',monospace;}
+.menu-thankyou{margin-top:${s("thankYouSpacing",7)}pt;font-size:6.55pt;font-style:normal;font-family:'RM',monospace;}
 #footer{margin-top:auto;padding-top:9.5pt;}
 #team{font-size:6.5pt;line-height:1.2;overflow-wrap:anywhere;}
 #team .menu-main{margin-bottom:1.4pt;}

@@ -365,3 +365,59 @@ describe("generateMenuHTML — wine country name expansion", () => {
     expect(html).toContain("'19");
   });
 });
+
+// ── layoutStyles ───────────────────────────────────────────────────────────────
+
+describe("generateMenuHTML — layoutStyles", () => {
+  it("uses default rowSpacing when layoutStyles is empty", () => {
+    const html = render({}, {}, [], { layoutStyles: {} });
+    expect(html).toContain("margin-bottom:3.15pt");
+  });
+
+  it("applies custom rowSpacing to .menu-row style", () => {
+    const html = render({}, {}, [], { layoutStyles: { rowSpacing: 5 } });
+    expect(html).toContain("margin-bottom:5pt");
+    expect(html).not.toContain("margin-bottom:3.15pt");
+  });
+
+  it("applies custom padLeft as --pad-l CSS variable", () => {
+    const html = render({}, {}, [], { layoutStyles: { padLeft: 20 } });
+    expect(html).toContain("--pad-l:20mm");
+  });
+
+  it("uses default padLeft when not in layoutStyles", () => {
+    const html = render({}, {}, [], { layoutStyles: {} });
+    expect(html).toContain("--pad-l:12mm");
+  });
+
+  it("applies custom fontSize to html,body font-size rule", () => {
+    const html = render({}, {}, [], { layoutStyles: { fontSize: 8 } });
+    expect(html).toContain("font-size:8pt");
+  });
+
+  it("applies custom logoSize to #logo img width", () => {
+    const html = render({}, {}, [], { layoutStyles: { logoSize: 25 } });
+    expect(html).toContain("width:25mm");
+  });
+
+  it("applies custom wineRowSpacing to .menu-row.wine-only", () => {
+    const html = render({}, {}, [], { layoutStyles: { wineRowSpacing: 7 } });
+    expect(html).toContain("margin-bottom:7pt");
+  });
+
+  it("applies custom thankYouSpacing to .menu-thankyou margin-top", () => {
+    const html = render({}, {}, [], { layoutStyles: { thankYouSpacing: 12 } });
+    expect(html).toContain("margin-top:12pt");
+  });
+
+  it("applies custom headerSpacing to #header margin-bottom", () => {
+    const html = render({}, {}, [], { layoutStyles: { headerSpacing: 15 } });
+    expect(html).toContain("margin-bottom:15mm");
+  });
+
+  it("applies custom padTop and padBottom as CSS variables", () => {
+    const html = render({}, {}, [], { layoutStyles: { padTop: 10, padBottom: 6 } });
+    expect(html).toContain("--pad-t:10mm");
+    expect(html).toContain("--pad-b:6mm");
+  });
+});

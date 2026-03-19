@@ -3215,6 +3215,55 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
 
   const setBeer = (seatId, val) => setBeerChoices(prev => ({ ...prev, [seatId]: val }));
 
+  // ── Layout styles (persistent per table) ──────────────────────────────────
+  const [layoutStyles, setLayoutStyles] = useState(() => table.menuLayoutStyles || {});
+  const [layoutOpen, setLayoutOpen] = useState(false);
+
+  const LAYOUT_PROPS = [
+    { key: "rowSpacing",      label: "Row spacing",       def: 3.15, step: 0.25, unit: "pt", dir: "v" },
+    { key: "wineRowSpacing",  label: "Wine row spacing",  def: 4.5,  step: 0.25, unit: "pt", dir: "v" },
+    { key: "sectionSpacing",  label: "Section gap",       def: 6.8,  step: 0.5,  unit: "pt", dir: "v" },
+    { key: "headerSpacing",   label: "Header gap",        def: 7,    step: 0.5,  unit: "mm", dir: "v" },
+    { key: "padTop",          label: "Pad top",           def: 8.4,  step: 0.5,  unit: "mm", dir: "v" },
+    { key: "padBottom",       label: "Pad bottom",        def: 8.2,  step: 0.5,  unit: "mm", dir: "v" },
+    { key: "padLeft",         label: "Pad left",          def: 12,   step: 0.5,  unit: "mm", dir: "h" },
+    { key: "padRight",        label: "Pad right",         def: 12,   step: 0.5,  unit: "mm", dir: "h" },
+    { key: "logoSize",        label: "Logo size",         def: 18.2, step: 0.5,  unit: "mm", dir: "h" },
+    { key: "fontSize",        label: "Font size",         def: 6.75, step: 0.05, unit: "pt", dir: "v" },
+    { key: "thankYouSpacing", label: "Thank-you gap",     def: 7,    step: 0.5,  unit: "pt", dir: "v" },
+  ];
+
+  const adjust = (key, def, step) => (dir) => {
+    setLayoutStyles(prev => {
+      const cur = key in prev ? prev[key] : def;
+      const next = { ...prev, [key]: Math.round((cur + dir * step) * 1000) / 1000 };
+      upd(table.id, "menuLayoutStyles", next);
+      return next;
+    });
+  };
+
+  const resetLayout = () => {
+    setLayoutStyles({});
+    upd(table.id, "menuLayoutStyles", {});
+  };
+
+  // Live preview HTML — uses first seat as representative
+  const previewHtml = useMemo(() => {
+    const previewSeat = seats[0] || { id: 1, pairing: "—", extras: {}, glasses: [], cocktails: [], beers: [] };
+    const seatCourses = menuCourses.map(c => applyMenuOverride(c, courseOverrides, previewSeat.id));
+    return generateMenuHTML({
+      seat: previewSeat,
+      table: { menuType: table.menuType || "", restrictions, bottleWines: tableBottles, birthday: table.birthday || false },
+      menuTitle,
+      teamNames,
+      menuCourses: seatCourses,
+      lang,
+      thankYouNote,
+      layoutStyles,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutStyles, menuTitle, teamNames, lang, thankYouNote]);
+
   const isPrintable = () => true;
   const seatBottles = () => tableBottles;
 
@@ -3230,6 +3279,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
       lang,
       seatOutputOverrides: seatEdits[seat.id] || {},
       thankYouNote,
+      layoutStyles,
     });
     const w = window.open("", "_blank", "width=620,height=880");
     if (!w) { alert("Pop-up blocked — allow pop-ups for this site."); return; }
@@ -3294,6 +3344,88 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
             <input value={thankYouNote} onChange={e => setThankYouNote(e.target.value)}
               style={{ fontFamily: FONT, fontSize: 11, padding: "8px 10px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }} />
           </div>
+        </div>
+
+        {/* Page Layout panel */}
+        <div style={{ marginBottom: 20, border: "1px solid #e8e8e8", borderRadius: 4 }}>
+          <div
+            onClick={() => setLayoutOpen(o => !o)}
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", cursor: "pointer", userSelect: "none" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>Page Layout</span>
+              {Object.keys(layoutStyles).length > 0 && (
+                <span style={{ fontFamily: FONT, fontSize: 8, padding: "2px 6px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>
+                  {Object.keys(layoutStyles).length} custom
+                </span>
+              )}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {Object.keys(layoutStyles).length > 0 && (
+                <button
+                  onClick={e => { e.stopPropagation(); resetLayout(); }}
+                  style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "3px 8px", border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer", background: "#fff9f9", color: "#c04040" }}
+                >RESET</button>
+              )}
+              <span style={{ fontFamily: FONT, fontSize: 11, color: "#bbb" }}>{layoutOpen ? "▲" : "▼"}</span>
+            </div>
+          </div>
+
+          {layoutOpen && (
+            <div style={{ borderTop: "1px solid #f0f0f0", display: "flex", gap: 0 }}>
+              {/* Controls column */}
+              <div style={{ flex: "0 0 260px", padding: "12px 14px", borderRight: "1px solid #f0f0f0" }}>
+                {LAYOUT_PROPS.map(({ key, label, def, step, unit, dir }) => {
+                  const val = key in layoutStyles ? layoutStyles[key] : def;
+                  const isCustom = key in layoutStyles;
+                  const dec = dir === "h" ? "←" : "↓";
+                  const inc = dir === "h" ? "→" : "↑";
+                  const btnStyle = { fontFamily: FONT, fontSize: 11, width: 26, height: 26, border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fafafa", color: "#555", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
+                  return (
+                    <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                      <span style={{ fontFamily: FONT, fontSize: 9, color: "#999", flex: "0 0 110px", whiteSpace: "nowrap" }}>{label}</span>
+                      <button style={btnStyle} onClick={() => adjust(key, def, step)(-1)}>{dec}</button>
+                      <span style={{ fontFamily: FONT, fontSize: 10, minWidth: 54, textAlign: "center", color: isCustom ? "#7a5020" : "#aaa", fontWeight: isCustom ? 700 : 400 }}>
+                        {val} {unit}
+                      </span>
+                      <button style={btnStyle} onClick={() => adjust(key, def, step)(+1)}>{inc}</button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Live preview column */}
+              <div style={{ flex: 1, padding: 12, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", overflow: "hidden", minWidth: 0 }}>
+                <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#ccc", textTransform: "uppercase", marginBottom: 8 }}>
+                  Preview (P{(seats[0]?.id) || 1})
+                </div>
+                <div style={{ position: "relative", width: "100%", overflow: "hidden" }}>
+                  {(() => {
+                    const containerW = 280;
+                    const a5W = 559;
+                    const a5H = 793;
+                    const scale = containerW / a5W;
+                    return (
+                      <div style={{ width: containerW, height: Math.round(a5H * scale), overflow: "hidden", border: "1px solid #e8e8e8", borderRadius: 2, position: "relative" }}>
+                        <iframe
+                          srcDoc={previewHtml}
+                          title="menu preview"
+                          style={{
+                            width: a5W,
+                            height: a5H,
+                            border: "none",
+                            transform: `scale(${scale})`,
+                            transformOrigin: "top left",
+                            pointerEvents: "none",
+                          }}
+                        />
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Seat rows */}
