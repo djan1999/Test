@@ -3253,6 +3253,8 @@ const LAYOUT_PROPS = [
   { key: "padLeft",         label: "Pad left",          def: 12,   step: 0.5,  unit: "mm", dir: "h" },
   { key: "padRight",        label: "Pad right",         def: 12,   step: 0.5,  unit: "mm", dir: "h" },
   { key: "logoSize",        label: "Logo size",         def: 10.5, step: 0.5,  unit: "mm", dir: "h" },
+  { key: "logoOffsetX",     label: "Logo offset X",     def: 0,    step: 0.5,  unit: "mm", dir: "h" },
+  { key: "logoOffsetY",     label: "Logo offset Y",     def: 0,    step: 0.5,  unit: "mm", dir: "v" },
   { key: "fontSize",        label: "Font size",         def: 6.75, step: 0.05, unit: "pt", dir: "v" },
   { key: "thankYouSpacing", label: "Thank-you gap",     def: 7,    step: 0.5,  unit: "pt", dir: "v" },
 ];
