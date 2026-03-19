@@ -4733,11 +4733,15 @@ export default function App() {
     try { localStorage.setItem("milka_menu_overrides", JSON.stringify(menuOverrides)); } catch {}
   }, [menuOverrides]);
 
-  // ── Load logo from Supabase on startup ──────────────────────────────────────
+  // ── Load logo on startup (Supabase → fallback to /logo.svg) ─────────────────
   useEffect(() => {
-    if (!supabase) return;
+    const loadDefault = () =>
+      fetch("/logo.svg").then(r => r.text())
+        .then(svg => setLogoDataUri(`data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`))
+        .catch(() => {});
+    if (!supabase) { loadDefault(); return; }
     supabase.from("service_settings").select("state").eq("id", "menu_logo").single()
-      .then(({ data }) => { if (data?.state?.dataUri) setLogoDataUri(data.state.dataUri); });
+      .then(({ data }) => { data?.state?.dataUri ? setLogoDataUri(data.state.dataUri) : loadDefault(); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveLogo = async (dataUri) => {
