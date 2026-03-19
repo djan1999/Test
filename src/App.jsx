@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
   DndContext, PointerSensor, TouchSensor,
@@ -452,9 +452,9 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   const isShort = String(table.menuType || "").toLowerCase() === "short";
 
   const extras = seat.extras || {};
-  const hasBeetroot = !!(extras[1]?.ordered || extras["1"]?.ordered);
-  const hasCheese = !!(extras[2]?.ordered || extras["2"]?.ordered);
-  const hasCake = !!(table.birthday || extras[3]?.ordered || extras["3"]?.ordered);
+  const hasBeetroot = !!extras[1]?.ordered;
+  const hasCheese   = !!extras[2]?.ordered;
+  const hasCake     = !!(table.birthday || extras[3]?.ordered);
 
   const glasses = Array.isArray(seat.glasses)
     ? seat.glasses.filter(w => w && (w.name || w.producer || w.vintage || w.notes))
@@ -597,7 +597,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       drink = { name: fpName, sub: fpSub };
     }
 
-    const beetrootExtra = extras[1] || extras["1"];
+    const beetrootExtra = extras[1];
     const isBeetrootOptionalCourse = optionalFlag === "beetroot" || courseKey === "beetroot" || courseName === "BEETROOT";
     if (isBeetrootOptionalCourse && beetrootExtra?.ordered) {
       const beetPair = String(beetrootExtra.pairing || "—").trim();
@@ -1286,7 +1286,6 @@ function MenuSyncTab({ menuCourses = [], onSyncMenu }) {
     }
   };
 
-  const SNACK_LABEL = { true: "snack", false: "" };
   const pairingCols = ["wp", "na", "os", "premium"];
   const pairingLabels = { wp: "Wine", na: "Non-Alc", os: "Our Story", premium: "Premium" };
 
@@ -2497,13 +2496,6 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
 
 // ── Table Seat Detail (read-only, used in DisplayBoard) ───────────────────────
 function TableSeatDetail({ table, dishes, isMobile }) {
-  const pairingColors = {
-    "—":        { color: "#666", bg: "#f5f5f5",  border: "#d8d8d8" },
-    "Non-Alc":  { color: "#1f5f73", bg: "#e8f7fb",  border: "#7fc6db" },
-    "Wine":      { color: "#7a5020", bg: "#f5ead8",  border: "#c8a060" },
-    "Premium":   { color: "#3a3a7a", bg: "#eaeaf5",  border: "#8888bb" },
-    "Our Story": { color: "#2a6a4a", bg: "#e0f5ea",  border: "#5aaa7a" },
-  };
 
   const chip = (label, color, bg, border, bold = false) => (
     <span style={{
@@ -2540,7 +2532,7 @@ function TableSeatDetail({ table, dishes, isMobile }) {
           const seatRestrictions = (table.restrictions || []).filter(r => r.pos === seat.id);
           const seatExtras = dishes.filter(d => seat.extras?.[d.id]?.ordered);
           const ws = waterStyle(seat.water);
-          const pc = pairingColors[seat.pairing] || pairingColors["Non-Alc"];
+          const pc = PC[seat.pairing] || PC["Non-Alc"];
           const hasInfo = seatRestrictions.length > 0 || seatExtras.length > 0;
           return (
             <div key={seat.id} style={{ border: "1px solid #ececec", borderRadius: 10, padding: "12px", background: "#fff" }}>
@@ -2589,11 +2581,15 @@ function TableSeatDetail({ table, dishes, isMobile }) {
 
 // ── Display Board ─────────────────────────────────────────────────────────────
 const PC = {
+  "—":         { color: "#666",    bg: "#f5f5f5", border: "#d8d8d8" },
   "Wine":      { color: "#7a5020", bg: "#f5ead8", border: "#c8a060" },
   "Non-Alc":   { color: "#1f5f73", bg: "#e8f7fb", border: "#7fc6db" },
   "Premium":   { color: "#3a3a7a", bg: "#eaeaf5", border: "#8888bb" },
   "Our Story": { color: "#2a6a4a", bg: "#e0f5ea", border: "#5aaa7a" },
 };
+// Flat color/bg maps used by Summary, Archive, and other read-only views
+const PAIRING_COLOR = { Wine: "#8a6030", "Non-Alc": "#1f5f73", Premium: "#3a3a7a", "Our Story": "#2a6a4a" };
+const PAIRING_BG    = { Wine: "#fdf4e8", "Non-Alc": "#e8f7fb", Premium: "#eaeaf5", "Our Story": "#e0f5ea" };
 const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
@@ -2741,9 +2737,9 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
               const pc      = PC[s.pairing];
               const restr   = allRestr.filter(r => r.pos === s.id);
               const extras  = dishes.filter(d => s.extras?.[d.id]?.ordered);
-              const beetExtra = s.extras?.[1] || s.extras?.["1"] || { ordered: false, pairing: "—" };
+              const beetExtra = s.extras?.[1] || { ordered: false, pairing: "—" };
               const hasBeet   = !!beetExtra.ordered;
-              const hasCheese = !!(s.extras?.[2]?.ordered || s.extras?.["2"]?.ordered);
+              const hasCheese = !!s.extras?.[2]?.ordered;
               const hasContent = (s.water && s.water !== "—") || s.pairing || restr.length > 0 || extras.length > 0;
 
               if (quickMode) {
@@ -2900,12 +2896,12 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
               <button onClick={() => {
                 const seats = t.seats || [];
                 const alertSeats = seats.map(s => {
-                  const beetExtra = s.extras?.[1] || s.extras?.["1"];
+                  const beetExtra = s.extras?.[1];
                   return {
                     id: s.id,
                     pairing: s.pairing || null,
                     beet: beetExtra?.ordered ? { pairing: beetExtra.pairing || "—" } : null,
-                    cheese: !!(s.extras?.[2]?.ordered || s.extras?.["2"]?.ordered),
+                    cheese: !!s.extras?.[2]?.ordered,
                   };
                 });
                 upd(t.id, "kitchenAlert", {
@@ -2998,7 +2994,6 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
 }
 
 // ── Service Quick View ────────────────────────────────────────────────────────
-const WATER_LABELS = { XC: "XC", XW: "XW", OC: "OC", OW: "OW" };
 const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 
 function ServiceQuickCard({ table, updSeat, onDetails }) {
@@ -3061,9 +3056,9 @@ function ServiceQuickCard({ table, updSeat, onDetails }) {
       {/* Per-seat rows */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px" }}>
         {seats.map(seat => {
-          const beetExtra = seat.extras?.[1] || seat.extras?.["1"] || { ordered: false, pairing: "—" };
+          const beetExtra = seat.extras?.[1] || { ordered: false, pairing: "—" };
           const hasBeet = !!beetExtra.ordered;
-          const hasCheese = !!(seat.extras?.[2]?.ordered || seat.extras?.["2"]?.ordered);
+          const hasCheese = !!seat.extras?.[2]?.ordered;
           const setBeetPairing = (p) => updSeat(table.id, seat.id, "extras", { ...seat.extras, 1: { ...beetExtra, pairing: p } });
           const pairingColor = { Wine: "#7a5020", "Non-Alc": "#3a6a2a", Premium: "#4a3a7a", "Our Story": "#2a5a6a" };
           const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#edf8e8", Premium: "#f0eeff", "Our Story": "#e8f5f8" };
@@ -3198,9 +3193,9 @@ function KitchenTicket({ table, menuCourses, upd }) {
   const isCakeCourse   = c => { const f = normFlag(c.optional_flag), k = normFlag(c.course_key || c.menu?.name); return f === "cake"     || k === "pear" || k === "pear_cake"; };
 
   // Extras ordered per seat — must come before courses filter
-  const beetSeats   = seats.filter(s => s.extras?.[1]?.ordered || s.extras?.["1"]?.ordered);
-  const cheeseSeats = seats.filter(s => s.extras?.[2]?.ordered || s.extras?.["2"]?.ordered);
-  const cakeSeats   = seats.filter(s => s.extras?.[3]?.ordered || s.extras?.["3"]?.ordered);
+  const beetSeats   = seats.filter(s => s.extras?.[1]?.ordered);
+  const cheeseSeats = seats.filter(s => s.extras?.[2]?.ordered);
+  const cakeSeats   = seats.filter(s => s.extras?.[3]?.ordered);
   const hasCake     = cakeSeats.length > 0;
 
   const isShort = String(table.menuType || "").trim().toLowerCase() === "short";
@@ -4115,8 +4110,6 @@ function FullModal({ title, onClose, actions, children }) {
 // ── Summary Modal ─────────────────────────────────────────────────────────────
 function SummaryModal({ tables, dishes = [], onClose }) {
   const active = tables.filter(t => t.active || t.arrivedAt);
-  const pairingColor = { "Wine": "#8a6030", "Non-Alc": "#1f5f73", "Premium": "#3a3a7a", "Our Story": "#2a6a4a" };
-  const pairingBg    = { "Wine": "#fdf4e8", "Non-Alc": "#e8f7fb", "Premium": "#eaeaf5", "Our Story": "#e0f5ea" };
 
   const copyText = () => {
     const lines = [];
@@ -4179,7 +4172,7 @@ function SummaryModal({ tables, dishes = [], onClose }) {
                   <div key={s.id} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", padding: "8px 4px", borderBottom: "1px solid #f5f5f5" }}>
                     <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: restr.length ? "#b04040" : "#999", minWidth: 28, letterSpacing: 0.5 }}>P{s.id}</span>
                     {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, background: ws.bg || "#f5f5f5", color: "#333", border: "1px solid #e0e0e0" }}>{s.water}</span>}
-                    {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, border: "1px solid #e0e0e0", color: pairingColor[s.pairing] || "#555", background: pairingBg[s.pairing] || "#fafafa" }}>{s.pairing}</span>}
+                    {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, border: "1px solid #e0e0e0", color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa" }}>{s.pairing}</span>}
                     {extras.map(d => { const ex = s.extras[d.id]; return <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}{ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}</span>; })}
                     {allBevs.map((b, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
                     {restr.map((r, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
@@ -4220,8 +4213,7 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
   const [loading, setLoading]   = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [deleting, setDeleting] = useState(null);
-  const pairingColor = { "Wine": "#8a6030", "Non-Alc": "#1f5f73", "Premium": "#3a3a7a", "Our Story": "#2a6a4a" };
-  const pairingBg    = { "Wine": "#fdf4e8", "Non-Alc": "#e8f7fb", "Premium": "#eaeaf5", "Our Story": "#e0f5ea" };
+
 
   const loadEntries = () => {
     if (!supabase) { setLoading(false); return; }
@@ -4395,7 +4387,7 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
                           <div key={s.id} style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", padding: "5px 4px", borderBottom: "1px solid #fafafa" }}>
                             <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#999", minWidth: 26 }}>P{s.id}</span>
                             {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
-                            {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: pairingColor[s.pairing] || "#555", background: pairingBg[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
+                            {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
                             {bevs.map((b, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
                             {extra.map(d => <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
                             {restr.map((r, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
