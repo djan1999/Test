@@ -17,15 +17,6 @@ import {
 } from "./utils/menuUtils.js";
 import { generateMenuHTML } from "./utils/menuGenerator.js";
 
-// Load logo SVG as a base64 data URI so it embeds correctly in printed HTML
-let _logoDataUri = "";
-if (typeof fetch !== "undefined") {
-  fetch("/logo.svg")
-    .then(r => r.text())
-    .then(svg => { _logoDataUri = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`; })
-    .catch(() => {});
-}
-
 const LIVE_MENU_SHEET_ID = import.meta.env.VITE_MENU_SHEET_ID || "1aPVGmKNcvDOFzyr3jSPT_KL5lKEYKPgkad3y0_E_Vl4";
 const LIVE_MENU_SHEET_TAB = import.meta.env.VITE_MENU_SHEET_TAB || "MILKA MENU V2";
 const LIVE_MENU_CSV_URL = `https://docs.google.com/spreadsheets/d/${LIVE_MENU_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(LIVE_MENU_SHEET_TAB)}`;
@@ -987,7 +978,7 @@ function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides, on
   );
 }
 
-function AdminPanel({ dishes, wines, cocktails, spirits, beers, onUpdateDishes, onUpdateWines, onSaveBeverages, onResetMenuLayout, onClose }) {
+function AdminPanel({ dishes, wines, cocktails, spirits, beers, onUpdateDishes, onUpdateWines, onSaveBeverages, onResetMenuLayout, logoDataUri = "", onSaveLogo, onClose }) {
   const [tab, setTab] = useState("wines");
   const isMobile = useIsMobile(700);
 
@@ -1140,17 +1131,53 @@ function AdminPanel({ dishes, wines, cocktails, spirits, beers, onUpdateDishes, 
           )}
 
           {tab === "settings" && (
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 20 }}>Print Layout</div>
-              <div style={{ border: "1px solid #f8e8e8", borderRadius: 4, padding: "16px 18px", background: "#fffafa" }}>
-                <div style={{ fontFamily: FONT, fontSize: 10, color: "#444", marginBottom: 6 }}>Reset to factory defaults</div>
-                <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginBottom: 14 }}>
-                  Clears all saved layout customisations (row spacing, padding, font size, etc.) and restores the original values.
+            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              {/* Logo */}
+              <div>
+                <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Menu Logo</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  <div style={{ width: 64, height: 64, border: "1px solid #e8e8e8", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", background: "#fafafa", flexShrink: 0 }}>
+                    {logoDataUri
+                      ? <img src={logoDataUri} alt="logo" style={{ width: 52, height: 52, objectFit: "contain" }} />
+                      : <span style={{ fontFamily: FONT, fontSize: 8, color: "#ccc", letterSpacing: 1 }}>NO LOGO</span>
+                    }
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginBottom: 8 }}>
+                      Upload PNG, JPG, or SVG. Will be embedded in all printed menus.
+                    </div>
+                    <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff", display: "inline-block" }}>
+                      UPLOAD LOGO
+                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = ev => onSaveLogo(ev.target.result);
+                        reader.readAsDataURL(file);
+                      }} />
+                    </label>
+                    {logoDataUri && (
+                      <button onClick={() => onSaveLogo("")} style={{ marginLeft: 8, fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #e08080", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#c04040" }}>
+                        REMOVE
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <button
-                  onClick={() => { if (window.confirm("Reset print layout to factory defaults?")) onResetMenuLayout(); }}
-                  style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #e08080", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#c04040" }}
-                >RESET LAYOUT TO DEFAULTS</button>
+              </div>
+
+              {/* Layout reset */}
+              <div>
+                <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Print Layout</div>
+                <div style={{ border: "1px solid #f8e8e8", borderRadius: 4, padding: "16px 18px", background: "#fffafa" }}>
+                  <div style={{ fontFamily: FONT, fontSize: 10, color: "#444", marginBottom: 6 }}>Reset to factory defaults</div>
+                  <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginBottom: 14 }}>
+                    Clears all saved layout customisations (row spacing, padding, font size, etc.) and restores the original values.
+                  </div>
+                  <button
+                    onClick={() => { if (window.confirm("Reset print layout to factory defaults?")) onResetMenuLayout(); }}
+                    style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #e08080", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#c04040" }}
+                  >RESET LAYOUT TO DEFAULTS</button>
+                </div>
               </div>
             </div>
           )}
@@ -3230,7 +3257,7 @@ const LAYOUT_PROPS = [
   { key: "thankYouSpacing", label: "Thank-you gap",     def: 7,    step: 0.5,  unit: "pt", dir: "v" },
 ];
 
-function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLayoutStyles = {} }) {
+function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLayoutStyles = {}, logoDataUri = "" }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState("WINTER MENU");
   const [thankYouNote, setThankYouNote] = useState("Thank you for your visit.");
@@ -3342,7 +3369,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
       seatOutputOverrides: seatEdits[seat.id] || {},
       thankYouNote,
       layoutStyles,
-      _logo: _logoDataUri,
+      _logo: logoDataUri,
     });
     const w = window.open("", "_blank", "width=620,height=880");
     if (!w) { alert("Pop-up blocked — allow pop-ups for this site."); return; }
@@ -4102,7 +4129,7 @@ function GateScreen({ onPass }) {
 }
 
 // ── Menu Page ─────────────────────────────────────────────────────────────────
-function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSaveMenuOverrides, onSyncMenu, upd, onExit }) {
+function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSaveMenuOverrides, onSyncMenu, upd, logoDataUri = "", onExit }) {
   const [tab, setTab]                   = useState("print");
   const [menuGenTable, setMenuGenTable] = useState(null);
   const [globalLayout, setGlobalLayout] = useState(() => {
@@ -4155,9 +4182,9 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
       lang: "en",
       thankYouNote: "",
       layoutStyles: globalLayout,
-      _logo: _logoDataUri,
+      _logo: logoDataUri,
     });
-  }, [globalLayout, menuCourses]);
+  }, [globalLayout, menuCourses, logoDataUri]);
 
   const TABS = ["print", "layout", "sync", "overrides"];
   const tabBtn = t => ({
@@ -4315,6 +4342,7 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
           menuCourses={menuCourses}
           upd={upd}
           defaultLayoutStyles={globalLayout}
+          logoDataUri={logoDataUri}
           onClose={() => setMenuGenTable(null)}
         />
       )}
@@ -4499,6 +4527,7 @@ export default function App() {
   const [summaryOpen,  setSummaryOpen]  = useState(false);
   const [archiveOpen,  setArchiveOpen]  = useState(false);
   const [syncStatus,   setSyncStatus]   = useState(hasSupabaseConfig ? "connecting" : "local-only");
+  const [logoDataUri,  setLogoDataUri]  = useState("");
   // Access gate: checked once at init against 12h TTL
   const [authed,       setAuthed]       = useState(() => readAccess());
   // Hydration: render immediately from localStorage, sync Supabase in background
@@ -4703,6 +4732,20 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem("milka_menu_overrides", JSON.stringify(menuOverrides)); } catch {}
   }, [menuOverrides]);
+
+  // ── Load logo from Supabase on startup ──────────────────────────────────────
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.from("service_settings").select("state").eq("id", "menu_logo").single()
+      .then(({ data }) => { if (data?.state?.dataUri) setLogoDataUri(data.state.dataUri); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveLogo = async (dataUri) => {
+    setLogoDataUri(dataUri);
+    if (!supabase) return;
+    await supabase.from("service_settings")
+      .upsert({ id: "menu_logo", state: { dataUri }, updated_at: new Date().toISOString() }, { onConflict: "id" });
+  };
 
   // ── Load menu overrides from Supabase on startup + realtime sync ────────────
   useEffect(() => {
@@ -5061,6 +5104,7 @@ export default function App() {
         onSaveMenuOverrides={saveMenuOverrides}
         onSyncMenu={syncMenu}
         upd={upd}
+        logoDataUri={logoDataUri}
         onExit={() => changeMode(null)}
       />
     </div>
@@ -5237,6 +5281,8 @@ export default function App() {
           dishes={dishes} wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
           onUpdateDishes={setDishes} onUpdateWines={setWines}
           onSaveBeverages={saveBeverages}
+          logoDataUri={logoDataUri}
+          onSaveLogo={saveLogo}
           onResetMenuLayout={() => {
             try { localStorage.removeItem("milka_menu_layout"); } catch {}
             if (supabase) supabase.from("service_settings").upsert({ id: "menu_layout_global", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" }).then(() => {});
