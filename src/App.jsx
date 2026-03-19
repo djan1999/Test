@@ -17,6 +17,15 @@ import {
 } from "./utils/menuUtils.js";
 import { generateMenuHTML } from "./utils/menuGenerator.js";
 
+// Load logo SVG as a base64 data URI so it embeds correctly in printed HTML
+let _logoDataUri = "";
+if (typeof fetch !== "undefined") {
+  fetch("/logo.svg")
+    .then(r => r.text())
+    .then(svg => { _logoDataUri = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`; })
+    .catch(() => {});
+}
+
 const LIVE_MENU_SHEET_ID = import.meta.env.VITE_MENU_SHEET_ID || "1aPVGmKNcvDOFzyr3jSPT_KL5lKEYKPgkad3y0_E_Vl4";
 const LIVE_MENU_SHEET_TAB = import.meta.env.VITE_MENU_SHEET_TAB || "MILKA MENU V2";
 const LIVE_MENU_CSV_URL = `https://docs.google.com/spreadsheets/d/${LIVE_MENU_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(LIVE_MENU_SHEET_TAB)}`;
@@ -978,7 +987,7 @@ function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides, on
   );
 }
 
-function AdminPanel({ dishes, wines, cocktails, spirits, beers, onUpdateDishes, onUpdateWines, onSaveBeverages, onClose }) {
+function AdminPanel({ dishes, wines, cocktails, spirits, beers, onUpdateDishes, onUpdateWines, onSaveBeverages, onResetMenuLayout, onClose }) {
   const [tab, setTab] = useState("wines");
   const isMobile = useIsMobile(700);
 
@@ -1032,7 +1041,7 @@ function AdminPanel({ dishes, wines, cocktails, spirits, beers, onUpdateDishes, 
     onClose();
   };
 
-  const TABS = ["wines", "cocktails", "spirits", "beers", "dishes"];
+  const TABS = ["wines", "cocktails", "spirits", "beers", "dishes", "settings"];
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "9px 18px",
     border: "none", cursor: "pointer", textTransform: "uppercase", transition: "all 0.1s",
@@ -1128,6 +1137,22 @@ function AdminPanel({ dishes, wines, cocktails, spirits, beers, onUpdateDishes, 
             <DrinkListEditor list={localBeers} setList={setLocalBeers}
               newItem={newBeer} setNewItem={setNewBeer}
               nextId={nextBeerId} label="beer" />
+          )}
+
+          {tab === "settings" && (
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 20 }}>Print Layout</div>
+              <div style={{ border: "1px solid #f8e8e8", borderRadius: 4, padding: "16px 18px", background: "#fffafa" }}>
+                <div style={{ fontFamily: FONT, fontSize: 10, color: "#444", marginBottom: 6 }}>Reset to factory defaults</div>
+                <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginBottom: 14 }}>
+                  Clears all saved layout customisations (row spacing, padding, font size, etc.) and restores the original values.
+                </div>
+                <button
+                  onClick={() => { if (window.confirm("Reset print layout to factory defaults?")) onResetMenuLayout(); }}
+                  style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #e08080", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#c04040" }}
+                >RESET LAYOUT TO DEFAULTS</button>
+              </div>
+            </div>
           )}
 
           {tab === "dishes" && (
@@ -3317,6 +3342,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
       seatOutputOverrides: seatEdits[seat.id] || {},
       thankYouNote,
       layoutStyles,
+      _logo: _logoDataUri,
     });
     const w = window.open("", "_blank", "width=620,height=880");
     if (!w) { alert("Pop-up blocked — allow pop-ups for this site."); return; }
@@ -4129,6 +4155,7 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
       lang: "en",
       thankYouNote: "",
       layoutStyles: globalLayout,
+      _logo: _logoDataUri,
     });
   }, [globalLayout, menuCourses]);
 
@@ -4205,13 +4232,6 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
                 )}
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {Object.keys(globalLayout).length > 0 && (
-                  <button onClick={() => setGlobalLayout({})} style={{
-                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-                    border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
-                    background: "#fff9f9", color: "#c04040",
-                  }}>RESET</button>
-                )}
                 <button onClick={saveGlobalLayout} disabled={layoutSaving} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
                   border: `1px solid ${layoutSaved ? "#4a9a6a" : "#1a1a1a"}`, borderRadius: 2,
@@ -5217,6 +5237,10 @@ export default function App() {
           dishes={dishes} wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
           onUpdateDishes={setDishes} onUpdateWines={setWines}
           onSaveBeverages={saveBeverages}
+          onResetMenuLayout={() => {
+            try { localStorage.removeItem("milka_menu_layout"); } catch {}
+            if (supabase) supabase.from("service_settings").upsert({ id: "menu_layout_global", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" }).then(() => {});
+          }}
           onClose={() => setAdminOpen(false)}
         />
       )}
