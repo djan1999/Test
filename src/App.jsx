@@ -978,7 +978,7 @@ function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides, on
   );
 }
 
-function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = [], menuOverrides = {}, onSetMenuOverrides, onSaveMenuOverrides, onUpdateDishes, onUpdateWines, onSaveBeverages, onSyncMenu, onClose }) {
+function AdminPanel({ dishes, wines, cocktails, spirits, beers, onUpdateDishes, onUpdateWines, onSaveBeverages, onClose }) {
   const [tab, setTab] = useState("wines");
   const isMobile = useIsMobile(700);
 
@@ -1029,11 +1029,10 @@ function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = []
     onUpdateDishes(localDishes);
     onUpdateWines(localWines);
     onSaveBeverages({ cocktails: localCocktails, spirits: localSpirits, beers: localBeers });
-    if (onSaveMenuOverrides) onSaveMenuOverrides(menuOverrides);
     onClose();
   };
 
-  const TABS = ["wines", "cocktails", "spirits", "beers", "dishes", "overrides", "menu"];
+  const TABS = ["wines", "cocktails", "spirits", "beers", "dishes"];
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "9px 18px",
     border: "none", cursor: "pointer", textTransform: "uppercase", transition: "all 0.1s",
@@ -1167,18 +1166,7 @@ function AdminPanel({ dishes, wines, cocktails, spirits, beers, menuCourses = []
           )}
 
 
-          {tab === "overrides" && (
-            <MenuOverridesTab
-              menuCourses={menuCourses}
-              overrides={menuOverrides}
-              onSetOverrides={onSetMenuOverrides}
-              onSave={onSaveMenuOverrides}
-            />
-          )}
 
-          {tab === "menu" && (
-            <MenuSyncTab menuCourses={menuCourses} onSyncMenu={onSyncMenu} />
-          )}
         </div>
 
         {/* Footer */}
@@ -1597,8 +1585,6 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
 function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, mode, onBack, upd, updSeat, setGuests, swapSeats }) {
   const isMobile = useIsMobile(860);
   const row1 = isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
-  const [showMenuGen, setShowMenuGen] = useState(false);
-
   return (
     <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "20px 12px 28px" : "24px 16px", overflowX: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
@@ -1606,16 +1592,7 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
           background: "none", border: "none", cursor: "pointer",
           fontFamily: FONT, fontSize: 11, color: "#666", letterSpacing: 1, padding: 0,
         }}>← all tables</button>
-        {(mode === "admin" || mode === "service") && table.active && (
-          <button onClick={() => setShowMenuGen(true)} style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "7px 14px",
-            border: "1px solid #c8a96e", borderRadius: 2, cursor: "pointer",
-            background: "#fdf4e8", color: "#7a5020",
-          }}>MENUS</button>
-        )}
       </div>
-
-      {showMenuGen && <MenuGenerator table={table} menuCourses={menuCourses} upd={upd} onClose={() => setShowMenuGen(false)} />}
 
       {/* Table number + guest count */}
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 12, gap: 16, flexWrap: "wrap" }}>
@@ -4113,7 +4090,7 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
 }
 
 // ── Access gate constants ─────────────────────────────────────────────────────
-const PINS            = { admin: "3412" };
+const PINS            = { admin: "3412", menu: "3412" };
 const ACCESS_PASSWORD = "milka2025";          // ← change to your own password
 const ACCESS_KEY      = "milka_access";
 const ACCESS_TTL_MS   = 12 * 60 * 60 * 1000; // 12 hours
@@ -4212,12 +4189,105 @@ function GateScreen({ onPass }) {
   );
 }
 
+// ── Menu Page ─────────────────────────────────────────────────────────────────
+function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSaveMenuOverrides, onSyncMenu, upd, onExit }) {
+  const [tab, setTab]               = useState("overrides");
+  const [menuGenTable, setMenuGenTable] = useState(null);
+
+  const TABS = ["overrides", "print", "sync"];
+  const tabBtn = t => ({
+    fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 20px",
+    border: "none", cursor: "pointer", textTransform: "uppercase", transition: "all 0.1s",
+    background: tab === t ? "#1a1a1a" : "transparent",
+    color: tab === t ? "#fff" : "#888",
+    borderBottom: tab === t ? "none" : "1px solid #e8e8e8",
+  });
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#fafafa", display: "flex", flexDirection: "column" }}>
+      {/* Header */}
+      <div style={{ background: "#fff", borderBottom: "1px solid #e8e8e8", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+        <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 3, color: "#1a1a1a" }}>MENU</span>
+        <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888" }}>EXIT</button>
+      </div>
+
+      {/* Tab bar */}
+      <div style={{ display: "flex", borderBottom: "1px solid #e8e8e8", background: "#fff", flexShrink: 0 }}>
+        {TABS.map(t => <button key={t} style={tabBtn(t)} onClick={() => setTab(t)}>{t}</button>)}
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "28px 24px", maxWidth: 740, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>
+
+        {/* ── OVERRIDES ── */}
+        {tab === "overrides" && (
+          <MenuOverridesTab
+            menuCourses={menuCourses}
+            overrides={menuOverrides}
+            onSetOverrides={onSetMenuOverrides}
+            onSave={onSaveMenuOverrides}
+          />
+        )}
+
+        {/* ── PRINT ── */}
+        {tab === "print" && (
+          <div>
+            <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1, marginBottom: 20 }}>
+              SELECT A TABLE TO GENERATE MENUS
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+              {tables.map(t => {
+                const hasData = t.active || t.resName || t.resTime;
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => setMenuGenTable(t)}
+                    style={{
+                      border: `1px solid ${hasData ? "#e0e0e0" : "#f0f0f0"}`,
+                      borderRadius: 6, padding: "14px 16px",
+                      background: hasData ? "#fff" : "#fafafa",
+                      cursor: "pointer", boxShadow: hasData ? "0 1px 4px rgba(0,0,0,0.06)" : "none",
+                      opacity: hasData ? 1 : 0.5, transition: "box-shadow 0.15s",
+                    }}
+                  >
+                    <div style={{ fontFamily: FONT, fontSize: 20, fontWeight: 800, color: "#111", letterSpacing: -1, lineHeight: 1 }}>T{t.id}</div>
+                    {t.resName && <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: "#333", marginTop: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.resName}</div>}
+                    {t.resTime && <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginTop: 2 }}>{t.resTime}</div>}
+                    {t.seats?.length > 0 && <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginTop: 4 }}>{t.seats.length} pax</div>}
+                    {t.active && <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#4a9a6a", marginTop: 4, fontWeight: 700 }}>SEATED</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── SYNC ── */}
+        {tab === "sync" && (
+          <MenuSyncTab menuCourses={menuCourses} onSyncMenu={onSyncMenu} />
+        )}
+      </div>
+
+      {/* MenuGenerator overlay */}
+      {menuGenTable && (
+        <MenuGenerator
+          table={menuGenTable}
+          menuCourses={menuCourses}
+          upd={upd}
+          onClose={() => setMenuGenTable(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 // ── Login Screen ──────────────────────────────────────────────────────────────
 function LoginScreen({ onEnter }) {
   const MODES = [
     { id: "display",  label: "Display",  sub: "read-only view",      icon: "◎", pin: false },
     { id: "service",  label: "Service",  sub: "full service access",  icon: "◈", pin: false },
     { id: "admin",    label: "Admin",    sub: "pin required",         icon: "◆", pin: true  },
+    { id: "menu",     label: "Menu",     sub: "menus & print",        icon: "▨", pin: true  },
   ];
   const [picking, setPicking] = useState(null);
   const [pin, setPin]         = useState("");
@@ -4939,6 +5009,22 @@ export default function App() {
     </div>
   );
 
+  if (mode === "menu") return (
+    <div style={{ minHeight: "100vh", background: "#fafafa", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+      <GlobalStyle />
+      <MenuPage
+        tables={tables}
+        menuCourses={effectiveMenuCourses}
+        menuOverrides={menuOverrides}
+        onSetMenuOverrides={setMenuOverrides}
+        onSaveMenuOverrides={saveMenuOverrides}
+        onSyncMenu={syncMenu}
+        upd={upd}
+        onExit={() => changeMode(null)}
+      />
+    </div>
+  );
+
   // Service + Admin modes
   return (
     <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
@@ -5108,13 +5194,8 @@ export default function App() {
       {adminOpen && (
         <AdminPanel
           dishes={dishes} wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
-          menuCourses={menuCourses}
-          menuOverrides={menuOverrides}
-          onSetMenuOverrides={setMenuOverrides}
-          onSaveMenuOverrides={saveMenuOverrides}
           onUpdateDishes={setDishes} onUpdateWines={setWines}
           onSaveBeverages={saveBeverages}
-          onSyncMenu={syncMenu}
           onClose={() => setAdminOpen(false)}
         />
       )}
