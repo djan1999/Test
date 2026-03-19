@@ -2668,6 +2668,32 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
   const [showEdit, setShowEdit] = useState(false);
   const [pickingRestr, setPickingRestr] = useState(null); // restriction key, or "custom"
   const [customNote, setCustomNote] = useState("");
+  const [editingCourse, setEditingCourse] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editNote, setEditNote] = useState("");
+
+  const kitchenCourseNotes = table.kitchenCourseNotes || {};
+  const startEditCourse = (key) => {
+    const curr = kitchenCourseNotes[key] || {};
+    setEditName(curr.name || "");
+    setEditNote(curr.note || "");
+    setEditingCourse(key);
+  };
+  const saveCourseDraft = (key, name, note) => {
+    const allNotes = { ...kitchenCourseNotes };
+    const entry = {};
+    if (name.trim()) entry.name = name.trim();
+    if (note.trim()) entry.note = note.trim();
+    if (Object.keys(entry).length) allNotes[key] = entry;
+    else delete allNotes[key];
+    upd(table.id, "kitchenCourseNotes", allNotes);
+  };
+  const clearCourseNote = (key) => {
+    const allNotes = { ...kitchenCourseNotes };
+    delete allNotes[key];
+    upd(table.id, "kitchenCourseNotes", allNotes);
+    setEditingCourse(null);
+  };
 
   const addKitchenRestr = (note, seatId) => {
     if (!note?.trim()) return;
@@ -2792,7 +2818,7 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
           {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a" }}>{durationMins} min</div>}
           <button
             onPointerDown={e => e.stopPropagation()}
-            onClick={e => { e.stopPropagation(); setShowEdit(v => !v); setPickingRestr(null); setCustomNote(""); }}
+            onClick={e => { e.stopPropagation(); setShowEdit(v => !v); setPickingRestr(null); setCustomNote(""); setEditingCourse(null); }}
             style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 7px",
               border: `1px solid ${showEdit ? "#1a1a1a" : "#ddd"}`,
@@ -3020,40 +3046,81 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
             return null;
           })();
 
+          const kcNote = kitchenCourseNotes[key] || {};
+          const displayName = kcNote.name || line1;
+          const isEditingThis = editingCourse === key;
+
           return (
-            <div key={key}
-              onClick={() => fired ? unfire(key) : fire(key)}
-              style={{
-                borderBottom: "1px solid #f2f2f2",
-                background: fired ? "#f3fcf5" : "#fff",
-                borderLeft: fired ? "4px solid #4a9a6a" : "4px solid transparent",
-                cursor: "pointer", transition: "background 0.15s",
-              }}>
-              <div style={{ display: "flex", alignItems: "center", padding: "7px 10px 7px 8px", gap: 7 }}>
+            <div key={key} style={{
+              borderBottom: "1px solid #f2f2f2",
+              background: fired ? "#f3fcf5" : "#fff",
+              borderLeft: fired ? "4px solid #4a9a6a" : kcNote.name || kcNote.note ? "4px solid #e0a030" : "4px solid transparent",
+            }}>
+              <div
+                onClick={() => !isEditingThis && (fired ? unfire(key) : fire(key))}
+                style={{ display: "flex", alignItems: "center", padding: "7px 10px 7px 8px", gap: 7, cursor: isEditingThis ? "default" : "pointer" }}>
                 <span style={{ fontFamily: FONT, fontSize: 13, color: fired ? "#4a9a6a" : "#ddd", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  {/* Line 1: CELERIAC | pork head, bozner sauce */}
                   <div style={{
                     fontFamily: FONT, fontSize: 11, fontWeight: 700, lineHeight: 1.25,
-                    color: fired ? "#bbb" : "#111",
+                    color: fired ? "#bbb" : kcNote.name ? "#b06000" : "#111",
                     textDecoration: fired ? "line-through" : "none",
                     letterSpacing: 0.2,
                   }}>
-                    {line1}
+                    {displayName}
+                    {kcNote.name && <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 400, color: "#aaa", marginLeft: 5 }}>({line1})</span>}
                     {extraLabel && <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 400, color: "#bbb", marginLeft: 6 }}>{extraLabel}</span>}
                   </div>
-                  {/* Restriction labels + kitchen note (line 3) — both in red */}
-                  {(modGroups || kitchenNote) && !fired && (
+                  {(modGroups || kitchenNote || kcNote.note) && !fired && (
                     <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
                       {modGroups && Object.entries(modGroups).sort(([a], [b]) => (a === baseName ? -1 : 1) - (b === baseName ? -1 : 1)).map(([name, count]) => (
                         <span key={name} style={{ fontFamily: FONT, fontSize: 10, color: name === baseName ? "#444" : "#c04040", fontWeight: 600 }}>{count}× {name}</span>
                       ))}
                       {kitchenNote && <span style={{ fontFamily: FONT, fontSize: 10, color: "#c04040", fontWeight: 600 }}>{kitchenNote}</span>}
+                      {kcNote.note && <span style={{ fontFamily: FONT, fontSize: 10, color: "#b06000", fontWeight: 600 }}>⚑ {kcNote.note}</span>}
                     </div>
                   )}
                 </div>
+                {showEdit && !fired && (
+                  <button
+                    onPointerDown={e => e.stopPropagation()}
+                    onClick={e => { e.stopPropagation(); if (isEditingThis) { saveCourseDraft(key, editName, editNote); setEditingCourse(null); } else { startEditCourse(key); } }}
+                    style={{
+                      fontFamily: FONT, fontSize: 9, padding: "2px 6px", flexShrink: 0,
+                      border: `1px solid ${isEditingThis ? "#1a1a1a" : "#ddd"}`,
+                      borderRadius: 3, cursor: "pointer",
+                      background: isEditingThis ? "#1a1a1a" : "#fff",
+                      color: isEditingThis ? "#fff" : "#aaa",
+                      touchAction: "manipulation",
+                    }}>✏</button>
+                )}
                 {firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
               </div>
+              {/* Inline course editor */}
+              {isEditingThis && (
+                <div onPointerDown={e => e.stopPropagation()} style={{ padding: "0 10px 8px 28px", display: "flex", flexDirection: "column", gap: 5 }}>
+                  <input
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    onBlur={() => saveCourseDraft(key, editName, editNote)}
+                    placeholder={`Rename "${line1}"…`}
+                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 7px", border: "1px solid #e0a030", borderRadius: 3, width: "100%", boxSizing: "border-box" }}
+                  />
+                  <input
+                    value={editNote}
+                    onChange={e => setEditNote(e.target.value)}
+                    onBlur={() => saveCourseDraft(key, editName, editNote)}
+                    placeholder="Add note (e.g. No Ricotta)…"
+                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 7px", border: "1px solid #ddd", borderRadius: 3, width: "100%", boxSizing: "border-box" }}
+                  />
+                  {(kcNote.name || kcNote.note) && (
+                    <button
+                      onPointerDown={e => e.stopPropagation()}
+                      onClick={e => { e.stopPropagation(); clearCourseNote(key); }}
+                      style={{ fontFamily: FONT, fontSize: 8, padding: "3px 8px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", alignSelf: "flex-start", touchAction: "manipulation" }}>Clear override</button>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
