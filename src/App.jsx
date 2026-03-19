@@ -308,6 +308,7 @@ const sanitizeTable = t => ({
   restrictions: Array.isArray(t.restrictions) ? t.restrictions : [],
   kitchenLog: t.kitchenLog && typeof t.kitchenLog === "object" ? t.kitchenLog : {},
   courseOverrides: t.courseOverrides && typeof t.courseOverrides === "object" ? t.courseOverrides : {},
+  kitchenCourseNotes: t.kitchenCourseNotes && typeof t.kitchenCourseNotes === "object" ? t.kitchenCourseNotes : {},
   tableGroup: Array.isArray(t.tableGroup) ? t.tableGroup : [],
 });
 
@@ -2660,12 +2661,14 @@ function ServiceQuickView({ tables, updSeat, setSel }) {
 }
 
 // ── Kitchen Board (KDS) ────────────────────────────────────────────────────────
-function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }) {
+function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, wines = [] }) {
   const seats = table.seats || [];
   const restrictions = table.restrictions || [];
   const log = table.kitchenLog || {};
+  const tableBottles = table.bottleWines || [];
   const [assigningRestrIdx, setAssigningRestrIdx] = useState(null);
   const [showEdit, setShowEdit] = useState(false);
+  const [showWines, setShowWines] = useState(false);
   const [pickingRestr, setPickingRestr] = useState(null); // restriction key, or "custom"
   const [customNote, setCustomNote] = useState("");
   const [editingCourse, setEditingCourse] = useState(null);
@@ -2816,19 +2819,55 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
           <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: allDone ? "#4a9a6a" : "#111", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 10, color: "#666", fontWeight: 400 }}>/{totalCourses}</span></div>
           {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a" }}>{durationMins} min</div>}
-          <button
-            onPointerDown={e => e.stopPropagation()}
-            onClick={e => { e.stopPropagation(); setShowEdit(v => !v); setPickingRestr(null); setCustomNote(""); setEditingCourse(null); }}
-            style={{
-              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 7px",
-              border: `1px solid ${showEdit ? "#1a1a1a" : "#ddd"}`,
-              borderRadius: 3, cursor: "pointer",
-              background: showEdit ? "#1a1a1a" : "#fff",
-              color: showEdit ? "#fff" : "#888",
-              touchAction: "manipulation",
-            }}>✏ EDIT</button>
+          <div style={{ display: "flex", gap: 4 }}>
+            <button
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); setShowWines(v => !v); }}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "2px 7px",
+                border: `1px solid ${showWines ? "#c8a060" : tableBottles.length > 0 ? "#e0c898" : "#ddd"}`,
+                borderRadius: 3, cursor: "pointer",
+                background: showWines ? "#fdf4e8" : tableBottles.length > 0 ? "#fffbf3" : "#fff",
+                color: showWines ? "#7a5020" : tableBottles.length > 0 ? "#9a6010" : "#bbb",
+                touchAction: "manipulation",
+              }}>🍾{tableBottles.length > 0 ? ` ${tableBottles.length}` : ""}</button>
+            <button
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); setShowEdit(v => !v); setPickingRestr(null); setCustomNote(""); setEditingCourse(null); }}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 7px",
+                border: `1px solid ${showEdit ? "#1a1a1a" : "#ddd"}`,
+                borderRadius: 3, cursor: "pointer",
+                background: showEdit ? "#1a1a1a" : "#fff",
+                color: showEdit ? "#fff" : "#888",
+                touchAction: "manipulation",
+              }}>✏ EDIT</button>
+          </div>
         </div>
       </div>
+
+      {/* ── Bottle wines panel ── */}
+      {showWines && (
+        <div onPointerDown={e => e.stopPropagation()} style={{ borderBottom: "1px solid #e8e8e8", padding: "8px 10px", background: "#fffbf3" }}>
+          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#9a6010", textTransform: "uppercase", marginBottom: 6 }}>Bottle Wines</div>
+          {tableBottles.map((w, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, color: "#7a5020", fontWeight: 500 }}>
+                🍾 {[w.producer, w.name, w.vintage].filter(Boolean).join(" ")}
+              </span>
+              <button
+                onClick={e => { e.stopPropagation(); upd(table.id, "bottleWines", tableBottles.filter((_, idx) => idx !== i)); }}
+                style={{ fontFamily: FONT, fontSize: 10, padding: "1px 6px", border: "1px solid #e0c898", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#9a6010", touchAction: "manipulation" }}>✕</button>
+            </div>
+          ))}
+          {wines.length > 0 && (
+            <WineSearch
+              wineObj={null} wines={wines} byGlass={false} placeholder="add bottle…"
+              onChange={w => { if (w) upd(table.id, "bottleWines", [...tableBottles, w]); }}
+            />
+          )}
+        </div>
+      )}
 
       {/* ── Temp restriction editor ── */}
       {showEdit && (
@@ -3160,7 +3199,7 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
   );
 }
 
-function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging }) {
+function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, wines = [] }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
@@ -3186,7 +3225,7 @@ function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging }) {
           background: "#f4fbf6",
         }} />
       ) : (
-        <KitchenTicket table={table} menuCourses={menuCourses} upd={upd} dragHandleRef={setActivatorNodeRef} dragListeners={listeners} />
+        <KitchenTicket table={table} menuCourses={menuCourses} upd={upd} dragHandleRef={setActivatorNodeRef} dragListeners={listeners} wines={wines} />
       )}
     </div>
   );
@@ -3286,7 +3325,7 @@ function KitchenAlertOverlay({ alerts, onConfirm }) {
   );
 }
 
-function KitchenBoard({ tables, menuCourses, upd }) {
+function KitchenBoard({ tables, menuCourses, upd, wines = [] }) {
   const activeTables = tables
     .filter(t => t.active && !t.kitchenArchived)
     .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
@@ -3361,6 +3400,7 @@ function KitchenBoard({ tables, menuCourses, upd }) {
                 upd={upd}
                 isDragging={activeId === t.id}
                 anyDragging={activeId !== null}
+                wines={wines}
               />
             ))}
           </div>
@@ -3373,7 +3413,7 @@ function KitchenBoard({ tables, menuCourses, upd }) {
             boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
             opacity: 0.97,
           }}>
-            <KitchenTicket table={activeTable} menuCourses={menuCourses} upd={upd} />
+            <KitchenTicket table={activeTable} menuCourses={menuCourses} upd={upd} wines={wines} />
           </div>
         )}
       </DragOverlay>
@@ -5224,7 +5264,7 @@ export default function App() {
       <GlobalStyle />
       <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={true} {...hProps} />
       <div style={{ padding: "20px 24px" }}>
-        <KitchenBoard tables={tables} menuCourses={effectiveMenuCourses} upd={upd} />
+        <KitchenBoard tables={tables} menuCourses={effectiveMenuCourses} upd={upd} wines={wines} />
       </div>
       {archiveOpen && (
         <ArchiveModal
