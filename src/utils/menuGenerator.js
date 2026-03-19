@@ -318,7 +318,7 @@ body{position:relative;}
 #header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8.6mm;margin-bottom:${s("headerSpacing",7)}mm;}
 #title{font-size:13.9pt;font-weight:700;letter-spacing:0.035em;}
 #menu-date{font-size:5.8pt;font-weight:400;letter-spacing:0.02em;margin-top:0.8mm;}
-#logo img{width:${s("logoSize",18.2)}mm;display:block;}
+#logo img{width:${s("logoSize",10.5)}mm;display:block;}
 #menu{width:100%;}
 .menu-row,.menu-section-row{display:grid;grid-template-columns:minmax(0,${hasPairing ? "0.85fr) minmax(0,1.15fr" : "1fr) minmax(0,1fr"});column-gap:${hasPairing ? "9mm" : "10.8mm"};align-items:start;break-inside:avoid;page-break-inside:avoid;}
 .menu-row{margin-bottom:${s("rowSpacing",3.15)}pt;}
