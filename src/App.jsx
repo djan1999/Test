@@ -2863,40 +2863,6 @@ function KitchenTicket({ table, menuCourses, upd }) {
         })()}
       </div>
 
-      {/* ── Extras confirmation alerts ── */}
-      {[
-        { type: "beetroot", seats: beetSeats,   label: "BEETROOT", colors: { bg: "#3a0a18", border: "#7a1a30" } },
-        { type: "cheese",   seats: cheeseSeats, label: "CHEESE",   colors: { bg: "#3a2a00", border: "#c8a030" } },
-        { type: "cake",     seats: cakeSeats,   label: "CAKE",     colors: { bg: "#2a1a40", border: "#8a60c0" } },
-      ].filter(({ seats, type }) => seats.length > 0 && !extrasConfirmed[type])
-       .map(({ type, seats, label, colors }) => (
-        <div key={type} style={{
-          background: colors.bg,
-          borderLeft: `4px solid ${colors.border}`,
-          padding: "8px 10px",
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-        }}>
-          <div>
-            <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: "#fff", letterSpacing: 1, textTransform: "uppercase" }}>
-              + {label}
-            </span>
-            <span style={{ fontFamily: FONT, fontSize: 9, color: "rgba(255,255,255,0.65)", marginLeft: 8 }}>
-              {seats.map(s => `P${s.id}`).join(" · ")}
-            </span>
-          </div>
-          <button
-            onClick={e => { e.stopPropagation(); confirmExtra(type); }}
-            style={{
-              fontFamily: FONT, fontSize: 8, letterSpacing: 1.5,
-              padding: "4px 10px", border: `1px solid ${colors.border}`,
-              borderRadius: 3, cursor: "pointer",
-              background: "rgba(255,255,255,0.12)", color: "#fff",
-              textTransform: "uppercase",
-            }}
-          >CONFIRM</button>
-        </div>
-      ))}
 
       {/* ── Courses ── */}
       <div style={{ display: "flex", flexDirection: "column" }}>
@@ -3177,7 +3143,10 @@ function KitchenBoard({ tables, menuCourses, upd }) {
     .filter(t => t.kitchenAlert && !t.kitchenAlert.confirmed)
     .map(t => ({ tableId: t.id, alert: t.kitchenAlert }));
 
-  const confirmAlert = (tableId) => upd(tableId, "kitchenAlert", null);
+  const confirmAlert = (tableId) => {
+    upd(tableId, "kitchenAlert", null);
+    upd(tableId, "extrasConfirmed", { beetroot: true, cheese: true, cake: true });
+  };
 
   if (activeTables.length === 0) return (
     <>
