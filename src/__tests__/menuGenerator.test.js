@@ -415,6 +415,23 @@ describe("generateMenuHTML — layoutStyles", () => {
     expect(html).toContain("margin-bottom:15mm");
   });
 
+  it("renders logo img when _logo is provided", () => {
+    const html = render({}, {}, [], { _logo: "data:image/svg+xml;base64,abc123" });
+    expect(html).toContain('<div id="logo">');
+    expect(html).toContain('<img src="data:image/svg+xml;base64,abc123" alt="Logo">');
+  });
+
+  it("omits logo div entirely when _logo is empty", () => {
+    const html = render({}, {}, [], { _logo: "" });
+    expect(html).not.toContain('<div id="logo">');
+  });
+
+  it("logo img uses generic alt text, not a hardcoded restaurant name", () => {
+    const html = render({}, {}, [], { _logo: "data:image/png;base64,xyz" });
+    expect(html).toContain('alt="Logo"');
+    expect(html).not.toContain('alt="Milka"');
+  });
+
   it("applies custom padTop and padBottom as CSS variables", () => {
     const html = render({}, {}, [], { layoutStyles: { padTop: 10, padBottom: 6 } });
     expect(html).toContain("--pad-t:10mm");

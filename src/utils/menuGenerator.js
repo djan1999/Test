@@ -338,7 +338,7 @@ body{position:relative;}
 </style>
 </head>
 <body>
-<div id="sheet"><div id="frame"><div id="scaleTarget"><div id="header"><div id="title">${safeTitle}<div id="menu-date">${esc(menuDate)}</div></div>${_logo ? `<div id="logo"><img src="${_logo}" alt="Milka"></div>` : `<div id="logo"></div>`}</div><div id="menu">${rowsHtml}</div><div id="footer"><div id="team"><div class="menu-main">TEAM:</div><div>${esc(teamNames)}</div></div></div></div></div></div>
+<div id="sheet"><div id="frame"><div id="scaleTarget"><div id="header"><div id="title">${safeTitle}<div id="menu-date">${esc(menuDate)}</div></div>${_logo ? `<div id="logo"><img src="${_logo}" alt="Logo"></div>` : ""}</div><div id="menu">${rowsHtml}</div><div id="footer"><div id="team"><div class="menu-main">TEAM:</div><div>${esc(teamNames)}</div></div></div></div></div></div>
 <script>
 (function(){
   const MIN_SCALE = 0.58;
