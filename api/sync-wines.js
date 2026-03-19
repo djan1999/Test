@@ -45,7 +45,7 @@ async function fetchHtml(url) {
   return res.text();
 }
 
-async function withRetry(fn, label, maxAttempts = 4) {
+export async function withRetry(fn, label, maxAttempts = 4) {
   let lastErr;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -62,7 +62,7 @@ async function withRetry(fn, label, maxAttempts = 4) {
   throw lastErr;
 }
 
-function extractCells(row) {
+export function extractCells(row) {
   const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
   const cells = [];
   let m;
@@ -78,7 +78,7 @@ function extractCells(row) {
   return cells;
 }
 
-function parseWinesFromHtml(html, countryLabel) {
+export function parseWinesFromHtml(html, countryLabel) {
   const wines = [];
   const tableRe = /<table[\s\S]*?<\/table>/gi;
   for (const table of html.match(tableRe) || []) {
@@ -100,7 +100,7 @@ function parseWinesFromHtml(html, countryLabel) {
   return wines;
 }
 
-function parseBeveragesFromHtml(html, category, subcategoryLabel) {
+export function parseBeveragesFromHtml(html, category, subcategoryLabel) {
   const beverages = [];
   const tableRe = /<table[\s\S]*?<\/table>/gi;
   for (const table of html.match(tableRe) || []) {

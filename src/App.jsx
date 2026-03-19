@@ -9,123 +9,24 @@ import {
   SortableContext, useSortable, rectSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { parseCSV, normHeader, csvRowsToObjects } from "./utils/csv.js";
+import {
+  firstFilled, applyMenuOverride, truthyCell, splitMainSubCell,
+  parseBilingual, mergeDishes, applyCourseRestriction,
+  RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP,
+} from "./utils/menuUtils.js";
 
 const LIVE_MENU_SHEET_ID = import.meta.env.VITE_MENU_SHEET_ID || "1aPVGmKNcvDOFzyr3jSPT_KL5lKEYKPgkad3y0_E_Vl4";
 const LIVE_MENU_SHEET_TAB = import.meta.env.VITE_MENU_SHEET_TAB || "MILKA MENU V2";
 const LIVE_MENU_CSV_URL = `https://docs.google.com/spreadsheets/d/${LIVE_MENU_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(LIVE_MENU_SHEET_TAB)}`;
 
-function parseCSV(text) {
-  const rows = [];
-  let row = [], field = "", inQuote = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inQuote) {
-      if (ch === '"' && text[i + 1] === '"') { field += '"'; i += 1; }
-      else if (ch === '"') inQuote = false;
-      else field += ch;
-    } else {
-      if (ch === '"') inQuote = true;
-      else if (ch === ',') { row.push(field); field = ""; }
-      else if (ch === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
-      else if (ch !== "\r") field += ch;
-    }
-  }
-  if (field || row.length) { row.push(field); rows.push(row); }
-  return rows;
-}
-
-const normHeader = value => String(value || "")
-  .trim()
-  .toLowerCase()
-  .replace(/\s+/g, "_")
-  .replace(/[^a-z0-9_/?#]+/g, "_")
-  .replace(/^_+|_+$/g, "");
-
-const csvRowsToObjects = (rows) => {
-  if (!Array.isArray(rows) || rows.length < 2) return [];
-  const headers = rows[0].map(normHeader);
-  return rows.slice(1).map(cols => {
-    const obj = {};
-    headers.forEach((header, idx) => { obj[header] = cols[idx] ?? ""; });
-    return obj;
-  });
-};
-
-const firstFilled = (...vals) => vals.find(v => String(v ?? "").trim()) ?? "";
-
-// Apply a service-level menu override to a course.
-// overrides[courseKey] = { name?, sub?, name_si?, sub_si?, seats?: { [seatId]: { name?, sub? } } }
-// seatId: if provided, seat-specific overrides take precedence over table-wide ones.
-const applyMenuOverride = (course, overrides, seatId = null) => {
-  const base = overrides?.[course.course_key];
-  if (!base) return course;
-  // Merge table-wide + seat-specific (seat wins)
-  const seatOv = seatId != null ? (base.seats?.[seatId] || {}) : {};
-  const ov = { ...base, ...seatOv };
-  if (!Object.keys(ov).filter(k => k !== "seats").length) return course;
-  return {
-    ...course,
-    menu: {
-      name: "name" in ov ? ov.name : course.menu?.name,
-      sub:  "sub"  in ov ? ov.sub  : course.menu?.sub,
-    },
-    menu_si: ("name_si" in ov || "sub_si" in ov) ? {
-      name: "name_si" in ov ? ov.name_si : (course.menu_si?.name || ""),
-      sub:  "sub_si"  in ov ? ov.sub_si  : (course.menu_si?.sub  || ""),
-    } : course.menu_si,
-  };
-};
-
-const truthyCell = value => {
-  const s = String(value ?? "").trim().toLowerCase();
-  return s === "true" || s === "yes" || s === "y" || s === "1" || s === "wahr";
-};
-
-const splitMainSubCell = (title, sub = "") => {
-  const rawTitle = String(title ?? "").trim();
-  const rawSub = String(sub ?? "").trim();
-  if (!rawTitle && !rawSub) return null;
-  if (rawTitle.includes("|")) {
-    const [left, ...rest] = rawTitle.split("|");
-    return {
-      name: left.trim(),
-      sub: rest.join("|").trim() || rawSub || "",
-    };
-  }
-  return { name: rawTitle, sub: rawSub };
-};
-
-// Parse a bilingual cell with optional kitchen note:
-//   Line 1 = EN  (menu generator)
-//   Line 2 = SI  (menu generator)
-//   Line 3 = kitchen ticket note (never used for menu generation)
-// rawSubCol is the optional separate sub/description column (same 3-line structure).
-// Returns { en: {name, sub} | null, si: {name, sub} | null, note: string }
-//
-// IMPORTANT: We split on a single \n (not \n+) to preserve blank-line positions.
-// A blank line 2 means "no SI content" — it must not shift line 3 up into the SI slot.
-const parseBilingual = (rawCell, rawSubCol = "") => {
-  const lines    = String(rawCell   ?? "").split("\n").map(s => s.trim());
-  const subLines = String(rawSubCol ?? "").split("\n").map(s => s.trim());
-  const en = splitMainSubCell(lines[0] || "", subLines[0] || "");
-  const si = (lines[1] || subLines[1])
-    ? splitMainSubCell(lines[1] || "", subLines[1] || "")
-    : null;
-  const note = lines[2] || subLines[2] || "";
-  return { en: en?.name ? en : null, si: si?.name ? si : null, note };
-};
-
 function normalizeLiveMenuRow(row) {
   const position = Number(firstFilled(row["#"], row.position, row.order_index)) || 0;
 
-  // Google Sheets cells may contain up to 3 lines: line 1 = EN, line 2 = SI, line 3 = kitchen note only.
-  // Split on single \n to preserve blank-line positions — a blank line 2 must NOT shift line 3 into SI slot.
   const dishLines = String(row.dish ?? "").split("\n").map(s => s.trim());
   const descLines = String(row.description ?? "").split("\n").map(s => s.trim());
   const dishEnRaw = dishLines[0] || "";
   const descEnRaw = descLines[0] || "";
-  // Line 2 = SI name (menu gen only). Line 3 = kitchen note fallback.
-  // Prefer an explicit dish_si column; fall back to line 2 of the dish cell.
   const dishSiRaw = String(row.dish_si ?? "").trim() || dishLines[1] || "";
   const descSiRaw = String(row.dish_si_sub ?? "").trim() || descLines[1] || "";
   const kitchenNoteFallback = dishLines[2] || "";
@@ -133,7 +34,6 @@ function normalizeLiveMenuRow(row) {
   const dish = splitMainSubCell(dishEnRaw, descEnRaw);
   if (!dish?.name) return null;
 
-  // course_key derived from the EN dish name only (not the combined cell)
   const courseKey = String(firstFilled(row.course_key, row.key, dishEnRaw) || "")
     .trim()
     .toLowerCase()
@@ -151,14 +51,12 @@ function normalizeLiveMenuRow(row) {
     const { en, si, note: cellNote } = parseBilingual(row[key], row[`${key}_sub`]);
     restrictions[key] = en;
     if (si) restrictions[`${key}_si`] = si;
-    // Kitchen note: prefer explicit "{key}_note" column, fall back to line 3 of the restriction cell.
     const note = String(firstFilled(row[`${key}_note`], cellNote) || "").trim();
     if (note) restrictions[`${key}_note`] = note;
   });
 
   const menuSi = splitMainSubCell(dishSiRaw, descSiRaw);
 
-  // Pairings — bilingual (line 1 = EN, line 2 = SI)
   const wpBi   = parseBilingual(row.wp_drink,  row.wp_sub);
   const naBi   = parseBilingual(row.na_drink,  row.na_sub);
   const osBi   = parseBilingual(row.os_drink,  row.os_sub);
@@ -182,7 +80,6 @@ function normalizeLiveMenuRow(row) {
     section_gap_before: truthyCell(firstFilled(row.section_gap_before)),
     show_on_short: truthyCell(firstFilled(row.show_on_short)),
     short_order: Number(firstFilled(row.short_order)) || null,
-    // Bilingual force pairing: same column, line 1 = EN "TITLE | sub", line 2 = SI "TITLE | sub"
     ...(() => {
       const raw = String(firstFilled(row.force_pairing_title)).trim();
       const [enLine, siLine] = raw.split("\n").map(l => l.trim());
@@ -230,25 +127,6 @@ const initDishes = [
 ];
 
 // ── Cocktails & Spirits & Beers ───────────────────────────────────────────────
-function mergeDishes(list) {
-  const base = Array.isArray(list) ? list : [];
-  const builtinById = new Map(initDishes.map(d => [String(d.id), d]));
-  const merged = base.map(item => {
-    const builtin = builtinById.get(String(item?.id ?? ""));
-    if (!builtin) return item;
-    return {
-      ...item,
-      name: builtin.name,
-      pairings: [...builtin.pairings],
-    };
-  });
-  const seen = new Set(merged.map(x => String(x?.id ?? "")));
-  initDishes.forEach(d => {
-    if (!seen.has(String(d.id))) merged.push({ ...d, pairings: [...d.pairings] });
-  });
-  return merged.sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
-}
-
 const initCocktails = [];
 const initSpirits   = [];
 const initBeers     = [];
@@ -364,75 +242,6 @@ const MILKA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 58 
   <circle cx="46" cy="10" r="10"/>
   <path d="M2,66 L2,30 L20,52 L38,24 L38,66 L34,66 L34,27 L20,50 L6,30 L6,66 Z"/>
 </svg>`;
-
-
-const RESTRICTION_PRIORITY_KEYS = [
-  "vegan","veg","pescetarian","gluten","dairy","nut","shellfish",
-  "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
-  "no_garlic_onion","halal","low_fodmap"
-];
-
-const RESTRICTION_COLUMN_MAP = {
-  veg: "veg",
-  vegan: "vegan",
-  pescetarian: "pescetarian",
-  gluten: "gluten_free",
-  dairy: "dairy_free",
-  nut: "nut_free",
-  shellfish: "shellfish_free",
-  no_red_meat: "no_red_meat",
-  no_pork: "no_pork",
-  no_game: "no_game",
-  no_offal: "no_offal",
-  egg_free: "egg_free",
-  no_alcohol: "no_alcohol",
-  no_garlic_onion: "no_garlic_onion",
-  halal: "halal",
-  low_fodmap: "low_fodmap",
-};
-
-function applyCourseRestriction(course, activeRestrictions, lang = "en") {
-  const baseDish = course?.menu || null;
-  if (!baseDish) return null;
-
-  let dish = {
-    name: String(baseDish.name || "").trim(),
-    sub: String(baseDish.sub || "").trim(),
-  };
-
-  const courseRestrictions = course?.restrictions || {};
-
-  for (const key of RESTRICTION_PRIORITY_KEYS) {
-    if (!(activeRestrictions || []).includes(key)) continue;
-    const mapped = RESTRICTION_COLUMN_MAP[key] || key;
-    // Prefer SI variant when generating a Slovenian menu
-    const siMapped = lang === "si" ? `${mapped}_si` : null;
-
-    if (courseRestrictions[mapped]) {
-      const next = (siMapped && courseRestrictions[siMapped]) ? courseRestrictions[siMapped] : courseRestrictions[mapped];
-      // If the cell had a | separator, next.sub is non-empty → full name+sub replacement.
-      // If no | separator, next.sub is empty → sub-only replacement, keep original dish name.
-      if (next?.sub) {
-        dish = { name: String(next.name || dish.name).trim(), sub: String(next.sub).trim() };
-      } else if (next?.name) {
-        dish = { name: dish.name, sub: String(next.name).trim() };
-      }
-      break; // highest-priority matching restriction wins
-    }
-
-    // backward compatibility for older static menu data
-    if (mapped === "veg" && course?.veg) {
-      const v = course.veg;
-      if (v?.sub) {
-        dish = { name: String(v.name || dish.name).trim(), sub: String(v.sub).trim() };
-      } else if (v?.name) {
-        dish = { name: dish.name, sub: String(v.name).trim() };
-      }
-    }
-  }
-
-  return dish;
-}
 
 
 function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null, lang = "en", seatOutputOverrides = {}, thankYouNote = "Thank you for your visit." }) {

@@ -5,69 +5,13 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { getSheetsToken, sheetsGet, SHEET_ID, SHEET_TAB } from "./_sheets-auth.js";
+import { parseCSV, normHeader } from "../src/utils/csv.js";
+import { firstFilled, truthyCell, splitMainSubCell, parseBilingual } from "../src/utils/menuUtils.js";
 
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_TAB)}`;
 
 const SYNC_SECRET = process.env.SYNC_SECRET;
 const CRON_SECRET = process.env.CRON_SECRET;
-
-// ── CSV parser (fallback path) ────────────────────────────────────────────────
-
-function parseCSV(text) {
-  const rows = [];
-  let row = [], field = "", inQuote = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inQuote) {
-      if (ch === '"' && text[i + 1] === '"') { field += '"'; i += 1; }
-      else if (ch === '"') inQuote = false;
-      else field += ch;
-    } else {
-      if (ch === '"') inQuote = true;
-      else if (ch === ',') { row.push(field); field = ""; }
-      else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ""; }
-      else if (ch !== '\r') field += ch;
-    }
-  }
-  if (field || row.length) { row.push(field); rows.push(row); }
-  return rows;
-}
-
-// ── Row normalisation ─────────────────────────────────────────────────────────
-
-const normHeader = value => String(value || "")
-  .trim()
-  .toLowerCase()
-  .replace(/\s+/g, "_")
-  .replace(/[^a-z0-9_/?#]+/g, "_")
-  .replace(/^_+|_+$/g, "");
-
-const firstFilled = (...vals) => vals.find(v => String(v ?? "").trim()) ?? "";
-const truthyCell = value => ["true", "yes", "y", "1", "wahr"].includes(String(value ?? "").trim().toLowerCase());
-
-const splitMainSubCell = (title, sub = "") => {
-  const rawTitle = String(title ?? "").trim();
-  const rawSub = String(sub ?? "").trim();
-  if (!rawTitle && !rawSub) return null;
-  if (rawTitle.includes("|")) {
-    const [left, ...rest] = rawTitle.split("|");
-    return { name: left.trim(), sub: rest.join("|").trim() || rawSub || "" };
-  }
-  return { name: rawTitle, sub: rawSub };
-};
-
-// Parse a bilingual cell with optional kitchen note:
-//   Line 1 = EN (menu generator), Line 2 = SI (menu generator), Line 3 = kitchen note.
-const parseBilingual = (rawCell, rawSubCol = "") => {
-  const lines    = String(rawCell   ?? "").split("\n").map(s => s.trim());
-  const subLines = String(rawSubCol ?? "").split("\n").map(s => s.trim());
-  const en = splitMainSubCell(lines[0] || "", subLines[0] || "");
-  const si = (lines[1] || subLines[1])
-    ? splitMainSubCell(lines[1] || "", subLines[1] || "")
-    : null;
-  const note = lines[2] || subLines[2] || "";
-  return { en: en?.name ? en : null, si: si?.name ? si : null, note };
-};
 
 const RESTRICTION_KEYS = [
   "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
@@ -75,7 +19,7 @@ const RESTRICTION_KEYS = [
   "no_garlic_onion","halal","low_fodmap",
 ];
 
-function parseRows(rows) {
+export function parseRows(rows) {
   if (rows.length < 2) return [];
   const headers = rows[0].map(normHeader);
   const records = rows.slice(1).map(cols => {

@@ -13,7 +13,7 @@ import { getSheetsToken, sheetsGet, sheetsUpdate, sheetsBatchUpdate, sheetsAppen
 const SYNC_SECRET = process.env.SYNC_SECRET;
 const CRON_SECRET = process.env.CRON_SECRET;
 
-function checkAuth(req) {
+export function checkAuth(req) {
   const authHeader = req.headers.authorization;
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const provided = bearerToken || req.headers["x-sync-secret"] || req.query.secret;
