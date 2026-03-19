@@ -2665,6 +2665,21 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
   const restrictions = table.restrictions || [];
   const log = table.kitchenLog || {};
   const [assigningRestrIdx, setAssigningRestrIdx] = useState(null);
+  const [showEdit, setShowEdit] = useState(false);
+  const [pickingRestr, setPickingRestr] = useState(null); // restriction key, or "custom"
+  const [customNote, setCustomNote] = useState("");
+
+  const addKitchenRestr = (note, seatId) => {
+    if (!note?.trim()) return;
+    const next = [...restrictions, { note: note.trim(), pos: seatId || null, kitchenAdded: true }];
+    upd(table.id, "restrictions", next);
+    setPickingRestr(null);
+    setCustomNote("");
+  };
+  const removeKitchenRestr = (origIdx) => {
+    const next = restrictions.filter((_, i) => i !== origIdx);
+    upd(table.id, "restrictions", next);
+  };
 
   const extrasConfirmed = table.extrasConfirmed || {};
   const confirmExtra = (type) => {
@@ -2772,11 +2787,102 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
           </div>
           {table.notes && <div style={{ fontFamily: FONT, fontSize: 8, color: "#555", fontStyle: "italic", marginTop: 1, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.notes}</div>}
         </div>
-        <div style={{ textAlign: "right", flexShrink: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
           <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: allDone ? "#4a9a6a" : "#111", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 10, color: "#666", fontWeight: 400 }}>/{totalCourses}</span></div>
-          {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", marginTop: 2 }}>{durationMins} min</div>}
+          {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a" }}>{durationMins} min</div>}
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); setShowEdit(v => !v); setPickingRestr(null); setCustomNote(""); }}
+            style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 7px",
+              border: `1px solid ${showEdit ? "#1a1a1a" : "#ddd"}`,
+              borderRadius: 3, cursor: "pointer",
+              background: showEdit ? "#1a1a1a" : "#fff",
+              color: showEdit ? "#fff" : "#888",
+              touchAction: "manipulation",
+            }}>✏ EDIT</button>
         </div>
       </div>
+
+      {/* ── Temp restriction editor ── */}
+      {showEdit && (
+        <div style={{ borderBottom: "1px solid #e8e8e8", padding: "8px 10px", background: "#fafafa" }}>
+          {/* Existing kitchen-added restrictions */}
+          {restrictions.map((r, i) => r.kitchenAdded ? (
+            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, color: "#b04040", fontWeight: 600 }}>
+                {restrLabel(r.note)}{r.pos ? ` → P${r.pos}` : " → All"}
+              </span>
+              <button
+                onPointerDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); removeKitchenRestr(i); }}
+                style={{ fontFamily: FONT, fontSize: 10, padding: "1px 6px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", touchAction: "manipulation" }}>✕</button>
+            </div>
+          ) : null)}
+          {/* Step 1: pick restriction */}
+          {!pickingRestr && (
+            <>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Add restriction</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {RESTRICTIONS.map(r => (
+                  <button key={r.key}
+                    onPointerDown={e => e.stopPropagation()}
+                    onClick={e => { e.stopPropagation(); setPickingRestr(r.key); }}
+                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#444", touchAction: "manipulation" }}>
+                    {r.emoji} {r.label}
+                  </button>
+                ))}
+                <button
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); setPickingRestr("custom"); }}
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#888", touchAction: "manipulation" }}>
+                  + Custom
+                </button>
+              </div>
+            </>
+          )}
+          {/* Step 2a: assign to seat */}
+          {pickingRestr && pickingRestr !== "custom" && (
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 9, color: "#444", marginBottom: 6 }}>
+                {restrLabel(pickingRestr)} → assign to:
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, null); }}
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8a060", borderRadius: 3, cursor: "pointer", background: "#fdf4e8", color: "#7a5020", fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                {seats.map(s => (
+                  <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, s.id); }}
+                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
+                ))}
+                <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPickingRestr(null); }}
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #eee", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#bbb", touchAction: "manipulation" }}>cancel</button>
+              </div>
+            </div>
+          )}
+          {/* Step 2b: custom text */}
+          {pickingRestr === "custom" && (
+            <div>
+              <input
+                value={customNote}
+                onChange={e => setCustomNote(e.target.value)}
+                placeholder="e.g. No Ricotta"
+                onPointerDown={e => e.stopPropagation()}
+                style={{ fontFamily: FONT, fontSize: 10, padding: "5px 8px", border: "1px solid #ddd", borderRadius: 3, width: "100%", marginBottom: 6, boxSizing: "border-box" }}
+              />
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, null); }}
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8a060", borderRadius: 3, cursor: "pointer", background: "#fdf4e8", color: "#7a5020", fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                {seats.map(s => (
+                  <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, s.id); }}
+                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
+                ))}
+                <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPickingRestr(null); setCustomNote(""); }}
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #eee", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#bbb", touchAction: "manipulation" }}>cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Pace ── */}
       <div style={{ borderBottom: "1px solid #e8e8e8", padding: "5px 10px", display: "flex", alignItems: "center", gap: 6 }}>
