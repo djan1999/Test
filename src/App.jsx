@@ -3460,7 +3460,7 @@ function BevEditRow({ emoji, label, items, onUpdate }) {
   );
 }
 
-function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLayoutStyles = {}, logoDataUri = "" }) {
+function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLayoutStyles = {}, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [] }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState("WINTER MENU");
   const [thankYouNote, setThankYouNote] = useState("Thank you for your visit.");
@@ -3869,10 +3869,60 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
                       })}
                     </div>
                   </div>
-                  <BevEditRow emoji="🍷" label="Glasses" items={s.glasses || []} onUpdate={items => updSeat(s.id, "glasses", items)} />
-                  <BevEditRow emoji="🍹" label="Cocktails" items={s.cocktails || []} onUpdate={items => updSeat(s.id, "cocktails", items)} />
-                  <BevEditRow emoji="🥃" label="Spirits" items={s.spirits || []} onUpdate={items => updSeat(s.id, "spirits", items)} />
-                  <BevEditRow emoji="🍺" label="Beers" items={s.beers || []} onUpdate={items => updSeat(s.id, "beers", items)} />
+                  {/* Aperitif quick-add buttons + BeverageSearch (linked to Supabase wines catalog) */}
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Beverages</div>
+                    {/* Aperitif quick-add */}
+                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
+                      {APERITIF_OPTIONS.map(ap => (
+                        <button key={ap.label} onClick={() => {
+                          const lk = ap.searchKey.toLowerCase();
+                          const found = winesCatalog.filter(w => w.byGlass).find(w =>
+                            w.name?.toLowerCase().includes(lk) || w.producer?.toLowerCase().includes(lk)
+                          );
+                          if (found) updSeat(s.id, "glasses", [...(s.glasses || []), found]);
+                          else updSeat(s.id, "cocktails", [...(s.cocktails || []), { name: ap.searchKey, notes: "" }]);
+                        }} style={{
+                          fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
+                          border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
+                          background: "#fdf8f0", color: "#7a5020",
+                        }}>{ap.label}</button>
+                      ))}
+                    </div>
+                    {/* Unified search */}
+                    <BeverageSearch
+                      wines={winesCatalog} cocktails={cocktailsCatalog} spirits={spiritsCatalog} beers={beersCatalog}
+                      onAdd={({ type, item }) => {
+                        if (type === "wine")     updSeat(s.id, "glasses",   [...(s.glasses   || []), item]);
+                        if (type === "cocktail") updSeat(s.id, "cocktails", [...(s.cocktails || []), item]);
+                        if (type === "spirit")   updSeat(s.id, "spirits",   [...(s.spirits   || []), item]);
+                        if (type === "beer")     updSeat(s.id, "beers",     [...(s.beers     || []), item]);
+                      }}
+                    />
+                    {/* Added beverages as removable chips */}
+                    {(() => {
+                      const allBevs = [
+                        ...(s.glasses   || []).map((x, i) => ({ key: `g${i}`, type: "wine",     label: x?.name, sub: x?.producer, onRemove: () => updSeat(s.id, "glasses",   (s.glasses  ||[]).filter((_,idx)=>idx!==i)) })),
+                        ...(s.cocktails || []).map((x, i) => ({ key: `c${i}`, type: "cocktail", label: x?.name, sub: x?.notes,    onRemove: () => updSeat(s.id, "cocktails", (s.cocktails||[]).filter((_,idx)=>idx!==i)) })),
+                        ...(s.spirits   || []).map((x, i) => ({ key: `sp${i}`,type: "spirit",   label: x?.name, sub: x?.notes,    onRemove: () => updSeat(s.id, "spirits",   (s.spirits  ||[]).filter((_,idx)=>idx!==i)) })),
+                        ...(s.beers     || []).map((x, i) => ({ key: `b${i}`, type: "beer",     label: x?.name, sub: x?.notes,    onRemove: () => updSeat(s.id, "beers",     (s.beers    ||[]).filter((_,idx)=>idx!==i)) })),
+                      ];
+                      if (allBevs.length === 0) return null;
+                      return (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                          {allBevs.map(bev => {
+                            const ts = BEV_TYPES[bev.type];
+                            return (
+                              <div key={bev.key} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: 999, background: ts.bg, border: `1px solid ${ts.border}` }}>
+                                <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>{bev.label}{bev.sub ? ` · ${bev.sub}` : ""}</span>
+                                <button onClick={bev.onRemove} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
                   {/* Beetroot & Cheese */}
                   {(() => {
                     const beetExtra = s.extras?.[1] || { ordered: false, pairing: "—" };
@@ -4733,6 +4783,10 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
           upd={upd}
           defaultLayoutStyles={globalLayout}
           logoDataUri={logoDataUri}
+          wines={wines}
+          cocktails={cocktails}
+          spirits={spirits}
+          beers={beers}
           onClose={() => setMenuGenTable(null)}
         />
       )}
