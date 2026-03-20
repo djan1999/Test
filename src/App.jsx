@@ -4569,7 +4569,7 @@ function GateScreen({ onPass }) {
 }
 
 // ── Menu Page ─────────────────────────────────────────────────────────────────
-function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSaveMenuOverrides, onSyncMenu, upd, logoDataUri = "", onExit }) {
+function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSaveMenuOverrides, onSyncMenu, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], onExit }) {
   const [tab, setTab]                   = useState("print");
   const [menuGenTable, setMenuGenTable] = useState(null);
   const [globalLayout, setGlobalLayout] = useState(() => {
@@ -5553,6 +5553,10 @@ export default function App() {
         onSyncMenu={syncMenu}
         upd={upd}
         logoDataUri={logoDataUri}
+        wines={wines}
+        cocktails={cocktails}
+        spirits={spirits}
+        beers={beers}
         onExit={() => changeMode(null)}
       />
     </div>
