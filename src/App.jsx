@@ -164,17 +164,6 @@ function writeTeamNames(value) {
   } catch {}
 }
 
-const LAYOUT_ORDER_KEY = "milka-menu-layout-order-v1";
-const LAYOUT_EDITS_KEY = "milka-menu-layout-edits-v1";
-function readLayoutOrder() {
-  try { const r = window.localStorage.getItem(LAYOUT_ORDER_KEY); return r ? JSON.parse(r) : null; }
-  catch { return null; }
-}
-function readLayoutEdits() {
-  try { const r = window.localStorage.getItem(LAYOUT_EDITS_KEY); return r ? JSON.parse(r) : {}; }
-  catch { return {}; }
-}
-
 const esc = (v) => String(v ?? "")
   .replace(/&/g, "&amp;")
   .replace(/</g, "&lt;")
@@ -255,6 +244,8 @@ const MILKA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 58 
   <path d="M2,66 L2,30 L20,52 L38,24 L38,66 L34,66 L34,27 L20,50 L6,30 L6,66 Z"/>
 </svg>`;
 
+
+
 const pairingStyle = {
   "—":        { color: "#666", border: "#d8d8d8", bg: "#f5f5f5" },
   "Non-Alc":  { color: "#1f5f73", border: "#7fc6db88", bg: "#7fc6db12" },
@@ -317,7 +308,6 @@ const sanitizeTable = t => ({
   restrictions: Array.isArray(t.restrictions) ? t.restrictions : [],
   kitchenLog: t.kitchenLog && typeof t.kitchenLog === "object" ? t.kitchenLog : {},
   courseOverrides: t.courseOverrides && typeof t.courseOverrides === "object" ? t.courseOverrides : {},
-  kitchenCourseNotes: t.kitchenCourseNotes && typeof t.kitchenCourseNotes === "object" ? t.kitchenCourseNotes : {},
   tableGroup: Array.isArray(t.tableGroup) ? t.tableGroup : [],
 });
 
@@ -2670,14 +2660,12 @@ function ServiceQuickView({ tables, updSeat, setSel }) {
 }
 
 // ── Kitchen Board (KDS) ────────────────────────────────────────────────────────
-function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, wines = [] }) {
+function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }) {
   const seats = table.seats || [];
   const restrictions = table.restrictions || [];
   const log = table.kitchenLog || {};
-  const tableBottles = table.bottleWines || [];
   const [assigningRestrIdx, setAssigningRestrIdx] = useState(null);
   const [showEdit, setShowEdit] = useState(false);
-  const [showWines, setShowWines] = useState(false);
   const [pickingRestr, setPickingRestr] = useState(null); // restriction key, or "custom"
   const [customNote, setCustomNote] = useState("");
   const [editingCourse, setEditingCourse] = useState(null);
@@ -2828,55 +2816,19 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, 
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
           <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: allDone ? "#4a9a6a" : "#111", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 10, color: "#666", fontWeight: 400 }}>/{totalCourses}</span></div>
           {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a" }}>{durationMins} min</div>}
-          <div style={{ display: "flex", gap: 4 }}>
-            <button
-              onPointerDown={e => e.stopPropagation()}
-              onClick={e => { e.stopPropagation(); setShowWines(v => !v); }}
-              style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "2px 7px",
-                border: `1px solid ${showWines ? "#c8a060" : tableBottles.length > 0 ? "#e0c898" : "#ddd"}`,
-                borderRadius: 3, cursor: "pointer",
-                background: showWines ? "#fdf4e8" : tableBottles.length > 0 ? "#fffbf3" : "#fff",
-                color: showWines ? "#7a5020" : tableBottles.length > 0 ? "#9a6010" : "#bbb",
-                touchAction: "manipulation",
-              }}>🍾{tableBottles.length > 0 ? ` ${tableBottles.length}` : ""}</button>
-            <button
-              onPointerDown={e => e.stopPropagation()}
-              onClick={e => { e.stopPropagation(); setShowEdit(v => !v); setPickingRestr(null); setCustomNote(""); setEditingCourse(null); }}
-              style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 7px",
-                border: `1px solid ${showEdit ? "#1a1a1a" : "#ddd"}`,
-                borderRadius: 3, cursor: "pointer",
-                background: showEdit ? "#1a1a1a" : "#fff",
-                color: showEdit ? "#fff" : "#888",
-                touchAction: "manipulation",
-              }}>✏ EDIT</button>
-          </div>
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); setShowEdit(v => !v); setPickingRestr(null); setCustomNote(""); setEditingCourse(null); }}
+            style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 7px",
+              border: `1px solid ${showEdit ? "#1a1a1a" : "#ddd"}`,
+              borderRadius: 3, cursor: "pointer",
+              background: showEdit ? "#1a1a1a" : "#fff",
+              color: showEdit ? "#fff" : "#888",
+              touchAction: "manipulation",
+            }}>✏ EDIT</button>
         </div>
       </div>
-
-      {/* ── Bottle wines panel ── */}
-      {showWines && (
-        <div onPointerDown={e => e.stopPropagation()} style={{ borderBottom: "1px solid #e8e8e8", padding: "8px 10px", background: "#fffbf3" }}>
-          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#9a6010", textTransform: "uppercase", marginBottom: 6 }}>Bottle Wines</div>
-          {tableBottles.map((w, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, color: "#7a5020", fontWeight: 500 }}>
-                🍾 {[w.producer, w.name, w.vintage].filter(Boolean).join(" ")}
-              </span>
-              <button
-                onClick={e => { e.stopPropagation(); upd(table.id, "bottleWines", tableBottles.filter((_, idx) => idx !== i)); }}
-                style={{ fontFamily: FONT, fontSize: 10, padding: "1px 6px", border: "1px solid #e0c898", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#9a6010", touchAction: "manipulation" }}>✕</button>
-            </div>
-          ))}
-          {wines.length > 0 && (
-            <WineSearch
-              wineObj={null} wines={wines} byGlass={false} placeholder="add bottle…"
-              onChange={w => { if (w) upd(table.id, "bottleWines", [...tableBottles, w]); }}
-            />
-          )}
-        </div>
-      )}
 
       {/* ── Temp restriction editor ── */}
       {showEdit && (
@@ -3208,7 +3160,7 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, 
   );
 }
 
-function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, wines = [] }) {
+function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
@@ -3234,7 +3186,7 @@ function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, wine
           background: "#f4fbf6",
         }} />
       ) : (
-        <KitchenTicket table={table} menuCourses={menuCourses} upd={upd} dragHandleRef={setActivatorNodeRef} dragListeners={listeners} wines={wines} />
+        <KitchenTicket table={table} menuCourses={menuCourses} upd={upd} dragHandleRef={setActivatorNodeRef} dragListeners={listeners} />
       )}
     </div>
   );
@@ -3334,7 +3286,7 @@ function KitchenAlertOverlay({ alerts, onConfirm }) {
   );
 }
 
-function KitchenBoard({ tables, menuCourses, upd, wines = [] }) {
+function KitchenBoard({ tables, menuCourses, upd }) {
   const activeTables = tables
     .filter(t => t.active && !t.kitchenArchived)
     .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
@@ -3409,7 +3361,6 @@ function KitchenBoard({ tables, menuCourses, upd, wines = [] }) {
                 upd={upd}
                 isDragging={activeId === t.id}
                 anyDragging={activeId !== null}
-                wines={wines}
               />
             ))}
           </div>
@@ -3422,7 +3373,7 @@ function KitchenBoard({ tables, menuCourses, upd, wines = [] }) {
             boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
             opacity: 0.97,
           }}>
-            <KitchenTicket table={activeTable} menuCourses={menuCourses} upd={upd} wines={wines} />
+            <KitchenTicket table={activeTable} menuCourses={menuCourses} upd={upd} />
           </div>
         )}
       </DragOverlay>
@@ -3451,15 +3402,13 @@ const LAYOUT_PROPS = [
 function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLayoutStyles = {}, logoDataUri = "" }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState("WINTER MENU");
-  const [thankYouNote, setThankYouNote] = useState("Hvala za vaš obisk.");
+  const [thankYouNote, setThankYouNote] = useState("Thank you for your visit.");
   const [lang, setLang] = useState("en");
   // Per-seat ephemeral one-time edits — { [seatId]: { [courseKey]: { name?, sub? } } }
   // Cleared automatically after the PDF for that seat is generated.
   const [seatEdits, setSeatEdits] = useState({});
   const [expandedSeatId, setExpandedSeatId] = useState(null);
-  const [layoutOpen, setLayoutOpen] = useState(false);
-  const [rowOrder, setRowOrder]     = useState(readLayoutOrder); // null = natural; array of indices when reordered
-  const [rowEdits, setRowEdits]     = useState(readLayoutEdits); // { idx: { leftTitle?, leftSub?, rightTitle?, rightSub? } }
+  const genLoaded = useRef(false);
 
   // Load team names + menu title from Supabase on mount
   useEffect(() => {
@@ -3562,11 +3511,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
       seatOutputOverrides: seatEdits[seat.id] || {},
       thankYouNote,
       layoutStyles,
-      _fontBold: MENU_FONT_BOLD,
-      _fontReg: MENU_FONT_REG,
       _logo: logoDataUri,
-      _rowOrder: rowOrder,
-      _rowEdits: rowEdits,
     });
     const w = window.open("", "_blank", "width=620,height=880");
     if (!w) { alert("Pop-up blocked — allow pop-ups for this site."); return; }
@@ -3816,96 +3761,6 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
             background: "#1a1a1a", color: "#fff",
           }}>GENERATE ALL</button>
         )}
-
-        {/* Layout Preview */}
-        {seats.length > 0 && (() => {
-          const previewSeat = seats[0];
-          const previewCourses = menuCourses.map(c => applyMenuOverride(c, courseOverrides, previewSeat.id));
-          const baseRows = generateMenuHTML({
-            seat: previewSeat,
-            table: { menuType: table.menuType || "", restrictions, bottleWines: tableBottles, birthday: table.birthday || false },
-            menuTitle, teamNames, menuCourses: previewCourses,
-            beerChoice: beerChoices[previewSeat.id] || defaultBeer(previewSeat),
-            lang, seatOutputOverrides: {}, thankYouNote,
-            _rowsOnly: true,
-          });
-          const displayRows = rowOrder && rowOrder.length === baseRows.length
-            ? rowOrder.map(i => ({ ...baseRows[i], _origIdx: i }))
-            : baseRows.map((r, i) => ({ ...r, _origIdx: i }));
-          const moveRow = (from, to) => {
-            const order = rowOrder || baseRows.map((_, i) => i);
-            const next = [...order];
-            const [item] = next.splice(from, 1);
-            next.splice(to, 0, item);
-            setRowOrder(next);
-          };
-          const hasEdits = Object.keys(rowEdits).length > 0 || rowOrder !== null;
-          return (
-            <div style={{ marginTop: 20, border: "1px solid #e8e8e8", borderRadius: 4 }}>
-              <div onClick={() => setLayoutOpen(o => !o)} style={{ padding: "10px 14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", background: layoutOpen ? "#fafafa" : "#fff" }}>
-                <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#555", textTransform: "uppercase" }}>Layout Preview {hasEdits ? "·" : ""}</span>
-                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <button onClick={e => { e.stopPropagation(); try { localStorage.setItem(LAYOUT_ORDER_KEY, JSON.stringify(rowOrder)); localStorage.setItem(LAYOUT_EDITS_KEY, JSON.stringify(rowEdits)); } catch {} }} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 8px", border: "1px solid #4a9a6a", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#4a9a6a" }}>Save as Default</button>
-                  {hasEdits && (
-                    <button onClick={e => { e.stopPropagation(); try { localStorage.removeItem(LAYOUT_ORDER_KEY); localStorage.removeItem(LAYOUT_EDITS_KEY); } catch {} setRowOrder(null); setRowEdits({}); }} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 8px", border: "1px solid #ccc", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888" }}>Reset</button>
-                  )}
-                  <span style={{ fontFamily: FONT, fontSize: 14, color: "#bbb", transform: layoutOpen ? "rotate(180deg)" : "none", transition: "transform 0.18s", display: "inline-block" }}>⌄</span>
-                </div>
-              </div>
-              {layoutOpen && (
-                <div style={{ borderTop: "1px solid #f0f0f0", padding: "6px 10px 12px" }}>
-                  {displayRows.map((row, dispIdx) => {
-                    const origIdx = row._origIdx;
-                    const ed = rowEdits[origIdx] || {};
-                    const rowLabel = row.type === "section" ? (ed.label ?? row.label ?? "SECTION") :
-                      row.type === "thankyou" ? "— Hvala —" :
-                      row.type === "team" ? "— Team —" :
-                      row.type === "wine-only" ? (row.right?.title || "wine-only") :
-                      (row.left?.title || "—");
-                    const canEdit = row.type === "course" || row.type === "wine-only" || row.type === "section";
-                    return (
-                      <div key={dispIdx} style={{ display: "flex", alignItems: "flex-start", gap: 6, padding: "5px 0", borderBottom: "1px solid #f8f8f8" }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingTop: 4 }}>
-                          <button disabled={dispIdx === 0} onClick={() => moveRow(dispIdx, dispIdx - 1)} style={{ fontFamily: FONT, fontSize: 9, padding: "1px 5px", border: "1px solid #e0e0e0", borderRadius: 2, cursor: dispIdx === 0 ? "default" : "pointer", background: "#fff", color: "#888", opacity: dispIdx === 0 ? 0.3 : 1 }}>▲</button>
-                          <button disabled={dispIdx === displayRows.length - 1} onClick={() => moveRow(dispIdx, dispIdx + 1)} style={{ fontFamily: FONT, fontSize: 9, padding: "1px 5px", border: "1px solid #e0e0e0", borderRadius: 2, cursor: dispIdx === displayRows.length - 1 ? "default" : "pointer", background: "#fff", color: "#888", opacity: dispIdx === displayRows.length - 1 ? 0.3 : 1 }}>▼</button>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          {!canEdit && (
-                            <span style={{ fontFamily: FONT, fontSize: 10, color: "#aaa", fontStyle: "italic" }}>{rowLabel}</span>
-                          )}
-                          {canEdit && row.type === "section" && (
-                            <input value={ed.label ?? row.label ?? ""} onChange={e => setRowEdits(prev => ({ ...prev, [origIdx]: { ...prev[origIdx], label: e.target.value } }))}
-                              style={{ fontFamily: FONT, fontSize: 10, width: "100%", border: "1px solid #e0e0e0", borderRadius: 2, padding: "2px 6px", color: "#555", letterSpacing: 1 }} />
-                          )}
-                          {canEdit && row.type !== "section" && (
-                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                              {row.left != null && (
-                                <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: "1 1 120px" }}>
-                                  <input placeholder="Left title" value={ed.leftTitle ?? row.left?.title ?? ""} onChange={e => setRowEdits(prev => ({ ...prev, [origIdx]: { ...prev[origIdx], leftTitle: e.target.value } }))}
-                                    style={{ fontFamily: FONT, fontSize: 10, border: "1px solid #e0e0e0", borderRadius: 2, padding: "2px 6px" }} />
-                                  <input placeholder="Left sub" value={ed.leftSub ?? row.left?.sub ?? ""} onChange={e => setRowEdits(prev => ({ ...prev, [origIdx]: { ...prev[origIdx], leftSub: e.target.value } }))}
-                                    style={{ fontFamily: FONT, fontSize: 9, border: "1px solid #e8e8e8", borderRadius: 2, padding: "2px 6px", color: "#888" }} />
-                                </div>
-                              )}
-                              {row.right != null && (
-                                <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: "1 1 120px" }}>
-                                  <input placeholder="Right title" value={ed.rightTitle ?? row.right?.title ?? ""} onChange={e => setRowEdits(prev => ({ ...prev, [origIdx]: { ...prev[origIdx], rightTitle: e.target.value } }))}
-                                    style={{ fontFamily: FONT, fontSize: 10, border: "1px solid #e0e0e0", borderRadius: 2, padding: "2px 6px" }} />
-                                  <input placeholder="Right sub" value={ed.rightSub ?? row.right?.sub ?? ""} onChange={e => setRowEdits(prev => ({ ...prev, [origIdx]: { ...prev[origIdx], rightSub: e.target.value } }))}
-                                    style={{ fontFamily: FONT, fontSize: 9, border: "1px solid #e8e8e8", borderRadius: 2, padding: "2px 6px", color: "#888" }} />
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })()}
       </div>
     </FullModal>
   );
@@ -4049,7 +3904,7 @@ function SummaryModal({ tables, dishes = [], onClose }) {
                 const restr   = (t.restrictions || []).filter(r => r.pos === s.id);
                 const extras  = dishes.filter(d => s.extras?.[d.id]?.ordered);
                 const allBevs = [
-                  ...(s.glasses   || []).filter(Boolean).map(x => { const rv = String(x?.vintage || "").trim(); const vt = rv.match(/^\d{4}$/) ? `'${rv.slice(2)}` : rv; return { label: [x?.producer, x?.name, vt].filter(Boolean).join(" "), ts: BEV_TYPES.wine }; }),
+                  ...(s.glasses   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.wine })),
                   ...(s.cocktails || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.cocktail })),
                   ...(s.spirits   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.spirit })),
                   ...(s.beers     || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.beer })),
@@ -4099,7 +3954,6 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
   const [loading, setLoading]   = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [deleting, setDeleting] = useState(null);
-  const [ktOpen, setKtOpen]     = useState(null); // entry.id whose kitchen tickets are expanded
 
 
   const loadEntries = () => {
@@ -4248,60 +4102,6 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
               </div>
               {isExp && (
                 <div style={{ borderTop: "1px solid #f0f0f0" }}>
-                  {/* Kitchen Tickets subsection */}
-                  {(entry.state?.kitchen_tickets || []).length > 0 && (
-                    <div style={{ borderBottom: "1px solid #f0f0f0" }}>
-                      <div onClick={() => setKtOpen(ktOpen === entry.id ? null : entry.id)} style={{ padding: "10px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fafcfa" }}>
-                        <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, color: "#4a9a6a", textTransform: "uppercase" }}>Kitchen Tickets</span>
-                        <span style={{ fontFamily: FONT, fontSize: 14, color: "#bbb", transform: ktOpen === entry.id ? "rotate(180deg)" : "none", transition: "transform 0.18s", display: "inline-block" }}>⌄</span>
-                      </div>
-                      {ktOpen === entry.id && (entry.state.kitchen_tickets || []).map(kt => {
-                        const klog = kt.kitchenLog || {};
-                        const fired = Object.entries(klog)
-                          .map(([courseKey, v]) => {
-                            const course = (entry.state?.menuCourses || []).find(c => c.course_key === courseKey);
-                            const name = course?.menu?.name || courseKey;
-                            return { name, firedAt: v.firedAt || "" };
-                          })
-                          .filter(e => e.firedAt)
-                          .sort((a, b) => a.firedAt.localeCompare(b.firedAt));
-                        return (
-                          <div key={kt.tableId} style={{ padding: "10px 16px", borderTop: "1px solid #f0f8f0" }}>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-                              <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 300, color: "#1a1a1a", letterSpacing: 1 }}>{String(kt.tableId).padStart(2,"0")}</span>
-                              {kt.resName  && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 500 }}>{kt.resName}</span>}
-                              {kt.menuType && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", border: "1px solid #e8e8e8", borderRadius: 2, color: "#555" }}>{kt.menuType}</span>}
-                              {kt.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a" }}>arr. {kt.arrivedAt}</span>}
-                              {kt.pace     && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", border: "1px solid #e8d8a0", borderRadius: 2, color: "#7a6020", background: "#fffce8" }}>{kt.pace}</span>}
-                              {kt.birthday && <span style={{ fontSize: 12 }}>🎂</span>}
-                            </div>
-                            {(kt.seats || []).map(s => {
-                              const restr = (kt.restrictions || []).filter(r => r.pos === s.id);
-                              const extra = (entry.state?.dishes || dishes).filter(d => s.extras?.[d.id]?.ordered);
-                              return (
-                                <div key={s.id} style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", padding: "3px 4px", borderBottom: "1px solid #f5faf5" }}>
-                                  <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#999", minWidth: 26 }}>P{s.id}</span>
-                                  {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
-                                  {extra.map(d => <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
-                                  {restr.map((r, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
-                                </div>
-                              );
-                            })}
-                            {fired.length > 0 && (
-                              <div style={{ padding: "5px 4px 2px", display: "flex", flexWrap: "wrap", gap: "4px 10px", alignItems: "center" }}>
-                                <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", letterSpacing: 1, textTransform: "uppercase" }}>Fired</span>
-                                {fired.map((e, i) => (
-                                  <span key={i} style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a" }}>
-                                    {e.firedAt} <span style={{ color: "#888" }}>{e.name}</span>
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
                   {entryTables.map(t => (
                     <div key={t.id} style={{ padding: "12px 16px", borderBottom: "1px solid #f8f8f8" }}>
                       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
@@ -4310,9 +4110,9 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
                         {t.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a" }}>arr. {t.arrivedAt}</span>}
                         {t.menuType  && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", border: "1px solid #e8e8e8", borderRadius: 2, color: "#555" }}>{t.menuType}</span>}
                         {t.birthday  && <span style={{ fontSize: 12 }}>🎂</span>}
-                        {(t.bottleWines || []).map((w, i) => { const rv = String(w?.vintage || "").trim(); const vt = rv.match(/^\d{4}$/) ? `'${rv.slice(2)}` : rv; const title = [w?.producer, w?.name, vt].filter(Boolean).join(" "); return (
-                          <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, border: "1px solid #c8a060", color: "#7a5020", background: "#fdf4e8" }}>🍾 {title}</span>
-                        ); })}
+                        {(t.bottleWines || []).map((w, i) => (
+                          <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, border: "1px solid #c8a060", color: "#7a5020", background: "#fdf4e8" }}>🍾 {w.name}</span>
+                        ))}
                       </div>
                       {(t.seats || []).map(s => {
                         const ws    = waterStyle(s.water);
@@ -4984,22 +4784,7 @@ export default function App() {
       const { error } = await supabase.from("service_archive").insert({
         date: new Date().toISOString().slice(0, 10),
         label: dateStr,
-        state: {
-          ...snap,
-          tables: activeTables,
-          menuCourses: effectiveMenuCourses,
-          kitchen_tickets: activeTables.map(t => ({
-            tableId:      t.id,
-            resName:      t.resName,
-            menuType:     t.menuType,
-            seats:        t.seats,
-            restrictions: t.restrictions,
-            kitchenLog:   t.kitchenLog,
-            pace:         t.pace,
-            birthday:     t.birthday,
-            arrivedAt:    t.arrivedAt,
-          })),
-        },
+        state: { ...snap, tables: activeTables, menuCourses: effectiveMenuCourses },
       });
       if (error) {
         window.alert("Archive failed: " + error.message);
@@ -5439,7 +5224,7 @@ export default function App() {
       <GlobalStyle />
       <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={true} {...hProps} />
       <div style={{ padding: "20px 24px" }}>
-        <KitchenBoard tables={tables} menuCourses={effectiveMenuCourses} upd={upd} wines={wines} />
+        <KitchenBoard tables={tables} menuCourses={effectiveMenuCourses} upd={upd} />
       </div>
       {archiveOpen && (
         <ArchiveModal
