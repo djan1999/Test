@@ -2996,6 +2996,33 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
       </div>
 
 
+      {/* ── Extras backup confirm — shown only when ordered but Send was never clicked ── */}
+      {upd && (beetSeats.length > 0 && !extrasConfirmed.beetroot || cheeseSeats.length > 0 && !extrasConfirmed.cheese) && (
+        <div style={{ background: "#fff8ee", borderBottom: "1px solid #f0d080", padding: "6px 10px", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#a07020", textTransform: "uppercase", flexShrink: 0 }}>⚠ Not sent</span>
+          {beetSeats.length > 0 && !extrasConfirmed.beetroot && (
+            <button
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); confirmExtra("beetroot"); }}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 10px",
+                border: "1px solid #c8a060", borderRadius: 3, cursor: "pointer",
+                background: "#fdf4e8", color: "#7a5020", touchAction: "manipulation",
+              }}>BEETROOT ({beetSeats.map(s => `P${s.id}`).join(" ")}) — CONFIRM</button>
+          )}
+          {cheeseSeats.length > 0 && !extrasConfirmed.cheese && (
+            <button
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); confirmExtra("cheese"); }}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 10px",
+                border: "1px solid #c8a060", borderRadius: 3, cursor: "pointer",
+                background: "#fdf4e8", color: "#7a5020", touchAction: "manipulation",
+              }}>CHEESE ({cheeseSeats.map(s => `P${s.id}`).join(" ")}) — CONFIRM</button>
+          )}
+        </div>
+      )}
+
       {/* ── Courses ── */}
       <div style={{ display: "flex", flexDirection: "column" }}>
         {courses.map((course, idx) => {
