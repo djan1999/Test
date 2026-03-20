@@ -328,13 +328,14 @@ export function generateMenuHTML({
 <head>
 <meta charset="UTF-8">
 <title>${safeTitle}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
-@font-face{font-family:'RM';font-weight:700;src:url('data:font/truetype;base64,${_fontBold}') format('truetype');}
-@font-face{font-family:'RM';font-weight:400;src:url('data:font/truetype;base64,${_fontReg}') format('truetype');}
 *{margin:0;padding:0;box-sizing:border-box;}
 :root{--page-w:148mm;--page-h:210mm;--pad-t:${s("padTop",8.4)}mm;--pad-r:${s("padRight",12)}mm;--pad-b:${s("padBottom",8.2)}mm;--pad-l:${s("padLeft",12)}mm;--inner-h:calc(var(--page-h) - var(--pad-t) - var(--pad-b));}
 @page{size:A5 portrait;margin:0;}
-html,body{width:var(--page-w);height:var(--page-h);overflow:hidden;background:#fff;color:#000;font-family:'RM', monospace;font-size:${s("fontSize",6.75)}pt;line-height:1.08;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+html,body{width:var(--page-w);height:var(--page-h);overflow:hidden;background:#fff;color:#000;font-family:'Roboto Mono', monospace;font-size:${s("fontSize",6.75)}pt;line-height:1.08;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 body{position:relative;}
 #sheet{width:var(--page-w);height:var(--page-h);overflow:hidden;position:relative;background:#fff;}
 #frame{position:absolute;inset:0;padding:var(--pad-t) var(--pad-r) var(--pad-b) var(--pad-l);overflow:hidden;}
@@ -356,7 +357,7 @@ body{position:relative;}
 .menu-sub{line-height:1.08;margin-top:0.75pt;overflow-wrap:anywhere;}
 .menu-section-row{margin:${s("sectionSpacing",6.8)}pt 0 ${(s("sectionSpacing",6.8)-0.6).toFixed(2)}pt;}
 .menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;text-transform:uppercase;}
-.menu-thankyou{margin-top:${s("thankYouSpacing",7)}pt;font-size:6.55pt;font-style:normal;font-family:'RM',monospace;}
+.menu-thankyou{margin-top:${s("thankYouSpacing",7)}pt;font-size:6.55pt;font-style:normal;}
 #footer{margin-top:auto;padding-top:9.5pt;}
 #team{font-size:6.5pt;line-height:1.2;overflow-wrap:anywhere;}
 #team .menu-main{margin-bottom:1.4pt;}
