@@ -435,7 +435,7 @@ function applyCourseRestriction(course, activeRestrictions, lang = "en") {
 }
 
 
-function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null, lang = "en", seatOutputOverrides = {}, thankYouNote = "Thank you for your visit." }) {
+function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null, lang = "en", seatOutputOverrides = {}, thankYouNote = "Hvala za vaš obisk.", _rowsOnly = false, _rowOrder = null, _rowEdits = {} }) {
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
   const PAIRING_LABELS = lang === "si"
     ? { wp: "VINSKA SPREMLJAVA", na: "BREZALKOHOLNA SPREMLJAVA", os: "OUR STORY SPREMLJAVA", premium: "PREMIUM SPREMLJAVA" }
@@ -553,7 +553,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   });
   visibleCourses.sort((a, b) => a.orderValue - b.orderValue);
 
-  const rows = [];
+  let rows = [];
   const hasPairing = !!pkey;
   const bottleQueue = hasPairing ? [] : [...tableBottles];
   // Aperitivos (cocktails + byGlass wines for pairing) fill course right columns from course 0.
@@ -580,7 +580,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   visibleCourses.forEach(({ course, i, courseName, courseKey, optionalFlag }) => {
     const insertPairingHere = hasPairing && !insertedPairingLabel && (
       (!isShort && i === PAIRING_INSERT_IDX) ||
-      (isShort && courseRowsSeen === 0)
+      (isShort && (courseKey === "beetroot" || courseKey === "squash"))
     );
     if (insertPairingHere) {
       rows.push({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING" });
@@ -673,6 +673,27 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
   }
 
   rows.push({ type: "thankyou" });
+  if (teamNames) rows.push({ type: "team", label: teamNames });
+
+  // Apply layout overrides (row reordering + inline edits from Layout Preview)
+  if (_rowOrder && _rowOrder.length === rows.length) {
+    rows = _rowOrder.map(i => rows[i]);
+  }
+  if (Object.keys(_rowEdits).length > 0) {
+    rows = rows.map((row, idx) => {
+      const ed = _rowEdits[idx];
+      if (!ed) return row;
+      const updated = { ...row };
+      if (row.left  && (ed.leftTitle  !== undefined || ed.leftSub  !== undefined))
+        updated.left  = { ...row.left,  title: ed.leftTitle  ?? row.left.title,  sub: ed.leftSub  ?? row.left.sub  };
+      if (row.right && (ed.rightTitle !== undefined || ed.rightSub !== undefined))
+        updated.right = { ...row.right, title: ed.rightTitle ?? row.right.title, sub: ed.rightSub ?? row.right.sub };
+      if (row.type === "section" && ed.label !== undefined) updated.label = ed.label;
+      return updated;
+    });
+  }
+
+  if (_rowsOnly) return rows;
 
   const renderBlock = (block, cls = "") => {
     if (!block || (!block.title && !block.sub)) return `<div class="menu-col ${cls}"></div>`;
@@ -692,6 +713,7 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
     if (row.type === "thankyou") {
       return `<div class="menu-thankyou">${esc(thankYouNote)}</div>`;
     }
+    if (row.type === "team") return "";
     return `<div class="menu-row ${row.rowClass || ""}">${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
   }).join("");
 
@@ -3693,12 +3715,15 @@ function KitchenBoard({ tables, menuCourses, upd }) {
 function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState("WINTER MENU");
-  const [thankYouNote, setThankYouNote] = useState("Thank you for your visit.");
+  const [thankYouNote, setThankYouNote] = useState("Hvala za vaš obisk.");
   const [lang, setLang] = useState("en");
   // Per-seat ephemeral one-time edits — { [seatId]: { [courseKey]: { name?, sub? } } }
   // Cleared automatically after the PDF for that seat is generated.
   const [seatEdits, setSeatEdits] = useState({});
   const [expandedSeatId, setExpandedSeatId] = useState(null);
+  const [layoutOpen, setLayoutOpen] = useState(false);
+  const [rowOrder, setRowOrder]     = useState(null); // null = natural; array of indices when reordered
+  const [rowEdits, setRowEdits]     = useState({});   // { idx: { leftTitle?, leftSub?, rightTitle?, rightSub? } }
 
   useEffect(() => {
     writeTeamNames(teamNames);
@@ -3771,6 +3796,8 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
       lang,
       seatOutputOverrides: seatEdits[seat.id] || {},
       thankYouNote,
+      _rowOrder: rowOrder,
+      _rowEdits: rowEdits,
     });
     const w = window.open("", "_blank", "width=620,height=880");
     if (!w) { alert("Pop-up blocked — allow pop-ups for this site."); return; }
@@ -4020,6 +4047,95 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose }) {
             background: "#1a1a1a", color: "#fff",
           }}>GENERATE ALL</button>
         )}
+
+        {/* Layout Preview */}
+        {seats.length > 0 && (() => {
+          const previewSeat = seats[0];
+          const previewCourses = menuCourses.map(c => applyMenuOverride(c, courseOverrides, previewSeat.id));
+          const baseRows = generateMenuHTML({
+            seat: previewSeat,
+            table: { menuType: table.menuType || "", restrictions, bottleWines: tableBottles, birthday: table.birthday || false },
+            menuTitle, teamNames, menuCourses: previewCourses,
+            beerChoice: beerChoices[previewSeat.id] || defaultBeer(previewSeat),
+            lang, seatOutputOverrides: {}, thankYouNote,
+            _rowsOnly: true,
+          });
+          const displayRows = rowOrder && rowOrder.length === baseRows.length
+            ? rowOrder.map(i => ({ ...baseRows[i], _origIdx: i }))
+            : baseRows.map((r, i) => ({ ...r, _origIdx: i }));
+          const moveRow = (from, to) => {
+            const order = rowOrder || baseRows.map((_, i) => i);
+            const next = [...order];
+            const [item] = next.splice(from, 1);
+            next.splice(to, 0, item);
+            setRowOrder(next);
+          };
+          const hasEdits = Object.keys(rowEdits).length > 0 || rowOrder !== null;
+          return (
+            <div style={{ marginTop: 20, border: "1px solid #e8e8e8", borderRadius: 4 }}>
+              <div onClick={() => setLayoutOpen(o => !o)} style={{ padding: "10px 14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", background: layoutOpen ? "#fafafa" : "#fff" }}>
+                <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#555", textTransform: "uppercase" }}>Layout Preview {hasEdits ? "·" : ""}</span>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  {hasEdits && (
+                    <button onClick={e => { e.stopPropagation(); setRowOrder(null); setRowEdits({}); }} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 8px", border: "1px solid #ccc", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888" }}>Reset</button>
+                  )}
+                  <span style={{ fontFamily: FONT, fontSize: 14, color: "#bbb", transform: layoutOpen ? "rotate(180deg)" : "none", transition: "transform 0.18s", display: "inline-block" }}>⌄</span>
+                </div>
+              </div>
+              {layoutOpen && (
+                <div style={{ borderTop: "1px solid #f0f0f0", padding: "6px 10px 12px" }}>
+                  {displayRows.map((row, dispIdx) => {
+                    const origIdx = row._origIdx;
+                    const ed = rowEdits[origIdx] || {};
+                    const rowLabel = row.type === "section" ? (ed.label ?? row.label ?? "SECTION") :
+                      row.type === "thankyou" ? "— Hvala —" :
+                      row.type === "team" ? "— Team —" :
+                      row.type === "wine-only" ? (row.right?.title || "wine-only") :
+                      (row.left?.title || "—");
+                    const canEdit = row.type === "course" || row.type === "wine-only" || row.type === "section";
+                    return (
+                      <div key={dispIdx} style={{ display: "flex", alignItems: "flex-start", gap: 6, padding: "5px 0", borderBottom: "1px solid #f8f8f8" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingTop: 4 }}>
+                          <button disabled={dispIdx === 0} onClick={() => moveRow(dispIdx, dispIdx - 1)} style={{ fontFamily: FONT, fontSize: 9, padding: "1px 5px", border: "1px solid #e0e0e0", borderRadius: 2, cursor: dispIdx === 0 ? "default" : "pointer", background: "#fff", color: "#888", opacity: dispIdx === 0 ? 0.3 : 1 }}>▲</button>
+                          <button disabled={dispIdx === displayRows.length - 1} onClick={() => moveRow(dispIdx, dispIdx + 1)} style={{ fontFamily: FONT, fontSize: 9, padding: "1px 5px", border: "1px solid #e0e0e0", borderRadius: 2, cursor: dispIdx === displayRows.length - 1 ? "default" : "pointer", background: "#fff", color: "#888", opacity: dispIdx === displayRows.length - 1 ? 0.3 : 1 }}>▼</button>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {!canEdit && (
+                            <span style={{ fontFamily: FONT, fontSize: 10, color: "#aaa", fontStyle: "italic" }}>{rowLabel}</span>
+                          )}
+                          {canEdit && row.type === "section" && (
+                            <input value={ed.label ?? row.label ?? ""} onChange={e => setRowEdits(prev => ({ ...prev, [origIdx]: { ...prev[origIdx], label: e.target.value } }))}
+                              style={{ fontFamily: FONT, fontSize: 10, width: "100%", border: "1px solid #e0e0e0", borderRadius: 2, padding: "2px 6px", color: "#555", letterSpacing: 1 }} />
+                          )}
+                          {canEdit && row.type !== "section" && (
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              {row.left != null && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: "1 1 120px" }}>
+                                  <input placeholder="Left title" value={ed.leftTitle ?? row.left?.title ?? ""} onChange={e => setRowEdits(prev => ({ ...prev, [origIdx]: { ...prev[origIdx], leftTitle: e.target.value } }))}
+                                    style={{ fontFamily: FONT, fontSize: 10, border: "1px solid #e0e0e0", borderRadius: 2, padding: "2px 6px" }} />
+                                  <input placeholder="Left sub" value={ed.leftSub ?? row.left?.sub ?? ""} onChange={e => setRowEdits(prev => ({ ...prev, [origIdx]: { ...prev[origIdx], leftSub: e.target.value } }))}
+                                    style={{ fontFamily: FONT, fontSize: 9, border: "1px solid #e8e8e8", borderRadius: 2, padding: "2px 6px", color: "#888" }} />
+                                </div>
+                              )}
+                              {row.right != null && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: "1 1 120px" }}>
+                                  <input placeholder="Right title" value={ed.rightTitle ?? row.right?.title ?? ""} onChange={e => setRowEdits(prev => ({ ...prev, [origIdx]: { ...prev[origIdx], rightTitle: e.target.value } }))}
+                                    style={{ fontFamily: FONT, fontSize: 10, border: "1px solid #e0e0e0", borderRadius: 2, padding: "2px 6px" }} />
+                                  <input placeholder="Right sub" value={ed.rightSub ?? row.right?.sub ?? ""} onChange={e => setRowEdits(prev => ({ ...prev, [origIdx]: { ...prev[origIdx], rightSub: e.target.value } }))}
+                                    style={{ fontFamily: FONT, fontSize: 9, border: "1px solid #e8e8e8", borderRadius: 2, padding: "2px 6px", color: "#888" }} />
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </FullModal>
   );
@@ -4163,7 +4279,7 @@ function SummaryModal({ tables, dishes = [], onClose }) {
                 const restr   = (t.restrictions || []).filter(r => r.pos === s.id);
                 const extras  = dishes.filter(d => s.extras?.[d.id]?.ordered);
                 const allBevs = [
-                  ...(s.glasses   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.wine })),
+                  ...(s.glasses   || []).filter(Boolean).map(x => { const rv = String(x?.vintage || "").trim(); const vt = rv.match(/^\d{4}$/) ? `'${rv.slice(2)}` : rv; return { label: [x?.producer, x?.name, vt].filter(Boolean).join(" "), ts: BEV_TYPES.wine }; }),
                   ...(s.cocktails || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.cocktail })),
                   ...(s.spirits   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.spirit })),
                   ...(s.beers     || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.beer })),
@@ -4213,6 +4329,7 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
   const [loading, setLoading]   = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [ktOpen, setKtOpen]     = useState(null); // entry.id whose kitchen tickets are expanded
 
 
   const loadEntries = () => {
@@ -4361,6 +4478,60 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
               </div>
               {isExp && (
                 <div style={{ borderTop: "1px solid #f0f0f0" }}>
+                  {/* Kitchen Tickets subsection */}
+                  {(entry.state?.kitchen_tickets || []).length > 0 && (
+                    <div style={{ borderBottom: "1px solid #f0f0f0" }}>
+                      <div onClick={() => setKtOpen(ktOpen === entry.id ? null : entry.id)} style={{ padding: "10px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fafcfa" }}>
+                        <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, color: "#4a9a6a", textTransform: "uppercase" }}>Kitchen Tickets</span>
+                        <span style={{ fontFamily: FONT, fontSize: 14, color: "#bbb", transform: ktOpen === entry.id ? "rotate(180deg)" : "none", transition: "transform 0.18s", display: "inline-block" }}>⌄</span>
+                      </div>
+                      {ktOpen === entry.id && (entry.state.kitchen_tickets || []).map(kt => {
+                        const klog = kt.kitchenLog || {};
+                        const fired = Object.entries(klog)
+                          .map(([courseKey, v]) => {
+                            const course = (entry.state?.menuCourses || []).find(c => c.course_key === courseKey);
+                            const name = course?.menu?.name || courseKey;
+                            return { name, firedAt: v.firedAt || "" };
+                          })
+                          .filter(e => e.firedAt)
+                          .sort((a, b) => a.firedAt.localeCompare(b.firedAt));
+                        return (
+                          <div key={kt.tableId} style={{ padding: "10px 16px", borderTop: "1px solid #f0f8f0" }}>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+                              <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 300, color: "#1a1a1a", letterSpacing: 1 }}>{String(kt.tableId).padStart(2,"0")}</span>
+                              {kt.resName  && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 500 }}>{kt.resName}</span>}
+                              {kt.menuType && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", border: "1px solid #e8e8e8", borderRadius: 2, color: "#555" }}>{kt.menuType}</span>}
+                              {kt.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a" }}>arr. {kt.arrivedAt}</span>}
+                              {kt.pace     && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", border: "1px solid #e8d8a0", borderRadius: 2, color: "#7a6020", background: "#fffce8" }}>{kt.pace}</span>}
+                              {kt.birthday && <span style={{ fontSize: 12 }}>🎂</span>}
+                            </div>
+                            {(kt.seats || []).map(s => {
+                              const restr = (kt.restrictions || []).filter(r => r.pos === s.id);
+                              const extra = (entry.state?.dishes || dishes).filter(d => s.extras?.[d.id]?.ordered);
+                              return (
+                                <div key={s.id} style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", padding: "3px 4px", borderBottom: "1px solid #f5faf5" }}>
+                                  <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#999", minWidth: 26 }}>P{s.id}</span>
+                                  {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
+                                  {extra.map(d => <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
+                                  {restr.map((r, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
+                                </div>
+                              );
+                            })}
+                            {fired.length > 0 && (
+                              <div style={{ padding: "5px 4px 2px", display: "flex", flexWrap: "wrap", gap: "4px 10px", alignItems: "center" }}>
+                                <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", letterSpacing: 1, textTransform: "uppercase" }}>Fired</span>
+                                {fired.map((e, i) => (
+                                  <span key={i} style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a" }}>
+                                    {e.firedAt} <span style={{ color: "#888" }}>{e.name}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   {entryTables.map(t => (
                     <div key={t.id} style={{ padding: "12px 16px", borderBottom: "1px solid #f8f8f8" }}>
                       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
@@ -4369,9 +4540,9 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
                         {t.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a" }}>arr. {t.arrivedAt}</span>}
                         {t.menuType  && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", border: "1px solid #e8e8e8", borderRadius: 2, color: "#555" }}>{t.menuType}</span>}
                         {t.birthday  && <span style={{ fontSize: 12 }}>🎂</span>}
-                        {(t.bottleWines || []).map((w, i) => (
-                          <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, border: "1px solid #c8a060", color: "#7a5020", background: "#fdf4e8" }}>🍾 {w.name}</span>
-                        ))}
+                        {(t.bottleWines || []).map((w, i) => { const rv = String(w?.vintage || "").trim(); const vt = rv.match(/^\d{4}$/) ? `'${rv.slice(2)}` : rv; const title = [w?.producer, w?.name, vt].filter(Boolean).join(" "); return (
+                          <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, border: "1px solid #c8a060", color: "#7a5020", background: "#fdf4e8" }}>🍾 {title}</span>
+                        ); })}
                       </div>
                       {(t.seats || []).map(s => {
                         const ws    = waterStyle(s.water);
@@ -4819,7 +4990,22 @@ export default function App() {
       const { error } = await supabase.from("service_archive").insert({
         date: new Date().toISOString().slice(0, 10),
         label: dateStr,
-        state: { ...snap, tables: activeTables, menuCourses: effectiveMenuCourses },
+        state: {
+          ...snap,
+          tables: activeTables,
+          menuCourses: effectiveMenuCourses,
+          kitchen_tickets: activeTables.map(t => ({
+            tableId:      t.id,
+            resName:      t.resName,
+            menuType:     t.menuType,
+            seats:        t.seats,
+            restrictions: t.restrictions,
+            kitchenLog:   t.kitchenLog,
+            pace:         t.pace,
+            birthday:     t.birthday,
+            arrivedAt:    t.arrivedAt,
+          })),
+        },
       });
       if (error) {
         window.alert("Archive failed: " + error.message);
