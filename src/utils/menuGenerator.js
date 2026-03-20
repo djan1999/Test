@@ -96,7 +96,13 @@ export function generateMenuHTML({
   const fmtDrinkParts = item => {
     if (!item) return { title: "", sub: "" };
     const type = item.__type || item.type || item.category || "";
-    if (type === "cocktail" || type === "beer") return { title: item.name || "", sub: item.notes || "" };
+    if (type === "cocktail" || type === "beer") {
+      const nameLines  = (item.name  || "").split("\n").map(s => s.trim());
+      const notesLines = (item.notes || "").split("\n").map(s => s.trim());
+      const title = lang === "si" ? (nameLines[1]  || nameLines[0]  || "") : (nameLines[0]  || "");
+      const sub   = lang === "si" ? (notesLines[1] || notesLines[0] || "") : (notesLines[0] || "");
+      return { title, sub };
+    }
     return fmtWineParts(item);
   };
 
