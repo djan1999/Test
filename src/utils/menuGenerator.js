@@ -31,12 +31,15 @@ export function generateMenuHTML({
   beerChoice = null,
   lang = "en",
   seatOutputOverrides = {},
-  thankYouNote = "Thank you for your visit.",
+  thankYouNote = "Hvala za vaš obisk.",
   layoutStyles = {},
   // Font/logo assets — empty strings are fine for tests (no rendering needed)
   _fontBold = "",
   _fontReg = "",
   _logo = "",
+  _rowsOnly = false,
+  _rowOrder = null,
+  _rowEdits = {},
 }) {
   const s = (key, def) => key in layoutStyles ? layoutStyles[key] : def;
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
@@ -156,7 +159,7 @@ export function generateMenuHTML({
   });
   visibleCourses.sort((a, b) => a.orderValue - b.orderValue);
 
-  const rows = [];
+  let rows = [];
   const hasPairing = !!pkey;
   const bottleQueue = hasPairing ? [] : [...tableBottles];
   const aperitivoQueue = [
@@ -179,7 +182,7 @@ export function generateMenuHTML({
   visibleCourses.forEach(({ course, i, courseName, courseKey, optionalFlag }) => {
     const insertPairingHere = hasPairing && !insertedPairingLabel && (
       (!isShort && i === PAIRING_INSERT_IDX) ||
-      (isShort && courseRowsSeen === 0)
+      (isShort && (courseKey === "beetroot" || courseKey === "squash"))
     );
     if (insertPairingHere) {
       rows.push({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING" });
@@ -267,6 +270,26 @@ export function generateMenuHTML({
   }
 
   rows.push({ type: "thankyou" });
+  if (teamNames) rows.push({ type: "team", label: teamNames });
+
+  if (_rowOrder && _rowOrder.length === rows.length) {
+    rows = _rowOrder.map(i => rows[i]);
+  }
+  if (Object.keys(_rowEdits).length > 0) {
+    rows = rows.map((row, idx) => {
+      const ed = _rowEdits[idx];
+      if (!ed) return row;
+      const updated = { ...row };
+      if (row.left  && (ed.leftTitle  !== undefined || ed.leftSub  !== undefined))
+        updated.left  = { ...row.left,  title: ed.leftTitle  ?? row.left.title,  sub: ed.leftSub  ?? row.left.sub  };
+      if (row.right && (ed.rightTitle !== undefined || ed.rightSub !== undefined))
+        updated.right = { ...row.right, title: ed.rightTitle ?? row.right.title, sub: ed.rightSub ?? row.right.sub };
+      if (row.type === "section" && ed.label !== undefined) updated.label = ed.label;
+      return updated;
+    });
+  }
+
+  if (_rowsOnly) return rows;
 
   const renderBlock = (block, cls = "") => {
     if (!block || (!block.title && !block.sub)) return `<div class="menu-col ${cls}"></div>`;
@@ -286,6 +309,7 @@ export function generateMenuHTML({
     if (row.type === "thankyou") {
       return `<div class="menu-thankyou">${esc(thankYouNote)}</div>`;
     }
+    if (row.type === "team") return "";
     return `<div class="menu-row ${row.rowClass || ""}">${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
   }).join("");
 

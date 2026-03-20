@@ -164,6 +164,17 @@ function writeTeamNames(value) {
   } catch {}
 }
 
+const LAYOUT_ORDER_KEY = "milka-menu-layout-order-v1";
+const LAYOUT_EDITS_KEY = "milka-menu-layout-edits-v1";
+function readLayoutOrder() {
+  try { const r = window.localStorage.getItem(LAYOUT_ORDER_KEY); return r ? JSON.parse(r) : null; }
+  catch { return null; }
+}
+function readLayoutEdits() {
+  try { const r = window.localStorage.getItem(LAYOUT_EDITS_KEY); return r ? JSON.parse(r) : {}; }
+  catch { return {}; }
+}
+
 const esc = (v) => String(v ?? "")
   .replace(/&/g, "&amp;")
   .replace(/</g, "&lt;")
@@ -243,450 +254,6 @@ const MILKA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 58 
   <circle cx="46" cy="10" r="10"/>
   <path d="M2,66 L2,30 L20,52 L38,24 L38,66 L34,66 L34,27 L20,50 L6,30 L6,66 Z"/>
 </svg>`;
-
-
-const RESTRICTION_PRIORITY_KEYS = [
-  "vegan","veg","pescetarian","gluten","dairy","nut","shellfish",
-  "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
-  "no_garlic_onion","halal","low_fodmap"
-];
-
-const RESTRICTION_COLUMN_MAP = {
-  veg: "veg",
-  vegan: "vegan",
-  pescetarian: "pescetarian",
-  gluten: "gluten_free",
-  dairy: "dairy_free",
-  nut: "nut_free",
-  shellfish: "shellfish_free",
-  no_red_meat: "no_red_meat",
-  no_pork: "no_pork",
-  no_game: "no_game",
-  no_offal: "no_offal",
-  egg_free: "egg_free",
-  no_alcohol: "no_alcohol",
-  no_garlic_onion: "no_garlic_onion",
-  halal: "halal",
-  low_fodmap: "low_fodmap",
-};
-
-function applyCourseRestriction(course, activeRestrictions, lang = "en") {
-  const baseDish = course?.menu || null;
-  if (!baseDish) return null;
-
-  let dish = {
-    name: String(baseDish.name || "").trim(),
-    sub: String(baseDish.sub || "").trim(),
-  };
-
-  const courseRestrictions = course?.restrictions || {};
-
-  for (const key of RESTRICTION_PRIORITY_KEYS) {
-    if (!(activeRestrictions || []).includes(key)) continue;
-    const mapped = RESTRICTION_COLUMN_MAP[key] || key;
-    // Prefer SI variant when generating a Slovenian menu
-    const siMapped = lang === "si" ? `${mapped}_si` : null;
-
-    if (courseRestrictions[mapped]) {
-      const next = (siMapped && courseRestrictions[siMapped]) ? courseRestrictions[siMapped] : courseRestrictions[mapped];
-      // If the cell had a | separator, next.sub is non-empty → full name+sub replacement.
-      // If no | separator, next.sub is empty → sub-only replacement, keep original dish name.
-      if (next?.sub) {
-        dish = { name: String(next.name || dish.name).trim(), sub: String(next.sub).trim() };
-      } else if (next?.name) {
-        dish = { name: dish.name, sub: String(next.name).trim() };
-      }
-      break; // highest-priority matching restriction wins
-    }
-
-    // backward compatibility for older static menu data
-    if (mapped === "veg" && course?.veg) {
-      const v = course.veg;
-      if (v?.sub) {
-        dish = { name: String(v.name || dish.name).trim(), sub: String(v.sub).trim() };
-      } else if (v?.name) {
-        dish = { name: dish.name, sub: String(v.name).trim() };
-      }
-    }
-  }
-
-  return dish;
-}
-
-
-function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = "", menuCourses = MENU_DATA, beerChoice = null, lang = "en", seatOutputOverrides = {}, thankYouNote = "Hvala za vaš obisk.", _rowsOnly = false, _rowOrder = null, _rowEdits = {} }) {
-  const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
-  const PAIRING_LABELS = lang === "si"
-    ? { wp: "VINSKA SPREMLJAVA", na: "BREZALKOHOLNA SPREMLJAVA", os: "OUR STORY SPREMLJAVA", premium: "PREMIUM SPREMLJAVA" }
-    : { wp: "WINE PAIRING", na: "NON-ALCO PAIRING", os: "OUR STORY PAIRING", premium: "PREMIUM PAIRING" };
-  // For SI menus, swap menu_si into the menu field so applyCourseRestriction uses the right base
-  const resolveCourse = (course) =>
-    (lang === "si" && course.menu_si?.name) ? { ...course, menu: course.menu_si } : course;
-
-  const seatId = seat.id;
-  const pairingLabel = seat.pairing === "—" ? "" : (seat.pairing || "");
-  const pkey = PAIRING_MAP[pairingLabel] || null;
-
-  const restrictions = (table.restrictions || []).filter(r => !r.pos || r.pos === seatId).map(r => r.note);
-  const isShort = String(table.menuType || "").toLowerCase() === "short";
-
-  const extras = seat.extras || {};
-  const hasBeetroot = !!extras[1]?.ordered;
-  const hasCheese   = !!extras[2]?.ordered;
-  const hasCake     = !!(table.birthday || extras[3]?.ordered);
-
-  const glasses = Array.isArray(seat.glasses)
-    ? seat.glasses.filter(w => w && (w.name || w.producer || w.vintage || w.notes))
-    : [];
-  const cocktails = Array.isArray(seat.cocktails)
-    ? seat.cocktails.filter(c => c && (c.name || c.notes))
-    : [];
-  const beers = Array.isArray(seat.beers)
-    ? seat.beers.filter(b => b && (b.name || b.notes))
-    : [];
-  const tableBottles = Array.isArray(table.bottleWines)
-    ? table.bottleWines.filter(w => w && (w.name || w.producer || w.vintage || w.notes))
-    : [];
-
-  const CRAYFISH_IDX = 4;
-  const DANUBE_SALMON_IDX = 5;
-  const PAIRING_INSERT_IDX = DANUBE_SALMON_IDX;
-
-  const fmtWineParts = w => {
-    const rawVintage = String(w?.vintage || "").trim();
-    const vintage = rawVintage.match(/^\d{4}$/) ? `'${rawVintage.slice(2)}` : rawVintage;
-    const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
-    const rawCountry = w?.country || "";
-    const country = COUNTRY_NAMES[rawCountry] || rawCountry;
-    const region = (w?.region || "").replace(new RegExp(`,?\\s*${rawCountry}$`), "").trim();
-    const subParts = [region, country].filter(Boolean);
-    return {
-      title: title || "",
-      sub: subParts.join(", ") || w?.notes || "",
-    };
-  };
-
-  const fmtDrinkParts = item => {
-    if (!item) return { title: "", sub: "" };
-    const type = item.__type || item.type || item.category || "";
-    if (type === "cocktail" || type === "beer") return { title: item.name || "", sub: item.notes || "" };
-    return fmtWineParts(item);
-  };
-
-  const selectedBeer = (() => {
-    if (beers.length === 0) {
-      return beerChoice === "nonalc"
-        ? { title: "SPENT BREAD KOMBUCHA", sub: "malt, hops" }
-        : { title: "Reservoir Dogs, Crazy Sister", sub: "Nova Gorica, Slovenia" };
-    }
-    const chosen = beers.find(b => {
-      const hay = `${b?.name || ""} ${b?.notes || ""}`.toLowerCase();
-      const isNA = hay.includes("0.0") || hay.includes("non") || hay.includes("zero") || hay.includes("free") || hay.includes("n/a") || hay.startsWith("na");
-      return beerChoice === "nonalc" ? isNA : !isNA;
-    }) || beers[0];
-    return fmtDrinkParts({ ...chosen, __type: "beer" });
-  })();
-
-  const normalizeToken = (value) => String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
-  const isTruthyShort = (value) => {
-    const v = String(value ?? "").trim().toLowerCase();
-    return v === "true" || v === "1" || v === "yes" || v === "y" || v === "x" || v === "wahr";
-  };
-
-  const visibleCourses = [];
-  menuCourses.forEach((course, i) => {
-    const courseKey = normalizeToken(course?.course_key || course?.key || course?.menu?.name);
-    const courseName = String(course?.menu?.name || "").trim().toUpperCase();
-    const courseNameKey = normalizeToken(course?.menu?.name || "");
-    const optionalFlag = normalizeToken(course?.optional_flag || "");
-
-    const isBeetrootCourse = optionalFlag === "beetroot" || courseKey === "beetroot" || courseNameKey === "beetroot";
-    const isCakeCourse = optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake" || courseNameKey === "pear";
-    const isCheeseExtraCourse = optionalFlag === "cheese" || courseKey === "cheese" || courseNameKey === "cheese";
-
-    if (isBeetrootCourse && !hasBeetroot) return;
-    if (isCakeCourse && !hasCake) return;
-    if (isCheeseExtraCourse && !hasCheese) return;
-
-    if (isShort) {
-      if (!isTruthyShort(course?.show_on_short)) return;
-      const rank = Number(course?.short_order) || 9999;
-      visibleCourses.push({ course, i, courseName, courseKey, optionalFlag, orderValue: rank });
-      return;
-    }
-
-    visibleCourses.push({
-      course,
-      i,
-      courseName,
-      courseKey,
-      optionalFlag,
-      orderValue: Number(course.position) || i + 1,
-    });
-  });
-  visibleCourses.sort((a, b) => a.orderValue - b.orderValue);
-
-  let rows = [];
-  const hasPairing = !!pkey;
-  const bottleQueue = hasPairing ? [] : [...tableBottles];
-  // Aperitivos (cocktails + byGlass wines for pairing) fill course right columns from course 0.
-  // For pairing: only fills where drink is null (early courses before pairing kicks in).
-  // For non-pairing: cocktails fill from course 0; byGlass wines distribute from Danube.
-  const aperitivoQueue = [
-    ...cocktails.map(c => ({ ...c, __type: "cocktail" })),
-    ...(hasPairing ? glasses.map(w => ({ ...w, __type: "wine" })) : []),
-  ];
-  const glassByGlassQueue = hasPairing ? [] : [...glasses.map(w => ({ ...w, __type: "wine" }))];
-
-  // Pairing case: only table bottles as wine-only rows at top (aperitivos now go into course columns)
-  const topRightItems = hasPairing ? [
-    ...tableBottles.map(item => ({
-      ...item,
-      __type: item?.__type || item?.type || item?.category || ((item?.notes && !item?.producer && !item?.vintage) ? "cocktail" : "wine"),
-    })),
-  ] : [];
-  topRightItems.forEach(item => rows.push({ type: "wine-only", right: fmtDrinkParts(item) }));
-
-  let insertedPairingLabel = false;
-  let courseRowsSeen = 0;
-
-  visibleCourses.forEach(({ course, i, courseName, courseKey, optionalFlag }) => {
-    const insertPairingHere = hasPairing && !insertedPairingLabel && (
-      (!isShort && i === PAIRING_INSERT_IDX) ||
-      (isShort && (courseKey === "beetroot" || courseKey === "squash"))
-    );
-    if (insertPairingHere) {
-      rows.push({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING" });
-      insertedPairingLabel = true;
-    }
-
-    let dish = applyCourseRestriction(resolveCourse(course), restrictions, lang);
-    // For SI menus, prefer the SI pairing variant when available
-    let drink = pkey ? (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]) : null;
-
-    if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
-      const fpName = (lang === "si" && course.force_pairing_title_si) ? course.force_pairing_title_si : (course.force_pairing_title || "KITCHEN MARTINI");
-      const fpSub  = (lang === "si" && course.force_pairing_sub_si)   ? course.force_pairing_sub_si   : (course.force_pairing_sub   || "");
-      drink = { name: fpName, sub: fpSub };
-    }
-
-    const beetrootExtra = extras[1];
-    const isBeetrootOptionalCourse = optionalFlag === "beetroot" || courseKey === "beetroot" || courseName === "BEETROOT";
-    if (isBeetrootOptionalCourse && beetrootExtra?.ordered) {
-      const beetPair = String(beetrootExtra.pairing || "—").trim();
-      if (beetPair === "N/A" || beetPair === "Non-Alc") {
-        const naVariant = lang === "si" ? (course.na_si || course.na) : course.na;
-        drink = naVariant || null;
-      } else if (beetPair === "Champagne" || beetPair === "Wine") {
-        drink = (lang === "si"
-          ? (course.os_si || course.os || course.premium_si || course.premium || course.wp_si || course.wp)
-          : (course.os || course.premium || course.wp)) || null;
-      } else {
-        drink = null;
-      }
-    }
-
-    if ((courseKey === "chicken_gizzard" || courseName === "CHICKEN GIZZARD") && selectedBeer) {
-      // For SI menus with default beer list, prefer the course's SI pairing variants
-      if (lang === "si" && beers.length === 0) {
-        const siKey = beerChoice === "nonalc" ? "na" : "wp";
-        const siDrink = course[`${siKey}_si`] || course[siKey];
-        drink = siDrink ? { name: siDrink.name || "", sub: siDrink.sub || "" } : { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
-      } else {
-        drink = { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
-      }
-    } else if (!drink && aperitivoQueue.length > 0) {
-      // Fill empty right column with next aperitivo (only when right column is empty)
-      const d = fmtDrinkParts(aperitivoQueue.shift());
-      drink = { name: d.title || "", sub: d.sub || "" };
-    } else if (i >= DANUBE_SALMON_IDX && glassByGlassQueue.length > 0) {
-      // From Danube onwards: by-the-glass wines fill right column
-      const d = fmtDrinkParts(glassByGlassQueue.shift());
-      drink = { name: d.title || "", sub: d.sub || "" };
-    } else if (!hasPairing && i >= DANUBE_SALMON_IDX && bottleQueue.length > 0) {
-      const nextBottle = bottleQueue.shift();
-      const d = fmtDrinkParts(nextBottle);
-      drink = { name: d.title || "", sub: d.sub || "" };
-    }
-
-    // Apply ephemeral per-seat output overrides (applied after restrictions)
-    const outputOv = seatOutputOverrides[courseKey];
-    if (outputOv) {
-      if (typeof outputOv.name === "string") dish = { ...(dish || {}), name: outputOv.name };
-      if (typeof outputOv.sub  === "string") dish = { ...(dish || {}), sub:  outputOv.sub  };
-    }
-
-    rows.push({
-      type: "course",
-      left: { title: dish?.name || "", sub: dish?.sub || "" },
-      right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
-      rowClass: [
-        (hasPairing && (courseKey === "crayfish" || i === CRAYFISH_IDX)) ? "after-crayfish" : "",
-        (isShort && (courseKey === "trout_belly" || courseName === "TROUT BELLY")) ? "short-after-trout-belly" : "",
-        (isShort && (courseKey === "venison" || courseName === "VENISON")) ? "short-after-venison" : "",
-        course.section_gap_before ? "section-gap-before" : "",
-      ].filter(Boolean).join(" "),
-    });
-    courseRowsSeen += 1;
-  });
-
-  while (aperitivoQueue.length > 0) {
-    rows.push({ type: "wine-only", right: fmtDrinkParts(aperitivoQueue.shift()) });
-  }
-  while (glassByGlassQueue.length > 0) {
-    rows.push({ type: "wine-only", right: fmtDrinkParts(glassByGlassQueue.shift()) });
-  }
-  while (!hasPairing && bottleQueue.length > 0) {
-    const d = fmtDrinkParts(bottleQueue.shift());
-    rows.push({ type: "wine-only", right: d });
-  }
-
-  if (hasPairing && !insertedPairingLabel) {
-    rows.unshift({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING" });
-  }
-
-  rows.push({ type: "thankyou" });
-  if (teamNames) rows.push({ type: "team", label: teamNames });
-
-  // Apply layout overrides (row reordering + inline edits from Layout Preview)
-  if (_rowOrder && _rowOrder.length === rows.length) {
-    rows = _rowOrder.map(i => rows[i]);
-  }
-  if (Object.keys(_rowEdits).length > 0) {
-    rows = rows.map((row, idx) => {
-      const ed = _rowEdits[idx];
-      if (!ed) return row;
-      const updated = { ...row };
-      if (row.left  && (ed.leftTitle  !== undefined || ed.leftSub  !== undefined))
-        updated.left  = { ...row.left,  title: ed.leftTitle  ?? row.left.title,  sub: ed.leftSub  ?? row.left.sub  };
-      if (row.right && (ed.rightTitle !== undefined || ed.rightSub !== undefined))
-        updated.right = { ...row.right, title: ed.rightTitle ?? row.right.title, sub: ed.rightSub ?? row.right.sub };
-      if (row.type === "section" && ed.label !== undefined) updated.label = ed.label;
-      return updated;
-    });
-  }
-
-  if (_rowsOnly) return rows;
-
-  const renderBlock = (block, cls = "") => {
-    if (!block || (!block.title && !block.sub)) return `<div class="menu-col ${cls}"></div>`;
-    return `<div class="menu-col ${cls}">
-      ${block.title ? `<div class="menu-main">${esc(block.title)}</div>` : ""}
-      ${block.sub ? `<div class="menu-sub">${esc(block.sub)}</div>` : ""}
-    </div>`;
-  };
-
-  const rowsHtml = rows.map(row => {
-    if (row.type === "section") {
-      return `<div class="menu-section-row pairing-section"><div></div><div class="menu-section-label">${esc(row.label)}</div></div>`;
-    }
-    if (row.type === "wine-only") {
-      return `<div class="menu-row wine-only">${renderBlock(null, "left")}${renderBlock(row.right, "right")}</div>`;
-    }
-    if (row.type === "thankyou") {
-      return `<div class="menu-thankyou">${esc(thankYouNote)}</div>`;
-    }
-    if (row.type === "team") return "";
-    return `<div class="menu-row ${row.rowClass || ""}">${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
-  }).join("");
-
-  const safeTitle = esc((menuTitle || "WINTER MENU").replace(/\s+/g, " ").trim());
-
-  const _today = new Date();
-  const _d = _today.getDate();
-  const _MONTHS_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  const _MONTHS_SI = ["Januar","Februar","Marec","April","Maj","Junij","Julij","Avgust","September","Oktober","November","December"];
-  const menuDate = lang === "si"
-    ? `${_d}. ${_MONTHS_SI[_today.getMonth()]} ${_today.getFullYear()}`
-    : (() => { const _suffix = [11,12,13].includes(_d) ? "th" : _d%10===1 ? "st" : _d%10===2 ? "nd" : _d%10===3 ? "rd" : "th"; return `${_d}${_suffix} of ${_MONTHS_EN[_today.getMonth()]}, ${_today.getFullYear()}`; })();
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>${safeTitle}</title>
-<style>
-@font-face{font-family:'RM';font-weight:700;src:url('data:font/truetype;base64,${MENU_FONT_BOLD}') format('truetype');}
-@font-face{font-family:'RM';font-weight:400;src:url('data:font/truetype;base64,${MENU_FONT_REG}') format('truetype');}
-*{margin:0;padding:0;box-sizing:border-box;}
-:root{--page-w:148mm;--page-h:210mm;--pad-t:8.4mm;--pad-r:12mm;--pad-b:8.2mm;--pad-l:12mm;--inner-h:calc(var(--page-h) - var(--pad-t) - var(--pad-b));}
-@page{size:A5 portrait;margin:0;}
-html,body{width:var(--page-w);height:var(--page-h);overflow:hidden;background:#fff;color:#000;font-family:'RM', monospace;font-size:6.75pt;line-height:1.08;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-body{position:relative;}
-#sheet{width:var(--page-w);height:var(--page-h);overflow:hidden;position:relative;background:#fff;}
-#frame{position:absolute;inset:0;padding:var(--pad-t) var(--pad-r) var(--pad-b) var(--pad-l);overflow:hidden;}
-#scaleTarget{width:100%;min-height:var(--inner-h);display:flex;flex-direction:column;transform-origin:top left;}
-#header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8.6mm;margin-bottom:7mm;}
-#title{font-size:13.9pt;font-weight:700;letter-spacing:0.035em;}
-#menu-date{font-size:5.8pt;font-weight:400;letter-spacing:0.02em;margin-top:0.8mm;}
-#logo img{width:18.2mm;display:block;}
-#menu{width:100%;}
-.menu-row,.menu-section-row{display:grid;grid-template-columns:minmax(0,${hasPairing ? "0.85fr) minmax(0,1.15fr" : "1fr) minmax(0,1fr"});column-gap:${hasPairing ? "9mm" : "10.8mm"};align-items:start;break-inside:avoid;page-break-inside:avoid;}
-.menu-row{margin-bottom:3.15pt;}
-.menu-row.wine-only{margin-bottom:4.5pt;}
-.menu-row.after-crayfish{margin-bottom:7.2pt;}
-.menu-row.short-after-trout-belly,.menu-row.short-after-venison{margin-bottom:10pt;}
-.menu-row.section-gap-before{margin-top:14.5pt;}
-.menu-col{min-width:0;}
-.menu-main{font-weight:700;line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;text-transform:uppercase;}
-.menu-sub{line-height:1.08;margin-top:0.75pt;overflow-wrap:anywhere;}
-.menu-section-row{margin:6.8pt 0 6.2pt;}
-.menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;text-transform:uppercase;}
-.menu-thankyou{margin-top:7pt;font-size:6.55pt;font-style:normal;font-family:'RM',monospace;}
-#footer{margin-top:auto;padding-top:9.5pt;}
-#team{font-size:6.5pt;line-height:1.2;overflow-wrap:anywhere;}
-#team .menu-main{margin-bottom:1.4pt;}
-</style>
-</head>
-<body>
-<div id="sheet"><div id="frame"><div id="scaleTarget"><div id="header"><div id="title">${safeTitle}<div id="menu-date">${esc(menuDate)}</div></div><div id="logo"><img src="data:image/png;base64,${MENU_LOGO}" alt="Milka"></div></div><div id="menu">${rowsHtml}</div><div id="footer"><div id="team"><div class="menu-main">TEAM:</div><div>${esc(teamNames)}</div></div></div></div></div></div>
-<script>
-(function(){
-  const MIN_SCALE = 0.58;
-  const MAX_TRIES = 80;
-  function fitOnePage(){
-    const frame = document.getElementById('frame');
-    const target = document.getElementById('scaleTarget');
-    if (!frame || !target) return;
-    target.style.transform = 'scale(1)';
-    target.style.width = '100%';
-    const maxH = frame.clientHeight;
-    const maxW = frame.clientWidth;
-    const naturalH = target.scrollHeight;
-    const naturalW = target.scrollWidth;
-    let scale = Math.min(1, maxH / naturalH, maxW / naturalW);
-    scale = Math.max(Math.min(scale, 1), MIN_SCALE);
-    let tries = 0;
-    while (tries < MAX_TRIES) {
-      target.style.transform = 'scale(' + scale + ')';
-      target.style.width = (100 / scale) + '%';
-      const rect = target.getBoundingClientRect();
-      if (rect.height <= maxH - 1 && rect.width <= maxW - 1) break;
-      scale -= 0.01;
-      if (scale <= MIN_SCALE) {
-        scale = MIN_SCALE;
-        target.style.transform = 'scale(' + scale + ')';
-        target.style.width = (100 / scale) + '%';
-        break;
-      }
-      tries += 1;
-    }
-  }
-  window.addEventListener('load', function(){ setTimeout(fitOnePage, 80); });
-  window.addEventListener('resize', fitOnePage);
-  window.addEventListener('beforeprint', fitOnePage);
-  window.addEventListener('afterprint', fitOnePage);
-})();
-</script>
-</body>
-</html>`;
-}
 
 const pairingStyle = {
   "—":        { color: "#666", border: "#d8d8d8", bg: "#f5f5f5" },
@@ -3891,8 +3458,8 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
   const [seatEdits, setSeatEdits] = useState({});
   const [expandedSeatId, setExpandedSeatId] = useState(null);
   const [layoutOpen, setLayoutOpen] = useState(false);
-  const [rowOrder, setRowOrder]     = useState(null); // null = natural; array of indices when reordered
-  const [rowEdits, setRowEdits]     = useState({});   // { idx: { leftTitle?, leftSub?, rightTitle?, rightSub? } }
+  const [rowOrder, setRowOrder]     = useState(readLayoutOrder); // null = natural; array of indices when reordered
+  const [rowEdits, setRowEdits]     = useState(readLayoutEdits); // { idx: { leftTitle?, leftSub?, rightTitle?, rightSub? } }
 
   // Load team names + menu title from Supabase on mount
   useEffect(() => {
@@ -3994,6 +3561,10 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
       lang,
       seatOutputOverrides: seatEdits[seat.id] || {},
       thankYouNote,
+      layoutStyles,
+      _fontBold: MENU_FONT_BOLD,
+      _fontReg: MENU_FONT_REG,
+      _logo: logoDataUri,
       _rowOrder: rowOrder,
       _rowEdits: rowEdits,
     });
@@ -4274,8 +3845,9 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
               <div onClick={() => setLayoutOpen(o => !o)} style={{ padding: "10px 14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", background: layoutOpen ? "#fafafa" : "#fff" }}>
                 <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#555", textTransform: "uppercase" }}>Layout Preview {hasEdits ? "·" : ""}</span>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <button onClick={e => { e.stopPropagation(); try { localStorage.setItem(LAYOUT_ORDER_KEY, JSON.stringify(rowOrder)); localStorage.setItem(LAYOUT_EDITS_KEY, JSON.stringify(rowEdits)); } catch {} }} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 8px", border: "1px solid #4a9a6a", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#4a9a6a" }}>Save as Default</button>
                   {hasEdits && (
-                    <button onClick={e => { e.stopPropagation(); setRowOrder(null); setRowEdits({}); }} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 8px", border: "1px solid #ccc", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888" }}>Reset</button>
+                    <button onClick={e => { e.stopPropagation(); try { localStorage.removeItem(LAYOUT_ORDER_KEY); localStorage.removeItem(LAYOUT_EDITS_KEY); } catch {} setRowOrder(null); setRowEdits({}); }} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 8px", border: "1px solid #ccc", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888" }}>Reset</button>
                   )}
                   <span style={{ fontFamily: FONT, fontSize: 14, color: "#bbb", transform: layoutOpen ? "rotate(180deg)" : "none", transition: "transform 0.18s", display: "inline-block" }}>⌄</span>
                 </div>
