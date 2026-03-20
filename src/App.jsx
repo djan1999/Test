@@ -3806,6 +3806,48 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
                   <BevEditRow emoji="🍹" label="Cocktails" items={s.cocktails || []} onUpdate={items => updSeat(s.id, "cocktails", items)} />
                   <BevEditRow emoji="🥃" label="Spirits" items={s.spirits || []} onUpdate={items => updSeat(s.id, "spirits", items)} />
                   <BevEditRow emoji="🍺" label="Beers" items={s.beers || []} onUpdate={items => updSeat(s.id, "beers", items)} />
+                  {/* Beetroot & Cheese */}
+                  {(() => {
+                    const beetExtra = s.extras?.[1] || { ordered: false, pairing: "—" };
+                    const hasCheese = !!s.extras?.[2]?.ordered;
+                    return (
+                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e8f0f8" }}>
+                        <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Extras</div>
+                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                          {/* Beetroot — off + 3 pairing options */}
+                          {[["off", "Beet off"], ["—", "Beet —"], ["Champagne", "Beet Champ"], ["N/A", "Beet N/A"]].map(([p, label]) => {
+                            const active = p === "off"
+                              ? !beetExtra.ordered
+                              : beetExtra.ordered && (beetExtra.pairing || "—") === p;
+                            return (
+                              <button key={p} onClick={() => {
+                                const newExtras = { ...s.extras };
+                                if (p === "off") { newExtras[1] = { ordered: false, pairing: "—" }; }
+                                else { newExtras[1] = { ordered: true, pairing: p }; }
+                                updSeat(s.id, "extras", newExtras);
+                              }} style={{
+                                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                                border: `1px solid ${active ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                                background: active ? "#fdf4e8" : "#fff",
+                                color: active ? "#7a5020" : "#bbb",
+                              }}>{label}</button>
+                            );
+                          })}
+                          <div style={{ width: 1, height: 18, background: "#e0e0e0" }} />
+                          {/* Cheese toggle */}
+                          <button onClick={() => {
+                            const cur = s.extras?.[2] || { ordered: false };
+                            updSeat(s.id, "extras", { ...s.extras, 2: { ...cur, ordered: !cur.ordered } });
+                          }} style={{
+                            fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                            border: `1px solid ${hasCheese ? "#a06830" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                            background: hasCheese ? "#fdf4e8" : "#fff",
+                            color: hasCheese ? "#a06830" : "#bbb",
+                          }}>Cheese {hasCheese ? "✓" : ""}</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
