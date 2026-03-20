@@ -2811,7 +2811,6 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
             {table.resTime && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: "#333" }}>{table.resTime}</span>}
             {table.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: "#4a9a6a" }}>arr. {table.arrivedAt}</span>}
           </div>
-          {table.notes && <div style={{ fontFamily: FONT, fontSize: 8, color: "#555", fontStyle: "italic", marginTop: 1, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.notes}</div>}
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
           <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: allDone ? "#4a9a6a" : "#111", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 10, color: "#666", fontWeight: 400 }}>/{totalCourses}</span></div>
@@ -2829,6 +2828,14 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
             }}>✏ EDIT</button>
         </div>
       </div>
+
+      {/* ── Notes banner ── */}
+      {table.notes && (
+        <div style={{ background: "#fffbe8", borderBottom: "1px solid #f0d878", padding: "5px 10px", display: "flex", gap: 6, alignItems: "flex-start" }}>
+          <span style={{ fontSize: 10, flexShrink: 0, lineHeight: 1.4 }}>📋</span>
+          <span style={{ fontFamily: FONT, fontSize: 10, color: "#7a6010", lineHeight: 1.35, fontStyle: "italic" }}>{table.notes}</span>
+        </div>
+      )}
 
       {/* ── Temp restriction editor ── */}
       {showEdit && (
@@ -3463,6 +3470,8 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
   const [seatEdits, setSeatEdits] = useState({});
   const [expandedSeatId, setExpandedSeatId] = useState(null);
   const [expandedDrinksId, setExpandedDrinksId] = useState(null);
+  const [previewSeatId, setPreviewSeatId] = useState(null);
+  const [previewHtml, setPreviewHtml] = useState("");
   const genLoaded = useRef(false);
 
   const updSeat = (seatId, field, value) => {
@@ -3583,6 +3592,29 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
     // One-time: clear this seat's edits and collapse its editor after printing
     clearSeatAllEdits(seat.id);
     setExpandedSeatId(null);
+    setPreviewSeatId(null);
+    setPreviewHtml("");
+  };
+
+  const openPreview = (seat) => {
+    const seatCourses = menuCourses.map(c => applyMenuOverride(c, courseOverrides, seat.id));
+    const html = generateMenuHTML({
+      seat,
+      table: { menuType: table.menuType || "", restrictions, bottleWines: tableBottles, birthday: table.birthday || false },
+      menuTitle,
+      teamNames,
+      menuCourses: seatCourses,
+      beerChoice: beerChoices[seat.id] || defaultBeer(seat),
+      lang,
+      seatOutputOverrides: seatEdits[seat.id] || {},
+      thankYouNote,
+      layoutStyles,
+      _logo: logoDataUri,
+    });
+    setPreviewHtml(html);
+    setPreviewSeatId(seat.id);
+    setExpandedSeatId(null);
+    setExpandedDrinksId(null);
   };
 
   const generateAll = () => {
@@ -3724,7 +3756,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
                 </div>
 
                 {/* Edit button — opens per-seat ephemeral course editor */}
-                <button onClick={() => { setExpandedSeatId(isExpanded ? null : s.id); setExpandedDrinksId(null); }} style={{
+                <button onClick={() => { setExpandedSeatId(isExpanded ? null : s.id); setExpandedDrinksId(null); setPreviewSeatId(null); }} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
                   border: `1px solid ${seatHasEdits ? "#f0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
                   background: seatHasEdits ? "#fff8e0" : "#fafafa",
@@ -3733,13 +3765,21 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
 
                 {/* Drinks edit button */}
                 {upd && (
-                  <button onClick={() => { setExpandedDrinksId(expandedDrinksId === s.id ? null : s.id); setExpandedSeatId(null); }} style={{
+                  <button onClick={() => { setExpandedDrinksId(expandedDrinksId === s.id ? null : s.id); setExpandedSeatId(null); setPreviewSeatId(null); }} style={{
                     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
                     border: `1px solid ${expandedDrinksId === s.id ? "#6a9abf" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
                     background: expandedDrinksId === s.id ? "#eef4fa" : "#fafafa",
                     color: expandedDrinksId === s.id ? "#2a5a80" : "#aaa",
                   }}>🍷</button>
                 )}
+
+                {/* Preview button */}
+                <button onClick={() => previewSeatId === s.id ? setPreviewSeatId(null) : openPreview(s)} style={{
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
+                  border: `1px solid ${previewSeatId === s.id ? "#4a7a9a" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                  background: previewSeatId === s.id ? "#e8f0f8" : "#fafafa",
+                  color: previewSeatId === s.id ? "#2a5a80" : "#aaa",
+                }}>👁</button>
 
                 <button onClick={() => openPrint(s)} style={{
                   marginLeft: "auto", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
@@ -3872,6 +3912,27 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
                             color: hasCheese ? "#a06830" : "#bbb",
                           }}>Cheese {hasCheese ? "✓" : ""}</button>
                         </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Menu preview */}
+              {previewSeatId === s.id && (
+                <div style={{ borderTop: "1px solid #e0eaf4", padding: "12px 16px 14px", background: "#f7fafd" }}>
+                  <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#6a9abf", textTransform: "uppercase", marginBottom: 10 }}>Preview — P{s.id}</div>
+                  {(() => {
+                    const containerW = 280;
+                    const a5W = 559, a5H = 793;
+                    const scale = containerW / a5W;
+                    return (
+                      <div style={{ width: containerW, height: Math.round(a5H * scale), overflow: "hidden", border: "1px solid #d0dce8", borderRadius: 2 }}>
+                        <iframe
+                          srcDoc={previewHtml}
+                          title={`preview-p${s.id}`}
+                          style={{ width: a5W, height: a5H, border: "none", transform: `scale(${scale})`, transformOrigin: "top left", pointerEvents: "none" }}
+                        />
                       </div>
                     );
                   })()}
