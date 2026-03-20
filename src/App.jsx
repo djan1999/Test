@@ -3549,6 +3549,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
             <button key={opt.val} onClick={() => {
               setLang(opt.val);
               setMenuTitle(opt.val === "si" ? "ZIMSKI MENI" : "WINTER MENU");
+              setThankYouNote(opt.val === "si" ? "Hvala za vaš obisk." : "Thank you for your visit.");
             }} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
               border: `1px solid ${lang === opt.val ? "#1a1a1a" : "#e0e0e0"}`,
