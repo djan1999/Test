@@ -3399,6 +3399,33 @@ const LAYOUT_PROPS = [
   { key: "thankYouSpacing", label: "Thank-you gap",     def: 7,    step: 0.5,  unit: "pt", dir: "v" },
 ];
 
+function BevEditRow({ emoji, label, items, onUpdate }) {
+  const [draft, setDraft] = useState("");
+  const add = () => { const v = draft.trim(); if (!v) return; onUpdate([...(items || []), { name: v }]); setDraft(""); };
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+        {(items || []).map((item, i) => (
+          <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 6px 2px 8px", borderRadius: 2, border: "1px solid #e0e0e0", background: "#fafafa", display: "flex", alignItems: "center", gap: 4 }}>
+            {emoji} {item.name}
+            <button onClick={() => onUpdate((items || []).filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "#bbb", fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>
+          </span>
+        ))}
+        <input
+          value={draft} onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") add(); }}
+          placeholder={`add…`}
+          style={{ fontFamily: FONT, fontSize: 10, padding: "3px 8px", border: "1px solid #e8e8e8", borderRadius: 2, outline: "none", width: 120 }}
+        />
+        {draft.trim() && (
+          <button onClick={add} style={{ fontFamily: FONT, fontSize: 9, padding: "3px 8px", border: "1px solid #c8a96e", borderRadius: 2, cursor: "pointer", background: "#fdf4e8", color: "#7a5020" }}>add</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLayoutStyles = {}, logoDataUri = "" }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState("WINTER MENU");
@@ -3408,7 +3435,14 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
   // Cleared automatically after the PDF for that seat is generated.
   const [seatEdits, setSeatEdits] = useState({});
   const [expandedSeatId, setExpandedSeatId] = useState(null);
+  const [expandedDrinksId, setExpandedDrinksId] = useState(null);
   const genLoaded = useRef(false);
+
+  const updSeat = (seatId, field, value) => {
+    if (!upd) return;
+    const newSeats = (table.seats || []).map(s => s.id === seatId ? { ...s, [field]: value } : s);
+    upd(table.id, "seats", newSeats);
+  };
 
   // Load team names + menu title from Supabase on mount
   useEffect(() => {
@@ -3663,12 +3697,22 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
                 </div>
 
                 {/* Edit button — opens per-seat ephemeral course editor */}
-                <button onClick={() => setExpandedSeatId(isExpanded ? null : s.id)} style={{
+                <button onClick={() => { setExpandedSeatId(isExpanded ? null : s.id); setExpandedDrinksId(null); }} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
                   border: `1px solid ${seatHasEdits ? "#f0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
                   background: seatHasEdits ? "#fff8e0" : "#fafafa",
                   color: seatHasEdits ? "#a07020" : "#aaa",
                 }}>{isExpanded ? "▲" : (seatHasEdits ? "✎ EDITED" : "✎")}</button>
+
+                {/* Drinks edit button */}
+                {upd && (
+                  <button onClick={() => { setExpandedDrinksId(expandedDrinksId === s.id ? null : s.id); setExpandedSeatId(null); }} style={{
+                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
+                    border: `1px solid ${expandedDrinksId === s.id ? "#6a9abf" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                    background: expandedDrinksId === s.id ? "#eef4fa" : "#fafafa",
+                    color: expandedDrinksId === s.id ? "#2a5a80" : "#aaa",
+                  }}>🍷</button>
+                )}
 
                 <button onClick={() => openPrint(s)} style={{
                   marginLeft: "auto", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
@@ -3734,6 +3778,34 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
                       );
                     })}
                   </div>
+                </div>
+              )}
+
+              {/* Drinks editor */}
+              {expandedDrinksId === s.id && (
+                <div style={{ borderTop: "1px solid #e8f0f8", padding: "12px 16px 14px", background: "#f7fafd" }}>
+                  <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#6a9abf", textTransform: "uppercase", marginBottom: 12 }}>Drinks & Pairing — P{s.id}</div>
+                  {/* Pairing selector */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Pairing</div>
+                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                      {["—", "Wine", "Non-Alc", "Premium", "Our Story"].map(p => {
+                        const active = (s.pairing || "—") === p;
+                        return (
+                          <button key={p} onClick={() => updSeat(s.id, "pairing", p === "—" ? "—" : p)} style={{
+                            fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
+                            border: `1px solid ${active ? "#2a5a80" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                            background: active ? "#2a5a80" : "#fff",
+                            color: active ? "#fff" : "#888",
+                          }}>{p}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <BevEditRow emoji="🍷" label="Glasses" items={s.glasses || []} onUpdate={items => updSeat(s.id, "glasses", items)} />
+                  <BevEditRow emoji="🍹" label="Cocktails" items={s.cocktails || []} onUpdate={items => updSeat(s.id, "cocktails", items)} />
+                  <BevEditRow emoji="🥃" label="Spirits" items={s.spirits || []} onUpdate={items => updSeat(s.id, "spirits", items)} />
+                  <BevEditRow emoji="🍺" label="Beers" items={s.beers || []} onUpdate={items => updSeat(s.id, "beers", items)} />
                 </div>
               )}
 
@@ -4526,7 +4598,7 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
       {/* MenuGenerator overlay */}
       {menuGenTable && (
         <MenuGenerator
-          table={menuGenTable}
+          table={tables.find(t => t.id === menuGenTable.id) || menuGenTable}
           menuCourses={menuCourses}
           upd={upd}
           defaultLayoutStyles={globalLayout}
