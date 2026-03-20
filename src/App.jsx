@@ -4054,11 +4054,59 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
                         <span style={{ fontFamily: FONT, fontSize: 14, color: "#8ab89a", transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s", display: "inline-block" }}>⌄</span>
                       </div>
                     </div>
-                    {/* Expanded: full KitchenTicket */}
+                    {/* Expanded: KitchenTicket + service data */}
                     {isOpen && (
                       <div style={{ borderTop: "1px solid #d8edd8", padding: "12px 14px", background: "#fff" }}>
-                        <div style={{ width: 248 }}>
-                          <KitchenTicket table={t} menuCourses={menuCourses} upd={null} />
+                        <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+                          {/* Left: full kitchen ticket as shown on display */}
+                          <div style={{ width: 248, flexShrink: 0 }}>
+                            <KitchenTicket table={t} menuCourses={menuCourses} upd={null} />
+                          </div>
+                          {/* Right: service selections — bottles, per-seat beverages & pairings */}
+                          <div style={{ flex: 1, minWidth: 220 }}>
+                            {(t.bottleWines || []).length > 0 && (
+                              <div style={{ marginBottom: 12 }}>
+                                <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Bottles</div>
+                                {(t.bottleWines || []).map((w, wi) => {
+                                  const rawVintage = String(w?.vintage || "").trim();
+                                  const vintage = rawVintage.match(/^\d{4}$/) ? `'${rawVintage.slice(2)}` : rawVintage;
+                                  const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
+                                  const rawCountry = w?.country || "";
+                                  const country = COUNTRY_NAMES[rawCountry] || rawCountry;
+                                  const region = (w?.region || "").replace(new RegExp(`,?\\s*${rawCountry}$`), "").trim();
+                                  const sub = [region, country].filter(Boolean).join(", ") || w?.notes || "";
+                                  return (
+                                    <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 1, marginBottom: 4 }}>
+                                      <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a1a1a", letterSpacing: 0.3 }}>🍾 {title}</span>
+                                      {sub && <span style={{ fontFamily: FONT, fontSize: 11, color: "#5a8fc4" }}>{sub}</span>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Seats</div>
+                            {(t.seats || []).map(s => {
+                              const ws = waterStyle(s.water);
+                              const restr = (t.restrictions || []).filter(r => r.pos === s.id);
+                              const extra = (dishes || []).filter(d => s.extras?.[d.id]?.ordered);
+                              const bevs = [
+                                ...(s.glasses   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.wine })),
+                                ...(s.cocktails || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.cocktail })),
+                                ...(s.spirits   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.spirit })),
+                                ...(s.beers     || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.beer })),
+                              ];
+                              return (
+                                <div key={s.id} style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", padding: "5px 4px", borderBottom: "1px solid #f5f5f5" }}>
+                                  <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#999", minWidth: 26 }}>P{s.id}</span>
+                                  {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
+                                  {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
+                                  {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
+                                  {extra.map(d => <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
+                                  {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -4105,60 +4153,57 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
                 <div style={{ borderTop: "1px solid #f0f0f0" }}>
                   {entryTables.map(t => (
                     <div key={t.id} style={{ padding: "12px 16px", borderBottom: "1px solid #f8f8f8" }}>
-                      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontFamily: FONT, fontSize: 16, fontWeight: 300, color: "#1a1a1a", letterSpacing: 1 }}>{String(t.id).padStart(2,"0")}</span>
-                        {t.resName   && <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 500 }}>{t.resName}</span>}
-                        {t.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a" }}>arr. {t.arrivedAt}</span>}
-                        {t.menuType  && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", border: "1px solid #e8e8e8", borderRadius: 2, color: "#555" }}>{t.menuType}</span>}
-                        {t.birthday  && <span style={{ fontSize: 12 }}>🎂</span>}
-                        {(t.bottleWines || []).map((w, i) => (
-                          <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, border: "1px solid #c8a060", color: "#7a5020", background: "#fdf4e8" }}>🍾 {w.name}</span>
-                        ))}
+                      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+                        {/* Left: full kitchen ticket as shown on display */}
+                        <div style={{ width: 248, flexShrink: 0 }}>
+                          <KitchenTicket table={t} menuCourses={entry.state?.menuCourses || []} upd={null} />
+                        </div>
+                        {/* Right: service selections — bottles, per-seat beverages & pairings */}
+                        <div style={{ flex: 1, minWidth: 220 }}>
+                          {(t.bottleWines || []).length > 0 && (
+                            <div style={{ marginBottom: 12 }}>
+                              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Bottles</div>
+                              {(t.bottleWines || []).map((w, wi) => {
+                                const rawVintage = String(w?.vintage || "").trim();
+                                const vintage = rawVintage.match(/^\d{4}$/) ? `'${rawVintage.slice(2)}` : rawVintage;
+                                const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
+                                const rawCountry = w?.country || "";
+                                const country = COUNTRY_NAMES[rawCountry] || rawCountry;
+                                const region = (w?.region || "").replace(new RegExp(`,?\\s*${rawCountry}$`), "").trim();
+                                const sub = [region, country].filter(Boolean).join(", ") || w?.notes || "";
+                                return (
+                                  <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 1, marginBottom: 4 }}>
+                                    <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a1a1a", letterSpacing: 0.3 }}>🍾 {title}</span>
+                                    {sub && <span style={{ fontFamily: FONT, fontSize: 11, color: "#5a8fc4" }}>{sub}</span>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Seats</div>
+                          {(t.seats || []).map(s => {
+                            const ws    = waterStyle(s.water);
+                            const restr = (t.restrictions || []).filter(r => r.pos === s.id);
+                            const extra = (entry.state?.dishes || dishes).filter(d => s.extras?.[d.id]?.ordered);
+                            const bevs  = [
+                              ...(s.glasses   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.wine })),
+                              ...(s.cocktails || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.cocktail })),
+                              ...(s.spirits   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.spirit })),
+                              ...(s.beers     || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.beer })),
+                            ];
+                            return (
+                              <div key={s.id} style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", padding: "5px 4px", borderBottom: "1px solid #fafafa" }}>
+                                <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#999", minWidth: 26 }}>P{s.id}</span>
+                                {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
+                                {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
+                                {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
+                                {extra.map(d => <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
+                                {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                      {(t.seats || []).map(s => {
-                        const ws    = waterStyle(s.water);
-                        const restr = (t.restrictions || []).filter(r => r.pos === s.id);
-                        const extra = (entry.state?.dishes || dishes).filter(d => s.extras?.[d.id]?.ordered);
-                        const bevs  = [
-                          ...(s.glasses   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.wine })),
-                          ...(s.cocktails || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.cocktail })),
-                          ...(s.spirits   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.spirit })),
-                          ...(s.beers     || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.beer })),
-                        ];
-                        return (
-                          <div key={s.id} style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", padding: "5px 4px", borderBottom: "1px solid #fafafa" }}>
-                            <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#999", minWidth: 26 }}>P{s.id}</span>
-                            {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
-                            {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
-                            {bevs.map((b, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
-                            {extra.map(d => <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
-                            {restr.map((r, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
-                          </div>
-                        );
-                      })}
-                      {/* Kitchen log for this table */}
-                      {(() => {
-                        const klog = t.kitchenLog || {};
-                        const fired = Object.entries(klog)
-                          .map(([courseKey, v]) => {
-                            const course = (entry.state?.menuCourses || []).find(c => c.course_key === courseKey);
-                            const name = course?.menu?.name || courseKey;
-                            return { name, firedAt: v.firedAt || "" };
-                          })
-                          .filter(e => e.firedAt)
-                          .sort((a, b) => a.firedAt.localeCompare(b.firedAt));
-                        if (!fired.length) return null;
-                        return (
-                          <div style={{ padding: "6px 4px 2px", display: "flex", flexWrap: "wrap", gap: "4px 10px", alignItems: "center" }}>
-                            <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", letterSpacing: 1, textTransform: "uppercase" }}>Kitchen</span>
-                            {fired.map((e, i) => (
-                              <span key={i} style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a" }}>
-                                {e.firedAt} <span style={{ color: "#888" }}>{e.name}</span>
-                              </span>
-                            ))}
-                          </div>
-                        );
-                      })()}
                     </div>
                   ))}
                 </div>
