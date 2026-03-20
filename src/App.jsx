@@ -613,6 +613,12 @@ function generateMenuHTML({ seat, table, menuTitle = "WINTER MENU", teamNames = 
       }
     }
 
+    // First aperitivo appears as a wine-only row above the first course (right column, no left)
+    // Subsequent aperitivos fill the right column of course rows
+    if (courseRowsSeen === 0 && aperitivoQueue.length > 0) {
+      rows.push({ type: "wine-only", right: fmtDrinkParts(aperitivoQueue.shift()) });
+    }
+
     if ((courseKey === "chicken_gizzard" || courseName === "CHICKEN GIZZARD") && selectedBeer) {
       // For SI menus with default beer list, prefer the course's SI pairing variants
       if (lang === "si" && beers.length === 0) {
