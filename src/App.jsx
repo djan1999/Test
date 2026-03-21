@@ -4020,7 +4020,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
 }
 
 // ── Header ────────────────────────────────────────────────────────────────────
-function Header({ modeLabel, showAddRes = false, showSummary = false, showMenu = false, showArchive = false, syncLabel, syncLive, activeCount, reserved, seated, onExit, onMenu, onSummary, onArchive, onAddRes }) {
+function Header({ modeLabel, showAddRes = false, showSummary = false, showMenu = false, showArchive = false, showInventory = false, syncLabel, syncLive, activeCount, reserved, seated, onExit, onMenu, onSummary, onArchive, onAddRes, onInventory }) {
   const modeColor = modeLabel === "ADMIN" ? "#4b4b88" : modeLabel === "SERVICE" ? "#2f7a45" : "#555";
   return (
     <div style={{
@@ -4043,6 +4043,9 @@ function Header({ modeLabel, showAddRes = false, showSummary = false, showMenu =
           )}
           {showMenu && (
             <button onClick={onMenu} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#1a1a1a" }}>MENU</button>
+          )}
+          {showInventory && (
+            <button onClick={onInventory} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #c8d8e8", borderRadius: 999, cursor: "pointer", background: "#f0f6ff", color: "#3060a0" }}>INVENTORY</button>
           )}
           {showArchive && (
             <button onClick={onArchive} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #e8d8b8", borderRadius: 999, cursor: "pointer", background: "#fff8f0", color: "#8a6030" }}>ARCHIVE</button>
@@ -4549,6 +4552,178 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
   );
 }
 
+// ── Inventory Modal ───────────────────────────────────────────────────────────
+function InventoryModal({ wines, onClose }) {
+  const [counts, setCounts]   = useState({});
+  const [search, setSearch]   = useState("");
+
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? wines.filter(w =>
+        (w.name     || "").toLowerCase().includes(q) ||
+        (w.producer || "").toLowerCase().includes(q) ||
+        (w.vintage  || "").toLowerCase().includes(q)
+      )
+    : wines;
+
+  const inc      = id => setCounts(c => ({ ...c, [id]: (c[id] || 0) + 1 }));
+  const dec      = id => setCounts(c => ({ ...c, [id]: Math.max(0, (c[id] || 0) - 1) }));
+  const setCount = (id, val) => {
+    const n = parseInt(val, 10);
+    setCounts(c => ({ ...c, [id]: isNaN(n) || n < 0 ? 0 : n }));
+  };
+  const clearAll = () => {
+    if (window.confirm("Clear all bottle counts?")) setCounts({});
+  };
+
+  const handlePrint = () => {
+    // Group all wines (not just filtered) by country
+    const byCountry = {};
+    wines.forEach(w => {
+      const country = COUNTRY_NAMES[w.country] || w.country || "Other";
+      if (!byCountry[country]) byCountry[country] = [];
+      byCountry[country].push(w);
+    });
+    const total = wines.reduce((s, w) => s + (counts[w.id] || 0), 0);
+    const dateStr = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+
+    const rows = (ws) => ws.map(w => {
+      const n = counts[w.id] || 0;
+      const rawVin = String(w.vintage || "").trim();
+      const vin = rawVin.match(/^\d{4}$/) ? `'${rawVin.slice(2)}` : rawVin;
+      const sub = [w.region, COUNTRY_NAMES[w.country] || w.country].filter(Boolean).join(", ");
+      return `<tr>
+        <td style="padding:5px 4px;border-bottom:1px solid #f0f0f0;vertical-align:top;">
+          <div style="font-weight:600;">${w.producer} ${w.name} <span style="font-weight:400;color:#888;">${vin}</span></div>
+          ${sub ? `<div style="font-size:9px;color:#aaa;margin-top:1px;">${sub}</div>` : ""}
+        </td>
+        <td style="padding:5px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-size:15px;font-weight:700;color:${n > 0 ? "#1a1a1a" : "#ddd"};white-space:nowrap;width:48px;">${n}</td>
+      </tr>`;
+    }).join("");
+
+    const sections = Object.entries(byCountry)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([country, ws]) => `
+        <div style="margin-bottom:20px;">
+          <div style="font-size:9px;letter-spacing:3px;color:#888;text-transform:uppercase;border-bottom:1px solid #e0e0e0;padding-bottom:4px;margin-bottom:6px;">${country}</div>
+          <table style="width:100%;border-collapse:collapse;">${rows(ws)}</table>
+        </div>`).join("");
+
+    const html = `<html><head><title>Wine Inventory · ${dateStr}</title>
+      <style>
+        body{font-family:'Roboto Mono',monospace;font-size:11px;padding:24px;color:#1a1a1a;}
+        @media print{body{padding:12px;}}
+      </style></head>
+      <body>
+        <div style="font-size:14px;font-weight:600;letter-spacing:4px;margin-bottom:4px;">WINE INVENTORY</div>
+        <div style="font-size:9px;letter-spacing:2px;color:#888;margin-bottom:24px;">${dateStr} · ${total} bottle${total !== 1 ? "s" : ""} total</div>
+        ${sections}
+        <div style="font-size:11px;font-weight:700;text-align:right;padding-top:12px;border-top:1px solid #e0e0e0;">TOTAL: ${total} bottles</div>
+      </body></html>`;
+
+    const w = window.open("", "_blank");
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 500);
+  };
+
+  const totalCounted = Object.values(counts).reduce((s, n) => s + n, 0);
+
+  const actions = (
+    <div style={{ display: "flex", gap: 8 }}>
+      <button onClick={clearAll} style={{
+        fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px",
+        border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888",
+      }}>CLEAR ALL</button>
+      <button onClick={handlePrint} style={{
+        fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
+        border: "1px solid #3060a0", borderRadius: 2, cursor: "pointer", background: "#f0f6ff", color: "#3060a0",
+      }}>PRINT</button>
+    </div>
+  );
+
+  return (
+    <FullModal title="Wine Inventory" onClose={onClose} actions={actions}>
+      <div style={{ maxWidth: 700, margin: "0 auto" }}>
+
+        {/* Search */}
+        <div style={{ marginBottom: 16 }}>
+          <input
+            autoFocus
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search wine, producer, vintage…"
+            style={{ ...baseInp, width: "100%", fontSize: 16, boxSizing: "border-box" }}
+          />
+        </div>
+
+        {/* Wine rows */}
+        {filtered.length === 0 && (
+          <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", padding: "40px 0", textAlign: "center" }}>No wines found</div>
+        )}
+        {filtered.map(w => {
+          const count = counts[w.id] || 0;
+          const rawVin = String(w.vintage || "").trim();
+          const vin = rawVin.match(/^\d{4}$/) ? `'${rawVin.slice(2)}` : rawVin;
+          const sub = [w.region, COUNTRY_NAMES[w.country] || w.country].filter(Boolean).join(", ");
+          return (
+            <div key={w.id} style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "10px 4px", borderBottom: "1px solid #f5f5f5",
+            }}>
+              {/* Wine info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>
+                  {w.producer}{" "}
+                  <span style={{ fontWeight: 400 }}>{w.name}</span>
+                  <span style={{ color: "#aaa", marginLeft: 6, fontSize: 11 }}>{vin}</span>
+                </div>
+                {sub && <div style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", marginTop: 2 }}>{sub}</div>}
+              </div>
+
+              {/* Counter */}
+              <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                <button onClick={() => dec(w.id)} style={{
+                  fontFamily: FONT, fontSize: 18, width: 38, height: 38,
+                  border: "1px solid #e8e8e8", borderRadius: "2px 0 0 2px",
+                  borderRight: "none", cursor: "pointer", background: "#fff", color: "#888",
+                  display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
+                }}>−</button>
+                <input
+                  type="number" min={0}
+                  value={count === 0 ? "" : count}
+                  onChange={e => setCount(w.id, e.target.value)}
+                  placeholder="0"
+                  style={{
+                    fontFamily: FONT, fontSize: 14, width: 46, height: 38,
+                    border: "1px solid #e8e8e8", outline: "none", textAlign: "center",
+                    color: count > 0 ? "#1a1a1a" : "#ccc", fontWeight: count > 0 ? 700 : 400,
+                    boxSizing: "border-box", WebkitAppearance: "none", MozAppearance: "textfield",
+                  }}
+                />
+                <button onClick={() => inc(w.id)} style={{
+                  fontFamily: FONT, fontSize: 18, width: 38, height: 38,
+                  border: "1px solid #3060a0", borderRadius: "0 2px 2px 0",
+                  borderLeft: "none", cursor: "pointer", background: "#f0f6ff", color: "#3060a0",
+                  display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
+                }}>+</button>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Running total */}
+        {wines.length > 0 && (
+          <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", textAlign: "right", padding: "14px 4px 0" }}>
+            {totalCounted} bottle{totalCounted !== 1 ? "s" : ""} counted
+          </div>
+        )}
+      </div>
+    </FullModal>
+  );
+}
+
 // ── Access gate constants ─────────────────────────────────────────────────────
 const PINS            = { admin: "3412", menu: "3412" };
 const ACCESS_PASSWORD = "milka2025";          // ← change to your own password
@@ -5048,9 +5223,10 @@ export default function App() {
   const [quickView,    setQuickView]    = useState("board");
   const [resModal,     setResModal]     = useState(null);
   const [resModalPresetTime, setResModalPresetTime] = useState(null);
-  const [adminOpen,    setAdminOpen]    = useState(false);
-  const [summaryOpen,  setSummaryOpen]  = useState(false);
-  const [archiveOpen,  setArchiveOpen]  = useState(false);
+  const [adminOpen,      setAdminOpen]      = useState(false);
+  const [summaryOpen,    setSummaryOpen]    = useState(false);
+  const [archiveOpen,    setArchiveOpen]    = useState(false);
+  const [inventoryOpen,  setInventoryOpen]  = useState(false);
   const [syncStatus,   setSyncStatus]   = useState(hasSupabaseConfig ? "connecting" : "local-only");
   const [logoDataUri,  setLogoDataUri]  = useState("");
   // Access gate: checked once at init against 12h TTL
@@ -5565,6 +5741,7 @@ export default function App() {
     onMenu: () => setAdminOpen(true),
     onSummary: () => setSummaryOpen(true),
     onArchive: () => setArchiveOpen(true),
+    onInventory: () => setInventoryOpen(true),
     onAddRes: () => {
       const freeTable = tables.find(t => !t.active && !t.resName && !t.resTime);
       if (freeTable) { setResModalPresetTime(null); setResModal(freeTable.id); }
@@ -5605,7 +5782,7 @@ export default function App() {
   if (mode === "display") return (
     <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
-      <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={true} {...hProps} />
+      <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={true} showInventory={true} {...hProps} />
       <div style={{ padding: "20px 24px" }}>
         <KitchenBoard tables={tables} menuCourses={effectiveMenuCourses} upd={upd} />
       </div>
@@ -5619,6 +5796,7 @@ export default function App() {
           menuCourses={effectiveMenuCourses}
         />
       )}
+      {inventoryOpen && <InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} />}
     </div>
   );
 
@@ -5654,6 +5832,7 @@ export default function App() {
         showAddRes={mode === "admin"}
         showMenu={mode === "admin"}
         showArchive={true}
+        showInventory={true}
         {...hProps}
       />
 
@@ -5836,6 +6015,7 @@ export default function App() {
           menuCourses={effectiveMenuCourses}
         />
       )}
+      {inventoryOpen && <InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} />}
     </div>
   );
 }
