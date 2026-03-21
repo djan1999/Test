@@ -199,9 +199,16 @@ export function generateMenuHTML({
     let drink = pkey ? (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]) : null;
 
     if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
-      const fpName = (lang === "si" && course.force_pairing_title_si) ? course.force_pairing_title_si : (course.force_pairing_title || "KITCHEN MARTINI");
-      const fpSub  = (lang === "si" && course.force_pairing_sub_si)   ? course.force_pairing_sub_si   : (course.force_pairing_sub   || "");
-      drink = { name: fpName, sub: fpSub };
+      // Defensively split in case legacy DB rows store both languages in one field (newline-separated)
+      const fpTitleLines = String(course.force_pairing_title || "").split("\n").map(s => s.trim());
+      const fpSubLines   = String(course.force_pairing_sub   || "").split("\n").map(s => s.trim());
+      const fpTitleEn = fpTitleLines[0] || "KITCHEN MARTINI";
+      const fpTitleSi = course.force_pairing_title_si || fpTitleLines[1] || fpTitleEn;
+      const fpSubEn   = fpSubLines[0] || "";
+      const fpSubSi   = course.force_pairing_sub_si   || fpSubLines[1] || fpSubEn;
+      drink = lang === "si"
+        ? { name: fpTitleSi, sub: fpSubSi }
+        : { name: fpTitleEn, sub: fpSubEn };
     }
 
     const beetrootExtra = extras[1];

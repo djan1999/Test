@@ -127,6 +127,8 @@ create table if not exists public.menu_courses (
   short_order integer,
   force_pairing_title text not null default '',
   force_pairing_sub text not null default '',
+  force_pairing_title_si text not null default '',
+  force_pairing_sub_si text not null default '',
   kitchen_note text not null default '',
   updated_at timestamptz not null default now()
 );
@@ -146,6 +148,8 @@ alter table public.menu_courses
   add column if not exists short_order integer,
   add column if not exists force_pairing_title text not null default '',
   add column if not exists force_pairing_sub text not null default '',
+  add column if not exists force_pairing_title_si text not null default '',
+  add column if not exists force_pairing_sub_si text not null default '',
   add column if not exists kitchen_note text not null default '';
 
 alter table public.menu_courses enable row level security;
