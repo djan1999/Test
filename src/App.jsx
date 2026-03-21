@@ -4594,6 +4594,9 @@ function InventoryModal({ wines, onClose }) {
   });
   Object.entries(myCounts).forEach(([wid, n]) => { if (n > 0) displayCounts[wid] = n; });
 
+  // Format count: 3 → "3", 3.5 → "3½"
+  const fmtCount = n => n % 1 >= 0.5 ? `${Math.floor(n)}½` : String(Math.floor(n));
+
   // Per-device totals (for footer)
   const deviceTotals = Object.entries(allDevices)
     .map(([did, dev]) => ({
@@ -4633,12 +4636,25 @@ function InventoryModal({ wines, onClose }) {
     });
   };
 
-  const inc      = id => applyUpdate(c => ({ ...c, [id]: (c[id] || 0) + 1 }));
-  const dec      = id => applyUpdate(c => ({ ...c, [id]: Math.max(0, (c[id] || 0) - 1) }));
+  const inc      = id => applyUpdate(c => {
+    const cur = c[id] || 0; const half = cur % 1 >= 0.5 ? 0.5 : 0;
+    return { ...c, [id]: Math.floor(cur) + 1 + half };
+  });
+  const dec      = id => applyUpdate(c => {
+    const cur = c[id] || 0; const half = cur % 1 >= 0.5 ? 0.5 : 0;
+    return { ...c, [id]: Math.max(0, Math.floor(cur) - 1) + half };
+  });
   const setCount = (id, val) => {
     const n = parseInt(val, 10);
-    applyUpdate(c => ({ ...c, [id]: isNaN(n) || n < 0 ? 0 : n }));
+    applyUpdate(c => {
+      const half = (c[id] || 0) % 1 >= 0.5 ? 0.5 : 0;
+      return { ...c, [id]: isNaN(n) || n < 0 ? 0 + half : n + half };
+    });
   };
+  const togglePartial = id => applyUpdate(c => {
+    const cur = c[id] || 0;
+    return { ...c, [id]: cur % 1 >= 0.5 ? Math.floor(cur) : cur + 0.5 };
+  });
   const clearAll = () => {
     if (window.confirm("Clear YOUR counts on this device? Other devices are not affected.")) applyUpdate({});
   };
@@ -4726,7 +4742,7 @@ function InventoryModal({ wines, onClose }) {
       byCountry[country].push(w);
     });
     const dateStr = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-    const deviceSummary = deviceTotals.map(d => `${d.label}: ${d.total}`).join(" · ");
+    const deviceSummary = deviceTotals.map(d => `${d.label}: ${fmtCount(d.total)}`).join(" · ");
 
     const rows = ws => ws.map(w => {
       const n      = displayCounts[w.id] || 0;
@@ -4738,7 +4754,7 @@ function InventoryModal({ wines, onClose }) {
           <div style="font-weight:600;">${w.producer} ${w.name} <span style="font-weight:400;color:#888;">${vin}</span></div>
           ${sub ? `<div style="font-size:9px;color:#aaa;margin-top:1px;">${sub}</div>` : ""}
         </td>
-        <td style="padding:5px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-size:15px;font-weight:700;color:${n > 0 ? "#1a1a1a" : "#ddd"};white-space:nowrap;width:48px;">${n}</td>
+        <td style="padding:5px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-size:15px;font-weight:700;color:${n > 0 ? "#1a1a1a" : "#ddd"};white-space:nowrap;width:48px;">${fmtCount(n)}</td>
       </tr>`;
     }).join("");
 
@@ -4755,9 +4771,9 @@ function InventoryModal({ wines, onClose }) {
       </head><body>
         <div style="font-size:14px;font-weight:600;letter-spacing:4px;margin-bottom:4px;">WINE INVENTORY</div>
         <div style="font-size:9px;letter-spacing:2px;color:#888;margin-bottom:4px;">${dateStr}</div>
-        ${deviceTotals.length > 1 ? `<div style="font-size:9px;color:#888;margin-bottom:20px;">${deviceSummary} · TOTAL: ${grandTotal}</div>` : `<div style="font-size:9px;color:#888;margin-bottom:20px;">Total: ${grandTotal} bottles</div>`}
+        ${deviceTotals.length > 1 ? `<div style="font-size:9px;color:#888;margin-bottom:20px;">${deviceSummary} · TOTAL: ${fmtCount(grandTotal)}</div>` : `<div style="font-size:9px;color:#888;margin-bottom:20px;">Total: ${fmtCount(grandTotal)} bottles</div>`}
         ${sections}
-        <div style="font-size:11px;font-weight:700;text-align:right;padding-top:12px;border-top:1px solid #e0e0e0;">TOTAL: ${grandTotal} bottles</div>
+        <div style="font-size:11px;font-weight:700;text-align:right;padding-top:12px;border-top:1px solid #e0e0e0;">TOTAL: ${fmtCount(grandTotal)} bottles</div>
       </body></html>`;
 
     const w = window.open("", "_blank");
@@ -4805,14 +4821,18 @@ function InventoryModal({ wines, onClose }) {
           <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", padding: "40px 0", textAlign: "center" }}>No wines found</div>
         )}
         {filtered.map(w => {
-          const myCount  = myCounts[w.id] || 0;
-          const rawVin   = String(w.vintage || "").trim();
-          const vin      = rawVin.match(/^\d{4}$/) ? `'${rawVin.slice(2)}` : rawVin;
-          const sub      = [w.region, COUNTRY_NAMES[w.country] || w.country].filter(Boolean).join(", ");
-          // Other devices' count for this wine
-          const othersCount = Object.entries(allDevices)
+          const myCount   = myCounts[w.id] || 0;
+          const fullBtls  = Math.floor(myCount);
+          const isPartial = myCount % 1 >= 0.5;
+          const rawVin    = String(w.vintage || "").trim();
+          const vin       = rawVin.match(/^\d{4}$/) ? `'${rawVin.slice(2)}` : rawVin;
+          const sub       = [w.region, COUNTRY_NAMES[w.country] || w.country].filter(Boolean).join(", ");
+          const othersRaw = Object.entries(allDevices)
             .filter(([did]) => did !== myId.current)
             .reduce((s, [, dev]) => s + (dev.counts?.[w.id] || 0), 0);
+          const othersLabel = othersRaw > 0
+            ? (othersRaw % 1 >= 0.5 ? `${Math.floor(othersRaw)}½` : String(othersRaw))
+            : null;
           return (
             <div key={w.id} style={{
               display: "flex", alignItems: "center", gap: 12,
@@ -4827,11 +4847,11 @@ function InventoryModal({ wines, onClose }) {
                 {sub && <div style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", marginTop: 2 }}>{sub}</div>}
               </div>
               {/* Other device count badge */}
-              {othersCount > 0 && (
+              {othersLabel && (
                 <span style={{
                   fontFamily: FONT, fontSize: 9, color: "#4a80c0", background: "#eaf0fc",
                   border: "1px solid #c8d8f0", borderRadius: 3, padding: "2px 7px", flexShrink: 0,
-                }}>{othersCount}</span>
+                }}>{othersLabel}</span>
               )}
               {/* My counter */}
               <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
@@ -4843,7 +4863,7 @@ function InventoryModal({ wines, onClose }) {
                 }}>−</button>
                 <input
                   type="number" min={0}
-                  value={myCount === 0 ? "" : myCount}
+                  value={fullBtls === 0 ? "" : fullBtls}
                   onChange={e => setCount(w.id, e.target.value)}
                   placeholder="0"
                   style={{
@@ -4855,10 +4875,19 @@ function InventoryModal({ wines, onClose }) {
                 />
                 <button onClick={() => inc(w.id)} style={{
                   fontFamily: FONT, fontSize: 18, width: 38, height: 38,
-                  border: "1px solid #3060a0", borderRadius: "0 2px 2px 0", borderLeft: "none",
+                  border: "1px solid #3060a0", borderRight: "none",
                   cursor: "pointer", background: "#f0f6ff", color: "#3060a0",
                   display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
                 }}>+</button>
+                <button onClick={() => togglePartial(w.id)} style={{
+                  fontFamily: FONT, fontSize: 10, width: 32, height: 38,
+                  border: isPartial ? "1px solid #e07840" : "1px solid #e8e8e8",
+                  borderRadius: "0 2px 2px 0", borderLeft: "none",
+                  cursor: "pointer",
+                  background: isPartial ? "#fff4ee" : "#fafafa",
+                  color: isPartial ? "#e07840" : "#ccc",
+                  display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
+                }}>½</button>
               </div>
             </div>
           );
@@ -4875,13 +4904,13 @@ function InventoryModal({ wines, onClose }) {
                   background: d.isMe ? "#f0f6ff" : "#f8f8f8",
                   color: d.isMe ? "#3060a0" : "#888",
                 }}>
-                  {d.label}{d.isMe ? " (you)" : ""}: {d.total}
+                  {d.label}{d.isMe ? " (you)" : ""}: {fmtCount(d.total)}
                 </span>
               ))}
               <span style={{
                 fontFamily: FONT, fontSize: 10, fontWeight: 700, color: "#1a1a1a",
                 padding: "3px 10px", borderRadius: 999, border: "1px solid #1a1a1a", background: "#fff",
-              }}>TOTAL: {grandTotal}</span>
+              }}>TOTAL: {fmtCount(grandTotal)}</span>
             </div>
           </div>
         )}
