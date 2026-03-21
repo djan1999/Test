@@ -5572,7 +5572,7 @@ export default function App() {
         showSummary={true}
         showAddRes={mode === "admin"}
         showMenu={mode === "admin"}
-        showArchive={mode === "admin"}
+        showArchive={true}
         {...hProps}
       />
 
