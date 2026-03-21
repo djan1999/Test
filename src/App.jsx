@@ -4203,28 +4203,37 @@ function SummaryModal({ tables, dishes = [], onClose }) {
 
 // ── Archive Modal ─────────────────────────────────────────────────────────────
 function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, onRestoreTicket, menuCourses }) {
-  const [entries, setEntries]   = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [expanded, setExpanded] = useState(null);
-  const [deleting, setDeleting] = useState(null);
-
+  const [entries, setEntries]         = useState([]);
+  const [deleted, setDeleted]         = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [expanded, setExpanded]       = useState(null);
+  const [deleting, setDeleting]       = useState(null);
+  const [showTrash, setShowTrash]     = useState(false);
 
   const loadEntries = () => {
     if (!supabase) { setLoading(false); return; }
     setLoading(true);
-    supabase.from("service_archive").select("*").order("created_at", { ascending: false }).limit(60)
-      .then(({ data, error }) => { setEntries(error ? [] : (data || [])); setLoading(false); });
+    Promise.all([
+      supabase.from("service_archive").select("*").is("deleted_at", null).order("created_at", { ascending: false }).limit(60),
+      supabase.from("service_archive").select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(30),
+    ]).then(([active, trash]) => {
+      setEntries(active.error ? [] : (active.data || []));
+      setDeleted(trash.error ? [] : (trash.data || []));
+      setLoading(false);
+    });
   };
   useEffect(loadEntries, []);
 
   const deleteEntry = async id => {
     if (!supabase) return;
     setDeleting(id);
-    const { error } = await supabase.from("service_archive").delete().eq("id", id);
+    const { error } = await supabase.from("service_archive").update({ deleted_at: new Date().toISOString() }).eq("id", id);
     if (error) {
-      alert("Delete failed: " + error.message + "\n\nYou may need to enable DELETE on the service_archive table in Supabase (Policies → anon → DELETE).");
+      alert("Delete failed: " + error.message + "\n\nYou may need to enable UPDATE on the service_archive table in Supabase (Policies → anon → UPDATE).");
     } else {
+      const entry = entries.find(x => x.id === id);
       setEntries(e => e.filter(x => x.id !== id));
+      if (entry) setDeleted(d => [{ ...entry, deleted_at: new Date().toISOString() }, ...d]);
       if (expanded === id) setExpanded(null);
     }
     setDeleting(null);
@@ -4232,14 +4241,43 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
 
   const deleteAll = async () => {
     if (!supabase) return;
-    if (!window.confirm("Delete ALL archive entries? This cannot be undone.")) return;
+    if (!window.confirm("Move ALL archive entries to trash? You can restore them from Recently Deleted.")) return;
     setDeleting("all");
-    const { error } = await supabase.from("service_archive").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    const now = new Date().toISOString();
+    const { error } = await supabase.from("service_archive").update({ deleted_at: now }).is("deleted_at", null);
     if (error) {
-      alert("Delete failed: " + error.message + "\n\nYou may need to enable DELETE on the service_archive table in Supabase (Policies → anon → DELETE).");
+      alert("Delete failed: " + error.message + "\n\nYou may need to enable UPDATE on the service_archive table in Supabase (Policies → anon → UPDATE).");
     } else {
+      setDeleted(d => [...entries.map(e => ({ ...e, deleted_at: now })), ...d]);
       setEntries([]);
       setExpanded(null);
+    }
+    setDeleting(null);
+  };
+
+  const restoreEntry = async id => {
+    if (!supabase) return;
+    setDeleting(id);
+    const { error } = await supabase.from("service_archive").update({ deleted_at: null }).eq("id", id);
+    if (error) {
+      alert("Restore failed: " + error.message);
+    } else {
+      const entry = deleted.find(x => x.id === id);
+      setDeleted(d => d.filter(x => x.id !== id));
+      if (entry) setEntries(e => [{ ...entry, deleted_at: null }, ...e].sort((a, b) => b.created_at.localeCompare(a.created_at)));
+    }
+    setDeleting(null);
+  };
+
+  const emptyTrash = async () => {
+    if (!supabase) return;
+    if (!window.confirm("Permanently delete all trashed entries? This cannot be undone.")) return;
+    setDeleting("trash");
+    const { error } = await supabase.from("service_archive").delete().not("deleted_at", "is", null);
+    if (error) {
+      alert("Empty trash failed: " + error.message);
+    } else {
+      setDeleted([]);
     }
     setDeleting(null);
   };
@@ -4378,7 +4416,7 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
               fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
               border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#e07070",
               opacity: deleting === "all" ? 0.5 : 1,
-            }}>{deleting === "all" ? "DELETING…" : "DELETE ALL"}</button>
+            }}>{deleting === "all" ? "MOVING TO TRASH…" : "DELETE ALL"}</button>
           </div>
         )}
         {entries.map(entry => {
@@ -4463,6 +4501,49 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
             </div>
           );
         })}
+
+        {/* ── Recently Deleted (trash) ── */}
+        {deleted.length > 0 && (
+          <div style={{ marginTop: 32 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <button
+                onClick={() => setShowTrash(v => !v)}
+                style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 3, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+              >
+                Recently Deleted ({deleted.length}) {showTrash ? "▲" : "▼"}
+              </button>
+              {showTrash && (
+                <button onClick={emptyTrash} disabled={deleting === "trash"} style={{
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "4px 12px",
+                  border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#e07070",
+                  opacity: deleting === "trash" ? 0.5 : 1,
+                }}>{deleting === "trash" ? "DELETING…" : "EMPTY TRASH"}</button>
+              )}
+            </div>
+            {showTrash && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {deleted.map(entry => {
+                  const entryTables = entry.state?.tables || [];
+                  const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
+                  const deletedDate = entry.deleted_at ? new Date(entry.deleted_at).toLocaleDateString() : "";
+                  return (
+                    <div key={entry.id} style={{ border: "1px solid #f5f0f0", borderRadius: 4, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fdf8f8", opacity: 0.8 }}>
+                      <div>
+                        <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 500, color: "#888" }}>{entry.label}</div>
+                        <div style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", marginTop: 2 }}>{entryTables.length} tables · {totalGuests} guests · deleted {deletedDate}</div>
+                      </div>
+                      <button onClick={() => restoreEntry(entry.id)} disabled={deleting === entry.id} style={{
+                        fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "4px 12px",
+                        border: "1px solid #b8d8c8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#4a9a6a",
+                        opacity: deleting === entry.id ? 0.5 : 1,
+                      }}>{deleting === entry.id ? "…" : "RESTORE"}</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </FullModal>
   );

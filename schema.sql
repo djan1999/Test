@@ -64,8 +64,13 @@ create table if not exists public.service_archive (
   date date not null,
   label text not null,
   state jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  deleted_at timestamptz default null
 );
+
+-- Migration: add deleted_at to existing service_archive tables
+alter table public.service_archive
+  add column if not exists deleted_at timestamptz default null;
 
 alter table public.service_archive enable row level security;
 
@@ -76,6 +81,10 @@ create policy "service_archive_read" on public.service_archive
 drop policy if exists "service_archive_write" on public.service_archive;
 create policy "service_archive_write" on public.service_archive
   for insert to anon, authenticated with check (true);
+
+drop policy if exists "service_archive_update" on public.service_archive;
+create policy "service_archive_update" on public.service_archive
+  for update to anon, authenticated using (true) with check (true);
 
 drop policy if exists "service_archive_delete" on public.service_archive;
 create policy "service_archive_delete" on public.service_archive
