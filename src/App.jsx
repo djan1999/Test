@@ -4553,9 +4553,114 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
 }
 
 // ── Inventory Modal ───────────────────────────────────────────────────────────
+const INV_LS_KEY      = "milka-inventory-counts";
+const INV_SETTINGS_ID = "inventory";
+
 function InventoryModal({ wines, onClose }) {
-  const [counts, setCounts]   = useState({});
-  const [search, setSearch]   = useState("");
+  const [counts, setCounts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(INV_LS_KEY) || "{}"); } catch { return {}; }
+  });
+  const [search,  setSearch]  = useState("");
+  const [syncSt,  setSyncSt]  = useState("loading"); // loading|synced|saving|offline|error
+
+  const latestCounts = useRef(counts);
+  const saveTimer    = useRef(null);
+
+  // Persist to localStorage + queue Supabase save
+  const applyUpdate = (updater) => {
+    setCounts(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      latestCounts.current = next;
+      try { localStorage.setItem(INV_LS_KEY, JSON.stringify(next)); } catch {}
+      if (supabase) {
+        clearTimeout(saveTimer.current);
+        setSyncSt(st => st === "offline" ? "offline" : "saving");
+        saveTimer.current = setTimeout(async () => {
+          if (!navigator.onLine) { setSyncSt("offline"); return; }
+          const { error } = await supabase.from("service_settings").upsert(
+            { id: INV_SETTINGS_ID, state: { counts: latestCounts.current }, updated_at: new Date().toISOString() },
+            { onConflict: "id" }
+          );
+          setSyncSt(error ? "error" : "synced");
+        }, 1500);
+      }
+      return next;
+    });
+  };
+
+  const inc      = id => applyUpdate(c => ({ ...c, [id]: (c[id] || 0) + 1 }));
+  const dec      = id => applyUpdate(c => ({ ...c, [id]: Math.max(0, (c[id] || 0) - 1) }));
+  const setCount = (id, val) => {
+    const n = parseInt(val, 10);
+    applyUpdate(c => ({ ...c, [id]: isNaN(n) || n < 0 ? 0 : n }));
+  };
+  const clearAll = () => {
+    if (window.confirm("Clear all bottle counts?")) applyUpdate({});
+  };
+
+  // Load from Supabase on mount, merge with any local counts already entered
+  useEffect(() => {
+    if (!supabase) { setSyncSt(navigator.onLine ? "synced" : "offline"); return; }
+    supabase.from("service_settings").select("state").eq("id", INV_SETTINGS_ID).single()
+      .then(({ data, error }) => {
+        if (!error && data?.state?.counts) {
+          const remote = data.state.counts;
+          // Merge: local non-zero values win (user may have already started counting offline)
+          const local = latestCounts.current;
+          const merged = { ...remote };
+          Object.entries(local).forEach(([id, n]) => { if (n > 0) merged[id] = n; });
+          latestCounts.current = merged;
+          setCounts(merged);
+          try { localStorage.setItem(INV_LS_KEY, JSON.stringify(merged)); } catch {}
+        }
+        setSyncSt(navigator.onLine ? "synced" : "offline");
+      });
+  }, []);
+
+  // Online / offline events — flush pending save when back online
+  useEffect(() => {
+    const goOnline = () => {
+      setSyncSt(st => st === "offline" ? "saving" : st);
+      clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(async () => {
+        if (!supabase) return;
+        const { error } = await supabase.from("service_settings").upsert(
+          { id: INV_SETTINGS_ID, state: { counts: latestCounts.current }, updated_at: new Date().toISOString() },
+          { onConflict: "id" }
+        );
+        setSyncSt(error ? "error" : "synced");
+      }, 500);
+    };
+    const goOffline = () => { clearTimeout(saveTimer.current); setSyncSt("offline"); };
+    window.addEventListener("online",  goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => { window.removeEventListener("online", goOnline); window.removeEventListener("offline", goOffline); };
+  }, []);
+
+  // Realtime: receive counts from other devices
+  useEffect(() => {
+    if (!supabase) return;
+    const ch = supabase.channel("milka-inventory")
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "service_settings",
+        filter: `id=eq.${INV_SETTINGS_ID}`,
+      }, payload => {
+        const remote = payload.new?.state?.counts;
+        if (!remote) return;
+        // Merge: remote fills in wines we haven't counted (0); for overlaps, remote wins (last write wins)
+        setCounts(prev => {
+          const merged = { ...prev };
+          Object.entries(remote).forEach(([id, n]) => {
+            if (!prev[id] || prev[id] === 0) merged[id] = n;
+          });
+          latestCounts.current = merged;
+          try { localStorage.setItem(INV_LS_KEY, JSON.stringify(merged)); } catch {}
+          return merged;
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
 
   const q = search.trim().toLowerCase();
   const filtered = q
@@ -4566,32 +4671,31 @@ function InventoryModal({ wines, onClose }) {
       )
     : wines;
 
-  const inc      = id => setCounts(c => ({ ...c, [id]: (c[id] || 0) + 1 }));
-  const dec      = id => setCounts(c => ({ ...c, [id]: Math.max(0, (c[id] || 0) - 1) }));
-  const setCount = (id, val) => {
-    const n = parseInt(val, 10);
-    setCounts(c => ({ ...c, [id]: isNaN(n) || n < 0 ? 0 : n }));
-  };
-  const clearAll = () => {
-    if (window.confirm("Clear all bottle counts?")) setCounts({});
-  };
+  const totalCounted = Object.values(counts).reduce((s, n) => s + n, 0);
+
+  const syncChip = (() => {
+    if (syncSt === "loading")  return { label: "LOADING…",      color: "#aaa",    bg: "#f8f8f8",  border: "#e8e8e8" };
+    if (syncSt === "saving")   return { label: "SAVING…",       color: "#a07020", bg: "#fffbe8",  border: "#e8d888" };
+    if (syncSt === "offline")  return { label: "OFFLINE · SAVED",color: "#c06020", bg: "#fff4ee",  border: "#e8c8a8" };
+    if (syncSt === "error")    return { label: "SYNC ERROR",    color: "#c02020", bg: "#fff0f0",  border: "#e8a8a8" };
+    return                            { label: "SYNCED",         color: "#2f7a45", bg: "#eef8f1",  border: "#8fc39f" };
+  })();
 
   const handlePrint = () => {
-    // Group all wines (not just filtered) by country
     const byCountry = {};
     wines.forEach(w => {
       const country = COUNTRY_NAMES[w.country] || w.country || "Other";
       if (!byCountry[country]) byCountry[country] = [];
       byCountry[country].push(w);
     });
-    const total = wines.reduce((s, w) => s + (counts[w.id] || 0), 0);
+    const total  = wines.reduce((s, w) => s + (counts[w.id] || 0), 0);
     const dateStr = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
-    const rows = (ws) => ws.map(w => {
-      const n = counts[w.id] || 0;
+    const rows = ws => ws.map(w => {
+      const n      = counts[w.id] || 0;
       const rawVin = String(w.vintage || "").trim();
-      const vin = rawVin.match(/^\d{4}$/) ? `'${rawVin.slice(2)}` : rawVin;
-      const sub = [w.region, COUNTRY_NAMES[w.country] || w.country].filter(Boolean).join(", ");
+      const vin    = rawVin.match(/^\d{4}$/) ? `'${rawVin.slice(2)}` : rawVin;
+      const sub    = [w.region, COUNTRY_NAMES[w.country] || w.country].filter(Boolean).join(", ");
       return `<tr>
         <td style="padding:5px 4px;border-bottom:1px solid #f0f0f0;vertical-align:top;">
           <div style="font-weight:600;">${w.producer} ${w.name} <span style="font-weight:400;color:#888;">${vin}</span></div>
@@ -4610,11 +4714,8 @@ function InventoryModal({ wines, onClose }) {
         </div>`).join("");
 
     const html = `<html><head><title>Wine Inventory · ${dateStr}</title>
-      <style>
-        body{font-family:'Roboto Mono',monospace;font-size:11px;padding:24px;color:#1a1a1a;}
-        @media print{body{padding:12px;}}
-      </style></head>
-      <body>
+      <style>body{font-family:'Roboto Mono',monospace;font-size:11px;padding:24px;color:#1a1a1a;}@media print{body{padding:12px;}}</style>
+      </head><body>
         <div style="font-size:14px;font-weight:600;letter-spacing:4px;margin-bottom:4px;">WINE INVENTORY</div>
         <div style="font-size:9px;letter-spacing:2px;color:#888;margin-bottom:24px;">${dateStr} · ${total} bottle${total !== 1 ? "s" : ""} total</div>
         ${sections}
@@ -4628,10 +4729,13 @@ function InventoryModal({ wines, onClose }) {
     setTimeout(() => w.print(), 500);
   };
 
-  const totalCounted = Object.values(counts).reduce((s, n) => s + n, 0);
-
   const actions = (
-    <div style={{ display: "flex", gap: 8 }}>
+    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <span style={{
+        fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "4px 10px",
+        border: `1px solid ${syncChip.border}`, borderRadius: 999,
+        background: syncChip.bg, color: syncChip.color, whiteSpace: "nowrap",
+      }}>{syncChip.label}</span>
       <button onClick={clearAll} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px",
         border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888",
@@ -4663,16 +4767,15 @@ function InventoryModal({ wines, onClose }) {
           <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", padding: "40px 0", textAlign: "center" }}>No wines found</div>
         )}
         {filtered.map(w => {
-          const count = counts[w.id] || 0;
+          const count  = counts[w.id] || 0;
           const rawVin = String(w.vintage || "").trim();
-          const vin = rawVin.match(/^\d{4}$/) ? `'${rawVin.slice(2)}` : rawVin;
-          const sub = [w.region, COUNTRY_NAMES[w.country] || w.country].filter(Boolean).join(", ");
+          const vin    = rawVin.match(/^\d{4}$/) ? `'${rawVin.slice(2)}` : rawVin;
+          const sub    = [w.region, COUNTRY_NAMES[w.country] || w.country].filter(Boolean).join(", ");
           return (
             <div key={w.id} style={{
               display: "flex", alignItems: "center", gap: 12,
               padding: "10px 4px", borderBottom: "1px solid #f5f5f5",
             }}>
-              {/* Wine info */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>
                   {w.producer}{" "}
@@ -4681,13 +4784,11 @@ function InventoryModal({ wines, onClose }) {
                 </div>
                 {sub && <div style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", marginTop: 2 }}>{sub}</div>}
               </div>
-
-              {/* Counter */}
               <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
                 <button onClick={() => dec(w.id)} style={{
                   fontFamily: FONT, fontSize: 18, width: 38, height: 38,
-                  border: "1px solid #e8e8e8", borderRadius: "2px 0 0 2px",
-                  borderRight: "none", cursor: "pointer", background: "#fff", color: "#888",
+                  border: "1px solid #e8e8e8", borderRadius: "2px 0 0 2px", borderRight: "none",
+                  cursor: "pointer", background: "#fff", color: "#888",
                   display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
                 }}>−</button>
                 <input
@@ -4704,8 +4805,8 @@ function InventoryModal({ wines, onClose }) {
                 />
                 <button onClick={() => inc(w.id)} style={{
                   fontFamily: FONT, fontSize: 18, width: 38, height: 38,
-                  border: "1px solid #3060a0", borderRadius: "0 2px 2px 0",
-                  borderLeft: "none", cursor: "pointer", background: "#f0f6ff", color: "#3060a0",
+                  border: "1px solid #3060a0", borderRadius: "0 2px 2px 0", borderLeft: "none",
+                  cursor: "pointer", background: "#f0f6ff", color: "#3060a0",
                   display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
                 }}>+</button>
               </div>
@@ -4713,7 +4814,6 @@ function InventoryModal({ wines, onClose }) {
           );
         })}
 
-        {/* Running total */}
         {wines.length > 0 && (
           <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", textAlign: "right", padding: "14px 4px 0" }}>
             {totalCounted} bottle{totalCounted !== 1 ? "s" : ""} counted
