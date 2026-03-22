@@ -96,30 +96,19 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
     sub: String(baseDish.sub || "").trim(),
   };
 
-  const courseRestrictions = course?.restrictions || {};
-
   for (const key of RESTRICTION_PRIORITY_KEYS) {
     if (!(activeRestrictions || []).includes(key)) continue;
     const mapped = RESTRICTION_COLUMN_MAP[key] || key;
-    const siMapped = lang === "si" ? `${mapped}_si` : null;
-
-    if (courseRestrictions[mapped]) {
-      const next = (siMapped && courseRestrictions[siMapped]) ? courseRestrictions[siMapped] : courseRestrictions[mapped];
-      if (next?.sub) {
-        dish = { name: String(next.name || dish.name).trim(), sub: String(next.sub).trim() };
-      } else if (next?.name) {
-        dish = { name: dish.name, sub: String(next.name).trim() };
+    const enVariant = course?.[mapped] || null;
+    const siVariant = lang === "si" ? (course?.restrictions_si?.[mapped] || null) : null;
+    const variant = (lang === "si" && siVariant) ? siVariant : enVariant;
+    if (variant) {
+      if (variant?.sub) {
+        dish = { name: String(variant.name || dish.name).trim(), sub: String(variant.sub).trim() };
+      } else if (variant?.name) {
+        dish = { name: dish.name, sub: String(variant.name).trim() };
       }
       break;
-    }
-
-    if (mapped === "veg" && course?.veg) {
-      const v = course.veg;
-      if (v?.sub) {
-        dish = { name: String(v.name || dish.name).trim(), sub: String(v.sub).trim() };
-      } else if (v?.name) {
-        dish = { name: dish.name, sub: String(v.name).trim() };
-      }
     }
   }
 
