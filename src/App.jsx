@@ -789,47 +789,100 @@ function BeverageSearch({ wines, cocktails, spirits, beers, onAdd }) {
 }
 
 // ── Menu Sync Tab ─────────────────────────────────────────────────────────────
-function MenuSyncTab({ menuCourses = [], onSyncMenu }) {
-  const [status, setStatus] = useState(null); // null | "syncing" | "ok" | "err"
-  const [msg, setMsg]       = useState("");
+function MenuSyncTab({ menuCourses = [], onSyncMenu, onSyncWines }) {
+  // per-source: null | "syncing" | "ok" | "err"
+  const [menuStatus,  setMenuStatus]  = useState(null);
+  const [menuMsg,     setMenuMsg]     = useState("");
+  const [winesStatus, setWinesStatus] = useState(null);
+  const [winesMsg,    setWinesMsg]    = useState("");
+  const [allSyncing,  setAllSyncing]  = useState(false);
 
-  const handleSync = async () => {
-    setStatus("syncing"); setMsg("");
+  const runMenuSync = async () => {
+    setMenuStatus("syncing"); setMenuMsg("");
     try {
       const r = await onSyncMenu();
-      if (r?.ok) {
-        setStatus("ok");
-        setMsg(`✓ ${r.synced} courses synced`);
-      } else {
-        setStatus("err");
-        setMsg(r?.error || "Sync failed");
-      }
-    } catch(e) {
-      setStatus("err");
-      setMsg(e.message);
-    }
+      if (r?.ok) { setMenuStatus("ok");  setMenuMsg(`✓ ${r.synced} courses`); }
+      else        { setMenuStatus("err"); setMenuMsg(r?.error || "Failed"); }
+    } catch (e) { setMenuStatus("err"); setMenuMsg(e.message); }
   };
+
+  const runWinesSync = async () => {
+    setWinesStatus("syncing"); setWinesMsg("");
+    try {
+      const r = await onSyncWines();
+      if (r?.ok) {
+        const parts = [
+          r.wines      != null ? `${r.wines} wines`      : null,
+          r.cocktails  != null ? `${r.cocktails} cocktails` : null,
+          r.beers      != null ? `${r.beers} beers`      : null,
+          r.spirits    != null ? `${r.spirits} spirits`  : null,
+        ].filter(Boolean);
+        const warn = r.failedCountries?.length ? ` (missed: ${r.failedCountries.join(", ")})` : "";
+        setWinesStatus("ok");
+        setWinesMsg(`✓ ${parts.join(", ")}${warn}`);
+      } else {
+        setWinesStatus("err");
+        setWinesMsg(r?.error || "Failed");
+      }
+    } catch (e) { setWinesStatus("err"); setWinesMsg(e.message); }
+  };
+
+  const handleSyncAll = async () => {
+    setAllSyncing(true);
+    setMenuStatus("syncing");  setMenuMsg("");
+    setWinesStatus("syncing"); setWinesMsg("");
+    await Promise.all([runMenuSync(), runWinesSync()]);
+    setAllSyncing(false);
+  };
+
+  const busy = allSyncing || menuStatus === "syncing" || winesStatus === "syncing";
 
   const pairingCols = ["wp", "na", "os", "premium"];
   const pairingLabels = { wp: "Wine", na: "Non-Alc", os: "Our Story", premium: "Premium" };
 
+  const btnBase = {
+    fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "10px 20px",
+    borderRadius: 2, cursor: busy ? "not-allowed" : "pointer",
+  };
+
   return (
     <div>
       <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 16 }}>
-        Menu Courses — live from Google Sheets
+        Data sync — menu courses &amp; wines
       </div>
 
-      <div style={{ marginBottom: 20, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <button onClick={handleSync} disabled={status === "syncing"} style={{
-          fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "10px 20px",
-          border: "1px solid #c8a96e", borderRadius: 2, cursor: status === "syncing" ? "not-allowed" : "pointer",
-          background: "#c8a96e", color: "#fff",
+      {/* ── Sync All ── */}
+      <div style={{ marginBottom: 16 }}>
+        <button onClick={handleSyncAll} disabled={busy} style={{
+          ...btnBase, border: "1px solid #c8a96e", background: "#c8a96e", color: "#fff", fontSize: 10, padding: "12px 28px",
         }}>
-          {status === "syncing" ? "SYNCING…" : "↻ SYNC FROM GOOGLE SHEETS"}
+          {allSyncing ? "SYNCING ALL…" : "↻ SYNC ALL"}
         </button>
-        {msg && (
-          <span style={{ fontFamily: FONT, fontSize: 10, color: status === "ok" ? "#2a7a2a" : "#c04040" }}>{msg}</span>
-        )}
+      </div>
+
+      {/* ── Individual buttons + status ── */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 24, alignItems: "flex-start" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={runMenuSync} disabled={busy} style={{
+            ...btnBase, border: "1px solid #aaa", background: "#fff", color: "#555",
+          }}>
+            {menuStatus === "syncing" ? "SYNCING…" : "↻ SYNC MENU"}
+          </button>
+          {menuMsg && (
+            <span style={{ fontFamily: FONT, fontSize: 10, color: menuStatus === "ok" ? "#2a7a2a" : "#c04040" }}>{menuMsg}</span>
+          )}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={runWinesSync} disabled={busy} style={{
+            ...btnBase, border: "1px solid #aaa", background: "#fff", color: "#555",
+          }}>
+            {winesStatus === "syncing" ? "SYNCING…" : "↻ SYNC WINES"}
+          </button>
+          {winesMsg && (
+            <span style={{ fontFamily: FONT, fontSize: 10, color: winesStatus === "ok" ? "#2a7a2a" : "#c04040" }}>{winesMsg}</span>
+          )}
+        </div>
       </div>
 
       <div style={{ fontSize: 9, fontFamily: FONT, color: "#bbb", marginBottom: 16, letterSpacing: 1 }}>
@@ -5084,7 +5137,7 @@ function GateScreen({ onPass }) {
 }
 
 // ── Menu Page ─────────────────────────────────────────────────────────────────
-function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSaveMenuOverrides, onSyncMenu, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], onExit }) {
+function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSaveMenuOverrides, onSyncMenu, onSyncWines, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], onExit }) {
   const [tab, setTab]                   = useState("print");
   const [menuGenTable, setMenuGenTable] = useState(null);
   const [globalLayout, setGlobalLayout] = useState(() => {
@@ -5276,7 +5329,7 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
 
         {/* ── SYNC ── */}
         {tab === "sync" && (
-          <MenuSyncTab menuCourses={menuCourses} onSyncMenu={onSyncMenu} />
+          <MenuSyncTab menuCourses={menuCourses} onSyncMenu={onSyncMenu} onSyncWines={onSyncWines} />
         )}
 
         {/* ── OVERRIDES ── */}
@@ -5570,6 +5623,19 @@ export default function App() {
       const json = await r.json();
       if (!r.ok) return { ok: false, error: json.error || String(r.status) };
       return { ok: true, synced: json.synced };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  const syncWines = async () => {
+    try {
+      const secret = import.meta.env.VITE_SYNC_SECRET || import.meta.env.VITE_CRON_SECRET || "";
+      const url = secret ? `/api/sync-wines?secret=${encodeURIComponent(secret)}` : "/api/sync-wines";
+      const r = await fetch(url);
+      const json = await r.json();
+      if (!r.ok) return { ok: false, error: json.error || String(r.status) };
+      return { ok: true, wines: json.wines, cocktails: json.cocktails, beers: json.beers, spirits: json.spirits, failedCountries: json.failedCountries };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -6012,6 +6078,7 @@ export default function App() {
         onSetMenuOverrides={setMenuOverrides}
         onSaveMenuOverrides={saveMenuOverrides}
         onSyncMenu={syncMenu}
+        onSyncWines={syncWines}
         upd={upd}
         logoDataUri={logoDataUri}
         wines={wines}
