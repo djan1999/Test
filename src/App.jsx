@@ -4144,8 +4144,14 @@ function Header({ modeLabel, showAddRes = false, showSummary = false, showMenu =
   const handleSyncAll = async () => {
     if (!onSyncAll || sSt === "syncing") return;
     setSSt("syncing");
-    const r = await onSyncAll();
-    setSSt(r?.ok ? "ok" : "err");
+    try {
+      const r = await onSyncAll();
+      console.log("[Sync]", r);
+      setSSt(r?.ok ? "ok" : "err");
+    } catch (e) {
+      console.error("[Sync] threw:", e);
+      setSSt("err");
+    }
     setTimeout(() => setSSt(null), 3000);
   };
   return (
@@ -5419,8 +5425,14 @@ function LoginScreen({ onEnter, onSyncAll }) {
   const handleSync = async () => {
     if (!onSyncAll || syncSt === "syncing") return;
     setSyncSt("syncing");
-    const r = await onSyncAll();
-    setSyncSt(r?.ok ? "ok" : "err");
+    try {
+      const r = await onSyncAll();
+      console.log("[LoginSync]", r);
+      setSyncSt(r?.ok ? "ok" : "err");
+    } catch (e) {
+      console.error("[LoginSync] threw:", e);
+      setSyncSt("err");
+    }
     setTimeout(() => setSyncSt(null), 3000);
   };
 
