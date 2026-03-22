@@ -168,6 +168,8 @@ export function generateMenuHTML({
   });
   visibleCourses.sort((a, b) => a.orderValue - b.orderValue);
 
+  const DANUBE_SALMON_IDX = visibleCourses.find(vc => vc.courseKey === DANUBE_SALMON_KEY)?.i ?? Infinity;
+
   let rows = [];
   const hasPairing = !!pkey;
   const bottleQueue = hasPairing ? [] : [...tableBottles];
