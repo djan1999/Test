@@ -100,6 +100,75 @@ function normalizeLiveMenuRow(row) {
 }
 
 async function fetchLiveMenuCourses() {
+  // Primary: read from Supabase menu_courses table
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("menu_courses")
+        .select("*")
+        .order("position", { ascending: true });
+      if (!error && data && data.length > 0) {
+        const DIETARY_KEYS = [
+          "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
+          "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
+          "no_garlic_onion","halal","low_fodmap",
+        ];
+        const courses = data.map(r => {
+          const restrictions = {};
+          DIETARY_KEYS.forEach(k => { restrictions[k] = r[k] ?? null; });
+          const rSi = r.restrictions_si || {};
+          Object.entries(rSi).forEach(([k, v]) => {
+            if (k.endsWith("__note")) {
+              if (v) restrictions[k.slice(0, -"__note".length) + "_note"] = v;
+            } else {
+              if (v) restrictions[`${k}_si`] = v;
+            }
+          });
+          let menu = r.menu || null;
+          let menu_si = r.menu_si || null;
+          if (menu?.name?.includes("\n")) {
+            const nameParts = menu.name.split(/\n+/).map(s => s.trim()).filter(Boolean);
+            const subParts  = (menu.sub || "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+            menu    = { name: nameParts[0] || "", sub: subParts[0] || "" };
+            if (!menu_si && nameParts[1]) menu_si = { name: nameParts[1], sub: subParts[1] || "" };
+          }
+          return {
+            position: r.position,
+            menu,
+            veg: r.veg,
+            hazards: r.hazards,
+            na: r.na,
+            na_si: r.na_si || null,
+            wp: r.wp,
+            wp_si: r.wp_si || null,
+            os: r.os,
+            os_si: r.os_si || null,
+            premium: r.premium,
+            premium_si: r.premium_si || null,
+            is_snack: r.is_snack,
+            menu_si,
+            course_key: r.course_key || "",
+            optional_flag: r.optional_flag || "",
+            section_gap_before: !!r.section_gap_before,
+            show_on_short: !!r.show_on_short,
+            short_order: r.short_order || null,
+            force_pairing_title: r.force_pairing_title || "",
+            force_pairing_sub: r.force_pairing_sub || "",
+            force_pairing_title_si: r.force_pairing_title_si || "",
+            force_pairing_sub_si: r.force_pairing_sub_si || "",
+            kitchen_note: r.kitchen_note || "",
+            aperitif_btn: r.aperitif_btn || null,
+            restrictions,
+          };
+        });
+        if (courses.length > 0) return courses;
+      }
+    } catch (supabaseErr) {
+      console.warn("Supabase menu_courses fetch failed, falling back to Google Sheets:", supabaseErr);
+    }
+  }
+
+  // Fallback: fetch directly from Google Sheets CSV
   const response = await fetch(LIVE_MENU_CSV_URL, { cache: "no-store" });
   if (!response.ok) throw new Error(`Live menu fetch failed: ${response.status}`);
   const csvText = await response.text();
@@ -5830,7 +5899,7 @@ export default function App() {
     return () => { mounted = false; supabase.removeChannel(wineChannel); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Menu courses: load live from Google Sheet, fallback to Supabase ────────
+  // ── Menu courses: load from Supabase, fallback to Google Sheets CSV ────────
   useEffect(() => {
     let mounted = true;
     let timer = null;
@@ -5841,80 +5910,13 @@ export default function App() {
       return true;
     };
 
-    const loadFromSupabase = async () => {
-      if (!supabase) return false;
-      const { data, error } = await supabase
-        .from("menu_courses")
-        .select("*")
-        .order("position", { ascending: true });
-      if (error || !data || data.length === 0) return false;
-      const DIETARY_KEYS = [
-        "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
-        "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
-        "no_garlic_onion","halal","low_fodmap",
-      ];
-      return applyCourses(data.map(r => {
-        const restrictions = {};
-        DIETARY_KEYS.forEach(k => { restrictions[k] = r[k] ?? null; });
-        // Merge SI restriction variants and kitchen notes from the restrictions_si column.
-        // Notes are stored with "__note" suffix (e.g. "no_pork__note" → restrictions["no_pork_note"]).
-        const rSi = r.restrictions_si || {};
-        Object.entries(rSi).forEach(([k, v]) => {
-          if (k.endsWith("__note")) {
-            if (v) restrictions[k.slice(0, -"__note".length) + "_note"] = v;
-          } else {
-            if (v) restrictions[`${k}_si`] = v;
-          }
-        });
-        // Legacy data may have menu.name = "EN NAME\nSI NAME" (two-line cell not split at sync time).
-        // Split it here so the correct language is shown for each menu type.
-        let menu = r.menu || null;
-        let menu_si = r.menu_si || null;
-        if (menu?.name?.includes("\n")) {
-          const nameParts = menu.name.split(/\n+/).map(s => s.trim()).filter(Boolean);
-          const subParts  = (menu.sub || "").split(/\n+/).map(s => s.trim()).filter(Boolean);
-          menu    = { name: nameParts[0] || "", sub: subParts[0] || "" };
-          if (!menu_si && nameParts[1]) menu_si = { name: nameParts[1], sub: subParts[1] || "" };
-        }
-        return {
-          position: r.position,
-          menu,
-          veg: r.veg,
-          hazards: r.hazards,
-          na: r.na,
-          na_si: r.na_si || null,
-          wp: r.wp,
-          wp_si: r.wp_si || null,
-          os: r.os,
-          os_si: r.os_si || null,
-          premium: r.premium,
-          premium_si: r.premium_si || null,
-          is_snack: r.is_snack,
-          menu_si,
-          course_key: r.course_key || "",
-          optional_flag: r.optional_flag || "",
-          section_gap_before: !!r.section_gap_before,
-          show_on_short: !!r.show_on_short,
-          short_order: r.short_order || null,
-          force_pairing_title: r.force_pairing_title || "",
-          force_pairing_sub: r.force_pairing_sub || "",
-          force_pairing_title_si: r.force_pairing_title_si || "",
-          force_pairing_sub_si: r.force_pairing_sub_si || "",
-          kitchen_note: r.kitchen_note || "",
-          aperitif_btn: r.aperitif_btn || null,
-          restrictions,
-        };
-      }));
-    };
-
     const loadCourses = async () => {
       try {
-        const liveCourses = await fetchLiveMenuCourses();
-        if (applyCourses(liveCourses)) return;
+        const courses = await fetchLiveMenuCourses();
+        applyCourses(courses);
       } catch (error) {
-        console.warn("Live menu sheet fetch failed:", error);
+        console.warn("Menu courses fetch failed:", error);
       }
-      await loadFromSupabase();
     };
 
     loadCourses();
