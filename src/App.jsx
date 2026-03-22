@@ -2940,6 +2940,7 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
           <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
             {table.resName && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
             {table.menuType && <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 3, background: isShort ? "#fff4e0" : "#e8f0ff", color: isShort ? "#a06000" : "#2a50a0" }}>{isShort ? "SHORT" : "LONG"}</span>}
+            <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 3, background: table.lang === "si" ? "#fff0f0" : "#f0fff4", color: table.lang === "si" ? "#a03030" : "#207040", border: "1px solid", borderColor: table.lang === "si" ? "#f0c0c0" : "#b0dcc0" }}>{table.lang === "si" ? "SI" : "EN"}</span>
             {table.birthday && <span style={{ fontSize: 10 }}>🎂</span>}
             {table.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 8, color: "#9a6a20", letterSpacing: 0.5 }}>{table.room ? `#${table.room}` : "Hotel"}</span>}
           </div>
