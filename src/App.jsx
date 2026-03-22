@@ -4138,8 +4138,16 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
 }
 
 // ── Header ────────────────────────────────────────────────────────────────────
-function Header({ modeLabel, showAddRes = false, showSummary = false, showMenu = false, showArchive = false, showInventory = false, syncLabel, syncLive, activeCount, reserved, seated, onExit, onMenu, onSummary, onArchive, onAddRes, onInventory }) {
+function Header({ modeLabel, showAddRes = false, showSummary = false, showMenu = false, showArchive = false, showInventory = false, showSync = false, syncLabel, syncLive, activeCount, reserved, seated, onExit, onMenu, onSummary, onArchive, onAddRes, onInventory, onSyncAll }) {
   const modeColor = modeLabel === "ADMIN" ? "#4b4b88" : modeLabel === "SERVICE" ? "#2f7a45" : "#555";
+  const [sSt, setSSt] = useState(null); // null | "syncing" | "ok" | "err"
+  const handleSyncAll = async () => {
+    if (!onSyncAll || sSt === "syncing") return;
+    setSSt("syncing");
+    const r = await onSyncAll();
+    setSSt(r?.ok ? "ok" : "err");
+    setTimeout(() => setSSt(null), 3000);
+  };
   return (
     <div style={{
       borderBottom: "1px solid #f0f0f0", padding: "10px 12px",
@@ -4167,6 +4175,18 @@ function Header({ modeLabel, showAddRes = false, showSummary = false, showMenu =
           )}
           {showArchive && (
             <button onClick={onArchive} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #e8d8b8", borderRadius: 999, cursor: "pointer", background: "#fff8f0", color: "#8a6030" }}>ARCHIVE</button>
+          )}
+          {showSync && (
+            <button onClick={handleSyncAll} disabled={sSt === "syncing"} style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px",
+              border: `1px solid ${sSt === "ok" ? "#8fc39f" : sSt === "err" ? "#e89898" : "#c8a96e"}`,
+              borderRadius: 999, cursor: sSt === "syncing" ? "not-allowed" : "pointer",
+              background: sSt === "ok" ? "#eef8f1" : sSt === "err" ? "#fff0f0" : "#fffaf4",
+              color: sSt === "ok" ? "#2f7a45" : sSt === "err" ? "#c04040" : "#8a6020",
+              fontWeight: 600, whiteSpace: "nowrap",
+            }}>
+              {sSt === "syncing" ? "SYNCING…" : sSt === "ok" ? "✓ SYNCED" : sSt === "err" ? "✗ FAILED" : "↻ SYNC"}
+            </button>
           )}
           <span style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px",
@@ -5194,6 +5214,15 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
     });
   }, [globalLayout, menuCourses, logoDataUri]);
 
+  const [mpSyncSt, setMpSyncSt] = useState(null); // null | "syncing" | "ok" | "err"
+  const handleMenuPageSyncAll = async () => {
+    if (mpSyncSt === "syncing") return;
+    setMpSyncSt("syncing");
+    const [m, w] = await Promise.all([onSyncMenu(), onSyncWines()]);
+    setMpSyncSt(m?.ok || w?.ok ? "ok" : "err");
+    setTimeout(() => setMpSyncSt(null), 3000);
+  };
+
   const TABS = ["print", "layout", "sync", "overrides"];
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 20px",
@@ -5208,7 +5237,19 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
       {/* Header */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e8e8e8", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 3, color: "#1a1a1a" }}>MENU</span>
-        <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888" }}>EXIT</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={handleMenuPageSyncAll} disabled={mpSyncSt === "syncing"} style={{
+            fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px",
+            border: `1px solid ${mpSyncSt === "ok" ? "#8fc39f" : mpSyncSt === "err" ? "#e89898" : "#c8a96e"}`,
+            borderRadius: 2, cursor: mpSyncSt === "syncing" ? "not-allowed" : "pointer",
+            background: mpSyncSt === "ok" ? "#eef8f1" : mpSyncSt === "err" ? "#fff0f0" : "#fffaf4",
+            color: mpSyncSt === "ok" ? "#2f7a45" : mpSyncSt === "err" ? "#c04040" : "#8a6020",
+            fontWeight: 600,
+          }}>
+            {mpSyncSt === "syncing" ? "SYNCING…" : mpSyncSt === "ok" ? "✓ SYNCED" : mpSyncSt === "err" ? "✗ FAILED" : "↻ SYNC"}
+          </button>
+          <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888" }}>EXIT</button>
+        </div>
       </div>
 
       {/* Tab bar */}
@@ -5641,6 +5682,11 @@ export default function App() {
     }
   };
 
+  const syncAll = async () => {
+    const [menuResult, winesResult] = await Promise.all([syncMenu(), syncWines()]);
+    return { ok: menuResult?.ok || winesResult?.ok, menu: menuResult, wines: winesResult };
+  };
+
   const saveBeverages = async ({ cocktails: newC, spirits: newS, beers: newB }) => {
     setCocktails(newC);
     setSpirits(newS);
@@ -6010,6 +6056,7 @@ export default function App() {
     onSummary: () => setSummaryOpen(true),
     onArchive: () => setArchiveOpen(true),
     onInventory: () => setInventoryOpen(true),
+    onSyncAll: syncAll,
     onAddRes: () => {
       const freeTable = tables.find(t => !t.active && !t.resName && !t.resTime);
       if (freeTable) { setResModalPresetTime(null); setResModal(freeTable.id); }
@@ -6102,6 +6149,7 @@ export default function App() {
         showMenu={mode === "admin"}
         showArchive={true}
         showInventory={true}
+        showSync={true}
         {...hProps}
       />
 
