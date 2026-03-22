@@ -5772,7 +5772,7 @@ export default function App() {
 
   const seedTestData = () => {
     const names = ["Novak", "Kovač", "Krajnc", "Zupan", "Horvat", "Mlakar", "Kralj", "Kos", "Smith", "Müller"];
-    const times = ["18:00","18:30","19:00","19:00","19:30","19:30","20:00","20:00","20:30","21:00"];
+    const times = ["18:00","18:00","18:30","18:30","19:00","19:00","19:00","19:15","19:15","19:15"];
     const types = ["long","long","long","short","long","long","short","long","long","long"];
     const pax   = [2,4,3,2,6,4,2,5,3,2];
     const langs = ["en","en","si","si","en","si","en","en","si","en"];
