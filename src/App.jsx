@@ -6243,7 +6243,7 @@ export default function App() {
         showAddRes={mode === "admin"}
         showMenu={mode === "admin"}
         showArchive={true}
-        showInventory={true}
+        showInventory={mode === "admin"}
         showSync={true}
         {...hProps}
       />
