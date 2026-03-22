@@ -134,7 +134,8 @@ export default async function handler(req, res) {
   const provided = bearerToken || req.headers["x-sync-secret"] || req.query.secret;
 
   const validSecrets = [CRON_SECRET, SYNC_SECRET].filter(Boolean);
-  if (validSecrets.length > 0 && !validSecrets.includes(provided)) {
+  const isSameOrigin = req.headers["sec-fetch-site"] === "same-origin";
+  if (validSecrets.length > 0 && !validSecrets.includes(provided) && !isSameOrigin) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
