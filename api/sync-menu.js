@@ -158,14 +158,11 @@ export default async function handler(req, res) {
     if (!supabaseUrl || !supabaseKey) throw new Error("Supabase env vars not configured");
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Base columns — always present in schema
-    const BASE_KEYS = [
+    // All columns present in the current schema
+    const ALL_KEYS = [
       "position","menu","veg","hazards","na","wp","os","premium","is_snack",
       "gluten_free","dairy_free","nut_free","pescetarian","no_red_meat",
       "no_pork","no_game","no_offal","egg_free",
-    ];
-    // Extended columns — present after migration
-    const EXTENDED_KEYS = [
       "menu_si","course_key","optional_flag","section_gap_before","show_on_short",
       "short_order","force_pairing_title","force_pairing_sub","kitchen_note",
       "vegan","shellfish_free","no_alcohol","no_garlic_onion","halal","low_fodmap",
@@ -174,23 +171,15 @@ export default async function handler(req, res) {
 
     const pick = (obj, keys) => Object.fromEntries(keys.map(k => [k, obj[k] ?? null]));
 
-    // Always upsert base columns
     const { error } = await supabase
       .from("menu_courses")
-      .upsert(courses.map(c => pick(c, BASE_KEYS)), { onConflict: "position" });
+      .upsert(courses.map(c => pick(c, ALL_KEYS)), { onConflict: "position" });
     if (error) throw new Error("Supabase upsert failed: " + error.message);
-
-    // Attempt extended upsert — silently skip if columns don't exist yet
-    const extendedCourses = courses.map(c => ({ position: c.position, ...pick(c, EXTENDED_KEYS) }));
-    const { error: extError } = await supabase
-      .from("menu_courses")
-      .upsert(extendedCourses, { onConflict: "position" });
-    const extendedOk = !extError;
 
     const positions = courses.map(c => c.position);
     await supabase.from("menu_courses").delete().not("position", "in", `(${positions.join(",")})`);
 
-    return res.status(200).json({ ok: true, synced: courses.length, extended: extendedOk });
+    return res.status(200).json({ ok: true, synced: courses.length });
   } catch (err) {
     console.error("sync-menu error:", err);
     return res.status(500).json({ ok: false, error: err.message });

@@ -75,9 +75,12 @@ export function generateMenuHTML({
     ? table.bottleWines.filter(w => w && (w.name || w.producer || w.vintage || w.notes))
     : [];
 
-  const CRAYFISH_IDX = 4;
-  const DANUBE_SALMON_IDX = 5;
-  const PAIRING_INSERT_IDX = DANUBE_SALMON_IDX;
+  // Pairing section label is inserted before the Danube Salmon course.
+  // Force-pairing override (e.g. kitchen martini) applies to the Crayfish course.
+  // These use course_key lookups instead of array indices so they remain correct
+  // if courses are added, removed, or reordered in the sheet.
+  const CRAYFISH_KEY      = "crayfish";
+  const DANUBE_SALMON_KEY = "danube_salmon";
 
   const fmtWineParts = w => {
     const rawVintage = String(w?.vintage || "").trim();
@@ -187,7 +190,7 @@ export function generateMenuHTML({
 
   visibleCourses.forEach(({ course, i, courseName, courseKey, optionalFlag }) => {
     const insertPairingHere = hasPairing && !insertedPairingLabel && (
-      (!isShort && i === PAIRING_INSERT_IDX) ||
+      (!isShort && courseKey === DANUBE_SALMON_KEY) ||
       (isShort && (courseKey === "beetroot" || courseKey === "squash"))
     );
     if (insertPairingHere) {
@@ -198,7 +201,7 @@ export function generateMenuHTML({
     let dish = applyCourseRestriction(resolveCourse(course), restrictions, lang);
     let drink = pkey ? (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]) : null;
 
-    if (pkey && (course.force_pairing_title || courseKey === "crayfish" || i === CRAYFISH_IDX)) {
+    if (pkey && (course.force_pairing_title || courseKey === CRAYFISH_KEY)) {
       // Defensively split in case legacy DB rows store both languages in one field (newline-separated)
       const fpTitleLines = String(course.force_pairing_title || "").split("\n").map(s => s.trim());
       const fpSubLines   = String(course.force_pairing_sub   || "").split("\n").map(s => s.trim());
@@ -258,7 +261,7 @@ export function generateMenuHTML({
       left: { title: dish?.name || "", sub: dish?.sub || "" },
       right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
       rowClass: [
-        (hasPairing && (courseKey === "crayfish" || i === CRAYFISH_IDX)) ? "after-crayfish" : "",
+        (hasPairing && courseKey === CRAYFISH_KEY) ? "after-crayfish" : "",
         (isShort && (courseKey === "trout_belly" || courseName === "TROUT BELLY")) ? "short-after-trout-belly" : "",
         (isShort && (courseKey === "venison" || courseName === "VENISON")) ? "short-after-venison" : "",
         course.section_gap_before ? "section-gap-before" : "",

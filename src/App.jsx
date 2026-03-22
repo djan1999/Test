@@ -13,7 +13,7 @@ import { parseCSV, normHeader, csvRowsToObjects } from "./utils/csv.js";
 import {
   firstFilled, applyMenuOverride, truthyCell, splitMainSubCell,
   parseBilingual, mergeDishes, applyCourseRestriction,
-  RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP,
+  RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, initDishes,
 } from "./utils/menuUtils.js";
 import { generateMenuHTML } from "./utils/menuGenerator.js";
 
@@ -120,12 +120,7 @@ const MOBILE_SAFE_INPUT_SIZE = 16;
 // ── Wine DB ───────────────────────────────────────────────────────────────────
 const initWines = [];
 
-// ── Initial extra dishes ──────────────────────────────────────────────────────
-const initDishes = [
-  { id: 1, name: "Beetroot",  pairings: ["—", "Champagne", "N/A"] },
-  { id: 2, name: "Cheese",    pairings: ["—", "Wine", "Non-Alc"] },
-  { id: 3, name: "Cake",      pairings: ["—"] },
-];
+// ── Initial extra dishes — imported from menuUtils.js ─────────────────────────
 
 // ── Cocktails & Spirits & Beers ───────────────────────────────────────────────
 const initCocktails = [];
@@ -285,6 +280,7 @@ const makeSeats = (n, ex = []) =>
   }));
 
 const fmt = d => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+const parseHHMM = s => { if (!s) return null; const [h, m] = s.split(":").map(Number); return isNaN(h) || isNaN(m) ? null : h * 60 + m; };
 
 // ── Blank table factory ───────────────────────────────────────────────────────
 const blankTable = id => ({
@@ -768,7 +764,7 @@ function MenuSyncTab({ menuCourses = [], onSyncMenu }) {
       </div>
 
       <div style={{ fontSize: 9, fontFamily: FONT, color: "#bbb", marginBottom: 16, letterSpacing: 1 }}>
-        Sheet: FOOD N PAIRINGS JAN26 · {menuCourses.length} courses loaded
+        Sheet: {LIVE_MENU_SHEET_TAB} · {menuCourses.length} courses loaded
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 360, overflowY: "auto" }}>
@@ -1513,7 +1509,7 @@ function ReservationModal({ table, tables = [], onSave, onClose }) {
 
 
 // ── Sitting time rows layout constant ─────────────────────────────────────────
-const SITTING_TIMES = ["18:00", "18:30", "19:00"];
+const SITTING_TIMES = ["18:00", "18:30", "19:00", "19:15"];
 
 // ── Table Card ────────────────────────────────────────────────────────────────
 function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
@@ -2446,7 +2442,7 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
   const rowsData = SITTING_TIMES.map(time => ({
     time,
     tables: visible
-      .filter(t => t.resTime === time || (time === "19:00" && t.resTime === "19:15"))
+      .filter(t => t.resTime === time)
       .sort((a, b) => {
         if (a.active !== b.active) return a.active ? -1 : 1;
         return (a.arrivedAt || a.resTime || "99").localeCompare(b.arrivedAt || b.resTime || "99");
@@ -2746,7 +2742,8 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
   const normFlag = s => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   const isBeetCourse   = c => { const f = normFlag(c.optional_flag), k = normFlag(c.course_key || c.menu?.name); return f === "beetroot" || k === "beetroot"; };
   const isCheeseCourse = c => { const f = normFlag(c.optional_flag), k = normFlag(c.course_key || c.menu?.name); return f === "cheese"   || k === "cheese";   };
-  const isCakeCourse   = c => { const f = normFlag(c.optional_flag), k = normFlag(c.course_key || c.menu?.name); return f === "cake"     || k === "pear" || k === "pear_cake"; };
+  // Also check normalized menu name directly (matches menuGenerator.js isCakeCourse logic)
+  const isCakeCourse   = c => { const f = normFlag(c.optional_flag), k = normFlag(c.course_key || c.menu?.name), kn = normFlag(c.menu?.name); return f === "cake" || k === "pear" || k === "pear_cake" || kn === "pear"; };
 
   // Extras ordered per seat — must come before courses filter
   const beetSeats   = seats.filter(s => s.extras?.[1]?.ordered);
@@ -2781,7 +2778,6 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
 
   // Duration: arrivedAt → last firedAt when all done
   const allDone = totalCourses > 0 && firedCount >= totalCourses;
-  const parseHHMM = s => { if (!s) return null; const [h,m] = s.split(":").map(Number); return isNaN(h)||isNaN(m) ? null : h*60+m; };
   const lastFiredAt = allDone ? Object.values(log).map(e => e.firedAt).filter(Boolean).sort().pop() : null;
   const durationMins = (() => {
     const start = parseHHMM(table.arrivedAt), end = parseHHMM(lastFiredAt);
@@ -3320,7 +3316,7 @@ function KitchenAlertOverlay({ alerts, onConfirm }) {
   );
 }
 
-function KitchenBoard({ tables, menuCourses, upd }) {
+function KitchenBoard({ tables, menuCourses, upd, updMany }) {
   const activeTables = tables
     .filter(t => t.active && !t.kitchenArchived)
     .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
@@ -3349,8 +3345,8 @@ function KitchenBoard({ tables, menuCourses, upd }) {
     .map(t => ({ tableId: t.id, alert: t.kitchenAlert }));
 
   const confirmAlert = (tableId) => {
-    upd(tableId, "kitchenAlert", null);
-    upd(tableId, "extrasConfirmed", { beetroot: true, cheese: true, cake: true });
+    // Batch both field updates into a single state change → one render, one Supabase save
+    updMany(tableId, { kitchenAlert: null, extrasConfirmed: { beetroot: true, cheese: true, cake: true } });
   };
 
   if (activeTables.length === 0) return (
@@ -4303,7 +4299,6 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
   const archivedTickets = (tables || []).filter(t => t.kitchenArchived);
   const [expandedTicket, setExpandedTicket] = useState(null);
   const fmtDuration = (mins) => { if (mins == null) return null; const h = Math.floor(mins / 60), m = mins % 60; return h > 0 ? `${h}h ${m}m` : `${m}m`; };
-  const parseHHMM = s => { if (!s) return null; const [h, m] = s.split(":").map(Number); return isNaN(h) || isNaN(m) ? null : h * 60 + m; };
 
   return (
     <FullModal title="Archive · End of Day" onClose={onClose} actions={archiveActions}>
@@ -5464,6 +5459,8 @@ export default function App() {
   const modalTable = tables.find(t => t.id === resModal);
 
   const upd = (id, f, v) => setTables(p => p.map(t => t.id === id ? { ...t, [f]: v } : t));
+  // Batch multiple field updates in one setTables call (one render, one Supabase save)
+  const updMany = (id, changes) => setTables(p => p.map(t => t.id === id ? { ...t, ...changes } : t));
 
   const updSeat = (tid, sid, f, v) => setTables(p => p.map(t =>
     t.id !== tid ? t : { ...t, seats: t.seats.map(s => s.id === sid ? { ...s, [f]: v } : s) }
@@ -5498,7 +5495,9 @@ export default function App() {
 
   const syncMenu = async () => {
     try {
-      const r = await fetch(`/api/sync-menu?secret=milka2025`);
+      const secret = import.meta.env.VITE_SYNC_SECRET || "";
+      const url = secret ? `/api/sync-menu?secret=${encodeURIComponent(secret)}` : "/api/sync-menu";
+      const r = await fetch(url);
       const json = await r.json();
       if (!r.ok) return { ok: false, error: json.error || String(r.status) };
       return { ok: true, synced: json.synced };
@@ -5572,10 +5571,16 @@ export default function App() {
         return { ...blankTable(t.id), active: t.active, arrivedAt: t.arrivedAt, kitchenLog: t.kitchenLog };
       }
       if (!sortedGroup.includes(t.id)) return t;
-      const newSeats = makeSeats(guests, t.seats).map(s => ({
-        ...s,
-        extras: { ...s.extras, ...(birthday ? { 3: { ordered: true, pairing: "—" } } : {}) },
-      }));
+      const newSeats = makeSeats(guests, t.seats).map(s => {
+        const newExtras = { ...s.extras };
+        if (birthday) {
+          newExtras[3] = { ordered: true, pairing: "—" };
+        } else {
+          // Clear auto-added cake when birthday is turned off
+          delete newExtras[3];
+        }
+        return { ...s, extras: newExtras };
+      });
       return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, restrictions, notes, tableGroup: sortedGroup };
     }));
     setResModal(null);
@@ -5979,7 +5984,7 @@ export default function App() {
       <GlobalStyle />
       <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={true} showInventory={true} {...hProps} />
       <div style={{ padding: "20px 24px" }}>
-        <KitchenBoard tables={tables} menuCourses={effectiveMenuCourses} upd={upd} />
+        <KitchenBoard tables={tables} menuCourses={effectiveMenuCourses} upd={upd} updMany={updMany} />
       </div>
       {archiveOpen && (
         <ArchiveModal
@@ -6075,11 +6080,7 @@ export default function App() {
               // Group tables by sitting time for admin (with empty slot placeholders)
               const rows = SITTING_TIMES.map(time => ({
                 time,
-                tables: visibleTables.filter(t => {
-                  if (t.resTime === time) return true;
-                  if (time === "19:00" && t.resTime === "19:15") return true;
-                  return false;
-                }),
+                tables: visibleTables.filter(t => t.resTime === time),
               }));
               const hasAnyInRows = rows.some(r => r.tables.length > 0);
               if (!hasAnyInRows) {

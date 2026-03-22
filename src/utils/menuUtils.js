@@ -6,7 +6,7 @@ export const firstFilled = (...vals) => vals.find(v => String(v ?? "").trim()) ?
 
 export const truthyCell = value => {
   const s = String(value ?? "").trim().toLowerCase();
-  return s === "true" || s === "yes" || s === "y" || s === "1" || s === "wahr";
+  return s === "true" || s === "yes" || s === "y" || s === "1" || s === "x" || s === "wahr";
 };
 
 export const splitMainSubCell = (title, sub = "") => {
@@ -126,7 +126,7 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
   return dish;
 }
 
-const initDishes = [
+export const initDishes = [
   { id: 1, name: "Beetroot",  pairings: ["—", "Champagne", "N/A"] },
   { id: 2, name: "Cheese",    pairings: ["—", "Wine", "Non-Alc"] },
   { id: 3, name: "Cake",      pairings: ["—"] },
