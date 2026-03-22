@@ -96,20 +96,23 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
     sub: String(baseDish.sub || "").trim(),
   };
 
+  const courseRestrictions = course?.restrictions || {};
+
   for (const key of RESTRICTION_PRIORITY_KEYS) {
     if (!(activeRestrictions || []).includes(key)) continue;
     const mapped = RESTRICTION_COLUMN_MAP[key] || key;
-    const enVariant = course?.[mapped] || null;
-    const siVariant = lang === "si" ? (course?.restrictions_si?.[mapped] || null) : null;
-    const variant = (lang === "si" && siVariant) ? siVariant : enVariant;
-    if (variant) {
-      if (variant?.sub) {
-        dish = { name: String(variant.name || dish.name).trim(), sub: String(variant.sub).trim() };
-      } else if (variant?.name) {
-        dish = { name: dish.name, sub: String(variant.name).trim() };
-      }
-      break;
+    const siMapped = lang === "si" ? `${mapped}_si` : null;
+
+    const variant = courseRestrictions[mapped] || null;
+    if (!variant) continue;
+
+    const next = (siMapped && courseRestrictions[siMapped]) ? courseRestrictions[siMapped] : variant;
+    if (next?.sub) {
+      dish = { name: String(next.name || dish.name).trim(), sub: String(next.sub).trim() };
+    } else if (next?.name) {
+      dish = { name: dish.name, sub: String(next.name).trim() };
     }
+    break;
   }
 
   return dish;
