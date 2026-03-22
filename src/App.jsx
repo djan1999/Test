@@ -4369,7 +4369,7 @@ function SummaryModal({ tables, dishes = [], onClose }) {
 }
 
 // ── Archive Modal ─────────────────────────────────────────────────────────────
-function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, onRestoreTicket, menuCourses }) {
+function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onSeedTest, onClose, onRestoreTicket, menuCourses }) {
   const [entries, setEntries]         = useState([]);
   const [deleted, setDeleted]         = useState([]);
   const [loading, setLoading]         = useState(true);
@@ -4453,6 +4453,10 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onClose, 
 
   const archiveActions = (
     <div style={{ display: "flex", gap: 8 }}>
+      <button onClick={onSeedTest} style={{
+        fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 14px",
+        border: "1px solid #b0d8b0", borderRadius: 2, cursor: "pointer", background: "#f0fbf0", color: "#307030",
+      }}>SEED TEST</button>
       <button onClick={onClearAll} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 14px",
         border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888",
@@ -5763,6 +5767,42 @@ export default function App() {
     setArchiveOpen(false);
   };
 
+  const seedTestData = () => {
+    const names = ["Novak", "Kovač", "Krajnc", "Zupan", "Horvat", "Mlakar", "Kralj", "Kos", "Smith", "Müller"];
+    const times = ["18:00","18:30","19:00","19:00","19:30","19:30","20:00","20:00","20:30","21:00"];
+    const types = ["long","long","long","short","long","long","short","long","long","long"];
+    const pax   = [2,4,3,2,6,4,2,5,3,2];
+    const langs = ["en","en","si","si","en","si","en","en","si","en"];
+    const restrPool = ["vegetarian","vegan","gluten free","lactose free","nut allergy","shellfish allergy","no pork"];
+    const rng = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    const now = fmt(new Date());
+    setTables(Array.from({ length: 10 }, (_, i) => {
+      const id = i + 1;
+      const n = pax[i];
+      const restrCount = Math.random() < 0.4 ? 1 : 0;
+      const restrictions = restrCount ? [{ note: rng(restrPool), pos: null }] : [];
+      return {
+        ...blankTable(id),
+        active: true,
+        resName: names[i],
+        resTime: times[i],
+        menuType: types[i],
+        guests: n,
+        guestType: Math.random() < 0.2 ? "hotel" : "regular",
+        room: Math.random() < 0.2 ? String(100 + Math.floor(Math.random() * 50)) : "",
+        birthday: Math.random() < 0.15,
+        lang: langs[i],
+        restrictions,
+        notes: Math.random() < 0.2 ? "Window seat please" : "",
+        arrivedAt: Math.random() < 0.6 ? now : null,
+        seats: makeSeats(n),
+        kitchenLog: {},
+        tableGroup: [],
+      };
+    }));
+    setArchiveOpen(false);
+  };
+
   const archiveAndClearAll = async () => {
     if (typeof window !== "undefined" && !window.confirm("Archive today's service and clear all tables?")) return;
     const snap = boardStateRef.current; // stable reference, never stale
@@ -6160,6 +6200,7 @@ export default function App() {
           tables={tables} dishes={dishes}
           onArchiveAndClear={archiveAndClearAll}
           onClearAll={clearAll}
+          onSeedTest={seedTestData}
           onClose={() => setArchiveOpen(false)}
           onRestoreTicket={id => upd(id, "kitchenArchived", false)}
           menuCourses={effectiveMenuCourses}
@@ -6377,6 +6418,7 @@ export default function App() {
           tables={tables} dishes={dishes}
           onArchiveAndClear={archiveAndClearAll}
           onClearAll={clearAll}
+          onSeedTest={seedTestData}
           onClose={() => setArchiveOpen(false)}
           onRestoreTicket={id => upd(id, "kitchenArchived", false)}
           menuCourses={effectiveMenuCourses}
