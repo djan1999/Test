@@ -5404,7 +5404,7 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
 }
 
 // ── Login Screen ──────────────────────────────────────────────────────────────
-function LoginScreen({ onEnter }) {
+function LoginScreen({ onEnter, onSyncAll }) {
   const MODES = [
     { id: "display",  label: "Display",  sub: "read-only view",      icon: "◎", pin: false },
     { id: "service",  label: "Service",  sub: "full service access",  icon: "◈", pin: false },
@@ -5414,6 +5414,15 @@ function LoginScreen({ onEnter }) {
   const [picking, setPicking] = useState(null);
   const [pin, setPin]         = useState("");
   const [shake, setShake]     = useState(false);
+  const [syncSt, setSyncSt]   = useState(null); // null | "syncing" | "ok" | "err"
+
+  const handleSync = async () => {
+    if (!onSyncAll || syncSt === "syncing") return;
+    setSyncSt("syncing");
+    const r = await onSyncAll();
+    setSyncSt(r?.ok ? "ok" : "err");
+    setTimeout(() => setSyncSt(null), 3000);
+  };
 
   const handleTile = mode => {
     if (!mode.pin) { onEnter(mode.id); return; }
@@ -5456,21 +5465,34 @@ function LoginScreen({ onEnter }) {
       </div>
 
       {!picking ? (
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center", maxWidth: 480 }}>
-          {MODES.map(m => (
-            <button key={m.id} onClick={() => handleTile(m)} style={{
-              fontFamily: FONT, cursor: "pointer",
-              background: "#fff", border: "1px solid #e8e8e8", borderRadius: 2,
-              padding: "28px 32px", width: 140, textAlign: "center",
-              transition: "all 0.12s", display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center", maxWidth: 480 }}>
+            {MODES.map(m => (
+              <button key={m.id} onClick={() => handleTile(m)} style={{
+                fontFamily: FONT, cursor: "pointer",
+                background: "#fff", border: "1px solid #e8e8e8", borderRadius: 2,
+                padding: "28px 32px", width: 140, textAlign: "center",
+                transition: "all 0.12s", display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+              }}>
+                <span style={{ fontSize: 24, color: "#444" }}>{m.icon}</span>
+                <div>
+                  <div style={{ fontSize: 11, letterSpacing: 2, color: "#1a1a1a", fontWeight: 500 }}>{m.label.toUpperCase()}</div>
+                  <div style={{ fontSize: 9, letterSpacing: 1, color: "#999", marginTop: 4 }}>{m.sub}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+          {onSyncAll && (
+            <button onClick={handleSync} disabled={syncSt === "syncing"} style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: 2,
+              padding: "6px 16px", borderRadius: 999, cursor: syncSt === "syncing" ? "not-allowed" : "pointer",
+              border: `1px solid ${syncSt === "ok" ? "#8fc39f" : syncSt === "err" ? "#e89898" : "#ddd"}`,
+              background: syncSt === "ok" ? "#eef8f1" : syncSt === "err" ? "#fff0f0" : "#fafafa",
+              color: syncSt === "ok" ? "#2f7a45" : syncSt === "err" ? "#c04040" : "#aaa",
             }}>
-              <span style={{ fontSize: 24, color: "#444" }}>{m.icon}</span>
-              <div>
-                <div style={{ fontSize: 11, letterSpacing: 2, color: "#1a1a1a", fontWeight: 500 }}>{m.label.toUpperCase()}</div>
-                <div style={{ fontSize: 9, letterSpacing: 1, color: "#999", marginTop: 4 }}>{m.sub}</div>
-              </div>
+              {syncSt === "syncing" ? "SYNCING…" : syncSt === "ok" ? "✓ SYNCED" : syncSt === "err" ? "✗ FAILED" : "↻ SYNC"}
             </button>
-          ))}
+          )}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 28, width: "100%", maxWidth: 320 }}>
@@ -6091,7 +6113,7 @@ export default function App() {
     </div>
   );
 
-  if (!mode) return <LoginScreen onEnter={m => { changeMode(m); setSel(null); }} />;
+  if (!mode) return <LoginScreen onEnter={m => { changeMode(m); setSel(null); }} onSyncAll={syncAll} />;
 
   // Display mode — unified board+kitchen view
   if (mode === "display") return (
