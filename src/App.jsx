@@ -355,7 +355,7 @@ const parseHHMM = s => { if (!s) return null; const [h, m] = s.split(":").map(Nu
 const blankTable = id => ({
   id, active: false, guests: 2, resName: "", resTime: "", guestType: "", room: "",
   arrivedAt: null, menuType: "", pace: "", bottleWines: [],
-  restrictions: [], birthday: false, notes: "", seats: makeSeats(2),
+  restrictions: [], birthday: false, notes: "", lang: "en", seats: makeSeats(2),
   kitchenLog: {}, tableGroup: [], kitchenAlert: null,
 });
 
@@ -1361,6 +1361,7 @@ function ReservationModal({ table, tables = [], onSave, onClose }) {
   const [birthday, setBirthday]   = useState(table.birthday || false);
   const [restrictions, setRestrictions] = useState(table.restrictions || []);
   const [notes, setNotes]         = useState(table.notes || "");
+  const [lang, setLang]           = useState(table.lang || "en");
 
   return (
     <div style={{
@@ -1470,6 +1471,23 @@ function ReservationModal({ table, tables = [], onSave, onClose }) {
                   }}>{opt}</button>
                 ))}
               </div>
+          </div>
+
+          <div>
+            <div style={fieldLabel}>Language</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[{v:"en",l:"EN"},{v:"si",l:"SLO"}].map(opt => (
+                <button key={opt.v} onClick={() => setLang(opt.v)} style={{
+                  fontFamily: FONT, fontSize: 10, letterSpacing: 2,
+                  padding: "10px 24px", border: "1px solid",
+                  borderColor: lang === opt.v ? "#1a1a1a" : "#e8e8e8",
+                  borderRadius: 2, cursor: "pointer",
+                  background: lang === opt.v ? "#1a1a1a" : "#fff",
+                  color: lang === opt.v ? "#fff" : "#888",
+                  textTransform: "uppercase",
+                }}>{opt.l}</button>
+              ))}
+            </div>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "120px 1fr", gap: 16, alignItems: "flex-start" }}>
@@ -1619,7 +1637,7 @@ function ReservationModal({ table, tables = [], onSave, onClose }) {
             flex: 1, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
             padding: "14px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#444",
           }}>CANCEL</button>
-          <button onClick={() => onSave({ tableIds, name, time, menuType, guests, guestType, room, birthday, restrictions, notes })} style={{
+          <button onClick={() => onSave({ tableIds, name, time, menuType, guests, guestType, room, birthday, restrictions, notes, lang })} style={{
             flex: 2, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
             padding: "14px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff",
           }}>SAVE</button>
@@ -2296,6 +2314,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
               color: isSeated ? "#2f7a45" : "#2f5f8a", fontWeight: 700,
             }}>{isSeated ? "SEATED" : "RESERVED"}</span>
             {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 3, border: "1px solid #e8e8e8", color: "#666" }}>{t.menuType}</span>}
+            {t.lang === "si" && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 3, border: "1px solid #c0ccee", color: "#3050a0", background: "#f0f4ff", fontWeight: 700 }}>SI</span>}
             {t.pace && (() => {
               const pc = { Slow: { color: "#7a5020", bg: "#fdf4e8", border: "#c8a060" }, Fast: { color: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" } }[t.pace] || {};
               return <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 3, border: `1px solid ${pc.border}`, background: pc.bg, color: pc.color, fontWeight: 700 }}>{t.pace}</span>;
@@ -3581,8 +3600,8 @@ function BevEditRow({ emoji, label, items, onUpdate }) {
 function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLayoutStyles = {}, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [] }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState("WINTER MENU");
-  const [thankYouNote, setThankYouNote] = useState("Thank you for your visit.");
-  const [lang, setLang] = useState("en");
+  const [thankYouNote, setThankYouNote] = useState(table.lang === "si" ? "Hvala za vaš obisk." : "Thank you for your visit.");
+  const [lang, setLang] = useState(table.lang || "en");
   // Per-seat ephemeral one-time edits — { [seatId]: { [courseKey]: { name?, sub? } } }
   // Cleared automatically after the PDF for that seat is generated.
   const [seatEdits, setSeatEdits] = useState({});
@@ -5775,7 +5794,7 @@ export default function App() {
     })};
   }));
 
-  const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, birthday, restrictions, notes }) => {
+  const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, birthday, restrictions, notes, lang }) => {
     const group = tableIds ?? (tableId ? [tableId] : [id]);
     const sortedGroup = [...group].sort((a, b) => a - b);
     // Find old group to clear tables that are no longer part of it
@@ -5796,7 +5815,7 @@ export default function App() {
         }
         return { ...s, extras: newExtras };
       });
-      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, restrictions, notes, tableGroup: sortedGroup };
+      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, restrictions, notes, lang: lang || "en", tableGroup: sortedGroup };
     }));
     setResModal(null);
   };
