@@ -7,7 +7,7 @@ That prevents one device from overwriting the whole board when another device ed
 
 ## Required Supabase setup
 1. Open Supabase SQL editor.
-2. Run `supabase/schema.sql`.
+2. Run `schema.sql`.
 3. Put your Supabase URL and anon key into `.env`.
 4. Start the app with `npm install` and `npm run dev`.
 
