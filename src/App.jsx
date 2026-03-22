@@ -4158,7 +4158,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
 }
 
 // ── Header ────────────────────────────────────────────────────────────────────
-function Header({ modeLabel, showAddRes = false, showSummary = false, showMenu = false, showArchive = false, showInventory = false, showSync = false, syncLabel, syncLive, activeCount, reserved, seated, onExit, onMenu, onSummary, onArchive, onAddRes, onInventory, onSyncAll }) {
+function Header({ modeLabel, showAddRes = false, showSummary = false, showMenu = false, showArchive = false, showInventory = false, showSync = false, showSeed = false, syncLabel, syncLive, activeCount, reserved, seated, onExit, onMenu, onSummary, onArchive, onAddRes, onInventory, onSyncAll, onSeed }) {
   const modeColor = modeLabel === "ADMIN" ? "#4b4b88" : modeLabel === "SERVICE" ? "#2f7a45" : "#555";
   const [sSt, setSSt] = useState(null); // null | "syncing" | "ok" | "err"
   const handleSyncAll = async () => {
@@ -4198,6 +4198,9 @@ function Header({ modeLabel, showAddRes = false, showSummary = false, showMenu =
           )}
           {showInventory && (
             <button onClick={onInventory} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #c8d8e8", borderRadius: 999, cursor: "pointer", background: "#f0f6ff", color: "#3060a0" }}>INVENTORY</button>
+          )}
+          {showSeed && (
+            <button onClick={onSeed} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #b0d8b0", borderRadius: 999, cursor: "pointer", background: "#f0fbf0", color: "#307030" }}>SEED TEST</button>
           )}
           {showArchive && (
             <button onClick={onArchive} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #e8d8b8", borderRadius: 999, cursor: "pointer", background: "#fff8f0", color: "#8a6030" }}>ARCHIVE</button>
@@ -6150,6 +6153,7 @@ export default function App() {
     onSummary: () => setSummaryOpen(true),
     onArchive: () => setArchiveOpen(true),
     onInventory: () => setInventoryOpen(true),
+    onSeed: seedTestData,
     onSyncAll: syncAll,
     onAddRes: () => {
       const freeTable = tables.find(t => !t.active && !t.resName && !t.resTime);
@@ -6244,6 +6248,7 @@ export default function App() {
         showMenu={mode === "admin"}
         showArchive={true}
         showInventory={mode === "admin"}
+        showSeed={mode === "admin"}
         showSync={true}
         {...hProps}
       />
