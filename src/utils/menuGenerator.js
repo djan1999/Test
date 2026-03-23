@@ -172,12 +172,16 @@ export function generateMenuHTML({
 
   let rows = [];
   const hasPairing = !!pkey;
+  const hasBottle = tableBottles.length > 0;
   const bottleQueue = hasPairing ? [] : [...tableBottles];
+  // When a bottle is present (no pairing key), glasses are aperitivos for early courses.
+  // When no bottle and no pairing key, glasses go glass-by-glass post-Danube.
+  const glassesAreAperitivos = hasPairing || hasBottle;
   const aperitivoQueue = [
     ...cocktails.map(c => ({ ...c, __type: "cocktail" })),
-    ...(hasPairing ? glasses.map(w => ({ ...w, __type: "wine" })) : []),
+    ...(glassesAreAperitivos ? glasses.map(w => ({ ...w, __type: "wine" })) : []),
   ];
-  const glassByGlassQueue = hasPairing ? [] : [...glasses.map(w => ({ ...w, __type: "wine" }))];
+  const glassByGlassQueue = glassesAreAperitivos ? [] : [...glasses.map(w => ({ ...w, __type: "wine" }))];
 
   const topRightItems = hasPairing ? [
     ...tableBottles.map(item => ({
