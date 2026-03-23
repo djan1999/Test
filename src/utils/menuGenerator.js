@@ -170,25 +170,33 @@ export function generateMenuHTML({
 
   const DANUBE_SALMON_IDX = visibleCourses.find(vc => vc.courseKey === DANUBE_SALMON_KEY)?.i ?? Infinity;
 
+  const dedup = arr => {
+    const seen = new Set();
+    return arr.filter(item => {
+      const key = (item.name || item.title || "").trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   let rows = [];
   const hasPairing = !!pkey;
   const hasBottle = tableBottles.length > 0;
-  const bottleQueue = hasPairing ? [] : [...tableBottles];
+  const bottleQueue = hasPairing ? [] : dedup([...tableBottles]);
   // When a bottle is present (no pairing key), glasses are aperitivos for early courses.
   // When no bottle and no pairing key, glasses go glass-by-glass post-Danube.
   const glassesAreAperitivos = hasPairing || hasBottle;
-  const aperitivoQueue = [
+  const aperitivoQueue = dedup([
     ...cocktails.map(c => ({ ...c, __type: "cocktail" })),
     ...(glassesAreAperitivos ? glasses.map(w => ({ ...w, __type: "wine" })) : []),
-  ];
-  const glassByGlassQueue = glassesAreAperitivos ? [] : [...glasses.map(w => ({ ...w, __type: "wine" }))];
+  ]);
+  const glassByGlassQueue = glassesAreAperitivos ? [] : dedup([...glasses.map(w => ({ ...w, __type: "wine" }))]);
 
-  const topRightItems = hasPairing ? [
-    ...tableBottles.map(item => ({
-      ...item,
-      __type: item?.__type || item?.type || item?.category || ((item?.notes && !item?.producer && !item?.vintage) ? "cocktail" : "wine"),
-    })),
-  ] : [];
+  const topRightItems = hasPairing ? dedup(tableBottles.map(item => ({
+    ...item,
+    __type: item?.__type || item?.type || item?.category || ((item?.notes && !item?.producer && !item?.vintage) ? "cocktail" : "wine"),
+  }))) : [];
   topRightItems.forEach(item => rows.push({ type: "wine-only", right: fmtDrinkParts(item) }));
   const topRightEnd = rows.length; // position after top bottle rows, before course rows
 
