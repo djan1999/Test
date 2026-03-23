@@ -5665,8 +5665,12 @@ export default function App() {
 
   const mergeRemoteTables = rows => {
     const byId = new Map((Array.isArray(rows) ? rows : []).map(row => [Number(row.table_id), sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) })]));
+    const nextTables = initTables.map(base => byId.get(base.id) || base);
+    // Snapshot prevTablesJsonRef BEFORE setTables so the save-useEffect sees no diff
+    // after a full poll and doesn't re-save the entire remote state.
+    prevTablesJsonRef.current = nextTables.map(t => JSON.stringify(sanitizeTable(t)));
     applyingRemoteRef.current = true;
-    setTables(() => initTables.map(base => byId.get(base.id) || base));
+    setTables(() => nextTables);
     setTimeout(() => { applyingRemoteRef.current = false; }, 0);
   };
 
@@ -5880,7 +5884,6 @@ export default function App() {
 
     writeLocalBoardState(boardStateRef.current);
 
-    if (applyingRemoteRef.current) return;
     if (!supabase) return;
 
     const nextJsonByIndex = tables.map(t => JSON.stringify(sanitizeTable(t)));
@@ -6029,7 +6032,14 @@ export default function App() {
         }
         if (!payload.new) return;
         applyRemoteTableRow(payload.new);
-        prevTablesJsonRef.current = tablesRef.current.map(t => JSON.stringify(sanitizeTable(t.id === Number(payload.new.table_id) ? { id: Number(payload.new.table_id), ...(payload.new.data || {}) } : t)));
+        // Only update the specific table's entry — do NOT overwrite other tables'
+        // entries so locally-pending changes for those tables are not silently dropped.
+        const remoteIdx = tablesRef.current.findIndex(t => t.id === Number(payload.new.table_id));
+        if (remoteIdx !== -1) {
+          const next = [...prevTablesJsonRef.current];
+          next[remoteIdx] = JSON.stringify(sanitizeTable({ id: Number(payload.new.table_id), ...(payload.new.data || {}) }));
+          prevTablesJsonRef.current = next;
+        }
         setSyncStatus("live");
       })
       .subscribe(status => {
@@ -6195,7 +6205,7 @@ export default function App() {
   if (mode === "display") return (
     <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
-      <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={true} showInventory={true} {...hProps} />
+      <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
       <div style={{ padding: "20px 24px" }}>
         <KitchenBoard tables={tables} menuCourses={effectiveMenuCourses} upd={upd} updMany={updMany} />
       </div>
