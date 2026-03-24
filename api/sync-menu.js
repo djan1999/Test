@@ -6,18 +6,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { getSheetsToken, sheetsGet, SHEET_ID, SHEET_TAB } from "./_sheets-auth.js";
 import { parseCSV, normHeader } from "../src/utils/csv.js";
-import { firstFilled, truthyCell, splitMainSubCell, parseBilingual } from "../src/utils/menuUtils.js";
+import { firstFilled, parseMenuRow, RESTRICTION_KEYS } from "../src/utils/menuUtils.js";
 
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_TAB)}`;
 
 const SYNC_SECRET = process.env.SYNC_SECRET;
 const CRON_SECRET = process.env.CRON_SECRET;
-
-const RESTRICTION_KEYS = [
-  "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
-  "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
-  "no_garlic_onion","halal","low_fodmap",
-];
 
 export function parseRows(rows) {
   if (rows.length < 2) return [];
@@ -29,94 +23,63 @@ export function parseRows(rows) {
   });
 
   return records.map((row) => {
-    // Google Sheets cells may contain up to 3 lines: line 1 = EN, line 2 = SI, line 3 = kitchen note only.
-    // Split on single \n to preserve blank-line positions — a blank line 2 must NOT shift line 3 into SI slot.
-    const dishLines = String(row.dish ?? "").split("\n").map(s => s.trim());
-    const descLines = String(row.description ?? "").split("\n").map(s => s.trim());
-    const dishEnRaw = dishLines[0] || "";
-    const descEnRaw = descLines[0] || "";
-    // Prefer an explicit dish_si / dish_si_sub column; fall back to line 2 of dish/description.
-    const dishSiRaw = String(row.dish_si ?? "").trim() || dishLines[1] || "";
-    const descSiRaw = String(row.dish_si_sub ?? "").trim() || descLines[1] || "";
+    const parsed = parseMenuRow(row);
+    if (!parsed) return null;
 
-    const menu = splitMainSubCell(dishEnRaw, descEnRaw);
-    if (!menu?.name) return null;
-
-    const courseKey = String(firstFilled(row.course_key, row.key, dishEnRaw) || "")
-      .trim().toLowerCase()
-      .replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-
-    // Per-restriction columns: line 1 = EN (menu gen), line 2 = SI (menu gen), line 3 = kitchen note.
-    const restrictionCols = {};
+    // Build the flat DB-schema shape from the canonical parsed structure
     const restrictionColsSi = {};
     const restrictionNotes = {};
     RESTRICTION_KEYS.forEach(k => {
-      const { en, si, note } = parseBilingual(row[k], row[`${k}_sub`]);
-      restrictionCols[k] = en;
-      if (si) restrictionColsSi[k] = si;
-      // Kitchen note: prefer explicit "{k}_note" column, fall back to line 3 of the restriction cell.
-      const resolvedNote = String(firstFilled(row[`${k}_note`], note) || "").trim();
-      if (resolvedNote) restrictionNotes[k] = resolvedNote;
+      if (parsed.restrictions[`${k}_si`]) restrictionColsSi[k] = parsed.restrictions[`${k}_si`];
+      if (parsed.restrictions[`${k}_note`]) restrictionNotes[k] = parsed.restrictions[`${k}_note`];
     });
 
-    // Pairings — bilingual (line 1 = EN, line 2 = SI)
-    const wpBi   = parseBilingual(row.wp_drink,  row.wp_sub);
-    const naBi   = parseBilingual(row.na_drink,  row.na_sub);
-    const osBi   = parseBilingual(row.os_drink,  row.os_sub);
-    const premBi = parseBilingual(row.premium,   row.premium_sub);
-
-    const menuSi = splitMainSubCell(dishSiRaw, descSiRaw);
-    // Line 3 of dish cell = kitchen note fallback
-    const kitchenNoteFallback = dishLines[2] || "";
+    const restrictions_si = (() => {
+      const combined = { ...restrictionColsSi };
+      Object.entries(restrictionNotes).forEach(([k, v]) => { combined[`${k}__note`] = v; });
+      return Object.keys(combined).length ? combined : null;
+    })();
 
     return {
-      position:            Number(firstFilled(row["#"], row.position, row.order_index)) || 0,
-      menu,
-      menu_si:             menuSi?.name ? menuSi : null,
-      veg:                 restrictionCols.veg,
+      position:            parsed.position,
+      menu:                parsed.menu,
+      menu_si:             parsed.menu_si,
+      veg:                 parsed.restrictions.veg,
       hazards:             null,
-      na:                  naBi.en,
-      na_si:               naBi.si || null,
-      wp:                  wpBi.en,
-      wp_si:               wpBi.si || null,
-      os:                  osBi.en,
-      os_si:               osBi.si || null,
-      premium:             premBi.en,
-      premium_si:          premBi.si || null,
-      is_snack:            truthyCell(firstFilled(row["snack?"], row.snack)),
-      course_key:          courseKey,
-      optional_flag:       String(firstFilled(row.optional_flag)).trim().toLowerCase(),
-      section_gap_before:  truthyCell(firstFilled(row.section_gap_before)),
-      show_on_short:       truthyCell(firstFilled(row.show_on_short)),
-      short_order:         Number(firstFilled(row.short_order)) || null,
-      force_pairing_title: String(firstFilled(row.force_pairing_title)).trim(),
-      force_pairing_sub:   String(firstFilled(row.force_pairing_sub)).trim(),
-      kitchen_note:        String(firstFilled(row.kitchen_note, kitchenNoteFallback)).trim(),
-      aperitif_btn:        String(firstFilled(row.aperitif_btn, row.aperitif) || "").trim() || null,
-      // Slovenian restriction substitutes + kitchen notes stored in one jsonb map.
-      // Notes are stored with a "__note" suffix key (e.g. "no_pork__note": "no guanciale").
-      restrictions_si: (() => {
-        const combined = { ...restrictionColsSi };
-        Object.entries(restrictionNotes).forEach(([k, v]) => { combined[`${k}__note`] = v; });
-        return Object.keys(combined).length ? combined : null;
-      })(),
-      // Original restriction columns (always present in schema)
-      vegan:        restrictionCols.vegan,
-      pescetarian:  restrictionCols.pescetarian,
-      gluten_free:  restrictionCols.gluten_free,
-      dairy_free:   restrictionCols.dairy_free,
-      nut_free:     restrictionCols.nut_free,
-      no_red_meat:  restrictionCols.no_red_meat,
-      no_pork:      restrictionCols.no_pork,
-      no_game:      restrictionCols.no_game,
-      no_offal:     restrictionCols.no_offal,
-      egg_free:     restrictionCols.egg_free,
-      // Extended restriction columns (added via migration)
-      shellfish_free:   restrictionCols.shellfish_free,
-      no_alcohol:       restrictionCols.no_alcohol,
-      no_garlic_onion:  restrictionCols.no_garlic_onion,
-      halal:            restrictionCols.halal,
-      low_fodmap:       restrictionCols.low_fodmap,
+      na:                  parsed.na,
+      na_si:               parsed.na_si,
+      wp:                  parsed.wp,
+      wp_si:               parsed.wp_si,
+      os:                  parsed.os,
+      os_si:               parsed.os_si,
+      premium:             parsed.premium,
+      premium_si:          parsed.premium_si,
+      is_snack:            parsed.is_snack,
+      course_key:          parsed.course_key,
+      optional_flag:       parsed.optional_flag,
+      section_gap_before:  parsed.section_gap_before,
+      show_on_short:       parsed.show_on_short,
+      short_order:         parsed.short_order,
+      force_pairing_title: parsed.force_pairing_title,
+      force_pairing_sub:   parsed.force_pairing_sub,
+      kitchen_note:        parsed.kitchen_note,
+      aperitif_btn:        parsed.aperitif_btn,
+      restrictions_si,
+      vegan:            parsed.restrictions.vegan,
+      pescetarian:      parsed.restrictions.pescetarian,
+      gluten_free:      parsed.restrictions.gluten_free,
+      dairy_free:       parsed.restrictions.dairy_free,
+      nut_free:         parsed.restrictions.nut_free,
+      no_red_meat:      parsed.restrictions.no_red_meat,
+      no_pork:          parsed.restrictions.no_pork,
+      no_game:          parsed.restrictions.no_game,
+      no_offal:         parsed.restrictions.no_offal,
+      egg_free:         parsed.restrictions.egg_free,
+      shellfish_free:   parsed.restrictions.shellfish_free,
+      no_alcohol:       parsed.restrictions.no_alcohol,
+      no_garlic_onion:  parsed.restrictions.no_garlic_onion,
+      halal:            parsed.restrictions.halal,
+      low_fodmap:       parsed.restrictions.low_fodmap,
     };
   }).filter(Boolean).sort((a, b) => a.position - b.position);
 }
