@@ -4929,29 +4929,117 @@ const writeAccess = () => {
 
 // ── ServiceDatePicker ─────────────────────────────────────────────────────────
 function ServiceDatePicker({ defaultDate, onConfirm, onCancel }) {
-  const [date, setDate] = useState(defaultDate || new Date().toISOString().slice(0, 10));
-  const formatted = date
-    ? new Date(date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).toUpperCase()
-    : "";
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [selected, setSelected] = useState(defaultDate || todayStr);
+  // weekOffset: 0 = current week, -1 = last week, +1 = next week
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  // Build week array (Mon–Sun) for the given offset
+  const weekDays = useMemo(() => {
+    const today = new Date();
+    // Monday of current week
+    const dow = today.getDay(); // 0=Sun
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - ((dow + 6) % 7) + weekOffset * 7);
+    monday.setHours(0, 0, 0, 0);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return d.toISOString().slice(0, 10);
+    });
+  }, [weekOffset]);
+
+  const monthLabel = useMemo(() => {
+    const d = new Date(weekDays[0] + "T00:00:00");
+    const d2 = new Date(weekDays[6] + "T00:00:00");
+    const m1 = d.toLocaleDateString("en-GB", { month: "long" }).toUpperCase();
+    const m2 = d2.toLocaleDateString("en-GB", { month: "long" }).toUpperCase();
+    const y = d2.getFullYear();
+    return m1 === m2 ? `${m1} ${y}` : `${m1} / ${m2} ${y}`;
+  }, [weekDays]);
+
+  const DAY_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+
   return (
-    <div style={{ minHeight: "100vh", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, padding: 24 }}>
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: FONT, zIndex: 200, padding: 16,
+    }}>
       <GlobalStyle />
-      <div style={{ width: "100%", maxWidth: 360, background: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "32px 28px", boxShadow: "0 4px 40px rgba(0,0,0,0.06)" }}>
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontSize: 10, letterSpacing: 4, color: "#1a1a1a", marginBottom: 6, fontWeight: 600 }}>SERVICE DATE</div>
-          <div style={{ fontSize: 9, letterSpacing: 2, color: "#999" }}>SELECT DATE TO BEGIN SERVICE</div>
+      <div style={{
+        width: "100%", maxWidth: 420, background: "#fff",
+        borderRadius: 12, overflow: "hidden",
+        boxShadow: "0 12px 60px rgba(0,0,0,0.18)",
+      }}>
+        {/* Header */}
+        <div style={{ background: "#1a1a1a", padding: "20px 20px 16px", textAlign: "center" }}>
+          <div style={{ fontSize: 9, letterSpacing: 4, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>MILKA</div>
+          <div style={{ fontSize: 13, letterSpacing: 3, color: "#fff", fontWeight: 700 }}>SELECT SERVICE DATE</div>
         </div>
-        <input
-          type="date"
-          value={date}
-          onChange={e => setDate(e.target.value)}
-          autoFocus
-          style={{ fontFamily: FONT, fontSize: MOBILE_SAFE_INPUT_SIZE, width: "100%", padding: "12px 14px", border: "1px solid #e0e0e0", borderRadius: 4, marginBottom: 8, outline: "none", textAlign: "center", color: "#1a1a1a" }}
-        />
-        {date && <div style={{ fontSize: 9, letterSpacing: 1, color: "#aaa", textAlign: "center", marginBottom: 20 }}>{formatted}</div>}
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <button onClick={onCancel} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "12px 0", flex: 1, border: "1px solid #e8e8e8", borderRadius: 4, cursor: "pointer", background: "#fff", color: "#666" }}>CANCEL</button>
-          <button onClick={() => date && onConfirm(date)} disabled={!date} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "12px 0", flex: 2, border: "1px solid #1a1a1a", borderRadius: 4, cursor: "pointer", background: "#1a1a1a", color: "#fff", fontWeight: 600, opacity: date ? 1 : 0.5 }}>START SERVICE</button>
+
+        {/* Week navigator */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 10px" }}>
+          <button
+            onClick={() => setWeekOffset(o => o - 1)}
+            style={{ fontFamily: FONT, fontSize: 16, border: "none", background: "none", cursor: "pointer", color: "#555", padding: "4px 10px", lineHeight: 1 }}
+          >‹</button>
+          <span style={{ fontSize: 9, letterSpacing: 3, color: "#888", fontWeight: 600 }}>{monthLabel}</span>
+          <button
+            onClick={() => setWeekOffset(o => o + 1)}
+            style={{ fontFamily: FONT, fontSize: 16, border: "none", background: "none", cursor: "pointer", color: "#555", padding: "4px 10px", lineHeight: 1 }}
+          >›</button>
+        </div>
+
+        {/* Day tiles */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, padding: "0 14px 20px" }}>
+          {weekDays.map((dateStr, i) => {
+            const d = new Date(dateStr + "T00:00:00");
+            const dayNum = d.getDate();
+            const isToday = dateStr === todayStr;
+            const isSel = dateStr === selected;
+            const isPast = dateStr < todayStr;
+            return (
+              <button
+                key={dateStr}
+                onClick={() => setSelected(dateStr)}
+                style={{
+                  fontFamily: FONT, border: "none", borderRadius: 8, cursor: "pointer",
+                  padding: "10px 0", display: "flex", flexDirection: "column",
+                  alignItems: "center", gap: 4, transition: "all 0.12s",
+                  background: isSel ? "#1a1a1a" : isToday ? "#f0f8f4" : "#f6f6f6",
+                  outline: isToday && !isSel ? "1.5px solid #3a8a5a" : "none",
+                  opacity: isPast && !isSel ? 0.45 : 1,
+                }}
+              >
+                <span style={{ fontSize: 8, letterSpacing: 1, color: isSel ? "rgba(255,255,255,0.6)" : "#aaa", fontWeight: 600 }}>{DAY_LABELS[i]}</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: isSel ? "#fff" : isToday ? "#2f7a45" : "#1a1a1a", lineHeight: 1 }}>{dayNum}</span>
+                {isToday && <span style={{ width: 4, height: 4, borderRadius: "50%", background: isSel ? "#fff" : "#3a8a5a" }} />}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Selected date confirmation */}
+        {selected && (
+          <div style={{ textAlign: "center", paddingBottom: 6 }}>
+            <span style={{ fontSize: 10, letterSpacing: 2, color: "#3a8a5a", fontWeight: 600 }}>
+              {new Date(selected + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }).toUpperCase()}
+            </span>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 0, borderTop: "1px solid #f0f0f0", marginTop: 14 }}>
+          <button
+            onClick={onCancel}
+            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 1, border: "none", borderRight: "1px solid #f0f0f0", cursor: "pointer", background: "#fff", color: "#888", fontWeight: 500 }}
+          >CANCEL</button>
+          <button
+            onClick={() => selected && onConfirm(selected)}
+            disabled={!selected}
+            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 2, border: "none", cursor: selected ? "pointer" : "not-allowed", background: selected ? "#1a1a1a" : "#f0f0f0", color: selected ? "#fff" : "#aaa", fontWeight: 700, opacity: 1 }}
+          >START SERVICE ›</button>
         </div>
       </div>
     </div>
@@ -6736,8 +6824,7 @@ export default function App() {
     </div>
   );
 
-  // Service date picker — shown before entering Service mode when no date is set
-  if (showServiceDatePicker) return (
+  const serviceDatePickerEl = showServiceDatePicker ? (
     <ServiceDatePicker
       defaultDate={new Date().toISOString().slice(0, 10)}
       onConfirm={async (date) => {
@@ -6756,13 +6843,12 @@ export default function App() {
       }}
       onCancel={() => { setShowServiceDatePicker(false); setPendingModeAfterDate(null); }}
     />
-  );
+  ) : null;
 
-  if (!mode) return <LoginScreen onEnter={m => { changeMode(m); setSel(null); }} onSyncAll={syncAll} />;
+  if (!mode) return <>{serviceDatePickerEl}<LoginScreen onEnter={m => { changeMode(m); setSel(null); }} onSyncAll={syncAll} /></>;
 
   // Reservation Manager mode
-  if (mode === "reservation") return (
-    <ReservationManager
+  if (mode === "reservation") return (<>{serviceDatePickerEl}<ReservationManager
       reservations={reservations}
       menuCourses={effectiveMenuCourses}
       tables={tables}
@@ -6772,11 +6858,11 @@ export default function App() {
       onExit={() => changeMode(null)}
       serviceDate={serviceDate}
       onSetServiceDate={persistServiceDate}
-    />
-  );
+    /></>);
 
   // Display mode — unified board+kitchen view
-  if (mode === "display") return (
+  if (mode === "display") return (<>
+    {serviceDatePickerEl}
     <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
       <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
@@ -6796,7 +6882,7 @@ export default function App() {
       )}
       {inventoryOpen && <InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} />}
     </div>
-  );
+  </>);
 
   if (mode === "menu") return (
     <div style={{ minHeight: "100vh", background: "#fafafa", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
@@ -6821,7 +6907,8 @@ export default function App() {
   );
 
   // Service + Admin modes
-  return (
+  return (<>
+    {serviceDatePickerEl}
     <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
 
@@ -6847,10 +6934,7 @@ export default function App() {
               {serviceDate && (
                 <span
                   title="Click to change service date"
-                  onClick={() => {
-                    const nd = window.prompt("Change service date (YYYY-MM-DD):", serviceDate);
-                    if (nd && /^\d{4}-\d{2}-\d{2}$/.test(nd)) persistServiceDate(nd);
-                  }}
+                  onClick={() => { setPendingModeAfterDate(mode); setShowServiceDatePicker(true); }}
                   style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#7aaa8a", cursor: "pointer", textTransform: "uppercase" }}
                 >
                   {new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}
@@ -7029,5 +7113,5 @@ export default function App() {
       )}
       {inventoryOpen && <InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} />}
     </div>
-  );
+  </>);
 }
