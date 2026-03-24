@@ -14,90 +14,25 @@ import {
   firstFilled, applyMenuOverride, truthyCell, splitMainSubCell,
   parseBilingual, mergeDishes, applyCourseRestriction,
   RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, initDishes,
+  parseMenuRow,
 } from "./utils/menuUtils.js";
 import { generateMenuHTML } from "./utils/menuGenerator.js";
+import {
+  readLocalBeverages, writeLocalBeverages,
+  readTeamNames, writeTeamNames,
+  readLocalBoardState, writeLocalBoardState,
+  BEV_STORAGE_KEY, TEAM_STORAGE_KEY, DEFAULT_TEAM_NAMES, STORAGE_KEY,
+} from "./utils/storage.js";
+import { makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM } from "./utils/tableHelpers.js";
+import { fuzzy, fuzzyDrink } from "./utils/search.js";
+import { useIsMobile } from "./hooks/useIsMobile.js";
 
 const LIVE_MENU_SHEET_ID = import.meta.env.VITE_MENU_SHEET_ID || "1aPVGmKNcvDOFzyr3jSPT_KL5lKEYKPgkad3y0_E_Vl4";
 const LIVE_MENU_SHEET_TAB = import.meta.env.VITE_MENU_SHEET_TAB || "MILKA MENU V2";
 const LIVE_MENU_CSV_URL = `https://docs.google.com/spreadsheets/d/${LIVE_MENU_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(LIVE_MENU_SHEET_TAB)}`;
 
-function normalizeLiveMenuRow(row) {
-  const position = Number(firstFilled(row["#"], row.position, row.order_index)) || 0;
-
-  const dishLines = String(row.dish ?? "").split("\n").map(s => s.trim());
-  const descLines = String(row.description ?? "").split("\n").map(s => s.trim());
-  const dishEnRaw = dishLines[0] || "";
-  const descEnRaw = descLines[0] || "";
-  const dishSiRaw = String(row.dish_si ?? "").trim() || dishLines[1] || "";
-  const descSiRaw = String(row.dish_si_sub ?? "").trim() || descLines[1] || "";
-  const kitchenNoteFallback = dishLines[2] || "";
-
-  const dish = splitMainSubCell(dishEnRaw, descEnRaw);
-  if (!dish?.name) return null;
-
-  const courseKey = String(firstFilled(row.course_key, row.key, dishEnRaw) || "")
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
-  const restrictionKeys = [
-    "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
-    "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
-    "no_garlic_onion","halal","low_fodmap"
-  ];
-  const restrictions = {};
-  restrictionKeys.forEach((key) => {
-    const { en, si, note: cellNote } = parseBilingual(row[key], row[`${key}_sub`]);
-    restrictions[key] = en;
-    if (si) restrictions[`${key}_si`] = si;
-    const note = String(firstFilled(row[`${key}_note`], cellNote) || "").trim();
-    if (note) restrictions[`${key}_note`] = note;
-  });
-
-  const menuSi = splitMainSubCell(dishSiRaw, descSiRaw);
-
-  const wpBi   = parseBilingual(row.wp_drink,  row.wp_sub);
-  const naBi   = parseBilingual(row.na_drink,  row.na_sub);
-  const osBi   = parseBilingual(row.os_drink,  row.os_sub);
-  const premBi = parseBilingual(row.premium,   row.premium_sub);
-
-  return {
-    position,
-    is_snack: truthyCell(firstFilled(row["snack?"], row.snack)),
-    menu: dish,
-    menu_si: menuSi?.name ? menuSi : null,
-    wp: wpBi.en,
-    wp_si: wpBi.si || null,
-    na: naBi.en,
-    na_si: naBi.si || null,
-    os: osBi.en,
-    os_si: osBi.si || null,
-    premium: premBi.en,
-    premium_si: premBi.si || null,
-    course_key: courseKey,
-    optional_flag: String(firstFilled(row.optional_flag)).trim().toLowerCase(),
-    section_gap_before: truthyCell(firstFilled(row.section_gap_before)),
-    show_on_short: truthyCell(firstFilled(row.show_on_short)),
-    short_order: Number(firstFilled(row.short_order)) || null,
-    ...(() => {
-      const raw = String(firstFilled(row.force_pairing_title)).trim();
-      const [enLine, siLine] = raw.split("\n").map(l => l.trim());
-      const en = splitMainSubCell(enLine, String(firstFilled(row.force_pairing_sub)).trim());
-      const si = siLine ? splitMainSubCell(siLine) : null;
-      return {
-        force_pairing_title: en?.name || "",
-        force_pairing_sub: en?.sub || "",
-        force_pairing_title_si: si?.name || "",
-        force_pairing_sub_si: si?.sub || "",
-      };
-    })(),
-    kitchen_note: String(firstFilled(row.kitchen_note, kitchenNoteFallback)).trim(),
-    aperitif_btn: String(firstFilled(row.aperitif_btn, row.aperitif) || "").trim() || null,
-    restrictions,
-  };
-}
+// Parsing is now shared via parseMenuRow from menuUtils.js
+const normalizeLiveMenuRow = parseMenuRow;
 
 async function fetchLiveMenuCourses() {
   // Primary: read from Supabase menu_courses table
@@ -197,36 +132,8 @@ const initSpirits   = [];
 const initBeers     = [];
 
 // ── Beverages local-storage key (separate from board state) ───────────────────
-const BEV_STORAGE_KEY = "milka-beverages-v1";
-function readLocalBeverages() {
-  try {
-    const raw = localStorage.getItem(BEV_STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch { return null; }
-}
-function writeLocalBeverages(bev) {
-  try { localStorage.setItem(BEV_STORAGE_KEY, JSON.stringify(bev)); } catch {}
-}
-
-
-const TEAM_STORAGE_KEY = "milka-menu-team-v2";
-const DEFAULT_TEAM_NAMES = "Daniel Polyakov, David Žefran, Djan Meglič, Eva Carlotta Schlier, Jela Šaban, Joel Gomez, Juan Galindo, James Masatoshi Muroyama, Nar Bahadur, Neža Jeromel, Tamara Sodja";
-function readTeamNames() {
-  if (typeof window === "undefined") return DEFAULT_TEAM_NAMES;
-  try {
-    const raw = window.localStorage.getItem(TEAM_STORAGE_KEY);
-    return raw && raw.trim() ? raw : DEFAULT_TEAM_NAMES;
-  } catch {
-    return DEFAULT_TEAM_NAMES;
-  }
-}
-function writeTeamNames(value) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(TEAM_STORAGE_KEY, value || DEFAULT_TEAM_NAMES);
-  } catch {}
-}
+// Storage helpers, search utilities, table factories, and useIsMobile hook
+// are now imported from their respective modules above.
 
 const esc = (v) => String(v ?? "")
   .replace(/&/g, "&amp;")
@@ -319,62 +226,6 @@ const pairingStyle = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const fuzzy = (q, wineList, byGlass = null) => {
-  if (!q) return [];
-  const lq = q.toLowerCase();
-  return wineList.filter(w => {
-    const hit = w.name.toLowerCase().includes(lq) || w.producer.toLowerCase().includes(lq) || w.vintage.includes(lq);
-    return hit && (byGlass === null || w.byGlass === byGlass);
-  }).slice(0, 6);
-};
-
-const fuzzyDrink = (q, list) => {
-  if (!q) return [];
-  const lq = q.toLowerCase();
-  return list.filter(d =>
-    d.name.toLowerCase().includes(lq) || (d.notes || "").toLowerCase().includes(lq)
-  ).slice(0, 6);
-};
-
-const makeSeats = (n, ex = []) =>
-  Array.from({ length: n }, (_, i) => ({
-    id: i + 1,
-    water:     ex[i]?.water     ?? "—",
-    glasses:   ex[i]?.glasses   ?? [],
-    cocktails: ex[i]?.cocktails ?? [],
-    spirits:   ex[i]?.spirits   ?? [],
-    beers:     ex[i]?.beers     ?? [],
-    pairing:   ex[i]?.pairing   ?? "",
-    extras:    ex[i]?.extras    ?? {},
-  }));
-
-const fmt = d => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-const parseHHMM = s => { if (!s) return null; const [h, m] = s.split(":").map(Number); return isNaN(h) || isNaN(m) ? null : h * 60 + m; };
-
-// ── Blank table factory ───────────────────────────────────────────────────────
-const blankTable = id => ({
-  id, active: false, guests: 2, resName: "", resTime: "", guestType: "", room: "",
-  arrivedAt: null, menuType: "", pace: "", bottleWines: [],
-  restrictions: [], birthday: false, notes: "", lang: "en", seats: makeSeats(2),
-  kitchenLog: {}, tableGroup: [], kitchenAlert: null,
-});
-
-const initTables = Array.from({ length: 10 }, (_, i) => blankTable(i + 1));
-
-// ── sanitizeTable: fill any missing fields so stale Supabase data never breaks UI ──
-const sanitizeTable = t => ({
-  ...blankTable(t.id ?? 0),
-  ...t,
-  bottleWines: Array.isArray(t.bottleWines) ? t.bottleWines : (t.bottleWine ? [t.bottleWine] : []),
-  seats: makeSeats(
-    t.guests ?? 2,
-    Array.isArray(t.seats) ? t.seats : []
-  ),
-  restrictions: Array.isArray(t.restrictions) ? t.restrictions : [],
-  kitchenLog: t.kitchenLog && typeof t.kitchenLog === "object" ? t.kitchenLog : {},
-  courseOverrides: t.courseOverrides && typeof t.courseOverrides === "object" ? t.courseOverrides : {},
-  tableGroup: Array.isArray(t.tableGroup) ? t.tableGroup : [],
-});
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const baseInp = {
@@ -414,7 +265,6 @@ const statusPill = (isLive, label) => ({
   whiteSpace: "nowrap",
 });
 
-const STORAGE_KEY = "milka-service-board-v8";
 const SERVICE_TABLES_TABLE = import.meta.env.VITE_SUPABASE_SERVICE_TABLES || "service_tables";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -430,25 +280,6 @@ const defaultBoardState = () => ({
   beers: initBeers,
 });
 
-const readLocalBoardState = () => {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    return null;
-  }
-};
-
-const writeLocalBoardState = state => {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {}
-};
-
 const circBtnSm = {
   width: 36, height: 36, borderRadius: "50%",
   border: "1px solid #e8e8e8", background: "#fff",
@@ -456,20 +287,6 @@ const circBtnSm = {
   display: "flex", alignItems: "center", justifyContent: "center",
   fontFamily: FONT, lineHeight: 1, touchAction: "manipulation",
 };
-
-function useIsMobile(bp = 700) {
-  const getValue = () => (typeof window !== "undefined" ? window.innerWidth < bp : false);
-  const [isMobile, setIsMobile] = useState(getValue);
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(getValue());
-    onResize();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [bp]);
-
-  return isMobile;
-}
 
 // ── Water Picker ──────────────────────────────────────────────────────────────
 function WaterPicker({ value, onChange }) {

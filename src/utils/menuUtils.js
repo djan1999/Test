@@ -118,6 +118,87 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
   return dish;
 }
 
+// Restriction keys shared between frontend and API sync
+export const RESTRICTION_KEYS = [
+  "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
+  "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
+  "no_garlic_onion","halal","low_fodmap",
+];
+
+/**
+ * Parse a single Google-Sheets row object into the canonical menu-course shape
+ * used by the frontend. Both App.jsx (CSV fallback) and api/sync-menu.js call
+ * this so the parsing logic lives in exactly one place.
+ *
+ * Returns null when the row has no dish name.
+ */
+export function parseMenuRow(row) {
+  const dishLines = String(row.dish ?? "").split("\n").map(s => s.trim());
+  const descLines = String(row.description ?? "").split("\n").map(s => s.trim());
+  const dishEnRaw = dishLines[0] || "";
+  const descEnRaw = descLines[0] || "";
+  const dishSiRaw = String(row.dish_si ?? "").trim() || dishLines[1] || "";
+  const descSiRaw = String(row.dish_si_sub ?? "").trim() || descLines[1] || "";
+  const kitchenNoteFallback = dishLines[2] || "";
+
+  const menu = splitMainSubCell(dishEnRaw, descEnRaw);
+  if (!menu?.name) return null;
+
+  const courseKey = String(firstFilled(row.course_key, row.key, dishEnRaw) || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  const restrictions = {};
+  RESTRICTION_KEYS.forEach((key) => {
+    const { en, si, note: cellNote } = parseBilingual(row[key], row[`${key}_sub`]);
+    restrictions[key] = en;
+    if (si) restrictions[`${key}_si`] = si;
+    const note = String(firstFilled(row[`${key}_note`], cellNote) || "").trim();
+    if (note) restrictions[`${key}_note`] = note;
+  });
+
+  const menuSi = splitMainSubCell(dishSiRaw, descSiRaw);
+  const wpBi   = parseBilingual(row.wp_drink,  row.wp_sub);
+  const naBi   = parseBilingual(row.na_drink,  row.na_sub);
+  const osBi   = parseBilingual(row.os_drink,  row.os_sub);
+  const premBi = parseBilingual(row.premium,   row.premium_sub);
+
+  const fpRaw = String(firstFilled(row.force_pairing_title)).trim();
+  const [fpEnLine, fpSiLine] = fpRaw.split("\n").map(l => l.trim());
+  const fpEn = splitMainSubCell(fpEnLine, String(firstFilled(row.force_pairing_sub)).trim());
+  const fpSi = fpSiLine ? splitMainSubCell(fpSiLine) : null;
+
+  return {
+    position: Number(firstFilled(row["#"], row.position, row.order_index)) || 0,
+    is_snack: truthyCell(firstFilled(row["snack?"], row.snack)),
+    menu,
+    menu_si: menuSi?.name ? menuSi : null,
+    wp: wpBi.en,
+    wp_si: wpBi.si || null,
+    na: naBi.en,
+    na_si: naBi.si || null,
+    os: osBi.en,
+    os_si: osBi.si || null,
+    premium: premBi.en,
+    premium_si: premBi.si || null,
+    course_key: courseKey,
+    optional_flag: String(firstFilled(row.optional_flag)).trim().toLowerCase(),
+    section_gap_before: truthyCell(firstFilled(row.section_gap_before)),
+    show_on_short: truthyCell(firstFilled(row.show_on_short)),
+    short_order: Number(firstFilled(row.short_order)) || null,
+    force_pairing_title: fpEn?.name || "",
+    force_pairing_sub: fpEn?.sub || "",
+    force_pairing_title_si: fpSi?.name || "",
+    force_pairing_sub_si: fpSi?.sub || "",
+    kitchen_note: String(firstFilled(row.kitchen_note, kitchenNoteFallback)).trim(),
+    aperitif_btn: String(firstFilled(row.aperitif_btn, row.aperitif) || "").trim() || null,
+    restrictions,
+  };
+}
+
 export const initDishes = [
   { id: 1, name: "Beetroot",  pairings: ["—", "Champagne", "N/A"] },
   { id: 2, name: "Cheese",    pairings: ["—", "Wine", "Non-Alc"] },
