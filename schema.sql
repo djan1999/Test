@@ -229,6 +229,33 @@ drop policy if exists "beverages_delete" on public.beverages;
 create policy "beverages_delete" on public.beverages
   for delete to anon, authenticated using (true);
 
+-- ── reservations ─────────────────────────────────────────────
+create table if not exists public.reservations (
+  id uuid primary key default gen_random_uuid(),
+  date date not null,
+  table_id integer not null,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.reservations enable row level security;
+
+drop policy if exists "reservations_read" on public.reservations;
+create policy "reservations_read" on public.reservations
+  for select to anon, authenticated using (true);
+
+drop policy if exists "reservations_write" on public.reservations;
+create policy "reservations_write" on public.reservations
+  for insert to anon, authenticated with check (true);
+
+drop policy if exists "reservations_update" on public.reservations;
+create policy "reservations_update" on public.reservations
+  for update to anon, authenticated using (true) with check (true);
+
+drop policy if exists "reservations_delete" on public.reservations;
+create policy "reservations_delete" on public.reservations
+  for delete to anon, authenticated using (true);
+
 -- ── Realtime ─────────────────────────────────────────────────
 do $$
 declare
@@ -239,7 +266,8 @@ begin
     'public.service_settings',
     'public.menu_courses',
     'public.wines',
-    'public.beverages'
+    'public.beverages',
+    'public.reservations'
   ] loop
     if not exists (
       select 1 from pg_publication_tables
