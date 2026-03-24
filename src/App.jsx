@@ -4924,6 +4924,494 @@ const writeAccess = () => {
   try { localStorage.setItem(ACCESS_KEY, JSON.stringify({ ts: Date.now() })); } catch {}
 };
 
+// ── ServiceDatePicker ─────────────────────────────────────────────────────────
+function ServiceDatePicker({ defaultDate, onConfirm, onCancel }) {
+  const [date, setDate] = useState(defaultDate || new Date().toISOString().slice(0, 10));
+  const formatted = date
+    ? new Date(date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).toUpperCase()
+    : "";
+  return (
+    <div style={{ minHeight: "100vh", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, padding: 24 }}>
+      <GlobalStyle />
+      <div style={{ width: "100%", maxWidth: 360, background: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "32px 28px", boxShadow: "0 4px 40px rgba(0,0,0,0.06)" }}>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ fontSize: 10, letterSpacing: 4, color: "#1a1a1a", marginBottom: 6, fontWeight: 600 }}>SERVICE DATE</div>
+          <div style={{ fontSize: 9, letterSpacing: 2, color: "#999" }}>SELECT DATE TO BEGIN SERVICE</div>
+        </div>
+        <input
+          type="date"
+          value={date}
+          onChange={e => setDate(e.target.value)}
+          autoFocus
+          style={{ fontFamily: FONT, fontSize: MOBILE_SAFE_INPUT_SIZE, width: "100%", padding: "12px 14px", border: "1px solid #e0e0e0", borderRadius: 4, marginBottom: 8, outline: "none", textAlign: "center", color: "#1a1a1a" }}
+        />
+        {date && <div style={{ fontSize: 9, letterSpacing: 1, color: "#aaa", textAlign: "center", marginBottom: 20 }}>{formatted}</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <button onClick={onCancel} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "12px 0", flex: 1, border: "1px solid #e8e8e8", borderRadius: 4, cursor: "pointer", background: "#fff", color: "#666" }}>CANCEL</button>
+          <button onClick={() => date && onConfirm(date)} disabled={!date} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "12px 0", flex: 2, border: "1px solid #1a1a1a", borderRadius: 4, cursor: "pointer", background: "#1a1a1a", color: "#fff", fontWeight: 600, opacity: date ? 1 : 0.5 }}>START SERVICE</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── ResvForm — create / edit a reservation ────────────────────────────────────
+function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }) {
+  const [tableIds,     setTableIds]     = useState(
+    initial?.data?.tableGroup?.length > 1 ? initial.data.tableGroup.map(Number)
+      : initial?.table_id               ? [Number(initial.table_id)]
+      : []
+  );
+  const [name,         setName]         = useState(initial?.data?.resName      || "");
+  const [time,         setTime]         = useState(initial?.data?.resTime      || "");
+  const [menuType,     setMenuType]     = useState(initial?.data?.menuType     || "");
+  const [lang,         setLang]         = useState(initial?.data?.lang         || "en");
+  const [guests,       setGuests]       = useState(initial?.data?.guests       || 2);
+  const [guestType,    setGuestType]    = useState(initial?.data?.guestType    || "");
+  const [room,         setRoom]         = useState(initial?.data?.room         || "");
+  const [birthday,     setBirthday]     = useState(!!initial?.data?.birthday);
+  const [restrictions, setRestrictions] = useState(initial?.data?.restrictions || []);
+  const [notes,        setNotes]        = useState(initial?.data?.notes        || "");
+  const [saving,       setSaving]       = useState(false);
+
+  const sortedGroup = [...tableIds].sort((a, b) => a - b);
+  const primaryId   = sortedGroup[0] ?? null;
+
+  const isConflict = (tid) => reservations.some(r =>
+    r.id !== excludeId &&
+    r.date === initial?.date &&
+    (r.table_id === tid || (r.data?.tableGroup || []).map(Number).includes(tid)) &&
+    !tableIds.includes(tid)
+  );
+
+  const handleSave = async () => {
+    if (!primaryId) return;
+    setSaving(true);
+    const data = {
+      resName: name, resTime: time, menuType, lang, guests, guestType,
+      room: guestType === "hotel" ? room : "", birthday, restrictions, notes,
+      tableGroup: sortedGroup,
+      courseOverrides:    initial?.data?.courseOverrides    || {},
+      kitchenCourseNotes: initial?.data?.kitchenCourseNotes || {},
+    };
+    await onSave({ id: initial?.id, date: initial?.date, table_id: primaryId, data });
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ background: "#fafafa", border: "1px solid #e8e8e8", borderRadius: 6, padding: "14px 14px 18px", margin: "4px 0 8px", fontFamily: FONT }}>
+      {/* Table picker */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={fieldLabel}>
+          Table
+          {tableIds.length > 1 && <span style={{ color: "#aaa", fontWeight: 400, marginLeft: 6 }}>T{sortedGroup.join("-")} · combined</span>}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
+          {Array.from({ length: 10 }, (_, i) => i + 1).map(tid => {
+            const isSel    = tableIds.includes(tid);
+            const conflict = isConflict(tid);
+            const isActive = tables.find(t => t.id === tid)?.active;
+            return (
+              <button key={tid} disabled={isActive} onClick={() => {
+                if (conflict || isActive) return;
+                setTableIds(prev => prev.includes(tid) ? (prev.length > 1 ? prev.filter(x => x !== tid) : prev) : [...prev, tid]);
+              }} style={{
+                fontFamily: FONT, fontSize: 11, padding: "9px 0",
+                border: "1px solid",
+                borderColor: isSel ? "#1a1a1a" : conflict ? "#f0d0b0" : isActive ? "#f0f0f0" : "#e0e0e0",
+                borderRadius: 2,
+                background: isSel ? "#1a1a1a" : conflict ? "#fff8f2" : isActive ? "#f8f8f8" : "#fff",
+                color: isSel ? "#fff" : conflict ? "#c07840" : isActive ? "#ccc" : "#555",
+                cursor: conflict || isActive ? "not-allowed" : "pointer",
+              }}>T{String(tid).padStart(2, "0")}</button>
+            );
+          })}
+        </div>
+        {tableIds.length === 0 && <div style={{ fontFamily: FONT, fontSize: 9, color: "#e06060", marginTop: 4 }}>Select at least one table</div>}
+      </div>
+
+      {/* Name + Sitting */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+        <div>
+          <div style={fieldLabel}>Name</div>
+          <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="Guest name…" style={baseInp} />
+        </div>
+        <div>
+          <div style={fieldLabel}>Sitting</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 5 }}>
+            {SITTING_TIMES.map(t => (
+              <button key={t} onClick={() => setTime(t === time ? "" : t)} style={{
+                fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "8px 0",
+                border: "1px solid", borderColor: time === t ? "#1a1a1a" : "#e8e8e8",
+                borderRadius: 2, cursor: "pointer",
+                background: time === t ? "#1a1a1a" : "#fff",
+                color: time === t ? "#fff" : "#666",
+              }}>{t}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Menu + Lang + Guests */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
+        <div>
+          <div style={fieldLabel}>Menu</div>
+          <div style={{ display: "flex", gap: 5 }}>
+            {[["long","Long"],["short","Short"]].map(([v, l]) => (
+              <button key={v} onClick={() => setMenuType(menuType === v ? "" : v)} style={{
+                fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "8px 0", flex: 1,
+                border: "1px solid", borderColor: menuType === v ? "#1a1a1a" : "#e8e8e8",
+                borderRadius: 2, cursor: "pointer",
+                background: menuType === v ? "#1a1a1a" : "#fff",
+                color: menuType === v ? "#fff" : "#666",
+              }}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={fieldLabel}>Language</div>
+          <div style={{ display: "flex", gap: 5 }}>
+            {[["en","EN"],["si","SLO"]].map(([v, l]) => (
+              <button key={v} onClick={() => setLang(v)} style={{
+                fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "8px 0", flex: 1,
+                border: "1px solid", borderColor: lang === v ? "#1a1a1a" : "#e8e8e8",
+                borderRadius: 2, cursor: "pointer",
+                background: lang === v ? "#1a1a1a" : "#fff",
+                color: lang === v ? "#fff" : "#666",
+              }}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={fieldLabel}>Guests</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button onClick={() => setGuests(g => Math.max(1, g - 1))} style={circBtnSm}>−</button>
+            <span style={{ fontFamily: FONT, fontSize: 15, minWidth: 22, textAlign: "center", color: "#1a1a1a" }}>{guests}</span>
+            <button onClick={() => setGuests(g => Math.min(14, g + 1))} style={circBtnSm}>+</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Guest type + Room */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10, alignItems: "flex-start" }}>
+        <div>
+          <div style={fieldLabel}>Guest type</div>
+          <div style={{ display: "flex", gap: 5 }}>
+            {[["","Regular"],["hotel","Hotel"],["outside","Outside"]].map(([v, l]) => (
+              <button key={v || "r"} onClick={() => { setGuestType(v); if (v !== "hotel") setRoom(""); }} style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "8px 0", flex: 1,
+                border: "1px solid", borderColor: guestType === v ? "#1a1a1a" : "#e8e8e8",
+                borderRadius: 2, cursor: "pointer",
+                background: guestType === v ? "#1a1a1a" : "#fff",
+                color: guestType === v ? "#fff" : "#666",
+              }}>{l}</button>
+            ))}
+          </div>
+        </div>
+        {guestType === "hotel" ? (
+          <div>
+            <div style={fieldLabel}>Room</div>
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+              {["01","11","12","21","22","23"].map(r => (
+                <button key={r} onClick={() => setRoom(x => x === r ? "" : r)} style={{
+                  fontFamily: FONT, fontSize: 11, padding: "7px 10px",
+                  border: "1px solid", borderColor: room === r ? "#c8a06e" : "#e8e8e8",
+                  borderRadius: 2, cursor: "pointer",
+                  background: room === r ? "#fdf6ec" : "#fff",
+                  color: room === r ? "#a07040" : "#555",
+                }}>{r}</button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 22 }}>
+            <input type="checkbox" id={`resvbd-${initial?.id || "new"}`} checked={birthday} onChange={e => setBirthday(e.target.checked)} style={{ width: 14, height: 14, cursor: "pointer" }} />
+            <label htmlFor={`resvbd-${initial?.id || "new"}`} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>Birthday cake</label>
+          </div>
+        )}
+      </div>
+      {guestType === "hotel" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <input type="checkbox" id={`resvbd2-${initial?.id || "new"}`} checked={birthday} onChange={e => setBirthday(e.target.checked)} style={{ width: 14, height: 14, cursor: "pointer" }} />
+          <label htmlFor={`resvbd2-${initial?.id || "new"}`} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>Birthday cake</label>
+        </div>
+      )}
+
+      {/* Dietary restrictions */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ ...fieldLabel, marginBottom: 8 }}>Dietary restrictions</div>
+        {Object.entries(RESTRICTION_GROUPS).map(([group, groupLabel]) => {
+          const items = RESTRICTIONS.filter(r => r.group === group);
+          return (
+            <div key={group} style={{ marginBottom: 10 }}>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 5 }}>{groupLabel}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {items.map(opt => {
+                  const cnt = restrictions.filter(r => r.note === opt.key).length;
+                  return (
+                    <button key={opt.key} onClick={() => setRestrictions(rs => [...rs, { pos: null, note: opt.key }])} style={{
+                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "5px 9px",
+                      borderRadius: 2, cursor: "pointer",
+                      border: `1px solid ${cnt > 0 ? "#e09090" : "#e8e8e8"}`,
+                      background: cnt > 0 ? "#fef0f0" : "#fafafa",
+                      color: cnt > 0 ? "#b04040" : "#888",
+                      fontWeight: cnt > 0 ? 600 : 400,
+                    }}>
+                      {opt.emoji} {opt.label}
+                      {cnt > 0 && <span style={{ marginLeft: 4, background: "#e09090", color: "#fff", borderRadius: 99, fontSize: 8, padding: "1px 4px" }}>{cnt}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {restrictions.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
+            {restrictions.map((r, i) => {
+              const def   = RESTRICTIONS.find(x => x.key === r.note);
+              const label = def ? `${def.emoji} ${def.label}` : r.note;
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", background: "#fef0f0", border: "1px solid #e09090", borderRadius: 2 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 10, color: "#b04040" }}>{label}</span>
+                  <button onClick={() => setRestrictions(rs => rs.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: "#e09090", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Notes */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={fieldLabel}>Notes</div>
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="VIP, pace, special requests…" style={{ ...baseInp, minHeight: 56, resize: "vertical", lineHeight: 1.5 }} />
+      </div>
+
+      {/* Save / Cancel */}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button onClick={onCancel} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px", border: "1px solid #e0e0e0", borderRadius: 4, cursor: "pointer", background: "#fff", color: "#666" }}>CANCEL</button>
+        <button onClick={handleSave} disabled={!primaryId || saving} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 20px", border: "1px solid #1a1a1a", borderRadius: 4, cursor: "pointer", background: "#1a1a1a", color: "#fff", fontWeight: 600, opacity: (!primaryId || saving) ? 0.5 : 1 }}>
+          {saving ? "SAVING…" : "SAVE"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── ResvCard — single reservation row with expandable edit + kitchen preview ──
+function ResvCard({ resv, allReservations, tables, menuCourses, expanded, onToggle, onUpsert, onDelete, onUpdReservation }) {
+  const [editing,   setEditing]   = useState(false);
+  const [localData, setLocalData] = useState(resv.data || {});
+
+  // Stay in sync when parent state updates (e.g. from realtime)
+  useEffect(() => { setLocalData(resv.data || {}); }, [resv.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const group      = localData.tableGroup?.length > 1 ? localData.tableGroup.map(Number) : [resv.table_id];
+  const tableLabel = group.length > 1
+    ? `T${[...group].sort((a, b) => a - b).join("-")}`
+    : `T${String(resv.table_id).padStart(2, "0")}`;
+
+  const virtualTable = {
+    ...blankTable(resv.table_id),
+    ...localData,
+    id:    resv.table_id,
+    seats: makeSeats(localData.guests || 2, localData.seats || []),
+  };
+
+  // Save course/restriction edits made inside the ticket preview to both the
+  // reservation and (if already pre-populated) the live service_tables row.
+  const updForTicket = (tid, field, value) => {
+    setLocalData(prev => ({ ...prev, [field]: value }));
+    onUpdReservation(resv.id, tid, field, value);
+  };
+
+  return (
+    <div style={{ border: `1px solid ${expanded ? "#d8d8d8" : "#efefef"}`, borderRadius: 4, marginBottom: 4, background: expanded ? "#fdfdfd" : "#fff", transition: "border-color 0.1s" }}>
+      {/* Summary row (always visible) */}
+      <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", cursor: "pointer", userSelect: "none" }}>
+        <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "#555", minWidth: 44 }}>{tableLabel}</span>
+        <span style={{ fontFamily: FONT, fontSize: 10, color: "#1a1a1a", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {localData.resName || <em style={{ color: "#bbb", fontStyle: "italic" }}>unnamed</em>}
+        </span>
+        {localData.resTime && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#888" }}>{localData.resTime}</span>}
+        <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb" }}>{localData.guests || 2}×</span>
+        {localData.menuType && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#c8a06e", textTransform: "uppercase" }}>{localData.menuType}</span>}
+        {localData.lang === "si" && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#6080c0" }}>SLO</span>}
+        {localData.birthday && <span style={{ fontSize: 10 }}>🎂</span>}
+        {localData.restrictions?.length > 0 && <span style={{ fontFamily: FONT, fontSize: 9, color: "#e07050" }}>⚠ {localData.restrictions.length}</span>}
+        <span style={{ fontFamily: FONT, fontSize: 9, color: "#ccc" }}>{expanded ? "▲" : "▼"}</span>
+      </div>
+
+      {/* Expanded panel */}
+      {expanded && (
+        <div style={{ borderTop: "1px solid #f0f0f0", padding: "10px 12px 14px" }}>
+          {editing ? (
+            <ResvForm
+              initial={resv}
+              tables={tables}
+              reservations={allReservations}
+              excludeId={resv.id}
+              onSave={async (row) => { await onUpsert(row); setEditing(false); }}
+              onCancel={() => setEditing(false)}
+            />
+          ) : (
+            <>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                <button onClick={() => setEditing(true)} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "5px 12px", border: "1px solid #d0d0d0", borderRadius: 999, cursor: "pointer", background: "#fff" }}>EDIT</button>
+                <button onClick={onDelete} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "5px 12px", border: "1px solid #f0c0c0", borderRadius: 999, cursor: "pointer", background: "#fff8f8", color: "#c04040" }}>DELETE</button>
+                {localData.notes && (
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: "#999", fontStyle: "italic", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{localData.notes}</span>
+                )}
+              </div>
+              {/* Kitchen ticket preview — full Display-mode fidelity */}
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 3, color: "#bbb", marginBottom: 6, textTransform: "uppercase" }}>Kitchen Preview</div>
+              <div style={{ border: "1px solid #f0f0f0", borderRadius: 4, overflow: "hidden", background: "#fff" }}>
+                <KitchenTicket
+                  table={virtualTable}
+                  menuCourses={menuCourses}
+                  upd={updForTicket}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ReservationManager — week-view planner ────────────────────────────────────
+function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onExit, serviceDate, onSetServiceDate }) {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [expandedId, setExpandedId] = useState(null);
+  const [addingDate, setAddingDate] = useState(null);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const weekDays = useMemo(() => {
+    const today = new Date();
+    const dow   = today.getDay();
+    const toMon = dow === 0 ? -6 : 1 - dow;
+    const mon   = new Date(today);
+    mon.setDate(today.getDate() + toMon + weekOffset * 7);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(mon);
+      d.setDate(mon.getDate() + i);
+      return d;
+    });
+  }, [weekOffset]);
+
+  const toDateStr  = d => d.toISOString().slice(0, 10);
+  const fmtDay     = d => d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase();
+  const fmtRange   = () => {
+    const o = { day: "numeric", month: "short" };
+    return `${weekDays[0].toLocaleDateString("en-GB", o)} – ${weekDays[6].toLocaleDateString("en-GB", o)}`.toUpperCase();
+  };
+
+  const navBtn = { fontFamily: FONT, fontSize: 11, padding: "4px 8px", border: "1px solid #e8e8e8", borderRadius: 4, cursor: "pointer", background: "#fff", color: "#555" };
+
+  const serviceDateLabel = serviceDate
+    ? new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }).toUpperCase()
+    : null;
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+      <GlobalStyle />
+
+      {/* Sticky header */}
+      <div style={{ borderBottom: "1px solid #f0f0f0", padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 50, gap: 12 }}>
+        <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#1a1a1a", flexShrink: 0 }}>← EXIT</button>
+        <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#999", flex: 1, textAlign: "center" }}>RESERVATIONS</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          <button onClick={() => setWeekOffset(w => w - 1)} style={navBtn}>◀</button>
+          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#888", minWidth: 110, textAlign: "center" }}>{fmtRange()}</span>
+          <button onClick={() => setWeekOffset(w => w + 1)} style={navBtn}>▶</button>
+        </div>
+      </div>
+
+      {/* Service date strip */}
+      <div style={{ padding: "7px 16px", borderBottom: "1px solid #f8f8f8", display: "flex", alignItems: "center", gap: 10 }}>
+        {serviceDate ? (
+          <>
+            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#2f7a45", fontWeight: 600 }}>● SERVICE: {serviceDateLabel}</span>
+            <button onClick={() => { const nd = window.prompt("Change service date (YYYY-MM-DD):", serviceDate); if (nd && /^\d{4}-\d{2}-\d{2}$/.test(nd)) onSetServiceDate(nd); }} style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#bbb", background: "none", border: "none", cursor: "pointer" }}>change</button>
+          </>
+        ) : (
+          <>
+            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#ccc" }}>NO ACTIVE SERVICE DATE</span>
+            <button onClick={() => { const nd = window.prompt("Set service date (YYYY-MM-DD):", todayStr); if (nd && /^\d{4}-\d{2}-\d{2}$/.test(nd)) onSetServiceDate(nd); }} style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#888", background: "none", border: "1px solid #e0e0e0", cursor: "pointer", borderRadius: 2, padding: "2px 8px" }}>SET DATE</button>
+          </>
+        )}
+      </div>
+
+      {/* Week */}
+      <div style={{ padding: "8px 16px 60px", maxWidth: 880, margin: "0 auto" }}>
+        {weekDays.map(day => {
+          const dateStr    = toDateStr(day);
+          const dayResv    = reservations
+            .filter(r => r.date === dateStr)
+            .sort((a, b) => (a.data?.resTime || "99:99").localeCompare(b.data?.resTime || "99:99"));
+          const isToday      = dateStr === todayStr;
+          const isServiceDay = dateStr === serviceDate;
+
+          return (
+            <div key={dateStr} style={{ marginBottom: 2 }}>
+              {/* Day header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0 6px", borderBottom: `1px solid ${isServiceDay ? "#d0e8d8" : "#f0f0f0"}` }}>
+                <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, fontWeight: 600, minWidth: 110, color: isServiceDay ? "#2f7a45" : isToday ? "#1a1a1a" : "#b0b0b0" }}>
+                  {fmtDay(day)}
+                  {isServiceDay && <span style={{ fontSize: 7, letterSpacing: 1, color: "#2f7a45", marginLeft: 5 }}>● SERVICE</span>}
+                  {isToday && !isServiceDay && <span style={{ fontSize: 7, letterSpacing: 1, color: "#ccc", marginLeft: 5 }}>TODAY</span>}
+                </span>
+                <span style={{ fontFamily: FONT, fontSize: 9, color: "#ddd", letterSpacing: 1 }}>{dayResv.length > 0 ? dayResv.length : "—"}</span>
+                <div style={{ flex: 1 }} />
+                <button
+                  onClick={() => setAddingDate(addingDate === dateStr ? null : dateStr)}
+                  style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "4px 10px", border: `1px solid ${addingDate === dateStr ? "#1a1a1a" : "#d0d0d0"}`, borderRadius: 999, cursor: "pointer", background: addingDate === dateStr ? "#1a1a1a" : "#fff", color: addingDate === dateStr ? "#fff" : "#888" }}
+                >+ ADD</button>
+              </div>
+
+              {/* New reservation form */}
+              {addingDate === dateStr && (
+                <ResvForm
+                  initial={{ date: dateStr, table_id: null, data: {} }}
+                  tables={tables}
+                  reservations={reservations}
+                  excludeId={null}
+                  onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) setAddingDate(null); }}
+                  onCancel={() => setAddingDate(null)}
+                />
+              )}
+
+              {/* Reservation rows */}
+              <div style={{ paddingTop: dayResv.length > 0 ? 3 : 0 }}>
+                {dayResv.map(r => (
+                  <ResvCard
+                    key={r.id}
+                    resv={r}
+                    allReservations={reservations}
+                    tables={tables}
+                    menuCourses={menuCourses}
+                    expanded={expandedId === r.id}
+                    onToggle={() => setExpandedId(expandedId === r.id ? null : r.id)}
+                    onUpsert={onUpsert}
+                    onDelete={async () => { if (window.confirm("Delete this reservation?")) { await onDelete(r.id); if (expandedId === r.id) setExpandedId(null); } }}
+                    onUpdReservation={onUpdReservation}
+                  />
+                ))}
+                {dayResv.length === 0 && addingDate !== dateStr && (
+                  <div style={{ fontFamily: FONT, fontSize: 9, color: "#e8e8e8", letterSpacing: 1, padding: "6px 0 2px" }}>—</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── GateScreen — password wall before anything else ───────────────────────────
 function GateScreen({ onPass }) {
   const [pw, setPw]       = useState("");
@@ -5256,10 +5744,11 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
 // ── Login Screen ──────────────────────────────────────────────────────────────
 function LoginScreen({ onEnter, onSyncAll }) {
   const MODES = [
-    { id: "display",  label: "Display",  sub: "read-only view",      icon: "◎", pin: false },
-    { id: "service",  label: "Service",  sub: "full service access",  icon: "◈", pin: false },
-    { id: "admin",    label: "Admin",    sub: "pin required",         icon: "◆", pin: true  },
-    { id: "menu",     label: "Menu",     sub: "menus & print",        icon: "▨", pin: true  },
+    { id: "display",     label: "Display",      sub: "read-only view",      icon: "◎", pin: false },
+    { id: "service",     label: "Service",      sub: "full service access",  icon: "◈", pin: false },
+    { id: "reservation", label: "Reservations", sub: "weekly planner",       icon: "◫", pin: false },
+    { id: "admin",       label: "Admin",        sub: "pin required",         icon: "◆", pin: true  },
+    { id: "menu",        label: "Menu",         sub: "menus & print",        icon: "▨", pin: true  },
   ];
   const [picking, setPicking] = useState(null);
   const [pin, setPin]         = useState("");
@@ -5462,6 +5951,13 @@ export default function App() {
   const [logoDataUri,  setLogoDataUri]  = useState("");
   // Access gate: checked once at init against 12h TTL
   const [authed,       setAuthed]       = useState(() => readAccess());
+  // Reservations & service date
+  const [reservations, setReservations] = useState([]);
+  const [serviceDate,  setServiceDate]  = useState(() => {
+    try { return localStorage.getItem("milka_service_date") || null; } catch { return null; }
+  });
+  const [showServiceDatePicker,  setShowServiceDatePicker]  = useState(false);
+  const [pendingModeAfterDate,   setPendingModeAfterDate]   = useState(null);
   // Hydration: render immediately from localStorage, sync Supabase in background
   const [hydrated,     setHydrated]     = useState(() => {
     if (!hasSupabaseConfig) return true;
@@ -5646,6 +6142,8 @@ export default function App() {
     setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     setSel(null);
     setArchiveOpen(false);
+    // Release the service date lock so the next service can set a new date
+    persistServiceDate(null);
   };
 
   const swapSeats = (tid, aId, bId) => setTables(p => p.map(t => {
@@ -5685,12 +6183,117 @@ export default function App() {
     setResModal(null);
   };
 
+  // ── Service date ──────────────────────────────────────────────────────────
+  const persistServiceDate = async (date) => {
+    setServiceDate(date);
+    try {
+      if (date) localStorage.setItem("milka_service_date", date);
+      else      localStorage.removeItem("milka_service_date");
+    } catch {}
+    if (!supabase) return;
+    await supabase.from("service_settings")
+      .upsert({ id: "service_date", state: date ? { date } : {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
+  };
+
+  // ── Reservations CRUD ─────────────────────────────────────────────────────
+  const upsertReservation = async ({ id, date, table_id, data: rData }) => {
+    const dbRow = { date, table_id, data: rData };
+    if (id) {
+      if (supabase) {
+        const { error } = await supabase.from("reservations").update(dbRow).eq("id", id);
+        if (!error) setReservations(prev => prev.map(r => r.id === id ? { ...r, ...dbRow } : r));
+        return { ok: !error, error };
+      }
+      setReservations(prev => prev.map(r => r.id === id ? { ...r, ...dbRow } : r));
+      return { ok: true };
+    }
+    if (supabase) {
+      const { data: inserted, error } = await supabase.from("reservations").insert(dbRow).select().single();
+      if (!error && inserted) setReservations(prev => [...prev, inserted]);
+      return { ok: !error, error, data: inserted };
+    }
+    const local = { ...dbRow, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    setReservations(prev => [...prev, local]);
+    return { ok: true, data: local };
+  };
+
+  const deleteReservation = async (id) => {
+    setReservations(prev => prev.filter(r => r.id !== id));
+    if (!supabase) return { ok: true };
+    const { error } = await supabase.from("reservations").delete().eq("id", id);
+    return { ok: !error };
+  };
+
+  // Apply reservation data to tables that are still blank (not yet active / named)
+  const prePopulateFromReservations = (rows) => {
+    if (!rows?.length) return;
+    setTables(prev => {
+      let next = [...prev];
+      for (const row of rows) {
+        const d = row.data || {};
+        const group = (d.tableGroup?.length > 1 ? d.tableGroup : [row.table_id]).map(Number);
+        for (const tid of group) {
+          const idx = next.findIndex(t => t.id === tid);
+          if (idx === -1) continue;
+          const t = next[idx];
+          if (t.active || t.resName) continue; // never overwrite occupied / named tables
+          next[idx] = {
+            ...t,
+            resName:            d.resName || "",
+            resTime:            d.resTime || "",
+            menuType:           d.menuType || "",
+            lang:               d.lang || "en",
+            guests:             d.guests || 2,
+            guestType:          d.guestType || "",
+            room:               d.room || "",
+            birthday:           !!d.birthday,
+            restrictions:       d.restrictions || [],
+            notes:              d.notes || "",
+            tableGroup:         group,
+            courseOverrides:    d.courseOverrides || {},
+            kitchenCourseNotes: d.kitchenCourseNotes || {},
+            seats:              makeSeats(d.guests || 2, t.seats),
+          };
+        }
+      }
+      return next;
+    });
+  };
+
+  // Update a field in a reservation's data AND sync to service_tables so
+  // Display mode picks it up via the existing realtime subscription.
+  const updTableFromReservation = (resvId, tableId, field, value) => {
+    setReservations(prev => prev.map(r => {
+      if (r.id !== resvId) return r;
+      const newData = { ...(r.data || {}), [field]: value };
+      supabase?.from("reservations").update({ data: newData }).eq("id", resvId).then(() => {});
+      return { ...r, data: newData };
+    }));
+    // Only push to service_tables when that table already carries reservation data
+    // (avoids polluting blank table rows before service starts).
+    const serviceTable = tablesRef.current?.find(t => t.id === tableId);
+    if (serviceTable?.resName || serviceTable?.active) {
+      upd(tableId, field, value);
+    }
+  };
+
   const changeMode = nextMode => {
+    // Service mode requires a locked service date
+    if (nextMode === "service" && !serviceDate) {
+      setPendingModeAfterDate(nextMode);
+      setShowServiceDatePicker(true);
+      return;
+    }
     setMode(nextMode);
     try {
       if (nextMode) localStorage.setItem("milka_mode", nextMode);
       else          localStorage.removeItem("milka_mode");
     } catch {}
+    // Pre-populate tables from reservations when entering live modes
+    if ((nextMode === "service" || nextMode === "display") && serviceDate && supabase) {
+      supabase.from("reservations").select("*").eq("date", serviceDate)
+        .then(({ data }) => { if (data?.length) prePopulateFromReservations(data); });
+    }
   };
 
   const switchMode = () => { changeMode(null); setSel(null); };
@@ -5935,6 +6538,48 @@ export default function App() {
     return () => { mounted = false; supabase.removeChannel(wineChannel); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Service date + reservations: load from Supabase + realtime ──────────────
+  useEffect(() => {
+    if (!supabase) return;
+    let mounted = true;
+
+    // Restore service date saved by a previous session
+    supabase.from("service_settings").select("state").eq("id", "service_date").single()
+      .then(({ data }) => {
+        if (!mounted || !data?.state?.date) return;
+        setServiceDate(d => d || data.state.date); // local state wins if already set
+        try { localStorage.setItem("milka_service_date", data.state.date); } catch {}
+      });
+
+    // Load reservations for -7 days … +30 days so the planner is pre-populated
+    const past   = new Date(); past.setDate(past.getDate() - 7);
+    const future = new Date(); future.setDate(future.getDate() + 30);
+    supabase.from("reservations").select("*")
+      .gte("date", past.toISOString().slice(0, 10))
+      .lte("date", future.toISOString().slice(0, 10))
+      .order("date").order("created_at")
+      .then(({ data, error }) => {
+        if (!mounted || error || !data) return;
+        setReservations(data);
+      });
+
+    const ch = supabase.channel("milka-reservations")
+      .on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, payload => {
+        if (!mounted) return;
+        if (payload.eventType === "DELETE") {
+          setReservations(prev => prev.filter(r => r.id !== payload.old?.id));
+        } else if (payload.new) {
+          setReservations(prev => {
+            const without = prev.filter(r => r.id !== payload.new.id);
+            return [...without, payload.new];
+          });
+        }
+      })
+      .subscribe();
+
+    return () => { mounted = false; supabase.removeChannel(ch); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Menu courses: load from Supabase, fallback to Google Sheets CSV ────────
   useEffect(() => {
     let mounted = true;
@@ -6016,7 +6661,44 @@ export default function App() {
     </div>
   );
 
+  // Service date picker — shown before entering Service mode when no date is set
+  if (showServiceDatePicker) return (
+    <ServiceDatePicker
+      defaultDate={new Date().toISOString().slice(0, 10)}
+      onConfirm={async (date) => {
+        await persistServiceDate(date);
+        setShowServiceDatePicker(false);
+        const target = pendingModeAfterDate;
+        setPendingModeAfterDate(null);
+        if (target) {
+          setMode(target);
+          try { localStorage.setItem("milka_mode", target); } catch {}
+          if ((target === "service" || target === "display") && supabase) {
+            supabase.from("reservations").select("*").eq("date", date)
+              .then(({ data }) => { if (data?.length) prePopulateFromReservations(data); });
+          }
+        }
+      }}
+      onCancel={() => { setShowServiceDatePicker(false); setPendingModeAfterDate(null); }}
+    />
+  );
+
   if (!mode) return <LoginScreen onEnter={m => { changeMode(m); setSel(null); }} onSyncAll={syncAll} />;
+
+  // Reservation Manager mode
+  if (mode === "reservation") return (
+    <ReservationManager
+      reservations={reservations}
+      menuCourses={effectiveMenuCourses}
+      tables={tables}
+      onUpsert={upsertReservation}
+      onDelete={deleteReservation}
+      onUpdReservation={updTableFromReservation}
+      onExit={() => changeMode(null)}
+      serviceDate={serviceDate}
+      onSetServiceDate={persistServiceDate}
+    />
+  );
 
   // Display mode — unified board+kitchen view
   if (mode === "display") return (
@@ -6085,6 +6767,18 @@ export default function App() {
           {/* Top bar: stats + Quick Access toggle */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
             <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+              {serviceDate && (
+                <span
+                  title="Click to change service date"
+                  onClick={() => {
+                    const nd = window.prompt("Change service date (YYYY-MM-DD):", serviceDate);
+                    if (nd && /^\d{4}-\d{2}-\d{2}$/.test(nd)) persistServiceDate(nd);
+                  }}
+                  style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#7aaa8a", cursor: "pointer", textTransform: "uppercase" }}
+                >
+                  {new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}
+                </span>
+              )}
               {(() => {
                 const seatedNow = tables.filter(t => t.active).filter(isPrimary).length;
                 const guestsNow = tables.filter(t => t.active).filter(isPrimary).reduce((a, t) => a + (t.guests || 0), 0);
