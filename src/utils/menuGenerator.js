@@ -269,10 +269,13 @@ export function generateMenuHTML({
     if (outputOv) {
       if (typeof outputOv.name === "string") dish = { ...(dish || {}), name: outputOv.name };
       if (typeof outputOv.sub  === "string") dish = { ...(dish || {}), sub:  outputOv.sub  };
+      if (typeof outputOv.drinkName === "string") drink = { ...(drink || {}), name: outputOv.drinkName };
+      if (typeof outputOv.drinkSub  === "string") drink = { ...(drink || {}), sub:  outputOv.drinkSub  };
     }
 
     rows.push({
       type: "course",
+      courseKey,
       left: { title: dish?.name || "", sub: dish?.sub || "" },
       right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
       rowClass: [
@@ -345,7 +348,9 @@ export function generateMenuHTML({
       return `<div class="menu-thankyou">${esc(thankYouNote)}</div>`;
     }
     if (row.type === "team") return "";
-    return `<div class="menu-row ${row.rowClass || ""}">${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
+    const courseGap = row.courseKey && layoutStyles.courseGaps?.[row.courseKey];
+    const gapStyle = courseGap != null ? ` style="margin-top:${courseGap}pt"` : "";
+    return `<div class="menu-row ${row.rowClass || ""}"${gapStyle}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
   }).join("");
 
   const safeTitle = esc((menuTitle || "WINTER MENU").replace(/\s+/g, " ").trim());

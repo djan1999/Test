@@ -3372,6 +3372,8 @@ function KitchenBoard({ tables, menuCourses, upd, updMany }) {
 }
 
 // ── Menu Generator ────────────────────────────────────────────────────────────
+const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
+
 const LAYOUT_PROPS = [
   { key: "rowSpacing",      label: "Row spacing",       def: 3.15, step: 0.25, unit: "pt", dir: "v" },
   { key: "wineRowSpacing",  label: "Wine row spacing",  def: 4.5,  step: 0.25, unit: "pt", dir: "v" },
@@ -3760,15 +3762,16 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
                     )}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                    {menuCourses.filter(c => !c.is_snack).map(course => {
+                    {(() => { const pkey = PAIRING_MAP[s.pairing]; const hasPair = !!pkey; return menuCourses.filter(c => !c.is_snack).map(course => {
                       const key = course.course_key;
                       const baseDish = getSeatDish(course, s.id);
                       const edit = seatEdits[s.id]?.[key] || {};
-                      const hasEdit = "name" in edit || "sub" in edit;
+                      const hasEdit = "name" in edit || "sub" in edit || "drinkName" in edit || "drinkSub" in edit;
                       const inpStyle = { ...baseInp, padding: "3px 6px", fontSize: 11 };
+                      const baseDrink = hasPair ? (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]) : null;
                       return (
                         <div key={key} style={{
-                          display: "grid", gridTemplateColumns: "120px 1fr 1.6fr 20px",
+                          display: "grid", gridTemplateColumns: hasPair ? "100px 1fr 1.2fr 44px 1fr 1.2fr 20px" : "120px 1fr 1.6fr 20px",
                           gap: 5, alignItems: "center",
                           borderRadius: 2, padding: "2px 4px",
                           background: hasEdit ? "#fffdf0" : "transparent",
@@ -3789,6 +3792,23 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
                             placeholder={"sub" in edit ? "" : (baseDish?.sub || "—")}
                             style={inpStyle}
                           />
+                          {hasPair && <>
+                            <span style={{ fontFamily: FONT, fontSize: 7, color: "#8a8a6a", textAlign: "center", whiteSpace: "nowrap" }}>
+                              {s.pairing}
+                            </span>
+                            <BlurInput
+                              committedValue={"drinkName" in edit ? edit.drinkName : ""}
+                              onCommit={v => setSeatEditField(s.id, key, "drinkName", v)}
+                              placeholder={"drinkName" in edit ? "" : (baseDrink?.name || "")}
+                              style={inpStyle}
+                            />
+                            <BlurInput
+                              committedValue={"drinkSub" in edit ? edit.drinkSub : ""}
+                              onCommit={v => setSeatEditField(s.id, key, "drinkSub", v)}
+                              placeholder={"drinkSub" in edit ? "" : (baseDrink?.sub || "")}
+                              style={inpStyle}
+                            />
+                          </>}
                           {hasEdit
                             ? <button onClick={() => setSeatEdits(prev => {
                                 const sd = { ...(prev[s.id] || {}) };
@@ -3798,7 +3818,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
                             : <span />}
                         </div>
                       );
-                    })}
+                    }); })()}
                   </div>
                 </div>
               )}
@@ -5704,6 +5724,22 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
     });
   };
 
+  const setCourseGap = (courseKey, value) => {
+    setGlobalLayout(prev => {
+      const effectiveDefault = prev.sectionSpacing ?? 6.8;
+      const gaps = { ...(prev.courseGaps || {}) };
+      if (value === effectiveDefault || value === "" || isNaN(value)) {
+        delete gaps[courseKey];
+      } else {
+        gaps[courseKey] = value;
+      }
+      const next = { ...prev };
+      if (Object.keys(gaps).length > 0) next.courseGaps = gaps;
+      else delete next.courseGaps;
+      return next;
+    });
+  };
+
   const globalPreviewHtml = useMemo(() => {
     const dummySeat = { id: 1, pairing: "Wine", extras: {}, glasses: [], cocktails: [], beers: [] };
     return generateMenuHTML({
@@ -5842,6 +5878,35 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
                     </div>
                   );
                 })}
+
+                {/* Per-course gap overrides */}
+                <div style={{ borderTop: "1px solid #f0f0f0", marginTop: 10, paddingTop: 10 }}>
+                  <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>
+                    COURSE GAP OVERRIDES
+                  </div>
+                  {menuCourses.filter(c => !c.is_snack).map(c => {
+                    const ck = c.course_key;
+                    const effectiveDefault = globalLayout.sectionSpacing ?? 6.8;
+                    const val = globalLayout.courseGaps?.[ck] ?? effectiveDefault;
+                    const isCustom = globalLayout.courseGaps?.[ck] != null;
+                    return (
+                      <div key={ck} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                        <span style={{ fontFamily: FONT, fontSize: 8, color: isCustom ? "#7a5020" : "#bbb", flex: "0 0 110px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: isCustom ? 700 : 400 }}>
+                          {c.menu?.name || ck}
+                        </span>
+                        <input
+                          type="number"
+                          value={val}
+                          step={0.5}
+                          onChange={e => setCourseGap(ck, parseFloat(e.target.value))}
+                          onBlur={e => { const v = parseFloat(e.target.value); if (isNaN(v)) setCourseGap(ck, effectiveDefault); }}
+                          style={{ fontFamily: FONT, fontSize: 9, width: 52, padding: "2px 4px", border: `1px solid ${isCustom ? "#e0c898" : "#e0e0e0"}`, borderRadius: 2, background: isCustom ? "#fffdf0" : "#fafafa", color: isCustom ? "#7a5020" : "#999", textAlign: "center" }}
+                        />
+                        <span style={{ fontFamily: FONT, fontSize: 8, color: "#ccc" }}>pt</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Live preview column */}
