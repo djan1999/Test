@@ -5059,13 +5059,22 @@ function ServiceDatePicker({ defaultDate, onConfirm, onCancel, reservations = []
         </div>
 
         {/* Selected date confirmation */}
-        {selected && (
-          <div style={{ textAlign: "center", paddingBottom: 6 }}>
-            <span style={{ fontSize: 10, letterSpacing: 2, color: "#3a8a5a", fontWeight: 600 }}>
-              {new Date(selected + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }).toUpperCase()}
-            </span>
-          </div>
-        )}
+        {selected && (() => {
+          const selResv = reservations.filter(r => r.date === selected);
+          const selGuests = selResv.reduce((a, r) => a + (r.data?.guests || 2), 0);
+          return (
+            <div style={{ textAlign: "center", paddingBottom: 6 }}>
+              <span style={{ fontSize: 10, letterSpacing: 2, color: "#3a8a5a", fontWeight: 600 }}>
+                {new Date(selected + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }).toUpperCase()}
+              </span>
+              {selResv.length > 0 && (
+                <div style={{ fontSize: 9, letterSpacing: 1, color: "#3a8a5a", fontWeight: 600, marginTop: 4 }}>
+                  {selGuests} PAX · {selResv.length} {selResv.length === 1 ? "TABLE" : "TABLES"}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Actions */}
         <div style={{ display: "flex", gap: 0, borderTop: "1px solid #f0f0f0", marginTop: 14 }}>
