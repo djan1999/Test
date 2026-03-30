@@ -7,7 +7,7 @@
 
 import { applyCourseRestriction } from "./menuUtils.js";
 
-// Default identical gaps between crayfish→danube and venison→sheep_cheese
+// Default identical gaps between crayfish→danube and venison→sheep_cheese (in pt)
 export const DEFAULT_COURSE_GAPS = { danube_salmon: 14.5, sheep_cheese: 14.5 };
 
 export const COUNTRY_NAMES = {
@@ -418,7 +418,7 @@ body{position:relative;}
 .menu-row,.menu-section-row{display:grid;grid-template-columns:minmax(0,${hasPairing ? "0.85fr) minmax(0,1.15fr" : "1fr) minmax(0,1fr"});column-gap:${hasPairing ? "9mm" : "10.8mm"};align-items:start;break-inside:avoid;page-break-inside:avoid;}
 .menu-row{margin-bottom:${s("rowSpacing",3.15)}pt;}
 .menu-row.wine-only{margin-bottom:${s("wineRowSpacing",4.5)}pt;}
-.menu-row.after-crayfish{margin-bottom:7.2pt;}
+.menu-row.after-crayfish{margin-bottom:${s("rowSpacing",3.15)}pt;}
 .menu-row.short-after-trout-belly,.menu-row.short-after-venison{margin-bottom:10pt;}
 .menu-row.section-gap-before{margin-top:14.5pt;}
 .menu-col{min-width:0;}
