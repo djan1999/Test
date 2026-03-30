@@ -265,6 +265,15 @@ export function generateMenuHTML({
       drink = { name: d.title || "", sub: d.sub || "" };
     }
 
+    // Apply persistent layout editor overrides (before ephemeral seat overrides)
+    const editorOv = layoutStyles.editorOverrides?.[courseKey];
+    if (editorOv) {
+      if (typeof editorOv.leftTitle === "string")  dish  = { ...(dish || {}),  name: editorOv.leftTitle };
+      if (typeof editorOv.leftSub  === "string")  dish  = { ...(dish || {}),  sub:  editorOv.leftSub  };
+      if (typeof editorOv.rightTitle === "string") drink = { ...(drink || {}), name: editorOv.rightTitle };
+      if (typeof editorOv.rightSub  === "string") drink = { ...(drink || {}), sub:  editorOv.rightSub  };
+    }
+
     const outputOv = seatOutputOverrides[courseKey];
     if (outputOv) {
       if (typeof outputOv.name === "string") dish = { ...(dish || {}), name: outputOv.name };
@@ -305,6 +314,22 @@ export function generateMenuHTML({
 
   if (hasPairing && !insertedPairingLabel) {
     rows.unshift({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING" });
+  }
+
+  // Insert gap-text rows from layout editor
+  const gapTexts = layoutStyles.gapTexts || {};
+  for (let ri = rows.length - 1; ri >= 0; ri--) {
+    const r = rows[ri];
+    if (r.type !== "course" || !r.courseKey) continue;
+    const gt = gapTexts[r.courseKey];
+    if (!gt || (!gt.leftTitle && !gt.rightTitle)) continue;
+    rows.splice(ri + 1, 0, {
+      type: "course",
+      courseKey: `_gap_${r.courseKey}`,
+      left: { title: gt.leftTitle || "", sub: gt.leftSub || "" },
+      right: gt.rightTitle ? { title: gt.rightTitle || "", sub: gt.rightSub || "" } : null,
+      rowClass: "",
+    });
   }
 
   rows.push({ type: "thankyou" });

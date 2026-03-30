@@ -5748,57 +5748,88 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
     });
   };
 
-  const [selectedCK, setSelectedCK] = useState(null);
+  const [selectedCKs, setSelectedCKs] = useState([]);
+  const [activeCell, setActiveCell] = useState(null); // { ck, side: "left"|"right" } or null
+  const lastClickedCK = useRef(null);
   const layoutIframeRef = useRef(null);
 
-  // Listen for row clicks from the preview iframe
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.data?.type === "layout-select") setSelectedCK(e.data.ck);
-    };
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
-  }, []);
+  const previewRows = useMemo(() => {
+    const dummySeat = { id: 1, pairing: "Wine", extras: {}, glasses: [], cocktails: [], beers: [] };
+    return generateMenuHTML({
+      seat: dummySeat,
+      table: { menuType: "", restrictions: [], bottleWines: [], birthday: false },
+      menuCourses, lang: "en", layoutStyles: globalLayout, _rowsOnly: true,
+    });
+  }, [globalLayout, menuCourses]);
 
-  // Send highlight back to iframe when selection or preview changes
-  useEffect(() => {
-    try { layoutIframeRef.current?.contentWindow?.postMessage({ type: "layout-highlight", ck: selectedCK }, "*"); } catch {}
-  });
+  const editorRows = useMemo(() => {
+    const result = [];
+    previewRows.forEach(row => {
+      result.push({ ...row, _isGap: false });
+      if (row.type === "course" && row.courseKey && !row.courseKey.startsWith("_gap_")) {
+        const gt = globalLayout.gapTexts?.[row.courseKey];
+        result.push({
+          type: "gap", _afterCK: row.courseKey, _isGap: true,
+          left: { title: gt?.leftTitle || "", sub: gt?.leftSub || "" },
+          right: { title: gt?.rightTitle || "", sub: gt?.rightSub || "" },
+        });
+      }
+    });
+    return result;
+  }, [previewRows, globalLayout.gapTexts]);
+
+  const handleRowClick = (ck, e) => {
+    if (!ck) return;
+    if (e.shiftKey && lastClickedCK.current) {
+      // Range select between lastClicked and ck
+      const allCKs = editorRows.filter(r => r.type === "course" && r.courseKey).map(r => r.courseKey);
+      const from = allCKs.indexOf(lastClickedCK.current);
+      const to = allCKs.indexOf(ck);
+      if (from >= 0 && to >= 0) {
+        const lo = Math.min(from, to), hi = Math.max(from, to);
+        setSelectedCKs(allCKs.slice(lo, hi + 1));
+      }
+    } else if (e.ctrlKey || e.metaKey) {
+      setSelectedCKs(prev => prev.includes(ck) ? prev.filter(k => k !== ck) : [...prev, ck]);
+    } else {
+      setSelectedCKs([ck]);
+    }
+    lastClickedCK.current = ck;
+  };
+
+  const setEditorOverride = (ck, field, value) => {
+    setGlobalLayout(prev => {
+      const ovs = { ...(prev.editorOverrides || {}) };
+      const entry = { ...(ovs[ck] || {}) };
+      if (value === "") delete entry[field]; else entry[field] = value;
+      if (Object.keys(entry).length > 0) ovs[ck] = entry; else delete ovs[ck];
+      const next = { ...prev };
+      if (Object.keys(ovs).length > 0) next.editorOverrides = ovs; else delete next.editorOverrides;
+      return next;
+    });
+  };
+
+  const setGapText = (afterCK, field, value) => {
+    setGlobalLayout(prev => {
+      const gts = { ...(prev.gapTexts || {}) };
+      const entry = { ...(gts[afterCK] || {}) };
+      if (value === "") delete entry[field]; else entry[field] = value;
+      if (Object.keys(entry).length > 0) gts[afterCK] = entry; else delete gts[afterCK];
+      const next = { ...prev };
+      if (Object.keys(gts).length > 0) next.gapTexts = gts; else delete next.gapTexts;
+      return next;
+    });
+  };
 
   const globalPreviewHtml = useMemo(() => {
     const dummySeat = { id: 1, pairing: "Wine", extras: {}, glasses: [], cocktails: [], beers: [] };
     return generateMenuHTML({
       seat: dummySeat,
       table: { menuType: "", restrictions: [], bottleWines: [], birthday: false },
-      menuTitle: "WINTER MENU",
-      teamNames: "",
-      menuCourses,
-      lang: "en",
-      thankYouNote: "",
-      layoutStyles: globalLayout,
-      _logo: logoDataUri,
+      menuTitle: "WINTER MENU", teamNames: "", menuCourses, lang: "en", thankYouNote: "",
+      layoutStyles: globalLayout, _logo: logoDataUri,
     });
   }, [globalLayout, menuCourses, logoDataUri]);
-
-  const interactivePreviewHtml = useMemo(() => {
-    if (!globalPreviewHtml) return "";
-    const injCSS = `.menu-row[data-ck]{cursor:pointer;transition:outline 0.12s,background 0.12s;border-radius:1px;}
-.menu-row[data-ck]:hover{outline:1.5px solid rgba(59,130,246,0.25);outline-offset:1px;}
-.menu-row._sel{outline:2px solid #3b82f6;outline-offset:2px;background:rgba(59,130,246,0.03);}
-.menu-row._sel:hover{outline:2px solid #3b82f6;}`;
-    const injJS = `document.querySelectorAll('.menu-row[data-ck]').forEach(function(el){
-el.addEventListener('click',function(){window.parent.postMessage({type:'layout-select',ck:el.dataset.ck},'*');});
-});
-window.addEventListener('message',function(e){
-if(e.data&&e.data.type==='layout-highlight'){
-document.querySelectorAll('.menu-row._sel').forEach(function(r){r.classList.remove('_sel');});
-if(e.data.ck){var t=document.querySelector('[data-ck=\"'+e.data.ck+'\"]');if(t){t.classList.add('_sel');}}
-}
-});`;
-    return globalPreviewHtml
-      .replace("</style>", injCSS + "\n</style>")
-      .replace("</body>", "<script>" + injJS + "<\/script></body>");
-  }, [globalPreviewHtml]);
 
   const [mpSyncSt, setMpSyncSt] = useState(null); // null | "syncing" | "ok" | "err"
   const handleMenuPageSyncAll = async () => {
@@ -5882,27 +5913,27 @@ if(e.data.ck){var t=document.querySelector('[data-ck=\"'+e.data.ck+'\"]');if(t){
         {/* ── LAYOUT ── */}
         {tab === "layout" && (
           <div tabIndex={0} style={{ outline: "none" }} onKeyDown={e => {
-            if (!selectedCK) return;
+            if (selectedCKs.length === 0) return;
             if (e.key === "ArrowUp" || e.key === "ArrowDown") {
               e.preventDefault();
               const dir = e.key === "ArrowUp" ? -1 : 1;
               setGlobalLayout(prev => {
                 const effDef = prev.sectionSpacing ?? 6.8;
-                const cur = prev.courseGaps?.[selectedCK] ?? effDef;
-                const next = Math.max(0, Math.round((cur + dir * 0.5) * 100) / 100);
                 const gaps = { ...(prev.courseGaps || {}) };
-                if (next === effDef) delete gaps[selectedCK]; else gaps[selectedCK] = next;
+                selectedCKs.forEach(ck => {
+                  const cur = gaps[ck] ?? effDef;
+                  const next = Math.max(0, Math.round((cur + dir * 0.5) * 100) / 100);
+                  if (next === effDef) delete gaps[ck]; else gaps[ck] = next;
+                });
                 const out = { ...prev };
                 if (Object.keys(gaps).length > 0) out.courseGaps = gaps; else delete out.courseGaps;
                 return out;
               });
             }
-            if (e.key === "Escape") setSelectedCK(null);
+            if (e.key === "Escape") { setSelectedCKs([]); setActiveCell(null); }
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>
-                PRINT LAYOUT
-              </div>
+              <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>PRINT LAYOUT</div>
               <button onClick={saveGlobalLayout} disabled={layoutSaving} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
                 border: `1px solid ${layoutSaved ? "#4a9a6a" : "#1a1a1a"}`, borderRadius: 2,
@@ -5911,25 +5942,21 @@ if(e.data.ck){var t=document.querySelector('[data-ck=\"'+e.data.ck+'\"]');if(t){
               }}>{layoutSaving ? "SAVING…" : layoutSaved ? "SAVED ✓" : "SAVE AS DEFAULT"}</button>
             </div>
 
-            <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, background: "#fff", display: "flex", gap: 0 }}>
+            <div style={{ display: "flex", gap: 0, border: "1px solid #e8e8e8", borderRadius: 4, background: "#fff" }}>
               {/* Controls column */}
-              <div style={{ flex: "0 0 240px", padding: "10px 12px", borderRight: "1px solid #f0f0f0", overflowY: "auto", maxHeight: 520 }}>
+              <div style={{ flex: "0 0 220px", padding: "10px 12px", borderRight: "1px solid #f0f0f0", overflowY: "auto", maxHeight: 560 }}>
                 {LAYOUT_GROUPS.map(group => (
                   <div key={group.label} style={{ marginBottom: 10 }}>
-                    <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 4 }}>
-                      {group.label}
-                    </div>
+                    <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 4 }}>{group.label}</div>
                     {group.props.map(({ key, label, def, step, unit }) => {
                       const val = key in globalLayout ? globalLayout[key] : def;
                       const isCustom = key in globalLayout;
-                      const btnSt = { fontFamily: FONT, fontSize: 10, width: 22, height: 22, border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fafafa", color: "#555", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 };
+                      const btnSt = { fontFamily: FONT, fontSize: 10, width: 20, height: 20, border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fafafa", color: "#555", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 };
                       return (
-                        <div key={key} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
-                          <span style={{ fontFamily: FONT, fontSize: 8, color: "#999", flex: "0 0 68px", whiteSpace: "nowrap" }}>{label}</span>
+                        <div key={key} style={{ display: "flex", alignItems: "center", gap: 3, marginBottom: 2 }}>
+                          <span style={{ fontFamily: FONT, fontSize: 8, color: "#999", flex: "0 0 60px", whiteSpace: "nowrap" }}>{label}</span>
                           <button style={btnSt} onClick={() => adjustGlobal(key, def, step)(-1)}>−</button>
-                          <span style={{ fontFamily: FONT, fontSize: 9, minWidth: 48, textAlign: "center", color: isCustom ? "#7a5020" : "#aaa", fontWeight: isCustom ? 700 : 400 }}>
-                            {val} {unit}
-                          </span>
+                          <span style={{ fontFamily: FONT, fontSize: 8, minWidth: 42, textAlign: "center", color: isCustom ? "#7a5020" : "#aaa", fontWeight: isCustom ? 700 : 400 }}>{val}{unit}</span>
                           <button style={btnSt} onClick={() => adjustGlobal(key, def, step)(+1)}>+</button>
                         </div>
                       );
@@ -5937,62 +5964,157 @@ if(e.data.ck){var t=document.querySelector('[data-ck=\"'+e.data.ck+'\"]');if(t){
                   </div>
                 ))}
 
-                {/* Selected course gap panel */}
-                {selectedCK && (() => {
-                  const selCourse = menuCourses.find(c => c.course_key === selectedCK);
+                {/* Selection panel */}
+                {selectedCKs.length > 0 && (() => {
                   const effDef = globalLayout.sectionSpacing ?? 6.8;
-                  const gapVal = globalLayout.courseGaps?.[selectedCK] ?? effDef;
-                  const isCustom = globalLayout.courseGaps?.[selectedCK] != null;
-                  const btnSt = { fontFamily: FONT, fontSize: 10, width: 22, height: 22, border: "1px solid #d0d8f0", borderRadius: 2, cursor: "pointer", background: "#f0f4ff", color: "#3b6fd6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 };
+                  const gapVals = selectedCKs.map(ck => globalLayout.courseGaps?.[ck] ?? effDef);
+                  const allSame = gapVals.every(v => v === gapVals[0]);
+                  const displayGap = allSame ? gapVals[0] : "mixed";
+                  const btnSt = { fontFamily: FONT, fontSize: 10, width: 20, height: 20, border: "1px solid #d0d8f0", borderRadius: 2, cursor: "pointer", background: "#f0f4ff", color: "#3b6fd6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 };
                   return (
-                    <div style={{ borderTop: "2px solid #3b82f6", marginTop: 6, paddingTop: 8 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <div style={{ borderTop: "2px solid #3b82f6", marginTop: 4, paddingTop: 6 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                         <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#3b82f6", fontWeight: 700 }}>
-                          {selCourse?.menu?.name || selectedCK}
+                          {selectedCKs.length === 1 ? (menuCourses.find(c => c.course_key === selectedCKs[0])?.menu?.name || selectedCKs[0]) : `${selectedCKs.length} SELECTED`}
                         </span>
-                        <button onClick={() => setSelectedCK(null)} style={{ background: "none", border: "none", color: "#aaa", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                        <button onClick={() => { setSelectedCKs([]); setActiveCell(null); }} style={{ background: "none", border: "none", color: "#aaa", cursor: "pointer", fontSize: 12, lineHeight: 1, padding: 0 }}>×</button>
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ fontFamily: FONT, fontSize: 8, color: "#666", flex: "0 0 68px" }}>Gap before</span>
-                        <button style={btnSt} onClick={() => setCourseGap(selectedCK, Math.max(0, Math.round((gapVal - 0.5) * 100) / 100))}>−</button>
-                        <span style={{ fontFamily: FONT, fontSize: 9, minWidth: 48, textAlign: "center", color: isCustom ? "#3b6fd6" : "#aaa", fontWeight: isCustom ? 700 : 400 }}>
-                          {gapVal} pt
+                      <div style={{ display: "flex", alignItems: "center", gap: 3, marginBottom: 4 }}>
+                        <span style={{ fontFamily: FONT, fontSize: 7, color: "#666", flex: "0 0 60px" }}>Gap before</span>
+                        <button style={btnSt} onClick={() => {
+                          const v = (allSame ? gapVals[0] : effDef) - 0.5;
+                          selectedCKs.forEach(ck => setCourseGap(ck, Math.max(0, Math.round(v * 100) / 100)));
+                        }}>−</button>
+                        <span style={{ fontFamily: FONT, fontSize: 8, minWidth: 42, textAlign: "center", color: "#3b6fd6", fontWeight: 700 }}>
+                          {typeof displayGap === "number" ? `${displayGap}pt` : displayGap}
                         </span>
-                        <button style={btnSt} onClick={() => setCourseGap(selectedCK, Math.round((gapVal + 0.5) * 100) / 100)}>+</button>
+                        <button style={btnSt} onClick={() => {
+                          const v = (allSame ? gapVals[0] : effDef) + 0.5;
+                          selectedCKs.forEach(ck => setCourseGap(ck, Math.round(v * 100) / 100));
+                        }}>+</button>
                       </div>
-                      <div style={{ fontFamily: FONT, fontSize: 7, color: "#aaa", marginTop: 5 }}>
-                        ↑↓ arrow keys to nudge · Esc to deselect
+
+                      {/* Active cell editing */}
+                      {activeCell && (() => {
+                        const isGap = activeCell.ck.startsWith("_gap_");
+                        const realCK = isGap ? activeCell.ck.replace("_gap_", "") : activeCell.ck;
+                        const sideLabel = activeCell.side === "left" ? "Dish" : "Drink";
+                        const titleField = activeCell.side === "left" ? "leftTitle" : "rightTitle";
+                        const subField = activeCell.side === "left" ? "leftSub" : "rightSub";
+                        const source = isGap ? (globalLayout.gapTexts?.[realCK] || {}) : (globalLayout.editorOverrides?.[realCK] || {});
+                        const setFn = isGap ? (f, v) => setGapText(realCK, f, v) : (f, v) => setEditorOverride(realCK, f, v);
+                        const curRow = editorRows.find(r => (r.courseKey === activeCell.ck) || (r._isGap && r._afterCK === realCK && isGap));
+                        const placeholder = curRow ? (activeCell.side === "left" ? curRow.left : curRow.right) : {};
+                        return (
+                          <div style={{ borderTop: "1px solid #e8e8e8", marginTop: 4, paddingTop: 4 }}>
+                            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#888", marginBottom: 3 }}>
+                              {isGap ? "GAP ROW" : sideLabel.toUpperCase()} — {activeCell.side}
+                            </div>
+                            <input
+                              value={source[titleField] || ""}
+                              onChange={e => setFn(titleField, e.target.value)}
+                              placeholder={placeholder?.title || "title"}
+                              style={{ fontFamily: FONT, fontSize: 9, width: "100%", padding: "2px 4px", border: "1px solid #d0d8f0", borderRadius: 2, marginBottom: 2, boxSizing: "border-box" }}
+                            />
+                            <input
+                              value={source[subField] || ""}
+                              onChange={e => setFn(subField, e.target.value)}
+                              placeholder={placeholder?.sub || "sub"}
+                              style={{ fontFamily: FONT, fontSize: 9, width: "100%", padding: "2px 4px", border: "1px solid #d0d8f0", borderRadius: 2, boxSizing: "border-box" }}
+                            />
+                          </div>
+                        );
+                      })()}
+
+                      <div style={{ fontFamily: FONT, fontSize: 7, color: "#aaa", marginTop: 4 }}>
+                        ↑↓ nudge gap · Shift+click range · Esc clear
                       </div>
                     </div>
                   );
                 })()}
               </div>
 
-              {/* Interactive preview column */}
-              <div style={{ flex: 1, padding: 12, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", overflow: "hidden", minWidth: 0 }}>
-                <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", textTransform: "uppercase", marginBottom: 6 }}>
-                  Click a course row to adjust its spacing
+              {/* Native row editor */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", textTransform: "uppercase", padding: "8px 10px 4px", flexShrink: 0 }}>
+                  Click rows to select · Click a cell to edit · Shift+click for range
                 </div>
-                {(() => {
-                  const containerW = 300;
-                  const a5W = 559;
-                  const a5H = 793;
-                  const scale = containerW / a5W;
-                  return (
-                    <div style={{ width: containerW, height: Math.round(a5H * scale), overflow: "hidden", border: "1px solid #e8e8e8", borderRadius: 2 }}>
-                      <iframe
-                        ref={layoutIframeRef}
-                        srcDoc={interactivePreviewHtml}
-                        title="layout preview"
-                        onLoad={() => { try { layoutIframeRef.current?.contentWindow?.postMessage({ type: "layout-highlight", ck: selectedCK }, "*"); } catch {} }}
-                        style={{
-                          width: a5W, height: a5H, border: "none",
-                          transform: `scale(${scale})`, transformOrigin: "top left",
-                        }}
-                      />
-                    </div>
-                  );
-                })()}
+                <div style={{ flex: 1, overflowY: "auto", padding: "0 6px 8px" }}>
+                  {editorRows.map((row, idx) => {
+                    if (row.type === "section") {
+                      return (
+                        <div key={`s-${idx}`} style={{ fontFamily: FONT, fontSize: 7, fontWeight: 700, letterSpacing: 1, color: "#888", padding: "6px 4px 2px", textTransform: "uppercase" }}>
+                          {row.label}
+                        </div>
+                      );
+                    }
+                    if (row.type === "thankyou" || row.type === "team") return null;
+                    if (row.type === "wine-only") {
+                      return (
+                        <div key={`w-${idx}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, padding: "2px 0" }}>
+                          <div style={{ fontFamily: FONT, fontSize: 8, color: "#ccc", padding: "3px 4px" }} />
+                          <div style={{ fontFamily: FONT, fontSize: 8, color: "#666", padding: "3px 4px", background: "#fafafa", borderRadius: 1 }}>
+                            <div style={{ fontWeight: 700, fontSize: 7, textTransform: "uppercase" }}>{row.right?.title}</div>
+                            {row.right?.sub && <div style={{ fontSize: 7, color: "#999" }}>{row.right.sub}</div>}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const isGap = row._isGap;
+                    const ck = isGap ? `_gap_${row._afterCK}` : row.courseKey;
+                    const isSel = !isGap && selectedCKs.includes(ck);
+                    const hasGapContent = isGap && (row.left?.title || row.right?.title);
+                    const cellStyle = (side) => {
+                      const isActive = activeCell?.ck === ck && activeCell?.side === side;
+                      return {
+                        fontFamily: FONT, fontSize: 8, padding: "3px 4px", borderRadius: 2, cursor: "pointer",
+                        minHeight: isGap ? 18 : undefined,
+                        background: isActive ? "#e8f0ff" : isSel ? "#f0f4ff" : isGap ? "#fcfcfc" : "#fff",
+                        border: isActive ? "1.5px solid #3b82f6" : isGap && !hasGapContent ? "1px dashed #e0e0e0" : isSel ? "1px solid #c0d4f0" : "1px solid transparent",
+                        transition: "background 0.1s, border 0.1s",
+                      };
+                    };
+                    const renderCell = (side) => {
+                      const data = side === "left" ? row.left : row.right;
+                      if (isGap && !data?.title && !data?.sub) {
+                        return <div style={cellStyle(side)} onClick={e => { e.stopPropagation(); setActiveCell({ ck, side }); if (!isGap) handleRowClick(ck, e); }} />;
+                      }
+                      return (
+                        <div style={cellStyle(side)} onClick={e => { e.stopPropagation(); setActiveCell({ ck, side }); if (!isGap) handleRowClick(ck, e); }}>
+                          {data?.title && <div style={{ fontWeight: 700, fontSize: 7, textTransform: "uppercase", lineHeight: 1.15 }}>{data.title}</div>}
+                          {data?.sub && <div style={{ fontSize: 7, color: "#888", lineHeight: 1.15, marginTop: 1 }}>{data.sub}</div>}
+                        </div>
+                      );
+                    };
+
+                    return (
+                      <div key={isGap ? `gap-${row._afterCK}` : `r-${ck}-${idx}`}
+                        onClick={e => { if (!isGap && ck) handleRowClick(ck, e); }}
+                        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, padding: "1px 0", cursor: isGap ? "default" : "pointer" }}>
+                        {renderCell("left")}
+                        {renderCell("right")}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Small iframe preview */}
+                <div style={{ borderTop: "1px solid #f0f0f0", padding: "6px 10px", flexShrink: 0 }}>
+                  <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", textTransform: "uppercase", marginBottom: 4 }}>PREVIEW</div>
+                  {(() => {
+                    const containerW = 200;
+                    const a5W = 559;
+                    const a5H = 793;
+                    const scale = containerW / a5W;
+                    return (
+                      <div style={{ width: containerW, height: Math.round(a5H * scale), overflow: "hidden", border: "1px solid #e8e8e8", borderRadius: 2 }}>
+                        <iframe ref={layoutIframeRef} srcDoc={globalPreviewHtml} title="layout preview"
+                          style={{ width: a5W, height: a5H, border: "none", transform: `scale(${scale})`, transformOrigin: "top left", pointerEvents: "none" }} />
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
           </div>
