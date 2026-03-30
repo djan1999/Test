@@ -16,7 +16,7 @@ import {
   RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, initDishes,
   parseMenuRow,
 } from "./utils/menuUtils.js";
-import { generateMenuHTML } from "./utils/menuGenerator.js";
+import { generateMenuHTML, DEFAULT_COURSE_GAPS } from "./utils/menuGenerator.js";
 import {
   readLocalBeverages, writeLocalBeverages,
   readTeamNames, writeTeamNames,
@@ -5732,11 +5732,15 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
     });
   };
 
+  const getCourseGap = (courseKey) => {
+    return globalLayout.courseGaps?.[courseKey] ?? DEFAULT_COURSE_GAPS[courseKey] ?? null;
+  };
+
   const setCourseGap = (courseKey, value) => {
     setGlobalLayout(prev => {
-      const effectiveDefault = prev.sectionSpacing ?? 6.8;
+      const defaultVal = DEFAULT_COURSE_GAPS[courseKey] ?? (prev.sectionSpacing ?? 6.8);
       const gaps = { ...(prev.courseGaps || {}) };
-      if (value === effectiveDefault || value === "" || isNaN(value)) {
+      if (value === defaultVal || value === "" || isNaN(value)) {
         delete gaps[courseKey];
       } else {
         gaps[courseKey] = value;
@@ -5766,13 +5770,16 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
     const result = [];
     previewRows.forEach(row => {
       result.push({ ...row, _isGap: false });
+      // Only show a gap row if gapTexts has content for this course (user added it)
       if (row.type === "course" && row.courseKey && !row.courseKey.startsWith("_gap_")) {
         const gt = globalLayout.gapTexts?.[row.courseKey];
-        result.push({
-          type: "gap", _afterCK: row.courseKey, _isGap: true,
-          left: { title: gt?.leftTitle || "", sub: gt?.leftSub || "" },
-          right: { title: gt?.rightTitle || "", sub: gt?.rightSub || "" },
-        });
+        if (gt && (gt.leftTitle || gt.leftSub || gt.rightTitle || gt.rightSub)) {
+          result.push({
+            type: "gap", _afterCK: row.courseKey, _isGap: true,
+            left: { title: gt.leftTitle || "", sub: gt.leftSub || "" },
+            right: { title: gt.rightTitle || "", sub: gt.rightSub || "" },
+          });
+        }
       }
     });
     return result;
@@ -5967,7 +5974,7 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
                 {/* Selection panel */}
                 {selectedCKs.length > 0 && (() => {
                   const effDef = globalLayout.sectionSpacing ?? 6.8;
-                  const gapVals = selectedCKs.map(ck => globalLayout.courseGaps?.[ck] ?? effDef);
+                  const gapVals = selectedCKs.map(ck => globalLayout.courseGaps?.[ck] ?? DEFAULT_COURSE_GAPS[ck] ?? effDef);
                   const allSame = gapVals.every(v => v === gapVals[0]);
                   const displayGap = allSame ? gapVals[0] : "mixed";
                   const btnSt = { fontFamily: FONT, fontSize: 10, width: 20, height: 20, border: "1px solid #d0d8f0", borderRadius: 2, cursor: "pointer", background: "#f0f4ff", color: "#3b6fd6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 };
@@ -6065,6 +6072,9 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
                     const ck = isGap ? `_gap_${row._afterCK}` : row.courseKey;
                     const isSel = !isGap && selectedCKs.includes(ck);
                     const hasGapContent = isGap && (row.left?.title || row.right?.title);
+                    // Can this course row have a gap inserted after it?
+                    const canAddGap = !isGap && row.type === "course" && row.courseKey && !row.courseKey.startsWith("_gap_")
+                      && !globalLayout.gapTexts?.[row.courseKey];
                     const cellStyle = (side) => {
                       const isActive = activeCell?.ck === ck && activeCell?.side === side;
                       return {
@@ -6078,7 +6088,7 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
                     const renderCell = (side) => {
                       const data = side === "left" ? row.left : row.right;
                       if (isGap && !data?.title && !data?.sub) {
-                        return <div style={cellStyle(side)} onClick={e => { e.stopPropagation(); setActiveCell({ ck, side }); if (!isGap) handleRowClick(ck, e); }} />;
+                        return <div style={cellStyle(side)} onClick={e => { e.stopPropagation(); setActiveCell({ ck, side }); }} />;
                       }
                       return (
                         <div style={cellStyle(side)} onClick={e => { e.stopPropagation(); setActiveCell({ ck, side }); if (!isGap) handleRowClick(ck, e); }}>
@@ -6089,11 +6099,32 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
                     };
 
                     return (
-                      <div key={isGap ? `gap-${row._afterCK}` : `r-${ck}-${idx}`}
-                        onClick={e => { if (!isGap && ck) handleRowClick(ck, e); }}
-                        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, padding: "1px 0", cursor: isGap ? "default" : "pointer" }}>
-                        {renderCell("left")}
-                        {renderCell("right")}
+                      <div key={isGap ? `gap-${row._afterCK}` : `r-${ck}-${idx}`}>
+                        <div onClick={e => { if (!isGap && ck) handleRowClick(ck, e); }}
+                          style={{ display: "grid", gridTemplateColumns: isGap ? "1fr 1fr 16px" : "1fr 1fr", gap: 2, padding: "1px 0", cursor: isGap ? "default" : "pointer" }}>
+                          {renderCell("left")}
+                          {renderCell("right")}
+                          {isGap && (
+                            <button onClick={() => {
+                              setGlobalLayout(prev => {
+                                const gts = { ...(prev.gapTexts || {}) };
+                                delete gts[row._afterCK];
+                                const next = { ...prev };
+                                if (Object.keys(gts).length > 0) next.gapTexts = gts; else delete next.gapTexts;
+                                return next;
+                              });
+                            }}
+                              style={{ fontFamily: FONT, fontSize: 9, color: "#ccc", background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1, alignSelf: "center" }}
+                              title="Remove gap row">×</button>
+                          )}
+                        </div>
+                        {canAddGap && (
+                          <div style={{ display: "flex", justifyContent: "center", padding: "1px 0" }}>
+                            <button onClick={() => setGapText(row.courseKey, "leftTitle", " ")}
+                              style={{ fontFamily: FONT, fontSize: 8, color: "#ccc", background: "none", border: "none", cursor: "pointer", padding: "0 4px", lineHeight: 1 }}
+                              title="Insert gap row below">+</button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

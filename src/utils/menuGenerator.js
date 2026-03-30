@@ -7,6 +7,9 @@
 
 import { applyCourseRestriction } from "./menuUtils.js";
 
+// Default identical gaps between crayfish→danube and venison→sheep_cheese
+export const DEFAULT_COURSE_GAPS = { danube_salmon: 14.5, sheep_cheese: 14.5 };
+
 export const COUNTRY_NAMES = {
   FR: "France", IT: "Italy", ES: "Spain", DE: "Germany", AT: "Austria",
   SI: "Slovenia", PT: "Portugal", GR: "Greece", HU: "Hungary", HR: "Croatia",
@@ -373,7 +376,7 @@ export function generateMenuHTML({
       return `<div class="menu-thankyou">${esc(thankYouNote)}</div>`;
     }
     if (row.type === "team") return "";
-    const courseGap = row.courseKey && layoutStyles.courseGaps?.[row.courseKey];
+    const courseGap = row.courseKey && (layoutStyles.courseGaps?.[row.courseKey] ?? DEFAULT_COURSE_GAPS[row.courseKey] ?? null);
     const gapStyle = courseGap != null ? ` style="margin-top:${courseGap}pt"` : "";
     const ckAttr = row.courseKey ? ` data-ck="${esc(row.courseKey)}"` : "";
     return `<div class="menu-row ${row.rowClass || ""}"${gapStyle}${ckAttr}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
