@@ -5028,7 +5028,6 @@ function ServiceDatePicker({ defaultDate, onConfirm, onCancel, reservations = []
             const isSel = dateStr === selected;
             const isPast = dateStr < todayStr;
             const dayResv = reservations.filter(r => r.date === dateStr);
-            const totalGuests = dayResv.reduce((a, r) => a + (r.data?.guests || 2), 0);
             return (
               <button
                 key={dateStr}
@@ -5045,14 +5044,7 @@ function ServiceDatePicker({ defaultDate, onConfirm, onCancel, reservations = []
                 <span style={{ fontSize: 8, letterSpacing: 1, color: isSel ? "rgba(255,255,255,0.6)" : "#aaa", fontWeight: 600 }}>{DAY_LABELS[i]}</span>
                 <span style={{ fontSize: 16, fontWeight: 700, color: isSel ? "#fff" : isToday ? "#2f7a45" : "#1a1a1a", lineHeight: 1 }}>{dayNum}</span>
                 {isToday && <span style={{ width: 4, height: 4, borderRadius: "50%", background: isSel ? "#fff" : "#3a8a5a" }} />}
-                {dayResv.length > 0 ? (
-                  <>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: isSel ? "#fff" : "#1a1a1a", lineHeight: 1 }}>{dayResv.length}</span>
-                    <span style={{ fontSize: 8, color: isSel ? "rgba(255,255,255,0.55)" : "#aaa", letterSpacing: 0.5 }}>{totalGuests}g</span>
-                  </>
-                ) : (
-                  <span style={{ fontSize: 8, color: isSel ? "rgba(255,255,255,0.3)" : "#ddd" }}>—</span>
-                )}
+                {dayResv.length > 0 && <span style={{ width: 4, height: 4, borderRadius: "50%", background: isSel ? "rgba(255,255,255,0.4)" : "#bbb", marginTop: 2 }} />}
               </button>
             );
           })}
