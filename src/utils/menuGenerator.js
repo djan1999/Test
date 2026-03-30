@@ -350,7 +350,8 @@ export function generateMenuHTML({
     if (row.type === "team") return "";
     const courseGap = row.courseKey && layoutStyles.courseGaps?.[row.courseKey];
     const gapStyle = courseGap != null ? ` style="margin-top:${courseGap}pt"` : "";
-    return `<div class="menu-row ${row.rowClass || ""}"${gapStyle}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
+    const ckAttr = row.courseKey ? ` data-ck="${esc(row.courseKey)}"` : "";
+    return `<div class="menu-row ${row.rowClass || ""}"${gapStyle}${ckAttr}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
   }).join("");
 
   const safeTitle = esc((menuTitle || "WINTER MENU").replace(/\s+/g, " ").trim());

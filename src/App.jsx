@@ -3374,20 +3374,28 @@ function KitchenBoard({ tables, menuCourses, upd, updMany }) {
 // ── Menu Generator ────────────────────────────────────────────────────────────
 const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
 
-const LAYOUT_PROPS = [
-  { key: "rowSpacing",      label: "Row spacing",       def: 3.15, step: 0.25, unit: "pt", dir: "v" },
-  { key: "wineRowSpacing",  label: "Wine row spacing",  def: 4.5,  step: 0.25, unit: "pt", dir: "v" },
-  { key: "sectionSpacing",  label: "Section gap",       def: 6.8,  step: 0.5,  unit: "pt", dir: "v" },
-  { key: "headerSpacing",   label: "Header gap",        def: 7,    step: 0.5,  unit: "mm", dir: "v" },
-  { key: "padTop",          label: "Pad top",           def: 8.4,  step: 0.5,  unit: "mm", dir: "v" },
-  { key: "padBottom",       label: "Pad bottom",        def: 8.2,  step: 0.5,  unit: "mm", dir: "v" },
-  { key: "padLeft",         label: "Pad left",          def: 12,   step: 0.5,  unit: "mm", dir: "h" },
-  { key: "padRight",        label: "Pad right",         def: 12,   step: 0.5,  unit: "mm", dir: "h" },
-  { key: "logoSize",        label: "Logo size",         def: 10.5, step: 0.5,  unit: "mm", dir: "h" },
-  { key: "logoOffsetX",     label: "Logo offset X",     def: 0,    step: 0.5,  unit: "mm", dir: "h" },
-  { key: "logoOffsetY",     label: "Logo offset Y",     def: 0,    step: 0.5,  unit: "mm", dir: "v" },
-  { key: "fontSize",        label: "Font size",         def: 6.75, step: 0.05, unit: "pt", dir: "v" },
-  { key: "thankYouSpacing", label: "Thank-you gap",     def: 7,    step: 0.5,  unit: "pt", dir: "v" },
+const LAYOUT_GROUPS = [
+  { label: "PAGE", props: [
+    { key: "padTop",    label: "Top",    def: 8.4, step: 0.5, unit: "mm" },
+    { key: "padBottom", label: "Bottom", def: 8.2, step: 0.5, unit: "mm" },
+    { key: "padLeft",   label: "Left",   def: 12,  step: 0.5, unit: "mm" },
+    { key: "padRight",  label: "Right",  def: 12,  step: 0.5, unit: "mm" },
+  ]},
+  { label: "TYPE", props: [
+    { key: "fontSize",      label: "Size",       def: 6.75, step: 0.05, unit: "pt" },
+    { key: "headerSpacing", label: "Header gap",  def: 7,    step: 0.5,  unit: "mm" },
+  ]},
+  { label: "LOGO", props: [
+    { key: "logoSize",    label: "Size",     def: 10.5, step: 0.5, unit: "mm" },
+    { key: "logoOffsetX", label: "Offset X", def: 0,    step: 0.5, unit: "mm" },
+    { key: "logoOffsetY", label: "Offset Y", def: 0,    step: 0.5, unit: "mm" },
+  ]},
+  { label: "GAPS", props: [
+    { key: "rowSpacing",      label: "Row",      def: 3.15, step: 0.25, unit: "pt" },
+    { key: "wineRowSpacing",  label: "Wine row", def: 4.5,  step: 0.25, unit: "pt" },
+    { key: "sectionSpacing",  label: "Section",  def: 6.8,  step: 0.5,  unit: "pt" },
+    { key: "thankYouSpacing", label: "Thank-you", def: 7,    step: 0.5,  unit: "pt" },
+  ]},
 ];
 
 function BevEditRow({ emoji, label, items, onUpdate }) {
@@ -5740,6 +5748,23 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
     });
   };
 
+  const [selectedCK, setSelectedCK] = useState(null);
+  const layoutIframeRef = useRef(null);
+
+  // Listen for row clicks from the preview iframe
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.data?.type === "layout-select") setSelectedCK(e.data.ck);
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  // Send highlight back to iframe when selection or preview changes
+  useEffect(() => {
+    try { layoutIframeRef.current?.contentWindow?.postMessage({ type: "layout-highlight", ck: selectedCK }, "*"); } catch {}
+  });
+
   const globalPreviewHtml = useMemo(() => {
     const dummySeat = { id: 1, pairing: "Wine", extras: {}, glasses: [], cocktails: [], beers: [] };
     return generateMenuHTML({
@@ -5754,6 +5779,26 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
       _logo: logoDataUri,
     });
   }, [globalLayout, menuCourses, logoDataUri]);
+
+  const interactivePreviewHtml = useMemo(() => {
+    if (!globalPreviewHtml) return "";
+    const injCSS = `.menu-row[data-ck]{cursor:pointer;transition:outline 0.12s,background 0.12s;border-radius:1px;}
+.menu-row[data-ck]:hover{outline:1.5px solid rgba(59,130,246,0.25);outline-offset:1px;}
+.menu-row._sel{outline:2px solid #3b82f6;outline-offset:2px;background:rgba(59,130,246,0.03);}
+.menu-row._sel:hover{outline:2px solid #3b82f6;}`;
+    const injJS = `document.querySelectorAll('.menu-row[data-ck]').forEach(function(el){
+el.addEventListener('click',function(){window.parent.postMessage({type:'layout-select',ck:el.dataset.ck},'*');});
+});
+window.addEventListener('message',function(e){
+if(e.data&&e.data.type==='layout-highlight'){
+document.querySelectorAll('.menu-row._sel').forEach(function(r){r.classList.remove('_sel');});
+if(e.data.ck){var t=document.querySelector('[data-ck=\"'+e.data.ck+'\"]');if(t){t.classList.add('_sel');}}
+}
+});`;
+    return globalPreviewHtml
+      .replace("</style>", injCSS + "\n</style>")
+      .replace("</body>", "<script>" + injJS + "<\/script></body>");
+  }, [globalPreviewHtml]);
 
   const [mpSyncSt, setMpSyncSt] = useState(null); // null | "syncing" | "ok" | "err"
   const handleMenuPageSyncAll = async () => {
@@ -5836,98 +5881,113 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
 
         {/* ── LAYOUT ── */}
         {tab === "layout" && (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <div>
-                <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>
-                  PRINT LAYOUT — global defaults applied to all menu prints
-                </div>
-                {Object.keys(globalLayout).length > 0 && (
-                  <span style={{ fontFamily: FONT, fontSize: 8, padding: "2px 6px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898", display: "inline-block", marginTop: 4 }}>
-                    {Object.keys(globalLayout).length} custom
-                  </span>
-                )}
+          <div tabIndex={0} style={{ outline: "none" }} onKeyDown={e => {
+            if (!selectedCK) return;
+            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              e.preventDefault();
+              const dir = e.key === "ArrowUp" ? -1 : 1;
+              setGlobalLayout(prev => {
+                const effDef = prev.sectionSpacing ?? 6.8;
+                const cur = prev.courseGaps?.[selectedCK] ?? effDef;
+                const next = Math.max(0, Math.round((cur + dir * 0.5) * 100) / 100);
+                const gaps = { ...(prev.courseGaps || {}) };
+                if (next === effDef) delete gaps[selectedCK]; else gaps[selectedCK] = next;
+                const out = { ...prev };
+                if (Object.keys(gaps).length > 0) out.courseGaps = gaps; else delete out.courseGaps;
+                return out;
+              });
+            }
+            if (e.key === "Escape") setSelectedCK(null);
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>
+                PRINT LAYOUT
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button onClick={saveGlobalLayout} disabled={layoutSaving} style={{
-                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-                  border: `1px solid ${layoutSaved ? "#4a9a6a" : "#1a1a1a"}`, borderRadius: 2,
-                  cursor: layoutSaving ? "default" : "pointer",
-                  background: layoutSaved ? "#4a9a6a" : "#1a1a1a", color: "#fff",
-                }}>{layoutSaving ? "SAVING…" : layoutSaved ? "SAVED ✓" : "SAVE AS DEFAULT"}</button>
-              </div>
+              <button onClick={saveGlobalLayout} disabled={layoutSaving} style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
+                border: `1px solid ${layoutSaved ? "#4a9a6a" : "#1a1a1a"}`, borderRadius: 2,
+                cursor: layoutSaving ? "default" : "pointer",
+                background: layoutSaved ? "#4a9a6a" : "#1a1a1a", color: "#fff",
+              }}>{layoutSaving ? "SAVING…" : layoutSaved ? "SAVED ✓" : "SAVE AS DEFAULT"}</button>
             </div>
 
             <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, background: "#fff", display: "flex", gap: 0 }}>
               {/* Controls column */}
-              <div style={{ flex: "0 0 260px", padding: "12px 14px", borderRight: "1px solid #f0f0f0" }}>
-                {LAYOUT_PROPS.map(({ key, label, def, step, unit, dir }) => {
-                  const val = key in globalLayout ? globalLayout[key] : def;
-                  const isCustom = key in globalLayout;
-                  const dec = dir === "h" ? "←" : "↓";
-                  const inc = dir === "h" ? "→" : "↑";
-                  const btnStyle = { fontFamily: FONT, fontSize: 11, width: 26, height: 26, border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fafafa", color: "#555", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
+              <div style={{ flex: "0 0 240px", padding: "10px 12px", borderRight: "1px solid #f0f0f0", overflowY: "auto", maxHeight: 520 }}>
+                {LAYOUT_GROUPS.map(group => (
+                  <div key={group.label} style={{ marginBottom: 10 }}>
+                    <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 4 }}>
+                      {group.label}
+                    </div>
+                    {group.props.map(({ key, label, def, step, unit }) => {
+                      const val = key in globalLayout ? globalLayout[key] : def;
+                      const isCustom = key in globalLayout;
+                      const btnSt = { fontFamily: FONT, fontSize: 10, width: 22, height: 22, border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fafafa", color: "#555", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 };
+                      return (
+                        <div key={key} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
+                          <span style={{ fontFamily: FONT, fontSize: 8, color: "#999", flex: "0 0 68px", whiteSpace: "nowrap" }}>{label}</span>
+                          <button style={btnSt} onClick={() => adjustGlobal(key, def, step)(-1)}>−</button>
+                          <span style={{ fontFamily: FONT, fontSize: 9, minWidth: 48, textAlign: "center", color: isCustom ? "#7a5020" : "#aaa", fontWeight: isCustom ? 700 : 400 }}>
+                            {val} {unit}
+                          </span>
+                          <button style={btnSt} onClick={() => adjustGlobal(key, def, step)(+1)}>+</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+
+                {/* Selected course gap panel */}
+                {selectedCK && (() => {
+                  const selCourse = menuCourses.find(c => c.course_key === selectedCK);
+                  const effDef = globalLayout.sectionSpacing ?? 6.8;
+                  const gapVal = globalLayout.courseGaps?.[selectedCK] ?? effDef;
+                  const isCustom = globalLayout.courseGaps?.[selectedCK] != null;
+                  const btnSt = { fontFamily: FONT, fontSize: 10, width: 22, height: 22, border: "1px solid #d0d8f0", borderRadius: 2, cursor: "pointer", background: "#f0f4ff", color: "#3b6fd6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 };
                   return (
-                    <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
-                      <span style={{ fontFamily: FONT, fontSize: 9, color: "#999", flex: "0 0 110px", whiteSpace: "nowrap" }}>{label}</span>
-                      <button style={btnStyle} onClick={() => adjustGlobal(key, def, step)(-1)}>{dec}</button>
-                      <span style={{ fontFamily: FONT, fontSize: 10, minWidth: 54, textAlign: "center", color: isCustom ? "#7a5020" : "#aaa", fontWeight: isCustom ? 700 : 400 }}>
-                        {val} {unit}
-                      </span>
-                      <button style={btnStyle} onClick={() => adjustGlobal(key, def, step)(+1)}>{inc}</button>
+                    <div style={{ borderTop: "2px solid #3b82f6", marginTop: 6, paddingTop: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#3b82f6", fontWeight: 700 }}>
+                          {selCourse?.menu?.name || selectedCK}
+                        </span>
+                        <button onClick={() => setSelectedCK(null)} style={{ background: "none", border: "none", color: "#aaa", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ fontFamily: FONT, fontSize: 8, color: "#666", flex: "0 0 68px" }}>Gap before</span>
+                        <button style={btnSt} onClick={() => setCourseGap(selectedCK, Math.max(0, Math.round((gapVal - 0.5) * 100) / 100))}>−</button>
+                        <span style={{ fontFamily: FONT, fontSize: 9, minWidth: 48, textAlign: "center", color: isCustom ? "#3b6fd6" : "#aaa", fontWeight: isCustom ? 700 : 400 }}>
+                          {gapVal} pt
+                        </span>
+                        <button style={btnSt} onClick={() => setCourseGap(selectedCK, Math.round((gapVal + 0.5) * 100) / 100)}>+</button>
+                      </div>
+                      <div style={{ fontFamily: FONT, fontSize: 7, color: "#aaa", marginTop: 5 }}>
+                        ↑↓ arrow keys to nudge · Esc to deselect
+                      </div>
                     </div>
                   );
-                })}
-
-                {/* Per-course gap overrides */}
-                <div style={{ borderTop: "1px solid #f0f0f0", marginTop: 10, paddingTop: 10 }}>
-                  <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>
-                    COURSE GAP OVERRIDES
-                  </div>
-                  {menuCourses.filter(c => !c.is_snack).map(c => {
-                    const ck = c.course_key;
-                    const effectiveDefault = globalLayout.sectionSpacing ?? 6.8;
-                    const val = globalLayout.courseGaps?.[ck] ?? effectiveDefault;
-                    const isCustom = globalLayout.courseGaps?.[ck] != null;
-                    return (
-                      <div key={ck} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                        <span style={{ fontFamily: FONT, fontSize: 8, color: isCustom ? "#7a5020" : "#bbb", flex: "0 0 110px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: isCustom ? 700 : 400 }}>
-                          {c.menu?.name || ck}
-                        </span>
-                        <input
-                          type="number"
-                          value={val}
-                          step={0.5}
-                          onChange={e => setCourseGap(ck, parseFloat(e.target.value))}
-                          onBlur={e => { const v = parseFloat(e.target.value); if (isNaN(v)) setCourseGap(ck, effectiveDefault); }}
-                          style={{ fontFamily: FONT, fontSize: 9, width: 52, padding: "2px 4px", border: `1px solid ${isCustom ? "#e0c898" : "#e0e0e0"}`, borderRadius: 2, background: isCustom ? "#fffdf0" : "#fafafa", color: isCustom ? "#7a5020" : "#999", textAlign: "center" }}
-                        />
-                        <span style={{ fontFamily: FONT, fontSize: 8, color: "#ccc" }}>pt</span>
-                      </div>
-                    );
-                  })}
-                </div>
+                })()}
               </div>
 
-              {/* Live preview column */}
+              {/* Interactive preview column */}
               <div style={{ flex: 1, padding: 12, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", overflow: "hidden", minWidth: 0 }}>
-                <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#ccc", textTransform: "uppercase", marginBottom: 8 }}>
-                  Preview
+                <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", textTransform: "uppercase", marginBottom: 6 }}>
+                  Click a course row to adjust its spacing
                 </div>
                 {(() => {
-                  const containerW = 280;
+                  const containerW = 300;
                   const a5W = 559;
                   const a5H = 793;
                   const scale = containerW / a5W;
                   return (
                     <div style={{ width: containerW, height: Math.round(a5H * scale), overflow: "hidden", border: "1px solid #e8e8e8", borderRadius: 2 }}>
                       <iframe
-                        srcDoc={globalPreviewHtml}
+                        ref={layoutIframeRef}
+                        srcDoc={interactivePreviewHtml}
                         title="layout preview"
+                        onLoad={() => { try { layoutIframeRef.current?.contentWindow?.postMessage({ type: "layout-highlight", ck: selectedCK }, "*"); } catch {} }}
                         style={{
                           width: a5W, height: a5H, border: "none",
                           transform: `scale(${scale})`, transformOrigin: "top left",
-                          pointerEvents: "none",
                         }}
                       />
                     </div>
