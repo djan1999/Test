@@ -5700,12 +5700,15 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
   const [layoutSaving, setLayoutSaving] = useState(false);
   const [layoutSaved,  setLayoutSaved]  = useState(false);
   const layoutLoaded = useRef(false);
+  const globalLayoutRef = useRef(globalLayout);
+  globalLayoutRef.current = globalLayout;
 
   // Load global layout from Supabase on mount
   useEffect(() => {
     if (!supabase) { layoutLoaded.current = true; return; }
-    supabase.from("service_settings").select("state").eq("id", "menu_layout_global").single()
-      .then(({ data }) => {
+    supabase.from("service_settings").select("state").eq("id", "menu_layout_global").maybeSingle()
+      .then(({ data, error }) => {
+        if (error) console.error("Layout load error:", error);
         if (data?.state && Object.keys(data.state).length > 0) setGlobalLayout(data.state);
         layoutLoaded.current = true;
       });
@@ -5718,9 +5721,11 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
 
   const saveGlobalLayout = async () => {
     setLayoutSaving(true); setLayoutSaved(false);
+    const toSave = globalLayoutRef.current;
     if (supabase) {
-      await supabase.from("service_settings")
-        .upsert({ id: "menu_layout_global", state: globalLayout, updated_at: new Date().toISOString() }, { onConflict: "id" });
+      const { error } = await supabase.from("service_settings")
+        .upsert({ id: "menu_layout_global", state: toSave, updated_at: new Date().toISOString() }, { onConflict: "id" });
+      if (error) { console.error("Layout save failed:", error); setLayoutSaving(false); return; }
     }
     setLayoutSaving(false); setLayoutSaved(true);
     setTimeout(() => setLayoutSaved(false), 2500);
