@@ -28,10 +28,9 @@ h2{font-family:'Roboto Mono',monospace;font-size:9pt;text-align:center;margin:0 
 
 const allergyHtmlShell = (title, bodyHtml, resvCount) => {
   // Scale font based on number of reservation columns to fit on one page
-  const baseFontPt = resvCount <= 3 ? 8.5 : resvCount <= 5 ? 7.5 : resvCount <= 7 ? 6.5 : 5.5;
-  const headerFontPt = Math.max(baseFontPt - 0.5, 5);
-  const courseSubPt = Math.max(baseFontPt - 1.5, 4.5);
-  const cellPad = resvCount <= 5 ? "3pt 4pt" : "2pt 3pt";
+  const baseFontPt = resvCount <= 3 ? 7 : resvCount <= 5 ? 6.5 : resvCount <= 7 ? 5.5 : 5;
+  const courseSubPt = Math.max(baseFontPt - 1.5, 4);
+  const cellPad = "1.5pt 3pt";
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${esc(title)}</title>
@@ -39,11 +38,10 @@ ${ROBOTO_LINK}
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Roboto Mono',monospace;font-size:${baseFontPt}pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-@page{size:A4 landscape;margin:8mm 6mm;}
+@page{size:A4 landscape;margin:5mm 5mm;}
 @media print{body{margin:0;}}
 table{width:100%;border-collapse:collapse;table-layout:fixed;}
-tr{page-break-inside:avoid;}
-th,td{border:1px solid #aaa;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;color:#000;font-weight:700;overflow:hidden;word-wrap:break-word;}
+th,td{border:1px solid #aaa;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;color:#000;font-weight:700;overflow:hidden;word-wrap:break-word;line-height:1.15;}
 th{text-align:center;}
 .green-header{background:#3d6b4f;color:#fff;}
 .green-header th,.green-header td{border-color:#2e5a3e;color:#fff;}
@@ -52,7 +50,7 @@ th{text-align:center;}
 .highlight{background:#edf7ef;}
 .course-name{text-transform:uppercase;font-size:${baseFontPt}pt;}
 .course-sub{font-size:${courseSubPt}pt;color:#555;font-style:italic;font-weight:400;}
-.resv-cell{font-size:${Math.max(baseFontPt - 0.5, 5)}pt;line-height:1.25;}
+.resv-cell{font-size:${baseFontPt}pt;line-height:1.15;}
 </style></head><body>${bodyHtml}</body></html>`;
 };
 
