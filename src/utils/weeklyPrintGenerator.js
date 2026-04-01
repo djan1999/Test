@@ -23,7 +23,7 @@ th{text-align:center;background:#fff;}
 .date-row td{background:#f0f0f0;}
 u{text-decoration:underline;color:#000;}
 h1{font-family:'Roboto Mono',monospace;font-size:11pt;text-align:center;margin:0 0 2pt;font-weight:700;}
-h2{font-family:'Roboto Mono',monospace;font-size:9pt;text-align:center;margin:0 0 10pt;font-weight:400;color:#000;}
+h2{font-family:'Roboto Mono',monospace;font-size:9pt;text-align:center;margin:0 0 10pt;font-weight:700;color:#000;}
 </style></head><body>${bodyHtml}</body></html>`;
 
 const allergyHtmlShell = (title, bodyHtml, resvCount) => {

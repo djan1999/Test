@@ -5142,19 +5142,18 @@ function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }
           {Array.from({ length: 10 }, (_, i) => i + 1).map(tid => {
             const isSel    = tableIds.includes(tid);
             const conflict = isConflict(tid);
-            const isActive = tables.find(t => t.id === tid)?.active;
             return (
-              <button key={tid} disabled={isActive} onClick={() => {
-                if (conflict || isActive) return;
+              <button key={tid} onClick={() => {
+                if (conflict) return;
                 setTableIds(prev => prev.includes(tid) ? (prev.length > 1 ? prev.filter(x => x !== tid) : prev) : [...prev, tid]);
               }} style={{
                 fontFamily: FONT, fontSize: 11, padding: "9px 0",
                 border: "1px solid",
-                borderColor: isSel ? "#1a1a1a" : conflict ? "#f0d0b0" : isActive ? "#f0f0f0" : "#e0e0e0",
+                borderColor: isSel ? "#1a1a1a" : conflict ? "#f0d0b0" : "#e0e0e0",
                 borderRadius: 2,
-                background: isSel ? "#1a1a1a" : conflict ? "#fff8f2" : isActive ? "#f8f8f8" : "#fff",
-                color: isSel ? "#fff" : conflict ? "#c07840" : isActive ? "#ccc" : "#555",
-                cursor: conflict || isActive ? "not-allowed" : "pointer",
+                background: isSel ? "#1a1a1a" : conflict ? "#fff8f2" : "#fff",
+                color: isSel ? "#fff" : conflict ? "#c07840" : "#555",
+                cursor: conflict ? "not-allowed" : "pointer",
               }}>T{String(tid).padStart(2, "0")}</button>
             );
           })}
