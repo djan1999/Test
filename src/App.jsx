@@ -6755,7 +6755,10 @@ export default function App() {
             tableGroup:         group,
             courseOverrides:    d.courseOverrides || {},
             kitchenCourseNotes: d.kitchenCourseNotes || {},
-            seats:              makeSeats(d.guests || 2, t.seats),
+            seats:              makeSeats(d.guests || 2, t.seats).map(s => {
+              if (!d.birthday) return s;
+              return { ...s, extras: { ...s.extras, 3: { ordered: true, pairing: "—" } } };
+            }),
           };
         }
       }
