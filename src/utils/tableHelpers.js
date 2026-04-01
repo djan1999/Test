@@ -38,6 +38,7 @@ export const blankTable = id => ({
   bottleWines: [],
   restrictions: [],
   birthday: false,
+  cakeNote: "",
   notes: "",
   lang: "en",
   seats: makeSeats(2),

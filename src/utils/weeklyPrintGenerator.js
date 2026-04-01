@@ -6,33 +6,53 @@ import { applyCourseRestriction, getCourseMod, RESTRICTION_PRIORITY_KEYS, RESTRI
 
 const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-const htmlShell = (title, bodyHtml, landscape = false) => `<!DOCTYPE html>
+const resvHtmlShell = (title, bodyHtml) => `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${esc(title)}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-@page{size:A4 ${landscape ? "landscape" : "portrait"};margin:10mm 8mm;}
+body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+@page{size:A4 portrait;margin:12mm 10mm;}
 @media print{body{margin:0;}}
-table{width:100%;border-collapse:collapse;page-break-inside:auto;}
+table{width:100%;border-collapse:collapse;}
 tr{page-break-inside:avoid;}
-th,td{border:1px solid #000;padding:3pt 4pt;vertical-align:top;text-align:left;font-size:8.5pt;}
-th{font-weight:700;text-align:center;}
-.green-header{background:#2f7a45;color:#fff;font-weight:700;}
-.green-header th,.green-header td{border-color:#256b36;color:#fff;}
+th,td{border:1px solid #000;padding:4pt 5pt;vertical-align:top;text-align:left;font-size:9pt;}
+th{font-weight:700;text-align:center;font-size:9pt;}
+.center{text-align:center;}
+.bold{font-weight:700;}
+u{text-decoration:underline;}
+h1{font-family:Arial,Helvetica,sans-serif;font-size:12pt;text-align:center;margin:0 0 2pt;font-weight:400;}
+h2{font-family:Arial,Helvetica,sans-serif;font-size:10pt;text-align:center;margin:0 0 10pt;font-weight:400;color:#000;}
+</style></head><body>${bodyHtml}</body></html>`;
+
+const allergyHtmlShell = (title, bodyHtml, resvCount) => {
+  // Scale font based on number of reservation columns to fit on one page
+  const baseFontPt = resvCount <= 3 ? 8.5 : resvCount <= 5 ? 7.5 : resvCount <= 7 ? 6.5 : 5.5;
+  const headerFontPt = Math.max(baseFontPt - 0.5, 5);
+  const courseSubPt = Math.max(baseFontPt - 1.5, 4.5);
+  const cellPad = resvCount <= 5 ? "3pt 4pt" : "2pt 3pt";
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${esc(title)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:Arial,Helvetica,sans-serif;font-size:${baseFontPt}pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+@page{size:A4 landscape;margin:8mm 6mm;}
+@media print{body{margin:0;}}
+table{width:100%;border-collapse:collapse;table-layout:fixed;}
+tr{page-break-inside:avoid;}
+th,td{border:1px solid #999;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;overflow:hidden;word-wrap:break-word;}
+th{font-weight:700;text-align:center;font-size:${headerFontPt}pt;}
+.green-header{background:#2e6b3a;color:#fff;font-weight:700;}
+.green-header th,.green-header td{border-color:#245a2e;color:#fff;}
 .red{color:#c04040;font-weight:700;}
 .center{text-align:center;}
 .bold{font-weight:700;}
-.resv-cell{font-size:7.5pt;line-height:1.3;}
-.highlight{background:#f0faf0;}
-.course-name{font-weight:700;text-transform:uppercase;font-size:8pt;}
-.course-sub{font-size:7pt;color:#666;font-style:italic;}
-h1{font-family:'Roboto Mono',monospace;font-size:11pt;text-align:center;margin:0 0 1pt;font-weight:700;}
-h2{font-family:'Roboto Mono',monospace;font-size:9pt;text-align:center;margin:0 0 8pt;font-weight:700;color:#1a1a1a;}
-u{text-decoration:underline;}
+.highlight{background:#edf7ef;}
+.course-name{font-weight:700;text-transform:uppercase;font-size:${baseFontPt}pt;}
+.course-sub{font-size:${courseSubPt}pt;color:#666;font-style:italic;}
+.resv-cell{font-size:${Math.max(baseFontPt - 0.5, 5)}pt;line-height:1.25;}
 </style></head><body>${bodyHtml}</body></html>`;
+};
 
 const fmtDateShort = ds => {
   const d = new Date(ds + "T00:00:00");
@@ -71,13 +91,6 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
   const lastDate  = sortedDates[sortedDates.length - 1] || weekEnd;
   const dateRange = `${fmtDateShort(firstDate)} - ${fmtDateFull(lastDate)}`;
 
-  const expLabel = (d) => {
-    const year = new Date(d.resTime ? (d.resTime + "T00:00:00") : new Date()).getFullYear();
-    const suffix = String(year).slice(-2);
-    if (d.menuType === "short") return "SM";
-    return `L${suffix}`;
-  };
-
   const expLabelForResv = (r) => {
     const year = new Date(r.date + "T00:00:00").getFullYear();
     const suffix = String(year).slice(-2);
@@ -89,7 +102,6 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
   const infoText = (d, r) => {
     const parts = [];
     if (d.guestType === "hotel" && d.room) parts.push(`<u>Hotel #${esc(d.room)}</u>`);
-    // Cake info
     if (d.birthday) {
       const occasion = d.cakeNote ? `(${esc(d.cakeNote)})` : "";
       parts.push(`<u>1xCAKE${occasion}</u>`);
@@ -98,17 +110,15 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
     return parts.join("<br>");
   };
 
-  // Build restriction text: group by key, show count + label
+  // Build restriction text
   const restrText = (restrictions) => {
     if (!restrictions?.length) return "";
-    // Group by note
     const counts = {};
     restrictions.forEach(r => {
       counts[r.note] = (counts[r.note] || 0) + 1;
     });
     return Object.entries(counts).map(([key, count]) => {
       const def = restrictionDefs.find(d => d.key === key);
-      // If it's a known restriction key, use the label; otherwise show raw text
       const label = def ? def.label.toLowerCase() : key;
       return count > 1 ? `${count}x ${label}` : label;
     }).join("\n");
@@ -151,7 +161,7 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
         body += `<td></td>`;
         body += `<td class="center">${d.guests || 2}</td>`;
         body += `<td>${esc(d.resTime || "")}</td>`;
-        body += `<td class="bold">${esc(d.resName || "—")}</td>`;
+        body += `<td class="bold">${esc(d.resName || "\u2014")}</td>`;
         body += `<td class="center">${esc(expLabelForResv(r))}</td>`;
         body += `<td style="font-size:8pt;">${infoText(d, r)}</td>`;
         body += `<td style="font-size:8pt;white-space:pre-line;">${esc(restr)}</td>`;
@@ -168,7 +178,7 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
   }
 
   body += `</table>`;
-  return htmlShell("Weekly Reservations", body, false);
+  return resvHtmlShell("Weekly Reservations", body);
 }
 
 // ── PDF 2: Weekly Allergy/Restriction Sheet ───────────────────────────────────
@@ -190,7 +200,7 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     .sort((a, b) => a.date.localeCompare(b.date) || (a.data?.resTime || "99").localeCompare(b.data?.resTime || "99"));
 
   if (weekResv.length === 0) {
-    return htmlShell("Weekly Allergy Sheet", `<h1 style="margin-top:40pt;">No restrictions or edits for ${esc(dateRange)}</h1>`, true);
+    return allergyHtmlShell("Weekly Allergy Sheet", `<h1 style="margin-top:40pt;font-family:Arial,Helvetica,sans-serif;">No restrictions or edits for ${esc(dateRange)}</h1>`, 0);
   }
 
   // Courses: all non-snack, non-cake courses in order
@@ -198,33 +208,33 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     .filter(c => !c.is_snack && c.optional_flag !== "cake")
     .sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
 
-  // Column width calc
-  const courseColW = 200;
-  const resvColW = Math.max(120, Math.floor((900 - courseColW) / Math.max(weekResv.length, 1)));
-
   let body = "";
-  body += `<table style="table-layout:fixed;">`;
+  body += `<table>`;
+
+  // Calculate course column width
+  const courseColPct = weekResv.length <= 3 ? "22%" : weekResv.length <= 5 ? "18%" : "15%";
+  const resvColPct = `${Math.floor((100 - parseInt(courseColPct)) / weekResv.length)}%`;
 
   // Header row 1: date range + guest names
   body += `<tr class="green-header">`;
-  body += `<th style="width:${courseColW}px;">${esc(dateRange)}</th>`;
+  body += `<th style="width:${courseColPct};text-align:left;padding-left:6pt;">${esc(dateRange)}</th>`;
   weekResv.forEach(r => {
     const d = r.data || {};
-    body += `<th style="width:${resvColW}px;text-align:center;font-size:8pt;">${esc(d.resName || "—")}</th>`;
+    body += `<th style="width:${resvColPct};text-align:center;">${esc(d.resName || "\u2014")}</th>`;
   });
   body += `</tr>`;
 
   // Header row 2: dates
   body += `<tr class="green-header">`;
-  body += `<td style="font-size:8pt;">Date</td>`;
+  body += `<td style="padding-left:6pt;">Date</td>`;
   weekResv.forEach(r => {
-    body += `<td class="center" style="font-size:8pt;">${fmtDateShort(r.date)}</td>`;
+    body += `<td class="center">${fmtDateShort(r.date)}</td>`;
   });
   body += `</tr>`;
 
   // Header row 3: allergies/restrictions summary + menu type
   body += `<tr class="green-header">`;
-  body += `<td style="font-size:7.5pt;">Allergies/Restrictions</td>`;
+  body += `<td style="padding-left:6pt;">Allergies/Restrictions</td>`;
   weekResv.forEach(r => {
     const d = r.data || {};
     const mt = d.menuType === "short" ? "SHORT MENU" : "LONG MENU";
@@ -237,7 +247,7 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
       const label = def ? def.label.toLowerCase() : key;
       return count > 1 ? `${count}x ${label}` : label;
     });
-    body += `<td class="center" style="font-size:7pt;line-height:1.35;">${esc(mt)}<br>${esc(restrLines.join(", "))}</td>`;
+    body += `<td class="center" style="line-height:1.3;">${esc(mt)}<br>${esc(restrLines.join(", "))}</td>`;
   });
   body += `</tr>`;
 
@@ -249,7 +259,7 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
 
     body += `<tr>`;
     // Course name column
-    body += `<td><span class="course-name">${esc(baseName)}</span>`;
+    body += `<td style="padding-left:6pt;"><span class="course-name">${esc(baseName)}</span>`;
     if (baseSub) body += `<br><span class="course-sub">${esc(baseSub)}</span>`;
     body += `</td>`;
 
@@ -300,5 +310,5 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
   });
 
   body += `</table>`;
-  return htmlShell("Weekly Allergy Sheet", body, true);
+  return allergyHtmlShell("Weekly Allergy Sheet", body, weekResv.length);
 }

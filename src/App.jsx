@@ -6749,6 +6749,7 @@ export default function App() {
             guestType:          d.guestType || "",
             room:               d.room || "",
             birthday:           !!d.birthday,
+            cakeNote:           d.birthday ? (d.cakeNote || "") : "",
             restrictions:       d.restrictions || [],
             notes:              d.notes || "",
             tableGroup:         group,
