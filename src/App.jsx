@@ -7420,7 +7420,7 @@ export default function App() {
     />
   ) : null;
 
-  if (!mode) return <>{serviceDatePickerEl}<LoginScreen onEnter={m => { changeMode(m); setSel(null); }} onSyncAll={syncAll} /></>;
+  if (!mode) return <>{serviceDatePickerEl}<LoginScreen onEnter={m => { changeMode(m); setSel(null); }} onSyncAll={syncWines} /></>;
 
   // Reservation Manager mode
   if (mode === "reservation") return (<>{serviceDatePickerEl}<ReservationManager
