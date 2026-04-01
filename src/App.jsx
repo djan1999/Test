@@ -15,7 +15,7 @@ import {
   RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, initDishes,
   parseMenuRow, RESTRICTION_KEYS,
 } from "./utils/menuUtils.js";
-import { generateMenuHTML, DEFAULT_COURSE_GAPS } from "./utils/menuGenerator.js";
+import { generateMenuHTML } from "./utils/menuGenerator.js";
 import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML } from "./utils/weeklyPrintGenerator.js";
 import {
   readLocalBeverages, writeLocalBeverages,
@@ -949,13 +949,9 @@ function DrinkListEditor({ list, setList, newItem, setNewItem, nextId, label }) 
   );
 }
 
-// ── Admin Panel ───────────────────────────────────────────────────────────────
-// ── Manual Menu Overrides Tab ─────────────────────────────────────────────────
 // BlurInput: keeps typed value local, only calls onCommit when focus leaves.
-// Prevents parent state updates (and re-renders) on every keystroke.
 function BlurInput({ committedValue, onCommit, placeholder, style }) {
   const [local, setLocal] = useState(committedValue ?? "");
-  // Sync if the committed value changes from outside (e.g. reset)
   const prev = useRef(committedValue);
   if (prev.current !== committedValue) { prev.current = committedValue; setLocal(committedValue ?? ""); }
   return (
@@ -969,114 +965,7 @@ function BlurInput({ committedValue, onCommit, placeholder, style }) {
   );
 }
 
-function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides, onSave }) {
-  const hasAny = Object.keys(overrides).some(k => Object.keys(overrides[k] || {}).length > 0);
-  const [saving, setSaving] = useState(false);
-  const [saved,  setSaved]  = useState(false);
-
-  const handleSave = async () => {
-    if (!onSave) return;
-    setSaving(true); setSaved(false);
-    await onSave(overrides);
-    setSaving(false); setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  };
-
-  const commitField = (courseKey, field, value) => {
-    onSetOverrides(prev => ({
-      ...prev,
-      [courseKey]: { ...(prev[courseKey] || {}), [field]: value },
-    }));
-  };
-
-  const clearCourse = courseKey => {
-    onSetOverrides(prev => { const next = { ...prev }; delete next[courseKey]; return next; });
-  };
-
-  const clearAll = () => onSetOverrides({});
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-        <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>
-          SERVICE OVERRIDES — changes apply to all menus & kitchen tickets tonight
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {onSave && (
-            <button onClick={handleSave} disabled={saving} style={{
-              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-              border: `1px solid ${saved ? "#4a9a6a" : "#1a1a1a"}`, borderRadius: 2, cursor: saving ? "default" : "pointer",
-              background: saved ? "#4a9a6a" : "#1a1a1a", color: "#fff",
-            }}>{saving ? "SAVING…" : saved ? "SAVED ✓" : "SAVE TO ALL SCREENS"}</button>
-          )}
-          {hasAny && (
-            <button onClick={clearAll} style={{
-              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-              border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
-              background: "#fff9f9", color: "#c04040",
-            }}>RESET ALL</button>
-          )}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {menuCourses.map(course => {
-          const key = course.course_key;
-          const ov = overrides[key] || {};
-          const hasOv = Object.keys(ov).length > 0;
-          const origName   = course.menu?.name || key;
-          const origSub    = course.menu?.sub  || "";
-          const origSiName = course.menu_si?.name || "";
-          const origSiSub  = course.menu_si?.sub  || "";
-          const inpStyle   = { ...baseInp, padding: "5px 8px", fontSize: 11 };
-
-          return (
-            <div key={key} style={{
-              border: `1px solid ${hasOv ? "#f0c060" : "#f0f0f0"}`,
-              borderRadius: 3, padding: "12px 14px",
-              background: hasOv ? "#fffdf4" : "#fff",
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <div>
-                  <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a1a1a", letterSpacing: 0.3 }}>{origName}</span>
-                  {origSub && <span style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginLeft: 8 }}>{origSub}</span>}
-                </div>
-                {hasOv && (
-                  <button onClick={() => clearCourse(key)} style={{
-                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 9px",
-                    border: "1px solid #e8c878", borderRadius: 2, cursor: "pointer",
-                    background: "#fff", color: "#a07020",
-                  }}>RESET</button>
-                )}
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div>
-                  <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", letterSpacing: 1, marginBottom: 3 }}>NAME (EN)</div>
-                  <BlurInput committedValue={"name" in ov ? ov.name : ""} onCommit={v => commitField(key, "name", v)} placeholder={origName} style={inpStyle} />
-                </div>
-                <div>
-                  <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", letterSpacing: 1, marginBottom: 3 }}>SUB (EN)</div>
-                  <BlurInput committedValue={"sub" in ov ? ov.sub : ""} onCommit={v => commitField(key, "sub", v)} placeholder={origSub || "—"} style={inpStyle} />
-                </div>
-                {(origSiName || origSiSub) && (<>
-                  <div>
-                    <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", letterSpacing: 1, marginBottom: 3 }}>NAME (SI)</div>
-                    <BlurInput committedValue={"name_si" in ov ? ov.name_si : ""} onCommit={v => commitField(key, "name_si", v)} placeholder={origSiName || "—"} style={inpStyle} />
-                  </div>
-                  <div>
-                    <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", letterSpacing: 1, marginBottom: 3 }}>SUB (SI)</div>
-                    <BlurInput committedValue={"sub_si" in ov ? ov.sub_si : ""} onCommit={v => commitField(key, "sub_si", v)} placeholder={origSiSub || "—"} style={inpStyle} />
-                  </div>
-                </>)}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+// ── Admin Panel ───────────────────────────────────────────────────────────────
 
 function AdminPanel({
   dishes, wines, cocktails, spirits, beers, menuCourses,
@@ -3611,29 +3500,6 @@ function KitchenBoard({ tables, menuCourses, upd, updMany }) {
 // ── Menu Generator ────────────────────────────────────────────────────────────
 const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
 
-const LAYOUT_GROUPS = [
-  { label: "PAGE", props: [
-    { key: "padTop",    label: "Top",    def: 8.4, step: 0.5, unit: "mm" },
-    { key: "padBottom", label: "Bottom", def: 8.2, step: 0.5, unit: "mm" },
-    { key: "padLeft",   label: "Left",   def: 12,  step: 0.5, unit: "mm" },
-    { key: "padRight",  label: "Right",  def: 12,  step: 0.5, unit: "mm" },
-  ]},
-  { label: "TYPE", props: [
-    { key: "fontSize",      label: "Size",       def: 6.75, step: 0.05, unit: "pt" },
-    { key: "headerSpacing", label: "Header gap",  def: 7,    step: 0.5,  unit: "mm" },
-  ]},
-  { label: "LOGO", props: [
-    { key: "logoSize",    label: "Size",     def: 10.5, step: 0.5, unit: "mm" },
-    { key: "logoOffsetX", label: "Offset X", def: 0,    step: 0.5, unit: "mm" },
-    { key: "logoOffsetY", label: "Offset Y", def: 0,    step: 0.5, unit: "mm" },
-  ]},
-  { label: "GAPS", props: [
-    { key: "rowSpacing",      label: "Row",      def: 3.15, step: 0.25, unit: "pt" },
-    { key: "wineRowSpacing",  label: "Wine row", def: 4.5,  step: 0.25, unit: "pt" },
-    { key: "sectionSpacing",  label: "Section",  def: 6.8,  step: 0.5,  unit: "pt" },
-    { key: "thankYouSpacing", label: "Thank-you", def: 7,    step: 0.5,  unit: "pt" },
-  ]},
-];
 
 function BevEditRow({ emoji, label, items, onUpdate }) {
   const [draft, setDraft] = useState("");
@@ -5997,461 +5863,50 @@ function GateScreen({ onPass }) {
   );
 }
 
-// ── Menu Page ─────────────────────────────────────────────────────────────────
-function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSaveMenuOverrides, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], onExit }) {
-  const [tab, setTab]                   = useState("print");
+// ── Menu Page — preview + print only ─────────────────────────────────────────
+function MenuPage({ tables, menuCourses, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], globalLayout = {}, onExit }) {
   const [menuGenTable, setMenuGenTable] = useState(null);
-  const [globalLayout, setGlobalLayout] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("milka_menu_layout") || "{}"); } catch { return {}; }
-  });
-  const [layoutSaving, setLayoutSaving] = useState(false);
-  const [layoutSaved,  setLayoutSaved]  = useState(false);
-  const layoutLoaded = useRef(false);
-  const globalLayoutRef = useRef(globalLayout);
-  globalLayoutRef.current = globalLayout;
-
-  // Load global layout from Supabase on mount
-  useEffect(() => {
-    if (!supabase) { layoutLoaded.current = true; return; }
-    supabase.from("service_settings").select("state").eq("id", "menu_layout_global").maybeSingle()
-      .then(({ data, error }) => {
-        if (error) console.error("Layout load error:", error);
-        if (data?.state && Object.keys(data.state).length > 0) setGlobalLayout(data.state);
-        layoutLoaded.current = true;
-      });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Persist to localStorage whenever layout changes
-  useEffect(() => {
-    try { localStorage.setItem("milka_menu_layout", JSON.stringify(globalLayout)); } catch {}
-  }, [globalLayout]);
-
-  const saveGlobalLayout = async () => {
-    setLayoutSaving(true); setLayoutSaved(false);
-    const toSave = globalLayoutRef.current;
-    if (supabase) {
-      const { error } = await supabase.from("service_settings")
-        .upsert({ id: "menu_layout_global", state: toSave, updated_at: new Date().toISOString() }, { onConflict: "id" });
-      if (error) { console.error("Layout save failed:", error); setLayoutSaving(false); return; }
-    }
-    setLayoutSaving(false); setLayoutSaved(true);
-    setTimeout(() => setLayoutSaved(false), 2500);
-  };
-
-  const adjustGlobal = (key, def, step) => (dir) => {
-    setGlobalLayout(prev => {
-      const cur = key in prev ? prev[key] : def;
-      return { ...prev, [key]: Math.round((cur + dir * step) * 1000) / 1000 };
-    });
-  };
-
-  const getCourseGap = (courseKey) => {
-    return globalLayout.courseGaps?.[courseKey] ?? DEFAULT_COURSE_GAPS[courseKey] ?? null;
-  };
-
-  const setCourseGap = (courseKey, value) => {
-    setGlobalLayout(prev => {
-      const defaultVal = DEFAULT_COURSE_GAPS[courseKey] ?? (prev.sectionSpacing ?? 6.8);
-      const gaps = { ...(prev.courseGaps || {}) };
-      if (value === defaultVal || value === "" || isNaN(value)) {
-        delete gaps[courseKey];
-      } else {
-        gaps[courseKey] = value;
-      }
-      const next = { ...prev };
-      if (Object.keys(gaps).length > 0) next.courseGaps = gaps;
-      else delete next.courseGaps;
-      return next;
-    });
-  };
-
-  const [selectedCKs, setSelectedCKs] = useState([]);
-  const [activeCell, setActiveCell] = useState(null); // { ck, side: "left"|"right" } or null
-  const lastClickedCK = useRef(null);
-  const layoutIframeRef = useRef(null);
-
-  const previewRows = useMemo(() => {
-    const dummySeat = { id: 1, pairing: "Wine", extras: {}, glasses: [], cocktails: [], beers: [] };
-    return generateMenuHTML({
-      seat: dummySeat,
-      table: { menuType: "", restrictions: [], bottleWines: [], birthday: false },
-      menuCourses, lang: "en", layoutStyles: globalLayout, _rowsOnly: true,
-    });
-  }, [globalLayout, menuCourses]);
-
-  const editorRows = useMemo(() => {
-    const result = [];
-    previewRows.forEach(row => {
-      result.push({ ...row, _isGap: false });
-      // Only show a gap row if gapTexts has content for this course (user added it)
-      if (row.type === "course" && row.courseKey && !row.courseKey.startsWith("_gap_")) {
-        const gt = globalLayout.gapTexts?.[row.courseKey];
-        if (gt && (gt.leftTitle || gt.leftSub || gt.rightTitle || gt.rightSub)) {
-          result.push({
-            type: "gap", _afterCK: row.courseKey, _isGap: true,
-            left: { title: gt.leftTitle || "", sub: gt.leftSub || "" },
-            right: { title: gt.rightTitle || "", sub: gt.rightSub || "" },
-          });
-        }
-      }
-    });
-    return result;
-  }, [previewRows, globalLayout.gapTexts]);
-
-  const handleRowClick = (ck, e) => {
-    if (!ck) return;
-    if (e.shiftKey && lastClickedCK.current) {
-      // Range select between lastClicked and ck
-      const allCKs = editorRows.filter(r => r.type === "course" && r.courseKey).map(r => r.courseKey);
-      const from = allCKs.indexOf(lastClickedCK.current);
-      const to = allCKs.indexOf(ck);
-      if (from >= 0 && to >= 0) {
-        const lo = Math.min(from, to), hi = Math.max(from, to);
-        setSelectedCKs(allCKs.slice(lo, hi + 1));
-      }
-    } else if (e.ctrlKey || e.metaKey) {
-      setSelectedCKs(prev => prev.includes(ck) ? prev.filter(k => k !== ck) : [...prev, ck]);
-    } else {
-      setSelectedCKs([ck]);
-    }
-    lastClickedCK.current = ck;
-  };
-
-  const setEditorOverride = (ck, field, value) => {
-    setGlobalLayout(prev => {
-      const ovs = { ...(prev.editorOverrides || {}) };
-      const entry = { ...(ovs[ck] || {}) };
-      if (value === "") delete entry[field]; else entry[field] = value;
-      if (Object.keys(entry).length > 0) ovs[ck] = entry; else delete ovs[ck];
-      const next = { ...prev };
-      if (Object.keys(ovs).length > 0) next.editorOverrides = ovs; else delete next.editorOverrides;
-      return next;
-    });
-  };
-
-  const setGapText = (afterCK, field, value) => {
-    setGlobalLayout(prev => {
-      const gts = { ...(prev.gapTexts || {}) };
-      const entry = { ...(gts[afterCK] || {}) };
-      if (value === "") delete entry[field]; else entry[field] = value;
-      if (Object.keys(entry).length > 0) gts[afterCK] = entry; else delete gts[afterCK];
-      const next = { ...prev };
-      if (Object.keys(gts).length > 0) next.gapTexts = gts; else delete next.gapTexts;
-      return next;
-    });
-  };
-
-  const globalPreviewHtml = useMemo(() => {
-    const dummySeat = { id: 1, pairing: "Wine", extras: {}, glasses: [], cocktails: [], beers: [] };
-    return generateMenuHTML({
-      seat: dummySeat,
-      table: { menuType: "", restrictions: [], bottleWines: [], birthday: false },
-      menuTitle: "WINTER MENU", teamNames: "", menuCourses, lang: "en", thankYouNote: "",
-      layoutStyles: globalLayout, _logo: logoDataUri,
-    });
-  }, [globalLayout, menuCourses, logoDataUri]);
-
-  const TABS = ["print", "layout", "overrides"];
-  const tabBtn = t => ({
-    fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 20px",
-    border: "none", cursor: "pointer", textTransform: "uppercase", transition: "all 0.1s",
-    background: tab === t ? "#1a1a1a" : "transparent",
-    color: tab === t ? "#fff" : "#888",
-    borderBottom: tab === t ? "none" : "1px solid #e8e8e8",
-  });
 
   return (
     <div style={{ minHeight: "100vh", background: "#fafafa", display: "flex", flexDirection: "column" }}>
       {/* Header */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e8e8e8", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 3, color: "#1a1a1a" }}>MENU</span>
-        <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888" }}>EXIT</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#aaa" }}>PREVIEW + PRINT</span>
+          <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888" }}>EXIT</button>
+        </div>
       </div>
 
-      {/* Tab bar */}
-      <div style={{ display: "flex", borderBottom: "1px solid #e8e8e8", background: "#fff", flexShrink: 0 }}>
-        {TABS.map(t => <button key={t} style={tabBtn(t)} onClick={() => setTab(t)}>{t}</button>)}
-      </div>
-
-      {/* Content */}
+      {/* Content — table selection for menu generation */}
       <div style={{ flex: 1, overflowY: "auto", padding: "28px 24px", maxWidth: 740, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>
-
-        {/* ── PRINT ── */}
-        {tab === "print" && (
-          <div>
-            <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1, marginBottom: 20 }}>
-              SELECT A TABLE TO GENERATE MENUS
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-              {tables.map(t => {
-                const hasData = t.active || t.resName || t.resTime;
-                return (
-                  <div
-                    key={t.id}
-                    onClick={() => setMenuGenTable(t)}
-                    style={{
-                      border: `1px solid ${hasData ? "#e0e0e0" : "#f0f0f0"}`,
-                      borderRadius: 6, padding: "14px 16px",
-                      background: hasData ? "#fff" : "#fafafa",
-                      cursor: "pointer", boxShadow: hasData ? "0 1px 4px rgba(0,0,0,0.06)" : "none",
-                      opacity: hasData ? 1 : 0.5, transition: "box-shadow 0.15s",
-                    }}
-                  >
-                    <div style={{ fontFamily: FONT, fontSize: 20, fontWeight: 800, color: "#111", letterSpacing: -1, lineHeight: 1 }}>T{t.id}</div>
-                    {t.resName && <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: "#333", marginTop: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.resName}</div>}
-                    {t.resTime && <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginTop: 2 }}>{t.resTime}</div>}
-                    {t.seats?.length > 0 && <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginTop: 4 }}>{t.seats.length} pax</div>}
-                    {t.active && <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#4a9a6a", marginTop: 4, fontWeight: 700 }}>SEATED</div>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── LAYOUT ── */}
-        {tab === "layout" && (
-          <div tabIndex={0} style={{ outline: "none" }} onKeyDown={e => {
-            if (selectedCKs.length === 0) return;
-            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-              e.preventDefault();
-              const dir = e.key === "ArrowUp" ? -1 : 1;
-              const step = 0.5;
-              setGlobalLayout(prev => {
-                const gaps = { ...(prev.courseGaps || {}) };
-                selectedCKs.forEach(ck => {
-                  const cur = gaps[ck] ?? DEFAULT_COURSE_GAPS[ck] ?? 0;
-                  gaps[ck] = Math.max(0, Math.round((cur + dir * step) * 100) / 100);
-                });
-                return { ...prev, courseGaps: gaps };
-              });
-            }
-            if (e.key === "Escape") { setSelectedCKs([]); setActiveCell(null); }
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>PRINT LAYOUT</div>
-              <button onClick={saveGlobalLayout} disabled={layoutSaving} style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-                border: `1px solid ${layoutSaved ? "#4a9a6a" : "#1a1a1a"}`, borderRadius: 2,
-                cursor: layoutSaving ? "default" : "pointer",
-                background: layoutSaved ? "#4a9a6a" : "#1a1a1a", color: "#fff",
-              }}>{layoutSaving ? "SAVING…" : layoutSaved ? "SAVED ✓" : "SAVE AS DEFAULT"}</button>
-            </div>
-
-            <div style={{ display: "flex", gap: 0, border: "1px solid #e8e8e8", borderRadius: 4, background: "#fff", height: "calc(100vh - 180px)", minHeight: 400 }}>
-              {/* Controls column */}
-              <div style={{ flex: "0 0 200px", padding: "8px 10px", borderRight: "1px solid #f0f0f0", overflowY: "auto" }}>
-                {LAYOUT_GROUPS.map(group => (
-                  <div key={group.label} style={{ marginBottom: 8 }}>
-                    <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 3 }}>{group.label}</div>
-                    {group.props.map(({ key, label, def, step, unit }) => {
-                      const val = key in globalLayout ? globalLayout[key] : def;
-                      const isCustom = key in globalLayout;
-                      const btnSt = { fontFamily: FONT, fontSize: 10, width: 18, height: 18, border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fafafa", color: "#555", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 };
-                      return (
-                        <div key={key} style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 1 }}>
-                          <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#999", flex: "0 0 55px", whiteSpace: "nowrap" }}>{label}</span>
-                          <button style={btnSt} onClick={() => adjustGlobal(key, def, step)(-1)}>−</button>
-                          <span style={{ fontFamily: FONT, fontSize: 7.5, minWidth: 38, textAlign: "center", color: isCustom ? "#7a5020" : "#aaa", fontWeight: isCustom ? 700 : 400 }}>{val}{unit}</span>
-                          <button style={btnSt} onClick={() => adjustGlobal(key, def, step)(+1)}>+</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-
-                {/* Selection panel */}
-                {selectedCKs.length > 0 && (() => {
-                  const gapVals = selectedCKs.map(ck => globalLayout.courseGaps?.[ck] ?? DEFAULT_COURSE_GAPS[ck] ?? 0);
-                  const allSame = gapVals.every(v => v === gapVals[0]);
-                  const displayGap = allSame ? gapVals[0] : "mixed";
-                  const btnSt = { fontFamily: FONT, fontSize: 10, width: 18, height: 18, border: "1px solid #d0d8f0", borderRadius: 2, cursor: "pointer", background: "#f0f4ff", color: "#3b6fd6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 };
-                  return (
-                    <div style={{ borderTop: "2px solid #3b82f6", marginTop: 4, paddingTop: 6 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                        <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1, color: "#3b82f6", fontWeight: 700 }}>
-                          {selectedCKs.length === 1 ? (menuCourses.find(c => c.course_key === selectedCKs[0])?.menu?.name || selectedCKs[0]) : `${selectedCKs.length} SELECTED`}
-                        </span>
-                        <button onClick={() => { setSelectedCKs([]); setActiveCell(null); }} style={{ background: "none", border: "none", color: "#aaa", cursor: "pointer", fontSize: 11, lineHeight: 1, padding: 0 }}>×</button>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 4 }}>
-                        <span style={{ fontFamily: FONT, fontSize: 7, color: "#666", flex: "0 0 55px" }}>Gap before</span>
-                        <button style={btnSt} onClick={() => {
-                          const v = (allSame ? gapVals[0] : 0) - 0.5;
-                          selectedCKs.forEach(ck => setCourseGap(ck, Math.max(0, Math.round(v * 100) / 100)));
-                        }}>−</button>
-                        <span style={{ fontFamily: FONT, fontSize: 7.5, minWidth: 38, textAlign: "center", color: "#3b6fd6", fontWeight: 700 }}>
-                          {typeof displayGap === "number" ? `${displayGap}pt` : displayGap}
-                        </span>
-                        <button style={btnSt} onClick={() => {
-                          const v = (allSame ? gapVals[0] : 0) + 0.5;
-                          selectedCKs.forEach(ck => setCourseGap(ck, Math.round(v * 100) / 100));
-                        }}>+</button>
-                      </div>
-
-                      {/* Active cell editing */}
-                      {activeCell && (() => {
-                        const isGapCell = activeCell.ck.startsWith("_gap_");
-                        const realCK = isGapCell ? activeCell.ck.replace("_gap_", "") : activeCell.ck;
-                        const sideLabel = activeCell.side === "left" ? "Dish" : "Drink";
-                        const titleField = activeCell.side === "left" ? "leftTitle" : "rightTitle";
-                        const subField = activeCell.side === "left" ? "leftSub" : "rightSub";
-                        const source = isGapCell ? (globalLayout.gapTexts?.[realCK] || {}) : (globalLayout.editorOverrides?.[realCK] || {});
-                        const setFn = isGapCell ? (f, v) => setGapText(realCK, f, v) : (f, v) => setEditorOverride(realCK, f, v);
-                        const curRow = editorRows.find(r => (r.courseKey === activeCell.ck) || (r._isGap && r._afterCK === realCK && isGapCell));
-                        const placeholder = curRow ? (activeCell.side === "left" ? curRow.left : curRow.right) : {};
-                        return (
-                          <div style={{ borderTop: "1px solid #e8e8e8", marginTop: 4, paddingTop: 4 }}>
-                            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#888", marginBottom: 2 }}>
-                              {isGapCell ? "GAP ROW" : sideLabel.toUpperCase()} — {activeCell.side}
-                            </div>
-                            <input
-                              value={source[titleField] || ""}
-                              onChange={e => setFn(titleField, e.target.value)}
-                              placeholder={placeholder?.title || "title"}
-                              style={{ fontFamily: FONT, fontSize: 8.5, width: "100%", padding: "2px 4px", border: "1px solid #d0d8f0", borderRadius: 2, marginBottom: 2, boxSizing: "border-box" }}
-                            />
-                            <input
-                              value={source[subField] || ""}
-                              onChange={e => setFn(subField, e.target.value)}
-                              placeholder={placeholder?.sub || "sub"}
-                              style={{ fontFamily: FONT, fontSize: 8.5, width: "100%", padding: "2px 4px", border: "1px solid #d0d8f0", borderRadius: 2, boxSizing: "border-box" }}
-                            />
-                          </div>
-                        );
-                      })()}
-
-                      <div style={{ fontFamily: FONT, fontSize: 6.5, color: "#aaa", marginTop: 4 }}>
-                        ↑↓ nudge · Shift+click range · Esc clear
-                      </div>
-                    </div>
-                  );
-                })()}
+        <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1, marginBottom: 20 }}>
+          SELECT A TABLE TO GENERATE MENUS
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+          {tables.map(t => {
+            const hasData = t.active || t.resName || t.resTime;
+            return (
+              <div
+                key={t.id}
+                onClick={() => setMenuGenTable(t)}
+                style={{
+                  border: `1px solid ${hasData ? "#e0e0e0" : "#f0f0f0"}`,
+                  borderRadius: 6, padding: "14px 16px",
+                  background: hasData ? "#fff" : "#fafafa",
+                  cursor: "pointer", boxShadow: hasData ? "0 1px 4px rgba(0,0,0,0.06)" : "none",
+                  opacity: hasData ? 1 : 0.5, transition: "box-shadow 0.15s",
+                }}
+              >
+                <div style={{ fontFamily: FONT, fontSize: 20, fontWeight: 800, color: "#111", letterSpacing: -1, lineHeight: 1 }}>T{t.id}</div>
+                {t.resName && <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: "#333", marginTop: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.resName}</div>}
+                {t.resTime && <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginTop: 2 }}>{t.resTime}</div>}
+                {t.seats?.length > 0 && <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginTop: 4 }}>{t.seats.length} pax</div>}
+                {t.active && <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#4a9a6a", marginTop: 4, fontWeight: 700 }}>SEATED</div>}
               </div>
-
-              {/* Row editor — middle column */}
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", borderRight: "1px solid #f0f0f0" }}>
-                <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", textTransform: "uppercase", padding: "6px 8px 3px", flexShrink: 0 }}>
-                  ROWS
-                </div>
-                <div style={{ flex: 1, overflowY: "auto", padding: "0 6px 6px" }}>
-                  {editorRows.map((row, idx) => {
-                    if (row.type === "section") {
-                      return (
-                        <div key={`s-${idx}`} style={{ fontFamily: FONT, fontSize: 7, fontWeight: 700, letterSpacing: 1, color: "#888", padding: "5px 4px 2px", textTransform: "uppercase" }}>
-                          {row.label}
-                        </div>
-                      );
-                    }
-                    if (row.type === "thankyou" || row.type === "team") return null;
-                    if (row.type === "wine-only") {
-                      return (
-                        <div key={`w-${idx}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, padding: "1px 0" }}>
-                          <div style={{ fontFamily: FONT, fontSize: 7, color: "#ccc", padding: "2px 4px" }} />
-                          <div style={{ fontFamily: FONT, fontSize: 7, color: "#666", padding: "2px 4px", background: "#fafafa", borderRadius: 1 }}>
-                            <div style={{ fontWeight: 700, fontSize: 6.5, textTransform: "uppercase" }}>{row.right?.title}</div>
-                            {row.right?.sub && <div style={{ fontSize: 6.5, color: "#999" }}>{row.right.sub}</div>}
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    const isGap = row._isGap;
-                    const ck = isGap ? `_gap_${row._afterCK}` : row.courseKey;
-                    const isSel = !isGap && selectedCKs.includes(ck);
-                    const hasGapContent = isGap && (row.left?.title || row.right?.title);
-                    const canAddGap = !isGap && row.type === "course" && row.courseKey && !row.courseKey.startsWith("_gap_")
-                      && !globalLayout.gapTexts?.[row.courseKey];
-                    const courseGapVal = !isGap && row.courseKey ? (globalLayout.courseGaps?.[row.courseKey] ?? DEFAULT_COURSE_GAPS[row.courseKey] ?? null) : null;
-                    const cellStyle = (side) => {
-                      const isActive = activeCell?.ck === ck && activeCell?.side === side;
-                      return {
-                        fontFamily: FONT, fontSize: 7, padding: "2px 4px", borderRadius: 2, cursor: "pointer",
-                        minHeight: isGap ? 16 : undefined,
-                        background: isActive ? "#e8f0ff" : isSel ? "#f0f4ff" : isGap ? "#fcfcfc" : "#fff",
-                        border: isActive ? "1.5px solid #3b82f6" : isGap && !hasGapContent ? "1px dashed #e0e0e0" : isSel ? "1px solid #c0d4f0" : "1px solid transparent",
-                        transition: "background 0.1s, border 0.1s",
-                      };
-                    };
-                    const renderCell = (side) => {
-                      const data = side === "left" ? row.left : row.right;
-                      if (isGap && !data?.title && !data?.sub) {
-                        return <div style={cellStyle(side)} onClick={e => { e.stopPropagation(); setActiveCell({ ck, side }); }} />;
-                      }
-                      return (
-                        <div style={cellStyle(side)} onClick={e => { e.stopPropagation(); setActiveCell({ ck, side }); if (!isGap) handleRowClick(ck, e); }}>
-                          {data?.title && <div style={{ fontWeight: 700, fontSize: 6.5, textTransform: "uppercase", lineHeight: 1.15 }}>{data.title}</div>}
-                          {data?.sub && <div style={{ fontSize: 6.5, color: "#888", lineHeight: 1.15, marginTop: 1 }}>{data.sub}</div>}
-                        </div>
-                      );
-                    };
-
-                    return (
-                      <div key={isGap ? `gap-${row._afterCK}` : `r-${ck}-${idx}`}>
-                        {courseGapVal != null && courseGapVal > 0 && (
-                          <div style={{ height: Math.min(courseGapVal * 0.8, 12), borderBottom: "1px dashed #e8e8e8", margin: "0 4px" }} />
-                        )}
-                        <div onClick={e => { if (!isGap && ck) handleRowClick(ck, e); }}
-                          style={{ display: "grid", gridTemplateColumns: isGap ? "1fr 1fr 14px" : "1fr 1fr", gap: 2, padding: "1px 0", cursor: isGap ? "default" : "pointer" }}>
-                          {renderCell("left")}
-                          {renderCell("right")}
-                          {isGap && (
-                            <button onClick={() => {
-                              setGlobalLayout(prev => {
-                                const gts = { ...(prev.gapTexts || {}) };
-                                delete gts[row._afterCK];
-                                const next = { ...prev };
-                                if (Object.keys(gts).length > 0) next.gapTexts = gts; else delete next.gapTexts;
-                                return next;
-                              });
-                            }}
-                              style={{ fontFamily: FONT, fontSize: 9, color: "#ccc", background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1, alignSelf: "center" }}
-                              title="Remove gap row">×</button>
-                          )}
-                        </div>
-                        {canAddGap && (
-                          <div style={{ display: "flex", justifyContent: "center", padding: "0" }}>
-                            <button onClick={() => setGapText(row.courseKey, "leftTitle", " ")}
-                              style={{ fontFamily: FONT, fontSize: 7, color: "#ddd", background: "none", border: "none", cursor: "pointer", padding: "0 4px", lineHeight: 1 }}
-                              title="Insert gap row below">+</button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Preview — right column */}
-              <div style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 8px", overflow: "hidden" }}>
-                <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", textTransform: "uppercase", marginBottom: 4, alignSelf: "flex-start" }}>PREVIEW</div>
-                {(() => {
-                  const containerH = Math.max(350, window.innerHeight - 250);
-                  const a5W = 559;
-                  const a5H = 793;
-                  const scale = containerH / a5H;
-                  const containerW = Math.round(a5W * scale);
-                  return (
-                    <div style={{ width: containerW, height: containerH, overflow: "hidden", border: "1px solid #e8e8e8", borderRadius: 2, flexShrink: 0 }}>
-                      <iframe ref={layoutIframeRef} srcDoc={globalPreviewHtml} title="layout preview"
-                        style={{ width: a5W, height: a5H, border: "none", transform: `scale(${scale})`, transformOrigin: "top left", pointerEvents: "none" }} />
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── OVERRIDES ── */}
-        {tab === "overrides" && (
-          <MenuOverridesTab
-            menuCourses={menuCourses}
-            overrides={menuOverrides}
-            onSetOverrides={onSetMenuOverrides}
-            onSave={onSaveMenuOverrides}
-          />
-        )}
+            );
+          })}
+        </div>
       </div>
 
       {/* MenuGenerator overlay */}
@@ -6480,7 +5935,7 @@ function LoginScreen({ onEnter, onSyncAll }) {
     { id: "service",     label: "Service",      sub: "full service access",  icon: "◈", pin: false },
     { id: "reservation", label: "Reservations", sub: "weekly planner",       icon: "◫", pin: false },
     { id: "admin",       label: "Admin",        sub: "pin required",         icon: "◆", pin: true  },
-    { id: "menu",        label: "Menu",         sub: "menus & print",        icon: "▨", pin: true  },
+    { id: "menu",        label: "Menu",         sub: "preview + print",      icon: "▨", pin: true  },
   ];
   const [picking, setPicking] = useState(null);
   const [pin, setPin]         = useState("");
@@ -6660,9 +6115,6 @@ export default function App() {
 
   const [tables,    setTables]    = useState(initialState.tables);
   const [menuCourses, setMenuCourses] = useState(MENU_DATA); // live from Supabase
-  const [menuOverrides, setMenuOverrides] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("milka_menu_overrides") || "{}"); } catch { return {}; }
-  });
   const [dishes,    setDishes]    = useState(mergeDishes(initialState.dishes));
   const [wines,     setWines]     = useState(initialState.wines);
   const [cocktails, setCocktails] = useState(localBev?.cocktails ?? initialState.cocktails ?? initCocktails);
@@ -6681,6 +6133,29 @@ export default function App() {
   const [inventoryOpen,  setInventoryOpen]  = useState(false);
   const [syncStatus,   setSyncStatus]   = useState(hasSupabaseConfig ? "connecting" : "local-only");
   const [logoDataUri,  setLogoDataUri]  = useState("");
+  // Print layout state (lifted from MenuPage into App for Admin access)
+  const [globalLayout, setGlobalLayout] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("milka_menu_layout") || "{}"); } catch { return {}; }
+  });
+  const [layoutSaving, setLayoutSaving] = useState(false);
+  const [layoutSaved,  setLayoutSaved]  = useState(false);
+  const layoutLoaded = useRef(false);
+  const globalLayoutRef = useRef(globalLayout);
+  globalLayoutRef.current = globalLayout;
+  // Quick Access items (data-driven, replaces hardcoded APERITIF_OPTIONS)
+  const [quickAccessItems, setQuickAccessItems] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("milka_quick_access") || "null");
+      if (stored) return stored;
+    } catch {}
+    // Default items matching old APERITIF_OPTIONS
+    return [
+      { id: 1, label: "SFSC",       searchKey: "SFSC",       type: "wine", enabled: true },
+      { id: 2, label: "Slapšak",    searchKey: "Slapšak",    type: "wine", enabled: true },
+      { id: 3, label: "Clandestin", searchKey: "Clandestin", type: "wine", enabled: true },
+      { id: 4, label: "Krug",       searchKey: "Krug",       type: "wine", enabled: true },
+    ];
+  });
   // Access gate: checked once at init against 12h TTL
   const [authed,       setAuthed]       = useState(() => readAccess());
   // Reservations & service date
@@ -6861,7 +6336,7 @@ export default function App() {
       const { error } = await supabase.from("service_archive").insert({
         date: new Date().toISOString().slice(0, 10),
         label: dateStr,
-        state: { ...snap, tables: activeTables, menuCourses: effectiveMenuCourses },
+        state: { ...snap, tables: activeTables, menuCourses: menuCourses },
       });
       if (error) {
         window.alert("Archive failed: " + error.message);
@@ -7071,10 +6546,6 @@ export default function App() {
     return () => clearTimeout(saveTimerRef.current);
   }, [tablesJson, hydrated]);
 
-  // ── Persist menu overrides to localStorage ─────────────────────────────────
-  useEffect(() => {
-    try { localStorage.setItem("milka_menu_overrides", JSON.stringify(menuOverrides)); } catch {}
-  }, [menuOverrides]);
 
   // ── Load logo on startup (Supabase → fallback to /logo.svg) ─────────────────
   useEffect(() => {
@@ -7094,42 +6565,65 @@ export default function App() {
       .upsert({ id: "menu_logo", state: { dataUri }, updated_at: new Date().toISOString() }, { onConflict: "id" });
   };
 
-  // ── Load menu overrides from Supabase on startup + realtime sync ────────────
+  // ── Load print layout from Supabase on mount ─────────────────────────────
   useEffect(() => {
-    if (!supabase) return;
-    supabase.from("service_settings").select("state").eq("id", "menu_overrides").single()
-      .then(({ data }) => {
-        if (data?.state && Object.keys(data.state).length > 0) setMenuOverrides(data.state);
+    if (!supabase) { layoutLoaded.current = true; return; }
+    supabase.from("service_settings").select("state").eq("id", "menu_layout_global").maybeSingle()
+      .then(({ data, error }) => {
+        if (error) console.error("Layout load error:", error);
+        if (data?.state && Object.keys(data.state).length > 0) setGlobalLayout(data.state);
+        layoutLoaded.current = true;
       });
-    const ch = supabase.channel("milka-menu-overrides")
-      .on("postgres_changes", { event: "*", schema: "public", table: "service_settings" }, payload => {
-        if (payload.new?.id === "menu_overrides") setMenuOverrides(payload.new?.state || {});
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const saveMenuOverrides = async (overrides) => {
-    if (!supabase) return { ok: false };
-    const { error } = await supabase
-      .from("service_settings")
-      .upsert({ id: "menu_overrides", state: overrides, updated_at: new Date().toISOString() }, { onConflict: "id" });
-    return { ok: !error };
+  // Persist layout to localStorage
+  useEffect(() => {
+    try { localStorage.setItem("milka_menu_layout", JSON.stringify(globalLayout)); } catch {}
+  }, [globalLayout]);
+
+  const saveGlobalLayout = async () => {
+    setLayoutSaving(true); setLayoutSaved(false);
+    const toSave = globalLayoutRef.current;
+    if (supabase) {
+      const { error } = await supabase.from("service_settings")
+        .upsert({ id: "menu_layout_global", state: toSave, updated_at: new Date().toISOString() }, { onConflict: "id" });
+      if (error) { console.error("Layout save failed:", error); setLayoutSaving(false); return; }
+    }
+    setLayoutSaving(false); setLayoutSaved(true);
+    setTimeout(() => setLayoutSaved(false), 2500);
   };
 
-  // ── Effective menu courses (overrides applied on top of sheet data) ─────────
-  // useMemo so this doesn't recompute on every render (e.g. while typing elsewhere)
-  const effectiveMenuCourses = useMemo(
-    () => menuCourses.map(c => applyMenuOverride(c, menuOverrides)),
-    [menuCourses, menuOverrides]
-  );
+  // ── Quick Access persistence ──────────────────────────────────────────────
+  useEffect(() => {
+    try { localStorage.setItem("milka_quick_access", JSON.stringify(quickAccessItems)); } catch {}
+  }, [quickAccessItems]);
 
-  // ── Aperitif quick-button options (from aperitif_btn column) ─────────────────
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.from("service_settings").select("state").eq("id", "quick_access").maybeSingle()
+      .then(({ data }) => {
+        if (data?.state?.items?.length) setQuickAccessItems(data.state.items);
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const updateQuickAccess = (items) => {
+    setQuickAccessItems(items);
+    if (supabase) {
+      supabase.from("service_settings")
+        .upsert({ id: "quick_access", state: { items }, updated_at: new Date().toISOString() }, { onConflict: "id" })
+        .then(() => {});
+    }
+  };
+
+  // ── Aperitif quick-button options (data-driven from Quick Access config) ──
   const aperitifOptions = useMemo(() => {
+    const fromQuickAccess = quickAccessItems.filter(i => i.enabled).map(i => i.label);
+    if (fromQuickAccess.length > 0) return fromQuickAccess;
+    // Fallback to aperitif_btn column from courses
     const fromSheet = [...new Set(menuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
     if (fromSheet.length > 0) return fromSheet;
     return APERITIF_OPTIONS.map(a => a.label);
-  }, [menuCourses]);
+  }, [quickAccessItems, menuCourses]);
 
   // ── Load service tables from Supabase + subscribe realtime ────────────────
   useEffect(() => {
@@ -7426,7 +6920,7 @@ export default function App() {
   // Reservation Manager mode
   if (mode === "reservation") return (<>{serviceDatePickerEl}<ReservationManager
       reservations={reservations}
-      menuCourses={effectiveMenuCourses}
+      menuCourses={menuCourses}
       tables={tables}
       onUpsert={upsertReservation}
       onDelete={deleteReservation}
@@ -7443,7 +6937,7 @@ export default function App() {
       <GlobalStyle />
       <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
       <div style={{ padding: "20px 24px" }}>
-        <KitchenBoard tables={tables} menuCourses={effectiveMenuCourses} upd={upd} updMany={updMany} />
+        <KitchenBoard tables={tables} menuCourses={menuCourses} upd={upd} updMany={updMany} />
       </div>
       {archiveOpen && (
         <ArchiveModal
@@ -7453,7 +6947,7 @@ export default function App() {
           onSeedTest={seedTestData}
           onClose={() => setArchiveOpen(false)}
           onRestoreTicket={id => upd(id, "kitchenArchived", false)}
-          menuCourses={effectiveMenuCourses}
+          menuCourses={menuCourses}
         />
       )}
       {inventoryOpen && <InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} />}
@@ -7465,12 +6959,10 @@ export default function App() {
       <GlobalStyle />
       <MenuPage
         tables={tables}
-        menuCourses={effectiveMenuCourses}
-        menuOverrides={menuOverrides}
-        onSetMenuOverrides={setMenuOverrides}
-        onSaveMenuOverrides={saveMenuOverrides}
+        menuCourses={menuCourses}
         upd={upd}
         logoDataUri={logoDataUri}
+        globalLayout={globalLayout}
         wines={wines}
         cocktails={cocktails}
         spirits={spirits}
@@ -7503,9 +6995,17 @@ export default function App() {
         logoDataUri={logoDataUri}
         onSaveLogo={saveLogo}
         onResetMenuLayout={() => {
+          setGlobalLayout({});
           try { localStorage.removeItem("milka_menu_layout"); } catch {}
           if (supabase) supabase.from("service_settings").upsert({ id: "menu_layout_global", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" }).then(() => {});
         }}
+        globalLayout={globalLayout}
+        onSetGlobalLayout={setGlobalLayout}
+        onSaveGlobalLayout={saveGlobalLayout}
+        layoutSaving={layoutSaving}
+        layoutSaved={layoutSaved}
+        quickAccessItems={quickAccessItems}
+        onUpdateQuickAccess={updateQuickAccess}
         onExit={() => changeMode(null)}
       />
     </div>
@@ -7603,7 +7103,7 @@ export default function App() {
           cocktails={cocktails}
           spirits={spirits}
           beers={beers}
-          menuCourses={effectiveMenuCourses}
+          menuCourses={menuCourses}
           mode={mode}
           onBack={() => setSel(null)}
           upd={(f, v) => upd(sel, f, v)}
@@ -7624,7 +7124,7 @@ export default function App() {
           onSeedTest={seedTestData}
           onClose={() => setArchiveOpen(false)}
           onRestoreTicket={id => upd(id, "kitchenArchived", false)}
-          menuCourses={effectiveMenuCourses}
+          menuCourses={menuCourses}
         />
       )}
       {inventoryOpen && <InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} />}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FONT } from "./adminStyles.js";
 import MenuLayoutPanel from "./MenuLayoutPanel.jsx";
 import DishesPanel from "./DishesPanel.jsx";
@@ -6,14 +6,17 @@ import DrinksPanel from "./DrinksPanel.jsx";
 import InventoryPanel from "./InventoryPanel.jsx";
 import SystemPanel from "./SystemPanel.jsx";
 import ArchivePanel from "./ArchivePanel.jsx";
+import PrintLayoutPanel from "./PrintLayoutPanel.jsx";
+import QuickAccessPanel from "./QuickAccessPanel.jsx";
 
 const SECTIONS = [
-  { id: "menu",      label: "Menu Layout",            icon: "▨" },
-  { id: "dishes",    label: "Dishes & Restrictions",   icon: "◈" },
-  { id: "drinks",    label: "Drinks & Pairings",       icon: "◎" },
-  { id: "inventory", label: "Wine / Inventory Sync",   icon: "↻" },
-  { id: "system",    label: "System & Sync",            icon: "◆" },
-  { id: "archive",   label: "Archive",                  icon: "◫" },
+  { id: "menu",       label: "Menu Layout",            icon: "▨" },
+  { id: "dishes",     label: "Dishes & Restrictions",   icon: "◈" },
+  { id: "drinks",     label: "Drinks & Pairings",       icon: "◎" },
+  { id: "quickaccess",label: "Quick Access",             icon: "◇" },
+  { id: "inventory",  label: "Inventory / Sync",         icon: "↻" },
+  { id: "system",     label: "System",                   icon: "◆" },
+  { id: "archive",    label: "Archive",                  icon: "◫" },
 ];
 
 // ── AdminLayout — modular admin control panel ──
@@ -42,6 +45,15 @@ export default function AdminLayout({
   logoDataUri,
   onSaveLogo,
   onResetMenuLayout,
+  // Print layout
+  globalLayout,
+  onSetGlobalLayout,
+  onSaveGlobalLayout,
+  layoutSaving,
+  layoutSaved,
+  // Quick Access
+  quickAccessItems,
+  onUpdateQuickAccess,
   // Navigation
   onExit,
 }) {
@@ -112,13 +124,67 @@ export default function AdminLayout({
         </nav>
 
         {/* Panel content */}
-        <main style={{ flex: 1, padding: "24px 32px", maxWidth: 900, overflowY: "auto" }}>
+        <main style={{ flex: 1, padding: "24px 32px", maxWidth: activeSection === "menu" ? 1200 : 900, overflowY: "auto" }}>
           {activeSection === "menu" && (
-            <MenuLayoutPanel
-              menuCourses={menuCourses}
-              onUpdateCourses={onUpdateMenuCourses}
-              onSaveCourses={onSaveMenuCourses}
-            />
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 20 }}>
+                MENU LAYOUT — course order, structure, positioning, print layout
+              </div>
+              <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+                <button
+                  onClick={() => setActiveSection("menu")}
+                  style={{
+                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
+                    border: "1px solid #1a1a1a", borderRadius: 2, cursor: "default",
+                    background: "#1a1a1a", color: "#fff",
+                  }}>COURSES</button>
+                <button
+                  onClick={() => setActiveSection("printlayout")}
+                  style={{
+                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
+                    border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer",
+                    background: "#fff", color: "#888",
+                  }}>PRINT LAYOUT</button>
+              </div>
+              <MenuLayoutPanel
+                menuCourses={menuCourses}
+                onUpdateCourses={onUpdateMenuCourses}
+                onSaveCourses={onSaveMenuCourses}
+              />
+            </div>
+          )}
+
+          {activeSection === "printlayout" && (
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 20 }}>
+                MENU LAYOUT — course order, structure, positioning, print layout
+              </div>
+              <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+                <button
+                  onClick={() => setActiveSection("menu")}
+                  style={{
+                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
+                    border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer",
+                    background: "#fff", color: "#888",
+                  }}>COURSES</button>
+                <button
+                  onClick={() => setActiveSection("printlayout")}
+                  style={{
+                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
+                    border: "1px solid #1a1a1a", borderRadius: 2, cursor: "default",
+                    background: "#1a1a1a", color: "#fff",
+                  }}>PRINT LAYOUT</button>
+              </div>
+              <PrintLayoutPanel
+                menuCourses={menuCourses}
+                logoDataUri={logoDataUri}
+                globalLayout={globalLayout}
+                onSetGlobalLayout={onSetGlobalLayout}
+                onSaveGlobalLayout={onSaveGlobalLayout}
+                layoutSaving={layoutSaving}
+                layoutSaved={layoutSaved}
+              />
+            </div>
           )}
 
           {activeSection === "dishes" && (
@@ -138,6 +204,13 @@ export default function AdminLayout({
               onUpdateDishes={onUpdateDishes}
               onUpdateWines={onUpdateWines}
               onSaveBeverages={onSaveBeverages}
+            />
+          )}
+
+          {activeSection === "quickaccess" && (
+            <QuickAccessPanel
+              quickAccessItems={quickAccessItems}
+              onUpdateQuickAccess={onUpdateQuickAccess}
             />
           )}
 

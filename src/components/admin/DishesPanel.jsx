@@ -1,7 +1,10 @@
 import { useState, useRef } from "react";
 import { FONT, baseInp, fieldLabel, primaryBtn } from "./adminStyles.js";
 
-// ── DishesPanel — manage extra dish options (optional courses offered to guests) ──
+// ── DishesPanel — manage dishes and restrictions ──
+// Contains:
+//   - Main Dishes: course-level dish info is managed in Menu Layout
+//   - Extra Dishes: optional courses offered to guests (beetroot, cheese, cake, etc.)
 export default function DishesPanel({ dishes, onUpdateDishes }) {
   const [localDishes, setLocalDishes] = useState(
     dishes.map(d => ({ ...d, pairings: [...d.pairings] }))
@@ -11,7 +14,7 @@ export default function DishesPanel({ dishes, onUpdateDishes }) {
 
   const addDish = () => {
     if (!newDishName.trim()) return;
-    setLocalDishes(l => [...l, { id: nextDishId.current++, name: newDishName.trim(), pairings: ["—", "Wine", "Non-Alc"] }]);
+    setLocalDishes(l => [...l, { id: nextDishId.current++, name: newDishName.trim(), pairings: ["\u2014", "Wine", "Non-Alc"] }]);
     setNewDishName("");
   };
   const removeDish    = id         => setLocalDishes(l => l.filter(d => d.id !== id));
@@ -22,9 +25,28 @@ export default function DishesPanel({ dishes, onUpdateDishes }) {
 
   return (
     <>
-      <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#888", marginBottom: 16 }}>
-        EXTRA DISH OPTIONS — optional courses offered to guests (beetroot, cheese, cake, etc.)
+      {/* Main Dishes info */}
+      <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#888", marginBottom: 8 }}>
+        DISHES & RESTRICTIONS
       </div>
+      <div style={{
+        fontFamily: FONT, fontSize: 10, color: "#aaa", padding: "16px 20px",
+        background: "#fafafa", border: "1px solid #f0f0f0", borderRadius: 4, marginBottom: 28,
+        lineHeight: 1.6,
+      }}>
+        Main dish names, descriptions, dietary flags, restriction variants, course keys, and kitchen notes are managed in <strong style={{ color: "#4b4b88" }}>Menu Layout</strong>.
+        <br />
+        Use the + button on each course to add restrictions and pairings.
+      </div>
+
+      {/* Extra Dishes */}
+      <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", marginBottom: 16, textTransform: "uppercase" }}>
+        Extra Dishes
+      </div>
+      <div style={{ fontFamily: FONT, fontSize: 10, color: "#aaa", marginBottom: 16 }}>
+        Optional courses offered to guests (beetroot, cheese, cake, etc.)
+      </div>
+
       <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
         {localDishes.map(dish => (
           <div key={dish.id} style={{ border: "1px solid #f0f0f0", borderRadius: 2, padding: "14px 16px" }}>
@@ -39,7 +61,7 @@ export default function DishesPanel({ dishes, onUpdateDishes }) {
                   <input value={p} onChange={e => updPairing(dish.id, idx, e.target.value)}
                     style={{ fontFamily: FONT, fontSize: 11, padding: "4px 8px", border: "1px solid #e8e8e8", borderRadius: 2, width: 80, outline: "none", color: "#1a1a1a", background: "#fafafa" }} />
                   {dish.pairings.length > 1 && (
-                    <button onClick={() => removePairing(dish.id, idx)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                    <button onClick={() => removePairing(dish.id, idx)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>x</button>
                   )}
                 </div>
               ))}

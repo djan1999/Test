@@ -8,9 +8,143 @@ const DIETARY_KEYS = [
   "no_garlic_onion","halal","low_fodmap",
 ];
 
+// ── Pairing types ──
+const PAIRING_KEYS = [
+  { key: "wp", label: "Wine" },
+  { key: "na", label: "Non-Alc" },
+  { key: "os", label: "Our Story" },
+  { key: "premium", label: "Premium" },
+];
+
+// ── AddItemPopover — small popover for the + button to add restriction or pairing ──
+function AddItemPopover({ course, onUpdate, onClose }) {
+  const [mode, setMode] = useState(null); // null | "restriction" | "pairing"
+  const inpSm = { ...baseInp, padding: "5px 8px", fontSize: 11 };
+
+  const addRestriction = (rKey) => {
+    const restrictions = { ...course.restrictions };
+    if (restrictions[rKey]) return; // already exists
+    restrictions[rKey] = { name: "", sub: "" };
+    onUpdate({ ...course, restrictions });
+    onClose();
+  };
+
+  const addPairing = (pairingKey) => {
+    if (course[pairingKey]) return; // already has value
+    onUpdate({ ...course, [pairingKey]: { name: "", sub: "" } });
+    onClose();
+  };
+
+  // Available restrictions (not yet set for this course)
+  const availableRestrictions = DIETARY_KEYS.filter(rKey => {
+    const val = course.restrictions?.[rKey];
+    return !val || (!val.name && !val.sub);
+  });
+
+  // Available pairings (not yet set)
+  const availablePairings = PAIRING_KEYS.filter(({ key }) => {
+    const val = course[key];
+    return !val || (!val.name && !val.sub);
+  });
+
+  if (!mode) {
+    return (
+      <div style={{
+        position: "absolute", top: "100%", right: 0, zIndex: 10,
+        background: "#fff", border: "1px solid #e0e0e0", borderRadius: 4,
+        boxShadow: "0 4px 12px rgba(0,0,0,0.1)", padding: "8px 0", minWidth: 160,
+      }}>
+        <button onClick={() => setMode("restriction")} style={{
+          display: "block", width: "100%", textAlign: "left", padding: "8px 16px",
+          fontFamily: FONT, fontSize: 10, border: "none", background: "none",
+          cursor: "pointer", color: "#b04040",
+        }}>+ Add Restriction</button>
+        <button onClick={() => setMode("pairing")} style={{
+          display: "block", width: "100%", textAlign: "left", padding: "8px 16px",
+          fontFamily: FONT, fontSize: 10, border: "none", background: "none",
+          cursor: "pointer", color: "#c8a06e",
+        }}>+ Add Pairing</button>
+        <div style={{ borderTop: "1px solid #f0f0f0", marginTop: 4, paddingTop: 4 }}>
+          <button onClick={onClose} style={{
+            display: "block", width: "100%", textAlign: "left", padding: "6px 16px",
+            fontFamily: FONT, fontSize: 9, border: "none", background: "none",
+            cursor: "pointer", color: "#aaa",
+          }}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "restriction") {
+    return (
+      <div style={{
+        position: "absolute", top: "100%", right: 0, zIndex: 10,
+        background: "#fff", border: "1px solid #e0e0e0", borderRadius: 4,
+        boxShadow: "0 4px 12px rgba(0,0,0,0.1)", padding: "8px 0", minWidth: 180,
+        maxHeight: 280, overflowY: "auto",
+      }}>
+        <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#999", padding: "4px 16px 8px", textTransform: "uppercase" }}>
+          Select Restriction
+        </div>
+        {availableRestrictions.length === 0 && (
+          <div style={{ fontFamily: FONT, fontSize: 10, color: "#ccc", padding: "8px 16px" }}>All restrictions already added</div>
+        )}
+        {availableRestrictions.map(rKey => (
+          <button key={rKey} onClick={() => addRestriction(rKey)} style={{
+            display: "block", width: "100%", textAlign: "left", padding: "6px 16px",
+            fontFamily: FONT, fontSize: 10, border: "none", background: "none",
+            cursor: "pointer", color: "#b04040",
+          }}>{rKey.replace(/_/g, " ")}</button>
+        ))}
+        <div style={{ borderTop: "1px solid #f0f0f0", marginTop: 4, paddingTop: 4 }}>
+          <button onClick={() => setMode(null)} style={{
+            display: "block", width: "100%", textAlign: "left", padding: "6px 16px",
+            fontFamily: FONT, fontSize: 9, border: "none", background: "none",
+            cursor: "pointer", color: "#aaa",
+          }}>Back</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "pairing") {
+    return (
+      <div style={{
+        position: "absolute", top: "100%", right: 0, zIndex: 10,
+        background: "#fff", border: "1px solid #e0e0e0", borderRadius: 4,
+        boxShadow: "0 4px 12px rgba(0,0,0,0.1)", padding: "8px 0", minWidth: 160,
+      }}>
+        <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#999", padding: "4px 16px 8px", textTransform: "uppercase" }}>
+          Select Pairing
+        </div>
+        {availablePairings.length === 0 && (
+          <div style={{ fontFamily: FONT, fontSize: 10, color: "#ccc", padding: "8px 16px" }}>All pairings already added</div>
+        )}
+        {availablePairings.map(({ key, label }) => (
+          <button key={key} onClick={() => addPairing(key)} style={{
+            display: "block", width: "100%", textAlign: "left", padding: "6px 16px",
+            fontFamily: FONT, fontSize: 10, border: "none", background: "none",
+            cursor: "pointer", color: "#c8a06e",
+          }}>{label}</button>
+        ))}
+        <div style={{ borderTop: "1px solid #f0f0f0", marginTop: 4, paddingTop: 4 }}>
+          <button onClick={() => setMode(null)} style={{
+            display: "block", width: "100%", textAlign: "left", padding: "6px 16px",
+            fontFamily: FONT, fontSize: 9, border: "none", background: "none",
+            cursor: "pointer", color: "#aaa",
+          }}>Back</button>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 // ── CourseEditor — inline editor for a single course row ──
 function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst, isLast }) {
   const [expanded, setExpanded] = useState(false);
+  const [showAddPopover, setShowAddPopover] = useState(false);
   const inpSm = { ...baseInp, padding: "5px 8px", fontSize: 11 };
   const labelSm = { fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#999", textTransform: "uppercase", marginBottom: 2 };
 
@@ -33,6 +167,18 @@ function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirs
     onUpdate({ ...course, restrictions });
   };
 
+  // Active restrictions (ones that have been configured for this course)
+  const activeRestrictions = DIETARY_KEYS.filter(rKey => {
+    const val = course.restrictions?.[rKey];
+    return val && (val.name || val.sub);
+  });
+
+  // Active pairings
+  const activePairings = PAIRING_KEYS.filter(({ key }) => {
+    const val = course[key];
+    return val && (val.name || val.sub);
+  });
+
   return (
     <div style={{
       border: "1px solid #e8e8e8", borderRadius: 4, background: "#fff",
@@ -52,6 +198,8 @@ function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirs
           {course.menu?.sub && <span style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginLeft: 8 }}>{course.menu.sub}</span>}
         </div>
         {course.is_snack && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 2, padding: "2px 6px" }}>SNACK</span>}
+        {activeRestrictions.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#b04040", border: "1px solid #f0cccc", borderRadius: 2, padding: "2px 6px" }}>{activeRestrictions.length}R</span>}
+        {activePairings.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 2, padding: "2px 6px" }}>{activePairings.length}P</span>}
         <div style={{ display: "flex", gap: 4 }}>
           <button onClick={e => { e.stopPropagation(); onMoveUp(); }} disabled={isFirst} style={{ background: "none", border: "none", cursor: isFirst ? "default" : "pointer", color: isFirst ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▲</button>
           <button onClick={e => { e.stopPropagation(); onMoveDown(); }} disabled={isLast} style={{ background: "none", border: "none", cursor: isLast ? "default" : "pointer", color: isLast ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▼</button>
@@ -96,22 +244,21 @@ function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirs
             </div>
           </div>
 
-          {/* Pairings */}
-          <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: "#888" }}>PAIRINGS</div>
-          {[
-            { key: "wp", label: "Wine" },
-            { key: "na", label: "Non-Alc" },
-            { key: "os", label: "Our Story" },
-            { key: "premium", label: "Premium" },
-          ].map(({ key, label }) => (
-            <div key={key} style={{ display: "grid", gridTemplateColumns: "70px 1fr 1fr 1fr 1fr", gap: 6, marginBottom: 4, alignItems: "center" }}>
-              <span style={{ fontFamily: FONT, fontSize: 9, color: "#c8a06e", fontWeight: 600 }}>{label}</span>
-              <input value={course[key]?.name || ""} onChange={e => updPairing(key, "en", "name", e.target.value)} style={inpSm} placeholder="Name (EN)" />
-              <input value={course[key]?.sub || ""} onChange={e => updPairing(key, "en", "sub", e.target.value)} style={inpSm} placeholder="Sub (EN)" />
-              <input value={course[`${key}_si`]?.name || ""} onChange={e => updPairing(key, "si", "name", e.target.value)} style={inpSm} placeholder="Name (SI)" />
-              <input value={course[`${key}_si`]?.sub || ""} onChange={e => updPairing(key, "si", "sub", e.target.value)} style={inpSm} placeholder="Sub (SI)" />
-            </div>
-          ))}
+          {/* Pairings — only show configured ones */}
+          {activePairings.length > 0 && (
+            <>
+              <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: "#888" }}>PAIRINGS</div>
+              {activePairings.map(({ key, label }) => (
+                <div key={key} style={{ display: "grid", gridTemplateColumns: "70px 1fr 1fr 1fr 1fr", gap: 6, marginBottom: 4, alignItems: "center" }}>
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: "#c8a06e", fontWeight: 600 }}>{label}</span>
+                  <input value={course[key]?.name || ""} onChange={e => updPairing(key, "en", "name", e.target.value)} style={inpSm} placeholder="Name (EN)" />
+                  <input value={course[key]?.sub || ""} onChange={e => updPairing(key, "en", "sub", e.target.value)} style={inpSm} placeholder="Sub (EN)" />
+                  <input value={course[`${key}_si`]?.name || ""} onChange={e => updPairing(key, "si", "name", e.target.value)} style={inpSm} placeholder="Name (SI)" />
+                  <input value={course[`${key}_si`]?.sub || ""} onChange={e => updPairing(key, "si", "sub", e.target.value)} style={inpSm} placeholder="Sub (SI)" />
+                </div>
+              ))}
+            </>
+          )}
 
           {/* Force Pairing */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginTop: 8, marginBottom: 12 }}>
@@ -121,24 +268,45 @@ function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirs
             <div><div style={labelSm}>Force Sub (SI)</div><input value={course.force_pairing_sub_si || ""} onChange={e => upd("force_pairing_sub_si", e.target.value)} style={inpSm} /></div>
           </div>
 
-          {/* Dietary Restrictions */}
-          <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: "#888" }}>DIETARY RESTRICTIONS</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 14 }}>
-            {DIETARY_KEYS.map(rKey => {
-              const val = course.restrictions?.[rKey];
-              const hasVal = val && (val.name || val.sub);
-              return (
-                <div key={rKey} style={{ display: "grid", gridTemplateColumns: "110px 1fr 1fr", gap: 6, alignItems: "center" }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, color: hasVal ? "#b04040" : "#ccc" }}>{rKey.replace(/_/g, " ")}</span>
-                  <input value={val?.name || ""} onChange={e => updRestriction(rKey, "name", e.target.value)} style={inpSm} placeholder="Alt name" />
-                  <input value={val?.sub || ""} onChange={e => updRestriction(rKey, "sub", e.target.value)} style={inpSm} placeholder="Alt desc" />
-                </div>
-              );
-            })}
-          </div>
+          {/* Dietary Restrictions — only show configured ones */}
+          {activeRestrictions.length > 0 && (
+            <>
+              <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: "#888" }}>DIETARY RESTRICTIONS</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 14 }}>
+                {activeRestrictions.map(rKey => {
+                  const val = course.restrictions?.[rKey];
+                  return (
+                    <div key={rKey} style={{ display: "grid", gridTemplateColumns: "110px 1fr 1fr", gap: 6, alignItems: "center" }}>
+                      <span style={{ fontFamily: FONT, fontSize: 9, color: "#b04040" }}>{rKey.replace(/_/g, " ")}</span>
+                      <input value={val?.name || ""} onChange={e => updRestriction(rKey, "name", e.target.value)} style={inpSm} placeholder="Alt name" />
+                      <input value={val?.sub || ""} onChange={e => updRestriction(rKey, "sub", e.target.value)} style={inpSm} placeholder="Alt desc" />
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
-          {/* Actions */}
-          <div style={{ display: "flex", gap: 8, borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
+          {/* Actions row with + button */}
+          <div style={{ display: "flex", gap: 8, borderTop: "1px solid #f0f0f0", paddingTop: 12, alignItems: "center" }}>
+            <div style={{ position: "relative" }}>
+              <button onClick={() => setShowAddPopover(x => !x)} style={{
+                fontFamily: FONT, fontSize: 11, padding: "6px 12px",
+                border: "1px solid #4b4b88", borderRadius: 2, cursor: "pointer",
+                background: showAddPopover ? "#4b4b88" : "#fff",
+                color: showAddPopover ? "#fff" : "#4b4b88",
+                fontWeight: 700,
+              }}>+</button>
+              {showAddPopover && (
+                <AddItemPopover
+                  course={course}
+                  onUpdate={onUpdate}
+                  onClose={() => setShowAddPopover(false)}
+                />
+              )}
+            </div>
+            <span style={{ fontFamily: FONT, fontSize: 9, color: "#aaa" }}>Add restriction or pairing</span>
+            <div style={{ flex: 1 }} />
             <button onClick={onDelete} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
               border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
