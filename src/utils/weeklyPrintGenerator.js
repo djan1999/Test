@@ -6,24 +6,24 @@ import { applyCourseRestriction, getCourseMod, RESTRICTION_PRIORITY_KEYS, RESTRI
 
 const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+const ROBOTO_LINK = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">`;
+
 const resvHtmlShell = (title, bodyHtml) => `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${esc(title)}</title>
+${ROBOTO_LINK}
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 @page{size:A4 portrait;margin:12mm 10mm;}
 @media print{body{margin:0;}}
 table{width:100%;border-collapse:collapse;}
 tr{page-break-inside:avoid;}
-th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:left;font-size:9pt;color:#000;}
-th{font-weight:700;text-align:center;font-size:9pt;background:#f0f0f0;}
-.center{text-align:center;}
-.bold{font-weight:700;}
+th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:left;font-size:8.5pt;color:#000;font-weight:700;}
+th{text-align:center;background:#fff;}
 .date-row td{background:#f0f0f0;}
 u{text-decoration:underline;color:#000;}
-a{color:#000;text-decoration:underline;}
-h1{font-family:Arial,Helvetica,sans-serif;font-size:12pt;text-align:center;margin:0 0 2pt;font-weight:700;}
-h2{font-family:Arial,Helvetica,sans-serif;font-size:10pt;text-align:center;margin:0 0 10pt;font-weight:400;color:#000;}
+h1{font-family:'Roboto Mono',monospace;font-size:11pt;text-align:center;margin:0 0 2pt;font-weight:700;}
+h2{font-family:'Roboto Mono',monospace;font-size:9pt;text-align:center;margin:0 0 10pt;font-weight:400;color:#000;}
 </style></head><body>${bodyHtml}</body></html>`;
 
 const allergyHtmlShell = (title, bodyHtml, resvCount) => {
@@ -35,23 +35,23 @@ const allergyHtmlShell = (title, bodyHtml, resvCount) => {
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${esc(title)}</title>
+${ROBOTO_LINK}
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:Arial,Helvetica,sans-serif;font-size:${baseFontPt}pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+body{font-family:'Roboto Mono',monospace;font-size:${baseFontPt}pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 @page{size:A4 landscape;margin:8mm 6mm;}
 @media print{body{margin:0;}}
 table{width:100%;border-collapse:collapse;table-layout:fixed;}
 tr{page-break-inside:avoid;}
-th,td{border:1px solid #aaa;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;color:#000;overflow:hidden;word-wrap:break-word;}
-th{font-weight:700;text-align:center;font-size:${headerFontPt}pt;}
-.green-header{background:#3d6b4f;color:#fff;font-weight:700;}
+th,td{border:1px solid #aaa;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;color:#000;font-weight:700;overflow:hidden;word-wrap:break-word;}
+th{text-align:center;}
+.green-header{background:#3d6b4f;color:#fff;}
 .green-header th,.green-header td{border-color:#2e5a3e;color:#fff;}
-.red{color:#c04040;font-weight:700;}
+.red{color:#c04040;}
 .center{text-align:center;}
-.bold{font-weight:700;}
 .highlight{background:#edf7ef;}
-.course-name{font-weight:700;text-transform:uppercase;font-size:${baseFontPt}pt;}
-.course-sub{font-size:${courseSubPt}pt;color:#666;font-style:italic;}
+.course-name{text-transform:uppercase;font-size:${baseFontPt}pt;}
+.course-sub{font-size:${courseSubPt}pt;color:#555;font-style:italic;font-weight:400;}
 .resv-cell{font-size:${Math.max(baseFontPt - 0.5, 5)}pt;line-height:1.25;}
 </style></head><body>${bodyHtml}</body></html>`;
 };
