@@ -3472,8 +3472,8 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
 
   const updSeat = (seatId, field, value) => {
     if (!upd) return;
-    const newSeats = (table.seats || []).map(s => s.id === seatId ? { ...s, [field]: value } : s);
-    upd(table.id, "seats", newSeats);
+    // Use functional update to avoid stale closure (e.g. adding aperitif then pairing in quick succession)
+    upd(table.id, "seats", prev => (prev || []).map(s => s.id === seatId ? { ...s, [field]: value } : s));
   };
 
   // Load team names + menu title from Supabase on mount
@@ -6551,7 +6551,7 @@ export default function App() {
   const selTable   = tables.find(t => t.id === sel);
   const modalTable = tables.find(t => t.id === resModal);
 
-  const upd = (id, f, v) => setTables(p => p.map(t => t.id === id ? { ...t, [f]: v } : t));
+  const upd = (id, f, v) => setTables(p => p.map(t => t.id === id ? { ...t, [f]: typeof v === "function" ? v(t[f]) : v } : t));
   // Batch multiple field updates in one setTables call (one render, one Supabase save)
   const updMany = (id, changes) => setTables(p => p.map(t => t.id === id ? { ...t, ...changes } : t));
 
@@ -6736,7 +6736,8 @@ export default function App() {
         }
         return { ...s, extras: newExtras };
       });
-      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, cakeNote: birthday ? (cakeNote || "") : "", restrictions, notes, lang: lang || "en", tableGroup: sortedGroup };
+      const ec = birthday ? { ...(t.extrasConfirmed || {}), cake: true } : t.extrasConfirmed || {};
+      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, cakeNote: birthday ? (cakeNote || "") : "", restrictions, notes, lang: lang || "en", tableGroup: sortedGroup, extrasConfirmed: ec };
     }));
     setResModal(null);
   };
@@ -6811,6 +6812,7 @@ export default function App() {
             tableGroup:         group,
             courseOverrides:    d.courseOverrides || {},
             kitchenCourseNotes: d.kitchenCourseNotes || {},
+            extrasConfirmed:   d.birthday ? { cake: true } : {},
             seats:              makeSeats(d.guests || 2, t.seats).map(s => {
               if (!d.birthday) return s;
               return { ...s, extras: { ...s.extras, 3: { ordered: true, pairing: "—" } } };
