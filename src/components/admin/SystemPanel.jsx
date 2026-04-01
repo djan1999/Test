@@ -1,0 +1,143 @@
+import { useState } from "react";
+import { FONT } from "./adminStyles.js";
+
+// ── SystemPanel — Supabase connection status, realtime, environment, debug ──
+export default function SystemPanel({
+  syncStatus,
+  supabaseUrl,
+  hasSupabase,
+  onSyncWines,
+  logoDataUri = "",
+  onSaveLogo,
+  onResetMenuLayout,
+}) {
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
+
+  const handleManualSync = async () => {
+    setSyncResult("syncing");
+    try {
+      const r = await onSyncWines();
+      setSyncResult(r?.ok ? "ok" : "err");
+    } catch { setSyncResult("err"); }
+    setTimeout(() => setSyncResult(null), 3000);
+  };
+
+  const statusColor = syncStatus === "live" ? "#2a7a2a" : syncStatus === "local-only" ? "#888" : syncStatus === "connecting" ? "#c8a06e" : "#c04040";
+  const statusLabel = syncStatus === "live" ? "Connected" : syncStatus === "local-only" ? "Local Only" : syncStatus === "connecting" ? "Connecting..." : "Error";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      {/* Connection Status */}
+      <div>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Supabase Connection</div>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, padding: "12px 16px", minWidth: 160 }}>
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Status</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor }} />
+              <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: statusColor }}>{statusLabel}</span>
+            </div>
+          </div>
+          <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, padding: "12px 16px", minWidth: 160 }}>
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Realtime</div>
+            <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: syncStatus === "live" ? "#2a7a2a" : "#888" }}>
+              {syncStatus === "live" ? "Active" : "Inactive"}
+            </span>
+          </div>
+          <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, padding: "12px 16px", minWidth: 160 }}>
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Environment</div>
+            <span style={{ fontFamily: FONT, fontSize: 12, color: "#444" }}>
+              {hasSupabase ? "Production" : "Local"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Manual Actions */}
+      <div>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Manual Actions</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button onClick={handleManualSync} disabled={syncResult === "syncing"} style={{
+            fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
+            border: `1px solid ${syncResult === "ok" ? "#8fc39f" : syncResult === "err" ? "#e89898" : "#c8a06e"}`,
+            borderRadius: 2, cursor: syncResult === "syncing" ? "not-allowed" : "pointer",
+            background: syncResult === "ok" ? "#eef8f1" : syncResult === "err" ? "#fff0f0" : "#fffaf4",
+            color: syncResult === "ok" ? "#2f7a45" : syncResult === "err" ? "#c04040" : "#8a6020",
+          }}>
+            {syncResult === "syncing" ? "SYNCING..." : syncResult === "ok" ? "SYNCED" : syncResult === "err" ? "FAILED" : "RESYNC WINES"}
+          </button>
+        </div>
+      </div>
+
+      {/* Logo */}
+      <div>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Menu Logo</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ width: 64, height: 64, border: "1px solid #e8e8e8", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", background: "#fafafa", flexShrink: 0 }}>
+            {logoDataUri
+              ? <img src={logoDataUri} alt="logo" style={{ width: 52, height: 52, objectFit: "contain" }} />
+              : <span style={{ fontFamily: FONT, fontSize: 8, color: "#ccc", letterSpacing: 1 }}>NO LOGO</span>
+            }
+          </div>
+          <div>
+            <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginBottom: 8 }}>
+              Upload PNG, JPG, or SVG. Will be embedded in all printed menus.
+            </div>
+            <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff", display: "inline-block" }}>
+              UPLOAD LOGO
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = ev => onSaveLogo(ev.target.result);
+                reader.readAsDataURL(file);
+              }} />
+            </label>
+            {logoDataUri && (
+              <button onClick={() => onSaveLogo("")} style={{ marginLeft: 8, fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #e08080", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#c04040" }}>
+                REMOVE
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Layout reset */}
+      <div>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Print Layout</div>
+        <div style={{ border: "1px solid #f8e8e8", borderRadius: 4, padding: "16px 18px", background: "#fffafa" }}>
+          <div style={{ fontFamily: FONT, fontSize: 10, color: "#444", marginBottom: 6 }}>Reset to factory defaults</div>
+          <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginBottom: 14 }}>
+            Clears all saved layout customisations (row spacing, padding, font size, etc.) and restores the original values.
+          </div>
+          <button
+            onClick={() => { if (window.confirm("Reset print layout to factory defaults?")) onResetMenuLayout(); }}
+            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #e08080", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#c04040" }}
+          >RESET LAYOUT TO DEFAULTS</button>
+        </div>
+      </div>
+
+      {/* Debug panel (collapsed) */}
+      <div>
+        <button
+          onClick={() => setDebugOpen(o => !o)}
+          style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+        >
+          Debug Info {debugOpen ? "▲" : "▼"}
+        </button>
+        {debugOpen && (
+          <div style={{ marginTop: 10, border: "1px solid #f0f0f0", borderRadius: 4, padding: "14px 16px", background: "#fafafa" }}>
+            <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", lineHeight: 1.8 }}>
+              <div>Supabase URL: {supabaseUrl ? supabaseUrl.replace(/https?:\/\//, "").slice(0, 30) + "..." : "not configured"}</div>
+              <div>Supabase Connected: {hasSupabase ? "yes" : "no"}</div>
+              <div>Sync Status: {syncStatus}</div>
+              <div>User Agent: {typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 60) + "..." : "N/A"}</div>
+              <div>Timestamp: {new Date().toISOString()}</div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

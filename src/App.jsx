@@ -26,6 +26,7 @@ import {
 import { makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM } from "./utils/tableHelpers.js";
 import { fuzzy, fuzzyDrink } from "./utils/search.js";
 import { useIsMobile } from "./hooks/useIsMobile.js";
+import { AdminLayout } from "./components/admin/index.js";
 
 // All dietary restriction keys used in the DB schema
 const DIETARY_KEYS = [
@@ -7479,22 +7480,53 @@ export default function App() {
     </div>
   );
 
-  // Service + Admin modes
+  // ── Admin mode — pure control panel, no service UI ──
+  if (mode === "admin") return (
+    <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+      <GlobalStyle />
+      <AdminLayout
+        menuCourses={menuCourses}
+        onUpdateMenuCourses={setMenuCourses}
+        onSaveMenuCourses={saveMenuCourses}
+        dishes={dishes}
+        onUpdateDishes={setDishes}
+        wines={wines}
+        cocktails={cocktails}
+        spirits={spirits}
+        beers={beers}
+        onUpdateWines={setWines}
+        onSaveBeverages={saveBeverages}
+        onSyncWines={syncWines}
+        syncStatus={syncStatus}
+        supabaseUrl={SUPABASE_URL}
+        hasSupabase={hasSupabaseConfig}
+        logoDataUri={logoDataUri}
+        onSaveLogo={saveLogo}
+        onResetMenuLayout={() => {
+          try { localStorage.removeItem("milka_menu_layout"); } catch {}
+          if (supabase) supabase.from("service_settings").upsert({ id: "menu_layout_global", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" }).then(() => {});
+        }}
+        onExit={() => changeMode(null)}
+      />
+    </div>
+  );
+
+  // Service mode only
   return (<>
     {serviceDatePickerEl}
     <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
 
       <Header
-        modeLabel={mode === "admin" ? "ADMIN" : "SERVICE"}
+        modeLabel="SERVICE"
         showSummary={true}
-        showAddRes={mode === "admin"}
-        showMenu={mode === "admin"}
+        showAddRes={false}
+        showMenu={false}
         showArchive={true}
-        showInventory={mode === "admin"}
-        showSeed={mode === "admin"}
+        showInventory={false}
+        showSeed={false}
         showSync={true}
-        showEndService={mode === "service"}
+        showEndService={true}
         onEndService={endService}
         {...hProps}
       />
@@ -7541,94 +7573,27 @@ export default function App() {
             </button>
           </div>
 
-          {/* Unified DisplayBoard — quickMode shows inline service controls */}
+          {/* Service DisplayBoard */}
           {(() => {
             const visibleTables = tables
-              .filter(t => mode === "admin" || t.active || t.resName || t.resTime)
+              .filter(t => t.active || t.resName || t.resTime)
               .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
 
-            // Admin mode: also show empty slot cards
-            if (mode === "admin" && quickView !== "service") {
-              // Group tables by sitting time for admin (with empty slot placeholders)
-              const rows = SITTING_TIMES.map(time => ({
-                time,
-                tables: visibleTables.filter(t => t.resTime === time),
-              }));
-              const hasAnyInRows = rows.some(r => r.tables.length > 0);
-              if (!hasAnyInRows) {
-                return (
-                  <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
-                    No reservations yet — add them in Admin
-                  </div>
-                );
-              }
-              return (
-                <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
-                  {rows.map(({ time, tables: rowTables }) => {
-                    if (rowTables.length === 0 && mode !== "admin") return null;
-                    const cardProps = t => ({
-                      key: t.id, table: t, mode,
-                      onClick: () => t.active && setSel(t.id),
-                      onSeat: () => seatTable(t.id),
-                      onUnseat: () => unseatTable(t.id),
-                      onClear: () => clear(t.id),
-                      onEditRes: () => { if (mode === "admin") { setResModalPresetTime(null); setResModal(t.id); } },
-                    });
-                    return (
-                      <div key={time}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-                          <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: "#aaa", textTransform: "uppercase" }}>
-                            {time === "19:00" ? "19:00 / 19:15" : time}
-                          </span>
-                          <div style={{ flex: 1, height: 1, background: "#f0f0f0" }} />
-                          <span style={{ fontFamily: FONT, fontSize: 9, color: "#ccc" }}>{rowTables.length} / 4</span>
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-                          {rowTables.slice(0, 4).map(t => <Card {...cardProps(t)} />)}
-                          {rowTables.length < 4 && Array.from({ length: 4 - rowTables.length }).map((_, i) => {
-                            const freeTable = tables.find(t => !t.active && !t.resName && !t.resTime);
-                            return (
-                              <div key={`empty-${time}-${i}`}
-                                onClick={() => { if (freeTable) { setResModalPresetTime(time); setResModal(freeTable.id); } }}
-                              style={{
-                                border: "1px dashed #e0e0e0", borderRadius: 4, minHeight: 190,
-                                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                                gap: 8, cursor: freeTable ? "pointer" : "default",
-                                transition: "border-color 0.15s, background 0.15s",
-                              }}
-                              onMouseEnter={e => { if (freeTable) { e.currentTarget.style.borderColor = "#c8a06e"; e.currentTarget.style.background = "#fffdf8"; }}}
-                              onMouseLeave={e => { e.currentTarget.style.borderColor = "#e0e0e0"; e.currentTarget.style.background = ""; }}
-                            >
-                              <span style={{ fontSize: 18, color: "#ddd" }}>+</span>
-                              <span style={{ fontFamily: FONT, fontSize: 9, color: "#ccc", letterSpacing: 2 }}>
-                                {freeTable ? "ADD RES" : "FULL"}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            return (
+              <DisplayBoard
+                tables={visibleTables}
+                dishes={dishes}
+                upd={upd}
+                quickMode={quickView === "service"}
+                updSeat={updSeat}
+                onCardClick={id => setSel(id)}
+                onSeat={seatTable}
+                onUnseat={unseatTable}
+                aperitifOptions={aperitifOptions}
+                wines={wines}
+              />
             );
-          }
-          // Service mode (and admin in quick mode): unified DisplayBoard
-          return (
-            <DisplayBoard
-              tables={visibleTables}
-              dishes={dishes}
-              upd={upd}
-              quickMode={quickView === "service"}
-              updSeat={updSeat}
-              onCardClick={id => setSel(id)}
-              onSeat={seatTable}
-              onUnseat={unseatTable}
-              aperitifOptions={aperitifOptions}
-              wines={wines}
-            />
-          );
-        })()}
+          })()}
         </div>
       ) : (
         <Detail
@@ -7648,32 +7613,6 @@ export default function App() {
         />
       )}
 
-      {mode === "admin" && resModal !== null && modalTable && (
-        <ReservationModal
-          table={{ ...modalTable, resTime: resModalPresetTime || modalTable.resTime }}
-          tables={tables}
-          onSave={data => saveRes(resModal, data)}
-          onClose={() => { setResModal(null); setResModalPresetTime(null); }}
-        />
-      )}
-      {adminOpen && (
-        <AdminPanel
-          dishes={dishes} wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
-          menuCourses={menuCourses}
-          onUpdateDishes={setDishes} onUpdateWines={setWines}
-          onSaveBeverages={saveBeverages}
-          onUpdateMenuCourses={setMenuCourses}
-          onSaveMenuCourses={saveMenuCourses}
-          onSyncWines={syncWines}
-          logoDataUri={logoDataUri}
-          onSaveLogo={saveLogo}
-          onResetMenuLayout={() => {
-            try { localStorage.removeItem("milka_menu_layout"); } catch {}
-            if (supabase) supabase.from("service_settings").upsert({ id: "menu_layout_global", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" }).then(() => {});
-          }}
-          onClose={() => setAdminOpen(false)}
-        />
-      )}
       {summaryOpen && (
         <SummaryModal tables={tables} dishes={dishes} onClose={() => setSummaryOpen(false)} />
       )}
