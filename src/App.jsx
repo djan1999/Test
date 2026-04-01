@@ -515,6 +515,7 @@ const BEV_TYPES = {
   cocktail: { label: "Cocktail", color: "#5a3878", bg: "#f5eeff", border: "#b898d8", dot: "#b898d8" },
   spirit:   { label: "Spirit",   color: "#7a5020", bg: "#fff3e0", border: "#d4a870", dot: "#d4a870" },
   beer:     { label: "Beer",     color: "#3a6a2a", bg: "#edf8e8", border: "#88bb70", dot: "#88bb70" },
+  aperitif: { label: "Aperitif", color: "#a07040", bg: "#fdf8f0", border: "#d0c0a8", dot: "#d0c0a8" },
 };
 
 // ── BeverageSearch — unified single-search across all drink types ──────────────
@@ -1746,10 +1747,10 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
             </div>
             {/* ── Beverages + Extras ── */}
             <div style={{ paddingLeft: isMobile ? 0 : 48, display: "flex", flexDirection: "column", gap: 12 }}>
-              {/* Unified beverage search */}
-              <div style={{ background: "#fcfcfc", border: "1px solid #ececec", borderRadius: 8, padding: isMobile ? "10px" : "12px" }}>
-                <div style={{ ...fieldLabel, marginBottom: 8, color: "#444" }}>Beverages</div>
-                {/* Aperitif quick-add buttons */}
+              {/* ── Aperitif ── generates above Sour Soup */}
+              <div style={{ background: "#fdf8f0", border: "1px solid #e8dcc8", borderRadius: 8, padding: isMobile ? "10px" : "12px" }}>
+                <div style={{ ...fieldLabel, marginBottom: 8, color: "#a07040" }}>Aperitif</div>
+                {/* Quick-add buttons */}
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                   {APERITIF_OPTIONS.map(ap => (
                     <button key={ap.label} onClick={() => {
@@ -1757,15 +1758,48 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
                       const found = wines.filter(w => w.byGlass).find(w =>
                         w.name?.toLowerCase().includes(lk) || w.producer?.toLowerCase().includes(lk)
                       );
-                      if (found) updSeat(seat.id, "glasses", [...(seat.glasses || []), found]);
-                      else updSeat(seat.id, "cocktails", [...(seat.cocktails || []), { name: ap.searchKey, notes: "" }]);
+                      const item = found || { name: ap.searchKey, notes: "", __cocktail: true };
+                      updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
                     }} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
                       border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
-                      background: "#fdf8f0", color: "#7a5020", transition: "all 0.1s",
+                      background: "#fff", color: "#7a5020", transition: "all 0.1s",
                     }}>{ap.label}</button>
                   ))}
                 </div>
+                <BeverageSearch
+                  wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
+                  onAdd={({ type, item }) => {
+                    updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
+                  }}
+                />
+                {/* Aperitif chips */}
+                {(seat.aperitifs || []).length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                    {(seat.aperitifs || []).map((x, i) => {
+                      const ts = BEV_TYPES.aperitif;
+                      const label = x?.name || x?.producer || "?";
+                      const sub = x?.producer && x?.name ? x.producer : (x?.notes || "");
+                      return (
+                        <div key={`ap${i}`} style={{
+                          display: "inline-flex", alignItems: "center", gap: 5,
+                          padding: "4px 8px 4px 10px", borderRadius: 999,
+                          background: ts.bg, border: `1px solid ${ts.border}`,
+                        }}>
+                          <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>
+                            {label}{sub ? ` · ${sub}` : ""}
+                          </span>
+                          <button onClick={() => updSeat(seat.id, "aperitifs", (seat.aperitifs||[]).filter((_,idx)=>idx!==i))} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* ── By the Glass ── generates from Danube Salmon row */}
+              <div style={{ background: "#fcfcfc", border: "1px solid #ececec", borderRadius: 8, padding: isMobile ? "10px" : "12px" }}>
+                <div style={{ ...fieldLabel, marginBottom: 8, color: "#444" }}>By the Glass</div>
                 <BeverageSearch
                   wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
                   onAdd={({ type, item }) => {
@@ -1775,7 +1809,7 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
                     if (type === "beer")     updSeat(seat.id, "beers",     [...(seat.beers     || []), item]);
                   }}
                 />
-                {/* Added beverages as chips */}
+                {/* By the Glass chips */}
                 {(() => {
                   const allBevs = [
                     ...(seat.glasses   || []).map((x, i) => ({ key: `g${i}`,  type: "wine",     label: x?.name, sub: x?.producer, onRemove: () => updSeat(seat.id, "glasses",   (seat.glasses||[]).filter((_,idx)=>idx!==i)) })),
@@ -2275,22 +2309,18 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                         <span style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", marginRight: 2 }}>APR</span>
                         {aperitifOptions.map(opt => {
                           const lk = opt.toLowerCase();
-                          const inGlasses = (s.glasses || []).some(w => w?.name?.toLowerCase().includes(lk) || w?.producer?.toLowerCase().includes(lk));
-                          const inCocktails = (s.cocktails || []).some(c => c?.name?.toLowerCase().includes(lk));
-                          const active = inGlasses || inCocktails;
+                          const active = (s.aperitifs || []).some(x => x?.name?.toLowerCase().includes(lk) || x?.producer?.toLowerCase().includes(lk));
                           return (
                             <button key={opt} onClick={() => {
                               if (!updSeat) return;
                               if (active) {
-                                // Remove from whichever list it's in
-                                updSeat(t.id, s.id, "glasses",   (s.glasses   || []).filter(w => !w?.name?.toLowerCase().includes(lk) && !w?.producer?.toLowerCase().includes(lk)));
-                                updSeat(t.id, s.id, "cocktails", (s.cocktails || []).filter(c => !c?.name?.toLowerCase().includes(lk)));
+                                updSeat(t.id, s.id, "aperitifs", (s.aperitifs || []).filter(x => !x?.name?.toLowerCase().includes(lk) && !x?.producer?.toLowerCase().includes(lk)));
                               } else {
                                 const found = wines.filter(w => w.byGlass).find(w =>
                                   w.name?.toLowerCase().includes(lk) || w.producer?.toLowerCase().includes(lk)
                                 );
-                                if (found) updSeat(t.id, s.id, "glasses",   [...(s.glasses   || []), found]);
-                                else       updSeat(t.id, s.id, "cocktails", [...(s.cocktails || []), { name: opt, notes: "" }]);
+                                const item = found || { name: opt, notes: "", __cocktail: true };
+                                updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item]);
                               }
                             }} style={{
                               fontFamily: FONT, fontSize: 8, letterSpacing: 0.3, padding: "3px 7px",
@@ -3853,10 +3883,9 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
                       })}
                     </div>
                   </div>
-                  {/* Aperitif quick-add buttons + BeverageSearch (linked to Supabase wines catalog) */}
+                  {/* ── Aperitif — generates above Sour Soup ── */}
                   <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Beverages</div>
-                    {/* Aperitif quick-add */}
+                    <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#a07040", textTransform: "uppercase", marginBottom: 6 }}>Aperitif</div>
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                       {APERITIF_OPTIONS.map(ap => (
                         <button key={ap.label} onClick={() => {
@@ -3864,16 +3893,40 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
                           const found = winesCatalog.filter(w => w.byGlass).find(w =>
                             w.name?.toLowerCase().includes(lk) || w.producer?.toLowerCase().includes(lk)
                           );
-                          if (found) updSeat(s.id, "glasses", [...(s.glasses || []), found]);
-                          else updSeat(s.id, "cocktails", [...(s.cocktails || []), { name: ap.searchKey, notes: "" }]);
+                          const item = found || { name: ap.searchKey, notes: "", __cocktail: true };
+                          updSeat(s.id, "aperitifs", [...(s.aperitifs || []), item]);
                         }} style={{
                           fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
                           border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
-                          background: "#fdf8f0", color: "#7a5020",
+                          background: "#fff", color: "#7a5020",
                         }}>{ap.label}</button>
                       ))}
                     </div>
-                    {/* Unified search */}
+                    <BeverageSearch
+                      wines={winesCatalog} cocktails={cocktailsCatalog} spirits={spiritsCatalog} beers={beersCatalog}
+                      onAdd={({ type, item }) => {
+                        updSeat(s.id, "aperitifs", [...(s.aperitifs || []), item]);
+                      }}
+                    />
+                    {(s.aperitifs || []).length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                        {(s.aperitifs || []).map((x, i) => {
+                          const ts = BEV_TYPES.aperitif;
+                          const label = x?.name || x?.producer || "?";
+                          const sub = x?.producer && x?.name ? x.producer : (x?.notes || "");
+                          return (
+                            <div key={`ap${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: 999, background: ts.bg, border: `1px solid ${ts.border}` }}>
+                              <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>{label}{sub ? ` · ${sub}` : ""}</span>
+                              <button onClick={() => updSeat(s.id, "aperitifs", (s.aperitifs||[]).filter((_,idx)=>idx!==i))} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  {/* ── By the Glass — generates from Danube Salmon ── */}
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>By the Glass</div>
                     <BeverageSearch
                       wines={winesCatalog} cocktails={cocktailsCatalog} spirits={spiritsCatalog} beers={beersCatalog}
                       onAdd={({ type, item }) => {
@@ -3883,7 +3936,6 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
                         if (type === "beer")     updSeat(s.id, "beers",     [...(s.beers     || []), item]);
                       }}
                     />
-                    {/* Added beverages as removable chips */}
                     {(() => {
                       const allBevs = [
                         ...(s.glasses   || []).map((x, i) => ({ key: `g${i}`, type: "wine",     label: x?.name, sub: x?.producer, onRemove: () => updSeat(s.id, "glasses",   (s.glasses  ||[]).filter((_,idx)=>idx!==i)) })),
@@ -4133,10 +4185,12 @@ function SummaryModal({ tables, dishes = [], onClose }) {
         const parts = [`P${s.id}`];
         if (s.water && s.water !== "—") parts.push(`water:${s.water}`);
         if (s.pairing) parts.push(s.pairing);
+        const ap = (s.aperitifs || []).map(x => x?.name).filter(Boolean);
         const gs = (s.glasses   || []).map(w => w?.name).filter(Boolean);
         const cs = (s.cocktails || []).map(c => c?.name).filter(Boolean);
         const sp = (s.spirits   || []).map(x => x?.name).filter(Boolean);
         const bs = (s.beers     || []).map(x => x?.name).filter(Boolean);
+        if (ap.length) parts.push("aperitif:" + ap.join(","));
         if (gs.length) parts.push("glass:"    + gs.join(","));
         if (cs.length) parts.push("cocktail:" + cs.join(","));
         if (sp.length) parts.push("spirit:"   + sp.join(","));
@@ -4176,6 +4230,7 @@ function SummaryModal({ tables, dishes = [], onClose }) {
                 const restr   = (t.restrictions || []).filter(r => r.pos === s.id);
                 const extras  = dishes.filter(d => s.extras?.[d.id]?.ordered);
                 const allBevs = [
+                  ...(s.aperitifs || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.aperitif })),
                   ...(s.glasses   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.wine })),
                   ...(s.cocktails || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.cocktail })),
                   ...(s.spirits   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.spirit })),
@@ -4402,6 +4457,7 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onSeedTes
                               const restr = (t.restrictions || []).filter(r => r.pos === s.id);
                               const extra = (dishes || []).filter(d => s.extras?.[d.id]?.ordered);
                               const bevs = [
+                                ...(s.aperitifs || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.aperitif })),
                                 ...(s.glasses   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.wine })),
                                 ...(s.cocktails || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.cocktail })),
                                 ...(s.spirits   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.spirit })),
@@ -4498,6 +4554,7 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onSeedTes
                             const restr = (t.restrictions || []).filter(r => r.pos === s.id);
                             const extra = (entry.state?.dishes || dishes).filter(d => s.extras?.[d.id]?.ordered);
                             const bevs  = [
+                              ...(s.aperitifs || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.aperitif })),
                               ...(s.glasses   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.wine })),
                               ...(s.cocktails || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.cocktail })),
                               ...(s.spirits   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.spirit })),
