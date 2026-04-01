@@ -118,6 +118,40 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
   return dish;
 }
 
+/**
+ * Get the modification string for a course given restriction keys,
+ * matching exactly what the kitchen ticket displays.
+ * Returns null if the dish is unchanged (standard).
+ */
+export function getCourseMod(course, restrKeys) {
+  if (!restrKeys || !restrKeys.length) return null;
+  const baseName = course?.menu?.name || "";
+  const baseSub  = course?.menu?.sub  || "";
+
+  // Priority 1: restriction notes (from spreadsheet)
+  for (const key of RESTRICTION_PRIORITY_KEYS) {
+    if (!restrKeys.includes(key)) continue;
+    const mapped = RESTRICTION_COLUMN_MAP[key] || key;
+    const note = course.restrictions?.[`${mapped}_note`];
+    if (note) return note.toUpperCase();
+  }
+
+  // Priority 2: full substitution
+  const modified = applyCourseRestriction(course, restrKeys);
+  if (modified) {
+    if (modified.name !== baseName) return modified.name;
+    if (modified.sub !== baseSub) {
+      // Show only the new/different parts of sub
+      const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
+      const modTokens = modified.sub.split(/[,·]+/).map(s => s.trim()).filter(Boolean);
+      const newOnes = modTokens.filter(t => !baseTokens.has(t.toLowerCase()));
+      return (newOnes.length > 0 ? newOnes[0] : modified.sub).toUpperCase();
+    }
+  }
+
+  return null; // standard dish
+}
+
 // Restriction keys shared between frontend and API sync
 export const RESTRICTION_KEYS = [
   "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",

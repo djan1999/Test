@@ -17,6 +17,7 @@ import {
   parseMenuRow,
 } from "./utils/menuUtils.js";
 import { generateMenuHTML, DEFAULT_COURSE_GAPS } from "./utils/menuGenerator.js";
+import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML } from "./utils/weeklyPrintGenerator.js";
 import {
   readLocalBeverages, writeLocalBeverages,
   readTeamNames, writeTeamNames,
@@ -3043,7 +3044,7 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
             <div key={key} style={{
               borderBottom: "1px solid #f2f2f2",
               background: fired ? "#f3fcf5" : "#fff",
-              borderLeft: fired ? "4px solid #4a9a6a" : kcNote.name || kcNote.note ? "4px solid #e0a030" : "4px solid transparent",
+              borderLeft: fired ? "4px solid #4a9a6a" : kcNote.name || kcNote.note ? "4px solid #c04040" : "4px solid transparent",
             }}>
               <div
                 onClick={() => !isEditingThis && (fired ? unfire(key) : fire(key))}
@@ -3052,7 +3053,7 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
                     fontFamily: FONT, fontSize: 11, fontWeight: 700, lineHeight: 1.25,
-                    color: fired ? "#bbb" : kcNote.name ? "#b06000" : "#111",
+                    color: fired ? "#bbb" : kcNote.name ? "#c04040" : "#111",
                     textDecoration: fired ? "line-through" : "none",
                     letterSpacing: 0.2,
                   }}>
@@ -3066,7 +3067,7 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
                         <span key={name} style={{ fontFamily: FONT, fontSize: 10, color: name === baseName ? "#444" : "#c04040", fontWeight: 600 }}>{count}× {name}</span>
                       ))}
                       {kitchenNote && <span style={{ fontFamily: FONT, fontSize: 10, color: "#c04040", fontWeight: 600 }}>{kitchenNote}</span>}
-                      {kcNote.note && <span style={{ fontFamily: FONT, fontSize: 10, color: "#b06000", fontWeight: 600 }}>⚑ {kcNote.note}</span>}
+                      {kcNote.note && <span style={{ fontFamily: FONT, fontSize: 10, color: "#c04040", fontWeight: 600 }}>⚑ {kcNote.note}</span>}
                     </div>
                   )}
                 </div>
@@ -3093,7 +3094,7 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
                     onChange={e => setEditName(e.target.value)}
                     onBlur={() => saveCourseDraft(key, editName, editNote)}
                     placeholder={`Rename "${line1}"…`}
-                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 7px", border: "1px solid #e0a030", borderRadius: 3, width: "100%", boxSizing: "border-box" }}
+                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 7px", border: "1px solid #c04040", borderRadius: 3, width: "100%", boxSizing: "border-box" }}
                   />
                   <input
                     value={editNote}
@@ -5523,6 +5524,21 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
         <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#1a1a1a", flexShrink: 0 }}>← EXIT</button>
         <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#999", flex: 1, textAlign: "center" }}>RESERVATIONS</span>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          <button onClick={() => {
+            const openPrintWindow = (html) => {
+              const w = window.open("", "_blank", "width=900,height=700");
+              if (!w) { alert("Pop-up blocked — allow pop-ups for this site."); return; }
+              w.document.write(html);
+              w.document.close();
+              w.focus();
+              setTimeout(() => w.print(), 800);
+            };
+            openPrintWindow(generateWeeklyReservationsHTML(reservations, weekDays, RESTRICTIONS));
+            setTimeout(() => {
+              openPrintWindow(generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, RESTRICTIONS));
+            }, 1200);
+          }}
+            style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "6px 10px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: "pointer", background: "#1a1a1a", color: "#fff", fontWeight: 600, flexShrink: 0 }}>PRINT WEEK</button>
           <button onClick={() => setWeekOffset(w => w - 1)} style={navBtn}>◀</button>
           <button onClick={() => setWeekOffset(0)}
             style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#888", minWidth: 110, textAlign: "center", background: "none", border: "1px solid #f0f0f0", borderRadius: 4, padding: "5px 0", cursor: "pointer" }}>{fmtRange()}</button>
