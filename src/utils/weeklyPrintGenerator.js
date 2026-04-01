@@ -18,23 +18,20 @@ body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#1a1a1a;-webkit-pri
 @media print{body{margin:0;}}
 table{width:100%;border-collapse:collapse;page-break-inside:auto;}
 tr{page-break-inside:avoid;}
-th,td{border:1px solid #888;padding:3pt 5pt;vertical-align:top;text-align:left;}
-th{font-weight:700;}
-.date-header{background:#1a1a1a;color:#fff;font-weight:700;font-size:10pt;padding:5pt 8pt;}
-.date-header td{border-color:#1a1a1a;}
+th,td{border:1px solid #000;padding:3pt 4pt;vertical-align:top;text-align:left;font-size:8.5pt;}
+th{font-weight:700;text-align:center;}
 .green-header{background:#2f7a45;color:#fff;font-weight:700;}
 .green-header th,.green-header td{border-color:#256b36;color:#fff;}
 .red{color:#c04040;font-weight:700;}
-.muted{color:#888;}
 .center{text-align:center;}
-.small{font-size:7.5pt;}
 .bold{font-weight:700;}
 .resv-cell{font-size:7.5pt;line-height:1.3;}
 .highlight{background:#f0faf0;}
 .course-name{font-weight:700;text-transform:uppercase;font-size:8pt;}
 .course-sub{font-size:7pt;color:#666;font-style:italic;}
-h1{font-family:'Roboto Mono',monospace;font-size:12pt;text-align:center;margin:0 0 2pt;}
-h2{font-family:'Roboto Mono',monospace;font-size:9pt;text-align:center;margin:0 0 10pt;font-weight:400;color:#555;}
+h1{font-family:'Roboto Mono',monospace;font-size:11pt;text-align:center;margin:0 0 1pt;font-weight:700;}
+h2{font-family:'Roboto Mono',monospace;font-size:9pt;text-align:center;margin:0 0 8pt;font-weight:700;color:#1a1a1a;}
+u{text-decoration:underline;}
 </style></head><body>${bodyHtml}</body></html>`;
 
 const fmtDateShort = ds => {
@@ -67,47 +64,73 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
   });
 
   const totalGuests = weekResv.reduce((a, r) => a + (r.data?.guests || 2), 0);
-  const dateRange = `${fmtDateShort(weekStart)} - ${fmtDateFull(weekEnd)}`;
 
-  const restrText = (restrictions) => {
-    if (!restrictions?.length) return "";
-    // Unique restriction keys, then map to labels
-    const unique = [...new Set(restrictions.map(r => r.note))];
-    return unique.map(key => {
-      const count = restrictions.filter(r => r.note === key).length;
-      const def = restrictionDefs.find(d => d.key === key);
-      const label = def ? def.label : key;
-      return count > 1 ? `${count}x ${label.toLowerCase()}` : label.toLowerCase();
-    }).join(", ");
+  // Date range: first date with reservations to last
+  const sortedDates = Object.keys(byDate).sort();
+  const firstDate = sortedDates[0] || weekStart;
+  const lastDate  = sortedDates[sortedDates.length - 1] || weekEnd;
+  const dateRange = `${fmtDateShort(firstDate)} - ${fmtDateFull(lastDate)}`;
+
+  const expLabel = (d) => {
+    const year = new Date(d.resTime ? (d.resTime + "T00:00:00") : new Date()).getFullYear();
+    const suffix = String(year).slice(-2);
+    if (d.menuType === "short") return "SM";
+    return `L${suffix}`;
   };
 
-  const infoText = (d) => {
+  const expLabelForResv = (r) => {
+    const year = new Date(r.date + "T00:00:00").getFullYear();
+    const suffix = String(year).slice(-2);
+    const d = r.data || {};
+    if (d.menuType === "short") return "SM";
+    return `L${suffix}`;
+  };
+
+  const infoText = (d, r) => {
     const parts = [];
     if (d.guestType === "hotel" && d.room) parts.push(`<u>Hotel #${esc(d.room)}</u>`);
-    if (d.birthday) parts.push("<u>1xCAKE" + (d.birthday && d.notes?.toLowerCase().includes("bday") ? "(bday)" : d.birthday ? "(anni)" : "") + "</u>");
+    // Cake info
+    if (d.birthday) {
+      const occasion = d.cakeNote ? `(${esc(d.cakeNote)})` : "";
+      parts.push(`<u>1xCAKE${occasion}</u>`);
+    }
     if (d.notes) parts.push(esc(d.notes));
     return parts.join("<br>");
   };
 
-  const expLabel = (menuType) => {
-    if (menuType === "short") return "SM";
-    return "LM";
+  // Build restriction text: group by key, show count + label
+  const restrText = (restrictions) => {
+    if (!restrictions?.length) return "";
+    // Group by note
+    const counts = {};
+    restrictions.forEach(r => {
+      counts[r.note] = (counts[r.note] || 0) + 1;
+    });
+    return Object.entries(counts).map(([key, count]) => {
+      const def = restrictionDefs.find(d => d.key === key);
+      // If it's a known restriction key, use the label; otherwise show raw text
+      const label = def ? def.label.toLowerCase() : key;
+      return count > 1 ? `${count}x ${label}` : label;
+    }).join("\n");
   };
 
   let body = `<h1>Reservations : ${esc(dateRange)}</h1>`;
   body += `<h2>Guest count : ${totalGuests}</h2>`;
 
   body += `<table>`;
-  body += `<tr style="background:#f0f0f0;"><th>DATE</th><th>COVER</th><th>TIME</th><th>NAME</th><th>EXP.</th><th>INFO</th><th>ALLERGIES/<br>RESTRICTIONS</th></tr>`;
+  body += `<tr><th>DATE</th><th>COVER</th><th>TIME</th><th>NAME</th><th>EXP.</th><th>INFO</th><th>ALLERGIES/<br>RESTRICTIONS</th></tr>`;
 
-  const sortedDates = Object.keys(byDate).sort();
   for (const ds of sortedDates) {
     const dayResv = byDate[ds];
     const dayGuests = dayResv.reduce((a, r) => a + (r.data?.guests || 2), 0);
     const dateLabel = fmtDateShort(ds);
 
-    // Date header row
-    body += `<tr class="date-header"><td colspan="7">${esc(dateLabel)}&nbsp;&nbsp;&nbsp;Total guest: ${dayGuests}</td></tr>`;
+    // Date + total guest row
+    body += `<tr>`;
+    body += `<td class="bold">${esc(dateLabel)}</td>`;
+    body += `<td style="font-size:8pt;">Total<br>guest:<br><span class="bold">${dayGuests}</span></td>`;
+    body += `<td></td><td></td><td></td><td></td><td></td>`;
+    body += `</tr>`;
 
     // Check if we need LUNCH / DINNER subheadings
     const lunchResv  = dayResv.filter(r => { const t = r.data?.resTime || ""; return t < "15:00"; });
@@ -115,19 +138,23 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
     const needsSplit = lunchResv.length > 0 && dinnerResv.length > 0;
 
     const renderRows = (resv, subLabel) => {
-      if (needsSplit && subLabel) {
-        body += `<tr><td colspan="7" style="font-weight:700;font-size:9pt;padding:4pt 8pt;border:none;background:#fff;">${subLabel}</td></tr>`;
-      }
-      resv.forEach((r, i) => {
-        const d = r.data || {};
+      if (subLabel) {
         body += `<tr>`;
-        body += `<td class="center">${i === 0 && !needsSplit ? esc(dateLabel) : ""}</td>`;
+        body += `<td class="bold">${subLabel}</td>`;
+        body += `<td></td><td></td><td></td><td></td><td></td><td></td>`;
+        body += `</tr>`;
+      }
+      resv.forEach(r => {
+        const d = r.data || {};
+        const restr = restrText(d.restrictions);
+        body += `<tr>`;
+        body += `<td></td>`;
         body += `<td class="center">${d.guests || 2}</td>`;
         body += `<td>${esc(d.resTime || "")}</td>`;
         body += `<td class="bold">${esc(d.resName || "—")}</td>`;
-        body += `<td class="center">${expLabel(d.menuType)}</td>`;
-        body += `<td class="small">${infoText(d)}</td>`;
-        body += `<td class="small">${restrText(d.restrictions)}</td>`;
+        body += `<td class="center">${esc(expLabelForResv(r))}</td>`;
+        body += `<td style="font-size:8pt;">${infoText(d, r)}</td>`;
+        body += `<td style="font-size:8pt;white-space:pre-line;">${esc(restr)}</td>`;
         body += `</tr>`;
       });
     };
@@ -201,15 +228,16 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
   weekResv.forEach(r => {
     const d = r.data || {};
     const mt = d.menuType === "short" ? "SHORT MENU" : "LONG MENU";
-    const restrLabels = (d.restrictions || []).map(rs => {
-      const count = (d.restrictions || []).filter(x => x.note === rs.note).length;
-      const def = restrictionDefs.find(x => x.key === rs.note);
-      const label = def ? def.label.toLowerCase() : rs.note;
+    const restrCounts = {};
+    (d.restrictions || []).forEach(rs => {
+      restrCounts[rs.note] = (restrCounts[rs.note] || 0) + 1;
+    });
+    const restrLines = Object.entries(restrCounts).map(([key, count]) => {
+      const def = restrictionDefs.find(x => x.key === key);
+      const label = def ? def.label.toLowerCase() : key;
       return count > 1 ? `${count}x ${label}` : label;
     });
-    // Deduplicate
-    const unique = [...new Set(restrLabels)];
-    body += `<td class="center" style="font-size:7pt;line-height:1.35;">${esc(mt)}<br>${esc(unique.join(", "))}</td>`;
+    body += `<td class="center" style="font-size:7pt;line-height:1.35;">${esc(mt)}<br>${esc(restrLines.join(", "))}</td>`;
   });
   body += `</tr>`;
 
@@ -243,7 +271,6 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
 
       // Priority 2: Restriction-based modifications (per-seat, grouped)
       if (restrictions.length > 0) {
-        // Build seat-level modification map
         const modCounts = {};
         for (let seatId = 1; seatId <= guests; seatId++) {
           const seatRestrKeys = restrictions

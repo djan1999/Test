@@ -3032,7 +3032,7 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
           const extraLabel = (() => {
             if (isBeetCourse(course))   return beetSeats.map(s => `P${s.id}`).join(" ");
             if (isCheeseCourse(course)) return cheeseSeats.map(s => `P${s.id}`).join(" ");
-            if (isCakeCourse(course))   return cakeSeats.map(s => `P${s.id}`).join(" ");
+            if (isCakeCourse(course))   return cakeSeats.map(s => `P${s.id}`).join(" ") + (table.cakeNote ? ` — ${table.cakeNote}` : "");
             return null;
           })();
 
@@ -5101,6 +5101,7 @@ function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }
   const [guestType,    setGuestType]    = useState(initial?.data?.guestType    || "");
   const [room,         setRoom]         = useState(initial?.data?.room         || "");
   const [birthday,     setBirthday]     = useState(!!initial?.data?.birthday);
+  const [cakeNote,     setCakeNote]     = useState(initial?.data?.cakeNote || "");
   const [restrictions, setRestrictions] = useState(initial?.data?.restrictions || []);
   const [notes,        setNotes]        = useState(initial?.data?.notes        || "");
   const [saving,       setSaving]       = useState(false);
@@ -5120,7 +5121,7 @@ function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }
     setSaving(true);
     const data = {
       resName: name, resTime: time, menuType, lang, guests, guestType,
-      room: guestType === "hotel" ? room : "", birthday, restrictions, notes,
+      room: guestType === "hotel" ? room : "", birthday, cakeNote: birthday ? cakeNote : "", restrictions, notes,
       tableGroup: sortedGroup,
       courseOverrides:    initial?.data?.courseOverrides    || {},
       kitchenCourseNotes: initial?.data?.kitchenCourseNotes || {},
@@ -5255,16 +5256,18 @@ function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }
             </div>
           </div>
         ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 22 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 22, flexWrap: "wrap" }}>
             <input type="checkbox" id={`resvbd-${initial?.id || "new"}`} checked={birthday} onChange={e => setBirthday(e.target.checked)} style={{ width: 14, height: 14, cursor: "pointer" }} />
-            <label htmlFor={`resvbd-${initial?.id || "new"}`} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>Birthday cake</label>
+            <label htmlFor={`resvbd-${initial?.id || "new"}`} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>Cake</label>
+            {birthday && <input value={cakeNote} onChange={e => setCakeNote(e.target.value)} placeholder="occasion (e.g. Mrs Bday)" style={{ ...baseInp, flex: 1, minWidth: 100, fontSize: MOBILE_SAFE_INPUT_SIZE, padding: "4px 8px" }} />}
           </div>
         )}
       </div>
       {guestType === "hotel" && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
           <input type="checkbox" id={`resvbd2-${initial?.id || "new"}`} checked={birthday} onChange={e => setBirthday(e.target.checked)} style={{ width: 14, height: 14, cursor: "pointer" }} />
-          <label htmlFor={`resvbd2-${initial?.id || "new"}`} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>Birthday cake</label>
+          <label htmlFor={`resvbd2-${initial?.id || "new"}`} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>Cake</label>
+          {birthday && <input value={cakeNote} onChange={e => setCakeNote(e.target.value)} placeholder="occasion (e.g. Mrs Bday)" style={{ ...baseInp, flex: 1, minWidth: 100, fontSize: MOBILE_SAFE_INPUT_SIZE, padding: "4px 8px" }} />}
         </div>
       )}
 
@@ -5336,6 +5339,7 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
   const [selectedDay, setSelectedDay] = useState(null);   // "YYYY-MM-DD" or null (week view)
   const [editingId,   setEditingId]   = useState(null);   // reservation id being edited, or "new"
   const [ticketId,    setTicketId]    = useState(null);    // reservation id showing kitchen preview
+  const [weeklyPreview, setWeeklyPreview] = useState(null); // "reservations" | "allergies" | null
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -5459,7 +5463,7 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
                       <span>{d.guests || 2} guests</span>
                       {d.menuType && <span style={{ color: "#c8a06e", textTransform: "uppercase", letterSpacing: 1 }}>{d.menuType}</span>}
                       {d.lang === "si" && <span style={{ color: "#6080c0" }}>SLO</span>}
-                      {d.birthday && <span>🎂</span>}
+                      {d.birthday && <span>🎂{d.cakeNote ? ` ${d.cakeNote}` : ""}</span>}
                       {d.guestType === "hotel" && d.room && <span style={{ color: "#a07040" }}>Room {d.room}</span>}
                     </div>
                     {d.restrictions?.length > 0 && (
@@ -5524,21 +5528,10 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
         <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#1a1a1a", flexShrink: 0 }}>← EXIT</button>
         <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#999", flex: 1, textAlign: "center" }}>RESERVATIONS</span>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          <button onClick={() => {
-            const openPrintWindow = (html) => {
-              const w = window.open("", "_blank", "width=900,height=700");
-              if (!w) { alert("Pop-up blocked — allow pop-ups for this site."); return; }
-              w.document.write(html);
-              w.document.close();
-              w.focus();
-              setTimeout(() => w.print(), 800);
-            };
-            openPrintWindow(generateWeeklyReservationsHTML(reservations, weekDays, RESTRICTIONS));
-            setTimeout(() => {
-              openPrintWindow(generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, RESTRICTIONS));
-            }, 1200);
-          }}
-            style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "6px 10px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: "pointer", background: "#1a1a1a", color: "#fff", fontWeight: 600, flexShrink: 0 }}>PRINT WEEK</button>
+          <button onClick={() => setWeeklyPreview(weeklyPreview === "reservations" ? null : "reservations")}
+            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "reservations" ? "#1a1a1a" : "#d0d0d0"}`, borderRadius: 999, cursor: "pointer", background: weeklyPreview === "reservations" ? "#1a1a1a" : "#fff", color: weeklyPreview === "reservations" ? "#fff" : "#555", fontWeight: 600, flexShrink: 0 }}>OVERVIEW</button>
+          <button onClick={() => setWeeklyPreview(weeklyPreview === "allergies" ? null : "allergies")}
+            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "allergies" ? "#1a1a1a" : "#d0d0d0"}`, borderRadius: 999, cursor: "pointer", background: weeklyPreview === "allergies" ? "#1a1a1a" : "#fff", color: weeklyPreview === "allergies" ? "#fff" : "#555", fontWeight: 600, flexShrink: 0 }}>ALLERGIES</button>
           <button onClick={() => setWeekOffset(w => w - 1)} style={navBtn}>◀</button>
           <button onClick={() => setWeekOffset(0)}
             style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#888", minWidth: 110, textAlign: "center", background: "none", border: "1px solid #f0f0f0", borderRadius: 4, padding: "5px 0", cursor: "pointer" }}>{fmtRange()}</button>
@@ -5564,6 +5557,42 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
           </>
         )}
       </div>
+
+      {/* Weekly preview panel */}
+      {weeklyPreview && (() => {
+        const html = weeklyPreview === "reservations"
+          ? generateWeeklyReservationsHTML(reservations, weekDays, RESTRICTIONS)
+          : generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, RESTRICTIONS);
+        const isLandscape = weeklyPreview === "allergies";
+        const a4W = isLandscape ? 1123 : 794;
+        const a4H = isLandscape ? 794 : 1123;
+        const containerW = Math.min(window.innerWidth - 32, 700);
+        const scale = containerW / a4W;
+        return (
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid #f0f0f0", background: "#fafafa" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>
+                {weeklyPreview === "reservations" ? "Weekly Overview" : "Weekly Allergies"} Preview
+              </span>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => {
+                  const w = window.open("", "_blank", "width=900,height=700");
+                  if (!w) { alert("Pop-up blocked"); return; }
+                  w.document.write(html); w.document.close(); w.focus();
+                  setTimeout(() => w.print(), 800);
+                }}
+                  style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: "pointer", background: "#1a1a1a", color: "#fff", fontWeight: 600 }}>PRINT</button>
+                <button onClick={() => setWeeklyPreview(null)}
+                  style={{ fontFamily: FONT, fontSize: 10, background: "none", border: "none", cursor: "pointer", color: "#aaa", padding: "0 4px" }}>×</button>
+              </div>
+            </div>
+            <div style={{ width: containerW, height: Math.round(a4H * scale), overflow: "hidden", border: "1px solid #e0e0e0", borderRadius: 4, background: "#fff" }}>
+              <iframe srcDoc={html} title="weekly preview"
+                style={{ width: a4W, height: a4H, border: "none", transform: `scale(${scale})`, transformOrigin: "top left", pointerEvents: "none" }} />
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Week grid — big tappable day tiles */}
       <div style={{ padding: "16px 16px 60px", maxWidth: 600, margin: "0 auto" }}>
@@ -6630,7 +6659,7 @@ export default function App() {
     })};
   }));
 
-  const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, birthday, restrictions, notes, lang }) => {
+  const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, birthday, cakeNote, restrictions, notes, lang }) => {
     const group = tableIds ?? (tableId ? [tableId] : [id]);
     const sortedGroup = [...group].sort((a, b) => a - b);
     // Find old group to clear tables that are no longer part of it
@@ -6651,7 +6680,7 @@ export default function App() {
         }
         return { ...s, extras: newExtras };
       });
-      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, restrictions, notes, lang: lang || "en", tableGroup: sortedGroup };
+      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, cakeNote: birthday ? (cakeNote || "") : "", restrictions, notes, lang: lang || "en", tableGroup: sortedGroup };
     }));
     setResModal(null);
   };
