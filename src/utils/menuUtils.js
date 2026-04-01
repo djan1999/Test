@@ -128,7 +128,7 @@ export function getCourseMod(course, restrKeys) {
   const baseName = course?.menu?.name || "";
   const baseSub  = course?.menu?.sub  || "";
 
-  // Priority 1: restriction notes (from spreadsheet)
+  // Priority 1: restriction notes
   for (const key of RESTRICTION_PRIORITY_KEYS) {
     if (!restrKeys.includes(key)) continue;
     const mapped = RESTRICTION_COLUMN_MAP[key] || key;
@@ -160,9 +160,8 @@ export const RESTRICTION_KEYS = [
 ];
 
 /**
- * Parse a single Google-Sheets row object into the canonical menu-course shape
- * used by the frontend. Both App.jsx (CSV fallback) and api/sync-menu.js call
- * this so the parsing logic lives in exactly one place.
+ * Parse a single row object into the canonical menu-course shape.
+ * This function is kept for data migration and import utilities.
  *
  * Returns null when the row has no dish name.
  */

@@ -91,49 +91,59 @@ create policy "service_archive_delete" on public.service_archive
   for delete to anon, authenticated using (true);
 
 -- ── menu_courses ─────────────────────────────────────────────
+-- This is the authoritative source for all menu data.
+-- Courses are managed directly via the Admin panel (no external sync).
 create table if not exists public.menu_courses (
   position integer primary key,
-  menu jsonb,
+  menu jsonb,                              -- {name, sub} EN dish
+  menu_si jsonb,                           -- {name, sub} SI dish
+  -- Dietary restriction substitutes (each is {name, sub} or null)
   veg jsonb,
-  hazards jsonb,
-  na jsonb,
-  wp jsonb,
-  os jsonb,
-  premium jsonb,
-  is_snack boolean not null default false,
+  vegan jsonb,
+  pescetarian jsonb,
   gluten_free jsonb,
   dairy_free jsonb,
   nut_free jsonb,
-  pescetarian jsonb,
+  shellfish_free jsonb,
   no_red_meat jsonb,
   no_pork jsonb,
   no_game jsonb,
   no_offal jsonb,
   egg_free jsonb,
-  -- Slovenian dish name (for SLO menu generator)
-  menu_si jsonb,
-  -- Slovenian pairing drink variants (line 2 of bilingual sheet cells)
-  wp_si jsonb,
-  na_si jsonb,
-  os_si jsonb,
-  premium_si jsonb,
-  -- Slovenian restriction substitutes (keyed by restriction name, e.g. {"veg": {name, sub}})
+  no_alcohol jsonb,
+  no_garlic_onion jsonb,
+  halal jsonb,
+  low_fodmap jsonb,
+  -- SI restriction substitutes + notes (keyed JSON blob)
   restrictions_si jsonb,
-  -- Kitchen / display metadata
+  -- Pairings (each is {name, sub} or null)
+  wp jsonb,                                -- Wine pairing
+  wp_si jsonb,
+  na jsonb,                                -- Non-alcoholic pairing
+  na_si jsonb,
+  os jsonb,                                -- Our Story pairing
+  os_si jsonb,
+  premium jsonb,                           -- Premium pairing
+  premium_si jsonb,
+  -- Forced pairing override (e.g. kitchen martini)
+  force_pairing_title text not null default '',
+  force_pairing_sub text not null default '',
+  force_pairing_title_si text not null default '',
+  force_pairing_sub_si text not null default '',
+  -- Metadata
+  hazards jsonb,
+  is_snack boolean not null default false,
   course_key text not null default '',
   optional_flag text not null default '',
   section_gap_before boolean not null default false,
   show_on_short boolean not null default false,
   short_order integer,
-  force_pairing_title text not null default '',
-  force_pairing_sub text not null default '',
-  force_pairing_title_si text not null default '',
-  force_pairing_sub_si text not null default '',
   kitchen_note text not null default '',
+  aperitif_btn text,
   updated_at timestamptz not null default now()
 );
 
--- Migration: add new columns if upgrading an existing table
+-- Migration: add columns if upgrading an existing table
 alter table public.menu_courses
   add column if not exists menu_si jsonb,
   add column if not exists wp_si jsonb,
@@ -150,7 +160,14 @@ alter table public.menu_courses
   add column if not exists force_pairing_sub text not null default '',
   add column if not exists force_pairing_title_si text not null default '',
   add column if not exists force_pairing_sub_si text not null default '',
-  add column if not exists kitchen_note text not null default '';
+  add column if not exists kitchen_note text not null default '',
+  add column if not exists vegan jsonb,
+  add column if not exists shellfish_free jsonb,
+  add column if not exists no_alcohol jsonb,
+  add column if not exists no_garlic_onion jsonb,
+  add column if not exists halal jsonb,
+  add column if not exists low_fodmap jsonb,
+  add column if not exists aperitif_btn text;
 
 alter table public.menu_courses enable row level security;
 

@@ -34,9 +34,6 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         navigateFallback: '/',
 
-        // Google Sheets CSV is intentionally absent from runtimeCaching.
-        // Offline fetches will throw a network error; the app falls back to
-        // whatever menu data is already loaded in state / localStorage.
         runtimeCaching: [
           // Fonts — rarely change, cache aggressively.
           {
@@ -73,9 +70,7 @@ export default defineConfig({
             },
           },
 
-          // Local serverless API routes (/api/*) — network-first; these hit
-          // Google Sheets on the server side so a cached response is better
-          // than nothing when connectivity is flaky.
+          // Local serverless API routes (/api/*) — network-first with fallback.
           {
             urlPattern: /\/api\/.*/i,
             handler: 'NetworkFirst',

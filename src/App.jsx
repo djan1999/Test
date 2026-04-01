@@ -9,12 +9,11 @@ import {
   SortableContext, useSortable, rectSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { parseCSV, normHeader, csvRowsToObjects } from "./utils/csv.js";
 import {
   firstFilled, applyMenuOverride, truthyCell, splitMainSubCell,
   parseBilingual, mergeDishes, applyCourseRestriction,
   RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, initDishes,
-  parseMenuRow,
+  parseMenuRow, RESTRICTION_KEYS,
 } from "./utils/menuUtils.js";
 import { generateMenuHTML, DEFAULT_COURSE_GAPS } from "./utils/menuGenerator.js";
 import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML } from "./utils/weeklyPrintGenerator.js";
@@ -28,94 +27,116 @@ import { makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM } from
 import { fuzzy, fuzzyDrink } from "./utils/search.js";
 import { useIsMobile } from "./hooks/useIsMobile.js";
 
-const LIVE_MENU_SHEET_ID = import.meta.env.VITE_MENU_SHEET_ID || "1aPVGmKNcvDOFzyr3jSPT_KL5lKEYKPgkad3y0_E_Vl4";
-const LIVE_MENU_SHEET_TAB = import.meta.env.VITE_MENU_SHEET_TAB || "MILKA MENU V2";
-const LIVE_MENU_CSV_URL = `https://docs.google.com/spreadsheets/d/${LIVE_MENU_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(LIVE_MENU_SHEET_TAB)}`;
+// All dietary restriction keys used in the DB schema
+const DIETARY_KEYS = [
+  "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
+  "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
+  "no_garlic_onion","halal","low_fodmap",
+];
 
-// Parsing is now shared via parseMenuRow from menuUtils.js
-const normalizeLiveMenuRow = parseMenuRow;
-
-async function fetchLiveMenuCourses() {
-  // Primary: read from Supabase menu_courses table
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("menu_courses")
-        .select("*")
-        .order("position", { ascending: true });
-      if (!error && data && data.length > 0) {
-        const DIETARY_KEYS = [
-          "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
-          "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
-          "no_garlic_onion","halal","low_fodmap",
-        ];
-        const courses = data.map(r => {
-          const restrictions = {};
-          DIETARY_KEYS.forEach(k => { restrictions[k] = r[k] ?? null; });
-          const rSi = r.restrictions_si || {};
-          Object.entries(rSi).forEach(([k, v]) => {
-            if (k.endsWith("__note")) {
-              if (v) restrictions[k.slice(0, -"__note".length) + "_note"] = v;
-            } else {
-              if (v) restrictions[`${k}_si`] = v;
-            }
-          });
-          let menu = r.menu || null;
-          let menu_si = r.menu_si || null;
-          if (menu?.name?.includes("\n")) {
-            const nameParts = menu.name.split(/\n+/).map(s => s.trim()).filter(Boolean);
-            const subParts  = (menu.sub || "").split(/\n+/).map(s => s.trim()).filter(Boolean);
-            menu    = { name: nameParts[0] || "", sub: subParts[0] || "" };
-            if (!menu_si && nameParts[1]) menu_si = { name: nameParts[1], sub: subParts[1] || "" };
-          }
-          return {
-            position: r.position,
-            menu,
-            veg: r.veg,
-            hazards: r.hazards,
-            na: r.na,
-            na_si: r.na_si || null,
-            wp: r.wp,
-            wp_si: r.wp_si || null,
-            os: r.os,
-            os_si: r.os_si || null,
-            premium: r.premium,
-            premium_si: r.premium_si || null,
-            is_snack: r.is_snack,
-            menu_si,
-            course_key: r.course_key || "",
-            optional_flag: r.optional_flag || "",
-            section_gap_before: !!r.section_gap_before,
-            show_on_short: !!r.show_on_short,
-            short_order: r.short_order || null,
-            force_pairing_title: r.force_pairing_title || "",
-            force_pairing_sub: r.force_pairing_sub || "",
-            force_pairing_title_si: r.force_pairing_title_si || "",
-            force_pairing_sub_si: r.force_pairing_sub_si || "",
-            kitchen_note: r.kitchen_note || "",
-            aperitif_btn: r.aperitif_btn || null,
-            restrictions,
-          };
-        });
-        if (courses.length > 0) return courses;
-      }
-    } catch (supabaseErr) {
-      console.warn("Supabase menu_courses fetch failed, falling back to Google Sheets:", supabaseErr);
+// Convert a Supabase menu_courses row to the internal shape used throughout the app.
+function supabaseRowToCourse(r) {
+  const restrictions = {};
+  DIETARY_KEYS.forEach(k => { restrictions[k] = r[k] ?? null; });
+  const rSi = r.restrictions_si || {};
+  Object.entries(rSi).forEach(([k, v]) => {
+    if (k.endsWith("__note")) {
+      if (v) restrictions[k.slice(0, -"__note".length) + "_note"] = v;
+    } else {
+      if (v) restrictions[`${k}_si`] = v;
     }
+  });
+  let menu = r.menu || null;
+  let menu_si = r.menu_si || null;
+  if (menu?.name?.includes("\n")) {
+    const nameParts = menu.name.split(/\n+/).map(s => s.trim()).filter(Boolean);
+    const subParts  = (menu.sub || "").split(/\n+/).map(s => s.trim()).filter(Boolean);
+    menu    = { name: nameParts[0] || "", sub: subParts[0] || "" };
+    if (!menu_si && nameParts[1]) menu_si = { name: nameParts[1], sub: subParts[1] || "" };
   }
+  return {
+    position: r.position,
+    menu,
+    veg: r.veg,
+    hazards: r.hazards,
+    na: r.na,
+    na_si: r.na_si || null,
+    wp: r.wp,
+    wp_si: r.wp_si || null,
+    os: r.os,
+    os_si: r.os_si || null,
+    premium: r.premium,
+    premium_si: r.premium_si || null,
+    is_snack: r.is_snack,
+    menu_si,
+    course_key: r.course_key || "",
+    optional_flag: r.optional_flag || "",
+    section_gap_before: !!r.section_gap_before,
+    show_on_short: !!r.show_on_short,
+    short_order: r.short_order || null,
+    force_pairing_title: r.force_pairing_title || "",
+    force_pairing_sub: r.force_pairing_sub || "",
+    force_pairing_title_si: r.force_pairing_title_si || "",
+    force_pairing_sub_si: r.force_pairing_sub_si || "",
+    kitchen_note: r.kitchen_note || "",
+    aperitif_btn: r.aperitif_btn || null,
+    restrictions,
+  };
+}
 
-  // Fallback: fetch directly from Google Sheets CSV
-  const response = await fetch(LIVE_MENU_CSV_URL, { cache: "no-store" });
-  if (!response.ok) throw new Error(`Live menu fetch failed: ${response.status}`);
-  const csvText = await response.text();
-  const rows = parseCSV(csvText);
-  const objects = csvRowsToObjects(rows);
-  const courses = objects
-    .map(normalizeLiveMenuRow)
-    .filter(Boolean)
-    .sort((a, b) => (a.position || 0) - (b.position || 0));
-  if (!courses.length) throw new Error("No menu courses parsed from live sheet");
-  return courses;
+// Convert internal course shape back to flat Supabase row for upsert.
+function courseToSupabaseRow(course) {
+  const restrictionColsSi = {};
+  const restrictionNotes = {};
+  RESTRICTION_KEYS.forEach(k => {
+    if (course.restrictions?.[`${k}_si`]) restrictionColsSi[k] = course.restrictions[`${k}_si`];
+    if (course.restrictions?.[`${k}_note`]) restrictionNotes[k] = course.restrictions[`${k}_note`];
+  });
+  const restrictions_si = (() => {
+    const combined = { ...restrictionColsSi };
+    Object.entries(restrictionNotes).forEach(([k, v]) => { combined[`${k}__note`] = v; });
+    return Object.keys(combined).length ? combined : null;
+  })();
+
+  const row = {
+    position: course.position,
+    menu: course.menu,
+    menu_si: course.menu_si,
+    wp: course.wp,
+    wp_si: course.wp_si,
+    na: course.na,
+    na_si: course.na_si,
+    os: course.os,
+    os_si: course.os_si,
+    premium: course.premium,
+    premium_si: course.premium_si,
+    hazards: course.hazards,
+    is_snack: course.is_snack,
+    course_key: course.course_key,
+    optional_flag: course.optional_flag,
+    section_gap_before: course.section_gap_before,
+    show_on_short: course.show_on_short,
+    short_order: course.short_order,
+    force_pairing_title: course.force_pairing_title,
+    force_pairing_sub: course.force_pairing_sub,
+    force_pairing_title_si: course.force_pairing_title_si,
+    force_pairing_sub_si: course.force_pairing_sub_si,
+    kitchen_note: course.kitchen_note,
+    aperitif_btn: course.aperitif_btn,
+    restrictions_si,
+  };
+  DIETARY_KEYS.forEach(k => { row[k] = course.restrictions?.[k] ?? null; });
+  return row;
+}
+
+async function fetchMenuCourses() {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("menu_courses")
+    .select("*")
+    .order("position", { ascending: true });
+  if (error || !data || data.length === 0) return [];
+  return data.map(supabaseRowToCourse);
 }
 
 
@@ -175,7 +196,7 @@ const COUNTRY_NAMES = {
   US: "USA", AR: "Argentina", CL: "Chile", AU: "Australia", NZ: "New Zealand",
   ZA: "South Africa", UY: "Uruguay",
 };
-// ── Restriction definitions — keys match spreadsheet column names ─────────────
+// ── Restriction definitions ───────────────────────────────────────────────────
 const RESTRICTIONS = [
   // Dietary
   { key: "veg",          label: "Vegetarian",      emoji: "🥦", group: "dietary"  },
@@ -608,138 +629,279 @@ function BeverageSearch({ wines, cocktails, spirits, beers, onAdd }) {
 }
 
 // ── Menu Sync Tab ─────────────────────────────────────────────────────────────
-function MenuSyncTab({ menuCourses = [], onSyncMenu, onSyncWines }) {
-  // per-source: null | "syncing" | "ok" | "err"
-  const [menuStatus,  setMenuStatus]  = useState(null);
-  const [menuMsg,     setMenuMsg]     = useState("");
-  const [winesStatus, setWinesStatus] = useState(null);
-  const [winesMsg,    setWinesMsg]    = useState("");
-  const [allSyncing,  setAllSyncing]  = useState(false);
+// ── Course Editor — inline editing of a single menu course ───────────────────
+function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst, isLast }) {
+  const [expanded, setExpanded] = useState(false);
+  const inpSm = { ...baseInp, padding: "5px 8px", fontSize: 11 };
+  const labelSm = { fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#999", textTransform: "uppercase", marginBottom: 2 };
 
-  const runMenuSync = async () => {
-    setMenuStatus("syncing"); setMenuMsg("");
-    try {
-      const r = await onSyncMenu();
-      if (r?.ok) { setMenuStatus("ok");  setMenuMsg(`✓ ${r.synced} courses`); }
-      else        { setMenuStatus("err"); setMenuMsg(r?.error || "Failed"); }
-    } catch (e) { setMenuStatus("err"); setMenuMsg(e.message); }
+  const upd = (field, value) => onUpdate({ ...course, [field]: value });
+  const updMenu = (lang, field, value) => {
+    const key = lang === "si" ? "menu_si" : "menu";
+    const current = course[key] || { name: "", sub: "" };
+    onUpdate({ ...course, [key]: { ...current, [field]: value } });
+  };
+  const updPairing = (pairingKey, lang, field, value) => {
+    const key = lang === "si" ? `${pairingKey}_si` : pairingKey;
+    const current = course[key] || { name: "", sub: "" };
+    onUpdate({ ...course, [key]: { ...current, [field]: value } });
+  };
+  const updRestriction = (rKey, field, value) => {
+    const restrictions = { ...course.restrictions };
+    const current = restrictions[rKey] || { name: "", sub: "" };
+    restrictions[rKey] = { ...current, [field]: value };
+    if (!restrictions[rKey].name && !restrictions[rKey].sub) restrictions[rKey] = null;
+    onUpdate({ ...course, restrictions });
   };
 
-  const runWinesSync = async () => {
-    setWinesStatus("syncing"); setWinesMsg("");
+  return (
+    <div style={{
+      border: "1px solid #e8e8e8", borderRadius: 4, background: "#fff",
+      marginBottom: 8, overflow: "hidden",
+    }}>
+      {/* Collapsed header */}
+      <div
+        onClick={() => setExpanded(x => !x)}
+        style={{
+          display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+          cursor: "pointer", background: expanded ? "#fafafa" : "#fff",
+        }}
+      >
+        <span style={{ fontFamily: FONT, fontSize: 10, color: "#bbb", minWidth: 22 }}>{course.position}</span>
+        <div style={{ flex: 1 }}>
+          <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a1a1a" }}>{course.menu?.name || "(unnamed)"}</span>
+          {course.menu?.sub && <span style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginLeft: 8 }}>{course.menu.sub}</span>}
+        </div>
+        {course.is_snack && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 2, padding: "2px 6px" }}>SNACK</span>}
+        <div style={{ display: "flex", gap: 4 }}>
+          <button onClick={e => { e.stopPropagation(); onMoveUp(); }} disabled={isFirst} style={{ background: "none", border: "none", cursor: isFirst ? "default" : "pointer", color: isFirst ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▲</button>
+          <button onClick={e => { e.stopPropagation(); onMoveDown(); }} disabled={isLast} style={{ background: "none", border: "none", cursor: isLast ? "default" : "pointer", color: isLast ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▼</button>
+        </div>
+        <span style={{ fontFamily: FONT, fontSize: 14, color: "#ccc", transition: "transform 0.15s", transform: expanded ? "rotate(180deg)" : "none" }}>▾</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: "12px 14px 16px", borderTop: "1px solid #f0f0f0" }}>
+          {/* ── Dish Info ── */}
+          <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: "#888" }}>DISH INFO</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+            <div><div style={labelSm}>Name (EN)</div><input value={course.menu?.name || ""} onChange={e => updMenu("en", "name", e.target.value)} style={inpSm} placeholder="Dish name" /></div>
+            <div><div style={labelSm}>Description (EN)</div><input value={course.menu?.sub || ""} onChange={e => updMenu("en", "sub", e.target.value)} style={inpSm} placeholder="ingredients, description" /></div>
+            <div><div style={labelSm}>Name (SI)</div><input value={course.menu_si?.name || ""} onChange={e => updMenu("si", "name", e.target.value)} style={inpSm} placeholder="Slovenian name" /></div>
+            <div><div style={labelSm}>Description (SI)</div><input value={course.menu_si?.sub || ""} onChange={e => updMenu("si", "sub", e.target.value)} style={inpSm} placeholder="Slovenian desc" /></div>
+          </div>
+
+          {/* ── Metadata ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+            <div><div style={labelSm}>Course Key</div><input value={course.course_key || ""} onChange={e => upd("course_key", e.target.value)} style={inpSm} placeholder="e.g. beetroot" /></div>
+            <div><div style={labelSm}>Optional Flag</div><input value={course.optional_flag || ""} onChange={e => upd("optional_flag", e.target.value)} style={inpSm} placeholder="e.g. beetroot" /></div>
+            <div><div style={labelSm}>Kitchen Note</div><input value={course.kitchen_note || ""} onChange={e => upd("kitchen_note", e.target.value)} style={inpSm} placeholder="Note for kitchen" /></div>
+            <div><div style={labelSm}>Aperitif Btn</div><input value={course.aperitif_btn || ""} onChange={e => upd("aperitif_btn", e.target.value || null)} style={inpSm} placeholder="Button label" /></div>
+          </div>
+
+          {/* ── Toggles ── */}
+          <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+            {[
+              { key: "is_snack", label: "Snack" },
+              { key: "section_gap_before", label: "Gap Before" },
+              { key: "show_on_short", label: "Show on Short" },
+            ].map(({ key, label }) => (
+              <label key={key} style={{ fontFamily: FONT, fontSize: 10, color: "#555", display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
+                <input type="checkbox" checked={!!course[key]} onChange={e => upd(key, e.target.checked)} />
+                {label}
+              </label>
+            ))}
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>Short order:</span>
+              <input type="number" value={course.short_order ?? ""} onChange={e => upd("short_order", e.target.value ? Number(e.target.value) : null)} style={{ ...inpSm, width: 60 }} />
+            </div>
+          </div>
+
+          {/* ── Pairings ── */}
+          <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: "#888" }}>PAIRINGS</div>
+          {[
+            { key: "wp", label: "Wine" },
+            { key: "na", label: "Non-Alc" },
+            { key: "os", label: "Our Story" },
+            { key: "premium", label: "Premium" },
+          ].map(({ key, label }) => (
+            <div key={key} style={{ display: "grid", gridTemplateColumns: "70px 1fr 1fr 1fr 1fr", gap: 6, marginBottom: 4, alignItems: "center" }}>
+              <span style={{ fontFamily: FONT, fontSize: 9, color: "#c8a06e", fontWeight: 600 }}>{label}</span>
+              <input value={course[key]?.name || ""} onChange={e => updPairing(key, "en", "name", e.target.value)} style={inpSm} placeholder="Name (EN)" />
+              <input value={course[key]?.sub || ""} onChange={e => updPairing(key, "en", "sub", e.target.value)} style={inpSm} placeholder="Sub (EN)" />
+              <input value={course[`${key}_si`]?.name || ""} onChange={e => updPairing(key, "si", "name", e.target.value)} style={inpSm} placeholder="Name (SI)" />
+              <input value={course[`${key}_si`]?.sub || ""} onChange={e => updPairing(key, "si", "sub", e.target.value)} style={inpSm} placeholder="Sub (SI)" />
+            </div>
+          ))}
+
+          {/* ── Force Pairing ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginTop: 8, marginBottom: 12 }}>
+            <div><div style={labelSm}>Force Pairing (EN)</div><input value={course.force_pairing_title || ""} onChange={e => upd("force_pairing_title", e.target.value)} style={inpSm} /></div>
+            <div><div style={labelSm}>Force Sub (EN)</div><input value={course.force_pairing_sub || ""} onChange={e => upd("force_pairing_sub", e.target.value)} style={inpSm} /></div>
+            <div><div style={labelSm}>Force Pairing (SI)</div><input value={course.force_pairing_title_si || ""} onChange={e => upd("force_pairing_title_si", e.target.value)} style={inpSm} /></div>
+            <div><div style={labelSm}>Force Sub (SI)</div><input value={course.force_pairing_sub_si || ""} onChange={e => upd("force_pairing_sub_si", e.target.value)} style={inpSm} /></div>
+          </div>
+
+          {/* ── Restrictions ── */}
+          <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: "#888" }}>DIETARY RESTRICTIONS</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 14 }}>
+            {DIETARY_KEYS.map(rKey => {
+              const val = course.restrictions?.[rKey];
+              const hasVal = val && (val.name || val.sub);
+              return (
+                <div key={rKey} style={{ display: "grid", gridTemplateColumns: "110px 1fr 1fr", gap: 6, alignItems: "center" }}>
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: hasVal ? "#b04040" : "#ccc" }}>{rKey.replace(/_/g, " ")}</span>
+                  <input value={val?.name || ""} onChange={e => updRestriction(rKey, "name", e.target.value)} style={inpSm} placeholder="Alt name" />
+                  <input value={val?.sub || ""} onChange={e => updRestriction(rKey, "sub", e.target.value)} style={inpSm} placeholder="Alt desc" />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ── Actions ── */}
+          <div style={{ display: "flex", gap: 8, borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
+            <button onClick={onDelete} style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
+              border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
+              background: "#fff9f9", color: "#c04040",
+            }}>DELETE COURSE</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Menu Courses Editor Tab — full CRUD for menu courses ─────────────────────
+function MenuCoursesTab({ menuCourses = [], onUpdateCourses, onSaveCourses }) {
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true); setSaved(false);
+    await onSaveCourses(menuCourses);
+    setSaving(false); setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  const updateCourse = (position, updated) => {
+    onUpdateCourses(menuCourses.map(c => c.position === position ? updated : c));
+  };
+
+  const deleteCourse = (position) => {
+    if (!window.confirm("Delete this course?")) return;
+    onUpdateCourses(menuCourses.filter(c => c.position !== position));
+  };
+
+  const moveCourse = (position, dir) => {
+    const idx = menuCourses.findIndex(c => c.position === position);
+    if (idx < 0) return;
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= menuCourses.length) return;
+    const reordered = [...menuCourses];
+    [reordered[idx], reordered[newIdx]] = [reordered[newIdx], reordered[idx]];
+    // Re-assign positions sequentially
+    onUpdateCourses(reordered.map((c, i) => ({ ...c, position: i + 1 })));
+  };
+
+  const addCourse = () => {
+    const maxPos = menuCourses.reduce((m, c) => Math.max(m, c.position || 0), 0);
+    const newCourse = {
+      position: maxPos + 1,
+      menu: { name: "", sub: "" },
+      menu_si: null,
+      wp: null, wp_si: null, na: null, na_si: null, os: null, os_si: null, premium: null, premium_si: null,
+      hazards: null, is_snack: false,
+      course_key: "", optional_flag: "", section_gap_before: false,
+      show_on_short: false, short_order: null,
+      force_pairing_title: "", force_pairing_sub: "",
+      force_pairing_title_si: "", force_pairing_sub_si: "",
+      kitchen_note: "", aperitif_btn: null,
+      restrictions: {},
+    };
+    onUpdateCourses([...menuCourses, newCourse]);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>
+          {menuCourses.length} COURSES
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={addCourse} style={{
+            fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
+            border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
+            background: "#1a1a1a", color: "#fff",
+          }}>+ ADD COURSE</button>
+          <button onClick={handleSave} disabled={saving} style={{
+            fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
+            border: `1px solid ${saved ? "#4a9a6a" : "#c8a06e"}`, borderRadius: 2,
+            cursor: saving ? "default" : "pointer",
+            background: saved ? "#4a9a6a" : "#c8a06e", color: "#fff",
+          }}>{saving ? "SAVING…" : saved ? "SAVED ✓" : "SAVE ALL COURSES"}</button>
+        </div>
+      </div>
+
+      {menuCourses.map((course, idx) => (
+        <CourseEditor
+          key={course.position}
+          course={course}
+          onUpdate={updated => updateCourse(course.position, updated)}
+          onDelete={() => deleteCourse(course.position)}
+          onMoveUp={() => moveCourse(course.position, -1)}
+          onMoveDown={() => moveCourse(course.position, +1)}
+          isFirst={idx === 0}
+          isLast={idx === menuCourses.length - 1}
+        />
+      ))}
+
+      {menuCourses.length === 0 && (
+        <div style={{ fontFamily: FONT, fontSize: 11, color: "#ccc", textAlign: "center", padding: "40px 0" }}>
+          No courses yet — add your first course above
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Wine Sync Tab — kept for wine/beverage sync from hotel website ───────────
+function WineSyncTab({ onSyncWines }) {
+  const [status, setStatus] = useState(null);
+  const [msg, setMsg] = useState("");
+
+  const handleSync = async () => {
+    setStatus("syncing"); setMsg("");
     try {
       const r = await onSyncWines();
       if (r?.ok) {
         const parts = [
-          r.wines      != null ? `${r.wines} wines`      : null,
-          r.cocktails  != null ? `${r.cocktails} cocktails` : null,
-          r.beers      != null ? `${r.beers} beers`      : null,
-          r.spirits    != null ? `${r.spirits} spirits`  : null,
+          r.wines != null ? `${r.wines} wines` : null,
+          r.cocktails != null ? `${r.cocktails} cocktails` : null,
+          r.beers != null ? `${r.beers} beers` : null,
+          r.spirits != null ? `${r.spirits} spirits` : null,
         ].filter(Boolean);
         const warn = r.failedCountries?.length ? ` (missed: ${r.failedCountries.join(", ")})` : "";
-        setWinesStatus("ok");
-        setWinesMsg(`✓ ${parts.join(", ")}${warn}`);
-      } else {
-        setWinesStatus("err");
-        setWinesMsg(r?.error || "Failed");
-      }
-    } catch (e) { setWinesStatus("err"); setWinesMsg(e.message); }
-  };
-
-  const handleSyncAll = async () => {
-    setAllSyncing(true);
-    setMenuStatus("syncing");  setMenuMsg("");
-    setWinesStatus("syncing"); setWinesMsg("");
-    await Promise.all([runMenuSync(), runWinesSync()]);
-    setAllSyncing(false);
-  };
-
-  const busy = allSyncing || menuStatus === "syncing" || winesStatus === "syncing";
-
-  const pairingCols = ["wp", "na", "os", "premium"];
-  const pairingLabels = { wp: "Wine", na: "Non-Alc", os: "Our Story", premium: "Premium" };
-
-  const btnBase = {
-    fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "10px 20px",
-    borderRadius: 2, cursor: busy ? "not-allowed" : "pointer",
+        setStatus("ok"); setMsg(`${parts.join(", ")}${warn}`);
+      } else { setStatus("err"); setMsg(r?.error || "Failed"); }
+    } catch (e) { setStatus("err"); setMsg(e.message); }
   };
 
   return (
     <div>
       <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 16 }}>
-        Data sync — menu courses &amp; wines
+        Wine &amp; beverage sync from hotel website
       </div>
-
-      {/* ── Sync All ── */}
-      <div style={{ marginBottom: 16 }}>
-        <button onClick={handleSyncAll} disabled={busy} style={{
-          ...btnBase, border: "1px solid #c8a96e", background: "#c8a96e", color: "#fff", fontSize: 10, padding: "12px 28px",
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <button onClick={handleSync} disabled={status === "syncing"} style={{
+          fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "10px 20px",
+          border: "1px solid #c8a06e", borderRadius: 2,
+          cursor: status === "syncing" ? "not-allowed" : "pointer",
+          background: "#c8a06e", color: "#fff",
         }}>
-          {allSyncing ? "SYNCING ALL…" : "↻ SYNC ALL"}
+          {status === "syncing" ? "SYNCING…" : "SYNC WINES & BEVERAGES"}
         </button>
-      </div>
-
-      {/* ── Individual buttons + status ── */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 24, alignItems: "flex-start" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button onClick={runMenuSync} disabled={busy} style={{
-            ...btnBase, border: "1px solid #aaa", background: "#fff", color: "#555",
-          }}>
-            {menuStatus === "syncing" ? "SYNCING…" : "↻ SYNC MENU"}
-          </button>
-          {menuMsg && (
-            <span style={{ fontFamily: FONT, fontSize: 10, color: menuStatus === "ok" ? "#2a7a2a" : "#c04040" }}>{menuMsg}</span>
-          )}
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button onClick={runWinesSync} disabled={busy} style={{
-            ...btnBase, border: "1px solid #aaa", background: "#fff", color: "#555",
-          }}>
-            {winesStatus === "syncing" ? "SYNCING…" : "↻ SYNC WINES"}
-          </button>
-          {winesMsg && (
-            <span style={{ fontFamily: FONT, fontSize: 10, color: winesStatus === "ok" ? "#2a7a2a" : "#c04040" }}>{winesMsg}</span>
-          )}
-        </div>
-      </div>
-
-      <div style={{ fontSize: 9, fontFamily: FONT, color: "#bbb", marginBottom: 16, letterSpacing: 1 }}>
-        Sheet: {LIVE_MENU_SHEET_TAB} · {menuCourses.length} courses loaded
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 360, overflowY: "auto" }}>
-        {menuCourses.map((c, i) => (
-          <div key={c.position || i} style={{
-            display: "grid", gridTemplateColumns: "24px 1fr 1fr 1fr 1fr 1fr", gap: 6,
-            padding: "8px 10px", border: "1px solid #f0f0f0", fontSize: 9, fontFamily: FONT,
-            background: c.is_snack ? "#fffdf8" : "#fff",
-          }}>
-            <span style={{ color: "#bbb" }}>{c.position || i + 1}</span>
-            <div>
-              <div style={{ fontWeight: 700, color: "#1a1a1a" }}>{c.menu?.name}</div>
-              <div style={{ color: "#999" }}>{c.menu?.sub}</div>
-            </div>
-            {pairingCols.map(p => (
-              <div key={p}>
-                {c[p] ? (
-                  <>
-                    <div style={{ color: "#c8a96e", fontWeight: 700 }}>{pairingLabels[p]}</div>
-                    <div style={{ color: "#555" }}>{c[p].name}</div>
-                    <div style={{ color: "#bbb" }}>{c[p].sub}</div>
-                  </>
-                ) : (
-                  <span style={{ color: "#eee" }}>—</span>
-                )}
-              </div>
-            ))}
-          </div>
-        ))}
-        {menuCourses.length === 0 && (
-          <div style={{ fontFamily: FONT, fontSize: 11, color: "#ccc", textAlign: "center", padding: "40px 0" }}>
-            No courses loaded yet — hit Sync to pull from Google Sheets
-          </div>
-        )}
+        {msg && <span style={{ fontFamily: FONT, fontSize: 10, color: status === "ok" ? "#2a7a2a" : "#c04040" }}>{msg}</span>}
       </div>
     </div>
   );
@@ -915,8 +1077,13 @@ function MenuOverridesTab({ menuCourses = [], overrides = {}, onSetOverrides, on
   );
 }
 
-function AdminPanel({ dishes, wines, cocktails, spirits, beers, onUpdateDishes, onUpdateWines, onSaveBeverages, onResetMenuLayout, logoDataUri = "", onSaveLogo, onClose }) {
-  const [tab, setTab] = useState("wines");
+function AdminPanel({
+  dishes, wines, cocktails, spirits, beers, menuCourses,
+  onUpdateDishes, onUpdateWines, onSaveBeverages, onResetMenuLayout,
+  onUpdateMenuCourses, onSaveMenuCourses, onSyncWines,
+  logoDataUri = "", onSaveLogo, onClose,
+}) {
+  const [tab, setTab] = useState("menu");
   const isMobile = useIsMobile(700);
 
   // ── Dishes ──
@@ -942,131 +1109,221 @@ function AdminPanel({ dishes, wines, cocktails, spirits, beers, onUpdateDishes, 
   const [localCocktails, setLocalCocktails] = useState(cocktails.map(c => ({ ...c })));
   const [newCocktail, setNewCocktail] = useState({ name: "", notes: "" });
   const nextCocktailId = useRef(Math.max(...cocktails.map(c => c.id), 0) + 1);
-  const addCocktail    = () => { if (!newCocktail.name.trim()) return; setLocalCocktails(l => [...l, { ...newCocktail, id: nextCocktailId.current++ }]); setNewCocktail({ name: "", notes: "" }); };
-  const removeCocktail = id      => setLocalCocktails(l => l.filter(c => c.id !== id));
-  const updCocktail    = (id,f,v) => setLocalCocktails(l => l.map(c => c.id === id ? { ...c, [f]: v } : c));
 
   // ── Spirits ──
   const [localSpirits, setLocalSpirits] = useState(spirits.map(s => ({ ...s })));
   const [newSpirit, setNewSpirit] = useState({ name: "", notes: "" });
   const nextSpiritId = useRef(Math.max(...spirits.map(s => s.id), 0) + 1);
-  const addSpirit    = () => { if (!newSpirit.name.trim()) return; setLocalSpirits(l => [...l, { ...newSpirit, id: nextSpiritId.current++ }]); setNewSpirit({ name: "", notes: "" }); };
-  const removeSpirit = id      => setLocalSpirits(l => l.filter(s => s.id !== id));
-  const updSpirit    = (id,f,v) => setLocalSpirits(l => l.map(s => s.id === id ? { ...s, [f]: v } : s));
 
   // ── Beers ──
   const [localBeers, setLocalBeers] = useState(beers.map(b => ({ ...b })));
   const [newBeer, setNewBeer] = useState({ name: "", notes: "" });
   const nextBeerId = useRef(Math.max(...beers.map(b => b.id), 0) + 1);
-  const addBeer    = () => { if (!newBeer.name.trim()) return; setLocalBeers(l => [...l, { ...newBeer, id: nextBeerId.current++ }]); setNewBeer({ name: "", notes: "" }); };
-  const removeBeer = id      => setLocalBeers(l => l.filter(b => b.id !== id));
-  const updBeer    = (id,f,v) => setLocalBeers(l => l.map(b => b.id === id ? { ...b, [f]: v } : b));
 
-  const handleSave = () => {
+  const handleSaveDrinks = () => {
     onUpdateDishes(localDishes);
     onUpdateWines(localWines);
     onSaveBeverages({ cocktails: localCocktails, spirits: localSpirits, beers: localBeers });
-    onClose();
   };
 
-  const TABS = ["wines", "cocktails", "spirits", "beers", "dishes", "settings"];
+  const SECTIONS = [
+    { id: "menu",         label: "Menu Layout" },
+    { id: "drinks",       label: "Drinks" },
+    { id: "dishes",       label: "Extras" },
+    { id: "sync",         label: "Sync" },
+    { id: "settings",     label: "Settings" },
+  ];
+
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "9px 18px",
     border: "none", cursor: "pointer", textTransform: "uppercase", transition: "all 0.1s",
     background: tab === t ? "#1a1a1a" : "#fff",
     color: tab === t ? "#fff" : "#444",
     borderBottom: tab === t ? "none" : "1px solid #e8e8e8",
+    whiteSpace: "nowrap",
   });
 
   return (
     <div style={{
       position: "fixed", inset: 0, background: "rgba(255,255,255,0.92)",
       backdropFilter: "blur(4px)", zIndex: 500,
-      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      display: "flex", alignItems: "stretch", justifyContent: "center",
     }} onClick={onClose}>
       <div style={{
         background: "#fff", borderTop: "1px solid #e8e8e8",
-        borderRadius: "12px 12px 0 0",
-        width: "100%", maxWidth: 580,
-        maxHeight: "92vh", overflow: "hidden",
+        width: "100%", maxWidth: 900,
+        maxHeight: "100vh", overflow: "hidden",
         boxShadow: "0 -4px 40px rgba(0,0,0,0.10)",
         display: "flex", flexDirection: "column",
       }} onClick={e => e.stopPropagation()}>
 
-        {/* Drag handle */}
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "#e0e0e0", margin: "12px auto 0" }} />
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid #e8e8e8", flexShrink: 0 }}>
+          <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 3, color: "#1a1a1a" }}>ADMIN</span>
+          <button onClick={onClose} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888" }}>CLOSE</button>
+        </div>
 
-        {/* Tab bar */}
-        <div style={{ display: "flex", borderBottom: "1px solid #e8e8e8", flexShrink: 0, marginTop: 8, overflowX: "auto" }}>
-          {TABS.map(t => <button key={t} style={tabBtn(t)} onClick={() => setTab(t)}>{t}</button>)}
+        {/* Section tabs */}
+        <div style={{ display: "flex", borderBottom: "1px solid #e8e8e8", flexShrink: 0, overflowX: "auto" }}>
+          {SECTIONS.map(s => <button key={s.id} style={tabBtn(s.id)} onClick={() => setTab(s.id)}>{s.label}</button>)}
         </div>
 
         {/* Scrollable content */}
         <div style={{ overflowY: "auto", padding: isMobile ? "20px 16px" : "24px 28px", flex: 1, overflowX: "hidden" }}>
 
-          {/* ── Wines tab ── */}
-          {tab === "wines" && (
+          {/* ── MENU LAYOUT ── Full course editor */}
+          {tab === "menu" && (
+            <MenuCoursesTab
+              menuCourses={menuCourses}
+              onUpdateCourses={onUpdateMenuCourses}
+              onSaveCourses={onSaveMenuCourses}
+            />
+          )}
+
+          {/* ── DRINKS ── Wines, cocktails, spirits, beers */}
+          {tab === "drinks" && (
             <>
-              {/* Wine rows */}
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 52px 28px", gap: 8, marginBottom: 8 }}>
-                {(isMobile ? ["Name", "Producer"] : ["Name", "Producer", "Vintage", "Glass", ""]).map((h, i) => (
-                  <div key={i} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#666", textTransform: "uppercase" }}>{h}</div>
-                ))}
+              {/* Sub-tabs for drink types */}
+              {(() => {
+                const [drinkTab, setDrinkTab] = useState("wines");
+                const drinkTabBtn = t => ({
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
+                  border: `1px solid ${drinkTab === t ? "#1a1a1a" : "#e8e8e8"}`,
+                  borderRadius: 2, cursor: "pointer",
+                  background: drinkTab === t ? "#1a1a1a" : "#fff",
+                  color: drinkTab === t ? "#fff" : "#888",
+                  marginRight: 6, marginBottom: 12,
+                });
+                return (
+                  <div>
+                    <div style={{ display: "flex", flexWrap: "wrap", marginBottom: 8 }}>
+                      {["wines", "cocktails", "spirits", "beers"].map(t => (
+                        <button key={t} style={drinkTabBtn(t)} onClick={() => setDrinkTab(t)}>{t.toUpperCase()}</button>
+                      ))}
+                      <button onClick={handleSaveDrinks} style={{
+                        fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
+                        border: "1px solid #4a9a6a", borderRadius: 2, cursor: "pointer",
+                        background: "#4a9a6a", color: "#fff", marginLeft: "auto",
+                      }}>SAVE DRINKS</button>
+                    </div>
+
+                    {drinkTab === "wines" && (
+                      <>
+                        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 52px 28px", gap: 8, marginBottom: 8 }}>
+                          {(isMobile ? ["Name", "Producer"] : ["Name", "Producer", "Vintage", "Glass", ""]).map((h, i) => (
+                            <div key={i} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#666", textTransform: "uppercase" }}>{h}</div>
+                          ))}
+                        </div>
+                        <div style={{ borderTop: "1px solid #f0f0f0", marginBottom: 10 }} />
+                        <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 20 }}>
+                          {localWines.map(w => (
+                            <div key={w.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr auto" : "1fr 1fr 70px 52px 28px", gap: 8, alignItems: "center" }}>
+                              <input value={w.name} onChange={e => updWine(w.id, "name", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Name" />
+                              <input value={w.producer} onChange={e => updWine(w.id, "producer", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Producer" />
+                              {!isMobile && <input value={w.vintage} onChange={e => updWine(w.id, "vintage", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="2020" />}
+                              <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
+                                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
+                                borderColor: w.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
+                                background: w.byGlass ? "#f0faf0" : "#fff", color: w.byGlass ? "#4a8a4a" : "#555",
+                              }}>{w.byGlass ? "YES" : "NO"}</button>
+                              <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 16 }}>
+                          <div style={fieldLabel}>Add wine</div>
+                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 52px", gap: 8, marginBottom: 10 }}>
+                            <input value={newWine.name} onChange={e => setNewWine(w => ({ ...w, name: e.target.value }))} placeholder="Name" style={{ ...baseInp, padding: "5px 8px" }} />
+                            <input value={newWine.producer} onChange={e => setNewWine(w => ({ ...w, producer: e.target.value }))} placeholder="Producer" style={{ ...baseInp, padding: "5px 8px" }} />
+                            {!isMobile && <input value={newWine.vintage} onChange={e => setNewWine(w => ({ ...w, vintage: e.target.value }))} placeholder="2020" style={{ ...baseInp, padding: "5px 8px" }} />}
+                            <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
+                              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
+                              borderColor: newWine.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
+                              background: newWine.byGlass ? "#f0faf0" : "#fff", color: newWine.byGlass ? "#4a8a4a" : "#555",
+                            }}>{newWine.byGlass ? "YES" : "NO"}</button>
+                          </div>
+                          <button onClick={addWine} style={{
+                            fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 20px",
+                            border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff",
+                          }}>+ ADD WINE</button>
+                        </div>
+                      </>
+                    )}
+
+                    {drinkTab === "cocktails" && (
+                      <DrinkListEditor list={localCocktails} setList={setLocalCocktails}
+                        newItem={newCocktail} setNewItem={setNewCocktail}
+                        nextId={nextCocktailId} label="cocktail" />
+                    )}
+
+                    {drinkTab === "spirits" && (
+                      <DrinkListEditor list={localSpirits} setList={setLocalSpirits}
+                        newItem={newSpirit} setNewItem={setNewSpirit}
+                        nextId={nextSpiritId} label="spirit" />
+                    )}
+
+                    {drinkTab === "beers" && (
+                      <DrinkListEditor list={localBeers} setList={setLocalBeers}
+                        newItem={newBeer} setNewItem={setNewBeer}
+                        nextId={nextBeerId} label="beer" />
+                    )}
+                  </div>
+                );
+              })()}
+            </>
+          )}
+
+          {/* ── EXTRAS (dishes) ── */}
+          {tab === "dishes" && (
+            <>
+              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#888", marginBottom: 16 }}>
+                EXTRA DISH OPTIONS — optional courses offered to guests (beetroot, cheese, cake, etc.)
               </div>
-              <div style={{ borderTop: "1px solid #f0f0f0", marginBottom: 10 }} />
-              <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 20 }}>
-                {localWines.map(w => (
-                  <div key={w.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr auto" : "1fr 1fr 70px 52px 28px", gap: 8, alignItems: "center" }}>
-                    <input value={w.name} onChange={e => updWine(w.id, "name", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Name" />
-                    <input value={w.producer} onChange={e => updWine(w.id, "producer", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Producer" />
-{!isMobile && <input value={w.vintage} onChange={e => updWine(w.id, "vintage", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="2020" />}
-                    <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
-                      fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                      borderColor: w.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                      background: w.byGlass ? "#f0faf0" : "#fff", color: w.byGlass ? "#4a8a4a" : "#555",
-                    }}>{w.byGlass ? "YES" : "NO"}</button>
-                    <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
+                {localDishes.map(dish => (
+                  <div key={dish.id} style={{ border: "1px solid #f0f0f0", borderRadius: 2, padding: "14px 16px" }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                      <input value={dish.name} onChange={e => updDishName(dish.id, e.target.value)} style={{ ...baseInp, fontWeight: 500, flex: 1 }} />
+                      <button onClick={() => removeDish(dish.id)} style={{ background: "none", border: "1px solid #ffcccc", borderRadius: 2, color: "#e07070", cursor: "pointer", fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px" }}>REMOVE</button>
+                    </div>
+                    <div style={{ ...fieldLabel, marginBottom: 8 }}>Pairing options</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {dish.pairings.map((p, idx) => (
+                        <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <input value={p} onChange={e => updPairing(dish.id, idx, e.target.value)}
+                            style={{ fontFamily: FONT, fontSize: 11, padding: "4px 8px", border: "1px solid #e8e8e8", borderRadius: 2, width: 80, outline: "none", color: "#1a1a1a", background: "#fafafa" }} />
+                          {dish.pairings.length > 1 && (
+                            <button onClick={() => removePairing(dish.id, idx)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                          )}
+                        </div>
+                      ))}
+                      <button onClick={() => addPairing(dish.id)} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 9px", border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#444" }}>+ option</button>
+                    </div>
                   </div>
                 ))}
               </div>
-              <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 16 }}>
-                <div style={fieldLabel}>Add wine</div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 52px", gap: 8, marginBottom: 10 }}>
-                  <input value={newWine.name} onChange={e => setNewWine(w => ({ ...w, name: e.target.value }))} placeholder="Name" style={{ ...baseInp, padding: "5px 8px" }} />
-                  <input value={newWine.producer} onChange={e => setNewWine(w => ({ ...w, producer: e.target.value }))} placeholder="Producer" style={{ ...baseInp, padding: "5px 8px" }} />
-                  {!isMobile && <input value={newWine.vintage} onChange={e => setNewWine(w => ({ ...w, vintage: e.target.value }))} placeholder="2020" style={{ ...baseInp, padding: "5px 8px" }} />}
-                  <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
-                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                    borderColor: newWine.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                    background: newWine.byGlass ? "#f0faf0" : "#fff", color: newWine.byGlass ? "#4a8a4a" : "#555",
-                  }}>{newWine.byGlass ? "YES" : "NO"}</button>
+              <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 18 }}>
+                <div style={fieldLabel}>Add dish</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input value={newDishName} onChange={e => setNewDishName(e.target.value)} onKeyDown={e => e.key === "Enter" && addDish()} placeholder="Dish name…" style={{ ...baseInp, flex: 1 }} />
+                  <button onClick={addDish} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 16px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff", whiteSpace: "nowrap" }}>+ ADD</button>
                 </div>
-                <button onClick={addWine} style={{
-                  fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 20px",
+              </div>
+              <div style={{ borderTop: "1px solid #f0f0f0", marginTop: 24, paddingTop: 14 }}>
+                <button onClick={() => { onUpdateDishes(localDishes); }} style={{
+                  fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
                   border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff",
-                }}>+ ADD WINE</button>
+                }}>SAVE EXTRAS</button>
               </div>
             </>
           )}
 
-          {tab === "cocktails" && (
-            <DrinkListEditor list={localCocktails} setList={setLocalCocktails}
-              newItem={newCocktail} setNewItem={setNewCocktail}
-              nextId={nextCocktailId} label="cocktail" />
+          {/* ── SYNC ── Wine sync from hotel website */}
+          {tab === "sync" && (
+            <WineSyncTab onSyncWines={onSyncWines} />
           )}
 
-          {tab === "spirits" && (
-            <DrinkListEditor list={localSpirits} setList={setLocalSpirits}
-              newItem={newSpirit} setNewItem={setNewSpirit}
-              nextId={nextSpiritId} label="spirit" />
-          )}
-
-          {tab === "beers" && (
-            <DrinkListEditor list={localBeers} setList={setLocalBeers}
-              newItem={newBeer} setNewItem={setNewBeer}
-              nextId={nextBeerId} label="beer" />
-          )}
-
+          {/* ── SETTINGS ── Logo, layout reset */}
           {tab === "settings" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
               {/* Logo */}
@@ -1118,50 +1375,6 @@ function AdminPanel({ dishes, wines, cocktails, spirits, beers, onUpdateDishes, 
               </div>
             </div>
           )}
-
-          {tab === "dishes" && (
-            <>
-              <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
-                {localDishes.map(dish => (
-                  <div key={dish.id} style={{ border: "1px solid #f0f0f0", borderRadius: 2, padding: "14px 16px" }}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
-                      <input value={dish.name} onChange={e => updDishName(dish.id, e.target.value)} style={{ ...baseInp, fontWeight: 500, flex: 1 }} />
-                      <button onClick={() => removeDish(dish.id)} style={{ background: "none", border: "1px solid #ffcccc", borderRadius: 2, color: "#e07070", cursor: "pointer", fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px" }}>REMOVE</button>
-                    </div>
-                    <div style={{ ...fieldLabel, marginBottom: 8 }}>Pairing options</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {dish.pairings.map((p, idx) => (
-                        <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <input value={p} onChange={e => updPairing(dish.id, idx, e.target.value)}
-                            style={{ fontFamily: FONT, fontSize: 11, padding: "4px 8px", border: "1px solid #e8e8e8", borderRadius: 2, width: 80, outline: "none", color: "#1a1a1a", background: "#fafafa" }} />
-                          {dish.pairings.length > 1 && (
-                            <button onClick={() => removePairing(dish.id, idx)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
-                          )}
-                        </div>
-                      ))}
-                      <button onClick={() => addPairing(dish.id)} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 9px", border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#444" }}>+ option</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 18 }}>
-                <div style={fieldLabel}>Add dish</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input value={newDishName} onChange={e => setNewDishName(e.target.value)} onKeyDown={e => e.key === "Enter" && addDish()} placeholder="Dish name…" style={{ ...baseInp, flex: 1 }} />
-                  <button onClick={addDish} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 16px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff", whiteSpace: "nowrap" }}>+ ADD</button>
-                </div>
-              </div>
-            </>
-          )}
-
-
-
-        </div>
-
-        {/* Footer */}
-        <div style={{ display: "flex", gap: 10, padding: "14px 28px", borderTop: "1px solid #f0f0f0", flexShrink: 0 }}>
-          <button onClick={onClose} style={{ flex: 1, fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#444" }}>CANCEL</button>
-          <button onClick={handleSave} style={{ flex: 2, fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff" }}>SAVE</button>
         </div>
       </div>
     </div>
@@ -5792,7 +6005,7 @@ function GateScreen({ onPass }) {
 }
 
 // ── Menu Page ─────────────────────────────────────────────────────────────────
-function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSaveMenuOverrides, onSyncMenu, onSyncWines, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], onExit }) {
+function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSaveMenuOverrides, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], onExit }) {
   const [tab, setTab]                   = useState("print");
   const [menuGenTable, setMenuGenTable] = useState(null);
   const [globalLayout, setGlobalLayout] = useState(() => {
@@ -5945,16 +6158,7 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
     });
   }, [globalLayout, menuCourses, logoDataUri]);
 
-  const [mpSyncSt, setMpSyncSt] = useState(null); // null | "syncing" | "ok" | "err"
-  const handleMenuPageSyncAll = async () => {
-    if (mpSyncSt === "syncing") return;
-    setMpSyncSt("syncing");
-    const [m, w] = await Promise.all([onSyncMenu(), onSyncWines()]);
-    setMpSyncSt(m?.ok || w?.ok ? "ok" : "err");
-    setTimeout(() => setMpSyncSt(null), 3000);
-  };
-
-  const TABS = ["print", "layout", "sync", "overrides"];
+  const TABS = ["print", "layout", "overrides"];
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 20px",
     border: "none", cursor: "pointer", textTransform: "uppercase", transition: "all 0.1s",
@@ -5968,19 +6172,7 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
       {/* Header */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e8e8e8", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 3, color: "#1a1a1a" }}>MENU</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={handleMenuPageSyncAll} disabled={mpSyncSt === "syncing"} style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px",
-            border: `1px solid ${mpSyncSt === "ok" ? "#8fc39f" : mpSyncSt === "err" ? "#e89898" : "#c8a96e"}`,
-            borderRadius: 2, cursor: mpSyncSt === "syncing" ? "not-allowed" : "pointer",
-            background: mpSyncSt === "ok" ? "#eef8f1" : mpSyncSt === "err" ? "#fff0f0" : "#fffaf4",
-            color: mpSyncSt === "ok" ? "#2f7a45" : mpSyncSt === "err" ? "#c04040" : "#8a6020",
-            fontWeight: 600,
-          }}>
-            {mpSyncSt === "syncing" ? "SYNCING…" : mpSyncSt === "ok" ? "✓ SYNCED" : mpSyncSt === "err" ? "✗ FAILED" : "↻ SYNC"}
-          </button>
-          <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888" }}>EXIT</button>
-        </div>
+        <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888" }}>EXIT</button>
       </div>
 
       {/* Tab bar */}
@@ -6258,11 +6450,6 @@ function MenuPage({ tables, menuCourses, menuOverrides, onSetMenuOverrides, onSa
           </div>
         )}
 
-        {/* ── SYNC ── */}
-        {tab === "sync" && (
-          <MenuSyncTab menuCourses={menuCourses} onSyncMenu={onSyncMenu} onSyncWines={onSyncWines} />
-        )}
-
         {/* ── OVERRIDES ── */}
         {tab === "overrides" && (
           <MenuOverridesTab
@@ -6387,7 +6574,7 @@ function LoginScreen({ onEnter, onSyncAll }) {
               background: syncSt === "ok" ? "#eef8f1" : syncSt === "err" ? "#fff0f0" : "#fafafa",
               color: syncSt === "ok" ? "#2f7a45" : syncSt === "err" ? "#c04040" : "#aaa",
             }}>
-              {syncSt === "syncing" ? "SYNCING…" : syncSt === "ok" ? "✓ SYNCED" : syncSt === "err" ? "✗ FAILED" : "↻ SYNC"}
+              {syncSt === "syncing" ? "SYNCING…" : syncSt === "ok" ? "✓ SYNCED" : syncSt === "err" ? "✗ FAILED" : "↻ SYNC WINES"}
             </button>
           )}
         </div>
@@ -6586,19 +6773,6 @@ export default function App() {
     setSel(null);
   };
 
-  const syncMenu = async () => {
-    try {
-      const secret = import.meta.env.VITE_SYNC_SECRET || "";
-      const url = secret ? `/api/sync-menu?secret=${encodeURIComponent(secret)}` : "/api/sync-menu";
-      const r = await fetch(url);
-      const json = await r.json();
-      if (!r.ok) return { ok: false, error: json.error || String(r.status) };
-      return { ok: true, synced: json.synced };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  };
-
   const syncWines = async () => {
     try {
       const secret = import.meta.env.VITE_SYNC_SECRET || import.meta.env.VITE_CRON_SECRET || "";
@@ -6612,9 +6786,19 @@ export default function App() {
     }
   };
 
-  const syncAll = async () => {
-    const [menuResult, winesResult] = await Promise.all([syncMenu(), syncWines()]);
-    return { ok: menuResult?.ok || winesResult?.ok, menu: menuResult, wines: winesResult };
+  // Save menu courses directly to Supabase (the app is now the source of truth)
+  const saveMenuCourses = async (courses) => {
+    if (!supabase) return;
+    const rows = courses.map(c => courseToSupabaseRow(c));
+    const { error } = await supabase
+      .from("menu_courses")
+      .upsert(rows, { onConflict: "position" });
+    if (error) { console.error("Menu save failed:", error); return; }
+    // Remove courses that no longer exist
+    const positions = courses.map(c => c.position);
+    if (positions.length > 0) {
+      await supabase.from("menu_courses").delete().not("position", "in", `(${positions.join(",")})`);
+    }
   };
 
   const saveBeverages = async ({ cocktails: newC, spirits: newS, beers: newB }) => {
@@ -6947,8 +7131,7 @@ export default function App() {
     [menuCourses, menuOverrides]
   );
 
-  // ── Aperitif quick-button options (read from sheet aperitif_btn column) ──────
-  // Falls back to APERITIF_OPTIONS labels (SFSC, Slapšak, …) if sheet column not yet added.
+  // ── Aperitif quick-button options (from aperitif_btn column) ─────────────────
   const aperitifOptions = useMemo(() => {
     const fromSheet = [...new Set(menuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
     if (fromSheet.length > 0) return fromSheet;
@@ -7144,32 +7327,30 @@ export default function App() {
     return () => { mounted = false; supabase.removeChannel(ch); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Menu courses: load from Supabase, fallback to Google Sheets CSV ────────
+  // ── Menu courses: load from Supabase (app is the source of truth) ───────────
   useEffect(() => {
     let mounted = true;
-    let timer = null;
-
-    const applyCourses = (data) => {
-      if (!mounted || !Array.isArray(data) || data.length === 0) return false;
-      setMenuCourses(data);
-      return true;
-    };
 
     const loadCourses = async () => {
       try {
-        const courses = await fetchLiveMenuCourses();
-        applyCourses(courses);
+        const courses = await fetchMenuCourses();
+        if (mounted && courses.length > 0) setMenuCourses(courses);
       } catch (error) {
         console.warn("Menu courses fetch failed:", error);
       }
     };
 
     loadCourses();
-    timer = window.setInterval(loadCourses, 60000);
-    return () => {
-      mounted = false;
-      if (timer) window.clearInterval(timer);
-    };
+
+    // Subscribe to realtime changes so edits from other devices appear instantly
+    if (!supabase) return;
+    const ch = supabase.channel("milka-menu-courses")
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_courses" }, () => {
+        if (mounted) loadCourses();
+      })
+      .subscribe();
+
+    return () => { mounted = false; supabase.removeChannel(ch); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Only count primary tables in groups (secondaries have same guest count stamped on them)
@@ -7190,7 +7371,7 @@ export default function App() {
     onArchive: () => setArchiveOpen(true),
     onInventory: () => setInventoryOpen(true),
     onSeed: seedTestData,
-    onSyncAll: syncAll,
+    onSyncAll: syncWines,
     onAddRes: () => {
       const freeTable = tables.find(t => !t.active && !t.resName && !t.resTime);
       if (freeTable) { setResModalPresetTime(null); setResModal(freeTable.id); }
@@ -7295,8 +7476,6 @@ export default function App() {
         menuOverrides={menuOverrides}
         onSetMenuOverrides={setMenuOverrides}
         onSaveMenuOverrides={saveMenuOverrides}
-        onSyncMenu={syncMenu}
-        onSyncWines={syncWines}
         upd={upd}
         logoDataUri={logoDataUri}
         wines={wines}
@@ -7488,8 +7667,12 @@ export default function App() {
       {adminOpen && (
         <AdminPanel
           dishes={dishes} wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
+          menuCourses={menuCourses}
           onUpdateDishes={setDishes} onUpdateWines={setWines}
           onSaveBeverages={saveBeverages}
+          onUpdateMenuCourses={setMenuCourses}
+          onSaveMenuCourses={saveMenuCourses}
+          onSyncWines={syncWines}
           logoDataUri={logoDataUri}
           onSaveLogo={saveLogo}
           onResetMenuLayout={() => {
