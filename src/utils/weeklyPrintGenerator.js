@@ -15,12 +15,14 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#000;-webkit-pr
 @media print{body{margin:0;}}
 table{width:100%;border-collapse:collapse;}
 tr{page-break-inside:avoid;}
-th,td{border:1px solid #000;padding:4pt 5pt;vertical-align:top;text-align:left;font-size:9pt;}
-th{font-weight:700;text-align:center;font-size:9pt;}
+th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:left;font-size:9pt;color:#000;}
+th{font-weight:700;text-align:center;font-size:9pt;background:#f0f0f0;}
 .center{text-align:center;}
 .bold{font-weight:700;}
-u{text-decoration:underline;}
-h1{font-family:Arial,Helvetica,sans-serif;font-size:12pt;text-align:center;margin:0 0 2pt;font-weight:400;}
+.date-row td{background:#f0f0f0;}
+u{text-decoration:underline;color:#000;}
+a{color:#000;text-decoration:underline;}
+h1{font-family:Arial,Helvetica,sans-serif;font-size:12pt;text-align:center;margin:0 0 2pt;font-weight:700;}
 h2{font-family:Arial,Helvetica,sans-serif;font-size:10pt;text-align:center;margin:0 0 10pt;font-weight:400;color:#000;}
 </style></head><body>${bodyHtml}</body></html>`;
 
@@ -40,10 +42,10 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:${baseFontPt}pt;color:#000
 @media print{body{margin:0;}}
 table{width:100%;border-collapse:collapse;table-layout:fixed;}
 tr{page-break-inside:avoid;}
-th,td{border:1px solid #999;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;overflow:hidden;word-wrap:break-word;}
+th,td{border:1px solid #aaa;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;color:#000;overflow:hidden;word-wrap:break-word;}
 th{font-weight:700;text-align:center;font-size:${headerFontPt}pt;}
-.green-header{background:#2e6b3a;color:#fff;font-weight:700;}
-.green-header th,.green-header td{border-color:#245a2e;color:#fff;}
+.green-header{background:#3d6b4f;color:#fff;font-weight:700;}
+.green-header th,.green-header td{border-color:#2e5a3e;color:#fff;}
 .red{color:#c04040;font-weight:700;}
 .center{text-align:center;}
 .bold{font-weight:700;}
@@ -136,7 +138,7 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
     const dateLabel = fmtDateShort(ds);
 
     // Date + total guest row
-    body += `<tr>`;
+    body += `<tr class="date-row">`;
     body += `<td class="bold">${esc(dateLabel)}</td>`;
     body += `<td style="font-size:8pt;">Total<br>guest:<br><span class="bold">${dayGuests}</span></td>`;
     body += `<td></td><td></td><td></td><td></td><td></td>`;
@@ -162,7 +164,7 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
         body += `<td class="center">${d.guests || 2}</td>`;
         body += `<td>${esc(d.resTime || "")}</td>`;
         body += `<td class="bold">${esc(d.resName || "\u2014")}</td>`;
-        body += `<td class="center">${esc(expLabelForResv(r))}</td>`;
+        body += `<td class="center"><u>${esc(expLabelForResv(r))}</u></td>`;
         body += `<td style="font-size:8pt;">${infoText(d, r)}</td>`;
         body += `<td style="font-size:8pt;white-space:pre-line;">${esc(restr)}</td>`;
         body += `</tr>`;
@@ -224,17 +226,17 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
   });
   body += `</tr>`;
 
-  // Header row 2: dates
-  body += `<tr class="green-header">`;
+  // Header row 2: dates (white background)
+  body += `<tr>`;
   body += `<td style="padding-left:6pt;">Date</td>`;
   weekResv.forEach(r => {
     body += `<td class="center">${fmtDateShort(r.date)}</td>`;
   });
   body += `</tr>`;
 
-  // Header row 3: allergies/restrictions summary + menu type
-  body += `<tr class="green-header">`;
-  body += `<td style="padding-left:6pt;">Allergies/Restrictions</td>`;
+  // Header row 3: allergies/restrictions summary + menu type (white background)
+  body += `<tr>`;
+  body += `<td style="padding-left:6pt;font-weight:700;">Allergies/Restrictions</td>`;
   weekResv.forEach(r => {
     const d = r.data || {};
     const mt = d.menuType === "short" ? "SHORT MENU" : "LONG MENU";
