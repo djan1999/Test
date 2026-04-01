@@ -21,6 +21,13 @@ export default function MenuLayoutPanel({
   onSaveVisualLayout,
   visualSaving,
   visualSaved,
+  // Print settings (forwarded to MenuLayoutBuilder)
+  globalLayout,
+  onSetGlobalLayout,
+  onSaveGlobalLayout,
+  layoutSaving,
+  layoutSaved,
+  logoDataUri,
 }) {
   const [activeTab, setActiveTab] = useState("builder");
 
@@ -59,6 +66,12 @@ export default function MenuLayoutPanel({
           onSaveLayout={onSaveVisualLayout}
           saving={visualSaving}
           saved={visualSaved}
+          globalLayout={globalLayout}
+          onSetGlobalLayout={onSetGlobalLayout}
+          onSaveGlobalLayout={onSaveGlobalLayout}
+          layoutSaving={layoutSaving}
+          layoutSaved={layoutSaved}
+          logoDataUri={logoDataUri}
         />
       )}
 

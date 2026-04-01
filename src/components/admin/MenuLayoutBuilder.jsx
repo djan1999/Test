@@ -1,13 +1,16 @@
 /**
- * MenuLayoutBuilder — visual drag-and-drop layout composition tool.
+ * MenuLayoutBuilder — WYSIWYG menu layout composition tool.
  *
- * Two-zone canvas (Left Column / Right Column) backed by @dnd-kit/sortable.
- * A block palette lets users add blocks; placed blocks are sortable within
- * their zone and can be dragged across zones.  A config panel appears on the
- * right when a block is selected.
+ * Three-panel layout:
+ *   Left:   Block palette — add blocks to either column
+ *   Center: MenuLayoutCanvas — visual WYSIWYG canvas (the build surface)
+ *   Right:  Block config inspector + live preview iframe + print settings
+ *
+ * This is the single source of truth for menu structure.
+ * The old PrintLayoutPanel is gone — print settings are embedded here.
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -18,230 +21,43 @@ import {
   closestCenter,
 } from "@dnd-kit/core";
 import {
-  SortableContext,
   sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { useDroppable } from "@dnd-kit/core";
 import { FONT, baseInp } from "./adminStyles.js";
 import { BLOCK_TYPES, SPACER_SIZES, makeBlockId } from "../../utils/visualLayout.js";
+import { generateMenuHTML } from "../../utils/menuGenerator.js";
+import MenuLayoutCanvas from "./MenuLayoutCanvas.jsx";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── DragOverlay card (used during active drag) ────────────────────────────────
 
-function blockLabel(block, menuCourses) {
-  if (block.type === "course") {
-    const c = menuCourses.find(mc => mc.course_key === block.courseKey);
-    return c?.menu?.name || block.courseKey || "(no course selected)";
-  }
-  if (block.type === "spacer") return `Spacer — ${SPACER_SIZES[block.size || "md"]?.label || "md"}`;
-  if (block.type === "heading" || block.type === "divider") return block.text || `(${block.type})`;
-  if (block.type === "pairing") return block.text || "Pairing (auto)";
-  return BLOCK_TYPES[block.type]?.label || block.type;
-}
-
-function blockSubLabel(block, menuCourses) {
-  if (block.type === "course") {
-    const c = menuCourses.find(mc => mc.course_key === block.courseKey);
-    const sub = c?.menu?.sub || "";
-    return [c?.course_key && `key: ${c.course_key}`, sub && sub.slice(0, 40)].filter(Boolean).join(" · ") || "";
-  }
-  if (block.type === "pairing")     return "wine/non-alc/premium · per seat selection";
-  if (block.type === "byGlass")     return "pulled from seat · by-the-glass queue";
-  if (block.type === "quickAccess") return "aperitif buttons · quick access config";
-  return "";
-}
-
-// ── SortableBlock — a block card that lives in a zone ────────────────────────
-
-function SortableBlock({ block, menuCourses, isSelected, onSelect, onRemove }) {
-  const {
-    attributes, listeners, setNodeRef,
-    transform, transition, isDragging,
-  } = useSortable({ id: block.id });
-
+function DragOverlayCard({ block, menuCourses }) {
+  if (!block) return null;
   const cfg = BLOCK_TYPES[block.type] || {};
-  const label   = blockLabel(block, menuCourses);
-  const subLabel = blockSubLabel(block, menuCourses);
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0 : 1,
-  };
-
+  let label = cfg.label || block.type;
+  if (block.type === "course") {
+    const c = menuCourses.find(mc => mc.course_key === block.courseKey);
+    label = c?.menu?.name || block.courseKey || "(course)";
+  } else if (block.type === "spacer") {
+    label = `Spacer — ${SPACER_SIZES[block.size || "md"]?.label || "md"}`;
+  } else if (block.text) {
+    label = block.text;
+  }
   return (
-    <div ref={setNodeRef} style={style}>
-      <BlockCard
-        block={block}
-        label={label}
-        subLabel={subLabel}
-        cfg={cfg}
-        isSelected={isSelected}
-        onSelect={() => onSelect(block.id)}
-        onRemove={() => onRemove(block.id)}
-        dragProps={{ ...attributes, ...listeners }}
-      />
-    </div>
-  );
-}
-
-// ── BlockCard — the visual card (also used inside DragOverlay) ────────────────
-
-function BlockCard({ block, label, subLabel, cfg, isSelected, onSelect, onRemove, dragProps = {}, isOverlay = false }) {
-  const accentColor = cfg.color || "#888";
-  const bgColor = isSelected ? accentColor : (cfg.bg || "#f8f8f8");
-  const textColor = isSelected ? "#fff" : "#1a1a1a";
-  const subColor  = isSelected ? "rgba(255,255,255,0.65)" : "#888";
-
-  return (
-    <div
-      style={{
-        background: bgColor,
-        border: `2px solid ${isSelected ? accentColor : "transparent"}`,
-        borderLeft: `4px solid ${accentColor}`,
-        borderRadius: 6,
-        padding: "9px 10px 9px 12px",
-        marginBottom: 6,
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        cursor: isOverlay ? "grabbing" : "default",
-        boxShadow: isOverlay ? "0 8px 24px rgba(0,0,0,0.18)" : isSelected ? "0 2px 8px rgba(0,0,0,0.12)" : "none",
-        userSelect: "none",
-      }}
-    >
-      {/* Drag handle */}
-      <div
-        {...dragProps}
-        style={{
-          cursor: "grab",
-          color: isSelected ? "rgba(255,255,255,0.5)" : "#bbb",
-          fontSize: 16,
-          lineHeight: 1,
-          flexShrink: 0,
-          touchAction: "none",
-          padding: "2px 0",
-        }}
-        title="Drag to reorder"
-      >
-        ⠿
+    <div style={{
+      background: cfg.bg || "#f8f8f8",
+      borderLeft: `4px solid ${cfg.color || "#888"}`,
+      borderRadius: 6, padding: "10px 14px",
+      display: "flex", alignItems: "center", gap: 10,
+      boxShadow: "0 8px 28px rgba(0,0,0,0.18)",
+      cursor: "grabbing", userSelect: "none", minWidth: 180,
+    }}>
+      <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: cfg.color, background: "rgba(0,0,0,0.06)", borderRadius: 3, padding: "2px 5px", flexShrink: 0, textTransform: "uppercase" }}>
+        {cfg.icon} {cfg.label}
       </div>
-
-      {/* Type badge */}
-      <div style={{
-        fontFamily: FONT, fontSize: 9, letterSpacing: 1,
-        color: isSelected ? "rgba(255,255,255,0.7)" : accentColor,
-        background: isSelected ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.04)",
-        border: `1px solid ${isSelected ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.08)"}`,
-        borderRadius: 3, padding: "2px 5px",
-        flexShrink: 0, textTransform: "uppercase",
-      }}>{cfg.icon || "·"} {cfg.label || block.type}</div>
-
-      {/* Labels */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontFamily: FONT, fontSize: 11, fontWeight: 700,
-          color: textColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        }}>{label}</div>
-        {subLabel && (
-          <div style={{
-            fontFamily: FONT, fontSize: 9, color: subColor,
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-            marginTop: 1,
-          }}>{subLabel}</div>
-        )}
-      </div>
-
-      {/* Select / remove buttons */}
-      {!isOverlay && (
-        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-          <button
-            onClick={e => { e.stopPropagation(); onSelect && onSelect(); }}
-            title="Configure"
-            style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: isSelected ? "rgba(255,255,255,0.8)" : "#aaa",
-              fontSize: 14, padding: "2px 4px", lineHeight: 1,
-            }}
-          >⚙</button>
-          <button
-            onClick={e => { e.stopPropagation(); onRemove && onRemove(); }}
-            title="Remove block"
-            style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: isSelected ? "rgba(255,255,255,0.7)" : "#ccc",
-              fontSize: 15, padding: "2px 4px", lineHeight: 1,
-            }}
-          >×</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── DropZone — a column that accepts dropped blocks ───────────────────────────
-
-function DropZone({ id, items, menuCourses, selectedId, onSelect, onRemove, label, accentColor, emptyHint }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
-      {/* Zone header */}
-      <div style={{
-        fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: accentColor,
-        textTransform: "uppercase", fontWeight: 700, marginBottom: 10,
-        paddingBottom: 8, borderBottom: `2px solid ${accentColor}22`,
-        display: "flex", alignItems: "center", gap: 6,
-      }}>
-        <span style={{ width: 8, height: 8, borderRadius: 2, background: accentColor, display: "inline-block" }} />
+      <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#1a1a1a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {label}
-        <span style={{ marginLeft: "auto", fontWeight: 400, color: "#bbb", fontSize: 8 }}>
-          {items.length} block{items.length !== 1 ? "s" : ""}
-        </span>
       </div>
-
-      {/* Sortable list */}
-      <SortableContext items={items.map(b => b.id)} strategy={verticalListSortingStrategy}>
-        <div
-          ref={setNodeRef}
-          style={{
-            flex: 1,
-            minHeight: 100,
-            padding: items.length === 0 ? "0" : "0",
-            background: isOver ? "#f8f8ff" : "transparent",
-            borderRadius: 8,
-            transition: "background 0.15s",
-          }}
-        >
-          {items.map(block => (
-            <SortableBlock
-              key={block.id}
-              block={block}
-              menuCourses={menuCourses}
-              isSelected={selectedId === block.id}
-              onSelect={onSelect}
-              onRemove={onRemove}
-            />
-          ))}
-
-          {items.length === 0 && (
-            <div style={{
-              border: `2px dashed ${isOver ? accentColor : "#ddd"}`,
-              borderRadius: 8,
-              padding: "28px 16px",
-              textAlign: "center",
-              color: isOver ? accentColor : "#ccc",
-              fontFamily: FONT, fontSize: 10, letterSpacing: 1,
-              transition: "all 0.15s",
-            }}>
-              {emptyHint}
-            </div>
-          )}
-        </div>
-      </SortableContext>
     </div>
   );
 }
@@ -483,6 +299,102 @@ function BlockConfigPanel({ block, menuCourses, onUpdate, onClose }) {
   );
 }
 
+// ── PrintSettingsPanel — embedded compact print config ────────────────────────
+
+const PRINT_GROUPS = [
+  { label: "PAGE", props: [
+    { key: "padTop",    label: "Top",    def: 8.4,  step: 0.5,  unit: "mm" },
+    { key: "padBottom", label: "Bottom", def: 8.2,  step: 0.5,  unit: "mm" },
+    { key: "padLeft",   label: "Left",   def: 12,   step: 0.5,  unit: "mm" },
+    { key: "padRight",  label: "Right",  def: 12,   step: 0.5,  unit: "mm" },
+  ]},
+  { label: "TYPE", props: [
+    { key: "fontSize",      label: "Size",      def: 6.75, step: 0.05, unit: "pt" },
+    { key: "headerSpacing", label: "Hdr gap",   def: 7,    step: 0.5,  unit: "mm" },
+  ]},
+  { label: "GAPS", props: [
+    { key: "rowSpacing",     label: "Row",     def: 3.15, step: 0.25, unit: "pt" },
+    { key: "wineRowSpacing", label: "Wine row",def: 4.5,  step: 0.25, unit: "pt" },
+    { key: "sectionSpacing", label: "Section", def: 6.8,  step: 0.5,  unit: "pt" },
+  ]},
+];
+
+function PrintSettingsPanel({ globalLayout, onSetGlobalLayout, onSaveGlobalLayout, layoutSaving, layoutSaved }) {
+  const [open, setOpen] = useState(false);
+  if (!onSetGlobalLayout) return null;
+
+  const adjust = (key, def, step) => (dir) => {
+    onSetGlobalLayout(prev => {
+      const cur = key in prev ? prev[key] : def;
+      return { ...prev, [key]: Math.round((cur + dir * step) * 1000) / 1000 };
+    });
+  };
+
+  const btnSt = {
+    fontFamily: FONT, fontSize: 10, width: 18, height: 18,
+    border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer",
+    background: "#fafafa", color: "#555",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    flexShrink: 0, padding: 0,
+  };
+
+  return (
+    <div style={{ marginTop: 16, borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: "flex", alignItems: "center", gap: 6, width: "100%",
+          background: "none", border: "none", cursor: "pointer", padding: 0,
+        }}
+      >
+        <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase" }}>
+          {open ? "▾" : "▸"} Print Settings
+        </span>
+        {onSaveGlobalLayout && (
+          <button
+            onClick={e => { e.stopPropagation(); onSaveGlobalLayout(); }}
+            disabled={layoutSaving}
+            style={{
+              marginLeft: "auto", fontFamily: FONT, fontSize: 7, letterSpacing: 1,
+              padding: "2px 8px", border: `1px solid ${layoutSaved ? "#4a9a6a" : "#ccc"}`,
+              borderRadius: 2, cursor: layoutSaving ? "default" : "pointer",
+              background: layoutSaved ? "#4a9a6a" : "#fff",
+              color: layoutSaved ? "#fff" : "#888",
+            }}
+          >{layoutSaved ? "SAVED" : "SAVE"}</button>
+        )}
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          {PRINT_GROUPS.map(group => (
+            <div key={group.label} style={{ marginBottom: 8 }}>
+              <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#ccc", textTransform: "uppercase", marginBottom: 4 }}>
+                {group.label}
+              </div>
+              {group.props.map(({ key, label, def, step, unit }) => {
+                const val = key in (globalLayout || {}) ? globalLayout[key] : def;
+                const isCustom = key in (globalLayout || {});
+                return (
+                  <div key={key} style={{ display: "flex", alignItems: "center", gap: 3, marginBottom: 2 }}>
+                    <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa", flex: "0 0 58px", whiteSpace: "nowrap" }}>{label}</span>
+                    <button style={btnSt} onClick={() => adjust(key, def, step)(-1)}>-</button>
+                    <span style={{ fontFamily: FONT, fontSize: 7.5, minWidth: 40, textAlign: "center", color: isCustom ? "#8a5020" : "#bbb", fontWeight: isCustom ? 700 : 400 }}>{val}{unit}</span>
+                    <button style={btnSt} onClick={() => adjust(key, def, step)(+1)}>+</button>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          <div style={{ fontFamily: FONT, fontSize: 7, color: "#ccc", marginTop: 6, lineHeight: 1.5 }}>
+            These settings control PDF margins, font size, and row spacing. Defaults are production-tuned.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── MenuLayoutBuilder (main component) ───────────────────────────────────────
 
 export default function MenuLayoutBuilder({
@@ -492,47 +404,37 @@ export default function MenuLayoutBuilder({
   onSaveLayout,
   saving = false,
   saved  = false,
+  // Print settings (optional — embedded panel)
+  globalLayout,
+  onSetGlobalLayout,
+  onSaveGlobalLayout,
+  layoutSaving,
+  layoutSaved,
+  logoDataUri = "",
 }) {
-  // Local column state — synced from prop on mount / external change
+  // ── Local column state — synced from prop on mount / external change ──────
   const [leftColumn,  setLeftColumn]  = useState(() => visualLayout?.leftColumn  || []);
   const [rightColumn, setRightColumn] = useState(() => visualLayout?.rightColumn || []);
-  const [activeBlock,   setActiveBlock]   = useState(null);
-  const [selectedId,    setSelectedId]    = useState(null);
+  const [activeBlock, setActiveBlock] = useState(null);
+  const [selectedId,  setSelectedId]  = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
 
-  // Sync from parent when prop changes externally (e.g. after load from Supabase)
   useEffect(() => {
     if (visualLayout?.leftColumn)  setLeftColumn(visualLayout.leftColumn);
     if (visualLayout?.rightColumn) setRightColumn(visualLayout.rightColumn);
   }, [visualLayout]);
 
-  // Propagate local changes up
+  // ── Propagate changes up ─────────────────────────────────────────────────
   const propagate = useCallback((left, right) => {
     onUpdateLayout({ leftColumn: left, rightColumn: right });
   }, [onUpdateLayout]);
 
-  const setLeft = useCallback((fn) => {
-    setLeftColumn(prev => {
-      const next = typeof fn === "function" ? fn(prev) : fn;
-      propagate(next, rightColumn);
-      return next;
-    });
-  }, [rightColumn, propagate]);
-
-  const setRight = useCallback((fn) => {
-    setRightColumn(prev => {
-      const next = typeof fn === "function" ? fn(prev) : fn;
-      propagate(leftColumn, next);
-      return next;
-    });
-  }, [leftColumn, propagate]);
-
-  // ── DnD sensors ──────────────────────────────────────────────────────────
+  // ── DnD ──────────────────────────────────────────────────────────────────
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  // ── Container resolution ─────────────────────────────────────────────────
   const findContainer = useCallback((id) => {
     if (id === "leftColumn" || id === "rightColumn") return id;
     if (leftColumn.some(b => b.id === id))  return "leftColumn";
@@ -540,7 +442,6 @@ export default function MenuLayoutBuilder({
     return null;
   }, [leftColumn, rightColumn]);
 
-  // ── Drag handlers ─────────────────────────────────────────────────────────
   const onDragStart = ({ active }) => {
     const all = [...leftColumn, ...rightColumn];
     setActiveBlock(all.find(b => b.id === active.id) || null);
@@ -548,87 +449,69 @@ export default function MenuLayoutBuilder({
 
   const onDragOver = ({ active, over }) => {
     if (!over) return;
-    const activeContainer = findContainer(active.id);
-    const overContainer   = findContainer(over.id);
-    if (!activeContainer || !overContainer || activeContainer === overContainer) return;
+    const ac = findContainer(active.id);
+    const oc = findContainer(over.id);
+    if (!ac || !oc || ac === oc) return;
 
-    const sourceItems = activeContainer === "leftColumn" ? leftColumn : rightColumn;
-    const destItems   = overContainer   === "leftColumn" ? leftColumn : rightColumn;
-    const activeIdx   = sourceItems.findIndex(b => b.id === active.id);
-    const block       = sourceItems[activeIdx];
+    const src  = ac === "leftColumn" ? leftColumn : rightColumn;
+    const dest = oc === "leftColumn" ? leftColumn : rightColumn;
+    const ai   = src.findIndex(b => b.id === active.id);
+    const block = src[ai];
     if (!block) return;
 
-    const overIdx  = destItems.findIndex(b => b.id === over.id);
-    const insertAt = overIdx >= 0 ? overIdx : destItems.length;
+    const oi  = dest.findIndex(b => b.id === over.id);
+    const at  = oi >= 0 ? oi : dest.length;
 
-    const newSource = sourceItems.filter(b => b.id !== active.id);
-    const newDest   = [
-      ...destItems.slice(0, insertAt),
-      block,
-      ...destItems.slice(insertAt),
-    ];
+    const newSrc  = src.filter(b => b.id !== active.id);
+    const newDest = [...dest.slice(0, at), block, ...dest.slice(at)];
 
-    if (activeContainer === "leftColumn") {
-      setLeftColumn(newSource);
-      setRightColumn(newDest);
-      propagate(newSource, newDest);
+    if (ac === "leftColumn") {
+      setLeftColumn(newSrc); setRightColumn(newDest);
+      propagate(newSrc, newDest);
     } else {
-      setRightColumn(newSource);
-      setLeftColumn(newDest);
-      propagate(newDest, newSource);
+      setRightColumn(newSrc); setLeftColumn(newDest);
+      propagate(newDest, newSrc);
     }
   };
 
   const onDragEnd = ({ active, over }) => {
     setActiveBlock(null);
     if (!over) return;
+    const ac = findContainer(active.id);
+    const oc = findContainer(over.id);
+    if (!ac || !oc || ac !== oc) return;
 
-    const activeContainer = findContainer(active.id);
-    const overContainer   = findContainer(over.id);
-    if (!activeContainer || !overContainer || activeContainer !== overContainer) return;
+    const items = ac === "leftColumn" ? leftColumn : rightColumn;
+    const oi    = items.findIndex(b => b.id === active.id);
+    const ni    = items.findIndex(b => b.id === over.id);
+    if (oi === ni) return;
 
-    const items    = activeContainer === "leftColumn" ? leftColumn : rightColumn;
-    const oldIndex = items.findIndex(b => b.id === active.id);
-    const newIndex = items.findIndex(b => b.id === over.id);
-    if (oldIndex === newIndex) return;
-
-    const reordered = arrayMove(items, oldIndex, newIndex);
-    if (activeContainer === "leftColumn") {
-      setLeftColumn(reordered);
-      propagate(reordered, rightColumn);
-    } else {
-      setRightColumn(reordered);
-      propagate(leftColumn, reordered);
-    }
+    const reordered = arrayMove(items, oi, ni);
+    if (ac === "leftColumn") { setLeftColumn(reordered); propagate(reordered, rightColumn); }
+    else                     { setRightColumn(reordered); propagate(leftColumn, reordered); }
   };
 
   // ── Block mutations ───────────────────────────────────────────────────────
   const addToLeft = (type) => {
     const block = { id: makeBlockId(type), type, ...(type === "spacer" ? { size: "md" } : {}) };
     const next = [...leftColumn, block];
-    setLeftColumn(next);
-    propagate(next, rightColumn);
-    setSelectedId(block.id);
+    setLeftColumn(next); propagate(next, rightColumn); setSelectedId(block.id);
   };
 
   const addToRight = (type) => {
     const block = { id: makeBlockId(type), type };
     const next = [...rightColumn, block];
-    setRightColumn(next);
-    propagate(leftColumn, next);
-    setSelectedId(block.id);
+    setRightColumn(next); propagate(leftColumn, next); setSelectedId(block.id);
   };
 
   const removeBlock = (id) => {
     const inLeft = leftColumn.some(b => b.id === id);
     if (inLeft) {
       const next = leftColumn.filter(b => b.id !== id);
-      setLeftColumn(next);
-      propagate(next, rightColumn);
+      setLeftColumn(next); propagate(next, rightColumn);
     } else {
       const next = rightColumn.filter(b => b.id !== id);
-      setRightColumn(next);
-      propagate(leftColumn, next);
+      setRightColumn(next); propagate(leftColumn, next);
     }
     if (selectedId === id) setSelectedId(null);
   };
@@ -637,25 +520,39 @@ export default function MenuLayoutBuilder({
     const inLeft = leftColumn.some(b => b.id === updated.id);
     if (inLeft) {
       const next = leftColumn.map(b => b.id === updated.id ? updated : b);
-      setLeftColumn(next);
-      propagate(next, rightColumn);
+      setLeftColumn(next); propagate(next, rightColumn);
     } else {
       const next = rightColumn.map(b => b.id === updated.id ? updated : b);
-      setRightColumn(next);
-      propagate(leftColumn, next);
+      setRightColumn(next); propagate(leftColumn, next);
     }
   };
 
   const selectedBlock = [...leftColumn, ...rightColumn].find(b => b.id === selectedId) || null;
 
-  // ── Active drag overlay data ──────────────────────────────────────────────
-  const overlayBlock = activeBlock || null;
-  const overlayCfg   = overlayBlock ? (BLOCK_TYPES[overlayBlock.type] || {}) : {};
-  const overlayLabel = overlayBlock ? blockLabel(overlayBlock, menuCourses) : "";
+  // ── Live preview HTML (computed from current state) ───────────────────────
+  const previewHtml = useMemo(() => {
+    if (!showPreview || !menuCourses.length) return "";
+    try {
+      const dummySeat = { id: 1, pairing: "Wine", extras: {}, glasses: [], cocktails: [], beers: [] };
+      return generateMenuHTML({
+        seat: dummySeat,
+        table: { menuType: "", restrictions: [], bottleWines: [], birthday: false },
+        menuTitle: "WINTER MENU",
+        teamNames: "",
+        menuCourses,
+        lang: "en",
+        thankYouNote: "",
+        layoutStyles: globalLayout || {},
+        _logo: logoDataUri || "",
+      });
+    } catch (e) {
+      return `<html><body style="font-family:monospace;padding:20px;color:#c04040">Preview error: ${e.message}</body></html>`;
+    }
+  }, [showPreview, menuCourses, globalLayout, logoDataUri]);
 
   return (
     <div style={{ fontFamily: FONT }}>
-      {/* Top bar */}
+      {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid #f0f0f0",
@@ -665,7 +562,7 @@ export default function MenuLayoutBuilder({
             Menu Layout Builder
           </div>
           <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginTop: 2 }}>
-            DRAG TO REORDER · CLICK ⚙ TO CONFIGURE · SAVE APPLIES ORDERING TO COURSES
+            SINGLE SOURCE OF TRUTH · DRAG IN CANVAS · CLICK BLOCK TO CONFIGURE · SAVE APPLIES ORDER
           </div>
         </div>
         <button
@@ -675,18 +572,17 @@ export default function MenuLayoutBuilder({
             fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "8px 20px",
             border: `1px solid ${saved ? "#4a9a6a" : "#4b4b88"}`,
             borderRadius: 4, cursor: saving ? "default" : "pointer",
-            background: saved ? "#4a9a6a" : "#4b4b88", color: "#fff",
-            fontWeight: 600,
+            background: saved ? "#4a9a6a" : "#4b4b88", color: "#fff", fontWeight: 600,
           }}
         >
           {saving ? "SAVING..." : saved ? "✓ SAVED" : "SAVE LAYOUT"}
         </button>
       </div>
 
-      {/* Three-panel layout */}
-      <div style={{ display: "grid", gridTemplateColumns: "190px 1fr 260px", gap: 20, alignItems: "start" }}>
+      {/* ── Three-panel layout ───────────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "190px 1fr 270px", gap: 20, alignItems: "start" }}>
 
-        {/* ── Left: Block palette ────────────────────────────────────────── */}
+        {/* ── Left: Block palette ───────────────────────────────────────── */}
         <div style={{
           background: "#fafafa", border: "1px solid #f0f0f0",
           borderRadius: 8, padding: "14px 12px",
@@ -698,18 +594,16 @@ export default function MenuLayoutBuilder({
 
           <PaletteSection
             title="Left column"
-            types={["course", "spacer", "divider", "heading"]}
+            types={["course", "spacer", "heading", "divider"]}
             onAddLeft={addToLeft}
             onAddRight={addToRight}
           />
-
           <PaletteSection
             title="Right column"
             types={["pairing", "byGlass", "quickAccess"]}
             onAddLeft={addToLeft}
             onAddRight={addToRight}
           />
-
           <PaletteSection
             title="Both zones"
             types={["divider", "heading"]}
@@ -724,11 +618,11 @@ export default function MenuLayoutBuilder({
           }}>
             ← L adds to left column
             <br />R → adds to right column
-            <br />Drag blocks to reorder or move between zones
+            <br />Drag blocks in the canvas to reorder
           </div>
         </div>
 
-        {/* ── Center: Layout canvas ──────────────────────────────────────── */}
+        {/* ── Center: WYSIWYG canvas ────────────────────────────────────── */}
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -736,47 +630,23 @@ export default function MenuLayoutBuilder({
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
         >
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            <DropZone
-              id="leftColumn"
-              items={leftColumn}
-              menuCourses={menuCourses}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              onRemove={removeBlock}
-              label="Left Column — Course Structure"
-              accentColor="#4b4b88"
-              emptyHint="Drop course, spacer, or divider blocks here"
-            />
-            <DropZone
-              id="rightColumn"
-              items={rightColumn}
-              menuCourses={menuCourses}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              onRemove={removeBlock}
-              label="Right Column — Beverage Structure"
-              accentColor="#c8a06e"
-              emptyHint="Drop pairing, by-glass, or quick access blocks here"
-            />
-          </div>
+          <MenuLayoutCanvas
+            leftColumn={leftColumn}
+            rightColumn={rightColumn}
+            menuCourses={menuCourses}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onRemove={removeBlock}
+          />
 
           <DragOverlay dropAnimation={{ duration: 150, easing: "cubic-bezier(0.18,0.67,0.6,1.22)" }}>
-            {overlayBlock && (
-              <BlockCard
-                block={overlayBlock}
-                label={overlayLabel}
-                subLabel=""
-                cfg={overlayCfg}
-                isSelected={false}
-                isOverlay
-              />
-            )}
+            <DragOverlayCard block={activeBlock} menuCourses={menuCourses} />
           </DragOverlay>
         </DndContext>
 
-        {/* ── Right: Config panel ───────────────────────────────────────── */}
+        {/* ── Right: Inspector + preview + print settings ───────────────── */}
         <div style={{ position: "sticky", top: 20 }}>
+          {/* Config panel */}
           <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#999", textTransform: "uppercase", marginBottom: 10 }}>
             Configure Block
           </div>
@@ -787,23 +657,19 @@ export default function MenuLayoutBuilder({
             onClose={() => setSelectedId(null)}
           />
 
-          {/* Layout stats */}
-          <div style={{
-            marginTop: 16, padding: "12px 14px",
-            background: "#fafafa", border: "1px solid #f0f0f0",
-            borderRadius: 8,
-          }}>
+          {/* Layout summary */}
+          <div style={{ marginTop: 14, padding: "10px 12px", background: "#fafafa", border: "1px solid #f0f0f0", borderRadius: 8 }}>
             <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>
               Layout Summary
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
               {[
-                { label: "Course blocks",    val: leftColumn.filter(b => b.type === "course").length,      color: "#4b4b88" },
-                { label: "Spacers",          val: leftColumn.filter(b => b.type === "spacer").length,      color: "#999" },
-                { label: "Pairing blocks",   val: rightColumn.filter(b => b.type === "pairing").length,    color: "#c8a06e" },
-                { label: "By-Glass blocks",  val: rightColumn.filter(b => b.type === "byGlass").length,    color: "#5a9e6e" },
-                { label: "Quick Access",     val: rightColumn.filter(b => b.type === "quickAccess").length, color: "#7a6e9e" },
-                { label: "Total courses",    val: menuCourses.length,                                      color: "#888" },
+                { label: "Course blocks",  val: leftColumn.filter(b => b.type === "course").length,       color: "#4b4b88" },
+                { label: "Spacers",        val: leftColumn.filter(b => b.type === "spacer").length,       color: "#999" },
+                { label: "Pairing blocks", val: rightColumn.filter(b => b.type === "pairing").length,     color: "#c8a06e" },
+                { label: "By-Glass",       val: rightColumn.filter(b => b.type === "byGlass").length,     color: "#5a9e6e" },
+                { label: "Quick Access",   val: rightColumn.filter(b => b.type === "quickAccess").length, color: "#7a6e9e" },
+                { label: "Total courses",  val: menuCourses.length,                                       color: "#888" },
               ].map(({ label, val, color }) => (
                 <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontFamily: FONT, fontSize: 9, color: "#888" }}>{label}</span>
@@ -812,6 +678,65 @@ export default function MenuLayoutBuilder({
               ))}
             </div>
           </div>
+
+          {/* Live preview toggle */}
+          <div style={{ marginTop: 14, borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
+            <button
+              onClick={() => setShowPreview(p => !p)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                background: "none", border: "none", cursor: "pointer", padding: 0,
+              }}
+            >
+              <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase" }}>
+                {showPreview ? "▾" : "▸"} Live Preview
+              </span>
+              {showPreview && menuCourses.length === 0 && (
+                <span style={{ fontFamily: FONT, fontSize: 7, color: "#e8b060" }}>no courses</span>
+              )}
+            </button>
+
+            {showPreview && menuCourses.length > 0 && (
+              <div style={{ marginTop: 10, overflow: "hidden" }}>
+                {(() => {
+                  const A5W = 559, A5H = 793;
+                  const containerW = 246;
+                  const scale = containerW / A5W;
+                  const containerH = Math.round(A5H * scale);
+                  return (
+                    <div style={{
+                      width: containerW, height: containerH,
+                      border: "1px solid #e8e4dc", borderRadius: 4,
+                      overflow: "hidden", background: "#fff",
+                    }}>
+                      <iframe
+                        srcDoc={previewHtml}
+                        title="menu preview"
+                        style={{
+                          width: A5W, height: A5H, border: "none",
+                          transform: `scale(${scale})`,
+                          transformOrigin: "top left",
+                          pointerEvents: "none",
+                        }}
+                      />
+                    </div>
+                  );
+                })()}
+                <div style={{ fontFamily: FONT, fontSize: 7, color: "#c0bcb4", marginTop: 4, textAlign: "center" }}>
+                  A5 preview — save to apply ordering
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Embedded print settings */}
+          <PrintSettingsPanel
+            globalLayout={globalLayout}
+            onSetGlobalLayout={onSetGlobalLayout}
+            onSaveGlobalLayout={onSaveGlobalLayout}
+            layoutSaving={layoutSaving}
+            layoutSaved={layoutSaved}
+          />
         </div>
 
       </div>
