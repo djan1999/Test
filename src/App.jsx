@@ -1084,6 +1084,7 @@ function AdminPanel({
   logoDataUri = "", onSaveLogo, onClose,
 }) {
   const [tab, setTab] = useState("menu");
+  const [drinkTab, setDrinkTab] = useState("wines");
   const isMobile = useIsMobile(700);
 
   // ── Dishes ──
@@ -1182,95 +1183,86 @@ function AdminPanel({
 
           {/* ── DRINKS ── Wines, cocktails, spirits, beers */}
           {tab === "drinks" && (
-            <>
-              {/* Sub-tabs for drink types */}
-              {(() => {
-                const [drinkTab, setDrinkTab] = useState("wines");
-                const drinkTabBtn = t => ({
+            <div>
+              <div style={{ display: "flex", flexWrap: "wrap", marginBottom: 8 }}>
+                {["wines", "cocktails", "spirits", "beers"].map(t => (
+                  <button key={t} style={{
+                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
+                    border: `1px solid ${drinkTab === t ? "#1a1a1a" : "#e8e8e8"}`,
+                    borderRadius: 2, cursor: "pointer",
+                    background: drinkTab === t ? "#1a1a1a" : "#fff",
+                    color: drinkTab === t ? "#fff" : "#888",
+                    marginRight: 6, marginBottom: 12,
+                  }} onClick={() => setDrinkTab(t)}>{t.toUpperCase()}</button>
+                ))}
+                <button onClick={handleSaveDrinks} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-                  border: `1px solid ${drinkTab === t ? "#1a1a1a" : "#e8e8e8"}`,
-                  borderRadius: 2, cursor: "pointer",
-                  background: drinkTab === t ? "#1a1a1a" : "#fff",
-                  color: drinkTab === t ? "#fff" : "#888",
-                  marginRight: 6, marginBottom: 12,
-                });
-                return (
-                  <div>
-                    <div style={{ display: "flex", flexWrap: "wrap", marginBottom: 8 }}>
-                      {["wines", "cocktails", "spirits", "beers"].map(t => (
-                        <button key={t} style={drinkTabBtn(t)} onClick={() => setDrinkTab(t)}>{t.toUpperCase()}</button>
-                      ))}
-                      <button onClick={handleSaveDrinks} style={{
-                        fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-                        border: "1px solid #4a9a6a", borderRadius: 2, cursor: "pointer",
-                        background: "#4a9a6a", color: "#fff", marginLeft: "auto",
-                      }}>SAVE DRINKS</button>
-                    </div>
+                  border: "1px solid #4a9a6a", borderRadius: 2, cursor: "pointer",
+                  background: "#4a9a6a", color: "#fff", marginLeft: "auto",
+                }}>SAVE DRINKS</button>
+              </div>
 
-                    {drinkTab === "wines" && (
-                      <>
-                        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 52px 28px", gap: 8, marginBottom: 8 }}>
-                          {(isMobile ? ["Name", "Producer"] : ["Name", "Producer", "Vintage", "Glass", ""]).map((h, i) => (
-                            <div key={i} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#666", textTransform: "uppercase" }}>{h}</div>
-                          ))}
-                        </div>
-                        <div style={{ borderTop: "1px solid #f0f0f0", marginBottom: 10 }} />
-                        <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 20 }}>
-                          {localWines.map(w => (
-                            <div key={w.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr auto" : "1fr 1fr 70px 52px 28px", gap: 8, alignItems: "center" }}>
-                              <input value={w.name} onChange={e => updWine(w.id, "name", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Name" />
-                              <input value={w.producer} onChange={e => updWine(w.id, "producer", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Producer" />
-                              {!isMobile && <input value={w.vintage} onChange={e => updWine(w.id, "vintage", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="2020" />}
-                              <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
-                                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                                borderColor: w.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                                background: w.byGlass ? "#f0faf0" : "#fff", color: w.byGlass ? "#4a8a4a" : "#555",
-                              }}>{w.byGlass ? "YES" : "NO"}</button>
-                              <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
-                            </div>
-                          ))}
-                        </div>
-                        <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 16 }}>
-                          <div style={fieldLabel}>Add wine</div>
-                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 52px", gap: 8, marginBottom: 10 }}>
-                            <input value={newWine.name} onChange={e => setNewWine(w => ({ ...w, name: e.target.value }))} placeholder="Name" style={{ ...baseInp, padding: "5px 8px" }} />
-                            <input value={newWine.producer} onChange={e => setNewWine(w => ({ ...w, producer: e.target.value }))} placeholder="Producer" style={{ ...baseInp, padding: "5px 8px" }} />
-                            {!isMobile && <input value={newWine.vintage} onChange={e => setNewWine(w => ({ ...w, vintage: e.target.value }))} placeholder="2020" style={{ ...baseInp, padding: "5px 8px" }} />}
-                            <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
-                              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                              borderColor: newWine.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                              background: newWine.byGlass ? "#f0faf0" : "#fff", color: newWine.byGlass ? "#4a8a4a" : "#555",
-                            }}>{newWine.byGlass ? "YES" : "NO"}</button>
-                          </div>
-                          <button onClick={addWine} style={{
-                            fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 20px",
-                            border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff",
-                          }}>+ ADD WINE</button>
-                        </div>
-                      </>
-                    )}
-
-                    {drinkTab === "cocktails" && (
-                      <DrinkListEditor list={localCocktails} setList={setLocalCocktails}
-                        newItem={newCocktail} setNewItem={setNewCocktail}
-                        nextId={nextCocktailId} label="cocktail" />
-                    )}
-
-                    {drinkTab === "spirits" && (
-                      <DrinkListEditor list={localSpirits} setList={setLocalSpirits}
-                        newItem={newSpirit} setNewItem={setNewSpirit}
-                        nextId={nextSpiritId} label="spirit" />
-                    )}
-
-                    {drinkTab === "beers" && (
-                      <DrinkListEditor list={localBeers} setList={setLocalBeers}
-                        newItem={newBeer} setNewItem={setNewBeer}
-                        nextId={nextBeerId} label="beer" />
-                    )}
+              {drinkTab === "wines" && (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 52px 28px", gap: 8, marginBottom: 8 }}>
+                    {(isMobile ? ["Name", "Producer"] : ["Name", "Producer", "Vintage", "Glass", ""]).map((h, i) => (
+                      <div key={i} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#666", textTransform: "uppercase" }}>{h}</div>
+                    ))}
                   </div>
-                );
-              })()}
-            </>
+                  <div style={{ borderTop: "1px solid #f0f0f0", marginBottom: 10 }} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 20 }}>
+                    {localWines.map(w => (
+                      <div key={w.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr auto" : "1fr 1fr 70px 52px 28px", gap: 8, alignItems: "center" }}>
+                        <input value={w.name} onChange={e => updWine(w.id, "name", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Name" />
+                        <input value={w.producer} onChange={e => updWine(w.id, "producer", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Producer" />
+                        {!isMobile && <input value={w.vintage} onChange={e => updWine(w.id, "vintage", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="2020" />}
+                        <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
+                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
+                          borderColor: w.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
+                          background: w.byGlass ? "#f0faf0" : "#fff", color: w.byGlass ? "#4a8a4a" : "#555",
+                        }}>{w.byGlass ? "YES" : "NO"}</button>
+                        <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 16 }}>
+                    <div style={fieldLabel}>Add wine</div>
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 52px", gap: 8, marginBottom: 10 }}>
+                      <input value={newWine.name} onChange={e => setNewWine(w => ({ ...w, name: e.target.value }))} placeholder="Name" style={{ ...baseInp, padding: "5px 8px" }} />
+                      <input value={newWine.producer} onChange={e => setNewWine(w => ({ ...w, producer: e.target.value }))} placeholder="Producer" style={{ ...baseInp, padding: "5px 8px" }} />
+                      {!isMobile && <input value={newWine.vintage} onChange={e => setNewWine(w => ({ ...w, vintage: e.target.value }))} placeholder="2020" style={{ ...baseInp, padding: "5px 8px" }} />}
+                      <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
+                        fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
+                        borderColor: newWine.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
+                        background: newWine.byGlass ? "#f0faf0" : "#fff", color: newWine.byGlass ? "#4a8a4a" : "#555",
+                      }}>{newWine.byGlass ? "YES" : "NO"}</button>
+                    </div>
+                    <button onClick={addWine} style={{
+                      fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 20px",
+                      border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff",
+                    }}>+ ADD WINE</button>
+                  </div>
+                </>
+              )}
+
+              {drinkTab === "cocktails" && (
+                <DrinkListEditor list={localCocktails} setList={setLocalCocktails}
+                  newItem={newCocktail} setNewItem={setNewCocktail}
+                  nextId={nextCocktailId} label="cocktail" />
+              )}
+
+              {drinkTab === "spirits" && (
+                <DrinkListEditor list={localSpirits} setList={setLocalSpirits}
+                  newItem={newSpirit} setNewItem={setNewSpirit}
+                  nextId={nextSpiritId} label="spirit" />
+              )}
+
+              {drinkTab === "beers" && (
+                <DrinkListEditor list={localBeers} setList={setLocalBeers}
+                  newItem={newBeer} setNewItem={setNewBeer}
+                  nextId={nextBeerId} label="beer" />
+              )}
+            </div>
           )}
 
           {/* ── EXTRAS (dishes) ── */}
