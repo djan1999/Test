@@ -27,6 +27,7 @@ import { makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM } from
 import { fuzzy, fuzzyDrink } from "./utils/search.js";
 import { useIsMobile } from "./hooks/useIsMobile.js";
 import { AdminLayout } from "./components/admin/index.js";
+import { buildDefaultLayout, applyCourseOrderFromLayout, applySpacerGapsFromLayout } from "./utils/visualLayout.js";
 
 // All dietary restriction keys used in the DB schema
 const DIETARY_KEYS = [
@@ -6142,6 +6143,14 @@ export default function App() {
   const layoutLoaded = useRef(false);
   const globalLayoutRef = useRef(globalLayout);
   globalLayoutRef.current = globalLayout;
+  // Visual layout (block-based builder)
+  const [visualLayout, setVisualLayout] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("milka_visual_layout") || "null"); } catch { return null; }
+  });
+  const [visualSaving, setVisualSaving] = useState(false);
+  const [visualSaved,  setVisualSaved]  = useState(false);
+  const visualLayoutRef = useRef(visualLayout);
+  visualLayoutRef.current = visualLayout;
   // Quick Access items (data-driven, replaces hardcoded APERITIF_OPTIONS)
   const [quickAccessItems, setQuickAccessItems] = useState(() => {
     try {
@@ -6593,6 +6602,47 @@ export default function App() {
     setTimeout(() => setLayoutSaved(false), 2500);
   };
 
+  // ── Visual layout (block-based builder) persistence ───────────────────────
+
+  // Load from Supabase on mount
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.from("service_settings").select("state").eq("id", "visual_layout").maybeSingle()
+      .then(({ data }) => {
+        if (data?.state?.leftColumn) {
+          setVisualLayout(data.state);
+          try { localStorage.setItem("milka_visual_layout", JSON.stringify(data.state)); } catch {}
+        }
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist to localStorage when changed
+  useEffect(() => {
+    if (!visualLayout) return;
+    try { localStorage.setItem("milka_visual_layout", JSON.stringify(visualLayout)); } catch {}
+  }, [visualLayout]);
+
+  // Save visual layout to Supabase + apply course ordering
+  const saveVisualLayout = async () => {
+    setVisualSaving(true); setVisualSaved(false);
+    const toSave = visualLayoutRef.current;
+    if (!toSave) { setVisualSaving(false); return; }
+
+    // Apply left-column ordering to menu_courses positions
+    let updatedCourses = applyCourseOrderFromLayout(toSave, menuCourses);
+    updatedCourses = applySpacerGapsFromLayout(toSave, updatedCourses);
+    setMenuCourses(updatedCourses);
+    await saveMenuCourses(updatedCourses);
+
+    if (supabase) {
+      const { error } = await supabase.from("service_settings")
+        .upsert({ id: "visual_layout", state: toSave, updated_at: new Date().toISOString() }, { onConflict: "id" });
+      if (error) { console.error("Visual layout save failed:", error); setVisualSaving(false); return; }
+    }
+    setVisualSaving(false); setVisualSaved(true);
+    setTimeout(() => setVisualSaved(false), 2500);
+  };
+
   // ── Quick Access persistence ──────────────────────────────────────────────
   useEffect(() => {
     try { localStorage.setItem("milka_quick_access", JSON.stringify(quickAccessItems)); } catch {}
@@ -6821,7 +6871,17 @@ export default function App() {
     const loadCourses = async () => {
       try {
         const courses = await fetchMenuCourses();
-        if (mounted && courses.length > 0) setMenuCourses(courses);
+        if (mounted && courses.length > 0) {
+          setMenuCourses(courses);
+          // Auto-generate visual layout from courses if none stored yet
+          if (!visualLayoutRef.current?.leftColumn?.length) {
+            const layout = buildDefaultLayout(courses);
+            if (mounted) {
+              setVisualLayout(layout);
+              try { localStorage.setItem("milka_visual_layout", JSON.stringify(layout)); } catch {}
+            }
+          }
+        }
       } catch (error) {
         console.warn("Menu courses fetch failed:", error);
       }
@@ -6980,6 +7040,11 @@ export default function App() {
         menuCourses={menuCourses}
         onUpdateMenuCourses={setMenuCourses}
         onSaveMenuCourses={saveMenuCourses}
+        visualLayout={visualLayout}
+        onUpdateVisualLayout={setVisualLayout}
+        onSaveVisualLayout={saveVisualLayout}
+        visualSaving={visualSaving}
+        visualSaved={visualSaved}
         dishes={dishes}
         onUpdateDishes={setDishes}
         wines={wines}

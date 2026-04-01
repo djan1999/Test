@@ -26,6 +26,12 @@ export default function AdminLayout({
   menuCourses,
   onUpdateMenuCourses,
   onSaveMenuCourses,
+  // Visual layout (block-based builder)
+  visualLayout,
+  onUpdateVisualLayout,
+  onSaveVisualLayout,
+  visualSaving,
+  visualSaved,
   // Dish data
   dishes,
   onUpdateDishes,
@@ -124,11 +130,11 @@ export default function AdminLayout({
         </nav>
 
         {/* Panel content */}
-        <main style={{ flex: 1, padding: "24px 32px", maxWidth: activeSection === "menu" ? 1200 : 900, overflowY: "auto" }}>
+        <main style={{ flex: 1, padding: "24px 32px", maxWidth: activeSection === "menu" ? 1400 : 900, overflowY: "auto" }}>
           {activeSection === "menu" && (
             <div>
               <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 20 }}>
-                MENU LAYOUT — course order, structure, positioning, print layout
+                MENU LAYOUT — visual layout builder · course editor · print layout
               </div>
               <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
                 <button
@@ -137,7 +143,7 @@ export default function AdminLayout({
                     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
                     border: "1px solid #1a1a1a", borderRadius: 2, cursor: "default",
                     background: "#1a1a1a", color: "#fff",
-                  }}>COURSES</button>
+                  }}>LAYOUT &amp; COURSES</button>
                 <button
                   onClick={() => setActiveSection("printlayout")}
                   style={{
@@ -150,6 +156,11 @@ export default function AdminLayout({
                 menuCourses={menuCourses}
                 onUpdateCourses={onUpdateMenuCourses}
                 onSaveCourses={onSaveMenuCourses}
+                visualLayout={visualLayout}
+                onUpdateVisualLayout={onUpdateVisualLayout}
+                onSaveVisualLayout={onSaveVisualLayout}
+                visualSaving={visualSaving}
+                visualSaved={visualSaved}
               />
             </div>
           )}
