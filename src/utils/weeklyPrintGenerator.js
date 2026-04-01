@@ -18,7 +18,7 @@ body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;-webkit-print-
 @media print{body{margin:0;}}
 table{width:100%;border-collapse:collapse;}
 tr{page-break-inside:avoid;}
-th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:left;font-size:8.5pt;color:#000;font-weight:700;}
+th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:center;font-size:8.5pt;color:#000;font-weight:700;}
 th{text-align:center;background:#fff;}
 .date-row td{background:#f0f0f0;}
 u{text-decoration:underline;color:#000;}
