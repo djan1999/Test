@@ -49,7 +49,7 @@ th{text-align:center;}
 .center{text-align:center;}
 .highlight{background:#edf7ef;}
 .course-name{text-transform:uppercase;font-size:${baseFontPt}pt;}
-.course-sub{font-size:${courseSubPt}pt;color:#555;font-style:italic;font-weight:400;}
+.course-sub{font-size:${courseSubPt}pt;color:#555;font-weight:400;}
 .resv-cell{font-size:${baseFontPt}pt;line-height:1.15;}
 </style></head><body>${bodyHtml}</body></html>`;
 };
