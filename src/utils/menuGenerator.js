@@ -203,6 +203,11 @@ export function generateMenuHTML({
   topRightItems.forEach(item => rows.push({ type: "wine-only", right: fmtDrinkParts(item) }));
   const topRightEnd = rows.length; // position after top bottle rows, before course rows
 
+  // Reserve first aperitivo for a dedicated row above the first course
+  const aperitifRow = aperitivoQueue.length > 0
+    ? { type: "wine-only", right: fmtDrinkParts(aperitivoQueue.shift()) }
+    : null;
+
   let insertedPairingLabel = false;
   let courseRowsSeen = 0;
 
@@ -300,12 +305,22 @@ export function generateMenuHTML({
     courseRowsSeen += 1;
   });
 
+  // Insert aperitif row right before the first course row
+  if (aperitifRow) {
+    const firstCourseIdx = rows.findIndex(r => r.type === "course");
+    if (firstCourseIdx >= 0) {
+      rows.splice(firstCourseIdx, 0, aperitifRow);
+    } else {
+      rows.push(aperitifRow);
+    }
+  }
+
   const aperitivoLeftovers = [];
   while (aperitivoQueue.length > 0) {
     aperitivoLeftovers.push({ type: "wine-only", right: fmtDrinkParts(aperitivoQueue.shift()) });
   }
   if (aperitivoLeftovers.length > 0) {
-    rows.splice(topRightEnd, 0, ...aperitivoLeftovers);
+    rows.splice(topRightEnd + (aperitifRow ? 1 : 0), 0, ...aperitivoLeftovers);
   }
   while (glassByGlassQueue.length > 0) {
     rows.push({ type: "wine-only", right: fmtDrinkParts(glassByGlassQueue.shift()) });

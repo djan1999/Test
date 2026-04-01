@@ -275,7 +275,7 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
         const parts = [];
         if (kcNote.name) parts.push(esc(kcNote.name));
         if (kcNote.note) parts.push(esc(kcNote.note));
-        body += `<td class="resv-cell highlight"><span class="red">${parts.join("<br>")}</span></td>`;
+        body += `<td class="resv-cell highlight">${parts.join("<br>")}</td>`;
         return;
       }
 
