@@ -48,16 +48,26 @@ export function makeBlockId(type = "block") {
 
 export function buildDefaultLayout(menuCourses = []) {
   const sorted = [...menuCourses].sort((a, b) => (a.position || 0) - (b.position || 0));
-  return {
-    leftColumn: sorted.map(c => ({
+
+  const leftColumn = [];
+  sorted.forEach(c => {
+    // Preserve any existing section gap as a spacer block
+    if (c.section_gap_before) {
+      leftColumn.push({ id: makeBlockId("spacer"), type: "spacer", size: "md" });
+    }
+    leftColumn.push({
       id: makeBlockId("course"),
       type: "course",
       courseKey: c.course_key || "",
-    })),
+    });
+  });
+
+  return {
+    leftColumn,
     rightColumn: [
-      { id: "pairing_main",      type: "pairing",     text: "Wine / Pairing" },
-      { id: "byglass_main",      type: "byGlass" },
-      { id: "quickaccess_main",  type: "quickAccess" },
+      { id: "pairing_main",     type: "pairing",     text: "Wine / Pairing" },
+      { id: "byglass_main",     type: "byGlass" },
+      { id: "quickaccess_main", type: "quickAccess" },
     ],
   };
 }

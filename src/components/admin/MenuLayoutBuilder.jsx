@@ -25,7 +25,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { FONT, baseInp } from "./adminStyles.js";
-import { BLOCK_TYPES, SPACER_SIZES, makeBlockId } from "../../utils/visualLayout.js";
+import { BLOCK_TYPES, SPACER_SIZES, makeBlockId, buildDefaultLayout } from "../../utils/visualLayout.js";
 import { generateMenuHTML } from "../../utils/menuGenerator.js";
 import MenuLayoutCanvas from "./MenuLayoutCanvas.jsx";
 
@@ -562,21 +562,39 @@ export default function MenuLayoutBuilder({
             Menu Layout Builder
           </div>
           <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", letterSpacing: 1, marginTop: 2 }}>
-            SINGLE SOURCE OF TRUTH · DRAG IN CANVAS · CLICK BLOCK TO CONFIGURE · SAVE APPLIES ORDER
+            DRAG TO REORDER · ⠿ HANDLE ON EACH BLOCK · ⚙ TO CONFIGURE · × TO REMOVE · SAVE APPLIES ORDER
           </div>
         </div>
-        <button
-          onClick={onSaveLayout}
-          disabled={saving}
-          style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "8px 20px",
-            border: `1px solid ${saved ? "#4a9a6a" : "#4b4b88"}`,
-            borderRadius: 4, cursor: saving ? "default" : "pointer",
-            background: saved ? "#4a9a6a" : "#4b4b88", color: "#fff", fontWeight: 600,
-          }}
-        >
-          {saving ? "SAVING..." : saved ? "✓ SAVED" : "SAVE LAYOUT"}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {menuCourses.length > 0 && (
+            <button
+              onClick={() => {
+                if (!window.confirm("Rebuild layout from current courses? This resets all manual block placement but preserves spacers from section gaps.")) return;
+                const fresh = buildDefaultLayout(menuCourses);
+                setLeftColumn(fresh.leftColumn);
+                setRightColumn(fresh.rightColumn);
+                propagate(fresh.leftColumn, fresh.rightColumn);
+              }}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "8px 14px",
+                border: "1px solid #e8e8e8", borderRadius: 4, cursor: "pointer",
+                background: "#fff", color: "#888",
+              }}
+            >↺ REBUILD FROM COURSES</button>
+          )}
+          <button
+            onClick={onSaveLayout}
+            disabled={saving}
+            style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "8px 20px",
+              border: `1px solid ${saved ? "#4a9a6a" : "#4b4b88"}`,
+              borderRadius: 4, cursor: saving ? "default" : "pointer",
+              background: saved ? "#4a9a6a" : "#4b4b88", color: "#fff", fontWeight: 600,
+            }}
+          >
+            {saving ? "SAVING..." : saved ? "✓ SAVED" : "SAVE LAYOUT"}
+          </button>
+        </div>
       </div>
 
       {/* ── Three-panel layout ───────────────────────────────────────────── */}

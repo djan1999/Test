@@ -150,7 +150,11 @@ function renderContent(block, menuCourses) {
 function SortableCanvasBlock({ block, menuCourses, isSelected, onSelect, onRemove }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id });
   const cfg = BLOCK_TYPES[block.type] || {};
-  const isStructural = block.type === "spacer" || block.type === "divider";
+  const accentColor = cfg.color || "#888";
+  const isSpacer  = block.type === "spacer";
+  const isDivider = block.type === "divider";
+  const isHeading = block.type === "heading";
+  const isInline  = isSpacer || isDivider || isHeading;
 
   return (
     <div
@@ -159,88 +163,151 @@ function SortableCanvasBlock({ block, menuCourses, isSelected, onSelect, onRemov
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0 : 1,
-        marginBottom: isStructural ? 2 : 5,
+        marginBottom: isInline ? 3 : 6,
       }}
     >
-      <div
-        onClick={() => onSelect(block.id)}
-        style={{
-          position: "relative",
-          padding: isStructural ? "5px 8px" : "8px 10px",
-          borderRadius: isStructural ? 2 : 5,
-          background: isSelected
-            ? `${cfg.color}10`
-            : isStructural ? "transparent" : "#ffffff",
-          border: isSelected
-            ? `1.5px solid ${cfg.color}55`
-            : isStructural ? "none" : "1px solid #e8e4dc",
-          borderLeft: isStructural
-            ? "none"
-            : `3px solid ${isSelected ? cfg.color : (cfg.color || "#888") + "55"}`,
-          boxShadow: isSelected
-            ? `0 0 0 2px ${cfg.color}18, 0 2px 8px rgba(0,0,0,0.06)`
-            : isStructural ? "none" : "0 1px 3px rgba(0,0,0,0.04)",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          minHeight: isStructural ? undefined : 38,
-          transition: "border-color 0.1s, background 0.1s, box-shadow 0.1s",
-        }}
-      >
-        {/* Drag handle */}
-        <div
-          {...attributes}
-          {...listeners}
-          onClick={e => e.stopPropagation()}
-          style={{
-            cursor: "grab",
-            color: isSelected ? (cfg.color || "#888") + "88" : "#ccc8c0",
-            fontSize: 14,
-            flexShrink: 0,
-            touchAction: "none",
-            padding: "0 1px",
-            lineHeight: 1,
-          }}
-          title="Drag to reorder"
-        >⠿</div>
+      {isInline ? (
+        /* ── Compact inline blocks (spacer, divider, heading) ── */
+        <div style={{
+          display: "flex", alignItems: "center", gap: 0,
+          background: isSelected ? `${accentColor}12` : "#f7f5f0",
+          border: `1px solid ${isSelected ? accentColor + "55" : "#e4e0d8"}`,
+          borderRadius: 4,
+          overflow: "hidden",
+        }}>
+          {/* Drag handle strip */}
+          <div
+            {...attributes}
+            {...listeners}
+            onClick={e => e.stopPropagation()}
+            style={{
+              cursor: "grab",
+              padding: "5px 8px",
+              color: "#aaa",
+              fontSize: 13,
+              flexShrink: 0,
+              touchAction: "none",
+              borderRight: "1px solid #e4e0d8",
+              alignSelf: "stretch",
+              display: "flex",
+              alignItems: "center",
+              background: "transparent",
+            }}
+            title="Drag to reorder"
+          >⠿</div>
 
-        {/* Block content */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {renderContent(block, menuCourses)}
+          {/* Content */}
+          <div style={{ flex: 1, padding: "5px 10px" }}>
+            {renderContent(block, menuCourses)}
+          </div>
+
+          {/* Config + remove — always visible */}
+          <div style={{ display: "flex", alignItems: "center", borderLeft: "1px solid #e4e0d8" }}>
+            <button
+              onClick={e => { e.stopPropagation(); onSelect(block.id); }}
+              title="Configure"
+              style={{
+                background: isSelected ? `${accentColor}18` : "none",
+                border: "none", cursor: "pointer",
+                color: isSelected ? accentColor : "#bbb",
+                fontSize: 11, padding: "5px 7px", lineHeight: 1,
+              }}
+            >⚙</button>
+            <button
+              onClick={e => { e.stopPropagation(); onRemove(block.id); }}
+              title="Remove"
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: "#ccc", fontSize: 15, padding: "5px 7px", lineHeight: 1,
+                borderLeft: "1px solid #e4e0d8",
+              }}
+            >×</button>
+          </div>
         </div>
-
-        {/* Action buttons — fade in on hover */}
+      ) : (
+        /* ── Standard content blocks (course, pairing, byGlass, quickAccess) ── */
         <div
-          className="canvas-block-actions"
+          onClick={() => onSelect(block.id)}
           style={{
-            display: "flex",
-            gap: 1,
-            flexShrink: 0,
-            opacity: isSelected ? 1 : 0,
-            transition: "opacity 0.12s",
+            display: "flex", alignItems: "stretch",
+            borderRadius: 6,
+            border: `1.5px solid ${isSelected ? accentColor : "#e4e0d8"}`,
+            background: isSelected ? `${accentColor}0d` : "#ffffff",
+            boxShadow: isSelected
+              ? `0 0 0 3px ${accentColor}20, 0 2px 8px rgba(0,0,0,0.06)`
+              : "0 1px 3px rgba(0,0,0,0.05)",
+            cursor: "pointer",
+            overflow: "hidden",
+            transition: "border-color 0.12s, background 0.12s, box-shadow 0.12s",
+            minHeight: 44,
           }}
-          onMouseEnter={e => e.currentTarget.style.opacity = "1"}
-          onMouseLeave={e => e.currentTarget.style.opacity = isSelected ? "1" : "0"}
         >
-          <button
-            onClick={e => { e.stopPropagation(); onSelect(block.id); }}
-            title="Configure"
+          {/* Left accent bar + drag handle */}
+          <div
+            {...attributes}
+            {...listeners}
+            onClick={e => e.stopPropagation()}
             style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: cfg.color || "#888", fontSize: 11, padding: "2px 4px", lineHeight: 1,
+              cursor: "grab",
+              width: 28,
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: isSelected ? accentColor : `${accentColor}22`,
+              color: isSelected ? "rgba(255,255,255,0.8)" : accentColor,
+              fontSize: 14,
+              touchAction: "none",
+              borderRight: `1px solid ${isSelected ? "transparent" : `${accentColor}22`}`,
+              transition: "background 0.12s",
+              userSelect: "none",
             }}
-          >⚙</button>
-          <button
-            onClick={e => { e.stopPropagation(); onRemove(block.id); }}
-            title="Remove block"
-            style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: "#bbb8b0", fontSize: 14, padding: "2px 4px", lineHeight: 1,
-            }}
-          >×</button>
+            title="Drag to reorder"
+          >⠿</div>
+
+          {/* Block content */}
+          <div style={{ flex: 1, minWidth: 0, padding: "9px 12px", display: "flex", alignItems: "center" }}>
+            {renderContent(block, menuCourses)}
+          </div>
+
+          {/* Config + remove — always visible */}
+          <div style={{
+            display: "flex", flexDirection: "column",
+            borderLeft: `1px solid ${isSelected ? `${accentColor}33` : "#ede9e0"}`,
+            flexShrink: 0,
+          }}>
+            <button
+              onClick={e => { e.stopPropagation(); onSelect(block.id); }}
+              title="Configure"
+              style={{
+                flex: 1,
+                background: isSelected ? `${accentColor}12` : "#fafaf8",
+                border: "none",
+                borderBottom: `1px solid ${isSelected ? `${accentColor}22` : "#ede9e0"}`,
+                cursor: "pointer",
+                color: isSelected ? accentColor : "#bbb",
+                fontSize: 11,
+                padding: "0 9px",
+                lineHeight: 1,
+              }}
+            >⚙</button>
+            <button
+              onClick={e => { e.stopPropagation(); onRemove(block.id); }}
+              title="Remove"
+              style={{
+                flex: 1,
+                background: "#fafaf8",
+                border: "none",
+                cursor: "pointer",
+                color: "#ccc",
+                fontSize: 15,
+                padding: "0 9px",
+                lineHeight: 1,
+              }}
+            >×</button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -328,12 +395,19 @@ export default function MenuLayoutCanvas({
     }}>
       {/* Canvas label */}
       <div style={{
-        fontFamily: FONT, fontSize: 7, letterSpacing: 3.5,
-        color: "#c0bcb4", textTransform: "uppercase",
-        textAlign: "center", marginBottom: 16,
-        paddingBottom: 10, borderBottom: "1px solid #ece8e0",
+        fontFamily: FONT, fontSize: 7, letterSpacing: 3,
+        color: "#b8b4ac", textTransform: "uppercase",
+        marginBottom: 16, paddingBottom: 10,
+        borderBottom: "1px solid #ece8e0",
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
       }}>
-        Menu Canvas — drag blocks to arrange · click to configure
+        <span>Menu Canvas</span>
+        <span style={{ color: "#d8d4cc" }}>·</span>
+        <span>⠿ drag to reorder</span>
+        <span style={{ color: "#d8d4cc" }}>·</span>
+        <span>⚙ configure</span>
+        <span style={{ color: "#d8d4cc" }}>·</span>
+        <span>× remove</span>
       </div>
 
       {/* Two-column layout */}
@@ -345,9 +419,9 @@ export default function MenuLayoutCanvas({
           selectedId={selectedId}
           onSelect={onSelect}
           onRemove={onRemove}
-          label="Left — Course Structure"
+          label="Left Column — Courses"
           accentColor="#4b4b88"
-          emptyHint="Drop course, spacer or heading blocks here"
+          emptyHint="Use ↺ REBUILD FROM COURSES to populate, or add blocks from the palette"
         />
         <CanvasZone
           id="rightColumn"
@@ -356,9 +430,9 @@ export default function MenuLayoutCanvas({
           selectedId={selectedId}
           onSelect={onSelect}
           onRemove={onRemove}
-          label="Right — Beverage"
+          label="Right Column — Beverage"
           accentColor="#c8a06e"
-          emptyHint="Drop pairing, by-glass or quick access blocks here"
+          emptyHint="Add Pairing, By the Glass, or Quick Access blocks from the palette"
         />
       </div>
     </div>
