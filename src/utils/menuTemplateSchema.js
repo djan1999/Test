@@ -8,9 +8,30 @@
  *   rows: RowDef[],
  * }
  *
- * RowDef:  { id: string, left: BlockDef | null, right: BlockDef | null }
+ * RowDef: {
+ *   id: string,
+ *   left: BlockDef | null,
+ *   right: BlockDef | null,
+ *   widthPreset?: string,   // "left/right" column widths, e.g. "55/45"
+ *   gap?: number,           // extra vertical gap above this row in pt
+ * }
  * BlockDef: { type: string, ...typeSpecificFields }
  */
+
+// ── Column width presets ───────────────────────────────────────────────────────
+
+export const WIDTH_PRESETS = ["100/0", "70/30", "55/45", "50/50", "30/70", "0/100"];
+
+/**
+ * Parse a "left/right" preset string into fractional values for CSS grid.
+ * Returns { leftFr, rightFr } — suitable for minmax(0,Xfr) grid columns.
+ */
+export function parseWidthPreset(preset) {
+  const parts = String(preset || "55/45").split("/");
+  const l = Math.max(0, parseInt(parts[0], 10) || 55);
+  const r = Math.max(0, parseInt(parts[1], 10) || 45);
+  return { leftFr: l, rightFr: r };
+}
 
 // ── Block type metadata ───────────────────────────────────────────────────────
 
@@ -19,7 +40,9 @@ export const BLOCK_META = {
   course: {
     label: "Course",        group: "content", color: "#4b4b88", bg: "#f0f0f8", icon: "◈",
     desc: "Dish text for a specific course — respects seat restrictions",
-    fields: [{ key: "courseKey", label: "Course", type: "course_select" }],
+    fields: [
+      { key: "courseKey", label: "Course", type: "course_select" },
+    ],
     defaults: { courseKey: "" },
   },
   pairing: {
@@ -30,9 +53,12 @@ export const BLOCK_META = {
   },
   pairing_label: {
     label: "Pairing Label", group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "T",
-    desc: "Static section header before the pairing column begins — text editable",
-    fields: [{ key: "text", label: "Label text", type: "text", placeholder: "WINE PAIRING" }],
-    defaults: { text: "WINE PAIRING" },
+    desc: "Static section header before the pairing column — text editable",
+    fields: [
+      { key: "text",  label: "Label text", type: "text",   placeholder: "WINE PAIRING" },
+      { key: "align", label: "Alignment",  type: "select", options: ["left", "center", "right"] },
+    ],
+    defaults: { text: "WINE PAIRING", align: "right" },
   },
   by_the_glass: {
     label: "By the Glass",  group: "content", color: "#5a9e6e", bg: "#f0f8f2", icon: "◷",
@@ -57,14 +83,21 @@ export const BLOCK_META = {
   spacer: {
     label: "Spacer",        group: "layout", color: "#999", bg: "#f8f8f8", icon: "▫",
     desc: "Empty vertical space — height adjustable in points",
-    fields: [{ key: "height", label: "Height (pt)", type: "number", min: 0.5, max: 80, step: 0.5 }],
+    fields: [
+      { key: "height", label: "Height (pt)", type: "number", min: 0.5, max: 80, step: 0.5 },
+    ],
     defaults: { height: 8 },
   },
   divider: {
     label: "Divider",       group: "layout", color: "#888", bg: "#f4f4f4", icon: "—",
     desc: "Full-width horizontal rule",
-    fields: [],
-    defaults: {},
+    fields: [
+      { key: "thickness",    label: "Thickness (pt)",     type: "number", min: 0.25, max: 4,  step: 0.25 },
+      { key: "color",        label: "Color (hex)",         type: "text",   placeholder: "#cccccc" },
+      { key: "marginTop",    label: "Margin top (pt)",     type: "number", min: 0, max: 30, step: 0.5 },
+      { key: "marginBottom", label: "Margin bottom (pt)",  type: "number", min: 0, max: 30, step: 0.5 },
+    ],
+    defaults: { thickness: 0.5, color: "#cccccc", marginTop: 3, marginBottom: 3 },
   },
 
   // ── Static blocks — same on every menu ───────────────────────────────────
@@ -75,35 +108,52 @@ export const BLOCK_META = {
       { key: "size",    label: "Size (mm)",     type: "number", min: 4,   max: 30,  step: 0.5 },
       { key: "offsetX", label: "Offset X (mm)", type: "number", min: -10, max: 10,  step: 0.5 },
       { key: "offsetY", label: "Offset Y (mm)", type: "number", min: -10, max: 10,  step: 0.5 },
+      { key: "align",   label: "Alignment",     type: "select", options: ["left", "center", "right"] },
     ],
-    defaults: { size: 10.5, offsetX: 0, offsetY: 0 },
+    defaults: { size: 10.5, offsetX: 0, offsetY: 0, align: "right" },
   },
   title: {
     label: "Title",         group: "static", color: "#1a1a1a", bg: "#f8f8f8", icon: "T",
     desc: "Menu title text — editable",
-    fields: [{ key: "text", label: "Title text", type: "text", placeholder: "WINTER MENU" }],
-    defaults: { text: "WINTER MENU" },
+    fields: [
+      { key: "text",      label: "Title text",      type: "text",     placeholder: "WINTER MENU" },
+      { key: "fontSize",  label: "Font size (pt)",   type: "number",   min: 6,   max: 30,   step: 0.5 },
+      { key: "tracking",  label: "Tracking (em)",    type: "number",   min: 0,   max: 0.2,  step: 0.005 },
+      { key: "uppercase", label: "Uppercase",         type: "checkbox" },
+      { key: "align",     label: "Alignment",         type: "select",   options: ["left", "center", "right"] },
+    ],
+    defaults: { text: "WINTER MENU", fontSize: 13.9, tracking: 0.035, uppercase: true, align: "left" },
   },
   team: {
     label: "Team Names",    group: "static", color: "#555", bg: "#f4f4f4", icon: "◆",
-    desc: "Team names loaded from settings",
-    fields: [],
-    defaults: {},
+    desc: "Team names loaded from service settings",
+    fields: [
+      { key: "align",   label: "Alignment",          type: "select", options: ["left", "center", "right"] },
+      { key: "spacing", label: "Label spacing (pt)",  type: "number", min: 0, max: 10, step: 0.5 },
+    ],
+    defaults: { align: "left", spacing: 1.4 },
   },
   goodbye: {
     label: "Goodbye Note",  group: "static", color: "#555", bg: "#f4f4f4", icon: "◁",
     desc: "Thank-you / goodbye note — editable",
-    fields: [{ key: "text", label: "Note text", type: "textarea", placeholder: "Hvala za vaš obisk." }],
-    defaults: { text: "Hvala za vaš obisk." },
+    fields: [
+      { key: "text",     label: "Note text",      type: "textarea", placeholder: "Hvala za vaš obisk." },
+      { key: "fontSize", label: "Font size (pt)",  type: "number",   min: 5, max: 14, step: 0.25 },
+      { key: "align",    label: "Alignment",       type: "select",   options: ["left", "center", "right"] },
+    ],
+    defaults: { text: "Hvala za vaš obisk.", fontSize: 6.55, align: "left" },
   },
   text: {
     label: "Text",          group: "static", color: "#333", bg: "#f2f2f2", icon: "≡",
     desc: "Free text block — fully editable",
     fields: [
-      { key: "text", label: "Content", type: "textarea", placeholder: "Enter text..." },
-      { key: "bold", label: "Bold",    type: "checkbox" },
+      { key: "text",       label: "Content",        type: "textarea", placeholder: "Enter text..." },
+      { key: "bold",       label: "Bold",            type: "checkbox" },
+      { key: "fontSize",   label: "Font size (pt)",  type: "number",   min: 5,  max: 20, step: 0.25 },
+      { key: "lineHeight", label: "Line height",      type: "number",   min: 1,  max: 3,  step: 0.05 },
+      { key: "align",      label: "Alignment",        type: "select",   options: ["left", "center", "right"] },
     ],
-    defaults: { text: "", bold: false },
+    defaults: { text: "", bold: false, fontSize: null, lineHeight: null, align: "left" },
   },
 };
 
@@ -120,50 +170,66 @@ export function makeRowId(prefix = "row") {
   return `${prefix}_${Date.now()}_${_seq++}`;
 }
 
+/** Create a new block with all default fields for its type. */
 export function makeBlock(type) {
   const meta = BLOCK_META[type];
   if (!meta) return { type };
   return { type, ...(meta.defaults || {}) };
 }
 
+/** Create a new RowDef with optional cells, width preset and gap. */
+export function makeRow(left = null, right = null, widthPreset = "55/45", gap = 0) {
+  return { id: makeRowId("row"), left, right, widthPreset, gap };
+}
+
 // ── Default template from existing course data ────────────────────────────────
 
 /**
  * Builds the initial default template from the current menuCourses.
+ * Used for first-time setup and as an auto-migration fallback in generateMenuHTML.
+ *
  * Preserves section_gap_before and inserts the pairing label before danube_salmon.
  */
 export function buildDefaultTemplate(menuCourses = []) {
   const sorted = [...menuCourses].sort((a, b) => (a.position || 0) - (b.position || 0));
   const rows = [];
 
-  // Header: title left, logo right — matches current header div structure
+  // Header: title left, logo right
   rows.push({
     id: "hdr",
-    left:  { type: "title", text: "WINTER MENU" },
-    right: { type: "logo", size: 10.5, offsetX: 0, offsetY: 0 },
+    left:  makeBlock("title"),
+    right: makeBlock("logo"),
+    widthPreset: "55/45",
+    gap: 0,
   });
   rows.push({
     id: "hdr_gap",
     left:  { type: "spacer", height: 7 },
     right: null,
+    widthPreset: "100/0",
+    gap: 0,
   });
 
-  // Aperitif above first course (right side only — blank if none)
+  // Aperitif row above the first course
   rows.push({
     id: "aperitif_row",
     left:  null,
-    right: { type: "aperitif" },
+    right: makeBlock("aperitif"),
+    widthPreset: "55/45",
+    gap: 0,
   });
 
   sorted.forEach((course, idx) => {
     const ck = course.course_key || `course_${idx}`;
 
-    // Section gap spacer
+    // Section gap spacer (e.g. before danube_salmon or sheep_cheese)
     if (course.section_gap_before && idx > 0) {
       rows.push({
         id: makeRowId("gap"),
         left:  { type: "spacer", height: 14.5 },
         right: null,
+        widthPreset: "100/0",
+        gap: 0,
       });
     }
 
@@ -172,20 +238,24 @@ export function buildDefaultTemplate(menuCourses = []) {
       rows.push({
         id: "pairing_label_row",
         left:  null,
-        right: { type: "pairing_label", text: "WINE PAIRING" },
+        right: makeBlock("pairing_label"),
+        widthPreset: "55/45",
+        gap: 0,
       });
     }
 
     rows.push({
       id: `course_${ck}`,
-      left:  { type: "course",  courseKey: ck },
-      right: { type: "pairing" },
+      left:  { type: "course", courseKey: ck },
+      right: makeBlock("pairing"),
+      widthPreset: "55/45",
+      gap: 0,
     });
   });
 
   // Footer
-  rows.push({ id: "goodbye_row", left: { type: "goodbye", text: "Hvala za vaš obisk." }, right: null });
-  rows.push({ id: "team_row",    left: { type: "team" },                                right: null });
+  rows.push({ id: "goodbye_row", left: makeBlock("goodbye"), right: null, widthPreset: "100/0", gap: 0 });
+  rows.push({ id: "team_row",    left: makeBlock("team"),    right: null, widthPreset: "100/0", gap: 0 });
 
   return { version: 2, rows };
 }

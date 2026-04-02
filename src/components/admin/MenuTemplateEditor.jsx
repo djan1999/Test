@@ -1,17 +1,20 @@
 /**
- * MenuTemplateEditor — row-based A5 canvas template editor for menu layout v2.
+ * MenuTemplateEditor — three-panel template editor for menu layout v2.
+ *
+ * Layout:
+ *   Left  (280px) : Row list editor — drag to reorder, add/delete/duplicate rows,
+ *                   per-row width preset and gap settings
+ *   Center (flex) : Live A5 preview iframe — renders the exact same HTML/CSS as
+ *                   the final print output via generateMenuHTML()
+ *   Right  (240px): Block inspector — type-specific field controls including a
+ *                   real course selector dropdown
  *
  * Template shape (saved to service_settings id: "menu_layout_v2"):
  *   { version: 2, rows: RowDef[] }
- *   RowDef: { id: string, left: BlockDef | null, right: BlockDef | null }
- *
- * Three-panel layout:
- *   Left:   block palette grouped by category
- *   Center: A5-proportioned canvas — draggable rows, two cells each
- *   Right:  inspector for the selected cell's block
+ *   RowDef: { id, left, right, widthPreset, gap }
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   DndContext, DragOverlay, PointerSensor, KeyboardSensor,
   useSensor, useSensors, closestCenter,
@@ -23,244 +26,275 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { FONT, baseInp } from "./adminStyles.js";
 import {
-  BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, buildDefaultTemplate,
+  BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
+  WIDTH_PRESETS,
 } from "../../utils/menuTemplateSchema.js";
+import { generateMenuHTML } from "../../utils/menuGenerator.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const GOLD = "#c8a96e";
-const CANVAS_BG = "#fdfcf8";
+const SELECTED_RING = "#4b4b88";
 const CELL_EMPTY_BG = "#f7f6f2";
 const CELL_EMPTY_BORDER = "#e4e2dc";
-const SELECTED_RING = "#4b4b88";
 
-// ── Block content preview ─────────────────────────────────────────────────────
+// Preview seat/table stubs — real courses + template drive the actual content
+const PREVIEW_SEAT = { id: 1, pairing: "Wine", extras: {}, glasses: [], cocktails: [], beers: [], aperitifs: [] };
+const PREVIEW_TABLE = { menuType: "full", restrictions: [], bottleWines: [], birthday: false };
 
-function BlockPreview({ block, menuCourses = [], logoDataUri }) {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function chipLabel(block, menuCourses) {
   if (!block) return null;
   const meta = BLOCK_META[block.type] || {};
-  const col = meta.color || "#888";
-
-  const tiny = { fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, textTransform: "uppercase" };
-  const label = { fontFamily: FONT, fontSize: 9, letterSpacing: 2, textTransform: "uppercase", fontWeight: 700 };
-  const body  = { fontFamily: FONT, fontSize: 9.5, color: "#333", lineHeight: 1.5 };
-
-  switch (block.type) {
-    case "course": {
-      const course = menuCourses.find(c => c.course_key === block.courseKey);
-      const name = course?.menu?.name || block.courseKey || "(no course)";
-      const desc = course?.menu?.description || "";
-      return (
-        <div>
-          <div style={{ ...label, color: "#1a1a1a" }}>{name}</div>
-          {desc && <div style={{ ...body, fontSize: 8.5, color: "#666", marginTop: 2 }}>{desc}</div>}
-        </div>
-      );
-    }
-    case "pairing":
-      return <div style={{ ...tiny, color: GOLD }}>◎ WINE / DRINK PAIRING</div>;
-    case "pairing_label":
-      return <div style={{ ...label, color: GOLD }}>{block.text || "WINE PAIRING"}</div>;
-    case "by_the_glass":
-      return <div style={{ ...tiny, color: "#5a9e6e" }}>◷ BY THE GLASS</div>;
-    case "bottle":
-      return <div style={{ ...tiny, color: "#5a9e6e" }}>◫ BOTTLE WINE</div>;
-    case "aperitif":
-      return <div style={{ ...tiny, color: "#7a6e9e" }}>◇ APERITIF</div>;
-    case "spacer":
-      return (
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <div style={{ flex: 1, borderTop: "1px dashed #ccc" }} />
-          <span style={{ ...tiny, color: "#aaa" }}>{block.height || 8}pt</span>
-          <div style={{ flex: 1, borderTop: "1px dashed #ccc" }} />
-        </div>
-      );
-    case "divider":
-      return <div style={{ borderTop: `1px solid ${col}`, width: "100%", margin: "2px 0" }} />;
-    case "logo":
-      return logoDataUri
-        ? <img src={logoDataUri} alt="logo" style={{ height: 22, objectFit: "contain" }} />
-        : <div style={{ ...tiny, color: "#bbb" }}>▣ LOGO</div>;
-    case "title":
-      return <div style={{ ...label, fontSize: 11, letterSpacing: 4, color: "#1a1a1a" }}>{block.text || "WINTER MENU"}</div>;
-    case "team":
-      return <div style={{ ...tiny, color: "#888" }}>◆ TEAM NAMES</div>;
-    case "goodbye":
-      return <div style={{ ...body, fontStyle: "italic", color: "#666" }}>{block.text || "Hvala za vaš obisk."}</div>;
-    case "text":
-      return <div style={{ ...body, fontWeight: block.bold ? 700 : 400 }}>{block.text || "(empty text)"}</div>;
-    default:
-      return <div style={{ ...tiny, color: "#999" }}>{meta.label || block.type}</div>;
+  let detail = "";
+  if (block.type === "course") {
+    const c = menuCourses.find(c => c.course_key === block.courseKey);
+    detail = c?.menu?.name || block.courseKey || "?";
+  } else if (block.type === "spacer") {
+    detail = `${block.height ?? 8}pt`;
+  } else if (block.type === "divider") {
+    detail = `${block.thickness ?? 0.5}pt`;
+  } else if (block.text) {
+    detail = block.text.slice(0, 16) + (block.text.length > 16 ? "…" : "");
   }
+  return `${meta.icon || ""} ${meta.label || block.type}${detail ? ` · ${detail}` : ""}`;
 }
 
-// ── Row cell ──────────────────────────────────────────────────────────────────
+// ── Block chip (in row list) ──────────────────────────────────────────────────
 
-function RowCell({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, menuCourses, logoDataUri }) {
+function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, menuCourses }) {
   const meta = block ? (BLOCK_META[block.type] || {}) : null;
-  const isEmpty = !block;
 
-  if (isEmpty) {
+  if (!block) {
     return (
       <div
         onClick={() => onAdd(rowId, side)}
         style={{
-          flex: side === "left" ? "0 0 55%" : "0 0 45%",
-          minHeight: 36, borderRadius: 3,
+          flex: 1, minWidth: 0, height: 28, borderRadius: 3,
           border: `1.5px dashed ${CELL_EMPTY_BORDER}`,
           background: CELL_EMPTY_BG,
           display: "flex", alignItems: "center", justifyContent: "center",
-          cursor: "pointer", transition: "all 0.12s",
+          cursor: "pointer",
         }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor = "#c8a96e"; e.currentTarget.style.background = "#fdf8f0"; }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor = CELL_EMPTY_BORDER; e.currentTarget.style.background = CELL_EMPTY_BG; }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = CELL_EMPTY_BORDER; }}
       >
-        <span style={{ fontFamily: FONT, fontSize: 11, color: "#ccc", fontWeight: 700 }}>+</span>
+        <span style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", fontWeight: 700 }}>+</span>
       </div>
     );
   }
 
   const accentCol = meta?.color || "#888";
-  const isLayout = meta?.group === "layout";
 
   return (
     <div
       onClick={() => onSelect(rowId, side)}
       style={{
-        flex: side === "left" ? "0 0 55%" : "0 0 45%",
-        borderRadius: 3, cursor: "pointer",
+        flex: 1, minWidth: 0, height: 28, borderRadius: 3, cursor: "pointer",
         border: `1.5px solid ${isSelected ? SELECTED_RING : "#e8e6e0"}`,
         background: isSelected ? "#f4f3fb" : (meta?.bg || "#fafafa"),
-        boxShadow: isSelected ? `0 0 0 2px ${SELECTED_RING}22` : "none",
-        display: "flex", flexDirection: "column",
-        transition: "all 0.1s", overflow: "hidden",
-        position: "relative",
+        display: "flex", alignItems: "center", gap: 0,
+        overflow: "hidden", position: "relative",
+        transition: "border-color 0.1s",
       }}
     >
-      {/* Accent strip */}
-      {!isLayout && (
-        <div style={{
-          position: "absolute", left: 0, top: 0, bottom: 0, width: 3,
-          background: accentCol, borderRadius: "3px 0 0 3px",
-        }} />
-      )}
-
-      {/* Content */}
-      <div style={{ padding: isLayout ? "5px 8px" : "7px 8px 7px 12px", flex: 1 }}>
-        <BlockPreview block={block} menuCourses={menuCourses} logoDataUri={logoDataUri} />
-      </div>
-
-      {/* Remove button */}
+      <div style={{ width: 3, alignSelf: "stretch", background: accentCol, flexShrink: 0 }} />
+      <span style={{
+        fontFamily: FONT, fontSize: 8, color: isSelected ? SELECTED_RING : "#444",
+        padding: "0 6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        flex: 1, letterSpacing: 0.3,
+      }}>
+        {chipLabel(block, menuCourses)}
+      </span>
       <button
         onClick={e => { e.stopPropagation(); onRemove(rowId, side); }}
         style={{
-          position: "absolute", top: 2, right: 2,
-          fontFamily: FONT, fontSize: 9, padding: "1px 4px",
-          border: "none", borderRadius: 2, cursor: "pointer",
-          background: "transparent", color: "#bbb",
-          lineHeight: 1,
+          flexShrink: 0, border: "none", background: "transparent",
+          cursor: "pointer", color: "#ccc", fontSize: 9, padding: "0 4px", height: "100%",
         }}
-        onMouseEnter={e => { e.currentTarget.style.color = "#e05050"; e.currentTarget.style.background = "#fff0f0"; }}
-        onMouseLeave={e => { e.currentTarget.style.color = "#bbb"; e.currentTarget.style.background = "transparent"; }}
+        onMouseEnter={e => { e.currentTarget.style.color = "#e05050"; }}
+        onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
       >×</button>
     </div>
   );
 }
 
-// ── Sortable row ──────────────────────────────────────────────────────────────
+// ── Row settings (width preset + gap) ────────────────────────────────────────
 
-function SortableRow({ row, selectedCell, onSelectCell, onRemoveBlock, onAddBlock, onRemoveRow, menuCourses, logoDataUri }) {
+function RowSettings({ row, onUpdate, onClose }) {
+  const current = row.widthPreset || "55/45";
+  const gap = row.gap ?? 0;
+
+  return (
+    <div style={{
+      padding: "10px 10px 10px 24px",
+      background: "#f8f7f3",
+      borderTop: "1px solid #ede9e0",
+    }}>
+      <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>
+        ROW SETTINGS
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontFamily: FONT, fontSize: 7.5, color: "#999", letterSpacing: 1, marginBottom: 4 }}>WIDTH</div>
+        <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+          {WIDTH_PRESETS.map(p => (
+            <button
+              key={p}
+              onClick={() => onUpdate({ ...row, widthPreset: p })}
+              style={{
+                fontFamily: FONT, fontSize: 7.5, padding: "3px 6px",
+                border: `1px solid ${current === p ? SELECTED_RING : "#ddd"}`,
+                borderRadius: 2, cursor: "pointer",
+                background: current === p ? "#f0f0f8" : "#fff",
+                color: current === p ? SELECTED_RING : "#666",
+                letterSpacing: 0,
+              }}
+            >{p}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ fontFamily: FONT, fontSize: 7.5, color: "#999", letterSpacing: 1 }}>GAP ABOVE (pt)</div>
+        <input
+          type="number"
+          value={gap}
+          min={0}
+          max={40}
+          step={0.5}
+          onChange={e => onUpdate({ ...row, gap: parseFloat(e.target.value) || 0 })}
+          style={{ ...baseInp, width: 50, fontSize: 10, padding: "2px 4px" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Sortable row (in left panel) ──────────────────────────────────────────────
+
+function SortableRow({
+  row, selectedCell, onSelectCell, onRemoveBlock, onAddBlock, onRemoveRow,
+  onDuplicateRow, onInsertAbove, onInsertBelow, onUpdateRow,
+  menuCourses,
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.id });
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.35 : 1,
+    opacity: isDragging ? 0.3 : 1,
   };
 
   const leftSelected  = selectedCell?.rowId === row.id && selectedCell?.side === "left";
   const rightSelected = selectedCell?.rowId === row.id && selectedCell?.side === "right";
 
   return (
-    <div ref={setNodeRef} style={{ ...style, display: "flex", alignItems: "stretch", gap: 6, marginBottom: 5 }}>
-      {/* Drag handle */}
-      <div
-        {...attributes} {...listeners}
-        style={{
-          width: 16, flexShrink: 0, cursor: "grab", borderRadius: 2,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: "#ccc", fontSize: 11, userSelect: "none",
-          background: isDragging ? "#e8e8e8" : "transparent",
-        }}
-        title="Drag to reorder"
-      >⋮⋮</div>
+    <div ref={setNodeRef} style={{ ...style, marginBottom: 2 }}>
+      {/* Row strip */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 4,
+        padding: "3px 4px",
+        background: (leftSelected || rightSelected) ? "#f4f3fb" : "#fff",
+        border: `1px solid ${(leftSelected || rightSelected) ? "#c8c6e8" : "#ede9e0"}`,
+        borderRadius: settingsOpen ? "3px 3px 0 0" : 3,
+      }}>
+        {/* Drag handle */}
+        <div
+          {...attributes} {...listeners}
+          style={{
+            width: 14, cursor: "grab", color: "#ccc", fontSize: 10,
+            userSelect: "none", textAlign: "center", flexShrink: 0,
+          }}
+          title="Drag to reorder"
+        >⋮⋮</div>
 
-      {/* Left cell */}
-      <RowCell
-        block={row.left}
-        rowId={row.id}
-        side="left"
-        isSelected={leftSelected}
-        onSelect={onSelectCell}
-        onRemove={onRemoveBlock}
-        onAdd={onAddBlock}
-        menuCourses={menuCourses}
-        logoDataUri={logoDataUri}
-      />
+        {/* Left chip */}
+        <BlockChip
+          block={row.left} rowId={row.id} side="left"
+          isSelected={leftSelected}
+          onSelect={onSelectCell} onRemove={onRemoveBlock} onAdd={onAddBlock}
+          menuCourses={menuCourses}
+        />
 
-      {/* Right cell */}
-      <RowCell
-        block={row.right}
-        rowId={row.id}
-        side="right"
-        isSelected={rightSelected}
-        onSelect={onSelectCell}
-        onRemove={onRemoveBlock}
-        onAdd={onAddBlock}
-        menuCourses={menuCourses}
-        logoDataUri={logoDataUri}
-      />
+        {/* Width indicator */}
+        <span style={{
+          fontFamily: FONT, fontSize: 7, color: "#bbb", letterSpacing: 0,
+          flexShrink: 0, minWidth: 30, textAlign: "center",
+        }}>{row.widthPreset || "55/45"}</span>
 
-      {/* Delete row button */}
-      <button
-        onClick={() => onRemoveRow(row.id)}
-        style={{
-          width: 20, flexShrink: 0, border: "none", background: "transparent",
-          cursor: "pointer", color: "#ddd", fontSize: 13, borderRadius: 2,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          padding: 0,
-        }}
-        title="Delete row"
-        onMouseEnter={e => { e.currentTarget.style.color = "#e05050"; e.currentTarget.style.background = "#fff0f0"; }}
-        onMouseLeave={e => { e.currentTarget.style.color = "#ddd"; e.currentTarget.style.background = "transparent"; }}
-      >⊗</button>
+        {/* Right chip */}
+        <BlockChip
+          block={row.right} rowId={row.id} side="right"
+          isSelected={rightSelected}
+          onSelect={onSelectCell} onRemove={onRemoveBlock} onAdd={onAddBlock}
+          menuCourses={menuCourses}
+        />
+
+        {/* Action buttons */}
+        <div style={{ display: "flex", gap: 1, flexShrink: 0 }}>
+          <RowActionBtn title="Insert row above" onClick={() => onInsertAbove(row.id)}>↑</RowActionBtn>
+          <RowActionBtn title="Insert row below" onClick={() => onInsertBelow(row.id)}>↓</RowActionBtn>
+          <RowActionBtn title="Duplicate row" onClick={() => onDuplicateRow(row.id)}>⎘</RowActionBtn>
+          <RowActionBtn title="Row settings" onClick={() => setSettingsOpen(v => !v)} active={settingsOpen}>⚙</RowActionBtn>
+          <RowActionBtn title="Delete row" onClick={() => onRemoveRow(row.id)} danger>⊗</RowActionBtn>
+        </div>
+      </div>
+
+      {/* Inline row settings */}
+      {settingsOpen && (
+        <RowSettings row={row} onUpdate={onUpdateRow} onClose={() => setSettingsOpen(false)} />
+      )}
     </div>
   );
 }
 
-// ── Drag overlay row (ghost while dragging) ───────────────────────────────────
+function RowActionBtn({ children, onClick, title, danger = false, active = false }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <button
+      onClick={onClick} title={title}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        width: 20, height: 22, border: "none", borderRadius: 2, cursor: "pointer",
+        fontFamily: FONT, fontSize: 10, padding: 0, lineHeight: 1,
+        background: active ? "#f0f0f8" : hov ? (danger ? "#fff0f0" : "#f4f3fb") : "transparent",
+        color: active ? SELECTED_RING : hov ? (danger ? "#e05050" : SELECTED_RING) : "#bbb",
+        transition: "all 0.1s",
+      }}
+    >{children}</button>
+  );
+}
+
+// ── Drag overlay ──────────────────────────────────────────────────────────────
 
 function OverlayRow({ row }) {
   return (
     <div style={{
-      display: "flex", alignItems: "center", gap: 6,
-      background: "#fff", border: "1.5px solid #4b4b88",
-      borderRadius: 4, padding: "6px 8px", opacity: 0.9,
-      boxShadow: "0 4px 16px rgba(75,75,136,0.18)",
+      background: "#fff", border: `1.5px solid ${SELECTED_RING}`, borderRadius: 3,
+      padding: "5px 10px", opacity: 0.9, boxShadow: "0 4px 16px rgba(75,75,136,0.18)",
+      fontFamily: FONT, fontSize: 8.5, color: SELECTED_RING, letterSpacing: 1,
     }}>
-      <span style={{ fontFamily: FONT, fontSize: 9, color: "#4b4b88", letterSpacing: 1 }}>
-        {row.left ? (BLOCK_META[row.left.type]?.label || row.left.type) : "—"}
-        {" / "}
-        {row.right ? (BLOCK_META[row.right.type]?.label || row.right.type) : "—"}
-      </span>
+      {row.left ? (BLOCK_META[row.left.type]?.label || row.left.type) : "—"}
+      {" · "}
+      {row.right ? (BLOCK_META[row.right.type]?.label || row.right.type) : "—"}
     </div>
   );
 }
 
 // ── Block picker modal ────────────────────────────────────────────────────────
 
-function BlockPickerModal({ onPick, onClose }) {
-  const [hoveredType, setHoveredType] = useState(null);
+function BlockPickerModal({ onPick, onClose, menuCourses }) {
+  const [hov, setHov] = useState(null);
+  const [filter, setFilter] = useState("");
+
+  const filtered = filter.trim()
+    ? Object.entries(BLOCK_META).filter(([t, m]) =>
+        m.label.toLowerCase().includes(filter.toLowerCase()) ||
+        m.desc.toLowerCase().includes(filter.toLowerCase()) ||
+        t.includes(filter.toLowerCase()))
+    : null;
 
   return (
     <div
@@ -273,60 +307,74 @@ function BlockPickerModal({ onPick, onClose }) {
     >
       <div
         style={{
-          background: "#fff", borderRadius: 6, padding: "24px 28px",
-          width: 520, maxHeight: "80vh", overflowY: "auto",
-          boxShadow: "0 8px 40px rgba(0,0,0,0.2)",
-          fontFamily: FONT,
+          background: "#fff", borderRadius: 6, padding: "20px 24px",
+          width: 500, maxHeight: "75vh", overflowY: "auto",
+          boxShadow: "0 8px 40px rgba(0,0,0,0.2)", fontFamily: FONT,
         }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 20 }}>
-          <span style={{ fontSize: 10, letterSpacing: 3, textTransform: "uppercase", color: "#1a1a1a", fontWeight: 700 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
+          <span style={{ fontSize: 9, letterSpacing: 3, textTransform: "uppercase", color: "#1a1a1a", fontWeight: 700 }}>
             ADD BLOCK
           </span>
           <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 16, color: "#bbb" }}>×</button>
         </div>
 
-        {BLOCK_GROUPS.map(group => (
-          <div key={group.id} style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 8, letterSpacing: 3, color: "#bbb", textTransform: "uppercase", marginBottom: 10 }}>
-              {group.label}
-              <span style={{ marginLeft: 8, fontSize: 7.5, color: "#ddd", letterSpacing: 1 }}>{group.desc}</span>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              {Object.entries(BLOCK_META)
-                .filter(([, m]) => m.group === group.id)
-                .map(([type, meta]) => (
+        <input
+          autoFocus
+          type="text"
+          placeholder="Filter blocks…"
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          style={{ ...baseInp, width: "100%", marginBottom: 14, fontSize: 11 }}
+        />
+
+        {(filtered ? [{ id: "search", label: "Results", desc: "" }] : BLOCK_GROUPS).map(group => {
+          const entries = filtered
+            ? filtered
+            : Object.entries(BLOCK_META).filter(([, m]) => m.group === group.id);
+          if (entries.length === 0) return null;
+          return (
+            <div key={group.id} style={{ marginBottom: 16 }}>
+              {!filtered && (
+                <div style={{ fontSize: 7.5, letterSpacing: 3, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>
+                  {group.label}
+                  <span style={{ marginLeft: 8, fontSize: 7, color: "#ddd", letterSpacing: 1 }}>{group.desc}</span>
+                </div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
+                {entries.map(([type, meta]) => (
                   <button
                     key={type}
                     onClick={() => onPick(type)}
-                    onMouseEnter={() => setHoveredType(type)}
-                    onMouseLeave={() => setHoveredType(null)}
+                    onMouseEnter={() => setHov(type)}
+                    onMouseLeave={() => setHov(null)}
                     style={{
-                      display: "flex", alignItems: "center", gap: 10,
-                      padding: "10px 12px", border: "1.5px solid",
-                      borderColor: hoveredType === type ? meta.color : "#eeeceb",
+                      display: "flex", alignItems: "center", gap: 9,
+                      padding: "9px 11px", border: "1.5px solid",
+                      borderColor: hov === type ? meta.color : "#eeeceb",
                       borderRadius: 4, cursor: "pointer",
-                      background: hoveredType === type ? (meta.bg || "#f8f8f8") : "#fafafa",
+                      background: hov === type ? (meta.bg || "#f8f8f8") : "#fafafa",
                       textAlign: "left", transition: "all 0.1s",
                     }}
                   >
-                    <span style={{ fontSize: 14, color: meta.color, width: 20, textAlign: "center", flexShrink: 0 }}>
+                    <span style={{ fontSize: 13, color: meta.color, width: 18, textAlign: "center", flexShrink: 0 }}>
                       {meta.icon}
                     </span>
                     <div>
-                      <div style={{ fontSize: 9, letterSpacing: 1, fontWeight: 700, color: "#1a1a1a", marginBottom: 2 }}>
+                      <div style={{ fontSize: 8.5, letterSpacing: 0.5, fontWeight: 700, color: "#1a1a1a", marginBottom: 2 }}>
                         {meta.label}
                       </div>
-                      <div style={{ fontSize: 7.5, color: "#999", lineHeight: 1.4, letterSpacing: 0 }}>
+                      <div style={{ fontSize: 7, color: "#999", lineHeight: 1.4 }}>
                         {meta.desc}
                       </div>
                     </div>
                   </button>
                 ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -334,23 +382,50 @@ function BlockPickerModal({ onPick, onClose }) {
 
 // ── Block inspector (right panel) ─────────────────────────────────────────────
 
-function BlockInspector({ block, onUpdate }) {
+function AlignButtons({ value, onChange }) {
+  const opts = [
+    { v: "left",   icon: "⟵" },
+    { v: "center", icon: "↔" },
+    { v: "right",  icon: "⟶" },
+  ];
+  return (
+    <div style={{ display: "flex", gap: 3 }}>
+      {opts.map(o => (
+        <button
+          key={o.v}
+          onClick={() => onChange(o.v)}
+          title={o.v}
+          style={{
+            width: 32, height: 26, border: `1px solid ${value === o.v ? SELECTED_RING : "#ddd"}`,
+            borderRadius: 2, cursor: "pointer", fontFamily: FONT, fontSize: 11,
+            background: value === o.v ? "#f0f0f8" : "#fff",
+            color: value === o.v ? SELECTED_RING : "#666",
+          }}
+        >{o.icon}</button>
+      ))}
+    </div>
+  );
+}
+
+function BlockInspector({ block, onUpdate, menuCourses }) {
   if (!block) return (
-    <div style={{ fontFamily: FONT, fontSize: 9, color: "#ccc", letterSpacing: 1, padding: "20px 0", textAlign: "center" }}>
-      SELECT A CELL TO CONFIGURE
+    <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#ccc", letterSpacing: 1, padding: "24px 0", textAlign: "center", lineHeight: 2 }}>
+      SELECT A CELL<br />TO CONFIGURE
     </div>
   );
 
   const meta = BLOCK_META[block.type] || {};
   const fields = meta.fields || [];
 
+  const setField = (key, val) => onUpdate({ ...block, [key]: val });
+
   if (fields.length === 0) return (
     <div>
-      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 10 }}>
-        {meta.label}
+      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: meta.color || "#888", textTransform: "uppercase", marginBottom: 8 }}>
+        {meta.icon} {meta.label}
       </div>
-      <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", lineHeight: 1.6 }}>{meta.desc}</div>
-      <div style={{ marginTop: 12, fontFamily: FONT, fontSize: 8, color: "#ccc", letterSpacing: 1 }}>
+      <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.6 }}>{meta.desc}</div>
+      <div style={{ marginTop: 10, fontFamily: FONT, fontSize: 7.5, color: "#ccc", letterSpacing: 1 }}>
         NO CONFIGURABLE FIELDS
       </div>
     </div>
@@ -364,50 +439,76 @@ function BlockInspector({ block, onUpdate }) {
 
       {fields.map(field => (
         <div key={field.key} style={{ marginBottom: 14 }}>
-          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>
+          <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>
             {field.label}
           </div>
 
-          {field.type === "textarea" ? (
+          {field.type === "course_select" ? (
+            <select
+              value={block[field.key] || ""}
+              onChange={e => setField(field.key, e.target.value)}
+              style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
+            >
+              <option value="">(none)</option>
+              {menuCourses.map(c => (
+                <option key={c.course_key} value={c.course_key}>
+                  {c.menu?.name || c.course_key}
+                </option>
+              ))}
+            </select>
+          ) : field.type === "select" ? (
+            field.key === "align" ? (
+              <AlignButtons value={block[field.key] || "left"} onChange={v => setField(field.key, v)} />
+            ) : (
+              <select
+                value={block[field.key] || (field.options?.[0] || "")}
+                onChange={e => setField(field.key, e.target.value)}
+                style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
+              >
+                {(field.options || []).map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            )
+          ) : field.type === "textarea" ? (
             <textarea
-              value={block[field.key] ?? field.placeholder ?? ""}
-              onChange={e => onUpdate({ ...block, [field.key]: e.target.value })}
+              value={block[field.key] ?? ""}
+              onChange={e => setField(field.key, e.target.value)}
               rows={3}
               style={{ ...baseInp, fontSize: 11, resize: "vertical" }}
               placeholder={field.placeholder || ""}
             />
           ) : field.type === "number" ? (
-            <input
-              type="number"
-              value={block[field.key] ?? ""}
-              min={field.min}
-              max={field.max}
-              step={field.step || 1}
-              onChange={e => onUpdate({ ...block, [field.key]: parseFloat(e.target.value) || 0 })}
-              style={{ ...baseInp, fontSize: 12 }}
-            />
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="number"
+                value={block[field.key] ?? ""}
+                min={field.min}
+                max={field.max}
+                step={field.step || 1}
+                onChange={e => setField(field.key, parseFloat(e.target.value) || 0)}
+                style={{ ...baseInp, fontSize: 12, flex: 1 }}
+              />
+              {field.min !== undefined && (
+                <span style={{ fontFamily: FONT, fontSize: 7, color: "#ccc", letterSpacing: 0 }}>
+                  {field.min}–{field.max}
+                </span>
+              )}
+            </div>
           ) : field.type === "checkbox" ? (
             <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
               <input
                 type="checkbox"
                 checked={!!block[field.key]}
-                onChange={e => onUpdate({ ...block, [field.key]: e.target.checked })}
+                onChange={e => setField(field.key, e.target.checked)}
               />
               <span style={{ fontFamily: FONT, fontSize: 9, color: "#555" }}>{field.label}</span>
             </label>
-          ) : field.type === "course_select" ? (
-            <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", padding: "8px 0" }}>
-              {/* Populated from parent via block.courseKey — rendered as text */}
-              Course key: <code style={{ color: "#4b4b88" }}>{block[field.key] || "(none)"}</code>
-              <div style={{ fontSize: 7.5, color: "#ccc", marginTop: 4, letterSpacing: 0.5 }}>
-                Set via Rebuild from Courses or use the text field
-              </div>
-            </div>
           ) : (
             <input
               type="text"
               value={block[field.key] ?? ""}
-              onChange={e => onUpdate({ ...block, [field.key]: e.target.value })}
+              onChange={e => setField(field.key, e.target.value)}
               style={{ ...baseInp, fontSize: 12 }}
               placeholder={field.placeholder || ""}
             />
@@ -418,23 +519,116 @@ function BlockInspector({ block, onUpdate }) {
   );
 }
 
+// ── A5 preview panel ──────────────────────────────────────────────────────────
+
+// A5 at 96 dpi: 148mm × 210mm ≈ 559px × 793px
+const A5_PX_W = 559;
+const A5_PX_H = 793;
+const PREVIEW_SCALE = 0.72;
+
+function LivePreview({ previewHtml, loading }) {
+  return (
+    <div style={{
+      flex: 1, overflowY: "auto", background: "#e8e6e0",
+      display: "flex", flexDirection: "column", alignItems: "center",
+      padding: "20px 16px",
+    }}>
+      <div style={{
+        fontFamily: FONT, fontSize: 7.5, letterSpacing: 3, color: "#aaa",
+        textTransform: "uppercase", marginBottom: 14,
+      }}>
+        LIVE PREVIEW {loading ? "· updating…" : "· A5"}
+      </div>
+
+      {/* Paper wrapper */}
+      <div style={{
+        width: A5_PX_W * PREVIEW_SCALE,
+        height: A5_PX_H * PREVIEW_SCALE,
+        overflow: "hidden",
+        flexShrink: 0,
+        boxShadow: "0 4px 24px rgba(0,0,0,0.22)",
+        borderRadius: 1,
+        position: "relative",
+        background: "#fff",
+      }}>
+        <iframe
+          srcDoc={previewHtml || "<html><body style='background:#fff'></body></html>"}
+          style={{
+            width: A5_PX_W,
+            height: A5_PX_H,
+            border: "none",
+            display: "block",
+            transform: `scale(${PREVIEW_SCALE})`,
+            transformOrigin: "top left",
+          }}
+          title="Menu preview"
+          sandbox="allow-scripts"
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function MenuTemplateEditor({
   menuTemplate,
   onUpdateTemplate,
   onSaveTemplate,
-  saving = false,
-  saved  = false,
+  saving  = false,
+  saved   = false,
   menuCourses = [],
   logoDataUri = "",
 }) {
   const [selectedCell, setSelectedCell] = useState(null); // { rowId, side }
   const [pickerTarget, setPickerTarget] = useState(null); // { rowId, side }
   const [activeRowId,  setActiveRowId]  = useState(null);
+  const [previewHtml,  setPreviewHtml]  = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const previewTimer = useRef(null);
 
   const template = menuTemplate || { version: 2, rows: [] };
   const rows = template.rows || [];
+
+  // ── Derive menu title from template's title block ──
+  const menuTitle = (() => {
+    for (const r of rows) {
+      if (r.left?.type === "title")  return r.left.text  || "WINTER MENU";
+      if (r.right?.type === "title") return r.right.text || "WINTER MENU";
+    }
+    return "WINTER MENU";
+  })();
+
+  const thankYouNote = (() => {
+    for (const r of rows) {
+      if (r.left?.type  === "goodbye") return r.left.text  || "Hvala za vaš obisk.";
+      if (r.right?.type === "goodbye") return r.right.text || "Hvala za vaš obisk.";
+    }
+    return "Hvala za vaš obisk.";
+  })();
+
+  // ── Live preview (debounced 250ms) ──
+  useEffect(() => {
+    clearTimeout(previewTimer.current);
+    setPreviewLoading(true);
+    previewTimer.current = setTimeout(() => {
+      try {
+        const html = generateMenuHTML({
+          seat:       PREVIEW_SEAT,
+          table:      PREVIEW_TABLE,
+          menuCourses,
+          menuTemplate: template,
+          _logo:      logoDataUri,
+          menuTitle,
+          thankYouNote,
+          teamNames: "Service Team",
+        });
+        setPreviewHtml(html);
+      } catch {}
+      setPreviewLoading(false);
+    }, 250);
+    return () => clearTimeout(previewTimer.current);
+  }, [template, menuCourses, logoDataUri]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = useCallback(newRows => {
     onUpdateTemplate({ ...template, rows: newRows });
@@ -445,26 +639,51 @@ export default function MenuTemplateEditor({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-
   function handleDragStart({ active }) { setActiveRowId(active.id); }
-
   function handleDragEnd({ active, over }) {
     setActiveRowId(null);
     if (!over || active.id === over.id) return;
-    const oldIdx = rows.findIndex(r => r.id === active.id);
-    const newIdx = rows.findIndex(r => r.id === over.id);
-    if (oldIdx !== -1 && newIdx !== -1) update(arrayMove(rows, oldIdx, newIdx));
+    const oi = rows.findIndex(r => r.id === active.id);
+    const ni = rows.findIndex(r => r.id === over.id);
+    if (oi !== -1 && ni !== -1) update(arrayMove(rows, oi, ni));
   }
 
   // ── Row mutations ──
-  const addRow = () => {
-    const newRow = { id: makeRowId("row"), left: null, right: null };
-    update([...rows, newRow]);
-  };
+  const addRow = () => update([...rows, makeRow()]);
 
   const removeRow = rowId => {
     update(rows.filter(r => r.id !== rowId));
     if (selectedCell?.rowId === rowId) setSelectedCell(null);
+  };
+
+  const duplicateRow = rowId => {
+    const idx = rows.findIndex(r => r.id === rowId);
+    if (idx === -1) return;
+    const orig = rows[idx];
+    const copy = { ...orig, id: makeRowId("row"), left: orig.left ? { ...orig.left } : null, right: orig.right ? { ...orig.right } : null };
+    const next = [...rows];
+    next.splice(idx + 1, 0, copy);
+    update(next);
+  };
+
+  const insertAbove = rowId => {
+    const idx = rows.findIndex(r => r.id === rowId);
+    if (idx === -1) return;
+    const next = [...rows];
+    next.splice(idx, 0, makeRow());
+    update(next);
+  };
+
+  const insertBelow = rowId => {
+    const idx = rows.findIndex(r => r.id === rowId);
+    if (idx === -1) return;
+    const next = [...rows];
+    next.splice(idx + 1, 0, makeRow());
+    update(next);
+  };
+
+  const updateRow = updatedRow => {
+    update(rows.map(r => r.id === updatedRow.id ? updatedRow : r));
   };
 
   const removeBlock = (rowId, side) => {
@@ -472,7 +691,7 @@ export default function MenuTemplateEditor({
     if (selectedCell?.rowId === rowId && selectedCell?.side === side) setSelectedCell(null);
   };
 
-  const pickBlock = (type) => {
+  const pickBlock = type => {
     if (!pickerTarget) return;
     const { rowId, side } = pickerTarget;
     const block = makeBlock(type);
@@ -481,7 +700,7 @@ export default function MenuTemplateEditor({
     setPickerTarget(null);
   };
 
-  const updateSelectedBlock = (newBlock) => {
+  const updateSelectedBlock = newBlock => {
     if (!selectedCell) return;
     const { rowId, side } = selectedCell;
     update(rows.map(r => r.id === rowId ? { ...r, [side]: newBlock } : r));
@@ -492,8 +711,7 @@ export default function MenuTemplateEditor({
     : null;
 
   const rebuild = () => {
-    const fresh = buildDefaultTemplate(menuCourses);
-    onUpdateTemplate(fresh);
+    onUpdateTemplate(buildDefaultTemplate(menuCourses));
     setSelectedCell(null);
   };
 
@@ -501,81 +719,69 @@ export default function MenuTemplateEditor({
 
   // ── Render ──
   return (
-    <div style={{ display: "flex", gap: 0, height: "calc(100vh - 130px)", minHeight: 500, fontFamily: FONT }}>
+    <div style={{ display: "flex", height: "calc(100vh - 130px)", minHeight: 500, fontFamily: FONT, gap: 0 }}>
 
-      {/* ── Left: block palette ── */}
+      {/* ── Left: Row editor ── */}
       <aside style={{
-        width: 200, flexShrink: 0, borderRight: "1px solid #f0f0f0",
-        padding: "16px 12px", overflowY: "auto", background: "#fafafa",
+        width: 288, flexShrink: 0, borderRight: "1px solid #ede9e0",
+        background: "#faf9f7", display: "flex", flexDirection: "column",
+        overflow: "hidden",
       }}>
-        <div style={{ fontSize: 8, letterSpacing: 3, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>
-          BLOCK TYPES
-        </div>
-
-        {BLOCK_GROUPS.map(group => (
-          <div key={group.id} style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 7.5, letterSpacing: 2, color: "#ccc", textTransform: "uppercase", marginBottom: 8 }}>
-              {group.label}
-            </div>
-            {Object.entries(BLOCK_META)
-              .filter(([, m]) => m.group === group.id)
-              .map(([type, meta]) => (
-                <div
-                  key={type}
-                  title={meta.desc}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 7,
-                    padding: "6px 8px", marginBottom: 2, borderRadius: 3,
-                    border: "1px solid #eeeceb", background: "#fff",
-                    cursor: "default",
-                  }}
-                >
-                  <span style={{ color: meta.color, fontSize: 11, width: 14, textAlign: "center", flexShrink: 0 }}>{meta.icon}</span>
-                  <span style={{ fontSize: 8, color: "#555", letterSpacing: 0.5 }}>{meta.label}</span>
-                </div>
-              ))}
+        {/* Header */}
+        <div style={{ padding: "12px 12px 8px", borderBottom: "1px solid #ede9e0", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 7.5, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+              LAYOUT EDITOR
+            </span>
+            <span style={{ fontSize: 7.5, color: "#ccc", fontFamily: FONT }}>
+              {rows.length} row{rows.length !== 1 ? "s" : ""}
+            </span>
           </div>
-        ))}
 
-        <div style={{ marginTop: 8, borderTop: "1px solid #f0f0f0", paddingTop: 14 }}>
+          {/* Save button */}
+          <button
+            onClick={onSaveTemplate}
+            disabled={saving}
+            style={{
+              width: "100%", fontFamily: FONT, fontSize: 8, letterSpacing: 2,
+              padding: "7px 0", border: "none", borderRadius: 3, cursor: saving ? "wait" : "pointer",
+              background: saved ? "#4a9a6a" : GOLD, color: "#fff",
+              textTransform: "uppercase", marginBottom: 6,
+            }}
+          >{saving ? "SAVING…" : saved ? "✓ SAVED" : "SAVE TEMPLATE"}</button>
+
+          {/* Rebuild button */}
           <button
             onClick={rebuild}
             style={{
-              width: "100%", fontFamily: FONT, fontSize: 8, letterSpacing: 1,
-              padding: "8px 0", border: "1px solid #e8e8e8", borderRadius: 3,
+              width: "100%", fontFamily: FONT, fontSize: 7.5, letterSpacing: 1,
+              padding: "5px 0", border: "1px solid #e0ddd6", borderRadius: 3,
               cursor: "pointer", background: "#fff", color: "#888",
               textTransform: "uppercase",
             }}
-            title="Generate default template from current courses"
-          >
-            ↺ Rebuild from Courses
-          </button>
-        </div>
-      </aside>
-
-      {/* ── Center: canvas ── */}
-      <section style={{ flex: 1, overflowY: "auto", padding: "20px 24px", background: "#f5f4f0" }}>
-
-        {/* Column headers */}
-        <div style={{ display: "flex", gap: 6, marginBottom: 8, paddingLeft: 22, paddingRight: 26 }}>
-          <div style={{ flex: "0 0 55%", fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase" }}>LEFT</div>
-          <div style={{ flex: "0 0 45%", fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase" }}>RIGHT</div>
+            title="Rebuild template from current courses"
+          >↺ REBUILD FROM COURSES</button>
         </div>
 
-        {/* A5 canvas */}
-        <div style={{
-          background: CANVAS_BG, borderRadius: 4,
-          border: "1px solid #e8e6e0",
-          padding: "14px 10px 14px 6px",
-          boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
-          minHeight: 400,
-        }}>
+        {/* Scrollable row list */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 8px 0" }}>
           {rows.length === 0 && (
             <div style={{
-              textAlign: "center", padding: "40px 0",
-              fontSize: 9, color: "#ccc", letterSpacing: 2, textTransform: "uppercase",
+              textAlign: "center", padding: "32px 16px",
+              fontSize: 8.5, color: "#ccc", letterSpacing: 1.5, lineHeight: 2.2,
+              textTransform: "uppercase",
             }}>
-              NO ROWS — CLICK ↺ REBUILD OR ADD A ROW BELOW
+              NO ROWS YET
+              <br />
+              <button
+                onClick={rebuild}
+                style={{
+                  marginTop: 10, fontFamily: FONT, fontSize: 8, letterSpacing: 1,
+                  padding: "8px 16px", border: `1.5px solid ${GOLD}`, borderRadius: 3,
+                  cursor: "pointer", background: "transparent", color: GOLD,
+                  textTransform: "uppercase",
+                }}
+              >↺ Generate Default Template</button>
             </div>
           )}
 
@@ -595,8 +801,11 @@ export default function MenuTemplateEditor({
                   onRemoveBlock={removeBlock}
                   onAddBlock={(rowId, side) => setPickerTarget({ rowId, side })}
                   onRemoveRow={removeRow}
+                  onDuplicateRow={duplicateRow}
+                  onInsertAbove={insertAbove}
+                  onInsertBelow={insertBelow}
+                  onUpdateRow={updateRow}
                   menuCourses={menuCourses}
-                  logoDataUri={logoDataUri}
                 />
               ))}
             </SortableContext>
@@ -607,50 +816,37 @@ export default function MenuTemplateEditor({
         </div>
 
         {/* Add row */}
-        <button
-          onClick={addRow}
-          style={{
-            marginTop: 10, width: "100%",
-            fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "10px 0",
-            border: "1.5px dashed #d8d6d0", borderRadius: 4, cursor: "pointer",
-            background: "transparent", color: "#bbb", textTransform: "uppercase",
-            transition: "all 0.12s",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.color = GOLD; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = "#d8d6d0"; e.currentTarget.style.color = "#bbb"; }}
-        >
-          + ADD ROW
-        </button>
-      </section>
-
-      {/* ── Right: inspector + save ── */}
-      <aside style={{
-        width: 260, flexShrink: 0, borderLeft: "1px solid #f0f0f0",
-        padding: "16px 16px", overflowY: "auto", background: "#fff",
-        display: "flex", flexDirection: "column", gap: 0,
-      }}>
-        {/* Save controls */}
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ padding: "8px", flexShrink: 0, borderTop: "1px solid #ede9e0" }}>
           <button
-            onClick={onSaveTemplate}
-            disabled={saving}
+            onClick={addRow}
             style={{
-              width: "100%", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
-              padding: "9px 0", border: "none", borderRadius: 3, cursor: saving ? "wait" : "pointer",
-              background: saved ? "#4a9a6a" : GOLD, color: "#fff",
-              textTransform: "uppercase", transition: "background 0.2s",
+              width: "100%", fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "8px 0",
+              border: "1.5px dashed #d0cec8", borderRadius: 3, cursor: "pointer",
+              background: "transparent", color: "#bbb", textTransform: "uppercase",
+              transition: "all 0.12s",
             }}
-          >
-            {saving ? "SAVING…" : saved ? "✓ SAVED" : "SAVE TEMPLATE"}
-          </button>
-          <div style={{ fontSize: 7.5, color: "#ccc", letterSpacing: 1, textTransform: "uppercase", marginTop: 6, textAlign: "center" }}>
-            {rows.length} row{rows.length !== 1 ? "s" : ""}
-          </div>
+            onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.color = GOLD; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "#d0cec8"; e.currentTarget.style.color = "#bbb"; }}
+          >+ ADD ROW</button>
         </div>
+      </aside>
 
-        <div style={{ borderTop: "1px solid #f4f4f4", paddingTop: 16 }}>
-          <BlockInspector block={selectedBlock} onUpdate={updateSelectedBlock} />
+      {/* ── Center: Live A5 preview ── */}
+      <LivePreview previewHtml={previewHtml} loading={previewLoading} />
+
+      {/* ── Right: Block inspector ── */}
+      <aside style={{
+        width: 240, flexShrink: 0, borderLeft: "1px solid #ede9e0",
+        padding: "14px 14px", overflowY: "auto", background: "#fff",
+      }}>
+        <div style={{ fontSize: 7.5, letterSpacing: 3, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>
+          BLOCK INSPECTOR
         </div>
+        <BlockInspector
+          block={selectedBlock}
+          onUpdate={updateSelectedBlock}
+          menuCourses={menuCourses}
+        />
       </aside>
 
       {/* Block picker modal */}
@@ -658,6 +854,7 @@ export default function MenuTemplateEditor({
         <BlockPickerModal
           onPick={pickBlock}
           onClose={() => setPickerTarget(null)}
+          menuCourses={menuCourses}
         />
       )}
     </div>
