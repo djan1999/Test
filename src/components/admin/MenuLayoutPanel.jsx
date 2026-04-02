@@ -1,13 +1,13 @@
 /**
  * MenuLayoutPanel — tabbed container for the Menu Layout section.
  *
- * Tab "BUILDER"  → visual drag-and-drop layout composer (MenuLayoutBuilder)
- * Tab "COURSES"  → per-course dish/pairing/restriction editor (CourseEditorPanel)
+ * Tab "TEMPLATE"  → row-based A5 canvas template editor (MenuTemplateEditor)
+ * Tab "COURSES"   → per-course dish/pairing/restriction editor (CourseEditorPanel)
  */
 
 import { useState } from "react";
 import { FONT } from "./adminStyles.js";
-import MenuLayoutBuilder from "./MenuLayoutBuilder.jsx";
+import MenuTemplateEditor from "./MenuTemplateEditor.jsx";
 import CourseEditorPanel from "./CourseEditorPanel.jsx";
 
 export default function MenuLayoutPanel({
@@ -15,21 +15,15 @@ export default function MenuLayoutPanel({
   menuCourses,
   onUpdateCourses,
   onSaveCourses,
-  // Visual layout
-  visualLayout,
-  onUpdateVisualLayout,
-  onSaveVisualLayout,
-  visualSaving,
-  visualSaved,
-  // Print settings (forwarded to MenuLayoutBuilder)
-  globalLayout,
-  onSetGlobalLayout,
-  onSaveGlobalLayout,
-  layoutSaving,
-  layoutSaved,
+  // Template (v2)
+  menuTemplate,
+  onUpdateTemplate,
+  onSaveTemplate,
+  templateSaving,
+  templateSaved,
   logoDataUri,
 }) {
-  const [activeTab, setActiveTab] = useState("builder");
+  const [activeTab, setActiveTab] = useState("template");
 
   const tabBtn = (id, label) => (
     <button
@@ -50,27 +44,19 @@ export default function MenuLayoutPanel({
   return (
     <div>
       {/* Tab bar */}
-      <div style={{
-        display: "flex", gap: 0, borderBottom: "1px solid #f0f0f0",
-        marginBottom: 24,
-      }}>
-        {tabBtn("builder", "▨ LAYOUT BUILDER")}
-        {tabBtn("courses", "◈ COURSES")}
+      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #f0f0f0", marginBottom: 24 }}>
+        {tabBtn("template", "▨ LAYOUT BUILDER")}
+        {tabBtn("courses",  "◈ COURSES")}
       </div>
 
-      {activeTab === "builder" && (
-        <MenuLayoutBuilder
-          visualLayout={visualLayout}
+      {activeTab === "template" && (
+        <MenuTemplateEditor
+          menuTemplate={menuTemplate}
+          onUpdateTemplate={onUpdateTemplate}
+          onSaveTemplate={onSaveTemplate}
+          saving={templateSaving}
+          saved={templateSaved}
           menuCourses={menuCourses}
-          onUpdateLayout={onUpdateVisualLayout}
-          onSaveLayout={onSaveVisualLayout}
-          saving={visualSaving}
-          saved={visualSaved}
-          globalLayout={globalLayout}
-          onSetGlobalLayout={onSetGlobalLayout}
-          onSaveGlobalLayout={onSaveGlobalLayout}
-          layoutSaving={layoutSaving}
-          layoutSaved={layoutSaved}
           logoDataUri={logoDataUri}
         />
       )}

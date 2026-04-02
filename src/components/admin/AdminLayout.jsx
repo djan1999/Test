@@ -25,12 +25,12 @@ export default function AdminLayout({
   menuCourses,
   onUpdateMenuCourses,
   onSaveMenuCourses,
-  // Visual layout (block-based builder — single source of truth)
-  visualLayout,
-  onUpdateVisualLayout,
-  onSaveVisualLayout,
-  visualSaving,
-  visualSaved,
+  // Template v2
+  menuTemplate,
+  onUpdateTemplate,
+  onSaveTemplate,
+  templateSaving,
+  templateSaved,
   // Dish data
   dishes,
   onUpdateDishes,
@@ -50,12 +50,6 @@ export default function AdminLayout({
   logoDataUri,
   onSaveLogo,
   onResetMenuLayout,
-  // Print settings (forwarded to builder — no longer a separate editor)
-  globalLayout,
-  onSetGlobalLayout,
-  onSaveGlobalLayout,
-  layoutSaving,
-  layoutSaved,
   // Quick Access
   quickAccessItems,
   onUpdateQuickAccess,
@@ -133,22 +127,17 @@ export default function AdminLayout({
           {activeSection === "menu" && (
             <div>
               <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 20 }}>
-                MENU LAYOUT — visual builder · course editor · single source of truth
+                MENU LAYOUT — template editor · course editor · single source of truth
               </div>
               <MenuLayoutPanel
                 menuCourses={menuCourses}
                 onUpdateCourses={onUpdateMenuCourses}
                 onSaveCourses={onSaveMenuCourses}
-                visualLayout={visualLayout}
-                onUpdateVisualLayout={onUpdateVisualLayout}
-                onSaveVisualLayout={onSaveVisualLayout}
-                visualSaving={visualSaving}
-                visualSaved={visualSaved}
-                globalLayout={globalLayout}
-                onSetGlobalLayout={onSetGlobalLayout}
-                onSaveGlobalLayout={onSaveGlobalLayout}
-                layoutSaving={layoutSaving}
-                layoutSaved={layoutSaved}
+                menuTemplate={menuTemplate}
+                onUpdateTemplate={onUpdateTemplate}
+                onSaveTemplate={onSaveTemplate}
+                templateSaving={templateSaving}
+                templateSaved={templateSaved}
                 logoDataUri={logoDataUri}
               />
             </div>

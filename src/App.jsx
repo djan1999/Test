@@ -16,6 +16,7 @@ import {
   parseMenuRow, RESTRICTION_KEYS,
 } from "./utils/menuUtils.js";
 import { generateMenuHTML } from "./utils/menuGenerator.js";
+import { buildDefaultTemplate } from "./utils/menuTemplateSchema.js";
 import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML } from "./utils/weeklyPrintGenerator.js";
 import {
   readLocalBeverages, writeLocalBeverages,
@@ -27,7 +28,6 @@ import { makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM } from
 import { fuzzy, fuzzyDrink } from "./utils/search.js";
 import { useIsMobile } from "./hooks/useIsMobile.js";
 import { AdminLayout } from "./components/admin/index.js";
-import { buildDefaultLayout, applyCourseOrderFromLayout, applySpacerGapsFromLayout } from "./utils/visualLayout.js";
 
 // All dietary restriction keys used in the DB schema
 const DIETARY_KEYS = [
@@ -3529,7 +3529,7 @@ function BevEditRow({ emoji, label, items, onUpdate }) {
   );
 }
 
-function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLayoutStyles = {}, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [] }) {
+function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLayoutStyles = {}, menuTemplate = null, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [] }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState("WINTER MENU");
   const [thankYouNote, setThankYouNote] = useState(table.lang === "si" ? "Hvala za vaš obisk." : "Thank you for your visit.");
@@ -3650,6 +3650,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
       seatOutputOverrides: seatEdits[seat.id] || {},
       thankYouNote,
       layoutStyles,
+      menuTemplate,
       _logo: logoDataUri,
     });
     const w = window.open("", "_blank", "width=620,height=880");
@@ -3678,6 +3679,7 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
       seatOutputOverrides: seatEdits[seat.id] || {},
       thankYouNote,
       layoutStyles,
+      menuTemplate,
       _logo: logoDataUri,
     });
     setPreviewHtml(html);
@@ -5865,7 +5867,7 @@ function GateScreen({ onPass }) {
 }
 
 // ── Menu Page — preview + print only ─────────────────────────────────────────
-function MenuPage({ tables, menuCourses, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], globalLayout = {}, onExit }) {
+function MenuPage({ tables, menuCourses, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], globalLayout = {}, menuTemplate = null, onExit }) {
   const [menuGenTable, setMenuGenTable] = useState(null);
 
   return (
@@ -5917,6 +5919,7 @@ function MenuPage({ tables, menuCourses, upd, logoDataUri = "", wines = [], cock
           menuCourses={menuCourses}
           upd={upd}
           defaultLayoutStyles={globalLayout}
+          menuTemplate={menuTemplate}
           logoDataUri={logoDataUri}
           wines={wines}
           cocktails={cocktails}
@@ -6143,14 +6146,6 @@ export default function App() {
   const layoutLoaded = useRef(false);
   const globalLayoutRef = useRef(globalLayout);
   globalLayoutRef.current = globalLayout;
-  // Visual layout (block-based builder)
-  const [visualLayout, setVisualLayout] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("milka_visual_layout") || "null"); } catch { return null; }
-  });
-  const [visualSaving, setVisualSaving] = useState(false);
-  const [visualSaved,  setVisualSaved]  = useState(false);
-  const visualLayoutRef = useRef(visualLayout);
-  visualLayoutRef.current = visualLayout;
   // Quick Access items (data-driven, replaces hardcoded APERITIF_OPTIONS)
   const [quickAccessItems, setQuickAccessItems] = useState(() => {
     try {
@@ -6602,45 +6597,43 @@ export default function App() {
     setTimeout(() => setLayoutSaved(false), 2500);
   };
 
-  // ── Visual layout (block-based builder) persistence ───────────────────────
 
-  // Load from Supabase on mount
+  // ── Menu template v2 (row-based canvas editor) ───────────────────────────
+  const [menuTemplate, setMenuTemplate] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("milka_menu_template_v2") || "null"); } catch { return null; }
+  });
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [templateSaved,  setTemplateSaved]  = useState(false);
+  const menuTemplateRef = useRef(menuTemplate);
+  menuTemplateRef.current = menuTemplate;
+
   useEffect(() => {
     if (!supabase) return;
-    supabase.from("service_settings").select("state").eq("id", "visual_layout").maybeSingle()
+    supabase.from("service_settings").select("state").eq("id", "menu_layout_v2").maybeSingle()
       .then(({ data }) => {
-        if (data?.state?.leftColumn) {
-          setVisualLayout(data.state);
-          try { localStorage.setItem("milka_visual_layout", JSON.stringify(data.state)); } catch {}
+        if (data?.state?.version === 2) {
+          setMenuTemplate(data.state);
+          try { localStorage.setItem("milka_menu_template_v2", JSON.stringify(data.state)); } catch {}
         }
       });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Persist to localStorage when changed
   useEffect(() => {
-    if (!visualLayout) return;
-    try { localStorage.setItem("milka_visual_layout", JSON.stringify(visualLayout)); } catch {}
-  }, [visualLayout]);
+    if (!menuTemplate) return;
+    try { localStorage.setItem("milka_menu_template_v2", JSON.stringify(menuTemplate)); } catch {}
+  }, [menuTemplate]);
 
-  // Save visual layout to Supabase + apply course ordering
-  const saveVisualLayout = async () => {
-    setVisualSaving(true); setVisualSaved(false);
-    const toSave = visualLayoutRef.current;
-    if (!toSave) { setVisualSaving(false); return; }
-
-    // Apply left-column ordering to menu_courses positions
-    let updatedCourses = applyCourseOrderFromLayout(toSave, menuCourses);
-    updatedCourses = applySpacerGapsFromLayout(toSave, updatedCourses);
-    setMenuCourses(updatedCourses);
-    await saveMenuCourses(updatedCourses);
-
+  const saveMenuTemplate = async () => {
+    setTemplateSaving(true); setTemplateSaved(false);
+    const toSave = menuTemplateRef.current;
+    if (!toSave) { setTemplateSaving(false); return; }
     if (supabase) {
       const { error } = await supabase.from("service_settings")
-        .upsert({ id: "visual_layout", state: toSave, updated_at: new Date().toISOString() }, { onConflict: "id" });
-      if (error) { console.error("Visual layout save failed:", error); setVisualSaving(false); return; }
+        .upsert({ id: "menu_layout_v2", state: toSave, updated_at: new Date().toISOString() }, { onConflict: "id" });
+      if (error) { console.error("Template save failed:", error); setTemplateSaving(false); return; }
     }
-    setVisualSaving(false); setVisualSaved(true);
-    setTimeout(() => setVisualSaved(false), 2500);
+    setTemplateSaving(false); setTemplateSaved(true);
+    setTimeout(() => setTemplateSaved(false), 2500);
   };
 
   // ── Quick Access persistence ──────────────────────────────────────────────
@@ -6873,12 +6866,12 @@ export default function App() {
         const courses = await fetchMenuCourses();
         if (mounted && courses.length > 0) {
           setMenuCourses(courses);
-          // Auto-generate visual layout from courses if none stored yet
-          if (!visualLayoutRef.current?.leftColumn?.length) {
-            const layout = buildDefaultLayout(courses);
+          // Auto-generate template v2 from courses if none stored yet
+          if (!menuTemplateRef.current?.rows?.length) {
+            const tmpl = buildDefaultTemplate(courses);
             if (mounted) {
-              setVisualLayout(layout);
-              try { localStorage.setItem("milka_visual_layout", JSON.stringify(layout)); } catch {}
+              setMenuTemplate(tmpl);
+              try { localStorage.setItem("milka_menu_template_v2", JSON.stringify(tmpl)); } catch {}
             }
           }
         }
@@ -7023,6 +7016,7 @@ export default function App() {
         upd={upd}
         logoDataUri={logoDataUri}
         globalLayout={globalLayout}
+        menuTemplate={menuTemplate}
         wines={wines}
         cocktails={cocktails}
         spirits={spirits}
@@ -7040,11 +7034,11 @@ export default function App() {
         menuCourses={menuCourses}
         onUpdateMenuCourses={setMenuCourses}
         onSaveMenuCourses={saveMenuCourses}
-        visualLayout={visualLayout}
-        onUpdateVisualLayout={setVisualLayout}
-        onSaveVisualLayout={saveVisualLayout}
-        visualSaving={visualSaving}
-        visualSaved={visualSaved}
+        menuTemplate={menuTemplate}
+        onUpdateTemplate={setMenuTemplate}
+        onSaveTemplate={saveMenuTemplate}
+        templateSaving={templateSaving}
+        templateSaved={templateSaved}
         dishes={dishes}
         onUpdateDishes={setDishes}
         wines={wines}
@@ -7064,11 +7058,6 @@ export default function App() {
           try { localStorage.removeItem("milka_menu_layout"); } catch {}
           if (supabase) supabase.from("service_settings").upsert({ id: "menu_layout_global", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" }).then(() => {});
         }}
-        globalLayout={globalLayout}
-        onSetGlobalLayout={setGlobalLayout}
-        onSaveGlobalLayout={saveGlobalLayout}
-        layoutSaving={layoutSaving}
-        layoutSaved={layoutSaved}
         quickAccessItems={quickAccessItems}
         onUpdateQuickAccess={updateQuickAccess}
         onExit={() => changeMode(null)}

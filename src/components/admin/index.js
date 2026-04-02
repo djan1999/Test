@@ -1,7 +1,6 @@
 export { default as AdminLayout } from "./AdminLayout.jsx";
 export { default as MenuLayoutPanel } from "./MenuLayoutPanel.jsx";
-export { default as MenuLayoutBuilder } from "./MenuLayoutBuilder.jsx";
-export { default as MenuLayoutCanvas } from "./MenuLayoutCanvas.jsx";
+export { default as MenuTemplateEditor } from "./MenuTemplateEditor.jsx";
 export { default as CourseEditorPanel } from "./CourseEditorPanel.jsx";
 export { default as DishesPanel } from "./DishesPanel.jsx";
 export { default as DrinksPanel } from "./DrinksPanel.jsx";

@@ -36,6 +36,8 @@ export function generateMenuHTML({
   seatOutputOverrides = {},
   thankYouNote = "Hvala za vaš obisk.",
   layoutStyles = {},
+  // Template v2 — when provided, drives the row order / block resolution
+  menuTemplate = null,
   // Font/logo assets — empty strings are fine for tests (no rendering needed)
   _fontBold = "",
   _fontReg = "",
@@ -205,6 +207,248 @@ export function generateMenuHTML({
     ...glasses.map(w => ({ ...w, __type: "wine" })),
     ...cocktails.map(c => ({ ...c, __type: "cocktail" })),
   ]);
+
+  // ── Template-driven path (v2) ─────────────────────────────────────────────
+  if (menuTemplate?.version === 2 && Array.isArray(menuTemplate.rows)) {
+    const aQ = [...aperitifQueue];
+    const gQ = [...glassByGlassQueue];
+    const bQ = [...bottleQueue];
+    // Separate queues so template walking is independent of legacy path
+    aperitifQueue.length = 0;
+    glassByGlassQueue.length = 0;
+    bottleQueue.length = 0;
+
+    for (const row of menuTemplate.rows) {
+      const lb = row.left;
+      const rb = row.right;
+
+      // ── spacer ──
+      const spacerBlock = lb?.type === "spacer" ? lb : rb?.type === "spacer" ? rb : null;
+      if (spacerBlock) {
+        rows.push({ type: "_spacer", height: spacerBlock.height || 8 });
+        continue;
+      }
+
+      // ── divider ──
+      if (lb?.type === "divider" || rb?.type === "divider") {
+        rows.push({ type: "_divider" });
+        continue;
+      }
+
+      // ── pairing_label ──
+      const plBlock = lb?.type === "pairing_label" ? lb : rb?.type === "pairing_label" ? rb : null;
+      if (plBlock) {
+        rows.push({ type: "section", label: plBlock.text || "WINE PAIRING" });
+        continue;
+      }
+
+      // ── logo / title → header — skip as body rows ──
+      if (lb?.type === "title" || lb?.type === "logo" || rb?.type === "title" || rb?.type === "logo") {
+        continue;
+      }
+
+      // ── team → footer ──
+      if (lb?.type === "team" || rb?.type === "team") continue;
+
+      // ── goodbye → thank you row ──
+      const gbBlock = lb?.type === "goodbye" ? lb : rb?.type === "goodbye" ? rb : null;
+      if (gbBlock) {
+        rows.push({ type: "thankyou", _text: gbBlock.text || thankYouNote });
+        continue;
+      }
+
+      // ── text ──
+      if (lb?.type === "text" || rb?.type === "text") {
+        const lText = lb?.type === "text" ? lb : null;
+        const rText = rb?.type === "text" ? rb : null;
+        const lVal = lText ? { title: lText.bold ? lText.text : "", sub: lText.bold ? "" : (lText.text || "") } : null;
+        const rVal = rText ? { title: rText.bold ? rText.text : "", sub: rText.bold ? "" : (rText.text || "") } : null;
+        rows.push({ type: "course", courseKey: null, left: lVal, right: rVal, rowClass: "" });
+        continue;
+      }
+
+      // ── aperitif ──
+      if (lb?.type === "aperitif" || rb?.type === "aperitif") {
+        if (aQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(aQ.shift()) });
+        continue;
+      }
+
+      // ── by_the_glass (explicit standalone) ──
+      if (lb?.type === "by_the_glass" || rb?.type === "by_the_glass") {
+        if (gQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(gQ.shift()) });
+        continue;
+      }
+
+      // ── bottle (explicit standalone) ──
+      if (lb?.type === "bottle" || rb?.type === "bottle") {
+        if (bQ.length > 0) { const d = fmtDrinkParts(bQ.shift()); rows.push({ type: "wine-only", right: d }); }
+        continue;
+      }
+
+      // ── course row ──
+      if (lb?.type === "course") {
+        const courseKey = lb.courseKey || "";
+        const vc = visibleCourses.find(vc => vc.courseKey === courseKey);
+        if (!vc) continue;
+        const { course, i } = vc;
+
+        let dish = applyCourseRestriction(resolveCourse(course), restrictions, lang);
+        let drink = null;
+
+        if (rb?.type === "pairing") {
+          if (pkey) {
+            drink = lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey];
+
+            // Force-pairing override (crayfish / kitchen martini)
+            if (course.force_pairing_title || courseKey === CRAYFISH_KEY) {
+              const fpTLines = String(course.force_pairing_title || "").split("\n").map(s => s.trim());
+              const fpSLines = String(course.force_pairing_sub   || "").split("\n").map(s => s.trim());
+              const fpTEn = fpTLines[0] || "KITCHEN MARTINI";
+              const fpTSi = course.force_pairing_title_si || fpTLines[1] || fpTEn;
+              const fpSEn = fpSLines[0] || "";
+              const fpSSi = course.force_pairing_sub_si   || fpSLines[1] || fpSEn;
+              drink = lang === "si" ? { name: fpTSi, sub: fpSSi } : { name: fpTEn, sub: fpSEn };
+            }
+
+            // Beetroot extra override
+            const isBeetrootCourse = normalizeToken(course.optional_flag || "") === "beetroot" || courseKey === "beetroot";
+            const beetExtra = extras[1];
+            if (isBeetrootCourse && beetExtra?.ordered) {
+              const beetPair = String(beetExtra.pairing || "—").trim();
+              if (beetPair === "N/A" || beetPair === "Non-Alc") {
+                drink = (lang === "si" ? (course.na_si || course.na) : course.na) || null;
+              } else if (beetPair === "Champagne" || beetPair === "Wine") {
+                drink = (lang === "si"
+                  ? (course.os_si || course.os || course.premium_si || course.premium || course.wp_si || course.wp)
+                  : (course.os || course.premium || course.wp)) || null;
+              } else { drink = null; }
+            }
+
+            // Beer for chicken gizzard
+            const cn = String(course?.menu?.name || "").trim().toUpperCase();
+            if ((courseKey === "chicken_gizzard" || cn === "CHICKEN GIZZARD") && selectedBeer) {
+              if (lang === "si" && beers.length === 0) {
+                const siK = beerChoice === "nonalc" ? "na" : "wp";
+                const siD = course[`${siK}_si`] || course[siK];
+                drink = siD ? { name: siD.name || "", sub: siD.sub || "" } : { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
+              } else {
+                drink = { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
+              }
+            }
+
+            // By-the-glass fallback from Danube onwards
+            if (!drink && i >= DANUBE_SALMON_IDX && gQ.length > 0) {
+              const d = fmtDrinkParts(gQ.shift()); drink = { name: d.title || "", sub: d.sub || "" };
+            }
+          } else {
+            // No pairing package → by-the-glass or bottle from Danube
+            if (i >= DANUBE_SALMON_IDX && gQ.length > 0) {
+              const d = fmtDrinkParts(gQ.shift()); drink = { name: d.title || "", sub: d.sub || "" };
+            } else if (i >= DANUBE_SALMON_IDX && bQ.length > 0) {
+              const d = fmtDrinkParts(bQ.shift()); drink = { name: d.title || "", sub: d.sub || "" };
+            }
+          }
+        }
+
+        // Editor + seat overrides
+        const edOv = layoutStyles.editorOverrides?.[courseKey];
+        if (edOv) {
+          if (typeof edOv.leftTitle  === "string") dish  = { ...(dish  || {}), name: edOv.leftTitle  };
+          if (typeof edOv.leftSub    === "string") dish  = { ...(dish  || {}), sub:  edOv.leftSub    };
+          if (typeof edOv.rightTitle === "string") drink = { ...(drink || {}), name: edOv.rightTitle };
+          if (typeof edOv.rightSub   === "string") drink = { ...(drink || {}), sub:  edOv.rightSub   };
+        }
+        const outOv = seatOutputOverrides[courseKey];
+        if (outOv) {
+          if (typeof outOv.name      === "string") dish  = { ...(dish  || {}), name: outOv.name      };
+          if (typeof outOv.sub       === "string") dish  = { ...(dish  || {}), sub:  outOv.sub       };
+          if (typeof outOv.drinkName === "string") drink = { ...(drink || {}), name: outOv.drinkName };
+          if (typeof outOv.drinkSub  === "string") drink = { ...(drink || {}), sub:  outOv.drinkSub  };
+        }
+
+        rows.push({
+          type: "course", courseKey,
+          left:  { title: dish?.name || "", sub: dish?.sub || "" },
+          right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
+          rowClass: course.section_gap_before ? "section-gap-before" : "",
+        });
+        continue;
+      }
+    }
+
+    // Leftover queues after template walk
+    while (gQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(gQ.shift()) });
+    while (bQ.length > 0) { const d = fmtDrinkParts(bQ.shift()); rows.push({ type: "wine-only", right: d }); }
+
+    if (_rowsOnly) return rows;
+
+    const renderBlock = (block, cls = "") => {
+      if (!block || (!block.title && !block.sub)) return `<div class="menu-col ${cls}"></div>`;
+      return `<div class="menu-col ${cls}">${block.title ? `<div class="menu-main">${esc(block.title)}</div>` : ""}${block.sub ? `<div class="menu-sub">${esc(block.sub)}</div>` : ""}</div>`;
+    };
+
+    const tmplRowsHtml = rows.map(row => {
+      if (row.type === "_spacer") return `<div style="height:${row.height}pt"></div>`;
+      if (row.type === "_divider") return `<hr style="border:none;border-top:0.5pt solid #ccc;margin:3pt 0;">`;
+      if (row.type === "section") return `<div class="menu-section-row pairing-section"><div></div><div class="menu-section-label">${esc(row.label || "")}</div></div>`;
+      if (row.type === "wine-only") return `<div class="menu-row wine-only">${renderBlock(null, "left")}${renderBlock(row.right, "right")}</div>`;
+      if (row.type === "thankyou") return `<div class="menu-thankyou">${esc(row._text || thankYouNote)}</div>`;
+      if (row.type === "team") return "";
+      const ckAttr = row.courseKey ? ` data-ck="${esc(row.courseKey)}"` : "";
+      return `<div class="menu-row ${row.rowClass || ""}"${ckAttr}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
+    }).join("");
+
+    const safeTitle2 = esc((menuTitle || "WINTER MENU").replace(/\s+/g, " ").trim());
+    const _today2 = new Date();
+    const _d2 = _today2.getDate();
+    const _MEN2 = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    const _MSI2 = ["Januar","Februar","Marec","April","Maj","Junij","Julij","Avgust","September","Oktober","November","December"];
+    const menuDate2 = lang === "si"
+      ? `${_d2}. ${_MSI2[_today2.getMonth()]} ${_today2.getFullYear()}`
+      : (() => { const sfx = [11,12,13].includes(_d2) ? "th" : _d2%10===1 ? "st" : _d2%10===2 ? "nd" : _d2%10===3 ? "rd" : "th"; return `${_d2}${sfx} of ${_MEN2[_today2.getMonth()]}, ${_today2.getFullYear()}`; })();
+    const s2 = (key, def) => key in layoutStyles ? layoutStyles[key] : def;
+
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${safeTitle2}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{--page-w:148mm;--page-h:210mm;--pad-t:${s2("padTop",8.4)}mm;--pad-r:${s2("padRight",12)}mm;--pad-b:${s2("padBottom",8.2)}mm;--pad-l:${s2("padLeft",12)}mm;--inner-h:calc(var(--page-h) - var(--pad-t) - var(--pad-b));}
+@page{size:A5 portrait;margin:0;}
+html,body{width:var(--page-w);height:var(--page-h);overflow:hidden;background:#fff;color:#000;font-family:'Roboto Mono',monospace;font-size:${s2("fontSize",6.75)}pt;line-height:1.08;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+body{position:relative;}
+#sheet{width:var(--page-w);height:var(--page-h);overflow:hidden;position:relative;background:#fff;}
+#frame{position:absolute;inset:0;padding:var(--pad-t) var(--pad-r) var(--pad-b) var(--pad-l);overflow:hidden;}
+#scaleTarget{width:100%;min-height:var(--inner-h);display:flex;flex-direction:column;transform-origin:top left;}
+#header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8.6mm;margin-bottom:${s2("headerSpacing",7)}mm;}
+#title{font-size:13.9pt;font-weight:700;letter-spacing:0.035em;}
+#menu-date{font-size:5.8pt;font-weight:400;letter-spacing:0.02em;margin-top:0.8mm;}
+#logo{transform:translate(${s2("logoOffsetX",0)}mm,${s2("logoOffsetY",0)}mm);}
+#logo img{width:${s2("logoSize",10.5)}mm;display:block;}
+#menu{width:100%;}
+.menu-row,.menu-section-row{display:grid;grid-template-columns:minmax(0,${hasPairing ? "0.85fr) minmax(0,1.15fr" : "1fr) minmax(0,1fr"});column-gap:${hasPairing ? "9mm" : "10.8mm"};align-items:start;break-inside:avoid;page-break-inside:avoid;}
+.menu-row{margin-bottom:${s2("rowSpacing",3.15)}pt;}
+.menu-row.wine-only{margin-bottom:${s2("wineRowSpacing",4.5)}pt;}
+.menu-row.section-gap-before{margin-top:14.5pt;}
+.menu-col{min-width:0;}
+.menu-main{font-weight:700;line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;text-transform:uppercase;}
+.menu-sub{line-height:1.08;margin-top:0.75pt;overflow-wrap:anywhere;}
+.menu-section-row{margin:${s2("sectionSpacing",6.8)}pt 0 ${(s2("sectionSpacing",6.8)-0.6).toFixed(2)}pt;}
+.menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;text-transform:uppercase;}
+.menu-thankyou{margin-top:${s2("thankYouSpacing",7)}pt;font-size:6.55pt;font-style:normal;}
+#footer{margin-top:auto;padding-top:9.5pt;}
+#team{font-size:6.5pt;line-height:1.2;overflow-wrap:anywhere;}
+#team .menu-main{margin-bottom:1.4pt;}
+</style></head>
+<body><div id="sheet"><div id="frame"><div id="scaleTarget">
+<div id="header"><div id="title">${safeTitle2}<div id="menu-date">${esc(menuDate2)}</div></div>${_logo ? `<div id="logo"><img src="${_logo}" alt="Logo"></div>` : ""}</div>
+<div id="menu">${tmplRowsHtml}</div>
+<div id="footer"><div id="team"><div class="menu-main">TEAM:</div><div>${esc(teamNames)}</div></div></div>
+</div></div></div>
+<script>(function(){const MIN_SCALE=0.58;const MAX_TRIES=80;function fit(){const frame=document.getElementById('frame');const target=document.getElementById('scaleTarget');if(!frame||!target)return;target.style.transform='scale(1)';target.style.width='100%';const maxH=frame.clientHeight;const maxW=frame.clientWidth;const naturalH=target.scrollHeight;const naturalW=target.scrollWidth;let scale=Math.min(1,maxH/naturalH,maxW/naturalW);scale=Math.max(Math.min(scale,1),MIN_SCALE);let tries=0;while(tries<MAX_TRIES){target.style.transform='scale('+scale+')';target.style.width=(100/scale)+'%';const rect=target.getBoundingClientRect();if(rect.height<=maxH-1&&rect.width<=maxW-1)break;scale-=0.01;if(scale<=MIN_SCALE){scale=MIN_SCALE;target.style.transform='scale('+scale+')';target.style.width=(100/scale)+'%';break;}tries+=1;}}window.addEventListener('load',function(){setTimeout(fit,80);});window.addEventListener('resize',fit);window.addEventListener('beforeprint',fit);window.addEventListener('afterprint',fit);})();</script>
+</body></html>`;
+  }
+  // ── End template-driven path ──────────────────────────────────────────────
 
   const topRightItems = hasPairing ? dedup(tableBottles.map(item => ({
     ...item,
