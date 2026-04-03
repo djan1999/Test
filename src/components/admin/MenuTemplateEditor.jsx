@@ -38,7 +38,11 @@ const CELL_EMPTY_BG = "#f7f6f2";
 const CELL_EMPTY_BORDER = "#e4e2dc";
 
 // Preview seat/table stubs — real courses + template drive the actual content
-const PREVIEW_SEAT = { id: 1, pairing: "Wine", extras: {}, glasses: [], cocktails: [], beers: [], aperitifs: [] };
+const PREVIEW_SEAT = {
+  id: 1, pairing: "Wine", extras: {}, cocktails: [], beers: [],
+  aperitifs: [{ name: "BILLECART-SALMON", producer: "Champagne", vintage: "", country: "FR", __type: "wine" }],
+  glasses: [{ name: "Puligny-Montrachet", producer: "Domaine Leflaive", vintage: "2022", country: "FR", __type: "wine" }],
+};
 const PREVIEW_TABLE = { menuType: "full", restrictions: [], bottleWines: [], birthday: false };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -564,6 +568,8 @@ export default function MenuTemplateEditor({
   const [activeRowId,  setActiveRowId]  = useState(null);
   const [previewHtml,  setPreviewHtml]  = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [leftOpen,  setLeftOpen]  = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
   const previewTimer = useRef(null);
 
   const template = menuTemplate || { version: 2, rows: [] };
@@ -727,23 +733,40 @@ export default function MenuTemplateEditor({
 
       {/* ── Left: Row editor ── */}
       <aside style={{
-        width: 288, flexShrink: 0, borderRight: "1px solid #ede9e0",
+        width: leftOpen ? 288 : 28, flexShrink: 0, borderRight: "1px solid #ede9e0",
         background: "#faf9f7", display: "flex", flexDirection: "column",
-        overflow: "hidden",
+        overflow: "hidden", transition: "width 0.18s ease",
       }}>
         {/* Header */}
-        <div style={{ padding: "12px 12px 8px", borderBottom: "1px solid #ede9e0", flexShrink: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ fontSize: 7.5, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
-              LAYOUT EDITOR
-            </span>
-            <span style={{ fontSize: 7.5, color: "#ccc", fontFamily: FONT }}>
-              {rows.length} row{rows.length !== 1 ? "s" : ""}
-            </span>
+        <div style={{ padding: leftOpen ? "12px 12px 8px" : "8px 4px", borderBottom: "1px solid #ede9e0", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: leftOpen ? 8 : 0 }}>
+            {leftOpen && (
+              <span style={{ fontSize: 7.5, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+                LAYOUT EDITOR
+              </span>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: leftOpen ? 0 : "auto", marginRight: leftOpen ? 0 : "auto" }}>
+              {leftOpen && (
+                <span style={{ fontSize: 7.5, color: "#ccc", fontFamily: FONT }}>
+                  {rows.length} row{rows.length !== 1 ? "s" : ""}
+                </span>
+              )}
+              <button
+                onClick={() => setLeftOpen(v => !v)}
+                title={leftOpen ? "Collapse panel" : "Expand panel"}
+                style={{
+                  border: "none", background: "transparent", cursor: "pointer",
+                  color: "#ccc", fontSize: 12, padding: "2px 4px", lineHeight: 1,
+                  fontFamily: FONT,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = GOLD; }}
+                onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
+              >{leftOpen ? "◂" : "▸"}</button>
+            </div>
           </div>
 
           {/* Save button */}
-          <button
+          {leftOpen && <button
             onClick={onSaveTemplate}
             disabled={saving}
             style={{
@@ -752,9 +775,10 @@ export default function MenuTemplateEditor({
               background: saved ? "#4a9a6a" : GOLD, color: "#fff",
               textTransform: "uppercase", marginBottom: 6,
             }}
-          >{saving ? "SAVING…" : saved ? "✓ SAVED" : "SAVE TEMPLATE"}</button>
+          >{saving ? "SAVING…" : saved ? "✓ SAVED" : "SAVE TEMPLATE"}</button>}
 
           {/* Rebuild button */}
+          {leftOpen && (
           <button
             onClick={rebuild}
             style={{
@@ -765,10 +789,11 @@ export default function MenuTemplateEditor({
             }}
             title="Rebuild template from current courses"
           >↺ REBUILD FROM COURSES</button>
+          )}
         </div>
 
         {/* Scrollable row list */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "8px 8px 0" }}>
+        {leftOpen && <div style={{ flex: 1, overflowY: "auto", padding: "8px 8px 0" }}>
           {rows.length === 0 && (
             <div style={{
               textAlign: "center", padding: "32px 16px",
@@ -818,10 +843,10 @@ export default function MenuTemplateEditor({
               {activeRow ? <OverlayRow row={activeRow} /> : null}
             </DragOverlay>
           </DndContext>
-        </div>
+        </div>}
 
         {/* Add row */}
-        <div style={{ padding: "8px", flexShrink: 0, borderTop: "1px solid #ede9e0" }}>
+        {leftOpen && <div style={{ padding: "8px", flexShrink: 0, borderTop: "1px solid #ede9e0" }}>
           <button
             onClick={addRow}
             style={{
@@ -833,7 +858,7 @@ export default function MenuTemplateEditor({
             onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.color = GOLD; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = "#d0cec8"; e.currentTarget.style.color = "#bbb"; }}
           >+ ADD ROW</button>
-        </div>
+        </div>}
       </aside>
 
       {/* ── Center: Live A5 preview (click to deselect) ── */}
@@ -843,17 +868,39 @@ export default function MenuTemplateEditor({
 
       {/* ── Right: Block inspector ── */}
       <aside style={{
-        width: 240, flexShrink: 0, borderLeft: "1px solid #ede9e0",
-        padding: "14px 14px", overflowY: "auto", background: "#fff",
+        width: rightOpen ? 240 : 28, flexShrink: 0, borderLeft: "1px solid #ede9e0",
+        overflowY: rightOpen ? "auto" : "hidden", background: "#fff",
+        display: "flex", flexDirection: "column",
+        transition: "width 0.18s ease",
       }}>
-        <div style={{ fontSize: 7.5, letterSpacing: 3, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>
-          BLOCK INSPECTOR
+        {/* Collapse toggle */}
+        <div style={{ padding: rightOpen ? "10px 14px 6px" : "8px 4px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: rightOpen ? "space-between" : "center" }}>
+          {rightOpen && (
+            <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+              BLOCK INSPECTOR
+            </span>
+          )}
+          <button
+            onClick={() => setRightOpen(v => !v)}
+            title={rightOpen ? "Collapse panel" : "Expand panel"}
+            style={{
+              border: "none", background: "transparent", cursor: "pointer",
+              color: "#ccc", fontSize: 12, padding: "2px 4px", lineHeight: 1,
+              fontFamily: FONT,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = GOLD; }}
+            onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
+          >{rightOpen ? "▸" : "◂"}</button>
         </div>
-        <BlockInspector
-          block={selectedBlock}
-          onUpdate={updateSelectedBlock}
-          menuCourses={menuCourses}
-        />
+        {rightOpen && (
+          <div style={{ padding: "0 14px 14px", flex: 1, overflowY: "auto" }}>
+            <BlockInspector
+              block={selectedBlock}
+              onUpdate={updateSelectedBlock}
+              menuCourses={menuCourses}
+            />
+          </div>
+        )}
       </aside>
 
       {/* Block picker modal */}

@@ -222,16 +222,23 @@ export function generateMenuHTML({
   let pairingLabelSeen = false;
 
   for (const tRow of template.rows) {
-    const lb = tRow.left;
-    const rb = tRow.right;
+    let lb = tRow.left;
+    let rb = tRow.right;
     const wp = tRow.widthPreset || "55/45";
 
-    // ── spacer ──
-    const spacerBlock = lb?.type === "spacer" ? lb : rb?.type === "spacer" ? rb : null;
-    if (spacerBlock) {
-      rows.push({ type: "_spacer", height: spacerBlock.height || 8, gap: tRow.gap || 0 });
+    // ── Spacer normalization ──
+    // Each cell is independent: a spacer in one cell becomes extra top-gap on the row,
+    // while content in the other cell still renders normally.
+    let spacerGap = 0;
+    if (lb?.type === "spacer") { spacerGap = Math.max(spacerGap, lb.height || 8); lb = null; }
+    if (rb?.type === "spacer") { spacerGap = Math.max(spacerGap, rb.height || 8); rb = null; }
+    const gap = (tRow.gap || 0) + spacerGap;
+    // If both cells are empty (both were spacers, or both null), emit a spacer row and skip
+    if (!lb && !rb) {
+      if (spacerGap > 0) rows.push({ type: "_spacer", height: spacerGap, gap });
       continue;
     }
+
 
     // ── divider ──
     if (lb?.type === "divider" || rb?.type === "divider") {
@@ -242,7 +249,7 @@ export function generateMenuHTML({
         color:        db.color        ?? "#cccccc",
         marginTop:    db.marginTop    ?? 3,
         marginBottom: db.marginBottom ?? 3,
-        gap: tRow.gap || 0,
+        gap,
       });
       continue;
     }
@@ -260,7 +267,7 @@ export function generateMenuHTML({
           "VINSKA SPREMLJAVA", "BREZALKOHOLNA SPREMLJAVA", "OUR STORY SPREMLJAVA", "PREMIUM SPREMLJAVA",
         ]);
         const label = (plBlock.text && !allAutoLabels.has(plBlock.text)) ? plBlock.text : autoLabel;
-        rows.push({ type: "section", label, widthPreset: wp, gap: tRow.gap || 0 });
+        rows.push({ type: "section", label, widthPreset: wp, gap });
       }
       continue;
     }
@@ -269,21 +276,21 @@ export function generateMenuHTML({
     if (lb?.type === "title" || lb?.type === "logo" || rb?.type === "title" || rb?.type === "logo") {
       const tBlock = lb?.type === "title" ? lb : rb?.type === "title" ? rb : null;
       const lBlock = lb?.type === "logo"  ? lb : rb?.type === "logo"  ? rb : null;
-      rows.push({ type: "_header", titleBlock: tBlock, logoBlock: lBlock, widthPreset: wp, gap: tRow.gap || 0 });
+      rows.push({ type: "_header", titleBlock: tBlock, logoBlock: lBlock, widthPreset: wp, gap });
       continue;
     }
 
     // ── team → in-flow team row ──
     if (lb?.type === "team" || rb?.type === "team") {
       const tmBlock = lb?.type === "team" ? lb : rb;
-      rows.push({ type: "_team", block: tmBlock, gap: tRow.gap || 0 });
+      rows.push({ type: "_team", block: tmBlock, gap });
       continue;
     }
 
     // ── goodbye → thank-you row ──
     const gbBlock = lb?.type === "goodbye" ? lb : rb?.type === "goodbye" ? rb : null;
     if (gbBlock) {
-      rows.push({ type: "thankyou", _text: thankYouNote || gbBlock.text, fontSize: gbBlock.fontSize, align: gbBlock.align, gap: tRow.gap || 0 });
+      rows.push({ type: "thankyou", _text: thankYouNote || gbBlock.text, fontSize: gbBlock.fontSize, align: gbBlock.align, gap });
       continue;
     }
 
@@ -292,25 +299,25 @@ export function generateMenuHTML({
       const lText = lb?.type === "text" ? lb : null;
       const rText = rb?.type === "text" ? rb : null;
       const mkTextVal = (b) => b ? { title: b.bold ? (b.text || "") : "", sub: b.bold ? "" : (b.text || ""), fontSize: b.fontSize, lineHeight: b.lineHeight, align: b.align } : null;
-      rows.push({ type: "course", courseKey: null, left: mkTextVal(lText), right: mkTextVal(rText), rowClass: "", widthPreset: wp, gap: tRow.gap || 0 });
+      rows.push({ type: "course", courseKey: null, left: mkTextVal(lText), right: mkTextVal(rText), rowClass: "", widthPreset: wp, gap });
       continue;
     }
 
     // ── aperitif ──
     if (lb?.type === "aperitif" || rb?.type === "aperitif") {
-      if (aQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(aQ.shift()), widthPreset: wp, gap: tRow.gap || 0 });
+      if (aQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(aQ.shift()), widthPreset: wp, gap });
       continue;
     }
 
     // ── by_the_glass (explicit standalone block) ──
     if (lb?.type === "by_the_glass" || rb?.type === "by_the_glass") {
-      if (gQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(gQ.shift()), widthPreset: wp, gap: tRow.gap || 0 });
+      if (gQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(gQ.shift()), widthPreset: wp, gap });
       continue;
     }
 
     // ── bottle (explicit standalone block) ──
     if (lb?.type === "bottle" || rb?.type === "bottle") {
-      if (bQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(bQ.shift()), widthPreset: wp, gap: tRow.gap || 0 });
+      if (bQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(bQ.shift()), widthPreset: wp, gap });
       continue;
     }
 
@@ -386,6 +393,13 @@ export function generateMenuHTML({
         }
       }
 
+      // Aperitif overflow: remaining aperitifs fill into pre-Danube course right columns
+      // so e.g. a 2nd aperitif shows alongside Sour Soup, 3rd alongside Linzer Eye, etc.
+      if (lb.showPairing !== false && !drink && aQ.length > 0 && i < DANUBE_SALMON_IDX) {
+        const d = fmtDrinkParts(aQ.shift());
+        drink = { name: d.title || "", sub: d.sub || "" };
+      }
+
       // Per-seat output overrides (ephemeral, set in the service view)
       const outOv = seatOutputOverrides[courseKey] || seatOutputOverrides[normKey];
       if (outOv) {
@@ -402,7 +416,7 @@ export function generateMenuHTML({
         right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
         rowClass: course.section_gap_before ? "section-gap-before" : "",
         widthPreset: wp,
-        gap: tRow.gap || 0,
+        gap,
       });
       continue;
     }
