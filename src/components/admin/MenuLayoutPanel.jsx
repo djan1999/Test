@@ -22,6 +22,11 @@ export default function MenuLayoutPanel({
   templateSaving,
   templateSaved,
   logoDataUri,
+  // Catalog data for preview panel
+  wines = [],
+  cocktails = [],
+  spirits = [],
+  beers = [],
 }) {
   const [activeTab, setActiveTab] = useState("template");
 
@@ -58,6 +63,10 @@ export default function MenuLayoutPanel({
           saved={templateSaved}
           menuCourses={menuCourses}
           logoDataUri={logoDataUri}
+          wines={wines}
+          cocktails={cocktails}
+          spirits={spirits}
+          beers={beers}
         />
       )}
 

@@ -139,6 +139,10 @@ export default function AdminLayout({
                 templateSaving={templateSaving}
                 templateSaved={templateSaved}
                 logoDataUri={logoDataUri}
+                wines={wines}
+                cocktails={cocktails}
+                spirits={spirits}
+                beers={beers}
               />
             </div>
           )}
