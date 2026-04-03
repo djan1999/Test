@@ -251,17 +251,34 @@ export function generateMenuHTML({
     const plBlock = lb?.type === "pairing_label" ? lb : rb?.type === "pairing_label" ? rb : null;
     if (plBlock) {
       pairingLabelSeen = true;
-      rows.push({ type: "section", label: plBlock.text || "WINE PAIRING", widthPreset: wp, gap: tRow.gap || 0 });
+      if (hasPairing) {
+        const autoLabel = PAIRING_LABELS[pkey] || "PAIRING";
+        // Use block text only when it's a custom override (non-empty AND not a standard auto label)
+        const allAutoLabels = new Set([
+          ...Object.values(PAIRING_LABELS),
+          "WINE PAIRING", "NON-ALCO PAIRING", "OUR STORY PAIRING", "PREMIUM PAIRING",
+          "VINSKA SPREMLJAVA", "BREZALKOHOLNA SPREMLJAVA", "OUR STORY SPREMLJAVA", "PREMIUM SPREMLJAVA",
+        ]);
+        const label = (plBlock.text && !allAutoLabels.has(plBlock.text)) ? plBlock.text : autoLabel;
+        rows.push({ type: "section", label, widthPreset: wp, gap: tRow.gap || 0 });
+      }
       continue;
     }
 
-    // ── logo / title → rendered in #header, not as body rows ──
+    // ── title / logo → in-flow header row ──
     if (lb?.type === "title" || lb?.type === "logo" || rb?.type === "title" || rb?.type === "logo") {
+      const tBlock = lb?.type === "title" ? lb : rb?.type === "title" ? rb : null;
+      const lBlock = lb?.type === "logo"  ? lb : rb?.type === "logo"  ? rb : null;
+      rows.push({ type: "_header", titleBlock: tBlock, logoBlock: lBlock, widthPreset: wp, gap: tRow.gap || 0 });
       continue;
     }
 
-    // ── team → rendered in #footer ──
-    if (lb?.type === "team" || rb?.type === "team") continue;
+    // ── team → in-flow team row ──
+    if (lb?.type === "team" || rb?.type === "team") {
+      const tmBlock = lb?.type === "team" ? lb : rb;
+      rows.push({ type: "_team", block: tmBlock, gap: tRow.gap || 0 });
+      continue;
+    }
 
     // ── goodbye → thank-you row ──
     const gbBlock = lb?.type === "goodbye" ? lb : rb?.type === "goodbye" ? rb : null;
@@ -309,7 +326,9 @@ export function generateMenuHTML({
       let dish = applyCourseRestriction(resolveCourse(course), restrictions, lang);
       let drink = null;
 
-      if (rb?.type === "pairing") {
+      if (lb.showPairing === false) {
+        // showPairing toggle off — don't resolve any drink for this course row
+      } else if (rb?.type === "pairing") {
         if (pkey) {
           drink = lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey];
 
@@ -351,16 +370,16 @@ export function generateMenuHTML({
           }
 
           // By-the-glass fallback from Danube Salmon onwards
-          if (!drink && i >= DANUBE_SALMON_IDX && gQ.length > 0) {
+          if (!drink && i >= DANUBE_SALMON_IDX && gQ.length > 0 && rb?.showByGlass !== false) {
             const d = fmtDrinkParts(gQ.shift());
             drink = { name: d.title || "", sub: d.sub || "" };
           }
         } else {
           // No pairing package — by-the-glass or bottle from Danube onwards
-          if (i >= DANUBE_SALMON_IDX && gQ.length > 0) {
+          if (i >= DANUBE_SALMON_IDX && gQ.length > 0 && rb?.showByGlass !== false) {
             const d = fmtDrinkParts(gQ.shift());
             drink = { name: d.title || "", sub: d.sub || "" };
-          } else if (i >= DANUBE_SALMON_IDX && bQ.length > 0) {
+          } else if (i >= DANUBE_SALMON_IDX && bQ.length > 0 && rb?.showBottle !== false) {
             const d = fmtDrinkParts(bQ.shift());
             drink = { name: d.title || "", sub: d.sub || "" };
           }
@@ -449,6 +468,19 @@ export function generateMenuHTML({
     return `grid-template-columns:minmax(0,${leftFr}fr) minmax(0,${rightFr}fr)`;
   };
 
+  // ── Date and title (needed by _header row renderer) ──────────────────────
+  const _today = new Date();
+  const _d = _today.getDate();
+  const _MONTHS_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const _MONTHS_SI = ["Januar","Februar","Marec","April","Maj","Junij","Julij","Avgust","September","Oktober","November","December"];
+  const menuDate = lang === "si"
+    ? `${_d}. ${_MONTHS_SI[_today.getMonth()]} ${_today.getFullYear()}`
+    : (() => {
+        const sfx = [11,12,13].includes(_d) ? "th" : _d%10===1 ? "st" : _d%10===2 ? "nd" : _d%10===3 ? "rd" : "th";
+        return `${_d}${sfx} of ${_MONTHS_EN[_today.getMonth()]}, ${_today.getFullYear()}`;
+      })();
+  const safeTitle = esc((menuTitle || "WINTER MENU").replace(/\s+/g, " ").trim());
+
   // ── Render rows to HTML ───────────────────────────────────────────────────
   const menuRowsHtml = rows.map(row => {
     const gapStyle = row.gap ? `margin-top:${row.gap}pt;` : "";
@@ -469,30 +501,33 @@ export function generateMenuHTML({
     if (row.type === "wine-only") {
       return `<div class="menu-row wine-only" style="${gapStyle}${gridCols(row.widthPreset)}">${renderBlock(null, "left")}${renderBlock(row.right, "right")}</div>`;
     }
+    if (row.type === "_header") {
+      const hasTitle = !!row.titleBlock;
+      const hasLogo  = !!row.logoBlock && !!_logo;
+      const titleHtml = hasTitle
+        ? `<div id="title">${safeTitle}<div id="menu-date">${esc(menuDate)}</div></div>`
+        : "";
+      const logoHtml = hasLogo
+        ? `<div id="logo"><img src="${_logo}" alt="Logo"></div>`
+        : "";
+      return `<div class="menu-header-row" style="${gapStyle}">${titleHtml}${logoHtml}</div>`;
+    }
+    if (row.type === "_team") {
+      const tmB = row.block || {};
+      const spacing = tmB.spacing ?? 1.4;
+      const names = tmB.names || teamNames;
+      const taStyle = (tmB.align && tmB.align !== "left") ? `text-align:${tmB.align};` : "";
+      return `<div id="team" style="${gapStyle}${taStyle}"><div class="menu-main" style="margin-bottom:${spacing}pt">TEAM:</div><div>${esc(names)}</div></div>`;
+    }
     if (row.type === "thankyou") {
       const fs = row.fontSize ? `font-size:${row.fontSize}pt;` : "";
       const ta = (row.align && row.align !== "left") ? `text-align:${row.align};` : "";
       return `<div class="menu-thankyou" style="${gapStyle}${fs}${ta}">${esc(row._text || thankYouNote)}</div>`;
     }
-    if (row.type === "team") return "";
     // course / text rows
     const ckAttr = row.courseKey ? ` data-ck="${esc(row.courseKey)}"` : "";
     return `<div class="menu-row ${row.rowClass || ""}" style="${gapStyle}${gridCols(row.widthPreset)}"${ckAttr}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
   }).join("");
-
-  // ── Date formatting ───────────────────────────────────────────────────────
-  const _today = new Date();
-  const _d = _today.getDate();
-  const _MONTHS_EN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  const _MONTHS_SI = ["Januar","Februar","Marec","April","Maj","Junij","Julij","Avgust","September","Oktober","November","December"];
-  const menuDate = lang === "si"
-    ? `${_d}. ${_MONTHS_SI[_today.getMonth()]} ${_today.getFullYear()}`
-    : (() => {
-        const sfx = [11,12,13].includes(_d) ? "th" : _d%10===1 ? "st" : _d%10===2 ? "nd" : _d%10===3 ? "rd" : "th";
-        return `${_d}${sfx} of ${_MONTHS_EN[_today.getMonth()]}, ${_today.getFullYear()}`;
-      })();
-
-  const safeTitle = esc((menuTitle || "WINTER MENU").replace(/\s+/g, " ").trim());
 
   // ── HTML output ───────────────────────────────────────────────────────────
   // Single unified rendering path — same CSS and structure used in both the
@@ -519,7 +554,7 @@ body{position:relative;}
 #sheet{width:var(--page-w);height:var(--page-h);overflow:hidden;position:relative;background:#fff;}
 #frame{position:absolute;inset:0;padding:var(--pad-t) var(--pad-r) var(--pad-b) var(--pad-l);overflow:hidden;}
 #scaleTarget{width:100%;min-height:var(--inner-h);display:flex;flex-direction:column;transform-origin:top left;}
-#header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8.6mm;margin-bottom:${s("headerSpacing",7)}mm;}
+.menu-header-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8.6mm;margin-bottom:${s("headerSpacing",7)}mm;}
 #title{font-size:${titleFontSize}pt;font-weight:700;letter-spacing:${titleTracking}em;text-transform:${titleTransform};text-align:${titleAlign};}
 #menu-date{font-size:5.8pt;font-weight:400;letter-spacing:0.02em;margin-top:0.8mm;text-transform:none;}
 #logo{transform:translate(${logoOffsetX}mm,${logoOffsetY}mm);}
@@ -536,19 +571,13 @@ body{position:relative;}
 .menu-section-row{display:grid;margin:${s("sectionSpacing",6.8)}pt 0 ${(s("sectionSpacing",6.8)-0.6).toFixed(2)}pt;}
 .menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;text-transform:uppercase;}
 .menu-thankyou{margin-top:${s("thankYouSpacing",7)}pt;font-size:6.55pt;font-style:normal;}
-#footer{margin-top:auto;padding-top:9.5pt;}
 #team{font-size:6.5pt;line-height:1.2;overflow-wrap:anywhere;}
 #team .menu-main{margin-bottom:1.4pt;}
 </style>
 </head>
 <body>
 <div id="sheet"><div id="frame"><div id="scaleTarget">
-<div id="header">
-  <div id="title">${safeTitle}<div id="menu-date">${esc(menuDate)}</div></div>
-  ${_logo ? `<div id="logo"><img src="${_logo}" alt="Logo"></div>` : ""}
-</div>
 <div id="menu">${menuRowsHtml}</div>
-<div id="footer"><div id="team"><div class="menu-main">TEAM:</div><div>${esc(teamNames)}</div></div></div>
 </div></div></div>
 <script>
 (function(){

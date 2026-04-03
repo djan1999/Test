@@ -41,24 +41,28 @@ export const BLOCK_META = {
     label: "Course",        group: "content", color: "#4b4b88", bg: "#f0f0f8", icon: "◈",
     desc: "Dish text for a specific course — respects seat restrictions",
     fields: [
-      { key: "courseKey", label: "Course", type: "course_select" },
+      { key: "courseKey",   label: "Course",              type: "course_select" },
+      { key: "showPairing", label: "Show pairing column", type: "checkbox" },
     ],
-    defaults: { courseKey: "" },
+    defaults: { courseKey: "", showPairing: true },
   },
   pairing: {
     label: "Pairing",       group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "◎",
     desc: "Drink pairing for this seat's selection (Wine / Non-Alc / OS / Premium). Falls back to by-the-glass from Danube Salmon onwards.",
-    fields: [],
-    defaults: {},
+    fields: [
+      { key: "showByGlass", label: "Show by-the-glass fallback", type: "checkbox" },
+      { key: "showBottle",  label: "Show bottle wine fallback",  type: "checkbox" },
+    ],
+    defaults: { showByGlass: true, showBottle: true },
   },
   pairing_label: {
     label: "Pairing Label", group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "T",
-    desc: "Static section header before the pairing column — text editable",
+    desc: "Auto-resolves label from pairing type (Wine/Non-Alc/etc). Text field overrides only. Row is hidden when seat has no pairing.",
     fields: [
-      { key: "text",  label: "Label text", type: "text",   placeholder: "WINE PAIRING" },
-      { key: "align", label: "Alignment",  type: "select", options: ["left", "center", "right"] },
+      { key: "text",  label: "Label override", type: "text", placeholder: "Leave empty for auto" },
+      { key: "align", label: "Alignment",       type: "select", options: ["left", "center", "right"] },
     ],
-    defaults: { text: "WINE PAIRING", align: "right" },
+    defaults: { text: "", align: "right" },
   },
   by_the_glass: {
     label: "By the Glass",  group: "content", color: "#5a9e6e", bg: "#f0f8f2", icon: "◷",
@@ -126,12 +130,13 @@ export const BLOCK_META = {
   },
   team: {
     label: "Team Names",    group: "static", color: "#555", bg: "#f4f4f4", icon: "◆",
-    desc: "Team names loaded from service settings",
+    desc: "Team names — override below or leave empty to use global service settings",
     fields: [
-      { key: "align",   label: "Alignment",          type: "select", options: ["left", "center", "right"] },
-      { key: "spacing", label: "Label spacing (pt)",  type: "number", min: 0, max: 10, step: 0.5 },
+      { key: "names",   label: "Team names",          type: "textarea", placeholder: "Leave empty for global team names" },
+      { key: "align",   label: "Alignment",            type: "select",   options: ["left", "center", "right"] },
+      { key: "spacing", label: "Label spacing (pt)",   type: "number",   min: 0, max: 10, step: 0.5 },
     ],
-    defaults: { align: "left", spacing: 1.4 },
+    defaults: { names: "", align: "left", spacing: 1.4 },
   },
   goodbye: {
     label: "Goodbye Note",  group: "static", color: "#555", bg: "#f4f4f4", icon: "◁",

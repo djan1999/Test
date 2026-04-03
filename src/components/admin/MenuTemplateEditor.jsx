@@ -27,7 +27,6 @@ import { CSS } from "@dnd-kit/utilities";
 import { FONT, baseInp } from "./adminStyles.js";
 import {
   BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
-  WIDTH_PRESETS,
 } from "../../utils/menuTemplateSchema.js";
 import { generateMenuHTML } from "../../utils/menuGenerator.js";
 
@@ -63,7 +62,7 @@ function chipLabel(block, menuCourses) {
 
 // ── Block chip (in row list) ──────────────────────────────────────────────────
 
-function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, menuCourses }) {
+function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, onMove, menuCourses }) {
   const meta = block ? (BLOCK_META[block.type] || {}) : null;
 
   if (!block) {
@@ -107,6 +106,17 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
       }}>
         {chipLabel(block, menuCourses)}
       </span>
+      {/* Move to other cell */}
+      <button
+        onClick={e => { e.stopPropagation(); onMove(rowId, side); }}
+        title={side === "left" ? "Move to right cell" : "Move to left cell"}
+        style={{
+          flexShrink: 0, border: "none", background: "transparent",
+          cursor: "pointer", color: "#ccc", fontSize: 9, padding: "0 3px", height: "100%",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.color = "#4b4b88"; }}
+        onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
+      >{side === "left" ? "→" : "←"}</button>
       <button
         onClick={e => { e.stopPropagation(); onRemove(rowId, side); }}
         style={{
@@ -122,37 +132,12 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
 
 // ── Row settings (width preset + gap) ────────────────────────────────────────
 
-function RowSettings({ row, onUpdate, onClose }) {
-  const current = row.widthPreset || "55/45";
+function RowSettings({ row, onUpdate }) {
   const gap = row.gap ?? 0;
-
   return (
-    <div style={{
-      padding: "10px 10px 10px 24px",
-      background: "#f8f7f3",
-      borderTop: "1px solid #ede9e0",
-    }}>
+    <div style={{ padding: "10px 10px 10px 24px", background: "#f8f7f3", borderTop: "1px solid #ede9e0" }}>
       <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>
         ROW SETTINGS
-      </div>
-      <div style={{ marginBottom: 8 }}>
-        <div style={{ fontFamily: FONT, fontSize: 7.5, color: "#999", letterSpacing: 1, marginBottom: 4 }}>WIDTH</div>
-        <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-          {WIDTH_PRESETS.map(p => (
-            <button
-              key={p}
-              onClick={() => onUpdate({ ...row, widthPreset: p })}
-              style={{
-                fontFamily: FONT, fontSize: 7.5, padding: "3px 6px",
-                border: `1px solid ${current === p ? SELECTED_RING : "#ddd"}`,
-                borderRadius: 2, cursor: "pointer",
-                background: current === p ? "#f0f0f8" : "#fff",
-                color: current === p ? SELECTED_RING : "#666",
-                letterSpacing: 0,
-              }}
-            >{p}</button>
-          ))}
-        </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <div style={{ fontFamily: FONT, fontSize: 7.5, color: "#999", letterSpacing: 1 }}>GAP ABOVE (pt)</div>
@@ -173,7 +158,7 @@ function RowSettings({ row, onUpdate, onClose }) {
 // ── Sortable row (in left panel) ──────────────────────────────────────────────
 
 function SortableRow({
-  row, selectedCell, onSelectCell, onRemoveBlock, onAddBlock, onRemoveRow,
+  row, selectedCell, onSelectCell, onRemoveBlock, onAddBlock, onMoveBlock, onRemoveRow,
   onDuplicateRow, onInsertAbove, onInsertBelow, onUpdateRow,
   menuCourses,
 }) {
@@ -213,21 +198,15 @@ function SortableRow({
         <BlockChip
           block={row.left} rowId={row.id} side="left"
           isSelected={leftSelected}
-          onSelect={onSelectCell} onRemove={onRemoveBlock} onAdd={onAddBlock}
+          onSelect={onSelectCell} onRemove={onRemoveBlock} onAdd={onAddBlock} onMove={onMoveBlock}
           menuCourses={menuCourses}
         />
-
-        {/* Width indicator */}
-        <span style={{
-          fontFamily: FONT, fontSize: 7, color: "#bbb", letterSpacing: 0,
-          flexShrink: 0, minWidth: 30, textAlign: "center",
-        }}>{row.widthPreset || "55/45"}</span>
 
         {/* Right chip */}
         <BlockChip
           block={row.right} rowId={row.id} side="right"
           isSelected={rightSelected}
-          onSelect={onSelectCell} onRemove={onRemoveBlock} onAdd={onAddBlock}
+          onSelect={onSelectCell} onRemove={onRemoveBlock} onAdd={onAddBlock} onMove={onMoveBlock}
           menuCourses={menuCourses}
         />
 
@@ -607,6 +586,18 @@ export default function MenuTemplateEditor({
     return "Hvala za vaš obisk.";
   })();
 
+  // ── Keyboard: Escape deselects / closes picker ──
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape") {
+        setPickerTarget(null);
+        setSelectedCell(null);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
   // ── Live preview (debounced 250ms) ──
   useEffect(() => {
     clearTimeout(previewTimer.current);
@@ -689,6 +680,19 @@ export default function MenuTemplateEditor({
   const removeBlock = (rowId, side) => {
     update(rows.map(r => r.id === rowId ? { ...r, [side]: null } : r));
     if (selectedCell?.rowId === rowId && selectedCell?.side === side) setSelectedCell(null);
+  };
+
+  // Swap a block to the other cell (left↔right)
+  const moveBlock = (rowId, fromSide) => {
+    const toSide = fromSide === "left" ? "right" : "left";
+    update(rows.map(r => {
+      if (r.id !== rowId) return r;
+      return { ...r, [toSide]: r[fromSide], [fromSide]: r[toSide] };
+    }));
+    // Update selection to follow the moved block
+    if (selectedCell?.rowId === rowId && selectedCell?.side === fromSide) {
+      setSelectedCell({ rowId, side: toSide });
+    }
   };
 
   const pickBlock = type => {
@@ -800,6 +804,7 @@ export default function MenuTemplateEditor({
                   onSelectCell={(rowId, side) => setSelectedCell({ rowId, side })}
                   onRemoveBlock={removeBlock}
                   onAddBlock={(rowId, side) => setPickerTarget({ rowId, side })}
+                  onMoveBlock={moveBlock}
                   onRemoveRow={removeRow}
                   onDuplicateRow={duplicateRow}
                   onInsertAbove={insertAbove}
@@ -831,8 +836,10 @@ export default function MenuTemplateEditor({
         </div>
       </aside>
 
-      {/* ── Center: Live A5 preview ── */}
-      <LivePreview previewHtml={previewHtml} loading={previewLoading} />
+      {/* ── Center: Live A5 preview (click to deselect) ── */}
+      <div style={{ flex: 1, display: "flex" }} onClick={() => setSelectedCell(null)}>
+        <LivePreview previewHtml={previewHtml} loading={previewLoading} />
+      </div>
 
       {/* ── Right: Block inspector ── */}
       <aside style={{
