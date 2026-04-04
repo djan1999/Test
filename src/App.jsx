@@ -3537,7 +3537,7 @@ function BevEditRow({ emoji, label, items, onUpdate }) {
   );
 }
 
-function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLayoutStyles = {}, menuTemplate = null, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [] }) {
+function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLayoutStyles = {}, menuTemplate = null, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [], aperitifOptions = [] }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState("WINTER MENU");
   const [thankYouNote, setThankYouNote] = useState(table.lang === "si" ? "Hvala za vaš obisk." : "Thank you for your visit.");
@@ -5937,6 +5937,7 @@ function MenuPage({ tables, menuCourses, upd, logoDataUri = "", wines = [], cock
           cocktails={cocktails}
           spirits={spirits}
           beers={beers}
+          aperitifOptions={aperitifOptions}
           onClose={() => setMenuGenTable(null)}
         />
       )}
