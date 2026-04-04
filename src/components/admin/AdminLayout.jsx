@@ -50,6 +50,8 @@ export default function AdminLayout({
   logoDataUri,
   onSaveLogo,
   layoutStyles = {},
+  onUpdateLayoutStyles,
+  onSaveLayoutStyles,
   onResetMenuLayout,
   // Quick Access
   quickAccessItems,
@@ -191,6 +193,9 @@ export default function AdminLayout({
               onSyncWines={onSyncWines}
               logoDataUri={logoDataUri}
               onSaveLogo={onSaveLogo}
+              layoutStyles={layoutStyles}
+              onUpdateLayoutStyles={onUpdateLayoutStyles}
+              onSaveLayoutStyles={onSaveLayoutStyles}
               onResetMenuLayout={onResetMenuLayout}
             />
           )}

@@ -595,7 +595,7 @@ body{position:relative;}
 #menu{width:100%;flex:1;display:flex;flex-direction:column;}
 .pin-bottom{margin-top:auto;}
 /* Per-row grid-template-columns are set via inline styles on each .menu-row */
-.menu-row{display:grid;column-gap:${hasPairing ? "9mm" : "10.8mm"};align-items:start;break-inside:avoid;page-break-inside:avoid;}
+.menu-row{display:grid;column-gap:${s("colGap", 9)}mm;align-items:start;break-inside:avoid;page-break-inside:avoid;}
 .menu-row{margin-bottom:${s("rowSpacing",3.15)}pt;}
 .menu-row.wine-only{margin-bottom:${s("wineRowSpacing",4.5)}pt;}
 
