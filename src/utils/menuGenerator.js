@@ -12,7 +12,6 @@
 import { applyCourseRestriction } from "./menuUtils.js";
 import { buildDefaultTemplate, parseWidthPreset } from "./menuTemplateSchema.js";
 
-export const DEFAULT_COURSE_GAPS = { danube_salmon: 14.5, sheep_cheese: 14.5 };
 
 export const COUNTRY_NAMES = {
   FR: "France", IT: "Italy", ES: "Spain", DE: "Germany", AT: "Austria",
@@ -290,7 +289,7 @@ export function generateMenuHTML({
     // ── goodbye → thank-you row ──
     const gbBlock = lb?.type === "goodbye" ? lb : rb?.type === "goodbye" ? rb : null;
     if (gbBlock) {
-      rows.push({ type: "thankyou", _text: thankYouNote || gbBlock.text, fontSize: gbBlock.fontSize, align: gbBlock.align, gap });
+      rows.push({ type: "thankyou", _text: gbBlock.text?.trim() || thankYouNote, fontSize: gbBlock.fontSize, align: gbBlock.align, gap });
       continue;
     }
 
@@ -414,7 +413,7 @@ export function generateMenuHTML({
         courseKey: normKey,
         left:  { title: dish?.name || "", sub: dish?.sub || "" },
         right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
-        rowClass: course.section_gap_before ? "section-gap-before" : "",
+        rowClass: "",
         widthPreset: wp,
         gap,
       });
@@ -493,7 +492,16 @@ export function generateMenuHTML({
         const sfx = [11,12,13].includes(_d) ? "th" : _d%10===1 ? "st" : _d%10===2 ? "nd" : _d%10===3 ? "rd" : "th";
         return `${_d}${sfx} of ${_MONTHS_EN[_today.getMonth()]}, ${_today.getFullYear()}`;
       })();
-  const safeTitle = esc((menuTitle || "WINTER MENU").replace(/\s+/g, " ").trim());
+  // Title: prefer the template's title block text (so preview and print agree),
+  // fall back to the menuTitle parameter (legacy / no-template path).
+  const _titleBlockText = (() => {
+    for (const r of (menuTemplate?.rows || [])) {
+      const tb = r.left?.type === "title" ? r.left : r.right?.type === "title" ? r.right : null;
+      if (tb?.text?.trim()) return tb.text.trim();
+    }
+    return null;
+  })();
+  const safeTitle = esc((_titleBlockText || menuTitle || "WINTER MENU").replace(/\s+/g, " ").trim());
 
   // ── Render rows to HTML ───────────────────────────────────────────────────
   const menuRowsHtml = rows.map(row => {
@@ -578,7 +586,7 @@ body{position:relative;}
 .menu-row,.menu-section-row{display:grid;column-gap:${hasPairing ? "9mm" : "10.8mm"};align-items:start;break-inside:avoid;page-break-inside:avoid;}
 .menu-row{margin-bottom:${s("rowSpacing",3.15)}pt;}
 .menu-row.wine-only{margin-bottom:${s("wineRowSpacing",4.5)}pt;}
-.menu-row.section-gap-before{margin-top:14.5pt;}
+
 .menu-col{min-width:0;}
 .menu-main{font-weight:700;line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;text-transform:uppercase;}
 .menu-sub{line-height:1.08;margin-top:0.75pt;overflow-wrap:anywhere;}

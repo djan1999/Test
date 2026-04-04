@@ -126,7 +126,7 @@ export const BLOCK_META = {
       { key: "uppercase", label: "Uppercase",         type: "checkbox" },
       { key: "align",     label: "Alignment",         type: "select",   options: ["left", "center", "right"] },
     ],
-    defaults: { text: "WINTER MENU", fontSize: 13.9, tracking: 0.035, uppercase: true, align: "left" },
+    defaults: { text: "", fontSize: 13.9, tracking: 0.035, uppercase: true, align: "left" },
   },
   team: {
     label: "Team Names",    group: "static", color: "#555", bg: "#f4f4f4", icon: "◆",
@@ -146,7 +146,7 @@ export const BLOCK_META = {
       { key: "fontSize", label: "Font size (pt)",  type: "number",   min: 5, max: 14, step: 0.25 },
       { key: "align",    label: "Alignment",       type: "select",   options: ["left", "center", "right"] },
     ],
-    defaults: { text: "Hvala za vaš obisk.", fontSize: 6.55, align: "left" },
+    defaults: { text: "", fontSize: 6.55, align: "left" },
   },
   text: {
     label: "Text",          group: "static", color: "#333", bg: "#f2f2f2", icon: "≡",
