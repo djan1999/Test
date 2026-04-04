@@ -199,6 +199,10 @@ export default function AdminLayout({
             <QuickAccessPanel
               quickAccessItems={quickAccessItems}
               onUpdateQuickAccess={onUpdateQuickAccess}
+              wines={wines}
+              cocktails={cocktails}
+              spirits={spirits}
+              beers={beers}
             />
           )}
 
