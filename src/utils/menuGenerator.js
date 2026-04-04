@@ -426,8 +426,11 @@ export function generateMenuHTML({
   // template (e.g. older saved templates, test fixtures), insert the section
   // header after the _header row (or at 0 if no header exists).
   if (hasPairing && !pairingLabelSeen) {
-    const headerIdx = rows.findIndex(r => r.type === "_header");
-    const insertAt = headerIdx >= 0 ? headerIdx + 1 : 0;
+    // Insert just before the first course row that carries a drink (non-null right),
+    // i.e. right before the pairing wines start. Fall back to after the _header.
+    const firstPairingIdx = rows.findIndex(r => r.type === "course" && r.right !== null);
+    const headerIdx       = rows.findIndex(r => r.type === "_header");
+    const insertAt = firstPairingIdx >= 0 ? firstPairingIdx : (headerIdx >= 0 ? headerIdx + 1 : 0);
     rows.splice(insertAt, 0, { type: "section", label: PAIRING_LABELS[pkey] || "PAIRING", widthPreset: "55/45", gap: 0 });
   }
 
