@@ -3127,7 +3127,16 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
           const baseSub     = course.menu?.sub  || "";
           const baseNameSi  = course.menu_si?.name || null;
           const baseSubSi   = course.menu_si?.sub  || "";
-          const kitchenNote = course.kitchen_note || "";
+          const kitchenNote = (() => {
+            const notes = new Set();
+            seats.forEach(seat => {
+              seatRestrKeys(seat).forEach(k => {
+                const n = course.restrictions?.[k]?.kitchen_note;
+                if (n?.trim()) notes.add(n.trim());
+              });
+            });
+            return [...notes].join(" · ");
+          })();
           const line1 = baseName;
           const subDiff = (modSub) => {
             const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));

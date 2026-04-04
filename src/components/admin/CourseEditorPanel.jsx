@@ -23,7 +23,7 @@ function AddItemPopover({ course, onUpdate, onClose }) {
 
   const addRestriction = (rKey) => {
     if (course.restrictions?.[rKey] != null) return;
-    const restrictions = { ...course.restrictions, [rKey]: { name: "", sub: "" } };
+    const restrictions = { ...course.restrictions, [rKey]: { name: "", sub: "", kitchen_note: "" } };
     onUpdate({ ...course, restrictions });
     onClose();
   };
@@ -226,9 +226,8 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
           </div>
 
           {/* Metadata */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
             <div><div style={labelSm}>Course Key</div><input value={course.course_key || ""} onChange={e => upd("course_key", e.target.value)} style={inpSm} placeholder="e.g. beetroot" /></div>
-            <div><div style={labelSm}>Kitchen Note</div><input value={course.kitchen_note || ""} onChange={e => upd("kitchen_note", e.target.value)} style={inpSm} placeholder="Note for kitchen" /></div>
             <div><div style={labelSm}>Aperitif Btn</div><input value={course.aperitif_btn || ""} onChange={e => upd("aperitif_btn", e.target.value || null)} style={inpSm} placeholder="Button label" /></div>
           </div>
 
@@ -315,10 +314,11 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
                 {activeRestrictions.map(rKey => {
                   const val = course.restrictions?.[rKey];
                   return (
-                    <div key={rKey} style={{ display: "grid", gridTemplateColumns: "110px 1fr 1fr 20px", gap: 6, alignItems: "center" }}>
+                    <div key={rKey} style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 1fr 20px", gap: 6, alignItems: "center" }}>
                       <span style={{ fontFamily: FONT, fontSize: 9, color: "#b04040" }}>{rKey.replace(/_/g, " ")}</span>
                       <input value={val?.name || ""} onChange={e => updRestriction(rKey, "name", e.target.value)} style={inpSm} placeholder={course.menu?.name || "Alt name"} />
                       <input value={val?.sub || ""} onChange={e => updRestriction(rKey, "sub", e.target.value)} style={inpSm} placeholder={course.menu?.sub || "Alt desc"} />
+                      <input value={val?.kitchen_note || ""} onChange={e => updRestriction(rKey, "kitchen_note", e.target.value)} style={inpSm} placeholder="Kitchen note" />
                       <button onClick={() => removeRestriction(rKey)} title="Remove restriction" style={{ background: "none", border: "none", cursor: "pointer", color: "#ddd", fontSize: 14, padding: 0, lineHeight: 1 }}
                         onMouseEnter={e => e.currentTarget.style.color = "#e07070"}
                         onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>×</button>
