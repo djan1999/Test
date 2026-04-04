@@ -424,9 +424,11 @@ export function generateMenuHTML({
   // ── Pairing label fallback ────────────────────────────────────────────────
   // When a pairing package is active but no pairing_label block exists in the
   // template (e.g. older saved templates, test fixtures), insert the section
-  // header at the top so the label always appears.
+  // header after the _header row (or at 0 if no header exists).
   if (hasPairing && !pairingLabelSeen) {
-    rows.unshift({ type: "section", label: PAIRING_LABELS[pkey] || "PAIRING", widthPreset: "55/45", gap: 0 });
+    const headerIdx = rows.findIndex(r => r.type === "_header");
+    const insertAt = headerIdx >= 0 ? headerIdx + 1 : 0;
+    rows.splice(insertAt, 0, { type: "section", label: PAIRING_LABELS[pkey] || "PAIRING", widthPreset: "55/45", gap: 0 });
   }
 
   // ── Append leftover drink queues after template walk ──────────────────────

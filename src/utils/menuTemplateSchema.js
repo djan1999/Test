@@ -200,18 +200,13 @@ export function buildDefaultTemplate(menuCourses = []) {
   const rows = [];
 
   // Header: title left, logo right
+  // Note: .menu-header-row CSS already has margin-bottom:headerSpacing mm,
+  // so no separate gap spacer is needed here.
   rows.push({
     id: "hdr",
     left:  makeBlock("title"),
     right: makeBlock("logo"),
     widthPreset: "55/45",
-    gap: 0,
-  });
-  rows.push({
-    id: "hdr_gap",
-    left:  { type: "spacer", height: 7 },
-    right: null,
-    widthPreset: "100/0",
     gap: 0,
   });
 
