@@ -317,8 +317,8 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
                   return (
                     <div key={rKey} style={{ display: "grid", gridTemplateColumns: "110px 1fr 1fr 20px", gap: 6, alignItems: "center" }}>
                       <span style={{ fontFamily: FONT, fontSize: 9, color: "#b04040" }}>{rKey.replace(/_/g, " ")}</span>
-                      <input value={val?.name || ""} onChange={e => updRestriction(rKey, "name", e.target.value)} style={inpSm} placeholder="Alt name" />
-                      <input value={val?.sub || ""} onChange={e => updRestriction(rKey, "sub", e.target.value)} style={inpSm} placeholder="Alt desc" />
+                      <input value={val?.name || ""} onChange={e => updRestriction(rKey, "name", e.target.value)} style={inpSm} placeholder={course.menu?.name || "Alt name"} />
+                      <input value={val?.sub || ""} onChange={e => updRestriction(rKey, "sub", e.target.value)} style={inpSm} placeholder={course.menu?.sub || "Alt desc"} />
                       <button onClick={() => removeRestriction(rKey)} title="Remove restriction" style={{ background: "none", border: "none", cursor: "pointer", color: "#ddd", fontSize: 14, padding: 0, lineHeight: 1 }}
                         onMouseEnter={e => e.currentTarget.style.color = "#e07070"}
                         onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>×</button>
