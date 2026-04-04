@@ -52,8 +52,8 @@ export function generateMenuHTML({
 
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
   const PAIRING_LABELS = lang === "si"
-    ? { wp: "VINSKA SPREMLJAVA", na: "BREZALKOHOLNA SPREMLJAVA", os: "OUR STORY SPREMLJAVA", premium: "PREMIUM SPREMLJAVA" }
-    : { wp: "WINE PAIRING", na: "NON-ALCO PAIRING", os: "OUR STORY PAIRING", premium: "PREMIUM PAIRING" };
+    ? { wp: "VINSKA SPREMLJAVA", na: "BREZALKOHOLNA SPREMLJAVA", os: "OUR STORY SPREMLJAVA", premium: "PREMIUM VINSKA SPREMLJAVA" }
+    : { wp: "WINE PAIRING", na: "NON-ALCO PAIRING", os: "OUR STORY PAIRING", premium: "PREMIUM WINE PAIRING" };
 
   // For SI menus, swap menu_si into the menu field so applyCourseRestriction uses the right base
   const resolveCourse = (course) =>
@@ -267,8 +267,8 @@ export function generateMenuHTML({
         const autoLabel = PAIRING_LABELS[pkey] || "PAIRING";
         const allAutoLabels = new Set([
           ...Object.values(PAIRING_LABELS),
-          "WINE PAIRING", "NON-ALCO PAIRING", "OUR STORY PAIRING", "PREMIUM PAIRING",
-          "VINSKA SPREMLJAVA", "BREZALKOHOLNA SPREMLJAVA", "OUR STORY SPREMLJAVA", "PREMIUM SPREMLJAVA",
+          "WINE PAIRING", "NON-ALCO PAIRING", "OUR STORY PAIRING", "PREMIUM PAIRING", "PREMIUM WINE PAIRING",
+          "VINSKA SPREMLJAVA", "BREZALKOHOLNA SPREMLJAVA", "OUR STORY SPREMLJAVA", "PREMIUM SPREMLJAVA", "PREMIUM VINSKA SPREMLJAVA",
         ]);
         const label = (plBlock.text && !allAutoLabels.has(plBlock.text)) ? plBlock.text : autoLabel;
         rows.push({
