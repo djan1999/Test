@@ -22,28 +22,25 @@ function AddItemPopover({ course, onUpdate, onClose }) {
   const inpSm = { ...baseInp, padding: "5px 8px", fontSize: 11 };
 
   const addRestriction = (rKey) => {
-    const restrictions = { ...course.restrictions };
-    if (restrictions[rKey]) return;
-    restrictions[rKey] = { name: "", sub: "" };
+    if (course.restrictions?.[rKey] != null) return;
+    const restrictions = { ...course.restrictions, [rKey]: { name: "", sub: "" } };
     onUpdate({ ...course, restrictions });
     onClose();
   };
 
   const addPairing = (pairingKey) => {
-    if (course[pairingKey]) return;
+    if (course[pairingKey] != null) return;
     onUpdate({ ...course, [pairingKey]: { name: "", sub: "" } });
     onClose();
   };
 
-  const availableRestrictions = DIETARY_KEYS.filter(rKey => {
-    const val = course.restrictions?.[rKey];
-    return !val || (!val.name && !val.sub);
-  });
+  const availableRestrictions = DIETARY_KEYS.filter(rKey =>
+    course.restrictions?.[rKey] == null
+  );
 
-  const availablePairings = PAIRING_KEYS.filter(({ key }) => {
-    const val = course[key];
-    return !val || (!val.name && !val.sub);
-  });
+  const availablePairings = PAIRING_KEYS.filter(({ key }) =>
+    course[key] == null
+  );
 
   if (!mode) {
     return (
@@ -161,19 +158,29 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
     const restrictions = { ...course.restrictions };
     const current = restrictions[rKey] || { name: "", sub: "" };
     restrictions[rKey] = { ...current, [field]: value };
-    if (!restrictions[rKey].name && !restrictions[rKey].sub) restrictions[rKey] = null;
     onUpdate({ ...course, restrictions });
   };
 
-  const activeRestrictions = DIETARY_KEYS.filter(rKey => {
-    const val = course.restrictions?.[rKey];
-    return val && (val.name || val.sub);
-  });
+  const removeRestriction = (rKey) => {
+    const restrictions = { ...course.restrictions };
+    delete restrictions[rKey];
+    onUpdate({ ...course, restrictions });
+  };
 
-  const activePairings = PAIRING_KEYS.filter(({ key }) => {
-    const val = course[key];
-    return val && (val.name || val.sub);
-  });
+  const removePairing = (pairingKey) => {
+    const updated = { ...course };
+    delete updated[pairingKey];
+    delete updated[`${pairingKey}_si`];
+    onUpdate(updated);
+  };
+
+  const activeRestrictions = DIETARY_KEYS.filter(rKey =>
+    course.restrictions?.[rKey] != null
+  );
+
+  const activePairings = PAIRING_KEYS.filter(({ key }) =>
+    course[key] != null
+  );
 
   const isOptional = !!(course.optional_flag || "").trim();
 
@@ -278,12 +285,15 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
             <>
               <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: "#888" }}>PAIRINGS</div>
               {activePairings.map(({ key, label }) => (
-                <div key={key} style={{ display: "grid", gridTemplateColumns: "70px 1fr 1fr 1fr 1fr", gap: 6, marginBottom: 4, alignItems: "center" }}>
+                <div key={key} style={{ display: "grid", gridTemplateColumns: "60px 1fr 1fr 1fr 1fr 20px", gap: 6, marginBottom: 4, alignItems: "center" }}>
                   <span style={{ fontFamily: FONT, fontSize: 9, color: "#c8a06e", fontWeight: 600 }}>{label}</span>
                   <input value={course[key]?.name || ""} onChange={e => updPairing(key, "en", "name", e.target.value)} style={inpSm} placeholder="Name (EN)" />
                   <input value={course[key]?.sub || ""} onChange={e => updPairing(key, "en", "sub", e.target.value)} style={inpSm} placeholder="Sub (EN)" />
                   <input value={course[`${key}_si`]?.name || ""} onChange={e => updPairing(key, "si", "name", e.target.value)} style={inpSm} placeholder="Name (SI)" />
                   <input value={course[`${key}_si`]?.sub || ""} onChange={e => updPairing(key, "si", "sub", e.target.value)} style={inpSm} placeholder="Sub (SI)" />
+                  <button onClick={() => removePairing(key)} title="Remove pairing" style={{ background: "none", border: "none", cursor: "pointer", color: "#ddd", fontSize: 14, padding: 0, lineHeight: 1 }}
+                    onMouseEnter={e => e.currentTarget.style.color = "#e07070"}
+                    onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>×</button>
                 </div>
               ))}
             </>
@@ -305,10 +315,13 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
                 {activeRestrictions.map(rKey => {
                   const val = course.restrictions?.[rKey];
                   return (
-                    <div key={rKey} style={{ display: "grid", gridTemplateColumns: "110px 1fr 1fr", gap: 6, alignItems: "center" }}>
+                    <div key={rKey} style={{ display: "grid", gridTemplateColumns: "110px 1fr 1fr 20px", gap: 6, alignItems: "center" }}>
                       <span style={{ fontFamily: FONT, fontSize: 9, color: "#b04040" }}>{rKey.replace(/_/g, " ")}</span>
                       <input value={val?.name || ""} onChange={e => updRestriction(rKey, "name", e.target.value)} style={inpSm} placeholder="Alt name" />
                       <input value={val?.sub || ""} onChange={e => updRestriction(rKey, "sub", e.target.value)} style={inpSm} placeholder="Alt desc" />
+                      <button onClick={() => removeRestriction(rKey)} title="Remove restriction" style={{ background: "none", border: "none", cursor: "pointer", color: "#ddd", fontSize: 14, padding: 0, lineHeight: 1 }}
+                        onMouseEnter={e => e.currentTarget.style.color = "#e07070"}
+                        onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>×</button>
                     </div>
                   );
                 })}
