@@ -1037,6 +1037,16 @@ export default function MenuTemplateEditor({
     onUpdateTemplate({ ...template, rows: newRows });
   }, [template, onUpdateTemplate]);
 
+  // ── Short-menu row filter ──
+  const isShortFilter = previewMenuType === "short";
+  const rowMatchesShort = (row) => {
+    const hasCourse = b => b?.type === "course";
+    if (!hasCourse(row.left) && !hasCourse(row.right)) return true;
+    const ok = b => hasCourse(b) && !!menuCourses.find(c => c.course_key === b.courseKey)?.show_on_short;
+    return ok(row.left) || ok(row.right);
+  };
+  const visibleRows = isShortFilter ? rows.filter(rowMatchesShort) : rows;
+
   // ── DnD ──
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -1241,8 +1251,13 @@ export default function MenuTemplateEditor({
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <SortableContext items={rows.map(r => r.id)} strategy={verticalListSortingStrategy}>
-              {rows.map(row => (
+            {isShortFilter && (
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#7a5020", background: "#fff8ee", border: "1px solid #f0d080", borderRadius: 3, padding: "5px 8px", margin: "0 0 6px", textTransform: "uppercase" }}>
+                Short menu — {visibleRows.length} blocks · Switch to FULL to see all
+              </div>
+            )}
+            <SortableContext items={visibleRows.map(r => r.id)} strategy={verticalListSortingStrategy}>
+              {visibleRows.map(row => (
                 <SortableRow
                   key={row.id}
                   row={row}
