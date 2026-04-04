@@ -218,6 +218,7 @@ export function generateMenuHTML({
   const bQ = [...bottleQueue];
 
   let rows = [];
+  let pendingLabel = null; // pairing_label block deferred until next course row
 
   for (const tRow of template.rows) {
     let lb = tRow.left;
@@ -253,18 +254,20 @@ export function generateMenuHTML({
     }
 
     // ── pairing_label ──
+    // Deferred: label is injected inline into the next course row's column
+    // so no separate section row occupies space in the other column.
+    const plSide  = lb?.type === "pairing_label" ? "left" : "right";
     const plBlock = lb?.type === "pairing_label" ? lb : rb?.type === "pairing_label" ? rb : null;
     if (plBlock) {
       if (hasPairing) {
         const autoLabel = PAIRING_LABELS[pkey] || "PAIRING";
-        // Use block text only when it's a custom override (non-empty AND not a standard auto label)
         const allAutoLabels = new Set([
           ...Object.values(PAIRING_LABELS),
           "WINE PAIRING", "NON-ALCO PAIRING", "OUR STORY PAIRING", "PREMIUM PAIRING",
           "VINSKA SPREMLJAVA", "BREZALKOHOLNA SPREMLJAVA", "OUR STORY SPREMLJAVA", "PREMIUM SPREMLJAVA",
         ]);
         const label = (plBlock.text && !allAutoLabels.has(plBlock.text)) ? plBlock.text : autoLabel;
-        rows.push({ type: "section", label, widthPreset: wp, gap });
+        pendingLabel = { text: label, side: plSide, align: plBlock.align || "right" };
       }
       continue;
     }
@@ -414,7 +417,9 @@ export function generateMenuHTML({
         rowClass: "",
         widthPreset: wp,
         gap,
+        pairingLabel: pendingLabel,
       });
+      pendingLabel = null;
       continue;
     }
   }
@@ -452,8 +457,12 @@ export function generateMenuHTML({
    * Render a left or right content block into a .menu-col div.
    * Accepts optional inline style override from text blocks.
    */
-  const renderBlock = (block, cls = "") => {
-    if (!block || (!block.title && !block.sub)) return `<div class="menu-col ${cls}"></div>`;
+  const renderBlock = (block, cls = "", prefixHtml = "") => {
+    if (!block || (!block.title && !block.sub)) {
+      return prefixHtml
+        ? `<div class="menu-col ${cls}">${prefixHtml}</div>`
+        : `<div class="menu-col ${cls}"></div>`;
+    }
     const styleAttr = (() => {
       const parts = [];
       if (block.fontSize)   parts.push(`font-size:${block.fontSize}pt`);
@@ -461,7 +470,7 @@ export function generateMenuHTML({
       if (block.align && block.align !== "left") parts.push(`text-align:${block.align}`);
       return parts.length ? ` style="${parts.join(";")}"` : "";
     })();
-    return `<div class="menu-col ${cls}"${styleAttr}>${block.title ? `<div class="menu-main">${esc(block.title)}</div>` : ""}${block.sub ? `<div class="menu-sub">${esc(block.sub)}</div>` : ""}</div>`;
+    return `<div class="menu-col ${cls}"${styleAttr}>${prefixHtml}${block.title ? `<div class="menu-main">${esc(block.title)}</div>` : ""}${block.sub ? `<div class="menu-sub">${esc(block.sub)}</div>` : ""}</div>`;
   };
 
   /**
@@ -508,12 +517,6 @@ export function generateMenuHTML({
       const mb = row.marginBottom  ?? 3;
       return `<hr style="border:none;border-top:${t}pt solid ${esc(c)};margin:${mt}pt 0 ${mb}pt;">`;
     }
-    if (row.type === "section") {
-      // margin-top comes only from the row's gap field (default 0) — no automatic CSS top gap,
-      // so an empty left cell never gets unwanted whitespace from a right-only label.
-      const sectionTopStyle = `margin-top:${row.gap || 0}pt;`;
-      return `<div class="menu-section-row pairing-section" style="${sectionTopStyle}${gridCols(row.widthPreset)}"><div></div><div class="menu-section-label">${esc(row.label || "")}</div></div>`;
-    }
     if (row.type === "wine-only") {
       return `<div class="menu-row wine-only" style="${gapStyle}${gridCols(row.widthPreset)}">${renderBlock(null, "left")}${renderBlock(row.right, "right")}</div>`;
     }
@@ -542,7 +545,17 @@ export function generateMenuHTML({
     }
     // course / text rows
     const ckAttr = row.courseKey ? ` data-ck="${esc(row.courseKey)}"` : "";
-    return `<div class="menu-row ${row.rowClass || ""}" style="${gapStyle}${gridCols(row.widthPreset)}"${ckAttr}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
+    const pl = row.pairingLabel;
+    let leftPrefix = "";
+    let rightPrefix = "";
+    if (pl) {
+      const mbPt = (s("sectionSpacing", 6.8) - 0.6).toFixed(2);
+      const taStyle = pl.align && pl.align !== "left" ? `text-align:${pl.align};` : "";
+      const labelDiv = `<div class="menu-section-label" style="margin-bottom:${mbPt}pt;${taStyle}">${esc(pl.text)}</div>`;
+      if (pl.side === "left") leftPrefix = labelDiv;
+      else rightPrefix = labelDiv;
+    }
+    return `<div class="menu-row ${row.rowClass || ""}" style="${gapStyle}${gridCols(row.widthPreset)}"${ckAttr}>${renderBlock(row.left, "left", leftPrefix)}${renderBlock(row.right, "right", rightPrefix)}</div>`;
   }).join("");
 
   // ── HTML output ───────────────────────────────────────────────────────────
