@@ -175,9 +175,12 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
     return val && (val.name || val.sub);
   });
 
+  const isOptional = !!(course.optional_flag || "").trim();
+
   return (
     <div style={{
-      border: "1px solid #e8e8e8", borderRadius: 4, background: "#fff",
+      border: `1px solid ${isOptional ? "#e0d4b8" : "#e8e8e8"}`, borderRadius: 4,
+      background: isOptional ? "#fffdf8" : "#fff",
       marginBottom: 8, overflow: "hidden",
     }}>
       {/* Collapsed header */}
@@ -185,7 +188,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
         onClick={() => setExpanded(x => !x)}
         style={{
           display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
-          cursor: "pointer", background: expanded ? "#fafafa" : "#fff",
+          cursor: "pointer", background: expanded ? "#fafafa" : "transparent",
         }}
       >
         <span style={{ fontFamily: FONT, fontSize: 10, color: "#bbb", minWidth: 22 }}>{course.position}</span>
@@ -193,6 +196,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
           <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a1a1a" }}>{course.menu?.name || "(unnamed)"}</span>
           {course.menu?.sub && <span style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginLeft: 8 }}>{course.menu.sub}</span>}
         </div>
+        {isOptional && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#9a6020", background: "#fff3d8", border: "1px solid #e8d090", borderRadius: 2, padding: "2px 6px" }}>OPTIONAL · {course.optional_flag}</span>}
         {course.is_snack && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 2, padding: "2px 6px" }}>SNACK</span>}
         {activeRestrictions.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#b04040", border: "1px solid #f0cccc", borderRadius: 2, padding: "2px 6px" }}>{activeRestrictions.length}R</span>}
         {activePairings.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 2, padding: "2px 6px" }}>{activePairings.length}P</span>}
@@ -215,25 +219,54 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
           </div>
 
           {/* Metadata */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
             <div><div style={labelSm}>Course Key</div><input value={course.course_key || ""} onChange={e => upd("course_key", e.target.value)} style={inpSm} placeholder="e.g. beetroot" /></div>
-            <div><div style={labelSm}>Optional Flag</div><input value={course.optional_flag || ""} onChange={e => upd("optional_flag", e.target.value)} style={inpSm} placeholder="e.g. beetroot" /></div>
             <div><div style={labelSm}>Kitchen Note</div><input value={course.kitchen_note || ""} onChange={e => upd("kitchen_note", e.target.value)} style={inpSm} placeholder="Note for kitchen" /></div>
             <div><div style={labelSm}>Aperitif Btn</div><input value={course.aperitif_btn || ""} onChange={e => upd("aperitif_btn", e.target.value || null)} style={inpSm} placeholder="Button label" /></div>
           </div>
 
           {/* Toggles */}
-          <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
             {[
-              { key: "is_snack",         label: "Snack"         },
-              { key: "section_gap_before", label: "Gap Before"  },
-              { key: "show_on_short",    label: "Show on Short" },
+              { key: "is_snack",           label: "Snack"         },
+              { key: "section_gap_before", label: "Gap Before"    },
+              { key: "show_on_short",      label: "Show on Short" },
             ].map(({ key, label }) => (
               <label key={key} style={{ fontFamily: FONT, fontSize: 10, color: "#555", display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
                 <input type="checkbox" checked={!!course[key]} onChange={e => upd(key, e.target.checked)} />
                 {label}
               </label>
             ))}
+            {/* Optional toggle */}
+            <button
+              onClick={() => upd("optional_flag", isOptional ? "" : "beetroot")}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 10px",
+                border: `1px solid ${isOptional ? "#d4a020" : "#ddd"}`,
+                borderRadius: 2, cursor: "pointer",
+                background: isOptional ? "#fff3d8" : "#fff",
+                color: isOptional ? "#9a6020" : "#aaa",
+              }}
+            >{isOptional ? "OPTIONAL ✓" : "OPTIONAL"}</button>
+            {isOptional && (
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontFamily: FONT, fontSize: 9, color: "#9a6020" }}>type:</span>
+                <select
+                  value={course.optional_flag || "beetroot"}
+                  onChange={e => upd("optional_flag", e.target.value)}
+                  style={{ ...inpSm, fontSize: 9, padding: "3px 6px" }}
+                >
+                  <option value="beetroot">Beetroot</option>
+                  <option value="cheese">Cheese</option>
+                  <option value="cake">Cake</option>
+                  <option value="custom">Custom…</option>
+                </select>
+                {course.optional_flag === "custom" && (
+                  <input value={course.optional_flag} onChange={e => upd("optional_flag", e.target.value)}
+                    style={{ ...inpSm, width: 90, fontSize: 9 }} placeholder="flag name" />
+                )}
+              </div>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <span style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>Short order:</span>
               <input type="number" value={course.short_order ?? ""} onChange={e => upd("short_order", e.target.value ? Number(e.target.value) : null)} style={{ ...inpSm, width: 60 }} />
@@ -365,7 +398,12 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>
-          {menuCourses.length} COURSES
+          {menuCourses.filter(c => !c.optional_flag).length} COURSES
+          {menuCourses.filter(c => c.optional_flag).length > 0 && (
+            <span style={{ color: "#c8a06e", marginLeft: 8 }}>
+              + {menuCourses.filter(c => c.optional_flag).length} OPTIONAL
+            </span>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={addCourse} style={{
