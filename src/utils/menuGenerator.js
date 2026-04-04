@@ -509,7 +509,10 @@ export function generateMenuHTML({
       return `<hr style="border:none;border-top:${t}pt solid ${esc(c)};margin:${mt}pt 0 ${mb}pt;">`;
     }
     if (row.type === "section") {
-      return `<div class="menu-section-row pairing-section" style="${gapStyle}${gridCols(row.widthPreset)}"><div></div><div class="menu-section-label">${esc(row.label || "")}</div></div>`;
+      // margin-top comes only from the row's gap field (default 0) — no automatic CSS top gap,
+      // so an empty left cell never gets unwanted whitespace from a right-only label.
+      const sectionTopStyle = `margin-top:${row.gap || 0}pt;`;
+      return `<div class="menu-section-row pairing-section" style="${sectionTopStyle}${gridCols(row.widthPreset)}"><div></div><div class="menu-section-label">${esc(row.label || "")}</div></div>`;
     }
     if (row.type === "wine-only") {
       return `<div class="menu-row wine-only" style="${gapStyle}${gridCols(row.widthPreset)}">${renderBlock(null, "left")}${renderBlock(row.right, "right")}</div>`;
@@ -581,7 +584,7 @@ body{position:relative;}
 .menu-col{min-width:0;}
 .menu-main{font-weight:700;line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;text-transform:uppercase;}
 .menu-sub{line-height:1.08;margin-top:0.75pt;overflow-wrap:anywhere;}
-.menu-section-row{display:grid;margin:${s("sectionSpacing",6.8)}pt 0 ${(s("sectionSpacing",6.8)-0.6).toFixed(2)}pt;}
+.menu-section-row{display:grid;margin-bottom:${(s("sectionSpacing",6.8)-0.6).toFixed(2)}pt;}
 .menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;text-transform:uppercase;}
 .menu-thankyou{margin-top:${s("thankYouSpacing",7)}pt;font-size:6.55pt;font-style:normal;}
 #team{font-size:6.5pt;line-height:1.2;overflow-wrap:anywhere;}
