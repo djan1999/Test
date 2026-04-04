@@ -235,7 +235,7 @@ export function generateMenuHTML({
     const gap = (tRow.gap || 0) + spacerGap;
     // If both cells are empty (both were spacers, or both null), emit a spacer row and skip
     if (!lb && !rb) {
-      if (spacerGap > 0) rows.push({ type: "_spacer", height: spacerGap, gap });
+      if (spacerGap > 0) rows.push({ type: "_spacer", height: spacerGap, gap: tRow.gap || 0 });
       continue;
     }
 

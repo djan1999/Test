@@ -600,7 +600,7 @@ function DrinkPill({ label, sub, onRemove }) {
 }
 
 /** Inline search dropdown for wines and cocktails in the preview data panel */
-function MiniSearch({ wines = [], cocktails = [], spirits = [], beers = [], byGlass = false, bottleOnly = false, aperitifsOnly = false, placeholder = "search…", onAdd }) {
+function MiniSearch({ wines = [], cocktails = [], spirits = [], beers = [], byGlass = false, bottleOnly = false, placeholder = "search…", onAdd }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -624,6 +624,10 @@ function MiniSearch({ wines = [], cocktails = [], spirits = [], beers = [], byGl
       cocktails.forEach(c => {
         if ((c.name || "").toLowerCase().includes(lq) || (c.notes || "").toLowerCase().includes(lq))
           out.push({ __type: "cocktail", name: c.name, notes: c.notes });
+      });
+      spirits.forEach(s => {
+        if ((s.name || "").toLowerCase().includes(lq) || (s.notes || "").toLowerCase().includes(lq))
+          out.push({ __type: "spirit", name: s.name, notes: s.notes });
       });
       beers.forEach(b => {
         if ((b.name || "").toLowerCase().includes(lq) || (b.notes || "").toLowerCase().includes(lq))
@@ -897,7 +901,7 @@ export default function MenuTemplateEditor({
     const count = Math.max(1, Math.min(8, n));
     setPreviewGuestsRaw(count);
     setPreviewSeats(prev => Array.from({ length: count }, (_, i) => prev[i] || makePreviewSeat(i + 1)));
-    if (previewSeatIdx >= count) setPreviewSeatIdx(count - 1);
+    setPreviewSeatIdx(prev => prev >= count ? count - 1 : prev);
   };
 
   const updatePreviewSeat = (idx, patch) => {
