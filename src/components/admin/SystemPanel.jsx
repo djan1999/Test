@@ -106,49 +106,6 @@ export default function SystemPanel({
         </div>
       </div>
 
-      {/* Column gap control */}
-      <div>
-        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Print Layout — Column Gap</div>
-        <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, padding: "16px 18px", background: "#fafafa" }}>
-          <div style={{ fontFamily: FONT, fontSize: 10, color: "#444", marginBottom: 6 }}>Gap between left and right columns</div>
-          <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginBottom: 14 }}>
-            Controls the space between the food column and the pairing column. Default is 9mm.
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <input
-              type="number"
-              step="0.5"
-              min="0"
-              max="30"
-              value={layoutStyles.colGap ?? ""}
-              placeholder="9"
-              onChange={e => {
-                if (!onUpdateLayoutStyles) return;
-                const raw = e.target.value;
-                const next = { ...layoutStyles };
-                if (raw === "" || isNaN(parseFloat(raw))) delete next.colGap;
-                else next.colGap = parseFloat(raw);
-                onUpdateLayoutStyles(next);
-              }}
-              style={{ fontFamily: FONT, fontSize: 11, padding: "5px 8px", border: "1px solid #ddd", borderRadius: 3, width: 80, textAlign: "center" }}
-            />
-            <span style={{ fontFamily: FONT, fontSize: 9, color: "#888" }}>mm</span>
-            {onSaveLayoutStyles && (
-              <button
-                onClick={onSaveLayoutStyles}
-                style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #4b4b88", borderRadius: 2, cursor: "pointer", background: "#4b4b88", color: "#fff", marginLeft: 8 }}
-              >SAVE</button>
-            )}
-            {"colGap" in layoutStyles && (
-              <button
-                onClick={() => { if (!onUpdateLayoutStyles) return; const next = { ...layoutStyles }; delete next.colGap; onUpdateLayoutStyles(next); }}
-                style={{ fontFamily: FONT, fontSize: 9, padding: "6px 10px", border: "1px solid #ddd", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#aaa" }}
-              >reset</button>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* Layout reset */}
       <div>
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Print Layout</div>

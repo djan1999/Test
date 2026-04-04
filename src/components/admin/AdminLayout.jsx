@@ -137,6 +137,8 @@ export default function AdminLayout({
               <MenuLayoutPanel
                 menuCourses={menuCourses}
                 menuTemplate={menuTemplate}
+                onUpdateLayoutStyles={onUpdateLayoutStyles}
+                onSaveLayoutStyles={onSaveLayoutStyles}
                 onUpdateTemplate={onUpdateTemplate}
                 onSaveTemplate={onSaveTemplate}
                 templateSaving={templateSaving}

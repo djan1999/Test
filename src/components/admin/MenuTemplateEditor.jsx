@@ -928,6 +928,8 @@ export default function MenuTemplateEditor({
   menuTemplate,
   onUpdateTemplate,
   onSaveTemplate,
+  onUpdateLayoutStyles,
+  onSaveLayoutStyles,
   saving  = false,
   saved   = false,
   menuCourses = [],
@@ -1225,6 +1227,43 @@ export default function MenuTemplateEditor({
             }}
             title="Rebuild template from current courses"
           >↺ REBUILD FROM COURSES</button>
+          )}
+
+          {/* Column gap control */}
+          {leftOpen && onUpdateLayoutStyles && (
+            <div style={{ marginTop: 10, borderTop: "1px solid #ede9e0", paddingTop: 8 }}>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1, color: "#bbb", textTransform: "uppercase", marginBottom: 5 }}>Column Gap</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={layoutStyles.colGap ?? ""}
+                  placeholder="9"
+                  onChange={e => {
+                    const raw = e.target.value;
+                    const next = { ...layoutStyles };
+                    if (raw === "" || isNaN(parseFloat(raw))) delete next.colGap;
+                    else next.colGap = parseFloat(raw);
+                    onUpdateLayoutStyles(next);
+                  }}
+                  style={{ fontFamily: FONT, fontSize: 10, padding: "4px 6px", border: "1px solid #ddd", borderRadius: 3, width: 54, textAlign: "center" }}
+                />
+                <span style={{ fontFamily: FONT, fontSize: 9, color: "#aaa" }}>mm</span>
+                {onSaveLayoutStyles && (
+                  <button onClick={onSaveLayoutStyles} style={{
+                    fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "4px 8px",
+                    border: "1px solid #4b4b88", borderRadius: 2, cursor: "pointer",
+                    background: "#4b4b88", color: "#fff", marginLeft: "auto",
+                  }}>SAVE</button>
+                )}
+              </div>
+              {"colGap" in layoutStyles && (
+                <button onClick={() => { const next = { ...layoutStyles }; delete next.colGap; onUpdateLayoutStyles(next); }}
+                  style={{ fontFamily: FONT, fontSize: 7.5, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: "2px 0", marginTop: 2 }}>
+                  reset to default
+                </button>
+              )}
+            </div>
           )}
         </div>
 

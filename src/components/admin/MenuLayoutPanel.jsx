@@ -1,10 +1,7 @@
-import { FONT } from "./adminStyles.js";
 import MenuTemplateEditor from "./MenuTemplateEditor.jsx";
 
 export default function MenuLayoutPanel({
-  // Course data (passed through to template editor for block resolution)
   menuCourses,
-  // Template (v2)
   menuTemplate,
   onUpdateTemplate,
   onSaveTemplate,
@@ -12,7 +9,8 @@ export default function MenuLayoutPanel({
   templateSaved,
   logoDataUri,
   layoutStyles = {},
-  // Catalog data for preview panel
+  onUpdateLayoutStyles,
+  onSaveLayoutStyles,
   wines = [],
   cocktails = [],
   spirits = [],
@@ -23,6 +21,8 @@ export default function MenuLayoutPanel({
       menuTemplate={menuTemplate}
       onUpdateTemplate={onUpdateTemplate}
       onSaveTemplate={onSaveTemplate}
+      onUpdateLayoutStyles={onUpdateLayoutStyles}
+      onSaveLayoutStyles={onSaveLayoutStyles}
       saving={templateSaving}
       saved={templateSaved}
       menuCourses={menuCourses}
