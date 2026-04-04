@@ -44,6 +44,24 @@ function render(seatOpts = {}, tableOpts = {}, courses = [], genOpts = {}) {
   });
 }
 
+/** Minimal template that includes a pairing_label block for pairing-label tests */
+function makePairingTemplate(courses = []) {
+  return {
+    version: 2,
+    rows: [
+      { id: "hdr", left: { type: "title", text: "" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
+      { id: "pl",  left: null, right: { type: "pairing_label", text: "", align: "right" }, widthPreset: "55/45", gap: 0 },
+      ...courses.map((c, i) => ({
+        id: `c_${i}`,
+        left:  { type: "course", courseKey: c.course_key },
+        right: { type: "pairing" },
+        widthPreset: "55/45",
+        gap: 0,
+      })),
+    ],
+  };
+}
+
 // ── Basic structure ────────────────────────────────────────────────────────────
 
 describe("generateMenuHTML — basic structure", () => {
@@ -263,14 +281,14 @@ describe("generateMenuHTML — pairing", () => {
   });
 
   it("shows WINE PAIRING section header when seat has Wine pairing", () => {
-    const html = render({ pairing: "Wine" }, {}, courses);
+    const html = render({ pairing: "Wine" }, {}, courses, { menuTemplate: makePairingTemplate(courses) });
     expect(html).toContain("WINE PAIRING");
   });
 
   it("shows NON-ALCO PAIRING section header for Non-Alc pairing", () => {
     const naEntry = { name: "Elderflower", sub: "sparkling" };
     const naCourses = [makeCourse("TROUT", "", { na: naEntry })];
-    const html = render({ pairing: "Non-Alc" }, {}, naCourses);
+    const html = render({ pairing: "Non-Alc" }, {}, naCourses, { menuTemplate: makePairingTemplate(naCourses) });
     expect(html).toContain("NON-ALCO PAIRING");
   });
 
@@ -300,8 +318,8 @@ describe("generateMenuHTML — SI language", () => {
 
   it("shows Slovenian pairing label when lang=si", () => {
     const wineEntry = { name: "Klinec", sub: "" };
-    const courses = [makeCourse("LAMB", "", { wp: wineEntry })];
-    const html = render({ pairing: "Wine" }, {}, courses, { lang: "si" });
+    const siCourses = [makeCourse("LAMB", "", { wp: wineEntry })];
+    const html = render({ pairing: "Wine" }, {}, siCourses, { lang: "si", menuTemplate: makePairingTemplate(siCourses) });
     expect(html).toContain("VINSKA SPREMLJAVA");
     expect(html).not.toContain("WINE PAIRING");
   });

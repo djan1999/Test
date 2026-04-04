@@ -218,7 +218,6 @@ export function generateMenuHTML({
   const bQ = [...bottleQueue];
 
   let rows = [];
-  let pairingLabelSeen = false;
 
   for (const tRow of template.rows) {
     let lb = tRow.left;
@@ -256,7 +255,6 @@ export function generateMenuHTML({
     // ── pairing_label ──
     const plBlock = lb?.type === "pairing_label" ? lb : rb?.type === "pairing_label" ? rb : null;
     if (plBlock) {
-      pairingLabelSeen = true;
       if (hasPairing) {
         const autoLabel = PAIRING_LABELS[pkey] || "PAIRING";
         // Use block text only when it's a custom override (non-empty AND not a standard auto label)
@@ -421,18 +419,6 @@ export function generateMenuHTML({
     }
   }
 
-  // ── Pairing label fallback ────────────────────────────────────────────────
-  // When a pairing package is active but no pairing_label block exists in the
-  // template (e.g. older saved templates, test fixtures), insert the section
-  // header after the _header row (or at 0 if no header exists).
-  if (hasPairing && !pairingLabelSeen) {
-    // Insert just before the first course row that carries a drink (non-null right),
-    // i.e. right before the pairing wines start. Fall back to after the _header.
-    const firstPairingIdx = rows.findIndex(r => r.type === "course" && r.right !== null);
-    const headerIdx       = rows.findIndex(r => r.type === "_header");
-    const insertAt = firstPairingIdx >= 0 ? firstPairingIdx : (headerIdx >= 0 ? headerIdx + 1 : 0);
-    rows.splice(insertAt, 0, { type: "section", label: PAIRING_LABELS[pkey] || "PAIRING", widthPreset: "55/45", gap: 0 });
-  }
 
   // ── Append leftover drink queues after template walk ──────────────────────
   while (gQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(gQ.shift()), widthPreset: "55/45" });
