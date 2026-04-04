@@ -295,14 +295,14 @@ export function generateMenuHTML({
     // ── team → in-flow team row ──
     if (lb?.type === "team" || rb?.type === "team") {
       const tmBlock = lb?.type === "team" ? lb : rb;
-      rows.push({ type: "_team", block: tmBlock, gap: consumeGap() });
+      rows.push({ type: "_team", block: tmBlock, gap: consumeGap(), pinToBottom: !!tRow.pinToBottom });
       continue;
     }
 
     // ── goodbye → thank-you row ──
     const gbBlock = lb?.type === "goodbye" ? lb : rb?.type === "goodbye" ? rb : null;
     if (gbBlock) {
-      rows.push({ type: "thankyou", _text: gbBlock.text?.trim() || thankYouNote, fontSize: gbBlock.fontSize, align: gbBlock.align, gap: consumeGap() });
+      rows.push({ type: "thankyou", _text: gbBlock.text?.trim() || thankYouNote, fontSize: gbBlock.fontSize, align: gbBlock.align, gap: consumeGap(), pinToBottom: !!tRow.pinToBottom });
       continue;
     }
 
@@ -513,6 +513,7 @@ export function generateMenuHTML({
   // ── Render rows to HTML ───────────────────────────────────────────────────
   const menuRowsHtml = rows.map(row => {
     const gapStyle = row.gap ? `margin-top:${row.gap}pt;` : "";
+    const pin = row.pinToBottom;
 
     if (row.type === "_divider") {
       const t  = row.thickness ?? 0.5;
@@ -549,16 +550,16 @@ export function generateMenuHTML({
       const spacing = tmB.spacing ?? 1.4;
       const names = tmB.names || teamNames;
       const taStyle = (tmB.align && tmB.align !== "left") ? `text-align:${tmB.align};` : "";
-      return `<div id="team" style="${gapStyle}${taStyle}"><div class="menu-main" style="margin-bottom:${spacing}pt">TEAM:</div><div>${esc(names)}</div></div>`;
+      return `<div id="team" class="${pin ? "pin-bottom" : ""}" style="${pin ? "" : gapStyle}${taStyle}"><div class="menu-main" style="margin-bottom:${spacing}pt">TEAM:</div><div>${esc(names)}</div></div>`;
     }
     if (row.type === "thankyou") {
       const fs = row.fontSize ? `font-size:${row.fontSize}pt;` : "";
       const ta = (row.align && row.align !== "left") ? `text-align:${row.align};` : "";
-      return `<div class="menu-thankyou" style="${gapStyle}${fs}${ta}">${esc(row._text || thankYouNote)}</div>`;
+      return `<div class="menu-thankyou ${pin ? "pin-bottom" : ""}" style="${pin ? "" : gapStyle}${fs}${ta}">${esc(row._text || thankYouNote)}</div>`;
     }
     // course / text rows
     const ckAttr = row.courseKey ? ` data-ck="${esc(row.courseKey)}"` : "";
-    return `<div class="menu-row ${row.rowClass || ""}" style="${gapStyle}${gridCols(row.widthPreset)}"${ckAttr}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
+    return `<div class="menu-row ${row.rowClass || ""}${pin ? " pin-bottom" : ""}" style="${pin ? "" : gapStyle}${gridCols(row.widthPreset)}"${ckAttr}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
   }).join("");
 
   // ── HTML output ───────────────────────────────────────────────────────────
@@ -591,7 +592,8 @@ body{position:relative;}
 #menu-date{font-size:5.8pt;font-weight:400;letter-spacing:0.02em;margin-top:0.8mm;text-transform:none;}
 #logo{transform:translate(${logoOffsetX}mm,${logoOffsetY}mm);}
 #logo img{width:${logoSize}mm;display:block;}
-#menu{width:100%;}
+#menu{width:100%;flex:1;display:flex;flex-direction:column;}
+.pin-bottom{margin-top:auto;}
 /* Per-row grid-template-columns are set via inline styles on each .menu-row */
 .menu-row{display:grid;column-gap:${hasPairing ? "9mm" : "10.8mm"};align-items:start;break-inside:avoid;page-break-inside:avoid;}
 .menu-row{margin-bottom:${s("rowSpacing",3.15)}pt;}

@@ -2187,7 +2187,7 @@ const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","P
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
 // cards on every DisplayBoard re-render (which caused the visual overlap animation glitch).
-function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onUnseat, dishes, aperitifOptions, wines = [] }) {
+function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onUnseat, dishes, aperitifOptions, wines = [], cocktails = [] }) {
     const isSeated = t.active;
     const allRestr = (t.restrictions || []).filter(r => r.note);
     const [assigningIdx, setAssigningIdx] = useState(null);
@@ -2404,18 +2404,20 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                       <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", padding: "2px 10px 8px" }}>
                         <span style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", marginRight: 2 }}>APR</span>
                         {aperitifOptions.map(opt => {
-                          const lk = opt.toLowerCase();
-                          const active = (s.aperitifs || []).some(x => x?.name?.toLowerCase().includes(lk) || x?.producer?.toLowerCase().includes(lk));
+                          const label = opt.label ?? opt;
+                          const sk = (opt.searchKey ?? opt).toLowerCase();
+                          const active = (s.aperitifs || []).some(x => x?.name?.toLowerCase().includes(sk) || x?.producer?.toLowerCase().includes(sk));
                           return (
-                            <button key={opt} onClick={() => {
+                            <button key={label} onClick={() => {
                               if (!updSeat) return;
                               if (active) {
-                                updSeat(t.id, s.id, "aperitifs", (s.aperitifs || []).filter(x => !x?.name?.toLowerCase().includes(lk) && !x?.producer?.toLowerCase().includes(lk)));
+                                updSeat(t.id, s.id, "aperitifs", (s.aperitifs || []).filter(x => !x?.name?.toLowerCase().includes(sk) && !x?.producer?.toLowerCase().includes(sk)));
                               } else {
-                                const found = wines.filter(w => w.byGlass).find(w =>
-                                  w.name?.toLowerCase().includes(lk) || w.producer?.toLowerCase().includes(lk)
-                                );
-                                const item = found || { name: opt, notes: "", __cocktail: true };
+                                const type = opt.type || "wine";
+                                const found = type === "wine"
+                                  ? wines.filter(w => w.byGlass).find(w => w.name?.toLowerCase().includes(sk) || w.producer?.toLowerCase().includes(sk))
+                                  : cocktails?.find(c => c.name?.toLowerCase().includes(sk));
+                                const item = found || { name: label, notes: "", __cocktail: true };
                                 updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item]);
                               }
                             }} style={{
@@ -2424,7 +2426,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                               borderRadius: 3, cursor: "pointer",
                               background: active ? "#fdf4e8" : "#fff",
                               color: active ? "#7a5020" : "#bbb",
-                            }}>{opt}</button>
+                            }}>{label}</button>
                           );
                         })}
                       </div>
@@ -2519,7 +2521,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
     );
 }
 
-function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [] }) {
+function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [] }) {
   const isMobile = useIsMobile(700);
 
   const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
@@ -2573,6 +2575,7 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
                   dishes={dishes}
                   aperitifOptions={aperitifOptions}
                   wines={wines}
+                  cocktails={cocktails}
                 />
               ))}
             </div>
@@ -2849,8 +2852,8 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
     if (isBeetCourse(c)   && !extrasConfirmed.beetroot) return false;
     if (isCheeseCourse(c) && cheeseSeats.length === 0) return false;
     if (isCheeseCourse(c) && !extrasConfirmed.cheese) return false;
-    if (isCakeCourse(c)   && cakeSeats.length   === 0) return false;
-    if (isCakeCourse(c)   && !extrasConfirmed.cake) return false;
+    if (isCakeCourse(c)   && cakeSeats.length   === 0 && !table.birthday) return false;
+    if (isCakeCourse(c)   && !extrasConfirmed.cake && !table.birthday) return false;
     if (isShort && !isTruthyShort(c.show_on_short)) return false;
     return true;
   }).sort((a, b) => {
@@ -3962,20 +3965,24 @@ function MenuGenerator({ table, menuCourses = MENU_DATA, upd, onClose, defaultLa
                   <div style={{ marginBottom: 10 }}>
                     <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#a07040", textTransform: "uppercase", marginBottom: 6 }}>Aperitif</div>
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-                      {APERITIF_OPTIONS.map(ap => (
-                        <button key={ap.label} onClick={() => {
-                          const lk = ap.searchKey.toLowerCase();
-                          const found = winesCatalog.filter(w => w.byGlass).find(w =>
-                            w.name?.toLowerCase().includes(lk) || w.producer?.toLowerCase().includes(lk)
-                          );
-                          const item = found || { name: ap.searchKey, notes: "", __cocktail: true };
-                          updSeat(s.id, "aperitifs", [...(s.aperitifs || []), item]);
-                        }} style={{
-                          fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
-                          border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
-                          background: "#fff", color: "#7a5020",
-                        }}>{ap.label}</button>
-                      ))}
+                      {aperitifOptions.map(ap => {
+                        const label = ap.label ?? ap;
+                        const sk = (ap.searchKey ?? ap).toLowerCase();
+                        const type = ap.type || "wine";
+                        return (
+                          <button key={label} onClick={() => {
+                            const found = type === "wine"
+                              ? winesCatalog.filter(w => w.byGlass).find(w => w.name?.toLowerCase().includes(sk) || w.producer?.toLowerCase().includes(sk))
+                              : cocktailsCatalog?.find(c => c.name?.toLowerCase().includes(sk));
+                            const item = found || { name: label, notes: "", __cocktail: true };
+                            updSeat(s.id, "aperitifs", [...(s.aperitifs || []), item]);
+                          }} style={{
+                            fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
+                            border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
+                            background: "#fff", color: "#7a5020",
+                          }}>{label}</button>
+                        );
+                      })}
                     </div>
                     <BeverageSearch
                       wines={winesCatalog} cocktails={cocktailsCatalog} spirits={spiritsCatalog} beers={beersCatalog}
@@ -6659,13 +6666,15 @@ export default function App() {
   };
 
   // ── Aperitif quick-button options (data-driven from Quick Access config) ──
+  // aperitifOptions: array of { label, searchKey, type } — preserves searchKey from config
   const aperitifOptions = useMemo(() => {
-    const fromQuickAccess = quickAccessItems.filter(i => i.enabled).map(i => i.label);
+    const fromQuickAccess = quickAccessItems.filter(i => i.enabled)
+      .map(i => ({ label: i.label, searchKey: i.searchKey || i.label, type: i.type || "wine" }));
     if (fromQuickAccess.length > 0) return fromQuickAccess;
     // Fallback to aperitif_btn column from courses
     const fromSheet = [...new Set(menuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
-    if (fromSheet.length > 0) return fromSheet;
-    return APERITIF_OPTIONS.map(a => a.label);
+    if (fromSheet.length > 0) return fromSheet.map(l => ({ label: l, searchKey: l, type: "wine" }));
+    return APERITIF_OPTIONS.map(a => ({ label: a.label, searchKey: a.searchKey, type: a.type || "wine" }));
   }, [quickAccessItems, menuCourses]);
 
   // ── Load service tables from Supabase + subscribe realtime ────────────────
@@ -7146,6 +7155,7 @@ export default function App() {
                 onUnseat={unseatTable}
                 aperitifOptions={aperitifOptions}
                 wines={wines}
+                cocktails={cocktails}
               />
             );
           })()}

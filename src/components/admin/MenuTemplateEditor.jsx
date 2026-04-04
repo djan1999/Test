@@ -162,22 +162,35 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
 
 function RowSettings({ row, onUpdate }) {
   const gap = row.gap ?? 0;
+  const pinned = !!row.pinToBottom;
   return (
     <div style={{ padding: "10px 10px 10px 24px", background: "#f8f7f3", borderTop: "1px solid #ede9e0" }}>
       <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>
         ROW SETTINGS
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ fontFamily: FONT, fontSize: 7.5, color: "#999", letterSpacing: 1 }}>GAP ABOVE (pt)</div>
-        <input
-          type="number"
-          value={gap}
-          min={0}
-          max={40}
-          step={0.5}
-          onChange={e => onUpdate({ ...row, gap: parseFloat(e.target.value) || 0 })}
-          style={{ ...baseInp, width: 50, fontSize: 10, padding: "2px 4px" }}
-        />
+      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ fontFamily: FONT, fontSize: 7.5, color: "#999", letterSpacing: 1 }}>GAP ABOVE (pt)</div>
+          <input
+            type="number"
+            value={gap}
+            step={0.5}
+            onChange={e => onUpdate({ ...row, gap: parseFloat(e.target.value) || 0 })}
+            style={{ ...baseInp, width: 50, fontSize: 10, padding: "2px 4px" }}
+          />
+        </div>
+        <button
+          onClick={() => onUpdate({ ...row, pinToBottom: !pinned })}
+          title="Pin this row to the bottom of the page (margin-top: auto)"
+          style={{
+            fontFamily: FONT, fontSize: 7.5, letterSpacing: 1, padding: "3px 9px",
+            border: `1px solid ${pinned ? SELECTED_RING : "#ddd"}`,
+            borderRadius: 2, cursor: "pointer",
+            background: pinned ? "#f0f0f8" : "#fff",
+            color: pinned ? SELECTED_RING : "#999",
+            textTransform: "uppercase",
+          }}
+        >⤓ {pinned ? "PINNED TO BOTTOM" : "PIN TO BOTTOM"}</button>
       </div>
     </div>
   );
@@ -243,6 +256,7 @@ function SortableRow({
           <RowActionBtn title="Insert row above" onClick={() => onInsertAbove(row.id)}>↑</RowActionBtn>
           <RowActionBtn title="Insert row below" onClick={() => onInsertBelow(row.id)}>↓</RowActionBtn>
           <RowActionBtn title="Duplicate row" onClick={() => onDuplicateRow(row.id)}>⎘</RowActionBtn>
+          {row.pinToBottom && <span title="Pinned to bottom" style={{ fontFamily: FONT, fontSize: 9, color: SELECTED_RING, padding: "0 2px" }}>⤓</span>}
           <RowActionBtn title="Row settings" onClick={() => setSettingsOpen(v => !v)} active={settingsOpen}>⚙</RowActionBtn>
           <RowActionBtn title="Delete row" onClick={() => onRemoveRow(row.id)} danger>⊗</RowActionBtn>
         </div>
@@ -820,7 +834,7 @@ function PreviewDataPanel({
               P{seatIdx + 1} EXTRAS
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-              {[{ id: 1, label: "Beetroot" }, { id: 2, label: "Cheese" }, { id: 3, label: "Cake" }].map(ex => {
+              {[{ id: 1, label: "Beetroot" }, { id: 2, label: "Cheese" }].map(ex => {
                 const active = !!(seat.extras || {})[ex.id]?.ordered;
                 return (
                   <button key={ex.id} onClick={() => {
@@ -831,13 +845,9 @@ function PreviewDataPanel({
                 );
               })}
               <button
-                onClick={() => {
-                  const t = seats.__birthday ?? false;
-                  // Store birthday on the seat object for preview
-                  updSeat({ _birthday: !seat._birthday });
-                }}
+                onClick={() => updSeat({ _birthday: !seat._birthday })}
                 style={btnStyle(!!seat._birthday)}
-              >Birthday</button>
+              >Birthday / Cake</button>
             </div>
           </div>
 
