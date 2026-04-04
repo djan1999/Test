@@ -232,8 +232,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
           {/* Toggles */}
           <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
             {[
-              { key: "section_gap_before", label: "Gap Before"    },
-              { key: "show_on_short",      label: "Show on Short" },
+              { key: "show_on_short", label: "Show on Short" },
             ].map(({ key, label }) => (
               <label key={key} style={{ fontFamily: FONT, fontSize: 10, color: "#555", display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
                 <input type="checkbox" checked={!!course[key]} onChange={e => upd(key, e.target.checked)} />
