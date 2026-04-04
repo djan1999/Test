@@ -326,7 +326,10 @@ export function generateMenuHTML({
     // ── goodbye → thank-you row ──
     const gbBlock = lb?.type === "goodbye" ? lb : rb?.type === "goodbye" ? rb : null;
     if (gbBlock) {
-      rows.push({ type: "thankyou", _text: gbBlock.text?.trim() || thankYouNote, fontSize: gbBlock.fontSize, align: gbBlock.align, gap: consumeGap(), pinToBottom: !!tRow.pinToBottom });
+      const gbText = lang === "si"
+        ? (gbBlock.text_si?.trim() || gbBlock.text?.trim())
+        : gbBlock.text?.trim();
+      rows.push({ type: "thankyou", _text: gbText || thankYouNote, fontSize: gbBlock.fontSize, align: gbBlock.align, gap: consumeGap(), pinToBottom: !!tRow.pinToBottom });
       continue;
     }
 
@@ -523,16 +526,18 @@ export function generateMenuHTML({
         const sfx = [11,12,13].includes(_d) ? "th" : _d%10===1 ? "st" : _d%10===2 ? "nd" : _d%10===3 ? "rd" : "th";
         return `${_d}${sfx} of ${_MONTHS_EN[_today.getMonth()]}, ${_today.getFullYear()}`;
       })();
-  // Title: prefer the template's title block text (so preview and print agree),
-  // fall back to the menuTitle parameter (legacy / no-template path).
+  // Title: prefer the template's title block text (lang-aware), fall back to menuTitle parameter.
   const _titleBlockText = (() => {
     for (const r of (menuTemplate?.rows || [])) {
       const tb = r.left?.type === "title" ? r.left : r.right?.type === "title" ? r.right : null;
-      if (tb?.text?.trim()) return tb.text.trim();
+      if (!tb) continue;
+      const t = lang === "si" ? (tb.text_si?.trim() || tb.text?.trim()) : tb.text?.trim();
+      if (t) return t;
     }
     return null;
   })();
-  const safeTitle = esc((_titleBlockText || menuTitle || "WINTER MENU").replace(/\s+/g, " ").trim());
+  const TITLE_FALLBACK = lang === "si" ? "ZIMSKI MENI" : "WINTER MENU";
+  const safeTitle = esc((_titleBlockText || menuTitle || TITLE_FALLBACK).replace(/\s+/g, " ").trim());
 
   // ── Render rows to HTML ───────────────────────────────────────────────────
   const menuRowsHtml = rows.map(row => {

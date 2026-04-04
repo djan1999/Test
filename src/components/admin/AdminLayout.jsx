@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FONT } from "./adminStyles.js";
 import MenuLayoutPanel from "./MenuLayoutPanel.jsx";
+import CourseEditorPanel from "./CourseEditorPanel.jsx";
 import DishesPanel from "./DishesPanel.jsx";
 import DrinksPanel from "./DrinksPanel.jsx";
 import InventoryPanel from "./InventoryPanel.jsx";
@@ -60,6 +61,7 @@ export default function AdminLayout({
   onExit,
 }) {
   const [activeSection, setActiveSection] = useState("menu");
+  const [dishesTab, setDishesTab] = useState("courses");
 
   return (
     <div style={{
@@ -130,12 +132,10 @@ export default function AdminLayout({
           {activeSection === "menu" && (
             <div>
               <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 20 }}>
-                MENU LAYOUT — template editor · course editor · single source of truth
+                MENU LAYOUT — template editor · single source of truth
               </div>
               <MenuLayoutPanel
                 menuCourses={menuCourses}
-                onUpdateCourses={onUpdateMenuCourses}
-                onSaveCourses={onSaveMenuCourses}
                 menuTemplate={menuTemplate}
                 onUpdateTemplate={onUpdateTemplate}
                 onSaveTemplate={onSaveTemplate}
@@ -152,10 +152,34 @@ export default function AdminLayout({
           )}
 
           {activeSection === "dishes" && (
-            <DishesPanel
-              dishes={dishes}
-              onUpdateDishes={onUpdateDishes}
-            />
+            <div>
+              {/* Tab bar */}
+              <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #f0f0f0", marginBottom: 24 }}>
+                {[["courses", "◈ COURSES"], ["dishes", "◈ DISHES & RESTRICTIONS"]].map(([id, label]) => (
+                  <button key={id} onClick={() => setDishesTab(id)} style={{
+                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 16px",
+                    border: "none", borderBottom: `2px solid ${dishesTab === id ? "#4b4b88" : "transparent"}`,
+                    borderRadius: 0, cursor: dishesTab === id ? "default" : "pointer",
+                    background: "transparent",
+                    color: dishesTab === id ? "#4b4b88" : "#aaa",
+                    fontWeight: dishesTab === id ? 700 : 400,
+                  }}>{label}</button>
+                ))}
+              </div>
+              {dishesTab === "courses" && (
+                <CourseEditorPanel
+                  menuCourses={menuCourses}
+                  onUpdateCourses={onUpdateMenuCourses}
+                  onSaveCourses={onSaveMenuCourses}
+                />
+              )}
+              {dishesTab === "dishes" && (
+                <DishesPanel
+                  dishes={dishes}
+                  onUpdateDishes={onUpdateDishes}
+                />
+              )}
+            </div>
           )}
 
           {activeSection === "drinks" && (

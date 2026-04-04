@@ -971,21 +971,26 @@ export default function MenuTemplateEditor({
   const template = menuTemplate || { version: 2, rows: [] };
   const rows = template.rows || [];
 
-  // ── Derive menu title from template's title block ──
+  // ── Derive menu title / thank-you from template blocks (lang-aware) ──
+  const pickLangText = (block, enFallback, siFallback) => {
+    if (!block) return previewLang === "si" ? siFallback : enFallback;
+    return previewLang === "si"
+      ? (block.text_si?.trim() || block.text?.trim() || siFallback)
+      : (block.text?.trim() || enFallback);
+  };
   const menuTitle = (() => {
     for (const r of rows) {
-      if (r.left?.type === "title")  return r.left.text  || "WINTER MENU";
-      if (r.right?.type === "title") return r.right.text || "WINTER MENU";
+      const tb = r.left?.type === "title" ? r.left : r.right?.type === "title" ? r.right : null;
+      if (tb) return pickLangText(tb, "WINTER MENU", "ZIMSKI MENI");
     }
-    return "WINTER MENU";
+    return previewLang === "si" ? "ZIMSKI MENI" : "WINTER MENU";
   })();
-
   const thankYouNote = (() => {
     for (const r of rows) {
-      if (r.left?.type  === "goodbye") return r.left.text  || "Hvala za vaš obisk.";
-      if (r.right?.type === "goodbye") return r.right.text || "Hvala za vaš obisk.";
+      const gb = r.left?.type === "goodbye" ? r.left : r.right?.type === "goodbye" ? r.right : null;
+      if (gb) return pickLangText(gb, "Thank you for your visit.", "Hvala za vaš obisk.");
     }
-    return "Hvala za vaš obisk.";
+    return previewLang === "si" ? "Hvala za vaš obisk." : "Thank you for your visit.";
   })();
 
   // ── Keyboard: Escape deselects / closes picker ──
