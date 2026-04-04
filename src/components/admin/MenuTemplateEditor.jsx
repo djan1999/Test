@@ -874,6 +874,7 @@ export default function MenuTemplateEditor({
   saved   = false,
   menuCourses = [],
   logoDataUri = "",
+  layoutStyles = {},
   wines = [],
   cocktails = [],
   spirits = [],
@@ -964,13 +965,14 @@ export default function MenuTemplateEditor({
           teamNames: "Service Team",
           lang: previewLang,
           beerChoice: null,
+          layoutStyles,
         });
         setPreviewHtml(html);
       } catch {}
       setPreviewLoading(false);
     }, 250);
     return () => clearTimeout(previewTimer.current);
-  }, [template, menuCourses, logoDataUri, previewSeats, previewSeatIdx, previewBottles, previewLang, previewMenuType]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [template, menuCourses, logoDataUri, layoutStyles, previewSeats, previewSeatIdx, previewBottles, previewLang, previewMenuType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = useCallback(newRows => {
     onUpdateTemplate({ ...template, rows: newRows });

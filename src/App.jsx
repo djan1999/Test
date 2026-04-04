@@ -7053,6 +7053,7 @@ export default function App() {
         hasSupabase={hasSupabaseConfig}
         logoDataUri={logoDataUri}
         onSaveLogo={saveLogo}
+        layoutStyles={globalLayout}
         onResetMenuLayout={() => {
           setGlobalLayout({});
           try { localStorage.removeItem("milka_menu_layout"); } catch {}

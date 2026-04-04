@@ -49,6 +49,7 @@ export default function AdminLayout({
   hasSupabase,
   logoDataUri,
   onSaveLogo,
+  layoutStyles = {},
   onResetMenuLayout,
   // Quick Access
   quickAccessItems,
@@ -139,6 +140,7 @@ export default function AdminLayout({
                 templateSaving={templateSaving}
                 templateSaved={templateSaved}
                 logoDataUri={logoDataUri}
+                layoutStyles={layoutStyles}
                 wines={wines}
                 cocktails={cocktails}
                 spirits={spirits}

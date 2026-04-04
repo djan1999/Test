@@ -22,6 +22,7 @@ export default function MenuLayoutPanel({
   templateSaving,
   templateSaved,
   logoDataUri,
+  layoutStyles = {},
   // Catalog data for preview panel
   wines = [],
   cocktails = [],
@@ -63,6 +64,7 @@ export default function MenuLayoutPanel({
           saved={templateSaved}
           menuCourses={menuCourses}
           logoDataUri={logoDataUri}
+          layoutStyles={layoutStyles}
           wines={wines}
           cocktails={cocktails}
           spirits={spirits}
