@@ -1054,6 +1054,23 @@ export default function MenuTemplateEditor({
   };
   const visibleRows = isShortFilter ? rows.filter(rowMatchesShort) : rows;
 
+  // In short mode, display rows in short_order to match the preview order.
+  const displayRows = (() => {
+    if (!isShortFilter) return visibleRows;
+    const isCourseRow = r => r.left?.type === "course" || r.right?.type === "course";
+    const courseIdxs = visibleRows.reduce((acc, r, i) => { if (isCourseRow(r)) acc.push(i); return acc; }, []);
+    if (courseIdxs.length === 0) return visibleRows;
+    const withOrder = courseIdxs.map(i => {
+      const cb = visibleRows[i].left?.type === "course" ? visibleRows[i].left : visibleRows[i].right;
+      const mc = menuCourses.find(c => c.course_key === (cb?.courseKey || ""));
+      return { i, order: Number(mc?.short_order) ?? 9999 };
+    });
+    const sorted = [...withOrder].sort((a, b) => a.order - b.order);
+    const reordered = [...visibleRows];
+    courseIdxs.forEach((origIdx, slot) => { reordered[origIdx] = visibleRows[sorted[slot].i]; });
+    return reordered;
+  })();
+
   // ── DnD ──
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -1297,11 +1314,11 @@ export default function MenuTemplateEditor({
           >
             {isShortFilter && (
               <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#7a5020", background: "#fff8ee", border: "1px solid #f0d080", borderRadius: 3, padding: "5px 8px", margin: "0 0 6px", textTransform: "uppercase" }}>
-                Short menu — {visibleRows.length} blocks · Switch to FULL to see all
+                Short menu — {displayRows.length} blocks · Switch to FULL to see all
               </div>
             )}
-            <SortableContext items={visibleRows.map(r => r.id)} strategy={verticalListSortingStrategy}>
-              {visibleRows.map(row => (
+            <SortableContext items={displayRows.map(r => r.id)} strategy={verticalListSortingStrategy}>
+              {displayRows.map(row => (
                 <SortableRow
                   key={row.id}
                   row={row}
