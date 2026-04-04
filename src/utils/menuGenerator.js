@@ -211,6 +211,30 @@ export function generateMenuHTML({
     ? menuTemplate
     : buildDefaultTemplate(menuCourses);
 
+  // ── Reorder template course rows for short menu ──────────────────────────
+  // When isShort, course rows are sorted by their course's short_order while
+  // structural rows (spacers, headers, etc.) stay at their original positions.
+  // This ensures the short_order field drives the render sequence rather than
+  // the template's long-menu layout order.
+  const effectiveTemplateRows = (() => {
+    if (!isShort) return template.rows;
+    const tRows = template.rows;
+    const courseIdxs = tRows.reduce((acc, row, i) => {
+      if (row.left?.type === "course") acc.push(i);
+      return acc;
+    }, []);
+    if (courseIdxs.length === 0) return tRows;
+    const withOrder = courseIdxs.map(i => {
+      const ck = normalizeToken(tRows[i].left?.courseKey || "");
+      const mc = menuCourses.find(c => normalizeToken(c.course_key || c.key || c.menu?.name || "") === ck);
+      return { i, order: Number(mc?.short_order) || 9999 };
+    });
+    const sorted = [...withOrder].sort((a, b) => a.order - b.order);
+    const reordered = [...tRows];
+    courseIdxs.forEach((origIdx, slot) => { reordered[origIdx] = tRows[sorted[slot].i]; });
+    return reordered;
+  })();
+
   // ── Walk template rows → internal row list ────────────────────────────────
   // Independent queue copies so template walking doesn't mutate the originals.
   const aQ = [...aperitifQueue];
@@ -220,7 +244,7 @@ export function generateMenuHTML({
   let rows = [];
   let pendingGap = 0;      // deferred spacer gap — applied to the next row that actually renders
 
-  for (const tRow of template.rows) {
+  for (const tRow of effectiveTemplateRows) {
     let lb = tRow.left;
     let rb = tRow.right;
     const wp = tRow.widthPreset || "55/45";
