@@ -531,26 +531,44 @@ function BlockInspector({ block, onUpdate, menuCourses }) {
 // A5 at 96 dpi: 148mm × 210mm ≈ 559px × 793px
 const A5_PX_W = 559;
 const A5_PX_H = 793;
-const PREVIEW_SCALE = 0.72;
+const A5_RATIO = A5_PX_W / A5_PX_H; // ≈ 0.705
 
 function LivePreview({ previewHtml, loading, label = "A5" }) {
+  const containerRef = useRef(null);
+  const [scale, setScale] = useState(0.62);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const avH = el.clientHeight - 50; // header label + padding
+      const avW = el.clientWidth - 32;
+      const fitH = Math.min(avH / A5_PX_H, avW / A5_PX_W);
+      setScale(Math.max(0.35, Math.min(1, fitH)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   return (
-    <div style={{
-      flex: 1, overflowY: "auto", background: "#e8e6e0",
+    <div ref={containerRef} style={{
+      flex: 1, overflow: "hidden", background: "#e8e6e0",
       display: "flex", flexDirection: "column", alignItems: "center",
       padding: "20px 16px",
     }}>
       <div style={{
         fontFamily: FONT, fontSize: 7.5, letterSpacing: 3, color: "#aaa",
-        textTransform: "uppercase", marginBottom: 14,
+        textTransform: "uppercase", marginBottom: 14, flexShrink: 0,
       }}>
         LIVE PREVIEW {loading ? "· updating…" : `· ${label}`}
       </div>
 
       {/* Paper wrapper */}
       <div style={{
-        width: A5_PX_W * PREVIEW_SCALE,
-        height: A5_PX_H * PREVIEW_SCALE,
+        width: A5_PX_W * scale,
+        height: A5_PX_H * scale,
         overflow: "hidden",
         flexShrink: 0,
         boxShadow: "0 4px 24px rgba(0,0,0,0.22)",
@@ -565,7 +583,7 @@ function LivePreview({ previewHtml, loading, label = "A5" }) {
             height: A5_PX_H,
             border: "none",
             display: "block",
-            transform: `scale(${PREVIEW_SCALE})`,
+            transform: `scale(${scale})`,
             transformOrigin: "top left",
           }}
           title="Menu preview"
@@ -695,9 +713,16 @@ function PreviewDataPanel({
   const addBottle = item => onBottleWinesChange([...bottleWines, item]);
 
   const apQuickAdd = label => {
-    const w = wines.find(x => (x.name || "").toLowerCase().includes(label.toLowerCase()));
-    if (w) addAp({ __type: "wine", name: w.name, producer: w.producer, vintage: w.vintage, country: w.country });
-    else   addAp({ __type: "wine", name: label, producer: "", vintage: "", country: "" });
+    const q = label.toLowerCase();
+    const w = wines.find(x => (x.name || "").toLowerCase().includes(q));
+    if (w) { addAp({ __type: "wine", name: w.name, producer: w.producer, vintage: w.vintage, country: w.country, region: w.region }); return; }
+    const sp = spirits.find(x => (x.name || "").toLowerCase().includes(q));
+    if (sp) { addAp({ __type: "cocktail", name: sp.name, notes: sp.notes || "" }); return; }
+    const ck = cocktails.find(x => (x.name || "").toLowerCase().includes(q));
+    if (ck) { addAp({ __type: "cocktail", name: ck.name, notes: ck.notes || "" }); return; }
+    const b = beers.find(x => (x.name || "").toLowerCase().includes(q));
+    if (b) { addAp({ __type: "beer", name: b.name, notes: b.notes || "" }); return; }
+    // No catalog match — do NOT add a bare text label
   };
 
   const toggleRestriction = key => {
@@ -784,12 +809,35 @@ function PreviewDataPanel({
             <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>
               P{seatIdx + 1} RESTRICTIONS
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 12 }}>
               {PREVIEW_RESTRICTIONS.map(r => (
                 <button key={r.key} onClick={() => toggleRestriction(r.key)} style={btnStyle((seat.restrictions || []).includes(r.key))}>
                   {r.label}
                 </button>
               ))}
+            </div>
+            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>
+              P{seatIdx + 1} EXTRAS
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+              {[{ id: 1, label: "Beetroot" }, { id: 2, label: "Cheese" }, { id: 3, label: "Cake" }].map(ex => {
+                const active = !!(seat.extras || {})[ex.id]?.ordered;
+                return (
+                  <button key={ex.id} onClick={() => {
+                    const cur = { ...(seat.extras || {}) };
+                    cur[ex.id] = { ordered: !active };
+                    updSeat({ extras: cur });
+                  }} style={btnStyle(active)}>{ex.label}</button>
+                );
+              })}
+              <button
+                onClick={() => {
+                  const t = seats.__birthday ?? false;
+                  // Store birthday on the seat object for preview
+                  updSeat({ _birthday: !seat._birthday });
+                }}
+                style={btnStyle(!!seat._birthday)}
+              >Birthday</button>
             </div>
           </div>
 
@@ -819,7 +867,7 @@ function PreviewDataPanel({
               ))}
             </div>
             <div style={{ display: "flex", gap: 4, marginBottom: 5 }}>
-              <MiniSearch wines={wines} cocktails={[]} spirits={[]} beers={[]} placeholder="search aperitif…" onAdd={addAp} />
+              <MiniSearch wines={wines} cocktails={cocktails} spirits={spirits} beers={beers} placeholder="search aperitif…" onAdd={addAp} />
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
               {seat.aperitifs.map((a, i) => (
@@ -885,8 +933,9 @@ export default function MenuTemplateEditor({
   const [activeRowId,  setActiveRowId]  = useState(null);
   const [previewHtml,  setPreviewHtml]  = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [leftOpen,  setLeftOpen]  = useState(true);
-  const [rightOpen, setRightOpen] = useState(true);
+  const [leftOpen,    setLeftOpen]    = useState(true);
+  const [rightOpen,   setRightOpen]   = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(true);
   const previewTimer = useRef(null);
 
   // ── Preview data state — configurable dummy seat (not persisted) ──
@@ -952,7 +1001,7 @@ export default function MenuTemplateEditor({
           menuType: previewMenuType,
           restrictions: (seat.restrictions || []).map(key => ({ note: key, pos: seat.id })),
           bottleWines: previewBottles,
-          birthday: false,
+          birthday: !!seat._birthday,
         };
         const html = generateMenuHTML({
           seat,
@@ -1223,13 +1272,42 @@ export default function MenuTemplateEditor({
         </div>}
       </aside>
 
-      {/* ── Center: Live A5 preview (click to deselect) ── */}
-      <div style={{ flex: 1, display: "flex" }} onClick={() => setSelectedCell(null)}>
-        <LivePreview
-          previewHtml={previewHtml}
-          loading={previewLoading}
-          label={`P${previewSeatIdx + 1} · ${(previewSeats[previewSeatIdx]?.pairing || "—")} · ${previewLang.toUpperCase()}${previewMenuType === "short" ? " · SHORT" : ""}`}
-        />
+      {/* ── Center: Live A5 preview (collapsible, click to deselect) ── */}
+      <div style={{
+        flex: previewOpen ? 1 : 0,
+        display: "flex", flexDirection: "column",
+        transition: "flex 0.18s ease",
+        minWidth: previewOpen ? 200 : 28,
+        borderLeft: "1px solid #ede9e0", borderRight: "1px solid #ede9e0",
+      }}>
+        {!previewOpen && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 8 }}>
+            <button
+              onClick={() => setPreviewOpen(true)}
+              title="Show preview"
+              style={{ border: "none", background: "transparent", cursor: "pointer", color: "#ccc", fontSize: 12, padding: "2px 4px", lineHeight: 1, fontFamily: FONT }}
+              onMouseEnter={e => { e.currentTarget.style.color = GOLD; }}
+              onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
+            >◂▸</button>
+            <span style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", writingMode: "vertical-lr", marginTop: 8 }}>PREVIEW</span>
+          </div>
+        )}
+        {previewOpen && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative" }} onClick={() => setSelectedCell(null)}>
+            <button
+              onClick={(e) => { e.stopPropagation(); setPreviewOpen(false); }}
+              title="Collapse preview"
+              style={{ position: "absolute", top: 6, right: 6, zIndex: 2, border: "none", background: "transparent", cursor: "pointer", color: "#ccc", fontSize: 10, padding: "2px 4px", lineHeight: 1, fontFamily: FONT }}
+              onMouseEnter={e => { e.currentTarget.style.color = GOLD; }}
+              onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
+            >✕</button>
+            <LivePreview
+              previewHtml={previewHtml}
+              loading={previewLoading}
+              label={`P${previewSeatIdx + 1} · ${(previewSeats[previewSeatIdx]?.pairing || "—")} · ${previewLang.toUpperCase()}${previewMenuType === "short" ? " · SHORT" : ""}`}
+            />
+          </div>
+        )}
       </div>
 
       {/* ── Right: Block inspector ── */}

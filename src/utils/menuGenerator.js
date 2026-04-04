@@ -218,7 +218,7 @@ export function generateMenuHTML({
   const bQ = [...bottleQueue];
 
   let rows = [];
-  let pendingLabel = null; // pairing_label block deferred until next course row
+  let pendingGap = 0;      // deferred spacer gap — applied to the next row that actually renders
 
   for (const tRow of template.rows) {
     let lb = tRow.left;
@@ -232,12 +232,17 @@ export function generateMenuHTML({
     if (lb?.type === "spacer") { spacerGap = Math.max(spacerGap, lb.height || 8); lb = null; }
     if (rb?.type === "spacer") { spacerGap = Math.max(spacerGap, rb.height || 8); rb = null; }
     const gap = (tRow.gap || 0) + spacerGap;
-    // If both cells are empty (both were spacers, or both null), emit a spacer row and skip
+    // If both cells are empty (both were spacers, or both null), defer the gap
+    // instead of emitting a standalone spacer row. This way, if the next course
+    // is hidden (e.g. beetroot not ordered), the spacer disappears with it.
     if (!lb && !rb) {
-      if (spacerGap > 0) rows.push({ type: "_spacer", height: spacerGap, gap: tRow.gap || 0 });
+      pendingGap += spacerGap + (tRow.gap || 0);
       continue;
     }
 
+    // Consume any deferred spacer gap from previous spacer-only rows.
+    // Course rows handle pendingGap separately (discarded when course is hidden).
+    const consumeGap = () => { const g = gap + pendingGap; pendingGap = 0; return g; };
 
     // ── divider ──
     if (lb?.type === "divider" || rb?.type === "divider") {
@@ -248,14 +253,13 @@ export function generateMenuHTML({
         color:        db.color        ?? "#cccccc",
         marginTop:    db.marginTop    ?? 3,
         marginBottom: db.marginBottom ?? 3,
-        gap,
+        gap: consumeGap(),
       });
       continue;
     }
 
     // ── pairing_label ──
-    // Deferred: label is injected inline into the next course row's column
-    // so no separate section row occupies space in the other column.
+    // Emits a section row with the label on whichever side (left/right) the block was placed.
     const plSide  = lb?.type === "pairing_label" ? "left" : "right";
     const plBlock = lb?.type === "pairing_label" ? lb : rb?.type === "pairing_label" ? rb : null;
     if (plBlock) {
@@ -267,7 +271,15 @@ export function generateMenuHTML({
           "VINSKA SPREMLJAVA", "BREZALKOHOLNA SPREMLJAVA", "OUR STORY SPREMLJAVA", "PREMIUM SPREMLJAVA",
         ]);
         const label = (plBlock.text && !allAutoLabels.has(plBlock.text)) ? plBlock.text : autoLabel;
-        pendingLabel = { text: label, side: plSide, align: plBlock.align || "right" };
+        rows.push({
+          type: "section",
+          label,
+          side: plSide,
+          align: plBlock.align || "right",
+          spacing: plBlock.spacing ?? 6,
+          widthPreset: wp,
+          gap: consumeGap(),
+        });
       }
       continue;
     }
@@ -276,21 +288,21 @@ export function generateMenuHTML({
     if (lb?.type === "title" || lb?.type === "logo" || rb?.type === "title" || rb?.type === "logo") {
       const tBlock = lb?.type === "title" ? lb : rb?.type === "title" ? rb : null;
       const lBlock = lb?.type === "logo"  ? lb : rb?.type === "logo"  ? rb : null;
-      rows.push({ type: "_header", titleBlock: tBlock, logoBlock: lBlock, widthPreset: wp, gap });
+      rows.push({ type: "_header", titleBlock: tBlock, logoBlock: lBlock, widthPreset: wp, gap: consumeGap() });
       continue;
     }
 
     // ── team → in-flow team row ──
     if (lb?.type === "team" || rb?.type === "team") {
       const tmBlock = lb?.type === "team" ? lb : rb;
-      rows.push({ type: "_team", block: tmBlock, gap });
+      rows.push({ type: "_team", block: tmBlock, gap: consumeGap() });
       continue;
     }
 
     // ── goodbye → thank-you row ──
     const gbBlock = lb?.type === "goodbye" ? lb : rb?.type === "goodbye" ? rb : null;
     if (gbBlock) {
-      rows.push({ type: "thankyou", _text: gbBlock.text?.trim() || thankYouNote, fontSize: gbBlock.fontSize, align: gbBlock.align, gap });
+      rows.push({ type: "thankyou", _text: gbBlock.text?.trim() || thankYouNote, fontSize: gbBlock.fontSize, align: gbBlock.align, gap: consumeGap() });
       continue;
     }
 
@@ -299,25 +311,25 @@ export function generateMenuHTML({
       const lText = lb?.type === "text" ? lb : null;
       const rText = rb?.type === "text" ? rb : null;
       const mkTextVal = (b) => b ? { title: b.bold ? (b.text || "") : "", sub: b.bold ? "" : (b.text || ""), fontSize: b.fontSize, lineHeight: b.lineHeight, align: b.align } : null;
-      rows.push({ type: "course", courseKey: null, left: mkTextVal(lText), right: mkTextVal(rText), rowClass: "", widthPreset: wp, gap });
+      rows.push({ type: "course", courseKey: null, left: mkTextVal(lText), right: mkTextVal(rText), rowClass: "", widthPreset: wp, gap: consumeGap() });
       continue;
     }
 
     // ── aperitif ──
     if (lb?.type === "aperitif" || rb?.type === "aperitif") {
-      if (aQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(aQ.shift()), widthPreset: wp, gap });
+      if (aQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(aQ.shift()), widthPreset: wp, gap: consumeGap() });
       continue;
     }
 
     // ── by_the_glass (explicit standalone block) ──
     if (lb?.type === "by_the_glass" || rb?.type === "by_the_glass") {
-      if (gQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(gQ.shift()), widthPreset: wp, gap });
+      if (gQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(gQ.shift()), widthPreset: wp, gap: consumeGap() });
       continue;
     }
 
     // ── bottle (explicit standalone block) ──
     if (lb?.type === "bottle" || rb?.type === "bottle") {
-      if (bQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(bQ.shift()), widthPreset: wp, gap });
+      if (bQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(bQ.shift()), widthPreset: wp, gap: consumeGap() });
       continue;
     }
 
@@ -327,7 +339,8 @@ export function generateMenuHTML({
       // Normalized lookup handles raw course_keys that differ in punctuation
       const normKey = normalizeToken(courseKey);
       const vc = visibleCourses.find(vc => vc.courseKey === courseKey || vc.courseKey === normKey);
-      if (!vc) continue;
+      // Course hidden (e.g. beetroot not ordered) — discard any pending spacer gap
+      if (!vc) { pendingGap = 0; continue; }
       const { course, i } = vc;
 
       let dish = applyCourseRestriction(resolveCourse(course), restrictions, lang);
@@ -416,10 +429,8 @@ export function generateMenuHTML({
         right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
         rowClass: "",
         widthPreset: wp,
-        gap,
-        pairingLabel: pendingLabel,
+        gap: consumeGap(),
       });
-      pendingLabel = null;
       continue;
     }
   }
@@ -457,12 +468,8 @@ export function generateMenuHTML({
    * Render a left or right content block into a .menu-col div.
    * Accepts optional inline style override from text blocks.
    */
-  const renderBlock = (block, cls = "", prefixHtml = "") => {
-    if (!block || (!block.title && !block.sub)) {
-      return prefixHtml
-        ? `<div class="menu-col ${cls}">${prefixHtml}</div>`
-        : `<div class="menu-col ${cls}"></div>`;
-    }
+  const renderBlock = (block, cls = "") => {
+    if (!block || (!block.title && !block.sub)) return `<div class="menu-col ${cls}"></div>`;
     const styleAttr = (() => {
       const parts = [];
       if (block.fontSize)   parts.push(`font-size:${block.fontSize}pt`);
@@ -470,7 +477,7 @@ export function generateMenuHTML({
       if (block.align && block.align !== "left") parts.push(`text-align:${block.align}`);
       return parts.length ? ` style="${parts.join(";")}"` : "";
     })();
-    return `<div class="menu-col ${cls}"${styleAttr}>${prefixHtml}${block.title ? `<div class="menu-main">${esc(block.title)}</div>` : ""}${block.sub ? `<div class="menu-sub">${esc(block.sub)}</div>` : ""}</div>`;
+    return `<div class="menu-col ${cls}"${styleAttr}>${block.title ? `<div class="menu-main">${esc(block.title)}</div>` : ""}${block.sub ? `<div class="menu-sub">${esc(block.sub)}</div>` : ""}</div>`;
   };
 
   /**
@@ -507,15 +514,21 @@ export function generateMenuHTML({
   const menuRowsHtml = rows.map(row => {
     const gapStyle = row.gap ? `margin-top:${row.gap}pt;` : "";
 
-    if (row.type === "_spacer") {
-      return `<div style="${gapStyle}height:${row.height}pt"></div>`;
-    }
     if (row.type === "_divider") {
       const t  = row.thickness ?? 0.5;
       const c  = row.color     ?? "#cccccc";
       const mt = (row.marginTop    ?? 3) + (row.gap || 0);
       const mb = row.marginBottom  ?? 3;
       return `<hr style="border:none;border-top:${t}pt solid ${esc(c)};margin:${mt}pt 0 ${mb}pt;">`;
+    }
+    if (row.type === "section") {
+      const ta = row.align && row.align !== "left" ? `text-align:${row.align};` : "";
+      const mbPt = (row.spacing ?? 6);
+      const labelHtml = `<div class="menu-section-label" style="${ta}">${esc(row.label || "")}</div>`;
+      const emptyDiv = `<div></div>`;
+      const leftHtml = row.side === "left" ? labelHtml : emptyDiv;
+      const rightHtml = row.side === "right" ? labelHtml : emptyDiv;
+      return `<div class="menu-row" style="${gapStyle}margin-bottom:${mbPt}pt;${gridCols(row.widthPreset)}">${leftHtml}${rightHtml}</div>`;
     }
     if (row.type === "wine-only") {
       return `<div class="menu-row wine-only" style="${gapStyle}${gridCols(row.widthPreset)}">${renderBlock(null, "left")}${renderBlock(row.right, "right")}</div>`;
@@ -545,17 +558,7 @@ export function generateMenuHTML({
     }
     // course / text rows
     const ckAttr = row.courseKey ? ` data-ck="${esc(row.courseKey)}"` : "";
-    const pl = row.pairingLabel;
-    let leftPrefix = "";
-    let rightPrefix = "";
-    if (pl) {
-      const mbPt = (s("sectionSpacing", 6.8) - 0.6).toFixed(2);
-      const taStyle = pl.align && pl.align !== "left" ? `text-align:${pl.align};` : "";
-      const labelDiv = `<div class="menu-section-label" style="margin-bottom:${mbPt}pt;${taStyle}">${esc(pl.text)}</div>`;
-      if (pl.side === "left") leftPrefix = labelDiv;
-      else rightPrefix = labelDiv;
-    }
-    return `<div class="menu-row ${row.rowClass || ""}" style="${gapStyle}${gridCols(row.widthPreset)}"${ckAttr}>${renderBlock(row.left, "left", leftPrefix)}${renderBlock(row.right, "right", rightPrefix)}</div>`;
+    return `<div class="menu-row ${row.rowClass || ""}" style="${gapStyle}${gridCols(row.widthPreset)}"${ckAttr}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
   }).join("");
 
   // ── HTML output ───────────────────────────────────────────────────────────
@@ -590,14 +593,13 @@ body{position:relative;}
 #logo img{width:${logoSize}mm;display:block;}
 #menu{width:100%;}
 /* Per-row grid-template-columns are set via inline styles on each .menu-row */
-.menu-row,.menu-section-row{display:grid;column-gap:${hasPairing ? "9mm" : "10.8mm"};align-items:start;break-inside:avoid;page-break-inside:avoid;}
+.menu-row{display:grid;column-gap:${hasPairing ? "9mm" : "10.8mm"};align-items:start;break-inside:avoid;page-break-inside:avoid;}
 .menu-row{margin-bottom:${s("rowSpacing",3.15)}pt;}
 .menu-row.wine-only{margin-bottom:${s("wineRowSpacing",4.5)}pt;}
 
 .menu-col{min-width:0;}
 .menu-main{font-weight:700;line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;text-transform:uppercase;}
 .menu-sub{line-height:1.08;margin-top:0.75pt;overflow-wrap:anywhere;}
-.menu-section-row{display:grid;margin-bottom:${(s("sectionSpacing",6.8)-0.6).toFixed(2)}pt;}
 .menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;text-transform:uppercase;}
 .menu-thankyou{margin-top:${s("thankYouSpacing",7)}pt;font-size:6.55pt;font-style:normal;}
 #team{font-size:6.5pt;line-height:1.2;overflow-wrap:anywhere;}
