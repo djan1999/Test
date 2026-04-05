@@ -40,10 +40,52 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
   `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
+const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
+const APP_SUBTITLE = String(import.meta.env.VITE_APP_SUBTITLE || "SERVICE BOARD").trim() || "SERVICE BOARD";
+
 const DEFAULT_MENU_TITLE_EN = String(import.meta.env.VITE_DEFAULT_MENU_TITLE_EN || "MENU").trim() || "MENU";
 const DEFAULT_MENU_TITLE_SI = String(import.meta.env.VITE_DEFAULT_MENU_TITLE_SI || "MENI").trim() || "MENI";
 const DEFAULT_THANK_YOU_EN = String(import.meta.env.VITE_DEFAULT_THANK_YOU_EN || "Thank you for your visit.").trim() || "Thank you for your visit.";
 const DEFAULT_THANK_YOU_SI = String(import.meta.env.VITE_DEFAULT_THANK_YOU_SI || "Hvala za vaš obisk.").trim() || "Hvala za vaš obisk.";
+const DEFAULT_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "01,11,12,21,22,23")
+  .split(",")
+  .map(s => s.trim())
+  .filter(Boolean);
+const parseSittingTimes = () => {
+  const raw = String(import.meta.env.VITE_DEFAULT_SITTING_TIMES || "18:00,18:30,19:00,19:15")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+  return raw.length > 0 ? raw : ["18:00", "18:30", "19:00", "19:15"];
+};
+const DEFAULT_SITTING_TIMES = parseSittingTimes();
+const parseReservationTemplates = () => {
+  const raw = String(import.meta.env.VITE_DEFAULT_RESERVATION_TEMPLATES || "").trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((t, idx) => ({
+        id: String(t?.id || `template_${idx + 1}`),
+        label: String(t?.label || "").trim(),
+        data: {
+          menuType: String(t?.data?.menuType || "").trim().toLowerCase(),
+          lang: String(t?.data?.lang || "en").trim().toLowerCase() === "si" ? "si" : "en",
+          guests: Number(t?.data?.guests) > 0 ? Number(t.data.guests) : undefined,
+          guestType: String(t?.data?.guestType || "").trim().toLowerCase(),
+          room: String(t?.data?.room || "").trim(),
+          birthday: t?.data?.birthday === true,
+          cakeNote: String(t?.data?.cakeNote || "").trim(),
+          notes: String(t?.data?.notes || "").trim(),
+        },
+      }))
+      .filter(t => t.label);
+  } catch {
+    return [];
+  }
+};
+const DEFAULT_RESERVATION_TEMPLATES = parseReservationTemplates();
 
 const parseDefaultQuickAccessItems = () => {
   const raw = String(import.meta.env.VITE_DEFAULT_QUICK_ACCESS || "").trim();
@@ -66,6 +108,31 @@ const parseDefaultQuickAccessItems = () => {
 };
 
 const DEFAULT_QUICK_ACCESS_ITEMS = parseDefaultQuickAccessItems();
+
+const SITTING_TIMES = DEFAULT_SITTING_TIMES;
+const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
+const RESV_TEMPLATES = DEFAULT_RESERVATION_TEMPLATES.length > 0 ? DEFAULT_RESERVATION_TEMPLATES : [
+  { id: "long2_en", label: "2p long EN", data: { guests: 2, menuType: "long", lang: "en", guestType: "" } },
+  { id: "long2_si", label: "2p long SLO", data: { guests: 2, menuType: "long", lang: "si", guestType: "" } },
+  { id: "short2_en", label: "2p short EN", data: { guests: 2, menuType: "short", lang: "en", guestType: "" } },
+  { id: "hotel2_en", label: "2p hotel EN", data: { guests: 2, menuType: "long", lang: "en", guestType: "hotel" } },
+];
+
+const normalizeResvTemplateData = (templateData = {}) => {
+  const parsedGuests = Number(templateData?.guests);
+  const guests = Number.isFinite(parsedGuests) && parsedGuests > 0 ? Math.max(1, Math.min(14, Math.round(parsedGuests))) : null;
+  const menuTypeRaw = String(templateData?.menuType || "").trim().toLowerCase();
+  const menuType = menuTypeRaw === "short" ? "short" : menuTypeRaw === "long" ? "long" : "";
+  const langRaw = String(templateData?.lang || "").trim().toLowerCase();
+  const lang = langRaw === "si" ? "si" : "en";
+  const guestTypeRaw = String(templateData?.guestType || "").trim().toLowerCase();
+  const guestType = guestTypeRaw === "hotel" ? "hotel" : guestTypeRaw === "outside" ? "outside" : "";
+  const room = String(templateData?.room || "").trim();
+  const birthday = templateData?.birthday === true;
+  const cakeNote = String(templateData?.cakeNote || "").trim();
+  const notes = String(templateData?.notes || "").trim();
+  return { guests, menuType, lang, guestType, room, birthday, cakeNote, notes };
+};
 
 // Convert a Supabase menu_courses row to the internal shape used throughout the app.
 function supabaseRowToCourse(r) {
@@ -1362,7 +1429,7 @@ function ReservationModal({ table, tables = [], onSave, onClose }) {
           <div>
             <div style={fieldLabel}>Sitting</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-              {["18:00","18:30","19:00","19:15"].map(t => (
+              {SITTING_TIMES.map(t => (
                 <button key={t} onClick={() => setTime(t)} style={{
                   fontFamily: FONT, fontSize: 13, letterSpacing: 1,
                   padding: "14px 0", flex: 1, border: "1px solid",
@@ -1437,7 +1504,7 @@ function ReservationModal({ table, tables = [], onSave, onClose }) {
                 <div style={{ marginTop: 12 }}>
                   <div style={fieldLabel}>Room</div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {["01","11","12","21","22","23"].map(r => (
+                    {ROOM_OPTIONS.map(r => (
                       <button key={r} onClick={() => setRoom(x => x === r ? "" : r)} style={{
                         fontFamily: FONT, fontSize: 13, fontWeight: 500, letterSpacing: 1,
                         padding: "12px 16px", border: "1px solid",
@@ -1567,9 +1634,6 @@ function ReservationModal({ table, tables = [], onSave, onClose }) {
 }
 
 
-// ── Sitting time rows layout constant ─────────────────────────────────────────
-const SITTING_TIMES = ["18:00", "18:30", "19:00", "19:15"];
-
 // ── Table Card ────────────────────────────────────────────────────────────────
 function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
   const hasRes = table.resName || table.resTime;
@@ -1689,9 +1753,19 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
 }
 
 // ── Detail View ───────────────────────────────────────────────────────────────
-function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers = [], menuCourses = [], aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats }) {
+function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers = [], menuCourses = [], aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll = null, onClearBeverages = null }) {
   const isMobile = useIsMobile(860);
   const row1 = isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
+  const seatCount = table.seats?.length || 0;
+  const canApplySeatToAll = typeof onApplySeatToAll === "function" && seatCount > 1;
+  const hasAnyBeverageData = (table.seats || []).some(s =>
+    (s.aperitifs?.length || 0) > 0 ||
+    (s.glasses?.length || 0) > 0 ||
+    (s.cocktails?.length || 0) > 0 ||
+    (s.spirits?.length || 0) > 0 ||
+    (s.beers?.length || 0) > 0 ||
+    (s.pairing && s.pairing !== "—")
+  );
   return (
     <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "20px 12px 28px" : "24px 16px", overflowX: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
@@ -1723,6 +1797,31 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
             {table.guests} guests
           </span>
         )}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+        <button
+          onClick={() => onApplySeatToAll && onApplySeatToAll(table.id, 1)}
+          disabled={!canApplySeatToAll}
+          style={{
+            fontFamily: FONT, fontSize: 9, letterSpacing: 1.2, padding: "6px 12px",
+            border: "1px solid #d8d8d8", borderRadius: 2, cursor: canApplySeatToAll ? "pointer" : "not-allowed",
+            background: "#fff", color: "#666", opacity: canApplySeatToAll ? 1 : 0.5,
+          }}
+        >
+          COPY P1 TO ALL
+        </button>
+        <button
+          onClick={() => onClearBeverages && onClearBeverages(table.id)}
+          disabled={!onClearBeverages || !hasAnyBeverageData}
+          style={{
+            fontFamily: FONT, fontSize: 9, letterSpacing: 1.2, padding: "6px 12px",
+            border: "1px solid #f0c8c8", borderRadius: 2, cursor: (onClearBeverages && hasAnyBeverageData) ? "pointer" : "not-allowed",
+            background: "#fff", color: "#c06060", opacity: (onClearBeverages && hasAnyBeverageData) ? 1 : 0.5,
+          }}
+        >
+          CLEAR ALL DRINKS
+        </button>
       </div>
 
       {/* Reservation strip */}
@@ -3562,6 +3661,7 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
   const [menuTitle, setMenuTitle] = useState(DEFAULT_MENU_TITLE_EN);
   const [thankYouNote, setThankYouNote] = useState(table.lang === "si" ? DEFAULT_THANK_YOU_SI : DEFAULT_THANK_YOU_EN);
   const [lang, setLang] = useState(table.lang || "en");
+  const [menuStep, setMenuStep] = useState(1); // 1=setup, 2=seat edits, 3=preview/print
   // Per-seat ephemeral one-time edits — { [seatId]: { [courseKey]: { name?, sub? } } }
   // Cleared automatically after the PDF for that seat is generated.
   const [seatEdits, setSeatEdits] = useState({});
@@ -3694,6 +3794,14 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
     setPreviewHtml("");
   };
 
+  const printSelected = async (selectedSeatIds) => {
+    const selected = seats.filter(s => selectedSeatIds.includes(s.id));
+    if (selected.length === 0) return;
+    selected.forEach((s, i) => {
+      setTimeout(() => openPrint(s), i * 700);
+    });
+  };
+
   const openPreview = (seat) => {
     const seatCourses = menuCourses.map(c => applyMenuOverride(c, courseOverrides, seat.id));
     const html = generateMenuHTML({
@@ -3734,14 +3842,32 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
     <FullModal title="Generate Menus" onClose={onClose}>
       <div style={{ maxWidth: 580, margin: "0 auto" }}>
 
+        {/* Wizard nav */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          {[{ id: 1, label: "SETUP" }, { id: 2, label: "SEATS" }, { id: 3, label: "PRINT" }].map(step => (
+            <button
+              key={step.id}
+              onClick={() => setMenuStep(step.id)}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "5px 10px",
+                border: `1px solid ${menuStep === step.id ? "#1a1a1a" : "#e0e0e0"}`,
+                borderRadius: 2, cursor: "pointer",
+                background: menuStep === step.id ? "#1a1a1a" : "#fff",
+                color: menuStep === step.id ? "#fff" : "#999",
+              }}
+            >
+              {step.label}
+            </button>
+          ))}
+        </div>
+
         {/* Language + Title + Team */}
         <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
           <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>Language</div>
           {[{val:"en",label:"EN"},{val:"si",label:"SLO"}].map(opt => (
             <button key={opt.val} onClick={() => {
               setLang(opt.val);
-              setMenuTitle(opt.val === "si" ? DEFAULT_MENU_TITLE_SI : DEFAULT_MENU_TITLE_EN);
-              setThankYouNote(opt.val === "si" ? DEFAULT_THANK_YOU_SI : DEFAULT_THANK_YOU_EN);
+              // Preserve user-entered title/note; provide explicit reset buttons instead.
             }} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
               border: `1px solid ${lang === opt.val ? "#1a1a1a" : "#e0e0e0"}`,
@@ -3756,6 +3882,10 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
             <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Menu Title</div>
             <input value={menuTitle} onChange={e => setMenuTitle(e.target.value)}
               style={{ fontFamily: FONT, fontSize: 11, padding: "8px 10px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }} />
+            <button onClick={() => setMenuTitle(lang === "si" ? DEFAULT_MENU_TITLE_SI : DEFAULT_MENU_TITLE_EN)} style={{
+              marginTop: 6, fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "4px 8px",
+              border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888",
+            }}>reset default</button>
           </div>
           <div style={{ flex: 2, minWidth: 220 }}>
             <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Team</div>
@@ -3768,13 +3898,19 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
             <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Thank You Note</div>
             <input value={thankYouNote} onChange={e => setThankYouNote(e.target.value)}
               style={{ fontFamily: FONT, fontSize: 11, padding: "8px 10px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }} />
+            <button onClick={() => setThankYouNote(lang === "si" ? DEFAULT_THANK_YOU_SI : DEFAULT_THANK_YOU_EN)} style={{
+              marginTop: 6, fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "4px 8px",
+              border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888",
+            }}>reset default</button>
           </div>
         </div>
 
         {/* Seat rows */}
-        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Seats</div>
+        {menuStep >= 2 && (
+          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Seats</div>
+        )}
 
-        {seats.map(s => {
+        {menuStep >= 2 && seats.map(s => {
           const seatRestr  = restrictions.filter(r => !r.pos || r.pos === s.id);
           const printable  = isPrintable(s);
           const extras     = Object.entries(s.extras || {}).filter(([,v]) => v?.ordered).map(([k]) => +k);
@@ -4146,16 +4282,33 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
           );
         })}
 
-        {seats.length === 0 && (
+        {menuStep >= 2 && seats.length === 0 && (
           <div style={{ fontFamily: FONT, fontSize: 11, color: "#ccc", textAlign: "center", padding: "40px 0" }}>No seats yet</div>
         )}
 
-        {seats.length > 0 && (
-          <button onClick={generateAll} style={{
-            marginTop: 16, width: "100%", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
-            padding: "12px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
-            background: "#1a1a1a", color: "#fff",
-          }}>GENERATE ALL</button>
+        {menuStep === 3 && seats.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+              {seats.map(seat => (
+                <button key={`print-seat-${seat.id}`} onClick={() => openPrint(seat)} style={{
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "8px 12px",
+                  border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#555",
+                }}>PRINT P{seat.id}</button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => printSelected(seats.map(s => s.id))} style={{
+                flex: 1, fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "12px",
+                border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
+                background: "#1a1a1a", color: "#fff",
+              }}>PRINT ALL SEATS</button>
+              <button onClick={generateAll} style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "12px",
+                border: "1px solid #c8a96e", borderRadius: 2, cursor: "pointer",
+                background: "#fffaf4", color: "#8a6020",
+              }}>LEGACY BULK</button>
+            </div>
+          </div>
         )}
       </div>
     </FullModal>
@@ -4187,7 +4340,7 @@ function Header({ modeLabel, showAddRes = false, showSummary = false, showMenu =
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 4, color: "#1a1a1a" }}>MILKA</span>
+          <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 4, color: "#1a1a1a" }}>{APP_NAME}</span>
           <span style={{ width: 1, height: 14, background: "#e8e8e8" }} />
           <span style={{ fontSize: 10, letterSpacing: 3, color: modeColor, textTransform: "uppercase", fontWeight: 700 }}>{modeLabel}</span>
         </div>
@@ -5171,7 +5324,7 @@ function ServiceDatePicker({ defaultDate, onConfirm, onCancel, reservations = []
       }}>
         {/* Header */}
         <div style={{ background: "#1a1a1a", padding: "20px 20px 16px", textAlign: "center" }}>
-          <div style={{ fontSize: 9, letterSpacing: 4, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>MILKA</div>
+          <div style={{ fontSize: 9, letterSpacing: 4, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>{APP_NAME}</div>
           <div style={{ fontSize: 13, letterSpacing: 3, color: "#fff", fontWeight: 700 }}>SELECT SERVICE DATE</div>
         </div>
 
@@ -5255,7 +5408,7 @@ function ServiceDatePicker({ defaultDate, onConfirm, onCancel, reservations = []
 }
 
 // ── ResvForm — create / edit a reservation ────────────────────────────────────
-function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }) {
+function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel, templates = RESV_TEMPLATES }) {
   const [tableIds,     setTableIds]     = useState(
     initial?.data?.tableGroup?.length > 1 ? initial.data.tableGroup.map(Number)
       : initial?.table_id               ? [Number(initial.table_id)]
@@ -5273,9 +5426,23 @@ function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }
   const [restrictions, setRestrictions] = useState(initial?.data?.restrictions || []);
   const [notes,        setNotes]        = useState(initial?.data?.notes        || "");
   const [saving,       setSaving]       = useState(false);
+  const [templateId,   setTemplateId]   = useState("");
 
   const sortedGroup = [...tableIds].sort((a, b) => a - b);
   const primaryId   = sortedGroup[0] ?? null;
+
+  const applyTemplate = (template) => {
+    if (!template?.data) return;
+    const d = normalizeResvTemplateData(template.data);
+    if (d.menuType === "long" || d.menuType === "short") setMenuType(d.menuType);
+    if (d.lang === "en" || d.lang === "si") setLang(d.lang);
+    if (typeof d.guests === "number" && d.guests > 0) setGuests(d.guests);
+    if (d.guestType === "hotel" || d.guestType === "outside" || d.guestType === "") setGuestType(d.guestType);
+    if (typeof d.room === "string") setRoom(d.room);
+    setBirthday(!!d.birthday);
+    if (typeof d.cakeNote === "string") setCakeNote(d.cakeNote);
+    if (typeof d.notes === "string") setNotes(d.notes);
+  };
 
   const isConflict = (tid) => reservations.some(r =>
     r.id !== excludeId &&
@@ -5351,6 +5518,40 @@ function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }
         </div>
       </div>
 
+      {/* Templates */}
+      {templates.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={fieldLabel}>Templates</div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <select
+              value={templateId}
+              onChange={e => setTemplateId(e.target.value)}
+              style={{ ...baseInp, minWidth: 210, fontSize: MOBILE_SAFE_INPUT_SIZE, padding: "7px 10px" }}
+            >
+              <option value="">Select template…</option>
+              {templates.map(t => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => {
+                const selected = templates.find(t => t.id === templateId);
+                if (selected) applyTemplate(selected);
+              }}
+              disabled={!templateId}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "6px 9px",
+                border: "1px solid #e0e0e0", borderRadius: 2,
+                cursor: templateId ? "pointer" : "not-allowed",
+                background: "#fff", color: "#666", opacity: templateId ? 1 : 0.5,
+              }}
+            >
+              APPLY
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Menu + Lang + Guests */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
         <div>
@@ -5411,7 +5612,7 @@ function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }
           <div>
             <div style={fieldLabel}>Room</div>
             <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-              {["01","11","12","21","22","23"].map(r => (
+              {ROOM_OPTIONS.map(r => (
                 <button key={r} onClick={() => setRoom(x => x === r ? "" : r)} style={{
                   fontFamily: FONT, fontSize: 11, padding: "7px 10px",
                   border: "1px solid", borderColor: room === r ? "#c8a06e" : "#e8e8e8",
@@ -5507,6 +5708,7 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
   const [editingId,   setEditingId]   = useState(null);   // reservation id being edited, or "new"
   const [ticketId,    setTicketId]    = useState(null);    // reservation id showing kitchen preview
   const [weeklyPreview, setWeeklyPreview] = useState(null); // "reservations" | "allergies" | null
+  const [draftFromReservation, setDraftFromReservation] = useState(null);
 
   const todayStr = toLocalDateISO();
 
@@ -5563,7 +5765,7 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
 
         {/* Sticky header */}
         <div style={{ borderBottom: "1px solid #f0f0f0", padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 50, gap: 12 }}>
-          <button onClick={() => { setSelectedDay(null); setEditingId(null); setTicketId(null); }}
+          <button onClick={() => { setSelectedDay(null); setEditingId(null); setTicketId(null); setDraftFromReservation(null); }}
             style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#1a1a1a", flexShrink: 0 }}>← WEEK</button>
           <div style={{ flex: 1, textAlign: "center" }}>
             <div style={{ fontSize: 10, letterSpacing: 3, color: isService ? "#2f7a45" : "#1a1a1a", fontWeight: 600 }}>{dayLabel}</div>
@@ -5572,8 +5774,21 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
               {isService && <span style={{ color: "#2f7a45", marginLeft: 6 }}>● ACTIVE SERVICE</span>}
             </div>
           </div>
-          <button onClick={() => setEditingId(editingId === "new" ? null : "new")}
-            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: "pointer", background: editingId === "new" ? "#1a1a1a" : "#fff", color: editingId === "new" ? "#fff" : "#1a1a1a", fontWeight: 600, flexShrink: 0 }}>+ ADD</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            <button onClick={() => {
+              const next = editingId === "new" ? null : "new";
+              setEditingId(next);
+              setDraftFromReservation(null);
+            }}
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: "pointer", background: editingId === "new" ? "#1a1a1a" : "#fff", color: editingId === "new" ? "#fff" : "#1a1a1a", fontWeight: 600 }}>+ ADD</button>
+            {editingId !== "new" && RESV_TEMPLATES.length > 0 && (
+              <button
+                onClick={() => { setEditingId("new"); setDraftFromReservation(null); }}
+                style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "6px 10px", border: "1px solid #d0d0d0", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#666", fontWeight: 600 }}
+                title="Open new reservation with templates"
+              >TEMPLATE</button>
+            )}
+          </div>
         </div>
 
         <div style={{ padding: "16px 16px 60px", maxWidth: 700, margin: "0 auto" }}>
@@ -5583,12 +5798,15 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 3, color: "#999", marginBottom: 6, textTransform: "uppercase" }}>New Reservation</div>
               <ResvForm
-                initial={{ date: selectedDay, table_id: null, data: {} }}
+                initial={draftFromReservation
+                  ? { date: selectedDay, table_id: draftFromReservation.table_id ?? null, data: draftFromReservation.data || {} }
+                  : { date: selectedDay, table_id: null, data: {} }}
                 tables={tables}
                 reservations={reservations}
                 excludeId={null}
-                onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) setEditingId(null); }}
-                onCancel={() => setEditingId(null)}
+                templates={RESV_TEMPLATES}
+                onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) { setEditingId(null); setDraftFromReservation(null); } }}
+                onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
               />
             </div>
           )}
@@ -5598,7 +5816,7 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
             <div style={{ textAlign: "center", padding: "60px 0", color: "#ccc" }}>
               <div style={{ fontSize: 28, marginBottom: 12 }}>◫</div>
               <div style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2 }}>NO RESERVATIONS</div>
-              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, marginTop: 6, color: "#ddd" }}>Tap + ADD to create one</div>
+              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, marginTop: 6, color: "#ddd" }}>Tap + ADD or TEMPLATE to create one</div>
             </div>
           )}
 
@@ -5649,6 +5867,16 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
                       style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid " + (isEditing ? "#1a1a1a" : "#d0d0d0"), borderRadius: 4, cursor: "pointer", background: isEditing ? "#1a1a1a" : "#fff", color: isEditing ? "#fff" : "#555" }}>EDIT</button>
                     <button onClick={() => { setTicketId(showTicket ? null : r.id); if (!showTicket) setEditingId(null); }}
                       style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid " + (showTicket ? "#1a1a1a" : "#d0d0d0"), borderRadius: 4, cursor: "pointer", background: showTicket ? "#1a1a1a" : "#fff", color: showTicket ? "#fff" : "#555" }}>TICKET</button>
+                    <button onClick={() => {
+                      setEditingId("new");
+                      setTicketId(null);
+                      setDraftFromReservation({
+                        table_id: r.table_id,
+                        data: { ...(r.data || {}), resName: `${d.resName || "Guest"} (copy)` },
+                        date: selectedDay,
+                      });
+                    }}
+                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid #d0d0d0", borderRadius: 4, cursor: "pointer", background: "#fff", color: "#666" }}>COPY</button>
                     <button onClick={async () => { if (window.confirm(`Delete reservation for ${d.resName || tLabel}?`)) { await onDelete(r.id); setEditingId(null); setTicketId(null); } }}
                       style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid #f0c0c0", borderRadius: 4, cursor: "pointer", background: "#fff8f8", color: "#c04040" }}>DEL</button>
                   </div>
@@ -5662,8 +5890,9 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
                       tables={tables}
                       reservations={reservations}
                       excludeId={r.id}
-                      onSave={async (row) => { await onUpsert(row); setEditingId(null); }}
-                      onCancel={() => setEditingId(null)}
+                      templates={RESV_TEMPLATES}
+                      onSave={async (row) => { await onUpsert(row); setEditingId(null); setDraftFromReservation(null); }}
+                      onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
                     />
                   </div>
                 )}
@@ -5850,8 +6079,8 @@ function GateScreen({ onPass }) {
     }}>
       <GlobalStyle />
       <div style={{ marginBottom: 52, textAlign: "center" }}>
-        <div style={{ fontSize: 15, fontWeight: 500, letterSpacing: 6, color: "#1a1a1a", marginBottom: 6 }}>MILKA</div>
-        <div style={{ fontSize: 9, letterSpacing: 4, color: "#555" }}>SERVICE BOARD</div>
+        <div style={{ fontSize: 15, fontWeight: 500, letterSpacing: 6, color: "#1a1a1a", marginBottom: 6 }}>{APP_NAME}</div>
+        <div style={{ fontSize: 9, letterSpacing: 4, color: "#555" }}>{APP_SUBTITLE}</div>
       </div>
 
       <div style={{ width: "100%", maxWidth: 320, textAlign: "center" }}>
@@ -6039,8 +6268,8 @@ function LoginScreen({ onEnter, onSyncAll }) {
     <div style={{ minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <GlobalStyle />
       <div style={{ marginBottom: 48, textAlign: "center" }}>
-        <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, letterSpacing: 6, color: "#1a1a1a", marginBottom: 8 }}>MILKA</div>
-        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#999" }}>SERVICE BOARD</div>
+        <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, letterSpacing: 6, color: "#1a1a1a", marginBottom: 8 }}>{APP_NAME}</div>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#999" }}>{APP_SUBTITLE}</div>
       </div>
 
       {!picking ? (
@@ -6258,6 +6487,47 @@ export default function App() {
   const setGuests = (tid, n) => setTables(p => p.map(t =>
     t.id !== tid ? t : { ...t, guests: n, seats: makeSeats(n, t.seats) }
   ));
+
+  const applySeatTemplateToAll = (tableId, sourceSeatId = 1) => setTables(prev => prev.map(t => {
+    if (t.id !== tableId) return t;
+    const seats = t.seats || [];
+    if (seats.length <= 1) return t;
+    const source = seats.find(s => s.id === sourceSeatId) || seats[0];
+    if (!source) return t;
+    const clonedExtras = source.extras
+      ? Object.fromEntries(Object.entries(source.extras).map(([k, v]) => [k, v ? { ...v } : v]))
+      : {};
+    const nextSeats = seats.map(s => (
+      s.id === source.id
+        ? s
+        : {
+            ...s,
+            water: source.water || "Still",
+            pairing: source.pairing || "—",
+            aperitifs: [...(source.aperitifs || [])],
+            glasses: [...(source.glasses || [])],
+            cocktails: [...(source.cocktails || [])],
+            spirits: [...(source.spirits || [])],
+            beers: [...(source.beers || [])],
+            extras: clonedExtras,
+          }
+    ));
+    return { ...t, seats: nextSeats };
+  }));
+
+  const clearSeatBeverages = (tableId) => setTables(prev => prev.map(t => {
+    if (t.id !== tableId) return t;
+    const nextSeats = (t.seats || []).map(s => ({
+      ...s,
+      pairing: "—",
+      aperitifs: [],
+      glasses: [],
+      cocktails: [],
+      spirits: [],
+      beers: [],
+    }));
+    return { ...t, seats: nextSeats };
+  }));
 
   const seatTable = id => {
     const now = fmt(new Date());
@@ -6969,7 +7239,7 @@ export default function App() {
     }}>
       <GlobalStyle />
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: 6, color: "#1a1a1a", marginBottom: 6 }}>MILKA</div>
+        <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: 6, color: "#1a1a1a", marginBottom: 6 }}>{APP_NAME}</div>
         <div style={{ fontSize: 9, letterSpacing: 4, color: "#bbb" }}>CONNECTING…</div>
       </div>
       <div style={{ display: "flex", gap: 6 }}>
@@ -7207,6 +7477,8 @@ export default function App() {
           updSeat={(sid, f, v) => updSeat(sel, sid, f, v)}
           setGuests={n => setGuests(sel, n)}
           swapSeats={(aId, bId) => swapSeats(sel, aId, bId)}
+          onApplySeatToAll={(tableId, sourceSeatId) => applySeatTemplateToAll(tableId, sourceSeatId)}
+          onClearBeverages={tableId => clearSeatBeverages(tableId)}
         />
       )}
 
