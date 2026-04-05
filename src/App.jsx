@@ -36,6 +36,10 @@ const DIETARY_KEYS = [
   "no_garlic_onion","halal","low_fodmap",
 ];
 
+const pad2 = (n) => String(n).padStart(2, "0");
+const toLocalDateISO = (date = new Date()) =>
+  `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+
 // Convert a Supabase menu_courses row to the internal shape used throughout the app.
 function supabaseRowToCourse(r) {
   const restrictions = {};
@@ -132,13 +136,13 @@ function courseToSupabaseRow(course) {
 }
 
 async function fetchMenuCourses() {
-  if (!supabase) return [];
+  if (!supabase) return null;
   const { data, error } = await supabase
     .from("menu_courses")
     .select("*")
     .order("position", { ascending: true });
-  if (error || !data || data.length === 0) return [];
-  return data.map(supabaseRowToCourse);
+  if (error) throw error;
+  return (data || []).map(supabaseRowToCourse);
 }
 
 
@@ -5092,12 +5096,16 @@ function InventoryModal({ wines, onClose }) {
 }
 
 // ── Access gate constants ─────────────────────────────────────────────────────
-const PINS            = { admin: "3412", menu: "3412" };
-const ACCESS_PASSWORD = "milka2025";          // ← change to your own password
+const PINS = {
+  admin: String(import.meta.env.VITE_PIN_ADMIN || "").trim(),
+  menu: String(import.meta.env.VITE_PIN_MENU || "").trim(),
+};
+const ACCESS_PASSWORD = String(import.meta.env.VITE_ACCESS_PASSWORD || "").trim();
 const ACCESS_KEY      = "milka_access";
 const ACCESS_TTL_MS   = 12 * 60 * 60 * 1000; // 12 hours
 
 const readAccess = () => {
+  if (!ACCESS_PASSWORD) return true;
   try {
     const raw = localStorage.getItem(ACCESS_KEY);
     if (!raw) return false;
@@ -5111,7 +5119,7 @@ const writeAccess = () => {
 
 // ── ServiceDatePicker ─────────────────────────────────────────────────────────
 function ServiceDatePicker({ defaultDate, onConfirm, onCancel, reservations = [] }) {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = toLocalDateISO();
   const [selected, setSelected] = useState(defaultDate || todayStr);
   // weekOffset: 0 = current week, -1 = last week, +1 = next week
   const [weekOffset, setWeekOffset] = useState(0);
@@ -5127,7 +5135,7 @@ function ServiceDatePicker({ defaultDate, onConfirm, onCancel, reservations = []
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
-      return d.toISOString().slice(0, 10);
+      return toLocalDateISO(d);
     });
   }, [weekOffset]);
 
@@ -5493,7 +5501,7 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
   const [ticketId,    setTicketId]    = useState(null);    // reservation id showing kitchen preview
   const [weeklyPreview, setWeeklyPreview] = useState(null); // "reservations" | "allergies" | null
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = toLocalDateISO();
 
   // ── Week helpers ─────────────────────────────────────────────────────────
   const weekDays = useMemo(() => {
@@ -5509,7 +5517,7 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
     });
   }, [weekOffset]);
 
-  const toDateStr = d => d.toISOString().slice(0, 10);
+  const toDateStr = d => toLocalDateISO(d);
   const fmtRange  = () => {
     const o = { day: "numeric", month: "short" };
     return `${weekDays[0].toLocaleDateString("en-GB", o)} – ${weekDays[6].toLocaleDateString("en-GB", o)}`.toUpperCase();
@@ -5812,6 +5820,11 @@ function GateScreen({ onPass }) {
   const [show, setShow]   = useState(false);
 
   const attempt = val => {
+    if (!ACCESS_PASSWORD) {
+      writeAccess();
+      onPass();
+      return;
+    }
     if (val === ACCESS_PASSWORD) {
       writeAccess();
       onPass();
@@ -5984,6 +5997,7 @@ function LoginScreen({ onEnter, onSyncAll }) {
 
   const handleTile = mode => {
     if (!mode.pin) { onEnter(mode.id); return; }
+    if (!PINS[mode.id]) { onEnter(mode.id); return; }
     setPicking(mode.id);
     setPin("");
   };
@@ -6360,7 +6374,7 @@ export default function App() {
     const activeTables = snap.tables.filter(t => t.active || t.arrivedAt || t.resName || t.resTime);
     if (supabase) {
       const { error } = await supabase.from("service_archive").insert({
-        date: new Date().toISOString().slice(0, 10),
+        date: toLocalDateISO(),
         label: dateStr,
         state: { ...snap, tables: activeTables, menuCourses: menuCourses },
       });
@@ -6791,16 +6805,16 @@ export default function App() {
         .from("beverages")
         .select("id, category, name, notes, position")
         .order("position", { ascending: true });
-      if (!mounted || error || !data || data.length === 0) return;
+      if (!mounted || error || !data) return;
       const byCat = cat => data
         .filter(r => r.category === cat)
         .map((r, i) => ({ id: r.id, name: r.name, notes: r.notes || "", position: r.position ?? i }));
       const c = byCat("cocktail");
       const s = byCat("spirit");
       const b = byCat("beer");
-      if (c.length) setCocktails(c);
-      if (s.length) setSpirits(s);
-      if (b.length) setBeers(b);
+      setCocktails(c);
+      setSpirits(s);
+      setBeers(b);
       writeLocalBeverages({ cocktails: c, spirits: s, beers: b });
     };
 
@@ -6823,7 +6837,7 @@ export default function App() {
         .from("wines")
         .select("key, name, wine_name, producer, vintage, region, country, by_glass")
         .order("name", { ascending: true });
-      if (!mounted || error || !data || data.length === 0) return;
+      if (!mounted || error || !data) return;
       setWines(data.map(r => ({
         id: r.key, name: r.wine_name || r.name,
         producer: r.producer || "", vintage: r.vintage || "",
@@ -6856,8 +6870,8 @@ export default function App() {
     const past   = new Date(); past.setDate(past.getDate() - 7);
     const future = new Date(); future.setDate(future.getDate() + 30);
     supabase.from("reservations").select("*")
-      .gte("date", past.toISOString().slice(0, 10))
-      .lte("date", future.toISOString().slice(0, 10))
+      .gte("date", toLocalDateISO(past))
+      .lte("date", toLocalDateISO(future))
       .order("date").order("created_at")
       .then(({ data, error }) => {
         if (!mounted || error || !data) return;
@@ -6888,15 +6902,14 @@ export default function App() {
     const loadCourses = async () => {
       try {
         const courses = await fetchMenuCourses();
-        if (mounted && courses.length > 0) {
-          setMenuCourses(courses);
-          // Auto-generate template v2 from courses if none stored yet
-          if (!menuTemplateRef.current?.rows?.length) {
-            const tmpl = buildDefaultTemplate(courses);
-            if (mounted) {
-              setMenuTemplate(tmpl);
-              try { localStorage.setItem("milka_menu_template_v2", JSON.stringify(tmpl)); } catch {}
-            }
+        if (!mounted || !courses) return;
+        setMenuCourses(courses);
+        // Auto-generate template v2 from courses if none stored yet
+        if (courses.length > 0 && !menuTemplateRef.current?.rows?.length) {
+          const tmpl = buildDefaultTemplate(courses);
+          if (mounted) {
+            setMenuTemplate(tmpl);
+            try { localStorage.setItem("milka_menu_template_v2", JSON.stringify(tmpl)); } catch {}
           }
         }
       } catch (error) {
@@ -6972,7 +6985,7 @@ export default function App() {
 
   const serviceDatePickerEl = showServiceDatePicker ? (
     <ServiceDatePicker
-      defaultDate={new Date().toISOString().slice(0, 10)}
+      defaultDate={toLocalDateISO()}
       reservations={reservations}
       onConfirm={async (date) => {
         await persistServiceDate(date);

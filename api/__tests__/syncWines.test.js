@@ -5,6 +5,7 @@ import {
   parseBeveragesFromHtml,
   withRetry,
 } from "../sync-wines.js";
+import handler from "../sync-wines.js";
 
 // ── extractCells ───────────────────────────────────────────────────────────────
 
@@ -167,6 +168,12 @@ describe("parseBeveragesFromHtml", () => {
     expect(beverages[0].notes).toContain("Whisky");
   });
 
+  it("uses the region column for spirit notes (not ABV)", () => {
+    const beverages = parseBeveragesFromHtml(SPIRIT_HTML, "spirit", "Whisky");
+    expect(beverages[0].notes).toContain("Speyside");
+    expect(beverages[0].notes).not.toContain("40%");
+  });
+
   it("returns empty array for empty HTML", () => {
     expect(parseBeveragesFromHtml("", "cocktail", "Cocktail")).toEqual([]);
   });
@@ -235,5 +242,41 @@ describe("withRetry", () => {
 
     expect(result).toBe("ok");
     expect(fn).toHaveBeenCalledTimes(3);
+  });
+});
+
+// ── handler auth ────────────────────────────────────────────────────────────────
+
+describe("sync-wines handler auth", () => {
+  it("requires CRON secret even when sec-fetch-site is same-origin", async () => {
+    const req = {
+      url: "http://localhost/api/sync-wines?dry=true",
+      headers: {
+        "sec-fetch-site": "same-origin",
+      },
+    };
+    const res = {
+      statusCode: 200,
+      payload: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(body) {
+        this.payload = body;
+        return this;
+      },
+    };
+
+    const prevSecret = process.env.CRON_SECRET;
+    process.env.CRON_SECRET = "super-secret";
+    try {
+      await handler(req, res);
+      expect(res.statusCode).toBe(401);
+      expect(res.payload).toEqual({ error: "Unauthorized" });
+    } finally {
+      if (prevSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = prevSecret;
+    }
   });
 });

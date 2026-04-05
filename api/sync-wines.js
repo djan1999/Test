@@ -113,7 +113,7 @@ export function parseBeveragesFromHtml(html, category, subcategoryLabel) {
       let displayName, notes;
       if (category === "spirit") {
         const producer = cells[1] || "";
-        const region   = cells[3] || "";
+        const region   = cells[2] || "";
         displayName = producer ? `${name} – ${producer}` : name;
         notes = [subcategoryLabel, region].filter(Boolean).join(", ");
       } else {
@@ -152,11 +152,8 @@ export default async function handler(req, res) {
   const provided = bearerToken ||
     req.headers["x-cron-secret"] ||
     new URL(req.url, "http://localhost").searchParams.get("secret");
-  const isSameOrigin = req.headers["sec-fetch-site"] === "same-origin";
-  if (!isSameOrigin) {
-    if (!secret) return res.status(500).json({ error: "CRON_SECRET not configured" });
-    if (provided !== secret) return res.status(401).json({ error: "Unauthorized" });
-  }
+  if (!secret) return res.status(500).json({ error: "CRON_SECRET not configured" });
+  if (provided !== secret) return res.status(401).json({ error: "Unauthorized" });
 
   const dry = new URL(req.url, "http://localhost").searchParams.get("dry") === "true";
 
