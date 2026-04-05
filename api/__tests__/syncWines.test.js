@@ -77,6 +77,13 @@ describe("parseWinesFromHtml", () => {
     expect(byGlass.by_glass).toBe(true);
   });
 
+  it("detects by-glass wines from single-digit prefix (e.g. '1.')", () => {
+    const html = `<table><tr><td>1. Movia</td><td>Lunar</td><td>2019</td><td>Brda</td><td>38</td></tr></table>`;
+    const [wine] = parseWinesFromHtml(html, "SI");
+    expect(wine.by_glass).toBe(true);
+    expect(wine.producer).toBe("Movia");
+  });
+
   it("strips numeric prefix from producer name", () => {
     const wines = parseWinesFromHtml(WINE_TABLE_HTML, "SI");
     const w = wines.find(w => w.producer.includes("Edi Simčič"));
