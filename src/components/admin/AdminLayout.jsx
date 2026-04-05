@@ -9,6 +9,8 @@ import SystemPanel from "./SystemPanel.jsx";
 import ArchivePanel from "./ArchivePanel.jsx";
 import QuickAccessPanel from "./QuickAccessPanel.jsx";
 
+const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
+
 const SECTIONS = [
   { id: "menu",        label: "Menu Layout",           icon: "▨" },
   { id: "dishes",      label: "Dishes & Restrictions",  icon: "◈" },
@@ -75,7 +77,7 @@ export default function AdminLayout({
         background: "#fff", position: "sticky", top: 0, zIndex: 50,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 4, color: "#1a1a1a" }}>MILKA</span>
+          <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 4, color: "#1a1a1a" }}>{APP_NAME}</span>
           <span style={{ width: 1, height: 14, background: "#e8e8e8" }} />
           <span style={{ fontSize: 10, letterSpacing: 3, color: "#4b4b88", textTransform: "uppercase", fontWeight: 700 }}>ADMIN</span>
         </div>

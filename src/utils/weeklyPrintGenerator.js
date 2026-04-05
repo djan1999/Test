@@ -64,7 +64,8 @@ const fmtDateFull = ds => {
   return `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
 };
 
-const toDateStr = d => d.toISOString().slice(0, 10);
+const toDateStr = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 // ── PDF 1: Weekly Reservations Sheet ──────────────────────────────────────────
 
