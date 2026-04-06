@@ -287,7 +287,7 @@ export function generateMenuHTML({
     const plSide  = lb?.type === "pairing_label" ? "left" : "right";
     const plBlock = lb?.type === "pairing_label" ? lb : rb?.type === "pairing_label" ? rb : null;
     if (plBlock) {
-      if (hasPairing && !isShort) {
+      if (hasPairing) {
         const autoLabel = PAIRING_LABELS[pkey] || "PAIRING";
         const allAutoLabels = new Set([
           ...Object.values(PAIRING_LABELS),

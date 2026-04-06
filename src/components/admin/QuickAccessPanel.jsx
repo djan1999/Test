@@ -1,56 +1,70 @@
 import { useState, useRef, useEffect } from "react";
 import { FONT, baseInp } from "./adminStyles.js";
+import { fuzzy, fuzzyDrink } from "../../utils/search.js";
 
-function catalogForType(type, wines, cocktails, spirits, beers) {
-  if (type === "wine")     return (wines     || []).map(w => w.name || w.producer || "").filter(Boolean);
-  if (type === "cocktail") return (cocktails || []).map(c => c.name || "").filter(Boolean);
-  if (type === "spirit")   return (spirits   || []).map(s => s.name || "").filter(Boolean);
-  if (type === "beer")     return (beers     || []).map(b => b.name || "").filter(Boolean);
-  return [];
-}
-
-function SearchKeyInput({ value, onChange, type, wines, cocktails, spirits, beers, placeholder, style }) {
+// ── WinePickerInput — mirrors the WineSearch in App.jsx ──────────────────────
+function WinePickerInput({ value, onChange, type, wines, cocktails, spirits, beers, style }) {
+  const [q, setQ]       = useState("");
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  const q = value.toLowerCase();
-  const matches = q.length > 0
-    ? catalogForType(type, wines, cocktails, spirits, beers)
-        .filter(name => name.toLowerCase().includes(q))
-        .slice(0, 8)
-    : [];
+  const ref             = useRef(null);
 
   useEffect(() => {
-    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
   }, []);
+
+  const list = type === "wine" ? wines : type === "cocktail" ? cocktails : type === "spirit" ? spirits : beers;
+  const results = q.length > 0
+    ? (type === "wine" ? fuzzy(q, wines, null) : fuzzyDrink(q, list)).slice(0, 8)
+    : [];
+
+  const selectItem = (item) => {
+    // For wines: use the wine name as the searchKey (matches existing lookup logic)
+    const key = type === "wine"
+      ? (item.name || item.producer || "")
+      : (item.name || "");
+    onChange(key);
+    setQ("");
+    setOpen(false);
+  };
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
+      {value && (
+        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
+          <span style={{ fontFamily: FONT, fontSize: 9, color: "#4b4b88", background: "#f4f4fc", border: "1px solid #c8c6e8", borderRadius: 2, padding: "2px 6px", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {value}
+          </span>
+          <button onClick={() => onChange("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>
+        </div>
+      )}
       <input
-        value={value}
-        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        value={q}
+        onChange={e => { setQ(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
-        placeholder={placeholder || "defaults to label"}
+        placeholder={value ? "search to replace…" : "search wines…"}
         style={style}
       />
-      {open && matches.length > 0 && (
+      {open && results.length > 0 && (
         <div style={{
-          position: "absolute", top: "100%", left: 0, right: 0, zIndex: 200,
+          position: "absolute", top: "100%", left: 0, right: 0, zIndex: 300,
           background: "#fff", border: "1px solid #e0e0e0", borderRadius: 3,
-          boxShadow: "0 4px 12px rgba(0,0,0,0.10)", maxHeight: 220, overflowY: "auto",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.10)", maxHeight: 260, overflowY: "auto",
         }}>
-          {matches.map(name => (
+          {results.map((item, i) => (
             <div
-              key={name}
-              onMouseDown={e => { e.preventDefault(); onChange(name); setOpen(false); }}
-              style={{
-                fontFamily: FONT, fontSize: 10, padding: "7px 10px", cursor: "pointer",
-                borderBottom: "1px solid #f4f4f4", color: "#222",
-              }}
+              key={item.id ?? i}
+              onMouseDown={e => { e.preventDefault(); selectItem(item); }}
+              style={{ fontFamily: FONT, fontSize: 10, padding: "8px 10px", cursor: "pointer", borderBottom: "1px solid #f4f4f4" }}
               onMouseEnter={e => e.currentTarget.style.background = "#f7f7ff"}
               onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-            >{name}</div>
+            >
+              <span style={{ fontWeight: 600, color: "#1a1a1a" }}>{item.name}</span>
+              {item.producer && <span style={{ color: "#888" }}> · {item.producer}</span>}
+              {item.vintage  && <span style={{ color: "#aaa" }}> · {item.vintage}</span>}
+              {item.byGlass  && <span style={{ color: "#4a9a6a", marginLeft: 4, fontSize: 8 }}>BTG</span>}
+            </div>
           ))}
         </div>
       )}
@@ -119,8 +133,8 @@ export default function QuickAccessPanel({
     onUpdateQuickAccess(reordered);
   };
 
-  const inpSm = { ...baseInp, padding: "5px 8px", fontSize: 11 };
-  const selSm = { ...inpSm, cursor: "pointer" };
+  const inpSm  = { ...baseInp, padding: "5px 8px", fontSize: 11 };
+  const selSm  = { ...inpSm, cursor: "pointer" };
 
   const TypeSelect = ({ value, onChange }) => (
     <select value={value} onChange={e => onChange(e.target.value)} style={selSm}>
@@ -130,6 +144,8 @@ export default function QuickAccessPanel({
       <option value="beer">Beer</option>
     </select>
   );
+
+  const pickerProps = (type) => ({ wines, cocktails, spirits, beers, type, style: inpSm });
 
   return (
     <div>
@@ -147,10 +163,8 @@ export default function QuickAccessPanel({
             {/* Row */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px" }}>
               <button onClick={() => toggleItem(item.id)} style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 1,
-                padding: "4px 10px", border: "1px solid",
-                borderColor: item.enabled ? "#4a9a6a" : "#ddd",
-                borderRadius: 2, cursor: "pointer",
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px", border: "1px solid",
+                borderColor: item.enabled ? "#4a9a6a" : "#ddd", borderRadius: 2, cursor: "pointer",
                 background: item.enabled ? "#f0faf0" : "#fff",
                 color: item.enabled ? "#4a9a6a" : "#aaa", flexShrink: 0,
               }}>{item.enabled ? "ON" : "OFF"}</button>
@@ -158,7 +172,7 @@ export default function QuickAccessPanel({
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{item.label}</div>
                 <div style={{ fontFamily: FONT, fontSize: 9, color: "#999" }}>
-                  search: {item.searchKey} | {item.type}
+                  search: <span style={{ color: "#4b4b88" }}>{item.searchKey}</span> · {item.type}
                 </div>
               </div>
 
@@ -194,12 +208,8 @@ export default function QuickAccessPanel({
                   <input value={editLabel} onChange={e => setEditLabel(e.target.value)} style={inpSm} />
                 </div>
                 <div>
-                  <div style={{ fontFamily: FONT, fontSize: 8, color: "#999", letterSpacing: 1, marginBottom: 3 }}>SEARCH KEY</div>
-                  <SearchKeyInput
-                    value={editKey} onChange={setEditKey} type={editType}
-                    wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
-                    style={inpSm}
-                  />
+                  <div style={{ fontFamily: FONT, fontSize: 8, color: "#999", letterSpacing: 1, marginBottom: 3 }}>LINKED PRODUCT</div>
+                  <WinePickerInput value={editKey} onChange={setEditKey} {...pickerProps(editType)} />
                 </div>
                 <div>
                   <div style={{ fontFamily: FONT, fontSize: 8, color: "#999", letterSpacing: 1, marginBottom: 3 }}>TYPE</div>
@@ -217,6 +227,7 @@ export default function QuickAccessPanel({
         )}
       </div>
 
+      {/* Add new item */}
       <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 18 }}>
         <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#999", textTransform: "uppercase", marginBottom: 8 }}>Add item</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px", gap: 8, marginBottom: 10 }}>
@@ -227,12 +238,8 @@ export default function QuickAccessPanel({
               placeholder="e.g. Slapšak" style={inpSm} />
           </div>
           <div>
-            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#999", marginBottom: 2 }}>SEARCH KEY</div>
-            <SearchKeyInput
-              value={newSearchKey} onChange={setNewSearchKey} type={newType}
-              wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
-              placeholder="defaults to label" style={inpSm}
-            />
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#999", marginBottom: 2 }}>LINKED PRODUCT</div>
+            <WinePickerInput value={newSearchKey} onChange={setNewSearchKey} {...pickerProps(newType)} />
           </div>
           <div>
             <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#999", marginBottom: 2 }}>TYPE</div>
