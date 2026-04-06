@@ -3654,7 +3654,6 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
   const [menuTitle, setMenuTitle] = useState(DEFAULT_MENU_TITLE_EN);
   const [thankYouNote, setThankYouNote] = useState(table.lang === "si" ? DEFAULT_THANK_YOU_SI : DEFAULT_THANK_YOU_EN);
   const [lang, setLang] = useState(table.lang || "en");
-  const [menuStep, setMenuStep] = useState(1); // 1=setup, 2=seat edits, 3=preview/print
   // Per-seat ephemeral one-time edits — { [seatId]: { [courseKey]: { name?, sub? } } }
   // Cleared automatically after the PDF for that seat is generated.
   const [seatEdits, setSeatEdits] = useState({});
@@ -3752,6 +3751,12 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
 
   const setBeer = (seatId, val) => setBeerChoices(prev => ({ ...prev, [seatId]: val }));
 
+  const setLanguageWithDefaults = (nextLang) => {
+    setLang(nextLang);
+    setMenuTitle(nextLang === "si" ? DEFAULT_MENU_TITLE_SI : DEFAULT_MENU_TITLE_EN);
+    setThankYouNote(nextLang === "si" ? DEFAULT_THANK_YOU_SI : DEFAULT_THANK_YOU_EN);
+  };
+
   // ── Layout styles (global default, read-only in this view) ───────────────
   const layoutStyles = defaultLayoutStyles || {};
 
@@ -3835,32 +3840,12 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
     <FullModal title="Generate Menus" onClose={onClose}>
       <div style={{ maxWidth: 580, margin: "0 auto" }}>
 
-        {/* Wizard nav */}
-        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-          {[{ id: 1, label: "SETUP" }, { id: 2, label: "SEATS" }, { id: 3, label: "PRINT" }].map(step => (
-            <button
-              key={step.id}
-              onClick={() => setMenuStep(step.id)}
-              style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "5px 10px",
-                border: `1px solid ${menuStep === step.id ? "#1a1a1a" : "#e0e0e0"}`,
-                borderRadius: 2, cursor: "pointer",
-                background: menuStep === step.id ? "#1a1a1a" : "#fff",
-                color: menuStep === step.id ? "#fff" : "#999",
-              }}
-            >
-              {step.label}
-            </button>
-          ))}
-        </div>
-
         {/* Language + Title + Team */}
         <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
           <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>Language</div>
           {[{val:"en",label:"EN"},{val:"si",label:"SLO"}].map(opt => (
             <button key={opt.val} onClick={() => {
-              setLang(opt.val);
-              // Preserve user-entered title/note; provide explicit reset buttons instead.
+              setLanguageWithDefaults(opt.val);
             }} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
               border: `1px solid ${lang === opt.val ? "#1a1a1a" : "#e0e0e0"}`,
@@ -3899,11 +3884,9 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
         </div>
 
         {/* Seat rows */}
-        {menuStep >= 2 && (
-          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Seats</div>
-        )}
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Seats</div>
 
-        {menuStep >= 2 && seats.map(s => {
+        {seats.map(s => {
           const seatRestr  = restrictions.filter(r => !r.pos || r.pos === s.id);
           const printable  = isPrintable(s);
           const extras     = Object.entries(s.extras || {}).filter(([,v]) => v?.ordered).map(([k]) => +k);
@@ -4275,31 +4258,18 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
           );
         })}
 
-        {menuStep >= 2 && seats.length === 0 && (
+        {seats.length === 0 && (
           <div style={{ fontFamily: FONT, fontSize: 11, color: "#ccc", textAlign: "center", padding: "40px 0" }}>No seats yet</div>
         )}
 
-        {menuStep === 3 && seats.length > 0 && (
+        {seats.length > 0 && (
           <div style={{ marginTop: 16 }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-              {seats.map(seat => (
-                <button key={`print-seat-${seat.id}`} onClick={() => openPrint(seat)} style={{
-                  fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "8px 12px",
-                  border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#555",
-                }}>PRINT P{seat.id}</button>
-              ))}
-            </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => printSelected(seats.map(s => s.id))} style={{
                 flex: 1, fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "12px",
                 border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
                 background: "#1a1a1a", color: "#fff",
               }}>PRINT ALL SEATS</button>
-              <button onClick={generateAll} style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "12px",
-                border: "1px solid #c8a96e", borderRadius: 2, cursor: "pointer",
-                background: "#fffaf4", color: "#8a6020",
-              }}>LEGACY BULK</button>
             </div>
           </div>
         )}

@@ -331,6 +331,12 @@ describe("generateMenuHTML — pairing", () => {
     const html = render({ pairing: "—" }, {}, [chicken], { beerChoice: "nonalc" });
     expect(html).toContain("SPENT BREAD KOMBUCHA");
   });
+
+  it("always shows crayfish kitchen martini even when no pairing is selected", () => {
+    const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
+    const html = render({ pairing: "—" }, {}, [crayfish]);
+    expect(html).toContain("KITCHEN MARTINI");
+  });
 });
 
 // ── SI language ───────────────────────────────────────────────────────────────

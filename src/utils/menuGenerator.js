@@ -146,6 +146,17 @@ export function generateMenuHTML({
     return { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
   };
 
+  const resolveForcedPairingDrink = (course, rawCourseKey, normKey) => {
+    if (!(course?.force_pairing_title || rawCourseKey === CRAYFISH_KEY || normKey === CRAYFISH_KEY)) return null;
+    const fpTLines = String(course?.force_pairing_title || "").split("\n").map(s => s.trim());
+    const fpSLines = String(course?.force_pairing_sub   || "").split("\n").map(s => s.trim());
+    const fpTEn = fpTLines[0] || "KITCHEN MARTINI";
+    const fpTSi = course?.force_pairing_title_si || fpTLines[1] || fpTEn;
+    const fpSEn = fpSLines[0] || "";
+    const fpSSi = course?.force_pairing_sub_si   || fpSLines[1] || fpSEn;
+    return lang === "si" ? { name: fpTSi, sub: fpSSi } : { name: fpTEn, sub: fpSEn };
+  };
+
   const normalizeToken = (value) => String(value || "")
     .trim()
     .toLowerCase()
@@ -390,23 +401,13 @@ export function generateMenuHTML({
       const cn = String(course?.menu?.name || "").trim().toUpperCase();
       const isChickenGizzard = normKey === "chicken_gizzard" || cn === "CHICKEN GIZZARD";
       const forcedBeerDrink = isChickenGizzard ? resolveBeerDrinkForCourse(course) : null;
+      const forcedPairingDrink = resolveForcedPairingDrink(course, courseKey, normKey);
 
-      if (lb.showPairing === false) {
+      if (lb.showPairing === false && !forcedPairingDrink) {
         // showPairing toggle off — don't resolve any drink for this course row
-      } else if (rb?.type === "pairing") {
+      } else if (rb?.type === "pairing" || forcedPairingDrink) {
         if (pkey) {
-          drink = lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey];
-
-          // Force-pairing override (e.g. crayfish → kitchen martini)
-          if (course.force_pairing_title || courseKey === CRAYFISH_KEY || normKey === CRAYFISH_KEY) {
-            const fpTLines = String(course.force_pairing_title || "").split("\n").map(s => s.trim());
-            const fpSLines = String(course.force_pairing_sub   || "").split("\n").map(s => s.trim());
-            const fpTEn = fpTLines[0] || "KITCHEN MARTINI";
-            const fpTSi = course.force_pairing_title_si || fpTLines[1] || fpTEn;
-            const fpSEn = fpSLines[0] || "";
-            const fpSSi = course.force_pairing_sub_si   || fpSLines[1] || fpSEn;
-            drink = lang === "si" ? { name: fpTSi, sub: fpSSi } : { name: fpTEn, sub: fpSEn };
-          }
+          drink = forcedPairingDrink || (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]);
 
           // Beetroot extra pairing override
           const isBeetrootC = normalizeToken(course.optional_flag || "") === "beetroot" || normKey === "beetroot";
@@ -431,6 +432,9 @@ export function generateMenuHTML({
             drink = { name: d.title || "", sub: d.sub || "" };
           }
         } else {
+          if (forcedPairingDrink) {
+            drink = forcedPairingDrink;
+          }
           if (forcedBeerDrink) {
             drink = forcedBeerDrink;
           }
