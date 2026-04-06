@@ -2935,7 +2935,7 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
   const isCheeseCourse  = c => { const f = normFlag(c.optional_flag), k = normFlag(c.course_key || c.menu?.name); return f === "cheese"   || k === "cheese";   };
   // Also check normalized menu name directly (matches menuGenerator.js isCakeCourse logic)
   const isCakeCourse    = c => { const f = normFlag(c.optional_flag), k = normFlag(c.course_key || c.menu?.name), kn = normFlag(c.menu?.name); return f === "cake" || k === "pear" || k === "pear_cake" || kn === "pear"; };
-  const isCrayfishCourse = c => { const k = normFlag(c.course_key || c.menu?.name); return k === "crayfish" || !!c.force_pairing_title; };
+  const isForcedPairingCourse = c => !!String(c.force_pairing_title || c.force_pairing_title_si || "").trim();
 
   // Extras ordered per seat — must come before courses filter
   const beetSeats   = seats.filter(s => s.extras?.[1]?.ordered);
@@ -3275,9 +3275,9 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
             if (isBeetCourse(course))    return beetSeats.map(s => `P${s.id}`).join(" ");
             if (isCheeseCourse(course))  return cheeseSeats.map(s => `P${s.id}`).join(" ");
             if (isCakeCourse(course))    return cakeSeats.map(s => `P${s.id}`).join(" ") + (table.cakeNote ? ` — ${table.cakeNote}` : "");
-            if (isCrayfishCourse(course)) {
-              const martiniSeats = seats.filter(s => s.pairing && s.pairing !== "—");
-              if (martiniSeats.length > 0) return `MARTINI · ${martiniSeats.map(s => `P${s.id} (${pLabel(s.pairing)})`).join(" ")}`;
+            if (isForcedPairingCourse(course)) {
+              const forcedSeats = seats || [];
+              if (forcedSeats.length > 0) return `FORCED PAIRING · ${forcedSeats.map(s => `P${s.id}`).join(" ")}`;
             }
             return null;
           })();
