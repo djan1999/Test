@@ -57,7 +57,7 @@ export const BLOCK_META = {
   },
   pairing_label: {
     label: "Pairing Label", group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "T",
-    desc: "Auto-resolves label from pairing type (Wine/Non-Alc/etc). Text field overrides only. Row is hidden when seat has no pairing.",
+    desc: "Auto-resolves label from pairing type (Wine/Non-Alc/etc). Text field overrides only. Section spacing is preserved even when seat has no pairing.",
     fields: [
       { key: "text",      label: "Label override",    type: "text",   placeholder: "Leave empty for auto" },
       { key: "align",     label: "Alignment",          type: "select", options: ["left", "center", "right"] },

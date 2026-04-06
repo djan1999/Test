@@ -133,6 +133,18 @@ export function generateMenuHTML({
     return fmtDrinkParts({ ...chosen, __type: "beer" });
   })();
 
+  const resolveBeerDrinkForCourse = (course) => {
+    if (!selectedBeer) return null;
+    // If we don't have explicit beer objects and we're rendering SI,
+    // prefer SI pairing labels from the course for natural language output.
+    if (lang === "si" && beers.length === 0) {
+      const siK = beerChoice === "nonalc" ? "na" : "wp";
+      const siD = course?.[`${siK}_si`] || course?.[siK];
+      if (siD?.name || siD?.sub) return { name: siD.name || "", sub: siD.sub || "" };
+    }
+    return { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
+  };
+
   const normalizeToken = (value) => String(value || "")
     .trim()
     .toLowerCase()
@@ -287,7 +299,7 @@ export function generateMenuHTML({
     const plSide  = lb?.type === "pairing_label" ? "left" : "right";
     const plBlock = lb?.type === "pairing_label" ? lb : rb?.type === "pairing_label" ? rb : null;
     if (plBlock) {
-      if (hasPairing) {
+      if (!isShort) {
         const autoLabel = PAIRING_LABELS[pkey] || "PAIRING";
         const allAutoLabels = new Set([
           ...Object.values(PAIRING_LABELS),
@@ -297,7 +309,9 @@ export function generateMenuHTML({
         const label = (plBlock.text && !allAutoLabels.has(plBlock.text)) ? plBlock.text : autoLabel;
         rows.push({
           type: "section",
-          label,
+          // Preserve section break spacing even when the seat has no pairing.
+          label: hasPairing ? label : "",
+          reserveHeight: !hasPairing,
           side: plSide,
           align: plBlock.align || "right",
           spacing: plBlock.spacing ?? 6,
@@ -372,6 +386,9 @@ export function generateMenuHTML({
 
       let dish = applyCourseRestriction(resolveCourse(course), restrictions, lang);
       let drink = null;
+      const cn = String(course?.menu?.name || "").trim().toUpperCase();
+      const isChickenGizzard = normKey === "chicken_gizzard" || cn === "CHICKEN GIZZARD";
+      const forcedBeerDrink = isChickenGizzard ? resolveBeerDrinkForCourse(course) : null;
 
       if (lb.showPairing === false) {
         // showPairing toggle off — don't resolve any drink for this course row
@@ -404,17 +421,8 @@ export function generateMenuHTML({
             } else { drink = null; }
           }
 
-          // Beer substitution for chicken gizzard
-          const cn = String(course?.menu?.name || "").trim().toUpperCase();
-          if ((normKey === "chicken_gizzard" || cn === "CHICKEN GIZZARD") && selectedBeer) {
-            if (lang === "si" && beers.length === 0) {
-              const siK = beerChoice === "nonalc" ? "na" : "wp";
-              const siD = course[`${siK}_si`] || course[siK];
-              drink = siD ? { name: siD.name || "", sub: siD.sub || "" } : { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
-            } else {
-              drink = { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
-            }
-          }
+          // Beer substitution for chicken gizzard (always visible).
+          if (forcedBeerDrink) drink = forcedBeerDrink;
 
           // By-the-glass fallback from Danube Salmon onwards
           if (!drink && i >= DANUBE_SALMON_IDX && gQ.length > 0 && rb?.showByGlass !== false) {
@@ -422,11 +430,14 @@ export function generateMenuHTML({
             drink = { name: d.title || "", sub: d.sub || "" };
           }
         } else {
+          if (forcedBeerDrink) {
+            drink = forcedBeerDrink;
+          }
           // No pairing package — by-the-glass or bottle from Danube onwards
-          if (i >= DANUBE_SALMON_IDX && gQ.length > 0 && rb?.showByGlass !== false) {
+          if (!drink && i >= DANUBE_SALMON_IDX && gQ.length > 0 && rb?.showByGlass !== false) {
             const d = fmtDrinkParts(gQ.shift());
             drink = { name: d.title || "", sub: d.sub || "" };
-          } else if (i >= DANUBE_SALMON_IDX && bQ.length > 0 && rb?.showBottle !== false) {
+          } else if (!drink && i >= DANUBE_SALMON_IDX && bQ.length > 0 && rb?.showBottle !== false) {
             const d = fmtDrinkParts(bQ.shift());
             drink = { name: d.title || "", sub: d.sub || "" };
           }
@@ -554,7 +565,11 @@ export function generateMenuHTML({
     if (row.type === "section") {
       const ta = row.align && row.align !== "left" ? `text-align:${row.align};` : "";
       const mbPt = (row.spacing ?? 6);
-      const labelHtml = `<div class="menu-section-label" style="${ta}">${esc(row.label || "")}</div>`;
+      const reserveHeight = row.reserveHeight !== false;
+      const labelHasText = String(row.label || "").trim().length > 0;
+      const labelVisibility = !labelHasText && reserveHeight ? "visibility:hidden;" : "";
+      const labelText = labelHasText ? esc(row.label || "") : (reserveHeight ? "&nbsp;" : "");
+      const labelHtml = `<div class="menu-section-label" style="${ta}${labelVisibility}">${labelText}</div>`;
       const emptyDiv = `<div></div>`;
       const leftHtml = row.side === "left" ? labelHtml : emptyDiv;
       const rightHtml = row.side === "right" ? labelHtml : emptyDiv;

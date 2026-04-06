@@ -280,6 +280,13 @@ describe("generateMenuHTML — pairing", () => {
     expect(html).not.toContain("WINE PAIRING");
   });
 
+  it("keeps section spacing row when pairing label exists but seat has no pairing", () => {
+    const html = render({ pairing: "—" }, {}, courses, { menuTemplate: makePairingTemplate(courses) });
+    expect(html).toContain('class="menu-section-label"');
+    expect(html).toContain("visibility:hidden");
+    expect(html).not.toContain("WINE PAIRING");
+  });
+
   it("shows WINE PAIRING section header when seat has Wine pairing", () => {
     const html = render({ pairing: "Wine" }, {}, courses, { menuTemplate: makePairingTemplate(courses) });
     expect(html).toContain("WINE PAIRING");
@@ -295,6 +302,12 @@ describe("generateMenuHTML — pairing", () => {
   it("includes wine name in right column when pairing active", () => {
     const html = render({ pairing: "Wine" }, {}, courses);
     expect(html).toContain("Klinec Mora");
+  });
+
+  it("forces beer line for chicken gizzard even when seat has no pairing", () => {
+    const chicken = makeCourse("CHICKEN GIZZARD", "", { position: 1 });
+    const html = render({ pairing: "—" }, {}, [chicken], { beerChoice: "nonalc" });
+    expect(html).toContain("SPENT BREAD KOMBUCHA");
   });
 });
 
