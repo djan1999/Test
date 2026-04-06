@@ -1753,7 +1753,7 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
 }
 
 // ── Detail View ───────────────────────────────────────────────────────────────
-function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers = [], menuCourses = [], aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll = null, onClearBeverages = null }) {
+function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats }) {
   const isMobile = useIsMobile(860);
   const row1 = isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
   const seatCount = table.seats?.length || 0;
@@ -1951,20 +1951,13 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
                 <div style={{ ...fieldLabel, marginBottom: 8, color: "#a07040" }}>Aperitif</div>
                 {/* Quick-add buttons */}
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-                  {aperitifOptions.map(opt => (
-                    <button key={opt.label} onClick={() => {
-                      const lk = String(opt.searchKey || opt.label || "").toLowerCase();
-                      const type = opt.type || "wine";
-                      const found = type === "wine"
-                        ? wines.filter(w => w.byGlass).find(w =>
-                            w.name?.toLowerCase().includes(lk) || w.producer?.toLowerCase().includes(lk)
-                          )
-                        : type === "cocktail"
-                          ? cocktails.find(c => c.name?.toLowerCase().includes(lk))
-                          : type === "beer"
-                            ? beers.find(b => b.name?.toLowerCase().includes(lk))
-                            : spirits.find(s => s.name?.toLowerCase().includes(lk));
-                      const item = found || { name: opt.label, notes: "" };
+                  {aperitifOptions.map(ap => (
+                    <button key={ap.label} onClick={() => {
+                      const lk = (ap.searchKey || ap.label).toLowerCase();
+                      const found = wines.filter(w => w.byGlass).find(w =>
+                        w.name?.toLowerCase().includes(lk) || w.producer?.toLowerCase().includes(lk)
+                      );
+                      const item = found || { name: ap.searchKey || ap.label, notes: "", __cocktail: true };
                       updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
                     }} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
@@ -6137,7 +6130,7 @@ function GateScreen({ onPass }) {
 }
 
 // ── Menu Page — preview + print only ─────────────────────────────────────────
-function MenuPage({ tables, menuCourses, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], globalLayout = {}, menuTemplate = null, onExit }) {
+function MenuPage({ tables, menuCourses, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], globalLayout = {}, menuTemplate = null, aperitifOptions = [], onExit }) {
   const [menuGenTable, setMenuGenTable] = useState(null);
 
   return (
@@ -7329,6 +7322,7 @@ export default function App() {
         cocktails={cocktails}
         spirits={spirits}
         beers={beers}
+        aperitifOptions={aperitifOptions}
         onExit={() => changeMode(null)}
       />
     </div>
