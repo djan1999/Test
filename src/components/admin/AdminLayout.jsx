@@ -34,6 +34,11 @@ export default function AdminLayout({
   onSaveTemplate,
   templateSaving,
   templateSaved,
+  menuRules,
+  onUpdateMenuRules,
+  onSaveMenuRules,
+  menuRulesSaving,
+  menuRulesSaved,
   // Dish data
   dishes,
   onUpdateDishes,
@@ -145,6 +150,11 @@ export default function AdminLayout({
                 onSaveTemplate={onSaveTemplate}
                 templateSaving={templateSaving}
                 templateSaved={templateSaved}
+                menuRules={menuRules}
+                onUpdateMenuRules={onUpdateMenuRules}
+                onSaveMenuRules={onSaveMenuRules}
+                menuRulesSaving={menuRulesSaving}
+                menuRulesSaved={menuRulesSaved}
                 logoDataUri={logoDataUri}
                 layoutStyles={layoutStyles}
                 wines={wines}

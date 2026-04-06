@@ -3673,12 +3673,11 @@ function BevEditRow({ emoji, label, items, onUpdate }) {
   );
 }
 
-function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutStyles = {}, menuTemplate = null, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [], aperitifOptions = [] }) {
+function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutStyles = {}, menuTemplate = null, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [], aperitifOptions = [], menuRules = DEFAULT_MENU_RULES }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState(DEFAULT_MENU_TITLE_EN);
   const [thankYouNote, setThankYouNote] = useState(table.lang === "si" ? DEFAULT_THANK_YOU_SI : DEFAULT_THANK_YOU_EN);
   const [lang, setLang] = useState(table.lang || "en");
-  const [menuRules, setMenuRules] = useState(() => normalizeMenuRulesForUi(DEFAULT_MENU_RULES));
   // Per-seat ephemeral one-time edits — { [seatId]: { [courseKey]: { name?, sub? } } }
   // Cleared automatically after the PDF for that seat is generated.
   const [seatEdits, setSeatEdits] = useState({});
@@ -3700,13 +3699,9 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
     Promise.all([
       supabase.from("service_settings").select("state").eq("id", "menu_gen_team").single(),
       supabase.from("service_settings").select("state").eq("id", "menu_gen_title").single(),
-      supabase.from("service_settings").select("state").eq("id", "menu_gen_rules").maybeSingle(),
-    ]).then(([teamRes, titleRes, rulesRes]) => {
+    ]).then(([teamRes, titleRes]) => {
       if (teamRes.data?.state?.value) setTeamNames(teamRes.data.state.value);
       if (titleRes.data?.state?.value) setMenuTitle(titleRes.data.state.value);
-      if (rulesRes.data?.state && typeof rulesRes.data.state === "object") {
-        setMenuRules(prev => normalizeMenuRulesForUi({ ...prev, ...rulesRes.data.state }));
-      }
       genLoaded.current = true;
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -3727,14 +3722,6 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
       .upsert({ id: "menu_gen_title", state: { value: menuTitle }, updated_at: new Date().toISOString() }, { onConflict: "id" })
       .then(() => {});
   }, [menuTitle]);
-
-  // Save menu rules to Supabase when changed
-  useEffect(() => {
-    if (!genLoaded.current || !supabase) return;
-    supabase.from("service_settings")
-      .upsert({ id: "menu_gen_rules", state: menuRules, updated_at: new Date().toISOString() }, { onConflict: "id" })
-      .then(() => {});
-  }, [menuRules]);
 
   const seats        = table.seats        || [];
   const restrictions = table.restrictions || [];
@@ -3787,11 +3774,11 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
   });
 
   const setBeer = (seatId, val) => setBeerChoices(prev => ({ ...prev, [seatId]: val }));
-  const setMenuRule = (key, value) => setMenuRules(prev => normalizeMenuRulesForUi({ ...prev, [key]: value }));
+  const normalizedMenuRules = normalizeMenuRulesForUi(menuRules);
 
   const setLanguageWithDefaults = (nextLang) => {
     setLang(nextLang);
-    if (menuRules?.overwriteTitleAndThankYouOnLanguageSwitch !== false) {
+    if (normalizedMenuRules?.overwriteTitleAndThankYouOnLanguageSwitch !== false) {
       setMenuTitle(nextLang === "si" ? DEFAULT_MENU_TITLE_SI : DEFAULT_MENU_TITLE_EN);
       setThankYouNote(nextLang === "si" ? DEFAULT_THANK_YOU_SI : DEFAULT_THANK_YOU_EN);
     }
@@ -3816,7 +3803,7 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
       seatOutputOverrides: seatEdits[seat.id] || {},
       thankYouNote,
       layoutStyles,
-      menuRules,
+      menuRules: normalizedMenuRules,
       menuTemplate,
       _logo: logoDataUri,
     });
@@ -3854,7 +3841,7 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
       seatOutputOverrides: seatEdits[seat.id] || {},
       thankYouNote,
       layoutStyles,
-      menuRules,
+      menuRules: normalizedMenuRules,
       menuTemplate,
       _logo: logoDataUri,
     });
@@ -3920,104 +3907,6 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
         </div>
 
         {/* Menu behavior rules (in-app configurable) */}
-        <div style={{ border: "1px solid #efefef", borderRadius: 4, padding: "10px 12px", marginBottom: 16 }}>
-          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 8 }}>Menu Rules</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8, marginBottom: 8 }}>
-            <label style={{ fontFamily: FONT, fontSize: 10, color: "#666", display: "flex", alignItems: "center", gap: 6 }}>
-              <input
-                type="checkbox"
-                checked={menuRules.preservePairingLabelSpacingWithoutPairing !== false}
-                onChange={e => setMenuRule("preservePairingLabelSpacingWithoutPairing", e.target.checked)}
-              />
-              Keep pairing section gap without pairing
-            </label>
-            <label style={{ fontFamily: FONT, fontSize: 10, color: "#666", display: "flex", alignItems: "center", gap: 6 }}>
-              <input
-                type="checkbox"
-                checked={menuRules.preserveCourseSectionGapFallback !== false}
-                onChange={e => setMenuRule("preserveCourseSectionGapFallback", e.target.checked)}
-              />
-              Use "Gap Before" fallback from course data
-            </label>
-            <label style={{ fontFamily: FONT, fontSize: 10, color: "#666", display: "flex", alignItems: "center", gap: 6 }}>
-              <input
-                type="checkbox"
-                checked={menuRules.forceCrayfishPairing !== false}
-                onChange={e => setMenuRule("forceCrayfishPairing", e.target.checked)}
-              />
-              Always force crayfish pairing
-            </label>
-            <label style={{ fontFamily: FONT, fontSize: 10, color: "#666", display: "flex", alignItems: "center", gap: 6 }}>
-              <input
-                type="checkbox"
-                checked={menuRules.forceChickenGizzardBeer !== false}
-                onChange={e => setMenuRule("forceChickenGizzardBeer", e.target.checked)}
-              />
-              Always force beer on chicken gizzard
-            </label>
-            <label style={{ fontFamily: FONT, fontSize: 10, color: "#666", display: "flex", alignItems: "center", gap: 6 }}>
-              <input
-                type="checkbox"
-                checked={menuRules.overwriteTitleAndThankYouOnLanguageSwitch !== false}
-                onChange={e => setMenuRule("overwriteTitleAndThankYouOnLanguageSwitch", e.target.checked)}
-              />
-              Overwrite title/thank-you on language switch
-            </label>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8, marginBottom: 8 }}>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Fallback gap (pt)</div>
-              <input
-                type="number"
-                step="0.5"
-                min="0"
-                value={menuRules.sectionGapFallbackPt ?? DEFAULT_MENU_RULES.sectionGapFallbackPt}
-                onChange={e => {
-                  const raw = Number(e.target.value);
-                  setMenuRule("sectionGapFallbackPt", Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_MENU_RULES.sectionGapFallbackPt);
-                }}
-                style={{ fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }}
-              />
-            </div>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Crayfish drink EN</div>
-              <input
-                value={menuRules.crayfishFallbackTitleEn || ""}
-                onChange={e => setMenuRule("crayfishFallbackTitleEn", e.target.value)}
-                style={{ fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }}
-              />
-            </div>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Crayfish sub EN</div>
-              <input
-                value={menuRules.crayfishFallbackSubEn || ""}
-                onChange={e => setMenuRule("crayfishFallbackSubEn", e.target.value)}
-                style={{ fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }}
-              />
-            </div>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Crayfish drink SI</div>
-              <input
-                value={menuRules.crayfishFallbackTitleSi || ""}
-                onChange={e => setMenuRule("crayfishFallbackTitleSi", e.target.value)}
-                style={{ fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }}
-              />
-            </div>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Crayfish sub SI</div>
-              <input
-                value={menuRules.crayfishFallbackSubSi || ""}
-                onChange={e => setMenuRule("crayfishFallbackSubSi", e.target.value)}
-                style={{ fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }}
-              />
-            </div>
-          </div>
-          <button onClick={() => setMenuRules(normalizeMenuRulesForUi(DEFAULT_MENU_RULES))} style={{
-            fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "4px 8px",
-            border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888",
-          }}>reset rules</button>
-        </div>
-
         {/* Seat rows */}
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Seats</div>
 
@@ -6235,7 +6124,7 @@ function GateScreen({ onPass }) {
 }
 
 // ── Menu Page — preview + print only ─────────────────────────────────────────
-function MenuPage({ tables, menuCourses, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], globalLayout = {}, menuTemplate = null, aperitifOptions = [], onExit }) {
+function MenuPage({ tables, menuCourses, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], globalLayout = {}, menuTemplate = null, aperitifOptions = [], menuRules = DEFAULT_MENU_RULES, onExit }) {
   const [menuGenTable, setMenuGenTable] = useState(null);
 
   return (
@@ -6294,6 +6183,7 @@ function MenuPage({ tables, menuCourses, upd, logoDataUri = "", wines = [], cock
           spirits={spirits}
           beers={beers}
           aperitifOptions={aperitifOptions}
+          menuRules={menuRules}
           onClose={() => setMenuGenTable(null)}
         />
       )}
@@ -6516,6 +6406,18 @@ export default function App() {
   const layoutLoaded = useRef(false);
   const globalLayoutRef = useRef(globalLayout);
   globalLayoutRef.current = globalLayout;
+  const [menuRules, setMenuRules] = useState(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem("milka_menu_rules") || "null");
+      return normalizeMenuRulesForUi(raw || DEFAULT_MENU_RULES);
+    } catch {
+      return normalizeMenuRulesForUi(DEFAULT_MENU_RULES);
+    }
+  });
+  const [menuRulesSaving, setMenuRulesSaving] = useState(false);
+  const [menuRulesSaved, setMenuRulesSaved] = useState(false);
+  const menuRulesRef = useRef(menuRules);
+  menuRulesRef.current = menuRules;
   // Quick Access items (data-driven, replaces hardcoded APERITIF_OPTIONS)
   const [quickAccessItems, setQuickAccessItems] = useState(() => {
     try {
@@ -7041,6 +6943,47 @@ export default function App() {
     setTimeout(() => setTemplateSaved(false), 2500);
   };
 
+  // ── Menu generation rules (layout behavior) ───────────────────────────────
+  useEffect(() => {
+    try { localStorage.setItem("milka_menu_rules", JSON.stringify(menuRules)); } catch {}
+  }, [menuRules]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.from("service_settings").select("state").eq("id", "menu_gen_rules").maybeSingle()
+      .then(({ data }) => {
+        if (data?.state && typeof data.state === "object") {
+          setMenuRules(normalizeMenuRulesForUi(data.state));
+          try { localStorage.setItem("milka_menu_rules", JSON.stringify(data.state)); } catch {}
+        }
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const updateMenuRules = (nextRules) => {
+    if (typeof nextRules === "function") {
+      setMenuRules(prev => normalizeMenuRulesForUi(nextRules(prev)));
+      return;
+    }
+    setMenuRules(normalizeMenuRulesForUi(nextRules));
+  };
+
+  const saveMenuRules = async () => {
+    setMenuRulesSaving(true);
+    setMenuRulesSaved(false);
+    if (supabase) {
+      const { error } = await supabase.from("service_settings")
+        .upsert({ id: "menu_gen_rules", state: menuRulesRef.current, updated_at: new Date().toISOString() }, { onConflict: "id" });
+      if (error) {
+        console.error("Menu rules save failed:", error);
+        setMenuRulesSaving(false);
+        return;
+      }
+    }
+    setMenuRulesSaving(false);
+    setMenuRulesSaved(true);
+    setTimeout(() => setMenuRulesSaved(false), 2500);
+  };
+
   // ── Quick Access persistence ──────────────────────────────────────────────
   useEffect(() => {
     try { localStorage.setItem("milka_quick_access", JSON.stringify(quickAccessItems)); } catch {}
@@ -7428,6 +7371,7 @@ export default function App() {
         spirits={spirits}
         beers={beers}
         aperitifOptions={aperitifOptions}
+        menuRules={menuRules}
         onExit={() => changeMode(null)}
       />
     </div>
@@ -7446,6 +7390,11 @@ export default function App() {
         onSaveTemplate={saveMenuTemplate}
         templateSaving={templateSaving}
         templateSaved={templateSaved}
+        menuRules={menuRules}
+        onUpdateMenuRules={updateMenuRules}
+        onSaveMenuRules={saveMenuRules}
+        menuRulesSaving={menuRulesSaving}
+        menuRulesSaved={menuRulesSaved}
         dishes={dishes}
         onUpdateDishes={setDishes}
         wines={wines}
