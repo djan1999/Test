@@ -12,6 +12,64 @@
 import { applyCourseRestriction } from "./menuUtils.js";
 import { buildDefaultTemplate, parseWidthPreset } from "./menuTemplateSchema.js";
 
+export const DEFAULT_MENU_RULES = {
+  preservePairingLabelSpacingWithoutPairing: true,
+  preserveCourseSectionGapFallback: true,
+  sectionGapFallbackPt: 14.5,
+  forceCrayfishPairing: true,
+  forceChickenGizzardBeer: true,
+  crayfishFallbackTitleEn: "KITCHEN MARTINI",
+  crayfishFallbackTitleSi: "KITCHEN MARTINI",
+  crayfishFallbackSubEn: "",
+  crayfishFallbackSubSi: "",
+};
+
+function normalizeMenuRules(input = {}) {
+  const merged = { ...DEFAULT_MENU_RULES, ...(input || {}) };
+  const firstDefined = (...vals) => vals.find(v => v !== undefined);
+  const boolWithDefault = (value, fallback = true) => {
+    if (value === undefined || value === null) return fallback;
+    if (typeof value === "string") return value.trim().toLowerCase() !== "false";
+    return value !== false;
+  };
+  const preservePairingFlag = firstDefined(
+    merged.preservePairingLabelSpacingWithoutPairing,
+    merged.preservePairingSectionGapWhenNoPairing,
+    merged.preservePairingLabelGapWithoutPairing
+  );
+  const preserveCourseGapFlag = firstDefined(
+    merged.preserveCourseSectionGapFallback,
+    merged.useCourseSectionGapFallback,
+    merged.applyCourseSectionGapFallback
+  );
+  const sectionGapValue = firstDefined(
+    merged.sectionGapFallbackPt,
+    merged.sectionGapPt
+  );
+  const forceCrayfishFlag = firstDefined(
+    merged.forceCrayfishPairing,
+    merged.forceCrayfishPairingAlways
+  );
+  const forceGizzardBeerFlag = firstDefined(
+    merged.forceChickenGizzardBeer,
+    merged.forceBeerOnChickenGizzard
+  );
+  return {
+    preservePairingLabelSpacingWithoutPairing: boolWithDefault(preservePairingFlag, true),
+    preserveCourseSectionGapFallback: boolWithDefault(preserveCourseGapFlag, true),
+    sectionGapFallbackPt: (() => {
+      const n = Number(sectionGapValue);
+      return Number.isFinite(n) && n >= 0 ? n : DEFAULT_MENU_RULES.sectionGapFallbackPt;
+    })(),
+    forceCrayfishPairing: boolWithDefault(forceCrayfishFlag, true),
+    forceChickenGizzardBeer: boolWithDefault(forceGizzardBeerFlag, true),
+    crayfishFallbackTitleEn: String(firstDefined(merged.crayfishFallbackTitleEn, DEFAULT_MENU_RULES.crayfishFallbackTitleEn) || DEFAULT_MENU_RULES.crayfishFallbackTitleEn),
+    crayfishFallbackTitleSi: String(firstDefined(merged.crayfishFallbackTitleSi, DEFAULT_MENU_RULES.crayfishFallbackTitleSi) || DEFAULT_MENU_RULES.crayfishFallbackTitleSi),
+    crayfishFallbackSubEn: String(firstDefined(merged.crayfishFallbackSubEn, DEFAULT_MENU_RULES.crayfishFallbackSubEn) || ""),
+    crayfishFallbackSubSi: String(firstDefined(merged.crayfishFallbackSubSi, DEFAULT_MENU_RULES.crayfishFallbackSubSi) || ""),
+  };
+}
+
 
 export const COUNTRY_NAMES = {
   FR: "France", IT: "Italy", ES: "Spain", DE: "Germany", AT: "Austria",
@@ -42,6 +100,7 @@ export function generateMenuHTML({
   // Template v2 — when provided, drives the row order / block resolution.
   // When null/absent, auto-migrated from menuCourses via buildDefaultTemplate().
   menuTemplate = null,
+  menuRules = DEFAULT_MENU_RULES,
   // Font/logo assets
   _fontBold = "",
   _fontReg = "",
@@ -49,6 +108,7 @@ export function generateMenuHTML({
   _rowsOnly = false,
 }) {
   const s = (key, def) => key in layoutStyles ? layoutStyles[key] : def;
+  const rules = normalizeMenuRules(menuRules);
 
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
   const PAIRING_LABELS = lang === "si"
@@ -91,7 +151,6 @@ export function generateMenuHTML({
 
   const CRAYFISH_KEY      = "crayfish";
   const DANUBE_SALMON_KEY = "danube_salmon";
-  const DEFAULT_SECTION_GAP_PT = 14.5;
 
   const fmtWineParts = w => {
     const rawVintage = String(w?.vintage || "").trim();
@@ -147,13 +206,19 @@ export function generateMenuHTML({
   };
 
   const resolveForcedPairingDrink = (course, rawCourseKey, normKey) => {
-    if (!(course?.force_pairing_title || rawCourseKey === CRAYFISH_KEY || normKey === CRAYFISH_KEY)) return null;
+    const hasExplicitForcePairing =
+      !!String(course?.force_pairing_title || "").trim() ||
+      !!String(course?.force_pairing_sub || "").trim() ||
+      !!String(course?.force_pairing_title_si || "").trim() ||
+      !!String(course?.force_pairing_sub_si || "").trim();
+    const isCrayfishCourse = rawCourseKey === CRAYFISH_KEY || normKey === CRAYFISH_KEY;
+    if (!(hasExplicitForcePairing || (rules.forceCrayfishPairing && isCrayfishCourse))) return null;
     const fpTLines = String(course?.force_pairing_title || "").split("\n").map(s => s.trim());
     const fpSLines = String(course?.force_pairing_sub   || "").split("\n").map(s => s.trim());
-    const fpTEn = fpTLines[0] || "KITCHEN MARTINI";
+    const fpTEn = fpTLines[0] || rules.crayfishFallbackTitleEn || "KITCHEN MARTINI";
     const fpTSi = course?.force_pairing_title_si || fpTLines[1] || fpTEn;
-    const fpSEn = fpSLines[0] || "";
-    const fpSSi = course?.force_pairing_sub_si   || fpSLines[1] || fpSEn;
+    const fpSEn = fpSLines[0] || rules.crayfishFallbackSubEn || "";
+    const fpSSi = course?.force_pairing_sub_si   || fpSLines[1] || rules.crayfishFallbackSubSi || fpSEn;
     return lang === "si" ? { name: fpTSi, sub: fpSSi } : { name: fpTEn, sub: fpSEn };
   };
 
@@ -312,6 +377,9 @@ export function generateMenuHTML({
     const plBlock = lb?.type === "pairing_label" ? lb : rb?.type === "pairing_label" ? rb : null;
     if (plBlock) {
       if (!isShort) {
+        if (!hasPairing && !rules.preservePairingLabelSpacingWithoutPairing) {
+          continue;
+        }
         const autoLabel = PAIRING_LABELS[pkey] || "PAIRING";
         const allAutoLabels = new Set([
           ...Object.values(PAIRING_LABELS),
@@ -400,7 +468,7 @@ export function generateMenuHTML({
       let drink = null;
       const cn = String(course?.menu?.name || "").trim().toUpperCase();
       const isChickenGizzard = normKey === "chicken_gizzard" || cn === "CHICKEN GIZZARD";
-      const forcedBeerDrink = isChickenGizzard ? resolveBeerDrinkForCourse(course) : null;
+      const forcedBeerDrink = (rules.forceChickenGizzardBeer && isChickenGizzard) ? resolveBeerDrinkForCourse(course) : null;
       const forcedPairingDrink = resolveForcedPairingDrink(course, courseKey, normKey);
 
       if (lb.showPairing === false && !forcedPairingDrink) {
@@ -477,7 +545,7 @@ export function generateMenuHTML({
         gap: (() => {
           const templateGap = consumeGap();
           if (templateGap > 0) return templateGap;
-          return course?.section_gap_before ? DEFAULT_SECTION_GAP_PT : 0;
+          return (rules.preserveCourseSectionGapFallback && course?.section_gap_before) ? rules.sectionGapFallbackPt : 0;
         })(),
       });
       continue;

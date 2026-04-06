@@ -337,6 +337,22 @@ describe("generateMenuHTML — pairing", () => {
     const html = render({ pairing: "—" }, {}, [crayfish]);
     expect(html).toContain("KITCHEN MARTINI");
   });
+
+  it("respects menu rule to disable automatic crayfish forcing", () => {
+    const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
+    const html = render({ pairing: "—" }, {}, [crayfish], {
+      menuRules: { forceCrayfishPairing: false },
+    });
+    expect(html).not.toContain("KITCHEN MARTINI");
+  });
+
+  it("uses configurable crayfish fallback titles from menu rules", () => {
+    const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
+    const html = render({ pairing: "—" }, {}, [crayfish], {
+      menuRules: { crayfishFallbackTitleEn: "CHEF MARTINI" },
+    });
+    expect(html).toContain("CHEF MARTINI");
+  });
 });
 
 // ── SI language ───────────────────────────────────────────────────────────────
