@@ -353,6 +353,23 @@ describe("generateMenuHTML — pairing", () => {
     });
     expect(html).toContain("CHEF MARTINI");
   });
+
+  it("supports forcing pairing on custom course keys", () => {
+    const venison = makeCourse("VENISON", "", { position: 1 });
+    const html = render({ pairing: "—" }, {}, [venison], {
+      menuRules: { forcePairingCourseKeys: ["venison"], crayfishFallbackTitleEn: "HOUSE PAIRING" },
+    });
+    expect(html).toContain("HOUSE PAIRING");
+  });
+
+  it("supports forcing beer on custom course keys", () => {
+    const venison = makeCourse("VENISON", "", { position: 1 });
+    const html = render({ pairing: "—" }, {}, [venison], {
+      beerChoice: "nonalc",
+      menuRules: { forceBeerCourseKeys: ["venison"] },
+    });
+    expect(html).toContain("SPENT BREAD KOMBUCHA");
+  });
 });
 
 // ── SI language ───────────────────────────────────────────────────────────────

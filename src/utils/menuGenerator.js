@@ -18,13 +18,40 @@ export const DEFAULT_MENU_RULES = {
   sectionGapFallbackPt: 14.5,
   forceCrayfishPairing: true,
   forceChickenGizzardBeer: true,
+  forcePairingCourseKeys: ["crayfish"],
+  forceBeerCourseKeys: ["chicken_gizzard"],
   crayfishFallbackTitleEn: "KITCHEN MARTINI",
   crayfishFallbackTitleSi: "KITCHEN MARTINI",
   crayfishFallbackSubEn: "",
   crayfishFallbackSubSi: "",
 };
 
-function normalizeMenuRules(input = {}) {
+const normalizeCourseToken = (value) => String(value || "")
+  .trim()
+  .toLowerCase()
+  .replace(/&/g, "and")
+  .replace(/[^a-z0-9]+/g, "_")
+  .replace(/^_+|_+$/g, "");
+
+const normalizeRuleKeyList = (value, fallback = []) => {
+  const rawList = (() => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string") return value.split(/[\n,]+/g);
+    if (value && typeof value === "object") return Object.keys(value).filter(k => value[k]);
+    return fallback;
+  })();
+  const out = [];
+  const seen = new Set();
+  (rawList || []).forEach(item => {
+    const token = normalizeCourseToken(item);
+    if (!token || seen.has(token)) return;
+    seen.add(token);
+    out.push(token);
+  });
+  return out;
+};
+
+export function normalizeMenuRules(input = {}) {
   const merged = { ...DEFAULT_MENU_RULES, ...(input || {}) };
   const firstDefined = (...vals) => vals.find(v => v !== undefined);
   const boolWithDefault = (value, fallback = true) => {
@@ -54,6 +81,24 @@ function normalizeMenuRules(input = {}) {
     merged.forceChickenGizzardBeer,
     merged.forceBeerOnChickenGizzard
   );
+  const forcedPairingKeys = normalizeRuleKeyList(
+    firstDefined(
+      merged.forcePairingCourseKeys,
+      merged.forcePairingCourseKey,
+      merged.forceCrayfishCourseKeys,
+      merged.forceCrayfishCourseKey
+    ),
+    DEFAULT_MENU_RULES.forcePairingCourseKeys
+  );
+  const forcedBeerKeys = normalizeRuleKeyList(
+    firstDefined(
+      merged.forceBeerCourseKeys,
+      merged.forceBeerCourseKey,
+      merged.forceChickenGizzardCourseKeys,
+      merged.forceChickenGizzardCourseKey
+    ),
+    DEFAULT_MENU_RULES.forceBeerCourseKeys
+  );
   return {
     preservePairingLabelSpacingWithoutPairing: boolWithDefault(preservePairingFlag, true),
     preserveCourseSectionGapFallback: boolWithDefault(preserveCourseGapFlag, true),
@@ -63,6 +108,8 @@ function normalizeMenuRules(input = {}) {
     })(),
     forceCrayfishPairing: boolWithDefault(forceCrayfishFlag, true),
     forceChickenGizzardBeer: boolWithDefault(forceGizzardBeerFlag, true),
+    forcePairingCourseKeys: forcedPairingKeys,
+    forceBeerCourseKeys: forcedBeerKeys,
     crayfishFallbackTitleEn: String(firstDefined(merged.crayfishFallbackTitleEn, DEFAULT_MENU_RULES.crayfishFallbackTitleEn) || DEFAULT_MENU_RULES.crayfishFallbackTitleEn),
     crayfishFallbackTitleSi: String(firstDefined(merged.crayfishFallbackTitleSi, DEFAULT_MENU_RULES.crayfishFallbackTitleSi) || DEFAULT_MENU_RULES.crayfishFallbackTitleSi),
     crayfishFallbackSubEn: String(firstDefined(merged.crayfishFallbackSubEn, DEFAULT_MENU_RULES.crayfishFallbackSubEn) || ""),
@@ -149,7 +196,6 @@ export function generateMenuHTML({
     ? table.bottleWines.filter(w => w && (w.name || w.producer || w.vintage || w.notes))
     : [];
 
-  const CRAYFISH_KEY      = "crayfish";
   const DANUBE_SALMON_KEY = "danube_salmon";
 
   const fmtWineParts = w => {
@@ -211,8 +257,9 @@ export function generateMenuHTML({
       !!String(course?.force_pairing_sub || "").trim() ||
       !!String(course?.force_pairing_title_si || "").trim() ||
       !!String(course?.force_pairing_sub_si || "").trim();
-    const isCrayfishCourse = rawCourseKey === CRAYFISH_KEY || normKey === CRAYFISH_KEY;
-    if (!(hasExplicitForcePairing || (rules.forceCrayfishPairing && isCrayfishCourse))) return null;
+    const rawKeyNorm = normalizeCourseToken(rawCourseKey);
+    const isForcedPairingCourse = rules.forcePairingCourseKeys.includes(normKey) || rules.forcePairingCourseKeys.includes(rawKeyNorm);
+    if (!(hasExplicitForcePairing || (rules.forceCrayfishPairing && isForcedPairingCourse))) return null;
     const fpTLines = String(course?.force_pairing_title || "").split("\n").map(s => s.trim());
     const fpSLines = String(course?.force_pairing_sub   || "").split("\n").map(s => s.trim());
     const fpTEn = fpTLines[0] || rules.crayfishFallbackTitleEn || "KITCHEN MARTINI";
@@ -222,13 +269,6 @@ export function generateMenuHTML({
     return lang === "si" ? { name: fpTSi, sub: fpSSi } : { name: fpTEn, sub: fpSEn };
   };
 
-  const normalizeToken = (value) => String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
   const isTruthyShort = (value) => {
     const v = String(value ?? "").trim().toLowerCase();
     return v === "true" || v === "1" || v === "yes" || v === "y" || v === "x" || v === "wahr";
@@ -237,9 +277,9 @@ export function generateMenuHTML({
   // ── Build visibleCourses (filtered and sorted) ────────────────────────────
   const visibleCourses = [];
   menuCourses.forEach((course, i) => {
-    const courseKey = normalizeToken(course?.course_key || course?.key || course?.menu?.name);
+    const courseKey = normalizeCourseToken(course?.course_key || course?.key || course?.menu?.name);
     const courseName = String(course?.menu?.name || "").trim().toUpperCase();
-    const optionalFlag = normalizeToken(course?.optional_flag || "");
+    const optionalFlag = normalizeCourseToken(course?.optional_flag || "");
 
     const isBeetrootCourse = optionalFlag === "beetroot" || courseKey === "beetroot";
     const isCakeCourse = optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake";
@@ -314,8 +354,8 @@ export function generateMenuHTML({
     }, []);
     if (courseIdxs.length === 0) return tRows;
     const withOrder = courseIdxs.map(i => {
-      const ck = normalizeToken(tRows[i].left?.courseKey || "");
-      const mc = menuCourses.find(c => normalizeToken(c.course_key || c.key || c.menu?.name || "") === ck);
+      const ck = normalizeCourseToken(tRows[i].left?.courseKey || "");
+      const mc = menuCourses.find(c => normalizeCourseToken(c.course_key || c.key || c.menu?.name || "") === ck);
       return { i, order: Number(mc?.short_order) || 9999 };
     });
     const sorted = [...withOrder].sort((a, b) => a.order - b.order);
@@ -458,7 +498,7 @@ export function generateMenuHTML({
     if (lb?.type === "course") {
       const courseKey = lb.courseKey || "";
       // Normalized lookup handles raw course_keys that differ in punctuation
-      const normKey = normalizeToken(courseKey);
+      const normKey = normalizeCourseToken(courseKey);
       const vc = visibleCourses.find(vc => vc.courseKey === courseKey || vc.courseKey === normKey);
       // Course hidden (e.g. beetroot not ordered) — discard any pending spacer gap
       if (!vc) { pendingGap = 0; continue; }
@@ -467,8 +507,9 @@ export function generateMenuHTML({
       let dish = applyCourseRestriction(resolveCourse(course), restrictions, lang);
       let drink = null;
       const cn = String(course?.menu?.name || "").trim().toUpperCase();
-      const isChickenGizzard = normKey === "chicken_gizzard" || cn === "CHICKEN GIZZARD";
-      const forcedBeerDrink = (rules.forceChickenGizzardBeer && isChickenGizzard) ? resolveBeerDrinkForCourse(course) : null;
+      const nameKey = normalizeCourseToken(cn);
+      const isForcedBeerCourse = rules.forceBeerCourseKeys.includes(normKey) || rules.forceBeerCourseKeys.includes(nameKey);
+      const forcedBeerDrink = (rules.forceChickenGizzardBeer && isForcedBeerCourse) ? resolveBeerDrinkForCourse(course) : null;
       const forcedPairingDrink = resolveForcedPairingDrink(course, courseKey, normKey);
 
       if (lb.showPairing === false && !forcedPairingDrink) {
@@ -478,7 +519,7 @@ export function generateMenuHTML({
           drink = forcedPairingDrink || (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]);
 
           // Beetroot extra pairing override
-          const isBeetrootC = normalizeToken(course.optional_flag || "") === "beetroot" || normKey === "beetroot";
+          const isBeetrootC = normalizeCourseToken(course.optional_flag || "") === "beetroot" || normKey === "beetroot";
           const beetExtra = extras[1];
           if (isBeetrootC && beetExtra?.ordered) {
             const beetPair = String(beetExtra.pairing || "—").trim();
@@ -491,7 +532,7 @@ export function generateMenuHTML({
             } else { drink = null; }
           }
 
-          // Beer substitution for chicken gizzard (always visible).
+          // Forced beer substitution for configured course keys.
           if (forcedBeerDrink) drink = forcedBeerDrink;
 
           // By-the-glass fallback from Danube Salmon onwards

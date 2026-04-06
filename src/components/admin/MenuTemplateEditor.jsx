@@ -28,7 +28,7 @@ import { FONT, baseInp } from "./adminStyles.js";
 import {
   BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
 } from "../../utils/menuTemplateSchema.js";
-import { generateMenuHTML, DEFAULT_MENU_RULES } from "../../utils/menuGenerator.js";
+import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -61,31 +61,6 @@ const PREVIEW_RESTRICTIONS = [
 ];
 
 const APERITIF_QUICK_KEYS = ["SFSC", "Slapšak", "Clandestin", "Krug"];
-
-const MENU_RULE_ALIASES = {
-  preservePairingSectionGapWhenNoPairing: "preservePairingLabelSpacingWithoutPairing",
-  useCourseSectionGapFallback: "preserveCourseSectionGapFallback",
-  sectionGapPt: "sectionGapFallbackPt",
-};
-
-function normalizeEditorMenuRules(raw = {}) {
-  const base = { ...DEFAULT_MENU_RULES };
-  Object.entries(raw || {}).forEach(([k, v]) => {
-    const key = MENU_RULE_ALIASES[k] || k;
-    base[key] = v;
-  });
-  return {
-    ...base,
-    preservePairingLabelSpacingWithoutPairing: base.preservePairingLabelSpacingWithoutPairing !== false,
-    preserveCourseSectionGapFallback: base.preserveCourseSectionGapFallback !== false,
-    forceCrayfishPairing: base.forceCrayfishPairing !== false,
-    forceChickenGizzardBeer: base.forceChickenGizzardBeer !== false,
-    overwriteTitleAndThankYouOnLanguageSwitch: base.overwriteTitleAndThankYouOnLanguageSwitch !== false,
-    sectionGapFallbackPt: Number.isFinite(Number(base.sectionGapFallbackPt)) && Number(base.sectionGapFallbackPt) >= 0
-      ? Number(base.sectionGapFallbackPt)
-      : DEFAULT_MENU_RULES.sectionGapFallbackPt,
-  };
-}
 
 /** Create a fresh blank preview seat for a given 1-based position. */
 const makePreviewSeat = (id) => ({
@@ -956,7 +931,7 @@ function MenuRulesPanel({
   open = false,
   onToggle,
 }) {
-  const rules = normalizeEditorMenuRules(menuRules);
+  const rules = normalizeMenuRules(menuRules);
   const setRule = (key, value) => {
     if (!onUpdateMenuRules) return;
     onUpdateMenuRules({ ...rules, [key]: value });
@@ -1009,7 +984,7 @@ function MenuRulesPanel({
                 checked={rules.forceCrayfishPairing !== false}
                 onChange={e => setRule("forceCrayfishPairing", e.target.checked)}
               />
-              Always show crayfish pairing drink
+              Enable forced pairing drink for configured course keys
             </label>
             <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
               <input
@@ -1017,7 +992,7 @@ function MenuRulesPanel({
                 checked={rules.forceChickenGizzardBeer !== false}
                 onChange={e => setRule("forceChickenGizzardBeer", e.target.checked)}
               />
-              Always show beer on chicken gizzard
+              Enable forced beer for configured course keys
             </label>
             <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
               <input
@@ -1029,6 +1004,24 @@ function MenuRulesPanel({
             </label>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 8 }}>
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing course keys</div>
+              <input
+                value={(rules.forcePairingCourseKeys || []).join(", ")}
+                onChange={e => setRule("forcePairingCourseKeys", e.target.value)}
+                style={{ ...baseInp, fontSize: 10, width: "100%" }}
+                placeholder="crayfish, next_section_key"
+              />
+            </div>
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced beer course keys</div>
+              <input
+                value={(rules.forceBeerCourseKeys || []).join(", ")}
+                onChange={e => setRule("forceBeerCourseKeys", e.target.value)}
+                style={{ ...baseInp, fontSize: 10, width: "100%" }}
+                placeholder="chicken_gizzard, custom_key"
+              />
+            </div>
             <div>
               <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Fallback gap (pt)</div>
               <input
@@ -1044,7 +1037,7 @@ function MenuRulesPanel({
               />
             </div>
             <div>
-              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Crayfish drink EN</div>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing drink EN</div>
               <input
                 value={rules.crayfishFallbackTitleEn || ""}
                 onChange={e => setRule("crayfishFallbackTitleEn", e.target.value)}
@@ -1052,7 +1045,7 @@ function MenuRulesPanel({
               />
             </div>
             <div>
-              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Crayfish sub EN</div>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing sub EN</div>
               <input
                 value={rules.crayfishFallbackSubEn || ""}
                 onChange={e => setRule("crayfishFallbackSubEn", e.target.value)}
@@ -1060,7 +1053,7 @@ function MenuRulesPanel({
               />
             </div>
             <div>
-              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Crayfish drink SI</div>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing drink SI</div>
               <input
                 value={rules.crayfishFallbackTitleSi || ""}
                 onChange={e => setRule("crayfishFallbackTitleSi", e.target.value)}
@@ -1068,7 +1061,7 @@ function MenuRulesPanel({
               />
             </div>
             <div>
-              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Crayfish sub SI</div>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing sub SI</div>
               <input
                 value={rules.crayfishFallbackSubSi || ""}
                 onChange={e => setRule("crayfishFallbackSubSi", e.target.value)}

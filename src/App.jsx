@@ -15,7 +15,7 @@ import {
   RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, initDishes,
   parseMenuRow, RESTRICTION_KEYS,
 } from "./utils/menuUtils.js";
-import { generateMenuHTML, DEFAULT_MENU_RULES } from "./utils/menuGenerator.js";
+import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
 import { buildDefaultTemplate } from "./utils/menuTemplateSchema.js";
 import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML } from "./utils/weeklyPrintGenerator.js";
 import {
@@ -47,30 +47,6 @@ const DEFAULT_MENU_TITLE_EN = String(import.meta.env.VITE_DEFAULT_MENU_TITLE_EN 
 const DEFAULT_MENU_TITLE_SI = String(import.meta.env.VITE_DEFAULT_MENU_TITLE_SI || "MENI").trim() || "MENI";
 const DEFAULT_THANK_YOU_EN = String(import.meta.env.VITE_DEFAULT_THANK_YOU_EN || "Thank you for your visit.").trim() || "Thank you for your visit.";
 const DEFAULT_THANK_YOU_SI = String(import.meta.env.VITE_DEFAULT_THANK_YOU_SI || "Hvala za vaš obisk.").trim() || "Hvala za vaš obisk.";
-const MENU_RULE_ALIASES = {
-  preservePairingSectionGapWhenNoPairing: "preservePairingLabelSpacingWithoutPairing",
-  useCourseSectionGapFallback: "preserveCourseSectionGapFallback",
-  sectionGapPt: "sectionGapFallbackPt",
-};
-
-function normalizeMenuRulesForUi(raw = {}) {
-  const base = { ...DEFAULT_MENU_RULES };
-  Object.entries(raw || {}).forEach(([k, v]) => {
-    const key = MENU_RULE_ALIASES[k] || k;
-    base[key] = v;
-  });
-  return {
-    ...base,
-    preservePairingLabelSpacingWithoutPairing: base.preservePairingLabelSpacingWithoutPairing !== false,
-    preserveCourseSectionGapFallback: base.preserveCourseSectionGapFallback !== false,
-    forceCrayfishPairing: base.forceCrayfishPairing !== false,
-    forceChickenGizzardBeer: base.forceChickenGizzardBeer !== false,
-    overwriteTitleAndThankYouOnLanguageSwitch: base.overwriteTitleAndThankYouOnLanguageSwitch !== false,
-    sectionGapFallbackPt: Number.isFinite(Number(base.sectionGapFallbackPt)) && Number(base.sectionGapFallbackPt) >= 0
-      ? Number(base.sectionGapFallbackPt)
-      : DEFAULT_MENU_RULES.sectionGapFallbackPt,
-  };
-}
 const DEFAULT_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "01,11,12,21,22,23")
   .split(",")
   .map(s => s.trim())
@@ -3774,7 +3750,7 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
   });
 
   const setBeer = (seatId, val) => setBeerChoices(prev => ({ ...prev, [seatId]: val }));
-  const normalizedMenuRules = normalizeMenuRulesForUi(menuRules);
+  const normalizedMenuRules = normalizeMenuRules(menuRules);
 
   const setLanguageWithDefaults = (nextLang) => {
     setLang(nextLang);
@@ -6409,9 +6385,9 @@ export default function App() {
   const [menuRules, setMenuRules] = useState(() => {
     try {
       const raw = JSON.parse(localStorage.getItem("milka_menu_rules") || "null");
-      return normalizeMenuRulesForUi(raw || DEFAULT_MENU_RULES);
+      return normalizeMenuRules(raw || DEFAULT_MENU_RULES);
     } catch {
-      return normalizeMenuRulesForUi(DEFAULT_MENU_RULES);
+      return normalizeMenuRules(DEFAULT_MENU_RULES);
     }
   });
   const [menuRulesSaving, setMenuRulesSaving] = useState(false);
@@ -6953,7 +6929,7 @@ export default function App() {
     supabase.from("service_settings").select("state").eq("id", "menu_gen_rules").maybeSingle()
       .then(({ data }) => {
         if (data?.state && typeof data.state === "object") {
-          setMenuRules(normalizeMenuRulesForUi(data.state));
+          setMenuRules(normalizeMenuRules(data.state));
           try { localStorage.setItem("milka_menu_rules", JSON.stringify(data.state)); } catch {}
         }
       });
@@ -6961,10 +6937,10 @@ export default function App() {
 
   const updateMenuRules = (nextRules) => {
     if (typeof nextRules === "function") {
-      setMenuRules(prev => normalizeMenuRulesForUi(nextRules(prev)));
+      setMenuRules(prev => normalizeMenuRules(nextRules(prev)));
       return;
     }
-    setMenuRules(normalizeMenuRulesForUi(nextRules));
+    setMenuRules(normalizeMenuRules(nextRules));
   };
 
   const saveMenuRules = async () => {
