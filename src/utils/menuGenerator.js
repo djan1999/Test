@@ -18,6 +18,7 @@ export const DEFAULT_MENU_RULES = {
   sectionGapFallbackPt: 14.5,
   forceCrayfishPairing: true,
   forceChickenGizzardBeer: true,
+  overwriteTitleAndThankYouOnLanguageSwitch: true,
   forcePairingCourseKeys: ["crayfish"],
   forceBeerCourseKeys: ["chicken_gizzard"],
   crayfishFallbackTitleEn: "KITCHEN MARTINI",
@@ -81,6 +82,10 @@ export function normalizeMenuRules(input = {}) {
     merged.forceChickenGizzardBeer,
     merged.forceBeerOnChickenGizzard
   );
+  const overwriteTitleAndThankYouFlag = firstDefined(
+    merged.overwriteTitleAndThankYouOnLanguageSwitch,
+    merged.overwriteTitleAndThankYouOnLangSwitch
+  );
   const forcedPairingKeys = normalizeRuleKeyList(
     firstDefined(
       merged.forcePairingCourseKeys,
@@ -108,6 +113,7 @@ export function normalizeMenuRules(input = {}) {
     })(),
     forceCrayfishPairing: boolWithDefault(forceCrayfishFlag, true),
     forceChickenGizzardBeer: boolWithDefault(forceGizzardBeerFlag, true),
+    overwriteTitleAndThankYouOnLanguageSwitch: boolWithDefault(overwriteTitleAndThankYouFlag, true),
     forcePairingCourseKeys: forcedPairingKeys,
     forceBeerCourseKeys: forcedBeerKeys,
     crayfishFallbackTitleEn: String(firstDefined(merged.crayfishFallbackTitleEn, DEFAULT_MENU_RULES.crayfishFallbackTitleEn) || DEFAULT_MENU_RULES.crayfishFallbackTitleEn),
