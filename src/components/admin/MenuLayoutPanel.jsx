@@ -7,6 +7,11 @@ export default function MenuLayoutPanel({
   onSaveTemplate,
   templateSaving,
   templateSaved,
+  menuRules,
+  onUpdateMenuRules,
+  onSaveMenuRules,
+  menuRulesSaving,
+  menuRulesSaved,
   logoDataUri,
   layoutStyles = {},
   onUpdateLayoutStyles,
@@ -25,6 +30,11 @@ export default function MenuLayoutPanel({
       onSaveLayoutStyles={onSaveLayoutStyles}
       saving={templateSaving}
       saved={templateSaved}
+      menuRules={menuRules}
+      onUpdateMenuRules={onUpdateMenuRules}
+      onSaveMenuRules={onSaveMenuRules}
+      menuRulesSaving={menuRulesSaving}
+      menuRulesSaved={menuRulesSaved}
       menuCourses={menuCourses}
       logoDataUri={logoDataUri}
       layoutStyles={layoutStyles}

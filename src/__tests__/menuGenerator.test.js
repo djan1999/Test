@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateMenuHTML } from "../utils/menuGenerator.js";
+import { generateMenuHTML, normalizeMenuRules } from "../utils/menuGenerator.js";
 
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -61,6 +61,22 @@ function makePairingTemplate(courses = []) {
     ],
   };
 }
+
+describe("normalizeMenuRules", () => {
+  it("keeps overwrite title/thank-you flag configurable", () => {
+    const rules = normalizeMenuRules({ overwriteTitleAndThankYouOnLanguageSwitch: false });
+    expect(rules.overwriteTitleAndThankYouOnLanguageSwitch).toBe(false);
+  });
+
+  it("normalizes force course keys from comma-separated strings", () => {
+    const rules = normalizeMenuRules({
+      forcePairingCourseKeys: "Crayfish, Venison Course",
+      forceBeerCourseKeys: "Chicken Gizzard\nLamb",
+    });
+    expect(rules.forcePairingCourseKeys).toEqual(["crayfish", "venison_course"]);
+    expect(rules.forceBeerCourseKeys).toEqual(["chicken_gizzard", "lamb"]);
+  });
+});
 
 // ── Basic structure ────────────────────────────────────────────────────────────
 
@@ -352,6 +368,23 @@ describe("generateMenuHTML — pairing", () => {
       menuRules: { crayfishFallbackTitleEn: "CHEF MARTINI" },
     });
     expect(html).toContain("CHEF MARTINI");
+  });
+
+  it("supports forcing pairing on custom course keys", () => {
+    const venison = makeCourse("VENISON", "", { position: 1 });
+    const html = render({ pairing: "—" }, {}, [venison], {
+      menuRules: { forcePairingCourseKeys: ["venison"], crayfishFallbackTitleEn: "HOUSE PAIRING" },
+    });
+    expect(html).toContain("HOUSE PAIRING");
+  });
+
+  it("supports forcing beer on custom course keys", () => {
+    const venison = makeCourse("VENISON", "", { position: 1 });
+    const html = render({ pairing: "—" }, {}, [venison], {
+      beerChoice: "nonalc",
+      menuRules: { forceBeerCourseKeys: ["venison"] },
+    });
+    expect(html).toContain("SPENT BREAD KOMBUCHA");
   });
 });
 

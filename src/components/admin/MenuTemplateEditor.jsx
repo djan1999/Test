@@ -28,7 +28,7 @@ import { FONT, baseInp } from "./adminStyles.js";
 import {
   BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
 } from "../../utils/menuTemplateSchema.js";
-import { generateMenuHTML } from "../../utils/menuGenerator.js";
+import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -922,6 +922,159 @@ function PreviewDataPanel({
   );
 }
 
+function MenuRulesPanel({
+  menuRules = DEFAULT_MENU_RULES,
+  onUpdateMenuRules,
+  onSaveMenuRules,
+  menuRulesSaving = false,
+  menuRulesSaved = false,
+  open = false,
+  onToggle,
+}) {
+  const rules = normalizeMenuRules(menuRules);
+  const setRule = (key, value) => {
+    if (!onUpdateMenuRules) return;
+    onUpdateMenuRules({ ...rules, [key]: value });
+  };
+
+  return (
+    <div style={{ borderBottom: "1px solid #ede9e0", background: "#f7f8fb", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? "1px solid #ede9e0" : "none" }}>
+        <button
+          onClick={onToggle}
+          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#4b4b88", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+        >{open ? "▾ MENU RULES" : "▸ MENU RULES"}</button>
+        <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa" }}>Global behavior controls used by preview + print</span>
+        {onSaveMenuRules && (
+          <button
+            onClick={onSaveMenuRules}
+            disabled={menuRulesSaving}
+            style={{
+              marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
+              padding: "4px 10px", border: "none", borderRadius: 3, cursor: menuRulesSaving ? "wait" : "pointer",
+              background: menuRulesSaved ? "#4a9a6a" : "#4b4b88", color: "#fff", textTransform: "uppercase",
+            }}
+          >
+            {menuRulesSaving ? "Saving..." : menuRulesSaved ? "Saved" : "Save Rules"}
+          </button>
+        )}
+      </div>
+      {open && (
+        <div style={{ padding: "10px 12px 12px", display: "grid", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 8 }}>
+            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={rules.preservePairingLabelSpacingWithoutPairing !== false}
+                onChange={e => setRule("preservePairingLabelSpacingWithoutPairing", e.target.checked)}
+              />
+              Keep section gap when pairing label is empty
+            </label>
+            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={rules.preserveCourseSectionGapFallback !== false}
+                onChange={e => setRule("preserveCourseSectionGapFallback", e.target.checked)}
+              />
+              Apply course "Gap Before" fallback when template has none
+            </label>
+            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={rules.forceCrayfishPairing !== false}
+                onChange={e => setRule("forceCrayfishPairing", e.target.checked)}
+              />
+              Enable forced pairing drink for configured course keys
+            </label>
+            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={rules.forceChickenGizzardBeer !== false}
+                onChange={e => setRule("forceChickenGizzardBeer", e.target.checked)}
+              />
+              Enable forced beer for configured course keys
+            </label>
+            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={rules.overwriteTitleAndThankYouOnLanguageSwitch !== false}
+                onChange={e => setRule("overwriteTitleAndThankYouOnLanguageSwitch", e.target.checked)}
+              />
+              Overwrite title/thank-you when language changes (menu generator)
+            </label>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 8 }}>
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing course keys</div>
+              <input
+                value={(rules.forcePairingCourseKeys || []).join(", ")}
+                onChange={e => setRule("forcePairingCourseKeys", e.target.value)}
+                style={{ ...baseInp, fontSize: 10, width: "100%" }}
+                placeholder="crayfish, next_section_key"
+              />
+            </div>
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced beer course keys</div>
+              <input
+                value={(rules.forceBeerCourseKeys || []).join(", ")}
+                onChange={e => setRule("forceBeerCourseKeys", e.target.value)}
+                style={{ ...baseInp, fontSize: 10, width: "100%" }}
+                placeholder="chicken_gizzard, custom_key"
+              />
+            </div>
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Fallback gap (pt)</div>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={rules.sectionGapFallbackPt ?? DEFAULT_MENU_RULES.sectionGapFallbackPt}
+                onChange={e => {
+                  const raw = Number(e.target.value);
+                  setRule("sectionGapFallbackPt", Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_MENU_RULES.sectionGapFallbackPt);
+                }}
+                style={{ ...baseInp, fontSize: 10, width: "100%" }}
+              />
+            </div>
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing drink EN</div>
+              <input
+                value={rules.crayfishFallbackTitleEn || ""}
+                onChange={e => setRule("crayfishFallbackTitleEn", e.target.value)}
+                style={{ ...baseInp, fontSize: 10, width: "100%" }}
+              />
+            </div>
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing sub EN</div>
+              <input
+                value={rules.crayfishFallbackSubEn || ""}
+                onChange={e => setRule("crayfishFallbackSubEn", e.target.value)}
+                style={{ ...baseInp, fontSize: 10, width: "100%" }}
+              />
+            </div>
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing drink SI</div>
+              <input
+                value={rules.crayfishFallbackTitleSi || ""}
+                onChange={e => setRule("crayfishFallbackTitleSi", e.target.value)}
+                style={{ ...baseInp, fontSize: 10, width: "100%" }}
+              />
+            </div>
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing sub SI</div>
+              <input
+                value={rules.crayfishFallbackSubSi || ""}
+                onChange={e => setRule("crayfishFallbackSubSi", e.target.value)}
+                style={{ ...baseInp, fontSize: 10, width: "100%" }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function MenuTemplateEditor({
@@ -932,6 +1085,11 @@ export default function MenuTemplateEditor({
   onSaveLayoutStyles,
   saving  = false,
   saved   = false,
+  menuRules = DEFAULT_MENU_RULES,
+  onUpdateMenuRules,
+  onSaveMenuRules,
+  menuRulesSaving = false,
+  menuRulesSaved = false,
   menuCourses = [],
   logoDataUri = "",
   layoutStyles = {},
@@ -948,6 +1106,7 @@ export default function MenuTemplateEditor({
   const [leftOpen,    setLeftOpen]    = useState(true);
   const [rightOpen,   setRightOpen]   = useState(true);
   const [previewOpen, setPreviewOpen] = useState(true);
+  const [menuRulesOpen, setMenuRulesOpen] = useState(false);
   const previewTimer = useRef(null);
 
   // ── Preview data state — configurable dummy seat (not persisted) ──
@@ -1032,13 +1191,14 @@ export default function MenuTemplateEditor({
           lang: previewLang,
           beerChoice: null,
           layoutStyles,
+          menuRules,
         });
         setPreviewHtml(html);
       } catch {}
       setPreviewLoading(false);
     }, 250);
     return () => clearTimeout(previewTimer.current);
-  }, [template, menuCourses, logoDataUri, layoutStyles, previewSeats, previewSeatIdx, previewBottles, previewLang, previewMenuType]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [template, menuCourses, logoDataUri, layoutStyles, menuRules, previewSeats, previewSeatIdx, previewBottles, previewLang, previewMenuType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = useCallback(newRows => {
     onUpdateTemplate({ ...template, rows: newRows });
@@ -1181,6 +1341,15 @@ export default function MenuTemplateEditor({
         lang={previewLang}         onLangChange={setPreviewLang}
         menuType={previewMenuType} onMenuTypeChange={setPreviewMenuType}
         open={previewDataOpen}     onToggle={() => setPreviewDataOpen(v => !v)}
+      />
+      <MenuRulesPanel
+        menuRules={menuRules}
+        onUpdateMenuRules={onUpdateMenuRules}
+        onSaveMenuRules={onSaveMenuRules}
+        menuRulesSaving={menuRulesSaving}
+        menuRulesSaved={menuRulesSaved}
+        open={menuRulesOpen}
+        onToggle={() => setMenuRulesOpen(v => !v)}
       />
 
       {/* ── Three-panel layout ── */}
