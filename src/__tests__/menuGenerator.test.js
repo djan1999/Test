@@ -131,6 +131,28 @@ describe("generateMenuHTML — course rendering", () => {
     expect(soupIdx).toBeLessThan(mainIdx);
     expect(mainIdx).toBeLessThan(dessertIdx);
   });
+
+  it("applies section_gap_before from course data when template lacks spacer row", () => {
+    const venison = makeCourse("VENISON", "", { position: 1 });
+    const sheepCheese = makeCourse("SHEEP CHEESE", "", { position: 2 });
+    sheepCheese.section_gap_before = true;
+    const template = {
+      version: 2,
+      rows: [
+        { id: "c1", left: { type: "course", courseKey: venison.course_key }, right: { type: "pairing" }, widthPreset: "55/45", gap: 0 },
+        { id: "c2", left: { type: "course", courseKey: sheepCheese.course_key }, right: { type: "pairing" }, widthPreset: "55/45", gap: 0 },
+      ],
+    };
+    const rows = generateMenuHTML({
+      seat: makeSeat({ pairing: "—" }),
+      table: makeTable(),
+      menuCourses: [venison, sheepCheese],
+      menuTemplate: template,
+      _rowsOnly: true,
+    });
+    const courseRows = rows.filter(r => r.type === "course");
+    expect(courseRows[1].gap).toBe(14.5);
+  });
 });
 
 // ── Dietary restriction application ───────────────────────────────────────────

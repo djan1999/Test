@@ -91,6 +91,7 @@ export function generateMenuHTML({
 
   const CRAYFISH_KEY      = "crayfish";
   const DANUBE_SALMON_KEY = "danube_salmon";
+  const DEFAULT_SECTION_GAP_PT = 14.5;
 
   const fmtWineParts = w => {
     const rawVintage = String(w?.vintage || "").trim();
@@ -467,7 +468,13 @@ export function generateMenuHTML({
         right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
         rowClass: "",
         widthPreset: wp,
-        gap: consumeGap(),
+        // Preserve section breaks even if the template is missing an explicit spacer row.
+        // (e.g. legacy templates where "Gap Before" was toggled later in course data)
+        gap: (() => {
+          const templateGap = consumeGap();
+          if (templateGap > 0) return templateGap;
+          return course?.section_gap_before ? DEFAULT_SECTION_GAP_PT : 0;
+        })(),
       });
       continue;
     }
