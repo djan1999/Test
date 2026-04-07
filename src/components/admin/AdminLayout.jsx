@@ -69,6 +69,12 @@ export default function AdminLayout({
 }) {
   const [activeSection, setActiveSection] = useState("menu");
   const [dishesTab, setDishesTab] = useState("courses");
+  const [navPinned, setNavPinned] = useState(false);
+  const [navHover, setNavHover] = useState(false);
+
+  const navOpen = navPinned || navHover;
+  const NAV_W_OPEN = 220;
+  const NAV_W_CLOSED = 56;
 
   return (
     <div style={{
@@ -107,18 +113,47 @@ export default function AdminLayout({
       <div style={{ display: "flex", flex: 1 }}>
         {/* Sidebar */}
         <nav style={{
-          width: 220, flexShrink: 0, borderRight: "1px solid #f0f0f0",
+          width: navOpen ? NAV_W_OPEN : NAV_W_CLOSED, flexShrink: 0, borderRight: "1px solid #f0f0f0",
           padding: "20px 0", background: "#fafafa",
           position: "sticky", top: 52, height: "calc(100vh - 52px)",
           overflowY: "auto",
+          transition: "width 0.16s ease",
+          overflowX: "hidden",
         }}>
+          <div style={{ padding: navOpen ? "0 12px 10px" : "0 8px 10px" }}>
+            <button
+              onClick={() => setNavPinned(v => !v)}
+              title={navPinned ? "Unpin sidebar" : "Pin sidebar open"}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: navOpen ? "space-between" : "center",
+                gap: 8,
+                padding: navOpen ? "8px 10px" : "8px 0",
+                border: "1px solid #e8e8e8",
+                borderRadius: 8,
+                background: "#fff",
+                cursor: "pointer",
+                color: navPinned ? "#4b4b88" : "#999",
+                fontFamily: FONT,
+                fontSize: 9,
+                letterSpacing: 1.5,
+                textTransform: "uppercase",
+              }}
+            >
+              <span style={{ fontSize: 14, width: 20, textAlign: "center" }}>{navPinned ? "📌" : "☰"}</span>
+              {navOpen && <span style={{ flex: 1, textAlign: "left" }}>{navPinned ? "Pinned" : "Hover to open"}</span>}
+              {navOpen && <span style={{ color: "#ccc" }}>{navPinned ? "ON" : "OFF"}</span>}
+            </button>
+          </div>
           {SECTIONS.map(s => (
             <button
               key={s.id}
               onClick={() => setActiveSection(s.id)}
               style={{
                 display: "flex", alignItems: "center", gap: 10,
-                width: "100%", padding: "12px 20px", border: "none",
+                width: "100%", padding: navOpen ? "12px 20px" : "12px 0", border: "none",
                 background: activeSection === s.id ? "#fff" : "transparent",
                 borderLeft: activeSection === s.id ? "3px solid #4b4b88" : "3px solid transparent",
                 cursor: "pointer", transition: "all 0.1s",
@@ -126,10 +161,11 @@ export default function AdminLayout({
                 color: activeSection === s.id ? "#1a1a1a" : "#888",
                 fontWeight: activeSection === s.id ? 600 : 400,
                 textAlign: "left",
+                justifyContent: navOpen ? "flex-start" : "center",
               }}
             >
               <span style={{ fontSize: 14, color: activeSection === s.id ? "#4b4b88" : "#ccc", width: 20, textAlign: "center" }}>{s.icon}</span>
-              {s.label}
+              {navOpen && s.label}
             </button>
           ))}
         </nav>
