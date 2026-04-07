@@ -38,6 +38,27 @@ export function writeTeamNames(value) {
   } catch {}
 }
 
+export const MENU_TITLE_EN_KEY = "milka-menu-title-en-v1";
+export const MENU_TITLE_SI_KEY = "milka-menu-title-si-v1";
+const MENU_TITLE_EN_FALLBACK = "MENU";
+const MENU_TITLE_SI_FALLBACK = "Zimski Meni";
+
+export function readMenuTitle(lang) {
+  const key = lang === "si" ? MENU_TITLE_SI_KEY : MENU_TITLE_EN_KEY;
+  const fallback = lang === "si" ? MENU_TITLE_SI_FALLBACK : MENU_TITLE_EN_FALLBACK;
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw && raw.trim() ? raw : fallback;
+  } catch { return fallback; }
+}
+
+export function writeMenuTitle(lang, value) {
+  if (typeof window === "undefined") return;
+  const key = lang === "si" ? MENU_TITLE_SI_KEY : MENU_TITLE_EN_KEY;
+  try { window.localStorage.setItem(key, value || ""); } catch {}
+}
+
 export const STORAGE_KEY = "milka-service-board-v8";
 
 export const readLocalBoardState = () => {

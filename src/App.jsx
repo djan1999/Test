@@ -21,6 +21,7 @@ import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML } from "./uti
 import {
   readLocalBeverages, writeLocalBeverages,
   readTeamNames, writeTeamNames,
+  readMenuTitle, writeMenuTitle,
   readLocalBoardState, writeLocalBoardState,
   BEV_STORAGE_KEY, TEAM_STORAGE_KEY, STORAGE_KEY,
 } from "./utils/storage.js";
@@ -3651,7 +3652,7 @@ function BevEditRow({ emoji, label, items, onUpdate }) {
 
 function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutStyles = {}, menuTemplate = null, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [], aperitifOptions = [], menuRules = DEFAULT_MENU_RULES }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
-  const [menuTitle, setMenuTitle] = useState(table.lang === "si" ? DEFAULT_MENU_TITLE_SI : DEFAULT_MENU_TITLE_EN);
+  const [menuTitle, setMenuTitle] = useState(() => readMenuTitle(table.lang || "en"));
   const [thankYouNote, setThankYouNote] = useState(table.lang === "si" ? DEFAULT_THANK_YOU_SI : DEFAULT_THANK_YOU_EN);
   const [lang, setLang] = useState(table.lang || "en");
   // Per-seat ephemeral one-time edits — { [seatId]: { [courseKey]: { name?, sub? } } }
@@ -3690,6 +3691,11 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
       .upsert({ id: "menu_gen_team", state: { value: teamNames }, updated_at: new Date().toISOString() }, { onConflict: "id" })
       .then(() => {});
   }, [teamNames]);
+
+  // Persist menu title per language to localStorage so it becomes the new default
+  useEffect(() => {
+    writeMenuTitle(lang, menuTitle);
+  }, [menuTitle, lang]);
 
   // Save menu title to Supabase when changed
   useEffect(() => {
@@ -3753,9 +3759,10 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
   const normalizedMenuRules = normalizeMenuRules(menuRules);
 
   const setLanguageWithDefaults = (nextLang) => {
+    writeMenuTitle(lang, menuTitle); // save current title before switching
     setLang(nextLang);
     if (normalizedMenuRules?.overwriteTitleAndThankYouOnLanguageSwitch !== false) {
-      setMenuTitle(nextLang === "si" ? DEFAULT_MENU_TITLE_SI : DEFAULT_MENU_TITLE_EN);
+      setMenuTitle(readMenuTitle(nextLang));
       setThankYouNote(nextLang === "si" ? DEFAULT_THANK_YOU_SI : DEFAULT_THANK_YOU_EN);
     }
   };
