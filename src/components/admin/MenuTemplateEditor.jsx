@@ -215,57 +215,99 @@ function SortableRow({
 
   const leftSelected  = selectedCell?.rowId === row.id && selectedCell?.side === "left";
   const rightSelected = selectedCell?.rowId === row.id && selectedCell?.side === "right";
+  const isGapRow = !row.left && !row.right;
 
   return (
     <div ref={setNodeRef} style={{ ...style, marginBottom: 2 }}>
-      {/* Row strip */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 4,
-        padding: "3px 4px",
-        background: (leftSelected || rightSelected) ? "#f4f3fb" : "#fff",
-        border: `1px solid ${(leftSelected || rightSelected) ? "#c8c6e8" : "#ede9e0"}`,
-        borderRadius: settingsOpen ? "3px 3px 0 0" : 3,
-      }}>
-        {/* Drag handle */}
-        <div
-          {...attributes} {...listeners}
-          style={{
-            width: 14, cursor: "grab", color: "#ccc", fontSize: 10,
-            userSelect: "none", textAlign: "center", flexShrink: 0,
-          }}
-          title="Drag to reorder"
-        >⋮⋮</div>
 
-        {/* Left chip */}
-        <BlockChip
-          block={row.left} rowId={row.id} side="left"
-          isSelected={leftSelected}
-          onSelect={onSelectCell} onRemove={onRemoveBlock} onAdd={onAddBlock} onMove={onMoveBlock}
-          menuCourses={menuCourses}
-        />
-
-        {/* Right chip */}
-        <BlockChip
-          block={row.right} rowId={row.id} side="right"
-          isSelected={rightSelected}
-          onSelect={onSelectCell} onRemove={onRemoveBlock} onAdd={onAddBlock} onMove={onMoveBlock}
-          menuCourses={menuCourses}
-        />
-
-        {/* Action buttons */}
-        <div style={{ display: "flex", gap: 1, flexShrink: 0 }}>
-          <RowActionBtn title="Insert row above" onClick={() => onInsertAbove(row.id)}>↑</RowActionBtn>
-          <RowActionBtn title="Insert row below" onClick={() => onInsertBelow(row.id)}>↓</RowActionBtn>
-          <RowActionBtn title="Duplicate row" onClick={() => onDuplicateRow(row.id)}>⎘</RowActionBtn>
-          {row.pinToBottom && <span title="Pinned to bottom" style={{ fontFamily: FONT, fontSize: 9, color: SELECTED_RING, padding: "0 2px" }}>⤓</span>}
-          <RowActionBtn title="Row settings" onClick={() => setSettingsOpen(v => !v)} active={settingsOpen}>⚙</RowActionBtn>
-          <RowActionBtn title="Delete row" onClick={() => onRemoveRow(row.id)} danger>⊗</RowActionBtn>
+      {isGapRow ? (
+        /* ── Gap row — both cells empty, show gap inline ── */
+        <div style={{
+          display: "flex", alignItems: "center", gap: 4,
+          padding: "3px 4px",
+          background: "#f7f6f0",
+          border: "1.5px dashed #d8d4c8",
+          borderRadius: 3,
+        }}>
+          <div
+            {...attributes} {...listeners}
+            style={{ width: 14, cursor: "grab", color: "#ccc", fontSize: 10, userSelect: "none", textAlign: "center", flexShrink: 0 }}
+            title="Drag to reorder"
+          >⋮⋮</div>
+          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#c8b87a", textTransform: "uppercase", flexShrink: 0 }}>
+            GAP
+          </span>
+          <input
+            type="number"
+            value={row.gap ?? 0}
+            step={0.5}
+            min={0}
+            onClick={e => e.stopPropagation()}
+            onChange={e => onUpdateRow({ ...row, gap: parseFloat(e.target.value) || 0 })}
+            style={{
+              fontFamily: FONT, fontSize: 9, padding: "2px 4px",
+              border: "1px solid #e0ddd6", borderRadius: 2,
+              width: 46, textAlign: "center", background: "#fff",
+            }}
+          />
+          <span style={{ fontFamily: FONT, fontSize: 8, color: "#bbb", flexShrink: 0 }}>pt</span>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", gap: 1, flexShrink: 0 }}>
+            <RowActionBtn title="Insert row above" onClick={() => onInsertAbove(row.id)}>↑</RowActionBtn>
+            <RowActionBtn title="Insert row below" onClick={() => onInsertBelow(row.id)}>↓</RowActionBtn>
+            <RowActionBtn title="Duplicate gap row" onClick={() => onDuplicateRow(row.id)}>⎘</RowActionBtn>
+            <RowActionBtn title="Delete gap row" onClick={() => onRemoveRow(row.id)} danger>⊗</RowActionBtn>
+          </div>
         </div>
-      </div>
+      ) : (
+        /* ── Normal content row ── */
+        <>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "3px 4px",
+            background: (leftSelected || rightSelected) ? "#f4f3fb" : "#fff",
+            border: `1px solid ${(leftSelected || rightSelected) ? "#c8c6e8" : "#ede9e0"}`,
+            borderRadius: settingsOpen ? "3px 3px 0 0" : 3,
+          }}>
+            {/* Drag handle */}
+            <div
+              {...attributes} {...listeners}
+              style={{ width: 14, cursor: "grab", color: "#ccc", fontSize: 10, userSelect: "none", textAlign: "center", flexShrink: 0 }}
+              title="Drag to reorder"
+            >⋮⋮</div>
 
-      {/* Inline row settings */}
-      {settingsOpen && (
-        <RowSettings row={row} onUpdate={onUpdateRow} onClose={() => setSettingsOpen(false)} />
+            {/* Left chip */}
+            <BlockChip
+              block={row.left} rowId={row.id} side="left"
+              isSelected={leftSelected}
+              onSelect={onSelectCell} onRemove={onRemoveBlock} onAdd={onAddBlock} onMove={onMoveBlock}
+              menuCourses={menuCourses}
+            />
+
+            {/* Right chip */}
+            <BlockChip
+              block={row.right} rowId={row.id} side="right"
+              isSelected={rightSelected}
+              onSelect={onSelectCell} onRemove={onRemoveBlock} onAdd={onAddBlock} onMove={onMoveBlock}
+              menuCourses={menuCourses}
+            />
+
+            {/* Action buttons */}
+            <div style={{ display: "flex", gap: 1, flexShrink: 0 }}>
+              <RowActionBtn title="Insert row above" onClick={() => onInsertAbove(row.id)}>↑</RowActionBtn>
+              <RowActionBtn title="Insert row below" onClick={() => onInsertBelow(row.id)}>↓</RowActionBtn>
+              <RowActionBtn title="Duplicate row" onClick={() => onDuplicateRow(row.id)}>⎘</RowActionBtn>
+              {row.pinToBottom && <span title="Pinned to bottom" style={{ fontFamily: FONT, fontSize: 9, color: SELECTED_RING, padding: "0 2px" }}>⤓</span>}
+              <RowActionBtn title="Row settings" onClick={() => setSettingsOpen(v => !v)} active={settingsOpen}>⚙</RowActionBtn>
+              <RowActionBtn title="Delete row" onClick={() => onRemoveRow(row.id)} danger>⊗</RowActionBtn>
+            </div>
+          </div>
+
+          {/* Inline row settings */}
+          {settingsOpen && (
+            <RowSettings row={row} onUpdate={onUpdateRow} onClose={() => setSettingsOpen(false)} />
+          )}
+        </>
       )}
     </div>
   );
@@ -974,14 +1016,6 @@ function MenuRulesPanel({
             <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
               <input
                 type="checkbox"
-                checked={rules.preserveCourseSectionGapFallback !== false}
-                onChange={e => setRule("preserveCourseSectionGapFallback", e.target.checked)}
-              />
-              Apply course "Gap Before" fallback when template has none
-            </label>
-            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
-              <input
-                type="checkbox"
                 checked={rules.forceCrayfishPairing !== false}
                 onChange={e => setRule("forceCrayfishPairing", e.target.checked)}
               />
@@ -1024,20 +1058,6 @@ function MenuRulesPanel({
               />
             </div>
             <div>
-              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Fallback gap (pt)</div>
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                value={rules.sectionGapFallbackPt ?? DEFAULT_MENU_RULES.sectionGapFallbackPt}
-                onChange={e => {
-                  const raw = Number(e.target.value);
-                  setRule("sectionGapFallbackPt", Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_MENU_RULES.sectionGapFallbackPt);
-                }}
-                style={{ ...baseInp, fontSize: 10, width: "100%" }}
-              />
-            </div>
-            <div>
               <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing drink EN</div>
               <input
                 value={rules.crayfishFallbackTitleEn || ""}
@@ -1076,6 +1096,163 @@ function MenuRulesPanel({
   );
 }
 
+// ── Layout Styles panel ───────────────────────────────────────────────────────
+
+/**
+ * One reusable number-input row for a layoutStyles key.
+ * Renders inline — no hooks.
+ */
+function StyleInput({ label, lkey, def, step, unit, min, layoutStyles, onUpdateLayoutStyles }) {
+  const current = lkey in layoutStyles ? layoutStyles[lkey] : def;
+  const isOverridden = lkey in layoutStyles;
+  return (
+    <div>
+      <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: "#aaa", textTransform: "uppercase", marginBottom: 3 }}>
+        {label}
+        {!isOverridden && <span style={{ color: "#ddd", marginLeft: 4 }}>· default {def}{unit}</span>}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <input
+          type="number"
+          step={step ?? 0.5}
+          min={min ?? 0}
+          value={current}
+          onChange={e => {
+            const n = parseFloat(e.target.value);
+            const next = { ...layoutStyles };
+            if (!Number.isFinite(n)) delete next[lkey];
+            else next[lkey] = n;
+            onUpdateLayoutStyles(next);
+          }}
+          style={{
+            fontFamily: FONT, fontSize: 9, padding: "2px 5px",
+            border: `1px solid ${isOverridden ? "#9090c0" : "#ddd"}`,
+            borderRadius: 2, width: 52, textAlign: "center",
+            background: isOverridden ? "#f4f3fb" : "#fff",
+          }}
+        />
+        <span style={{ fontFamily: FONT, fontSize: 8, color: "#aaa" }}>{unit}</span>
+        {isOverridden && (
+          <button
+            onClick={() => { const next = { ...layoutStyles }; delete next[lkey]; onUpdateLayoutStyles(next); }}
+            title="Reset to default"
+            style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: "0 2px" }}
+          >↺</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLayoutStyles, open, onToggle }) {
+  const si = (props) => <StyleInput layoutStyles={layoutStyles} onUpdateLayoutStyles={onUpdateLayoutStyles} {...props} />;
+  return (
+    <div style={{ borderBottom: "1px solid #ede9e0", background: "#f7f6fb", flexShrink: 0 }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? "1px solid #ede9e0" : "none" }}>
+        <button
+          onClick={onToggle}
+          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#4b4b88", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+        >{open ? "▾ SPACING SETTINGS" : "▸ SPACING SETTINGS"}</button>
+        <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa" }}>
+          Page margins · columns · row gaps · footer — all configurable
+        </span>
+        {onSaveLayoutStyles && (
+          <button
+            onClick={onSaveLayoutStyles}
+            style={{
+              marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
+              padding: "4px 10px", border: "none", borderRadius: 3, cursor: "pointer",
+              background: "#4b4b88", color: "#fff", textTransform: "uppercase",
+            }}
+          >Save Styles</button>
+        )}
+      </div>
+
+      {open && (
+        <div style={{ padding: "12px 14px 14px", display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* Page margins */}
+          <div>
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Page Margins</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
+              {si({ label: "Top",    lkey: "padTop",    def: 8.4, step: 0.1, unit: "mm" })}
+              {si({ label: "Right",  lkey: "padRight",  def: 12,  step: 0.5, unit: "mm" })}
+              {si({ label: "Bottom", lkey: "padBottom", def: 8.2, step: 0.1, unit: "mm" })}
+              {si({ label: "Left",   lkey: "padLeft",   def: 12,  step: 0.5, unit: "mm" })}
+            </div>
+          </div>
+
+          {/* Columns */}
+          <div>
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Columns</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
+              {si({ label: "Column gap",           lkey: "colGap",       def: 9,   step: 0.5, unit: "mm" })}
+              {si({ label: "Header gap (title↔logo)", lkey: "headerColGap", def: 8.6, step: 0.1, unit: "mm" })}
+              <div>
+                <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: "#aaa", textTransform: "uppercase", marginBottom: 3 }}>
+                  Course split (dish / wine)
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <input
+                    type="number"
+                    step={1}
+                    min={20}
+                    max={80}
+                    value={layoutStyles.courseColSplit ?? 55}
+                    onChange={e => {
+                      const n = parseInt(e.target.value, 10);
+                      const next = { ...layoutStyles };
+                      if (isNaN(n)) delete next.courseColSplit;
+                      else next.courseColSplit = Math.min(80, Math.max(20, n));
+                      onUpdateLayoutStyles(next);
+                    }}
+                    style={{
+                      fontFamily: FONT, fontSize: 9, padding: "2px 5px",
+                      border: `1px solid ${"courseColSplit" in layoutStyles ? "#9090c0" : "#ddd"}`,
+                      borderRadius: 2, width: 52, textAlign: "center",
+                      background: "courseColSplit" in layoutStyles ? "#f4f3fb" : "#fff",
+                    }}
+                  />
+                  <span style={{ fontFamily: FONT, fontSize: 8, color: "#aaa" }}>
+                    / {100 - (layoutStyles.courseColSplit ?? 55)} %
+                  </span>
+                  {"courseColSplit" in layoutStyles && (
+                    <button
+                      onClick={() => { const next = { ...layoutStyles }; delete next.courseColSplit; onUpdateLayoutStyles(next); }}
+                      title="Reset to default (55)"
+                      style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: "0 2px" }}
+                    >↺</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Row spacing */}
+          <div>
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Row Spacing</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
+              {si({ label: "Between rows",      lkey: "rowSpacing",     def: 3.15, step: 0.05, unit: "pt" })}
+              {si({ label: "Between wine rows", lkey: "wineRowSpacing", def: 4.5,  step: 0.05, unit: "pt" })}
+            </div>
+          </div>
+
+          {/* Header / footer */}
+          <div>
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Header &amp; Footer</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
+              {si({ label: "Header → content gap", lkey: "headerSpacing",   def: 7, step: 0.5, unit: "mm" })}
+              {si({ label: "Thank-you top gap",     lkey: "thankYouSpacing", def: 7, step: 0.5, unit: "pt" })}
+            </div>
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function MenuTemplateEditor({
@@ -1107,7 +1284,8 @@ export default function MenuTemplateEditor({
   const [leftOpen,    setLeftOpen]    = useState(true);
   const [rightOpen,   setRightOpen]   = useState(true);
   const [previewOpen, setPreviewOpen] = useState(true);
-  const [menuRulesOpen, setMenuRulesOpen] = useState(false);
+  const [menuRulesOpen,    setMenuRulesOpen]    = useState(false);
+  const [layoutStylesOpen, setLayoutStylesOpen] = useState(false);
   const previewTimer = useRef(null);
 
   // ── Preview data state — configurable dummy seat (not persisted) ──
@@ -1240,7 +1418,8 @@ export default function MenuTemplateEditor({
   }
 
   // ── Row mutations ──
-  const addRow = () => update([...rows, makeRow()]);
+  const addRow    = () => update([...rows, makeRow()]);
+  const addGapRow = () => update([...rows, { ...makeRow(), gap: 12 }]);
 
   const removeRow = rowId => {
     update(rows.filter(r => r.id !== rowId));
@@ -1367,6 +1546,14 @@ export default function MenuTemplateEditor({
         onToggle={() => setMenuRulesOpen(v => !v)}
       />
 
+      <LayoutStylesPanel
+        layoutStyles={layoutStyles}
+        onUpdateLayoutStyles={onUpdateLayoutStyles}
+        onSaveLayoutStyles={onSaveLayoutStyles}
+        open={layoutStylesOpen}
+        onToggle={() => setLayoutStylesOpen(v => !v)}
+      />
+
       {/* ── Three-panel layout ── */}
       <div style={{ display: "flex", flex: 1, minHeight: 0, gap: 0 }}>
 
@@ -1430,83 +1617,7 @@ export default function MenuTemplateEditor({
           >↺ REBUILD FROM COURSES</button>
           )}
 
-          {/* Column gap control */}
-          {leftOpen && onUpdateLayoutStyles && (
-            <div style={{ marginTop: 10, borderTop: "1px solid #ede9e0", paddingTop: 8 }}>
-              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1, color: "#bbb", textTransform: "uppercase", marginBottom: 5 }}>Column Gap</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <input
-                  type="number"
-                  step="0.5"
-                  value={layoutStyles.colGap ?? ""}
-                  placeholder="9"
-                  onChange={e => {
-                    const raw = e.target.value;
-                    const next = { ...layoutStyles };
-                    if (raw === "" || isNaN(parseFloat(raw))) delete next.colGap;
-                    else next.colGap = parseFloat(raw);
-                    onUpdateLayoutStyles(next);
-                  }}
-                  style={{ fontFamily: FONT, fontSize: 10, padding: "4px 6px", border: "1px solid #ddd", borderRadius: 3, width: 54, textAlign: "center" }}
-                />
-                <span style={{ fontFamily: FONT, fontSize: 9, color: "#aaa" }}>mm</span>
-                {onSaveLayoutStyles && (
-                  <button onClick={onSaveLayoutStyles} style={{
-                    fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "4px 8px",
-                    border: "1px solid #4b4b88", borderRadius: 2, cursor: "pointer",
-                    background: "#4b4b88", color: "#fff", marginLeft: "auto",
-                  }}>SAVE</button>
-                )}
-              </div>
-              {"colGap" in layoutStyles && (
-                <button onClick={() => { const next = { ...layoutStyles }; delete next.colGap; onUpdateLayoutStyles(next); }}
-                  style={{ fontFamily: FONT, fontSize: 7.5, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: "2px 0", marginTop: 2 }}>
-                  reset to default
-                </button>
-              )}
-
-              {/* Course column split */}
-              <div style={{ marginTop: 10 }}>
-                <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1, color: "#bbb", textTransform: "uppercase", marginBottom: 5 }}>
-                  Course Split (dish / wine)
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <input
-                    type="number"
-                    step="1"
-                    min="20"
-                    max="80"
-                    value={layoutStyles.courseColSplit ?? 55}
-                    onChange={e => {
-                      const raw = e.target.value;
-                      const next = { ...layoutStyles };
-                      const n = parseInt(raw, 10);
-                      if (isNaN(n)) delete next.courseColSplit;
-                      else next.courseColSplit = Math.min(80, Math.max(20, n));
-                      onUpdateLayoutStyles(next);
-                    }}
-                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 6px", border: "1px solid #ddd", borderRadius: 3, width: 54, textAlign: "center" }}
-                  />
-                  <span style={{ fontFamily: FONT, fontSize: 9, color: "#aaa" }}>
-                    / {100 - (layoutStyles.courseColSplit ?? 55)} %
-                  </span>
-                  {onSaveLayoutStyles && (
-                    <button onClick={onSaveLayoutStyles} style={{
-                      fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "4px 8px",
-                      border: "1px solid #4b4b88", borderRadius: 2, cursor: "pointer",
-                      background: "#4b4b88", color: "#fff", marginLeft: "auto",
-                    }}>SAVE</button>
-                  )}
-                </div>
-                {"courseColSplit" in layoutStyles && (
-                  <button onClick={() => { const next = { ...layoutStyles }; delete next.courseColSplit; onUpdateLayoutStyles(next); }}
-                    style={{ fontFamily: FONT, fontSize: 7.5, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: "2px 0", marginTop: 2 }}>
-                    reset to default (55)
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Spacing settings moved to the SPACING SETTINGS panel above the 3-panel area */}
         </div>
 
         {/* Scrollable row list */}
@@ -1567,12 +1678,12 @@ export default function MenuTemplateEditor({
           </DndContext>
         </div>}
 
-        {/* Add row */}
-        {leftOpen && <div style={{ padding: "8px", flexShrink: 0, borderTop: "1px solid #ede9e0" }}>
+        {/* Add row / add gap */}
+        {leftOpen && <div style={{ padding: "8px", flexShrink: 0, borderTop: "1px solid #ede9e0", display: "flex", gap: 4 }}>
           <button
             onClick={addRow}
             style={{
-              width: "100%", fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "8px 0",
+              flex: 1, fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "8px 0",
               border: "1.5px dashed #d0cec8", borderRadius: 3, cursor: "pointer",
               background: "transparent", color: "#bbb", textTransform: "uppercase",
               transition: "all 0.12s",
@@ -1580,6 +1691,18 @@ export default function MenuTemplateEditor({
             onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.color = GOLD; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = "#d0cec8"; e.currentTarget.style.color = "#bbb"; }}
           >+ ADD ROW</button>
+          <button
+            onClick={addGapRow}
+            title="Add a gap-only row for section spacing"
+            style={{
+              flex: 1, fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "8px 0",
+              border: "1.5px dashed #d4cfa0", borderRadius: 3, cursor: "pointer",
+              background: "transparent", color: "#c8b87a", textTransform: "uppercase",
+              transition: "all 0.12s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "#c8a96e"; e.currentTarget.style.color = "#c8a96e"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "#d4cfa0"; e.currentTarget.style.color = "#c8b87a"; }}
+          >+ ADD GAP</button>
         </div>}
       </aside>
 

@@ -85,14 +85,9 @@ export const BLOCK_META = {
   },
 
   // ── Layout blocks ─────────────────────────────────────────────────────────
-  spacer: {
-    label: "Spacer",        group: "layout", color: "#999", bg: "#f8f8f8", icon: "▫",
-    desc: "Empty vertical space — height adjustable in points",
-    fields: [
-      { key: "height", label: "Height (pt)", type: "number", step: 0.5 },
-    ],
-    defaults: { height: 8 },
-  },
+  // Note: spacer blocks have been replaced by gap rows (empty rows with row.gap set).
+  // Any saved spacer blocks in old templates are still handled gracefully by the
+  // generator (converted to pendingGap), but cannot be created from the editor.
   divider: {
     label: "Divider",       group: "layout", color: "#888", bg: "#f4f4f4", icon: "—",
     desc: "Full-width horizontal rule",
@@ -225,14 +220,16 @@ export function buildDefaultTemplate(menuCourses = []) {
   sorted.forEach((course, idx) => {
     const ck = course.course_key || `course_${idx}`;
 
-    // Section gap spacer (e.g. before danube_salmon or sheep_cheese)
+    // Section gap row (e.g. before danube_salmon or sheep_cheese)
+    // Uses a gap-only row (both cells null) — the gap value is deferred to the
+    // next visible content row in generateMenuHTML, so hidden courses collapse cleanly.
     if (course.section_gap_before && idx > 0) {
       rows.push({
         id: makeRowId("gap"),
-        left:  { type: "spacer", height: 14.5 },
+        left:  null,
         right: null,
         widthPreset: "100/0",
-        gap: 0,
+        gap: 14.5,
       });
     }
 

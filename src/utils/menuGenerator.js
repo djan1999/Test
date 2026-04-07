@@ -14,8 +14,6 @@ import { buildDefaultTemplate, parseWidthPreset } from "./menuTemplateSchema.js"
 
 export const DEFAULT_MENU_RULES = {
   preservePairingLabelSpacingWithoutPairing: true,
-  preserveCourseSectionGapFallback: true,
-  sectionGapFallbackPt: 14.5,
   forceCrayfishPairing: true,
   forceChickenGizzardBeer: true,
   overwriteTitleAndThankYouOnLanguageSwitch: true,
@@ -65,15 +63,6 @@ export function normalizeMenuRules(input = {}) {
     merged.preservePairingSectionGapWhenNoPairing,
     merged.preservePairingLabelGapWithoutPairing
   );
-  const preserveCourseGapFlag = firstDefined(
-    merged.preserveCourseSectionGapFallback,
-    merged.useCourseSectionGapFallback,
-    merged.applyCourseSectionGapFallback
-  );
-  const sectionGapValue = firstDefined(
-    merged.sectionGapFallbackPt,
-    merged.sectionGapPt
-  );
   const forceCrayfishFlag = firstDefined(
     merged.forceCrayfishPairing,
     merged.forceCrayfishPairingAlways
@@ -106,11 +95,6 @@ export function normalizeMenuRules(input = {}) {
   );
   return {
     preservePairingLabelSpacingWithoutPairing: boolWithDefault(preservePairingFlag, true),
-    preserveCourseSectionGapFallback: boolWithDefault(preserveCourseGapFlag, true),
-    sectionGapFallbackPt: (() => {
-      const n = Number(sectionGapValue);
-      return Number.isFinite(n) && n >= 0 ? n : DEFAULT_MENU_RULES.sectionGapFallbackPt;
-    })(),
     forceCrayfishPairing: boolWithDefault(forceCrayfishFlag, true),
     forceChickenGizzardBeer: boolWithDefault(forceGizzardBeerFlag, true),
     overwriteTitleAndThankYouOnLanguageSwitch: boolWithDefault(overwriteTitleAndThankYouFlag, true),
@@ -591,12 +575,13 @@ export function generateMenuHTML({
         right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
         rowClass: "",
         widthPreset: wp,
-        // Preserve section breaks even if the template is missing an explicit spacer row.
-        // (e.g. legacy templates where "Gap Before" was toggled later in course data)
         gap: (() => {
           const templateGap = consumeGap();
           if (templateGap > 0) return templateGap;
-          return (rules.preserveCourseSectionGapFallback && course?.section_gap_before) ? rules.sectionGapFallbackPt : 0;
+          // Legacy fallback: honour section_gap_before on course data when template has no gap row.
+          // Templates built since the gap-row refactor always have explicit gap rows, so this
+          // only fires for old saved templates that pre-date the refactor.
+          return course?.section_gap_before ? 14.5 : 0;
         })(),
       });
       continue;
@@ -750,7 +735,7 @@ body{position:relative;}
 #sheet{width:var(--page-w);height:var(--page-h);overflow:hidden;position:relative;background:#fff;}
 #frame{position:absolute;inset:0;padding:var(--pad-t) var(--pad-r) var(--pad-b) var(--pad-l);overflow:hidden;}
 #scaleTarget{width:100%;min-height:var(--inner-h);display:flex;flex-direction:column;transform-origin:top left;}
-.menu-header-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8.6mm;margin-bottom:${s("headerSpacing",7)}mm;}
+.menu-header-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:${s("headerColGap",8.6)}mm;margin-bottom:${s("headerSpacing",7)}mm;}
 #title{font-size:${titleFontSize}pt;font-weight:700;letter-spacing:${titleTracking}em;text-transform:${titleTransform};text-align:${titleAlign};}
 #menu-date{font-size:5.8pt;font-weight:400;letter-spacing:0.02em;margin-top:0.8mm;text-transform:none;}
 #logo{transform:translate(${logoOffsetX}mm,${logoOffsetY}mm);}
