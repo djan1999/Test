@@ -44,8 +44,6 @@ const toLocalDateISO = (date = new Date()) =>
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
 const APP_SUBTITLE = String(import.meta.env.VITE_APP_SUBTITLE || "SERVICE BOARD").trim() || "SERVICE BOARD";
 
-const DEFAULT_MENU_TITLE_EN = String(import.meta.env.VITE_DEFAULT_MENU_TITLE_EN || "MENU").trim() || "MENU";
-const DEFAULT_MENU_TITLE_SI = "Zimski Meni";
 const DEFAULT_THANK_YOU_EN = String(import.meta.env.VITE_DEFAULT_THANK_YOU_EN || "Thank you for your visit.").trim() || "Thank you for your visit.";
 const DEFAULT_THANK_YOU_SI = String(import.meta.env.VITE_DEFAULT_THANK_YOU_SI || "Hvala za vaš obisk.").trim() || "Hvala za vaš obisk.";
 const DEFAULT_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "01,11,12,21,22,23")
@@ -3866,10 +3864,6 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
             <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Menu Title</div>
             <input value={menuTitle} onChange={e => setMenuTitle(e.target.value)}
               style={{ fontFamily: FONT, fontSize: 11, padding: "8px 10px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }} />
-            <button onClick={() => setMenuTitle(lang === "si" ? DEFAULT_MENU_TITLE_SI : DEFAULT_MENU_TITLE_EN)} style={{
-              marginTop: 6, fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "4px 8px",
-              border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888",
-            }}>reset default</button>
           </div>
           <div style={{ flex: 2, minWidth: 220 }}>
             <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Team</div>
