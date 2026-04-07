@@ -1324,6 +1324,36 @@ export default function MenuTemplateEditor({
   const template = menuTemplate || { version: 2, rows: [] };
   const rows = template.rows || [];
 
+  // ── One-time migration: convert any old spacer-block rows to gap rows ──────
+  // Old templates stored gaps as { left: { type: "spacer", height: N } } rows.
+  // We silently fold the spacer height into row.gap so they render as gap rows.
+  useEffect(() => {
+    if (!menuTemplate?.rows) return;
+    const hasSpacers = menuTemplate.rows.some(
+      r => r.left?.type === "spacer" || r.right?.type === "spacer"
+    );
+    if (!hasSpacers) return;
+    const migrated = {
+      ...menuTemplate,
+      rows: menuTemplate.rows.map(row => {
+        const lSpacer = row.left?.type === "spacer";
+        const rSpacer = row.right?.type === "spacer";
+        if (!lSpacer && !rSpacer) return row;
+        const spacerH = Math.max(
+          lSpacer ? (row.left.height ?? 8) : 0,
+          rSpacer ? (row.right.height ?? 8) : 0,
+        );
+        return {
+          ...row,
+          left:  lSpacer ? null : row.left,
+          right: rSpacer ? null : row.right,
+          gap:   (row.gap || 0) + spacerH,
+        };
+      }),
+    };
+    onUpdateTemplate(migrated);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // menuTitle and thankYouNote come from state (shared localStorage with MenuGenerator)
 
   // ── Keyboard: Escape deselects / closes picker ──

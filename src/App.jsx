@@ -5640,7 +5640,6 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
               setDraftFromReservation(null);
             }}
               style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: "pointer", background: editingId === "new" ? "#1a1a1a" : "#fff", color: editingId === "new" ? "#fff" : "#1a1a1a", fontWeight: 600 }}>+ ADD</button>
-            )}
           </div>
         </div>
 
