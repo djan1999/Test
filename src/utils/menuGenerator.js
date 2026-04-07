@@ -13,7 +13,6 @@ import { applyCourseRestriction } from "./menuUtils.js";
 import { buildDefaultTemplate, parseWidthPreset } from "./menuTemplateSchema.js";
 
 export const DEFAULT_MENU_RULES = {
-  preservePairingLabelSpacingWithoutPairing: true,
   forceCrayfishPairing: true,
   forceChickenGizzardBeer: true,
   overwriteTitleAndThankYouOnLanguageSwitch: true,
@@ -58,11 +57,6 @@ export function normalizeMenuRules(input = {}) {
     if (typeof value === "string") return value.trim().toLowerCase() !== "false";
     return value !== false;
   };
-  const preservePairingFlag = firstDefined(
-    merged.preservePairingLabelSpacingWithoutPairing,
-    merged.preservePairingSectionGapWhenNoPairing,
-    merged.preservePairingLabelGapWithoutPairing
-  );
   const forceCrayfishFlag = firstDefined(
     merged.forceCrayfishPairing,
     merged.forceCrayfishPairingAlways
@@ -94,7 +88,6 @@ export function normalizeMenuRules(input = {}) {
     DEFAULT_MENU_RULES.forceBeerCourseKeys
   );
   return {
-    preservePairingLabelSpacingWithoutPairing: boolWithDefault(preservePairingFlag, true),
     forceCrayfishPairing: boolWithDefault(forceCrayfishFlag, true),
     forceChickenGizzardBeer: boolWithDefault(forceGizzardBeerFlag, true),
     overwriteTitleAndThankYouOnLanguageSwitch: boolWithDefault(overwriteTitleAndThankYouFlag, true),
@@ -415,9 +408,9 @@ export function generateMenuHTML({
     const plBlock = lb?.type === "pairing_label" ? lb : rb?.type === "pairing_label" ? rb : null;
     if (plBlock) {
       if (!isShort) {
-        const keepWhenNoPairing =
-          plBlock.keepWhenNoPairing === true ||
-          (plBlock.keepWhenNoPairing !== false && rules.preservePairingLabelSpacingWithoutPairing);
+        // Per-block control. Default is to keep the reserved row (back-compat with old global behavior).
+        // Set to false on the block to disable reserving space when no pairing is selected.
+        const keepWhenNoPairing = plBlock.keepWhenNoPairing !== false;
         if (!hasPairing && !keepWhenNoPairing) {
           continue;
         }

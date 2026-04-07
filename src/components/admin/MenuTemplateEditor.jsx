@@ -978,14 +978,6 @@ function MenuRulesPanel({
             <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
               <input
                 type="checkbox"
-                checked={rules.preservePairingLabelSpacingWithoutPairing !== false}
-                onChange={e => setRule("preservePairingLabelSpacingWithoutPairing", e.target.checked)}
-              />
-              Keep section gap when pairing label is empty
-            </label>
-            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
-              <input
-                type="checkbox"
                 checked={rules.forceCrayfishPairing !== false}
                 onChange={e => setRule("forceCrayfishPairing", e.target.checked)}
               />
