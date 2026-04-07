@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
   DndContext, PointerSensor, TouchSensor,
@@ -6536,6 +6536,7 @@ export default function App() {
       const r = await fetch(url);
       const json = await r.json();
       if (!r.ok) return { ok: false, error: json.error || String(r.status) };
+      await loadWines(); // explicit reload after sync completes
       return { ok: true, wines: json.wines, cocktails: json.cocktails, beers: json.beers, spirits: json.spirits, failedCountries: json.failedCountries };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -7117,30 +7118,29 @@ export default function App() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Wines: load from Supabase wines table + realtime ─────────────────────────
+  const loadWines = useCallback(async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("wines")
+      .select("key, name, wine_name, producer, vintage, region, country, by_glass")
+      .order("name", { ascending: true });
+    if (error || !data) return;
+    setWines(data.map(r => ({
+      id: r.key, name: r.wine_name || r.name,
+      producer: r.producer || "", vintage: r.vintage || "",
+      region: r.region || "", country: r.country || "",
+      byGlass: r.by_glass ?? false,
+    })));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!supabase) return;
-    let mounted = true;
-
-    const loadWines = async () => {
-      const { data, error } = await supabase
-        .from("wines")
-        .select("key, name, wine_name, producer, vintage, region, country, by_glass")
-        .order("name", { ascending: true });
-      if (!mounted || error || !data) return;
-      setWines(data.map(r => ({
-        id: r.key, name: r.wine_name || r.name,
-        producer: r.producer || "", vintage: r.vintage || "",
-        region: r.region || "", country: r.country || "",
-        byGlass: r.by_glass ?? false,
-      })));
-    };
-
     loadWines();
     const wineChannel = supabase.channel("milka-wines")
       .on("postgres_changes", { event: "*", schema: "public", table: "wines" }, loadWines)
       .subscribe();
-    return () => { mounted = false; supabase.removeChannel(wineChannel); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => supabase.removeChannel(wineChannel);
+  }, [loadWines]);
 
   // ── Service date + reservations: load from Supabase + realtime ──────────────
   useEffect(() => {

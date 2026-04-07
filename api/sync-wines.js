@@ -210,32 +210,29 @@ export default async function handler(req, res) {
     if (!supabaseUrl || !supabaseKey) throw new Error("Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_KEY)");
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Sync wines
+    // Sync wines — delete existing rows for synced countries, then insert fresh ones.
+    // This avoids a huge NOT IN query (400+ keys would exceed PostgREST URL limits).
     let winesUpserted = 0;
     if (successfulCountries.length > 0) {
       const seen = new Set();
       const uniqueWines = allWines.filter(w => { if (seen.has(w.key)) return false; seen.add(w.key); return true; });
-      const BATCH = 200;
-      if (uniqueWines.length > 0) {
-        for (let i = 0; i < uniqueWines.length; i += BATCH) {
-          const { error } = await supabase.from("wines").upsert(uniqueWines.slice(i, i + BATCH), { onConflict: "key" });
-          if (error) throw error;
-          winesUpserted += uniqueWines.slice(i, i + BATCH).length;
-        }
-      }
       const syncedCountryLabels = successfulCountries.map(r => r.label);
-      // Only delete stale wines from countries we successfully fetched.
-      // This prevents wiping a country's wines when its page fails to load.
-      let deleteQ = supabase
+
+      // Delete all existing wines for successfully-fetched countries first.
+      // Countries that failed are left untouched so their wines remain available.
+      const { error: deleteError } = await supabase
         .from("wines")
         .delete()
         .in("country", syncedCountryLabels);
-      if (uniqueWines.length > 0) {
-        const freshKeys = uniqueWines.map(w => w.key);
-        deleteQ = deleteQ.not("key", "in", `(${freshKeys.map(k => `"${k}"`).join(",")})`);
-      }
-      const { error: deleteError } = await deleteQ;
       if (deleteError) console.warn("[sync] wines delete error:", deleteError.message);
+
+      // Insert all fresh wines in batches.
+      const BATCH = 200;
+      for (let i = 0; i < uniqueWines.length; i += BATCH) {
+        const { error } = await supabase.from("wines").insert(uniqueWines.slice(i, i + BATCH));
+        if (error) throw error;
+        winesUpserted += uniqueWines.slice(i, i + BATCH).length;
+      }
     }
 
     // Sync beverages — replace all 3 categories fresh every run
