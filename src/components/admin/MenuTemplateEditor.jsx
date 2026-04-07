@@ -1123,9 +1123,6 @@ export default function MenuTemplateEditor({
   const [menuTitle,    setMenuTitle]    = useState(() => readMenuTitle("en"));
   const [thankYouNote, setThankYouNote] = useState(() => readThankYouNote("en"));
 
-  useEffect(() => { writeMenuTitle(previewLang, menuTitle); },    [menuTitle, previewLang]);
-  useEffect(() => { writeThankYouNote(previewLang, thankYouNote); }, [thankYouNote, previewLang]);
-
   // When language is switched, load stored values for the new language
   const handleLangChange = (nextLang) => {
     writeMenuTitle(previewLang, menuTitle);
@@ -1346,7 +1343,7 @@ export default function MenuTemplateEditor({
           <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", whiteSpace: "nowrap" }}>Menu Title</span>
           <input
             value={menuTitle}
-            onChange={e => setMenuTitle(e.target.value)}
+            onChange={e => { setMenuTitle(e.target.value); writeMenuTitle(previewLang, e.target.value); }}
             style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", flex: 1, minWidth: 80 }}
           />
         </div>
@@ -1354,7 +1351,7 @@ export default function MenuTemplateEditor({
           <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", whiteSpace: "nowrap" }}>Thank You Note</span>
           <input
             value={thankYouNote}
-            onChange={e => setThankYouNote(e.target.value)}
+            onChange={e => { setThankYouNote(e.target.value); writeThankYouNote(previewLang, e.target.value); }}
             style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", flex: 1, minWidth: 140 }}
           />
         </div>

@@ -3690,13 +3690,9 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
   }, [teamNames]);
 
   // Persist menu title and thank-you note per language to localStorage
-  useEffect(() => {
-    writeMenuTitle(lang, menuTitle);
-  }, [menuTitle, lang]);
-
-  useEffect(() => {
-    writeThankYouNote(lang, thankYouNote);
-  }, [thankYouNote, lang]);
+  // Note: writes happen directly in onChange and setLanguageWithDefaults — NOT here as a
+  // side-effect — to avoid a React batching race where lang changes before menuTitle does,
+  // causing the wrong language's key to get overwritten.
 
   // Save menu title to Supabase when changed
   useEffect(() => {
@@ -3866,7 +3862,7 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
         <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 160 }}>
             <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Menu Title</div>
-            <input value={menuTitle} onChange={e => setMenuTitle(e.target.value)}
+            <input value={menuTitle} onChange={e => { setMenuTitle(e.target.value); writeMenuTitle(lang, e.target.value); }}
               style={{ fontFamily: FONT, fontSize: 11, padding: "8px 10px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }} />
           </div>
           <div style={{ flex: 2, minWidth: 220 }}>
@@ -3878,7 +3874,7 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
         <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 220 }}>
             <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Thank You Note</div>
-            <input value={thankYouNote} onChange={e => setThankYouNote(e.target.value)}
+            <input value={thankYouNote} onChange={e => { setThankYouNote(e.target.value); writeThankYouNote(lang, e.target.value); }}
               style={{ fontFamily: FONT, fontSize: 11, padding: "8px 10px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }} />
           </div>
         </div>
