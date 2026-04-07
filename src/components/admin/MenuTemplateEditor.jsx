@@ -29,6 +29,7 @@ import {
   BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
 } from "../../utils/menuTemplateSchema.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
+import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote } from "../../utils/storage.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1118,6 +1119,22 @@ export default function MenuTemplateEditor({
   const [previewLang,     setPreviewLang]       = useState("en");
   const [previewMenuType, setPreviewMenuType]   = useState("");
 
+  // ── Menu title / thank-you note — read from shared localStorage, same source as MenuGenerator ──
+  const [menuTitle,    setMenuTitle]    = useState(() => readMenuTitle("en"));
+  const [thankYouNote, setThankYouNote] = useState(() => readThankYouNote("en"));
+
+  useEffect(() => { writeMenuTitle(previewLang, menuTitle); },    [menuTitle, previewLang]);
+  useEffect(() => { writeThankYouNote(previewLang, thankYouNote); }, [thankYouNote, previewLang]);
+
+  // When language is switched, load stored values for the new language
+  const handleLangChange = (nextLang) => {
+    writeMenuTitle(previewLang, menuTitle);
+    writeThankYouNote(previewLang, thankYouNote);
+    setPreviewLang(nextLang);
+    setMenuTitle(readMenuTitle(nextLang));
+    setThankYouNote(readThankYouNote(nextLang));
+  };
+
   const setPreviewGuests = (n) => {
     const count = Math.max(1, Math.min(8, n));
     setPreviewGuestsRaw(count);
@@ -1132,27 +1149,7 @@ export default function MenuTemplateEditor({
   const template = menuTemplate || { version: 2, rows: [] };
   const rows = template.rows || [];
 
-  // ── Derive menu title / thank-you from template blocks (lang-aware) ──
-  const pickLangText = (block, enFallback, siFallback) => {
-    if (!block) return previewLang === "si" ? siFallback : enFallback;
-    return previewLang === "si"
-      ? (block.text_si?.trim() || block.text?.trim() || siFallback)
-      : (block.text?.trim() || enFallback);
-  };
-  const menuTitle = (() => {
-    for (const r of rows) {
-      const tb = r.left?.type === "title" ? r.left : r.right?.type === "title" ? r.right : null;
-      if (tb) return pickLangText(tb, "WINTER MENU", "ZIMSKI MENI");
-    }
-    return previewLang === "si" ? "ZIMSKI MENI" : "WINTER MENU";
-  })();
-  const thankYouNote = (() => {
-    for (const r of rows) {
-      const gb = r.left?.type === "goodbye" ? r.left : r.right?.type === "goodbye" ? r.right : null;
-      if (gb) return pickLangText(gb, "Thank you for your visit.", "Hvala za vaš obisk.");
-    }
-    return previewLang === "si" ? "Hvala za vaš obisk." : "Thank you for your visit.";
-  })();
+  // menuTitle and thankYouNote come from state (shared localStorage with MenuGenerator)
 
   // ── Keyboard: Escape deselects / closes picker ──
   useEffect(() => {
@@ -1198,7 +1195,7 @@ export default function MenuTemplateEditor({
       setPreviewLoading(false);
     }, 250);
     return () => clearTimeout(previewTimer.current);
-  }, [template, menuCourses, logoDataUri, layoutStyles, menuRules, previewSeats, previewSeatIdx, previewBottles, previewLang, previewMenuType]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [template, menuCourses, logoDataUri, layoutStyles, menuRules, previewSeats, previewSeatIdx, previewBottles, previewLang, previewMenuType, menuTitle, thankYouNote]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = useCallback(newRows => {
     onUpdateTemplate({ ...template, rows: newRows });
@@ -1338,10 +1335,31 @@ export default function MenuTemplateEditor({
         seatIdx={previewSeatIdx}   onSeatIdxChange={setPreviewSeatIdx}
         seats={previewSeats}       onUpdateSeat={updatePreviewSeat}
         bottleWines={previewBottles} onBottleWinesChange={setPreviewBottles}
-        lang={previewLang}         onLangChange={setPreviewLang}
+        lang={previewLang}         onLangChange={handleLangChange}
         menuType={previewMenuType} onMenuTypeChange={setPreviewMenuType}
         open={previewDataOpen}     onToggle={() => setPreviewDataOpen(v => !v)}
       />
+
+      {/* ── Menu Title + Thank You Note (shared with MenuGenerator via localStorage) ── */}
+      <div style={{ display: "flex", gap: 12, padding: "8px 14px", borderBottom: "1px solid #ede9e0", background: "#faf9f7", alignItems: "center", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", whiteSpace: "nowrap" }}>Menu Title</span>
+          <input
+            value={menuTitle}
+            onChange={e => setMenuTitle(e.target.value)}
+            style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", flex: 1, minWidth: 80 }}
+          />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 2 }}>
+          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", whiteSpace: "nowrap" }}>Thank You Note</span>
+          <input
+            value={thankYouNote}
+            onChange={e => setThankYouNote(e.target.value)}
+            style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", flex: 1, minWidth: 140 }}
+          />
+        </div>
+      </div>
+
       <MenuRulesPanel
         menuRules={menuRules}
         onUpdateMenuRules={onUpdateMenuRules}
