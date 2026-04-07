@@ -415,7 +415,10 @@ export function generateMenuHTML({
     const plBlock = lb?.type === "pairing_label" ? lb : rb?.type === "pairing_label" ? rb : null;
     if (plBlock) {
       if (!isShort) {
-        if (!hasPairing && !rules.preservePairingLabelSpacingWithoutPairing) {
+        const keepWhenNoPairing =
+          plBlock.keepWhenNoPairing === true ||
+          (plBlock.keepWhenNoPairing !== false && rules.preservePairingLabelSpacingWithoutPairing);
+        if (!hasPairing && !keepWhenNoPairing) {
           continue;
         }
         const autoLabel = PAIRING_LABELS[pkey] || "PAIRING";
@@ -430,6 +433,7 @@ export function generateMenuHTML({
           // Preserve section break spacing even when the seat has no pairing.
           label: hasPairing ? label : "",
           reserveHeight: !hasPairing,
+          reserveMinHeight: plBlock.reserveMinHeight ?? null,
           side: plSide,
           align: plBlock.align || "right",
           spacing: plBlock.spacing ?? 6,
@@ -671,7 +675,9 @@ export function generateMenuHTML({
       const emptyDiv = `<div></div>`;
       const leftHtml = row.side === "left" ? labelHtml : emptyDiv;
       const rightHtml = row.side === "right" ? labelHtml : emptyDiv;
-      return `<div class="menu-row" style="${gapStyle}margin-bottom:${mbPt}pt;${gridCols(row.widthPreset)}">${leftHtml}${rightHtml}</div>`;
+      const reservePt = Number(row.reservePt ?? 0) || 0;
+      const reserveStyle = reserveHeight && reservePt > 0 ? `min-height:${reservePt}pt;` : "";
+      return `<div class="menu-row" style="${gapStyle}${reserveStyle}margin-bottom:${mbPt}pt;${gridCols(row.widthPreset)}">${leftHtml}${rightHtml}</div>`;
     }
     if (row.type === "wine-only") {
       return `<div class="menu-row wine-only" style="${gapStyle}${gridCols(row.widthPreset)}">${renderBlock(null, "left")}${renderBlock(row.right, "right")}</div>`;

@@ -61,9 +61,11 @@ export const BLOCK_META = {
     fields: [
       { key: "text",      label: "Label override",    type: "text",   placeholder: "Leave empty for auto" },
       { key: "align",     label: "Alignment",          type: "select", options: ["left", "center", "right"] },
+      { key: "reserveWhenNoPairing", label: "Keep reserved row when no pairing", type: "checkbox" },
+      { key: "reserveHeightPt",      label: "Reserved row height (pt)",          type: "number", step: 0.5, min: 0 },
       { key: "spacing",   label: "Spacing below (pt)", type: "number", step: 0.5 },
     ],
-    defaults: { text: "", align: "right", spacing: 6 },
+    defaults: { text: "", align: "right", reserveWhenNoPairing: null, reserveHeightPt: null, spacing: 6 },
   },
   by_the_glass: {
     label: "By the Glass",  group: "content", color: "#5a9e6e", bg: "#f0f8f2", icon: "◷",
