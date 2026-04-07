@@ -22,6 +22,7 @@ import {
   readLocalBeverages, writeLocalBeverages,
   readTeamNames, writeTeamNames,
   readMenuTitle, writeMenuTitle,
+  readThankYouNote, writeThankYouNote,
   readLocalBoardState, writeLocalBoardState,
   BEV_STORAGE_KEY, TEAM_STORAGE_KEY, STORAGE_KEY,
 } from "./utils/storage.js";
@@ -44,8 +45,6 @@ const toLocalDateISO = (date = new Date()) =>
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
 const APP_SUBTITLE = String(import.meta.env.VITE_APP_SUBTITLE || "SERVICE BOARD").trim() || "SERVICE BOARD";
 
-const DEFAULT_THANK_YOU_EN = String(import.meta.env.VITE_DEFAULT_THANK_YOU_EN || "Thank you for your visit.").trim() || "Thank you for your visit.";
-const DEFAULT_THANK_YOU_SI = String(import.meta.env.VITE_DEFAULT_THANK_YOU_SI || "Hvala za vaš obisk.").trim() || "Hvala za vaš obisk.";
 const DEFAULT_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "01,11,12,21,22,23")
   .split(",")
   .map(s => s.trim())
@@ -3651,7 +3650,7 @@ function BevEditRow({ emoji, label, items, onUpdate }) {
 function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutStyles = {}, menuTemplate = null, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [], aperitifOptions = [], menuRules = DEFAULT_MENU_RULES }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState(() => readMenuTitle(table.lang || "en"));
-  const [thankYouNote, setThankYouNote] = useState(table.lang === "si" ? DEFAULT_THANK_YOU_SI : DEFAULT_THANK_YOU_EN);
+  const [thankYouNote, setThankYouNote] = useState(() => readThankYouNote(table.lang || "en"));
   const [lang, setLang] = useState(table.lang || "en");
   // Per-seat ephemeral one-time edits — { [seatId]: { [courseKey]: { name?, sub? } } }
   // Cleared automatically after the PDF for that seat is generated.
@@ -3690,10 +3689,14 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
       .then(() => {});
   }, [teamNames]);
 
-  // Persist menu title per language to localStorage so it becomes the new default
+  // Persist menu title and thank-you note per language to localStorage
   useEffect(() => {
     writeMenuTitle(lang, menuTitle);
   }, [menuTitle, lang]);
+
+  useEffect(() => {
+    writeThankYouNote(lang, thankYouNote);
+  }, [thankYouNote, lang]);
 
   // Save menu title to Supabase when changed
   useEffect(() => {
@@ -3757,11 +3760,12 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
   const normalizedMenuRules = normalizeMenuRules(menuRules);
 
   const setLanguageWithDefaults = (nextLang) => {
-    writeMenuTitle(lang, menuTitle); // save current title before switching
+    writeMenuTitle(lang, menuTitle);
+    writeThankYouNote(lang, thankYouNote);
     setLang(nextLang);
     if (normalizedMenuRules?.overwriteTitleAndThankYouOnLanguageSwitch !== false) {
       setMenuTitle(readMenuTitle(nextLang));
-      setThankYouNote(nextLang === "si" ? DEFAULT_THANK_YOU_SI : DEFAULT_THANK_YOU_EN);
+      setThankYouNote(readThankYouNote(nextLang));
     }
   };
 
@@ -3876,10 +3880,6 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
             <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Thank You Note</div>
             <input value={thankYouNote} onChange={e => setThankYouNote(e.target.value)}
               style={{ fontFamily: FONT, fontSize: 11, padding: "8px 10px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", width: "100%" }} />
-            <button onClick={() => setThankYouNote(lang === "si" ? DEFAULT_THANK_YOU_SI : DEFAULT_THANK_YOU_EN)} style={{
-              marginTop: 6, fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "4px 8px",
-              border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888",
-            }}>reset default</button>
           </div>
         </div>
 

@@ -40,22 +40,30 @@ export function writeTeamNames(value) {
 
 export const MENU_TITLE_EN_KEY = "milka-menu-title-en-v1";
 export const MENU_TITLE_SI_KEY = "milka-menu-title-si-v1";
-const MENU_TITLE_EN_FALLBACK = "MENU";
-const MENU_TITLE_SI_FALLBACK = "Zimski Meni";
+export const THANK_YOU_EN_KEY  = "milka-thankyou-en-v1";
+export const THANK_YOU_SI_KEY  = "milka-thankyou-si-v1";
 
 export function readMenuTitle(lang) {
   const key = lang === "si" ? MENU_TITLE_SI_KEY : MENU_TITLE_EN_KEY;
-  const fallback = lang === "si" ? MENU_TITLE_SI_FALLBACK : MENU_TITLE_EN_FALLBACK;
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw && raw.trim() ? raw : fallback;
-  } catch { return fallback; }
+  if (typeof window === "undefined") return "";
+  try { return window.localStorage.getItem(key) ?? ""; } catch { return ""; }
 }
 
 export function writeMenuTitle(lang, value) {
   if (typeof window === "undefined") return;
   const key = lang === "si" ? MENU_TITLE_SI_KEY : MENU_TITLE_EN_KEY;
+  try { window.localStorage.setItem(key, value || ""); } catch {}
+}
+
+export function readThankYouNote(lang) {
+  const key = lang === "si" ? THANK_YOU_SI_KEY : THANK_YOU_EN_KEY;
+  if (typeof window === "undefined") return "";
+  try { return window.localStorage.getItem(key) ?? ""; } catch { return ""; }
+}
+
+export function writeThankYouNote(lang, value) {
+  if (typeof window === "undefined") return;
+  const key = lang === "si" ? THANK_YOU_SI_KEY : THANK_YOU_EN_KEY;
   try { window.localStorage.setItem(key, value || ""); } catch {}
 }
 

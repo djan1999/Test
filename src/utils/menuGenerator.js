@@ -466,10 +466,7 @@ export function generateMenuHTML({
     // ── goodbye → thank-you row ──
     const gbBlock = lb?.type === "goodbye" ? lb : rb?.type === "goodbye" ? rb : null;
     if (gbBlock) {
-      const gbText = lang === "si"
-        ? (gbBlock.text_si?.trim() || gbBlock.text?.trim())
-        : gbBlock.text?.trim();
-      rows.push({ type: "thankyou", _text: gbText || thankYouNote, fontSize: gbBlock.fontSize, align: gbBlock.align, gap: consumeGap(), pinToBottom: !!tRow.pinToBottom });
+      rows.push({ type: "thankyou", _text: thankYouNote, fontSize: gbBlock.fontSize, align: gbBlock.align, gap: consumeGap(), pinToBottom: !!tRow.pinToBottom });
       continue;
     }
 
@@ -707,14 +704,14 @@ export function generateMenuHTML({
     if (row.type === "_team") {
       const tmB = row.block || {};
       const spacing = tmB.spacing ?? 1.4;
-      const names = tmB.names || teamNames;
+      const names = teamNames;
       const taStyle = (tmB.align && tmB.align !== "left") ? `text-align:${tmB.align};` : "";
       return `<div id="team" class="${pin ? "pin-bottom" : ""}" style="${pin ? "" : gapStyle}${taStyle}"><div class="menu-main" style="margin-bottom:${spacing}pt">TEAM:</div><div>${esc(names)}</div></div>`;
     }
     if (row.type === "thankyou") {
       const fs = row.fontSize ? `font-size:${row.fontSize}pt;` : "";
       const ta = (row.align && row.align !== "left") ? `text-align:${row.align};` : "";
-      return `<div class="menu-thankyou ${pin ? "pin-bottom" : ""}" style="${pin ? "" : gapStyle}${fs}${ta}">${esc(row._text || thankYouNote)}</div>`;
+      return `<div class="menu-thankyou ${pin ? "pin-bottom" : ""}" style="${pin ? "" : gapStyle}${fs}${ta}">${esc(row._text)}</div>`;
     }
     // course / text rows
     const ckAttr = row.courseKey ? ` data-ck="${esc(row.courseKey)}"` : "";
