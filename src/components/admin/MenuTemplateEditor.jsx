@@ -1326,6 +1326,29 @@ export default function MenuTemplateEditor({
     onUpdateTemplate(migrated);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── One-time migration: normalize row.gap into explicit gap rows ────────────
+  // Older saved templates may have "gap above" stored directly on content rows.
+  // Since gaps are now edited only via explicit gap-only rows, we convert:
+  //   [ { gap: N, left/right: content } ] → [ { gapRow(N) }, { gap: 0, content } ]
+  // This makes every gap visible/editable in the row list.
+  useEffect(() => {
+    if (!menuTemplate?.rows) return;
+    const needsNormalize = menuTemplate.rows.some(r => (r?.gap || 0) > 0 && (r.left || r.right));
+    if (!needsNormalize) return;
+    const normalized = [];
+    for (const r of menuTemplate.rows) {
+      const g = Number(r?.gap || 0) || 0;
+      const hasContent = !!(r?.left || r?.right);
+      if (g > 0 && hasContent) {
+        normalized.push({ ...makeRow(), left: null, right: null, widthPreset: "100/0", gap: g });
+        normalized.push({ ...r, gap: 0 });
+      } else {
+        normalized.push(r);
+      }
+    }
+    onUpdateTemplate({ ...menuTemplate, rows: normalized });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // menuTitle and thankYouNote come from state (shared localStorage with MenuGenerator)
 
   // ── Keyboard: Escape deselects / closes picker ──
