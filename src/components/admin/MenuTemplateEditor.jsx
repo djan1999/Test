@@ -178,7 +178,9 @@ function SortableRow({
 
   const leftSelected  = selectedCell?.rowId === row.id && selectedCell?.side === "left";
   const rightSelected = selectedCell?.rowId === row.id && selectedCell?.side === "right";
-  const isGapRow = !row.left && !row.right;
+  // Gap rows are explicit "spacing" rows: both cells empty AND gap > 0.
+  // Empty content rows (both cells empty, gap = 0) should still allow adding blocks.
+  const isGapRow = !row.left && !row.right && (Number(row.gap || 0) > 0);
 
   return (
     <div ref={setNodeRef} style={{ ...style, marginBottom: 2 }}>
