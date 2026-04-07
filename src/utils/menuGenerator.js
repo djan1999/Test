@@ -235,7 +235,20 @@ export function generateMenuHTML({
     return { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
   };
 
-  const resolveForcedPairingDrink = (course, rawCourseKey, normKey) => {
+  const resolveForcedPairingDrink = (course, rawCourseKey, normKey, override = null) => {
+    // Explicit override from template block (highest priority)
+    if (override && typeof override === "object") {
+      const oT = String(override.title || "").trim();
+      const oS = String(override.sub || "").trim();
+      const oTSi = String(override.title_si || "").trim();
+      const oSSi = String(override.sub_si || "").trim();
+      if (lang === "si") {
+        if (oTSi || oSSi) return { name: oTSi, sub: oSSi };
+        if (oT || oS) return { name: oT, sub: oS };
+      } else {
+        if (oT || oS) return { name: oT, sub: oS };
+      }
+    }
     const hasExplicitForcePairing =
       !!String(course?.force_pairing_title || "").trim() ||
       !!String(course?.force_pairing_sub || "").trim() ||
