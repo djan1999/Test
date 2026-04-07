@@ -44,7 +44,7 @@ const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MIL
 const APP_SUBTITLE = String(import.meta.env.VITE_APP_SUBTITLE || "SERVICE BOARD").trim() || "SERVICE BOARD";
 
 const DEFAULT_MENU_TITLE_EN = String(import.meta.env.VITE_DEFAULT_MENU_TITLE_EN || "MENU").trim() || "MENU";
-const DEFAULT_MENU_TITLE_SI = String(import.meta.env.VITE_DEFAULT_MENU_TITLE_SI || "MENI").trim() || "MENI";
+const DEFAULT_MENU_TITLE_SI = "Zimski Meni";
 const DEFAULT_THANK_YOU_EN = String(import.meta.env.VITE_DEFAULT_THANK_YOU_EN || "Thank you for your visit.").trim() || "Thank you for your visit.";
 const DEFAULT_THANK_YOU_SI = String(import.meta.env.VITE_DEFAULT_THANK_YOU_SI || "Hvala za vaš obisk.").trim() || "Hvala za vaš obisk.";
 const DEFAULT_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "01,11,12,21,22,23")
@@ -3651,7 +3651,7 @@ function BevEditRow({ emoji, label, items, onUpdate }) {
 
 function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutStyles = {}, menuTemplate = null, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [], aperitifOptions = [], menuRules = DEFAULT_MENU_RULES }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
-  const [menuTitle, setMenuTitle] = useState(DEFAULT_MENU_TITLE_EN);
+  const [menuTitle, setMenuTitle] = useState(table.lang === "si" ? DEFAULT_MENU_TITLE_SI : DEFAULT_MENU_TITLE_EN);
   const [thankYouNote, setThankYouNote] = useState(table.lang === "si" ? DEFAULT_THANK_YOU_SI : DEFAULT_THANK_YOU_EN);
   const [lang, setLang] = useState(table.lang || "en");
   // Per-seat ephemeral one-time edits — { [seatId]: { [courseKey]: { name?, sub? } } }

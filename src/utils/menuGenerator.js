@@ -673,7 +673,7 @@ export function generateMenuHTML({
     }
     return null;
   })();
-  const TITLE_FALLBACK = lang === "si" ? "ZIMSKI MENI" : "WINTER MENU";
+  const TITLE_FALLBACK = lang === "si" ? "Zimski Meni" : "WINTER MENU";
   const safeTitle = esc((_titleBlockText || menuTitle || TITLE_FALLBACK).replace(/\s+/g, " ").trim());
 
   // ── Render rows to HTML ───────────────────────────────────────────────────
