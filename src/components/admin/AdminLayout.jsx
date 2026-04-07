@@ -135,7 +135,7 @@ export default function AdminLayout({
         </nav>
 
         {/* Panel content */}
-        <main style={{ flex: 1, padding: "24px 32px", maxWidth: activeSection === "menu" ? 1400 : 900, overflowY: "auto" }}>
+        <main style={{ flex: 1, padding: "24px 24px", maxWidth: activeSection === "menu" ? "none" : 900, overflowY: "auto" }}>
           {activeSection === "menu" && (
             <div>
               <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 20 }}>

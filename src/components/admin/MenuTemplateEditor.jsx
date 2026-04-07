@@ -1504,7 +1504,7 @@ export default function MenuTemplateEditor({
 
   // ── Render ──
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 130px)", minHeight: 500, fontFamily: FONT }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 500, fontFamily: FONT }}>
 
       {/* ── Preview Data Panel (collapsible strip above 3 panels) ── */}
       <PreviewDataPanel
