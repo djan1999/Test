@@ -519,11 +519,29 @@ export function generateMenuHTML({
       const nameKey = normalizeCourseToken(cn);
       const isForcedBeerCourse = rules.forceBeerCourseKeys.includes(normKey) || rules.forceBeerCourseKeys.includes(nameKey);
       const forcedBeerDrink = (rules.forceChickenGizzardBeer && isForcedBeerCourse) ? resolveBeerDrinkForCourse(course) : null;
-      const forcedPairingDrink = resolveForcedPairingDrink(course, courseKey, normKey);
 
-      if (lb.showPairing === false && !forcedPairingDrink) {
+      const forcedPairingOverride = (rb?.type === "forced_pairing")
+        ? {
+            // Allow forcing via course fields (default) but also allow block override
+            ...(rb.useCourseForceFields === false ? {} : null),
+            title: rb.title,
+            sub: rb.sub,
+            title_si: rb.title_si,
+            sub_si: rb.sub_si,
+            useCourseForceFields: rb.useCourseForceFields !== false,
+          }
+        : null;
+
+      const forcedPairingDrink = resolveForcedPairingDrink(
+        course,
+        courseKey,
+        normKey,
+        (rb?.type === "forced_pairing" && rb?.useCourseForceFields === false) ? forcedPairingOverride : forcedPairingOverride
+      );
+
+      if (lb.showPairing === false && !forcedPairingDrink && rb?.type !== "forced_pairing") {
         // showPairing toggle off — don't resolve any drink for this course row
-      } else if (rb?.type === "pairing" || forcedPairingDrink) {
+      } else if (rb?.type === "pairing" || rb?.type === "forced_pairing" || forcedPairingDrink) {
         if (pkey) {
           drink = forcedPairingDrink || (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]);
 

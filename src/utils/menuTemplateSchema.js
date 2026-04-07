@@ -210,6 +210,7 @@ export function makeRow(left = null, right = null, widthPreset = "55/45", gap = 
 export function buildDefaultTemplate(menuCourses = []) {
   const sorted = [...menuCourses].sort((a, b) => (a.position || 0) - (b.position || 0));
   const rows = [];
+  const norm = (v) => String(v || "").trim().toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 
   // Header: title left, logo right
   // Note: .menu-header-row CSS already has margin-bottom:headerSpacing mm,
@@ -233,6 +234,7 @@ export function buildDefaultTemplate(menuCourses = []) {
 
   sorted.forEach((course, idx) => {
     const ck = course.course_key || `course_${idx}`;
+    const nck = norm(ck);
 
     // Pairing section label before danube_salmon
     if (ck === "danube_salmon") {
@@ -248,7 +250,7 @@ export function buildDefaultTemplate(menuCourses = []) {
     rows.push({
       id: `course_${ck}`,
       left:  { type: "course", courseKey: ck },
-      right: makeBlock("pairing"),
+      right: (nck === "crayfish" || nck === "chicken_gizzard") ? makeBlock("forced_pairing") : makeBlock("pairing"),
       widthPreset: "55/45",
       gap: 0,
     });
