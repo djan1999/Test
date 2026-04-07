@@ -579,8 +579,15 @@ function LivePreview({ previewHtml, loading, label = "A5" }) {
       <div style={{
         fontFamily: FONT, fontSize: 7.5, letterSpacing: 3, color: "#aaa",
         textTransform: "uppercase", marginBottom: 14, flexShrink: 0,
+        width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
       }}>
-        LIVE PREVIEW {loading ? "· updating…" : `· ${label}`}
+        <span>LIVE PREVIEW {loading ? "· updating…" : `· ${label}`}</span>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, letterSpacing: 1.2, color: "#9a96b5" }}>
+          <input type="checkbox" checked={!!window.__menuSpacingDebug} onChange={(e) => {
+            window.__menuSpacingDebug = e.target.checked;
+          }} />
+          SPACING DEBUG
+        </label>
       </div>
 
       {/* Paper wrapper */}

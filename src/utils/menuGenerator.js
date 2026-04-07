@@ -143,6 +143,7 @@ export function generateMenuHTML({
   _fontReg = "",
   _logo = "",
   _rowsOnly = false,
+  _debugSpacing = false,
 }) {
   const s = (key, def) => key in layoutStyles ? layoutStyles[key] : def;
   const rules = normalizeMenuRules(menuRules);
@@ -706,6 +707,68 @@ export function generateMenuHTML({
   // ── HTML output ───────────────────────────────────────────────────────────
   // Single unified rendering path — same CSS and structure used in both the
   // live editor preview and the final print window.
+  const spacingDebugHtml = _debugSpacing ? `
+<style id="__spacing_debug_css">
+  .__dbg-outline{outline:1px dashed rgba(210,70,70,0.38);outline-offset:-1px;position:relative;}
+  .__dbg-badge{
+    position:absolute;left:0;top:0;transform:translateY(-100%);
+    font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size:9px;line-height:1;
+    background:rgba(255,255,255,0.92);
+    border:1px solid rgba(210,70,70,0.55);
+    color:#b04040;
+    padding:2px 4px;border-radius:3px;
+    white-space:nowrap;
+    pointer-events:none;
+  }
+  .__dbg-badge.__right{left:auto;right:0;}
+</style>
+<script id="__spacing_debug_js">
+  (function(){
+    function toNumPx(v){
+      if (!v) return 0;
+      const n = parseFloat(String(v).replace('px',''));
+      return Number.isFinite(n) ? n : 0;
+    }
+    function fmtPx(px){
+      const p = Math.round(px * 10) / 10;
+      return (p === 0 ? "0" : String(p)) + "px";
+    }
+    function annotate(el, label, right){
+      if (!el || el.querySelector(':scope > .__dbg-badge')) return;
+      el.classList.add('__dbg-outline');
+      const b = document.createElement('div');
+      b.className = '__dbg-badge' + (right ? ' __right' : '');
+      b.textContent = label;
+      el.appendChild(b);
+    }
+    function run(){
+      const root = document.getElementById('menu');
+      if (!root) return;
+      const kids = Array.from(root.children || []);
+      kids.forEach((el) => {
+        const cs = getComputedStyle(el);
+        const mt = toNumPx(cs.marginTop);
+        const mb = toNumPx(cs.marginBottom);
+        if (mt === 0 && mb === 0) return;
+        const tag = el.tagName.toLowerCase();
+        const cls = (el.className || '').toString();
+        const kind =
+          tag === 'hr' ? 'divider' :
+          cls.includes('menu-header-row') ? 'header' :
+          cls.includes('menu-thankyou') ? 'thankyou' :
+          cls.includes('pin-bottom') ? 'pin' :
+          cls.includes('menu-row') ? 'row' :
+          el.id ? el.id : tag;
+        annotate(el, kind + '  mt ' + fmtPx(mt) + ' · mb ' + fmtPx(mb), false);
+      });
+    }
+    window.addEventListener('load', function(){ setTimeout(run, 60); });
+    window.addEventListener('resize', function(){ setTimeout(run, 60); });
+  })();
+</script>
+` : "";
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -753,6 +816,7 @@ body{position:relative;}
 <div id="sheet"><div id="frame"><div id="scaleTarget">
 <div id="menu">${menuRowsHtml}</div>
 </div></div></div>
+${spacingDebugHtml}
 <script>
 (function(){
   const MIN_SCALE = ${s("minScale", 0.58)};
