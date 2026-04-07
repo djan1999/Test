@@ -1961,7 +1961,7 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
                       border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
                       background: "#fff", color: "#7a5020", transition: "all 0.1s",
-                    }}>{opt.label}</button>
+                    }}>{ap.label}</button>
                   ))}
                 </div>
                 <BeverageSearch
