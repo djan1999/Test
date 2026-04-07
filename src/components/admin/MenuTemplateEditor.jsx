@@ -159,43 +159,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
   );
 }
 
-// ── Row settings (width preset + gap) ────────────────────────────────────────
-
-function RowSettings({ row, onUpdate }) {
-  const gap = row.gap ?? 0;
-  const pinned = !!row.pinToBottom;
-  return (
-    <div style={{ padding: "10px 10px 10px 24px", background: "#f8f7f3", borderTop: "1px solid #ede9e0" }}>
-      <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>
-        ROW SETTINGS
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ fontFamily: FONT, fontSize: 7.5, color: "#999", letterSpacing: 1 }}>GAP ABOVE (pt)</div>
-          <input
-            type="number"
-            value={gap}
-            step={0.5}
-            onChange={e => onUpdate({ ...row, gap: parseFloat(e.target.value) || 0 })}
-            style={{ ...baseInp, width: 50, fontSize: 10, padding: "2px 4px" }}
-          />
-        </div>
-        <button
-          onClick={() => onUpdate({ ...row, pinToBottom: !pinned })}
-          title="Pin this row to the bottom of the page (margin-top: auto)"
-          style={{
-            fontFamily: FONT, fontSize: 7.5, letterSpacing: 1, padding: "3px 9px",
-            border: `1px solid ${pinned ? SELECTED_RING : "#ddd"}`,
-            borderRadius: 2, cursor: "pointer",
-            background: pinned ? "#f0f0f8" : "#fff",
-            color: pinned ? SELECTED_RING : "#999",
-            textTransform: "uppercase",
-          }}
-        >⤓ {pinned ? "PINNED TO BOTTOM" : "PIN TO BOTTOM"}</button>
-      </div>
-    </div>
-  );
-}
+// ── Row settings removed ─────────────────────────────────────────────────────
 
 // ── Sortable row (in left panel) ──────────────────────────────────────────────
 
@@ -205,7 +169,6 @@ function SortableRow({
   menuCourses,
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.id });
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -267,7 +230,7 @@ function SortableRow({
             padding: "3px 4px",
             background: (leftSelected || rightSelected) ? "#f4f3fb" : "#fff",
             border: `1px solid ${(leftSelected || rightSelected) ? "#c8c6e8" : "#ede9e0"}`,
-            borderRadius: settingsOpen ? "3px 3px 0 0" : 3,
+            borderRadius: 3,
           }}>
             {/* Drag handle */}
             <div
@@ -297,16 +260,14 @@ function SortableRow({
               <RowActionBtn title="Insert row above" onClick={() => onInsertAbove(row.id)}>↑</RowActionBtn>
               <RowActionBtn title="Insert row below" onClick={() => onInsertBelow(row.id)}>↓</RowActionBtn>
               <RowActionBtn title="Duplicate row" onClick={() => onDuplicateRow(row.id)}>⎘</RowActionBtn>
-              {row.pinToBottom && <span title="Pinned to bottom" style={{ fontFamily: FONT, fontSize: 9, color: SELECTED_RING, padding: "0 2px" }}>⤓</span>}
-              <RowActionBtn title="Row settings" onClick={() => setSettingsOpen(v => !v)} active={settingsOpen}>⚙</RowActionBtn>
+              <RowActionBtn
+                title={row.pinToBottom ? "Unpin from bottom" : "Pin to bottom"}
+                onClick={() => onUpdateRow({ ...row, pinToBottom: !row.pinToBottom })}
+                active={!!row.pinToBottom}
+              >⤓</RowActionBtn>
               <RowActionBtn title="Delete row" onClick={() => onRemoveRow(row.id)} danger>⊗</RowActionBtn>
             </div>
           </div>
-
-          {/* Inline row settings */}
-          {settingsOpen && (
-            <RowSettings row={row} onUpdate={onUpdateRow} onClose={() => setSettingsOpen(false)} />
-          )}
         </>
       )}
     </div>

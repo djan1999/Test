@@ -167,7 +167,8 @@ describe("generateMenuHTML — course rendering", () => {
       _rowsOnly: true,
     });
     const courseRows = rows.filter(r => r.type === "course");
-    expect(courseRows[1].gap).toBe(14.5);
+    // section_gap_before legacy spacing is no longer used; gaps should be explicit in the template.
+    expect(courseRows[1].gap).toBe(0);
   });
 });
 

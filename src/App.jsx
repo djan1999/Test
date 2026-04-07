@@ -120,7 +120,7 @@ function supabaseRowToCourse(r) {
     menu_si,
     course_key: r.course_key || "",
     optional_flag: r.optional_flag || "",
-    section_gap_before: !!r.section_gap_before,
+    section_gap_before: false,
     show_on_short: !!r.show_on_short,
     short_order: r.short_order || null,
     force_pairing_title: r.force_pairing_title || "",
@@ -163,7 +163,7 @@ function courseToSupabaseRow(course) {
     is_snack: course.is_snack,
     course_key: course.course_key,
     optional_flag: course.optional_flag,
-    section_gap_before: course.section_gap_before,
+    section_gap_before: false,
     show_on_short: course.show_on_short,
     short_order: course.short_order,
     force_pairing_title: course.force_pairing_title,
@@ -725,7 +725,6 @@ function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirs
           <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
             {[
               { key: "is_snack", label: "Snack" },
-              { key: "section_gap_before", label: "Gap Before" },
               { key: "show_on_short", label: "Show on Short" },
             ].map(({ key, label }) => (
               <label key={key} style={{ fontFamily: FONT, fontSize: 10, color: "#555", display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>

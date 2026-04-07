@@ -575,14 +575,7 @@ export function generateMenuHTML({
         right: drink ? { title: drink.name || "", sub: drink.sub || "" } : null,
         rowClass: "",
         widthPreset: wp,
-        gap: (() => {
-          const templateGap = consumeGap();
-          if (templateGap > 0) return templateGap;
-          // Legacy fallback: honour section_gap_before on course data when template has no gap row.
-          // Templates built since the gap-row refactor always have explicit gap rows, so this
-          // only fires for old saved templates that pre-date the refactor.
-          return course?.section_gap_before ? 14.5 : 0;
-        })(),
+        gap: consumeGap(),
       });
       continue;
     }

@@ -191,7 +191,7 @@ export function makeRow(left = null, right = null, widthPreset = "55/45", gap = 
  * Builds the initial default template from the current menuCourses.
  * Used for first-time setup and as an auto-migration fallback in generateMenuHTML.
  *
- * Preserves section_gap_before and inserts the pairing label before danube_salmon.
+ * Inserts the pairing label before danube_salmon.
  */
 export function buildDefaultTemplate(menuCourses = []) {
   const sorted = [...menuCourses].sort((a, b) => (a.position || 0) - (b.position || 0));
@@ -219,19 +219,6 @@ export function buildDefaultTemplate(menuCourses = []) {
 
   sorted.forEach((course, idx) => {
     const ck = course.course_key || `course_${idx}`;
-
-    // Section gap row (e.g. before danube_salmon or sheep_cheese)
-    // Uses a gap-only row (both cells null) — the gap value is deferred to the
-    // next visible content row in generateMenuHTML, so hidden courses collapse cleanly.
-    if (course.section_gap_before && idx > 0) {
-      rows.push({
-        id: makeRowId("gap"),
-        left:  null,
-        right: null,
-        widthPreset: "100/0",
-        gap: 14.5,
-      });
-    }
 
     // Pairing section label before danube_salmon
     if (ck === "danube_salmon") {
