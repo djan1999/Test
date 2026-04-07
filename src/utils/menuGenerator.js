@@ -408,9 +408,13 @@ export function generateMenuHTML({
     const plBlock = lb?.type === "pairing_label" ? lb : rb?.type === "pairing_label" ? rb : null;
     if (plBlock) {
       if (!isShort) {
-        // Per-block control. Default is to keep the reserved row (back-compat with old global behavior).
+        // Per-block control. Default is to keep the reserved row (back-compat with old behavior).
         // Set to false on the block to disable reserving space when no pairing is selected.
-        const keepWhenNoPairing = plBlock.keepWhenNoPairing !== false;
+        // (We support both historic/internal key names to avoid breaking old saved templates.)
+        const keepWhenNoPairing =
+          plBlock.reserveWhenNoPairing === false ? false
+          : plBlock.reserveWhenNoPairing === true ? true
+          : plBlock.keepWhenNoPairing !== false;
         if (!hasPairing && !keepWhenNoPairing) {
           continue;
         }
@@ -426,7 +430,7 @@ export function generateMenuHTML({
           // Preserve section break spacing even when the seat has no pairing.
           label: hasPairing ? label : "",
           reserveHeight: !hasPairing,
-          reserveMinHeight: plBlock.reserveMinHeight ?? null,
+          reservePt: plBlock.reserveHeightPt ?? plBlock.reserveMinHeight ?? null,
           side: plSide,
           align: plBlock.align || "right",
           spacing: plBlock.spacing ?? 6,
