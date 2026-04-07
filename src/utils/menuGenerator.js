@@ -737,7 +737,7 @@ body{position:relative;}
 #scaleTarget{width:100%;min-height:var(--inner-h);display:flex;flex-direction:column;transform-origin:top left;}
 .menu-header-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:${s("headerColGap",8.6)}mm;margin-bottom:${s("headerSpacing",7)}mm;}
 #title{font-size:${titleFontSize}pt;font-weight:700;letter-spacing:${titleTracking}em;text-transform:${titleTransform};text-align:${titleAlign};}
-#menu-date{font-size:5.8pt;font-weight:400;letter-spacing:0.02em;margin-top:0.8mm;text-transform:none;}
+#menu-date{font-size:5.8pt;font-weight:400;letter-spacing:0.02em;margin-top:${s("menuDateMarginTop",0.8)}mm;text-transform:none;}
 #logo{transform:translate(${logoOffsetX}mm,${logoOffsetY}mm);}
 #logo img{width:${logoSize}mm;display:block;}
 #menu{width:100%;flex:1;display:flex;flex-direction:column;}
@@ -749,11 +749,11 @@ body{position:relative;}
 
 .menu-col{min-width:0;}
 .menu-main{font-weight:700;line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;text-transform:uppercase;}
-.menu-sub{line-height:1.08;margin-top:0.75pt;overflow-wrap:anywhere;}
-.menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;text-transform:uppercase;}
+.menu-sub{line-height:1.08;margin-top:${s("menuSubMarginTop",0.75)}pt;overflow-wrap:anywhere;}
+.menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:${s("sectionLabelPaddingTop",0.6)}pt;text-transform:uppercase;}
 .menu-thankyou{margin-top:${s("thankYouSpacing",7)}pt;font-size:6.55pt;font-style:normal;}
 #team{font-size:6.5pt;line-height:1.2;overflow-wrap:anywhere;}
-#team .menu-main{margin-bottom:1.4pt;}
+#team .menu-main{margin-bottom:0;}
 </style>
 </head>
 <body>
@@ -762,7 +762,7 @@ body{position:relative;}
 </div></div></div>
 <script>
 (function(){
-  const MIN_SCALE = 0.58;
+  const MIN_SCALE = ${s("minScale", 0.58)};
   const MAX_TRIES = 80;
   function fit(){
     const frame = document.getElementById('frame');

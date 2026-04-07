@@ -1247,6 +1247,17 @@ function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLayoutSty
             </div>
           </div>
 
+          {/* Micro spacing */}
+          <div>
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Micro Spacing</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
+              {si({ label: "Title → date gap",          lkey: "menuDateMarginTop",     def: 0.8,  step: 0.05, unit: "mm" })}
+              {si({ label: "Main → sub gap",            lkey: "menuSubMarginTop",      def: 0.75, step: 0.05, unit: "pt" })}
+              {si({ label: "Section label padding-top", lkey: "sectionLabelPaddingTop", def: 0.6,  step: 0.05, unit: "pt" })}
+              {si({ label: "Min autoscale (fit)",       lkey: "minScale",              def: 0.58, step: 0.01, unit: "" , min: 0.1 })}
+            </div>
+          </div>
+
         </div>
       )}
     </div>
