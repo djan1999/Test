@@ -29,7 +29,7 @@ import {
   BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
 } from "../../utils/menuTemplateSchema.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
-import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote } from "../../utils/storage.js";
+import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote, readTeamNames } from "../../utils/storage.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1184,7 +1184,7 @@ export default function MenuTemplateEditor({
           _logo: logoDataUri,
           menuTitle,
           thankYouNote,
-          teamNames: "Service Team",
+          teamNames: readTeamNames(),
           lang: previewLang,
           beerChoice: null,
           layoutStyles,
