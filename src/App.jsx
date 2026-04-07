@@ -1751,7 +1751,7 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
 }
 
 // ── Detail View ───────────────────────────────────────────────────────────────
-function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats }) {
+function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages }) {
   const isMobile = useIsMobile(860);
   const row1 = isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
   const seatCount = table.seats?.length || 0;
