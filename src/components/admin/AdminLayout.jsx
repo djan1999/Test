@@ -68,7 +68,8 @@ export default function AdminLayout({
   onExit,
 }) {
   const [activeSection, setActiveSection] = useState("menu");
-  const [dishesTab, setDishesTab] = useState("courses");
+  const [dishesCoursesOpen, setDishesCoursesOpen] = useState(true);
+  const [dishesEditorOpen, setDishesEditorOpen] = useState(true);
   const [navPinned, setNavPinned] = useState(false);
   const [navHover, setNavHover] = useState(false);
 
@@ -203,32 +204,71 @@ export default function AdminLayout({
 
           {activeSection === "dishes" && (
             <div>
-              {/* Tab bar */}
-              <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #f0f0f0", marginBottom: 24 }}>
-                {[["courses", "◈ COURSES"], ["dishes", "◈ DISHES & RESTRICTIONS"]].map(([id, label]) => (
-                  <button key={id} onClick={() => setDishesTab(id)} style={{
-                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 16px",
-                    border: "none", borderBottom: `2px solid ${dishesTab === id ? "#4b4b88" : "transparent"}`,
-                    borderRadius: 0, cursor: dishesTab === id ? "default" : "pointer",
-                    background: "transparent",
-                    color: dishesTab === id ? "#4b4b88" : "#aaa",
-                    fontWeight: dishesTab === id ? 700 : 400,
-                  }}>{label}</button>
-                ))}
+              {/* Combined view: Courses + Dishes/Restrictions */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                <div style={{ border: "1px solid #f0f0f0", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
+                  <button
+                    onClick={() => setDishesCoursesOpen(v => !v)}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "10px 14px",
+                      border: "none",
+                      background: "#fafafa",
+                      cursor: "pointer",
+                      fontFamily: FONT,
+                    }}
+                    title={dishesCoursesOpen ? "Collapse" : "Expand"}
+                  >
+                    <span style={{ fontSize: 9, letterSpacing: 2, color: "#4b4b88", textTransform: "uppercase", fontWeight: 700 }}>
+                      ◈ Courses
+                    </span>
+                    <span style={{ fontSize: 12, color: "#bbb" }}>{dishesCoursesOpen ? "▾" : "▸"}</span>
+                  </button>
+                  {dishesCoursesOpen && (
+                    <div style={{ padding: "14px 14px 16px" }}>
+                      <CourseEditorPanel
+                        menuCourses={menuCourses}
+                        onUpdateCourses={onUpdateMenuCourses}
+                        onSaveCourses={onSaveMenuCourses}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ border: "1px solid #f0f0f0", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
+                  <button
+                    onClick={() => setDishesEditorOpen(v => !v)}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "10px 14px",
+                      border: "none",
+                      background: "#fafafa",
+                      cursor: "pointer",
+                      fontFamily: FONT,
+                    }}
+                    title={dishesEditorOpen ? "Collapse" : "Expand"}
+                  >
+                    <span style={{ fontSize: 9, letterSpacing: 2, color: "#4b4b88", textTransform: "uppercase", fontWeight: 700 }}>
+                      ◈ Dishes &amp; Restrictions
+                    </span>
+                    <span style={{ fontSize: 12, color: "#bbb" }}>{dishesEditorOpen ? "▾" : "▸"}</span>
+                  </button>
+                  {dishesEditorOpen && (
+                    <div style={{ padding: "14px 14px 16px" }}>
+                      <DishesPanel
+                        dishes={dishes}
+                        onUpdateDishes={onUpdateDishes}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
-              {dishesTab === "courses" && (
-                <CourseEditorPanel
-                  menuCourses={menuCourses}
-                  onUpdateCourses={onUpdateMenuCourses}
-                  onSaveCourses={onSaveMenuCourses}
-                />
-              )}
-              {dishesTab === "dishes" && (
-                <DishesPanel
-                  dishes={dishes}
-                  onUpdateDishes={onUpdateDishes}
-                />
-              )}
             </div>
           )}
 
