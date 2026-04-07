@@ -379,10 +379,17 @@ export function generateMenuHTML({
   let rows = [];
   let pendingGap = 0;      // deferred spacer gap — applied to the next row that actually renders
 
+  const PAIRING_RIGHT_TYPES = new Set(["pairing", "pairing_label", "aperitif"]);
+  const _courseLeft = Math.min(99, Math.max(1, Math.round(Number(s("courseColSplit", 55)) || 55)));
+
   for (const tRow of effectiveTemplateRows) {
     let lb = tRow.left;
     let rb = tRow.right;
-    const wp = tRow.widthPreset || "55/45";
+    // For pairing/wine rows, courseColSplit overrides the stored widthPreset so the user
+    // can shift the right column left without editing every row individually.
+    const wp = PAIRING_RIGHT_TYPES.has(rb?.type)
+      ? `${_courseLeft}/${100 - _courseLeft}`
+      : (tRow.widthPreset || "55/45");
 
     // ── Spacer normalization ──
     // Each cell is independent: a spacer in one cell becomes extra top-gap on the row,

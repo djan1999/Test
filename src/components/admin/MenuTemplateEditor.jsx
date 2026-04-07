@@ -1464,6 +1464,47 @@ export default function MenuTemplateEditor({
                   reset to default
                 </button>
               )}
+
+              {/* Course column split */}
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1, color: "#bbb", textTransform: "uppercase", marginBottom: 5 }}>
+                  Course Split (dish / wine)
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <input
+                    type="number"
+                    step="1"
+                    min="20"
+                    max="80"
+                    value={layoutStyles.courseColSplit ?? 55}
+                    onChange={e => {
+                      const raw = e.target.value;
+                      const next = { ...layoutStyles };
+                      const n = parseInt(raw, 10);
+                      if (isNaN(n)) delete next.courseColSplit;
+                      else next.courseColSplit = Math.min(80, Math.max(20, n));
+                      onUpdateLayoutStyles(next);
+                    }}
+                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 6px", border: "1px solid #ddd", borderRadius: 3, width: 54, textAlign: "center" }}
+                  />
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: "#aaa" }}>
+                    / {100 - (layoutStyles.courseColSplit ?? 55)} %
+                  </span>
+                  {onSaveLayoutStyles && (
+                    <button onClick={onSaveLayoutStyles} style={{
+                      fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "4px 8px",
+                      border: "1px solid #4b4b88", borderRadius: 2, cursor: "pointer",
+                      background: "#4b4b88", color: "#fff", marginLeft: "auto",
+                    }}>SAVE</button>
+                  )}
+                </div>
+                {"courseColSplit" in layoutStyles && (
+                  <button onClick={() => { const next = { ...layoutStyles }; delete next.courseColSplit; onUpdateLayoutStyles(next); }}
+                    style={{ fontFamily: FONT, fontSize: 7.5, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: "2px 0", marginTop: 2 }}>
+                    reset to default (55)
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
