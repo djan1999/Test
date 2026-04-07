@@ -663,7 +663,7 @@ export function generateMenuHTML({
         const sfx = [11,12,13].includes(_d) ? "th" : _d%10===1 ? "st" : _d%10===2 ? "nd" : _d%10===3 ? "rd" : "th";
         return `${_d}${sfx} of ${_MONTHS_EN[_today.getMonth()]}, ${_today.getFullYear()}`;
       })();
-  // Title: prefer the template's title block text (lang-aware), fall back to menuTitle parameter.
+  // Title: menuTitle (user input) wins; template title block is fallback only.
   const _titleBlockText = (() => {
     for (const r of (menuTemplate?.rows || [])) {
       const tb = r.left?.type === "title" ? r.left : r.right?.type === "title" ? r.right : null;
@@ -674,7 +674,7 @@ export function generateMenuHTML({
     return null;
   })();
   const TITLE_FALLBACK = lang === "si" ? "Zimski Meni" : "WINTER MENU";
-  const safeTitle = esc((_titleBlockText || menuTitle || TITLE_FALLBACK).replace(/\s+/g, " ").trim());
+  const safeTitle = esc((menuTitle || _titleBlockText || TITLE_FALLBACK).replace(/\s+/g, " ").trim());
 
   // ── Render rows to HTML ───────────────────────────────────────────────────
   const menuRowsHtml = rows.map(row => {
