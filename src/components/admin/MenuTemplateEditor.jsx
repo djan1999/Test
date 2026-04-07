@@ -1266,6 +1266,8 @@ export default function MenuTemplateEditor({
   const [menuRulesOpen,    setMenuRulesOpen]    = useState(false);
   const [layoutStylesOpen, setLayoutStylesOpen] = useState(false);
   const previewTimer = useRef(null);
+  const didMigrateSpacersRef = useRef(false);
+  const didNormalizeRowGapsRef = useRef(false);
 
   // ── Preview data state — configurable dummy seat (not persisted) ──
   const [previewDataOpen, setPreviewDataOpen] = useState(false);
@@ -1307,10 +1309,12 @@ export default function MenuTemplateEditor({
   // Old templates stored gaps as { left: { type: "spacer", height: N } } rows.
   // We silently fold the spacer height into row.gap so they render as gap rows.
   useEffect(() => {
+    if (didMigrateSpacersRef.current) return;
     if (!menuTemplate?.rows) return;
     const hasSpacers = menuTemplate.rows.some(
       r => r.left?.type === "spacer" || r.right?.type === "spacer"
     );
+    didMigrateSpacersRef.current = true;
     if (!hasSpacers) return;
     const migrated = {
       ...menuTemplate,
@@ -1331,7 +1335,7 @@ export default function MenuTemplateEditor({
       }),
     };
     onUpdateTemplate(migrated);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [menuTemplate, onUpdateTemplate]);
 
   // ── One-time migration: normalize row.gap into explicit gap rows ────────────
   // Older saved templates may have "gap above" stored directly on content rows.
@@ -1339,8 +1343,10 @@ export default function MenuTemplateEditor({
   //   [ { gap: N, left/right: content } ] → [ { gapRow(N) }, { gap: 0, content } ]
   // This makes every gap visible/editable in the row list.
   useEffect(() => {
+    if (didNormalizeRowGapsRef.current) return;
     if (!menuTemplate?.rows) return;
     const needsNormalize = menuTemplate.rows.some(r => (r?.gap || 0) > 0 && (r.left || r.right));
+    didNormalizeRowGapsRef.current = true;
     if (!needsNormalize) return;
     const normalized = [];
     for (const r of menuTemplate.rows) {
@@ -1354,7 +1360,7 @@ export default function MenuTemplateEditor({
       }
     }
     onUpdateTemplate({ ...menuTemplate, rows: normalized });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [menuTemplate, onUpdateTemplate]);
 
   // menuTitle and thankYouNote come from state (shared localStorage with MenuGenerator)
 
