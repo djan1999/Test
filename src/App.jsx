@@ -57,33 +57,6 @@ const parseSittingTimes = () => {
   return raw.length > 0 ? raw : ["18:00", "18:30", "19:00", "19:15"];
 };
 const DEFAULT_SITTING_TIMES = parseSittingTimes();
-const parseReservationTemplates = () => {
-  const raw = String(import.meta.env.VITE_DEFAULT_RESERVATION_TEMPLATES || "").trim();
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((t, idx) => ({
-        id: String(t?.id || `template_${idx + 1}`),
-        label: String(t?.label || "").trim(),
-        data: {
-          menuType: String(t?.data?.menuType || "").trim().toLowerCase(),
-          lang: String(t?.data?.lang || "en").trim().toLowerCase() === "si" ? "si" : "en",
-          guests: Number(t?.data?.guests) > 0 ? Number(t.data.guests) : undefined,
-          guestType: String(t?.data?.guestType || "").trim().toLowerCase(),
-          room: String(t?.data?.room || "").trim(),
-          birthday: t?.data?.birthday === true,
-          cakeNote: String(t?.data?.cakeNote || "").trim(),
-          notes: String(t?.data?.notes || "").trim(),
-        },
-      }))
-      .filter(t => t.label);
-  } catch {
-    return [];
-  }
-};
-const DEFAULT_RESERVATION_TEMPLATES = parseReservationTemplates();
 
 const parseDefaultQuickAccessItems = () => {
   const raw = String(import.meta.env.VITE_DEFAULT_QUICK_ACCESS || "").trim();
@@ -109,28 +82,6 @@ const DEFAULT_QUICK_ACCESS_ITEMS = parseDefaultQuickAccessItems();
 
 const SITTING_TIMES = DEFAULT_SITTING_TIMES;
 const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
-const RESV_TEMPLATES = DEFAULT_RESERVATION_TEMPLATES.length > 0 ? DEFAULT_RESERVATION_TEMPLATES : [
-  { id: "long2_en", label: "2p long EN", data: { guests: 2, menuType: "long", lang: "en", guestType: "" } },
-  { id: "long2_si", label: "2p long SLO", data: { guests: 2, menuType: "long", lang: "si", guestType: "" } },
-  { id: "short2_en", label: "2p short EN", data: { guests: 2, menuType: "short", lang: "en", guestType: "" } },
-  { id: "hotel2_en", label: "2p hotel EN", data: { guests: 2, menuType: "long", lang: "en", guestType: "hotel" } },
-];
-
-const normalizeResvTemplateData = (templateData = {}) => {
-  const parsedGuests = Number(templateData?.guests);
-  const guests = Number.isFinite(parsedGuests) && parsedGuests > 0 ? Math.max(1, Math.min(14, Math.round(parsedGuests))) : null;
-  const menuTypeRaw = String(templateData?.menuType || "").trim().toLowerCase();
-  const menuType = menuTypeRaw === "short" ? "short" : menuTypeRaw === "long" ? "long" : "";
-  const langRaw = String(templateData?.lang || "").trim().toLowerCase();
-  const lang = langRaw === "si" ? "si" : "en";
-  const guestTypeRaw = String(templateData?.guestType || "").trim().toLowerCase();
-  const guestType = guestTypeRaw === "hotel" ? "hotel" : guestTypeRaw === "outside" ? "outside" : "";
-  const room = String(templateData?.room || "").trim();
-  const birthday = templateData?.birthday === true;
-  const cakeNote = String(templateData?.cakeNote || "").trim();
-  const notes = String(templateData?.notes || "").trim();
-  return { guests, menuType, lang, guestType, room, birthday, cakeNote, notes };
-};
 
 // Convert a Supabase menu_courses row to the internal shape used throughout the app.
 function supabaseRowToCourse(r) {
@@ -3273,10 +3224,6 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
             if (isBeetCourse(course))    return beetSeats.map(s => `P${s.id}`).join(" ");
             if (isCheeseCourse(course))  return cheeseSeats.map(s => `P${s.id}`).join(" ");
             if (isCakeCourse(course))    return cakeSeats.map(s => `P${s.id}`).join(" ") + (table.cakeNote ? ` — ${table.cakeNote}` : "");
-            if (isForcedPairingCourse(course)) {
-              const forcedSeats = seats || [];
-              if (forcedSeats.length > 0) return `FORCED PAIRING · ${forcedSeats.map(s => `P${s.id}`).join(" ")}`;
-            }
             return null;
           })();
 
@@ -5368,7 +5315,7 @@ function ServiceDatePicker({ defaultDate, onConfirm, onCancel, reservations = []
 }
 
 // ── ResvForm — create / edit a reservation ────────────────────────────────────
-function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel, templates = RESV_TEMPLATES }) {
+function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }) {
   const [tableIds,     setTableIds]     = useState(
     initial?.data?.tableGroup?.length > 1 ? initial.data.tableGroup.map(Number)
       : initial?.table_id               ? [Number(initial.table_id)]
@@ -5386,23 +5333,9 @@ function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel, 
   const [restrictions, setRestrictions] = useState(initial?.data?.restrictions || []);
   const [notes,        setNotes]        = useState(initial?.data?.notes        || "");
   const [saving,       setSaving]       = useState(false);
-  const [templateId,   setTemplateId]   = useState("");
 
   const sortedGroup = [...tableIds].sort((a, b) => a - b);
   const primaryId   = sortedGroup[0] ?? null;
-
-  const applyTemplate = (template) => {
-    if (!template?.data) return;
-    const d = normalizeResvTemplateData(template.data);
-    if (d.menuType === "long" || d.menuType === "short") setMenuType(d.menuType);
-    if (d.lang === "en" || d.lang === "si") setLang(d.lang);
-    if (typeof d.guests === "number" && d.guests > 0) setGuests(d.guests);
-    if (d.guestType === "hotel" || d.guestType === "outside" || d.guestType === "") setGuestType(d.guestType);
-    if (typeof d.room === "string") setRoom(d.room);
-    setBirthday(!!d.birthday);
-    if (typeof d.cakeNote === "string") setCakeNote(d.cakeNote);
-    if (typeof d.notes === "string") setNotes(d.notes);
-  };
 
   const isConflict = (tid) => reservations.some(r =>
     r.id !== excludeId &&
@@ -5477,40 +5410,6 @@ function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel, 
           </div>
         </div>
       </div>
-
-      {/* Templates */}
-      {templates.length > 0 && (
-        <div style={{ marginBottom: 10 }}>
-          <div style={fieldLabel}>Templates</div>
-          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-            <select
-              value={templateId}
-              onChange={e => setTemplateId(e.target.value)}
-              style={{ ...baseInp, minWidth: 210, fontSize: MOBILE_SAFE_INPUT_SIZE, padding: "7px 10px" }}
-            >
-              <option value="">Select template…</option>
-              {templates.map(t => (
-                <option key={t.id} value={t.id}>{t.label}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => {
-                const selected = templates.find(t => t.id === templateId);
-                if (selected) applyTemplate(selected);
-              }}
-              disabled={!templateId}
-              style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "6px 9px",
-                border: "1px solid #e0e0e0", borderRadius: 2,
-                cursor: templateId ? "pointer" : "not-allowed",
-                background: "#fff", color: "#666", opacity: templateId ? 1 : 0.5,
-              }}
-            >
-              APPLY
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Menu + Lang + Guests */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
@@ -5741,12 +5640,6 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
               setDraftFromReservation(null);
             }}
               style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: "pointer", background: editingId === "new" ? "#1a1a1a" : "#fff", color: editingId === "new" ? "#fff" : "#1a1a1a", fontWeight: 600 }}>+ ADD</button>
-            {editingId !== "new" && RESV_TEMPLATES.length > 0 && (
-              <button
-                onClick={() => { setEditingId("new"); setDraftFromReservation(null); }}
-                style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "6px 10px", border: "1px solid #d0d0d0", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#666", fontWeight: 600 }}
-                title="Open new reservation with templates"
-              >TEMPLATE</button>
             )}
           </div>
         </div>
@@ -5764,7 +5657,7 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
                 tables={tables}
                 reservations={reservations}
                 excludeId={null}
-                templates={RESV_TEMPLATES}
+
                 onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) { setEditingId(null); setDraftFromReservation(null); } }}
                 onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
               />
@@ -5850,7 +5743,7 @@ function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDel
                       tables={tables}
                       reservations={reservations}
                       excludeId={r.id}
-                      templates={RESV_TEMPLATES}
+      
                       onSave={async (row) => { await onUpsert(row); setEditingId(null); setDraftFromReservation(null); }}
                       onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
                     />
