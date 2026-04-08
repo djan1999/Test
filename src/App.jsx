@@ -2280,13 +2280,35 @@ export default function App() {
     supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_profiles_v1").maybeSingle()
       .then(({ data }) => {
         const profiles = Array.isArray(data?.state?.profiles) ? data.state.profiles : null;
-        if (!profiles?.length) return;
-        setLayoutProfiles(profiles);
-        const activeId = String(data?.state?.activeId || profiles[0]?.id || "");
-        setActiveLayoutProfileId(activeId);
-        const active = profiles.find(p => p.id === activeId) || profiles[0];
-        setGlobalLayout(active?.layoutStyles || {});
-        setMenuTemplate(active?.menuTemplate || null);
+        if (profiles?.length) {
+          setLayoutProfiles(profiles);
+          const activeId = String(data?.state?.activeId || profiles[0]?.id || "");
+          setActiveLayoutProfileId(activeId);
+          const active = profiles.find(p => p.id === activeId) || profiles[0];
+          setGlobalLayout(active?.layoutStyles || {});
+          setMenuTemplate(active?.menuTemplate || null);
+          return;
+        }
+        // Compatibility fallback: hydrate from legacy single-layout keys if profile payload
+        // has not been created yet.
+        Promise.all([
+          supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_global").maybeSingle(),
+          supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_v2").maybeSingle(),
+        ]).then(([legacyLayoutRes, legacyTemplateRes]) => {
+          const legacyLayout = (legacyLayoutRes?.data?.state && typeof legacyLayoutRes.data.state === "object")
+            ? legacyLayoutRes.data.state
+            : {};
+          const legacyTemplate = (legacyTemplateRes?.data?.state?.version === 2 && Array.isArray(legacyTemplateRes.data.state.rows))
+            ? legacyTemplateRes.data.state
+            : null;
+          if (!legacyTemplate && Object.keys(legacyLayout).length === 0) return;
+          const migrated = [{ id: "layout_1", name: "Layout 1", layoutStyles: legacyLayout, menuTemplate: legacyTemplate }];
+          setLayoutProfiles(migrated);
+          setActiveLayoutProfileId("layout_1");
+          setGlobalLayout(legacyLayout);
+          setMenuTemplate(legacyTemplate);
+          persistLayoutProfiles(migrated, "layout_1");
+        }).catch(() => {});
       });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2617,7 +2639,13 @@ export default function App() {
         const courses = await fetchMenuCourses();
         if (!mounted || !courses) return;
         setMenuCourses(courses);
-        // Layout templates are profile-managed and start blank by default.
+        // Compatibility/safety: if template is blank but courses exist, synthesize default rows
+        // so the editor isn't an empty screen.
+        setMenuTemplate((prev) => {
+          if (prev?.version === 2 && Array.isArray(prev.rows) && prev.rows.length > 0) return prev;
+          if (!courses.length) return prev;
+          return buildDefaultTemplate(courses);
+        });
       } catch (error) {
         console.warn("Menu courses fetch failed:", error);
       }
