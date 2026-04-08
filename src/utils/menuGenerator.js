@@ -544,32 +544,23 @@ export function generateMenuHTML({
       const isForcedBeerCourse = rules.forceBeerCourseKeys.includes(normKey) || rules.forceBeerCourseKeys.includes(nameKey);
       const forcedBeerDrink = (rules.forceChickenGizzardBeer && isForcedBeerCourse) ? resolveBeerDrinkForCourse(course) : null;
 
-      const forcedPairingOverride = (() => {
-        if (rb?.type !== "forced_pairing") return null;
-        const isNonAlc = String(beerChoice || "").trim().toLowerCase() === "nonalc";
-        const itemId = isNonAlc
-          ? (rb.naCatalogItemId ?? null)
-          : (rb.catalogItemId ?? rb.catalogId ?? null);
-        const itemType = isNonAlc
-          ? (rb.naCatalogType || "")
-          : (rb.catalogType || "");
-        const picked = itemType && itemId != null ? findBeverage(itemType, itemId) : null;
-        const pickedParts = picked ? fmtDrinkParts({ ...picked, __type: itemType }) : null;
-        return {
-          title: pickedParts?.title || rb.title,
-          sub: pickedParts?.sub || rb.sub,
-          title_si: isNonAlc ? (rb.naTitleSi || rb.title_si) : rb.title_si,
-          sub_si: rb.sub_si,
-          useCourseForceFields: rb.useCourseForceFields !== false,
-        };
+      const forcedPairingDrink = (() => {
+        // Product-only forced_pairing block: choose ALCO or N/A product by seat toggle.
+        if (rb?.type === "forced_pairing") {
+          const isNonAlc = String(beerChoice || "").trim().toLowerCase() === "nonalc";
+          const itemId = isNonAlc
+            ? (rb.naCatalogItemId ?? null)
+            : (rb.catalogItemId ?? rb.catalogId ?? null);
+          const itemType = isNonAlc
+            ? (rb.naCatalogType || "")
+            : (rb.catalogType || "");
+          const picked = itemType && itemId != null ? findBeverage(itemType, itemId) : null;
+          if (!picked) return null;
+          const parts = fmtDrinkParts({ ...picked, __type: itemType });
+          return { name: parts.title || "", sub: parts.sub || "" };
+        }
+        return resolveForcedPairingDrink(course, courseKey, normKey, null);
       })();
-
-      const forcedPairingDrink = resolveForcedPairingDrink(
-        course,
-        courseKey,
-        normKey,
-        (rb?.type === "forced_pairing" && rb?.useCourseForceFields === false) ? forcedPairingOverride : forcedPairingOverride
-      );
 
       if (lb.showPairing === false && !forcedPairingDrink && rb?.type !== "forced_pairing") {
         // showPairing toggle off — don't resolve any drink for this course row

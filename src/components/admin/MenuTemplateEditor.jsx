@@ -502,12 +502,6 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
                 ));
               })()}
             </select>
-            <input
-              value={block.title_si || ""}
-              onChange={e => setField("title_si", e.target.value)}
-              placeholder="Slovenian name override (optional)"
-              style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
-            />
             <div style={{ height: 1, background: "#f0f0f0", margin: "4px 0" }} />
             <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 2 }}>
               Product reference (non-alcoholic)
@@ -543,14 +537,8 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
                 ));
               })()}
             </select>
-            <input
-              value={block.naTitleSi || ""}
-              onChange={e => setField("naTitleSi", e.target.value)}
-              placeholder="Slovenian N/A name override (optional)"
-              style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
-            />
             <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.5 }}>
-              ALCO / N/A product pickers are linked to menu-generation ALCO/N/A toggle. Optional SI overrides control Slovenian names.
+              ALCO / N/A product pickers are linked to menu-generation ALCO/N/A toggle.
             </div>
           </div>
         </div>

@@ -349,10 +349,10 @@ describe("generateMenuHTML — pairing", () => {
     expect(html).toContain("SPENT BREAD KOMBUCHA");
   });
 
-  it("always shows crayfish kitchen martini even when no pairing is selected", () => {
+  it("does not force crayfish drink when forced-pairing block has no product", () => {
     const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
     const html = render({ pairing: "—" }, {}, [crayfish]);
-    expect(html).toContain("KITCHEN MARTINI");
+    expect(html).not.toContain("KITCHEN MARTINI");
   });
 
   it("respects menu rule to disable automatic crayfish forcing", () => {
@@ -363,12 +363,45 @@ describe("generateMenuHTML — pairing", () => {
     expect(html).not.toContain("KITCHEN MARTINI");
   });
 
-  it("uses configurable crayfish fallback titles from menu rules", () => {
+  it("ignores crayfish fallback title rules for product-only forced-pairing blocks", () => {
     const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
     const html = render({ pairing: "—" }, {}, [crayfish], {
       menuRules: { crayfishFallbackTitleEn: "CHEF MARTINI" },
     });
-    expect(html).toContain("CHEF MARTINI");
+    expect(html).not.toContain("CHEF MARTINI");
+  });
+
+  it("uses ALCO or N/A product in forced-pairing block based on beerChoice", () => {
+    const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
+    const template = {
+      version: 2,
+      rows: [
+        { id: "hdr", left: { type: "title" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
+        {
+          id: "c1",
+          left: { type: "course", courseKey: crayfish.course_key },
+          right: {
+            type: "forced_pairing",
+            catalogType: "cocktail",
+            catalogItemId: 11,
+            naCatalogType: "cocktail",
+            naCatalogItemId: 22,
+          },
+          widthPreset: "55/45",
+          gap: 0,
+        },
+      ],
+    };
+    const beverages = {
+      cocktails: [
+        { id: 11, name: "Kitchen Martini", notes: "aquavit, pickles" },
+        { id: 22, name: "Garden Sour", notes: "apple, herbs" },
+      ],
+    };
+    const htmlAlco = render({ pairing: "—" }, {}, [crayfish], { menuTemplate: template, beverages, beerChoice: "alco" });
+    const htmlNa = render({ pairing: "—" }, {}, [crayfish], { menuTemplate: template, beverages, beerChoice: "nonalc" });
+    expect(htmlAlco).toContain("Kitchen Martini");
+    expect(htmlNa).toContain("Garden Sour");
   });
 
   it("supports forcing pairing on custom course keys", () => {

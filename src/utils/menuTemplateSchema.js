@@ -69,20 +69,13 @@ export const BLOCK_META = {
   },
   forced_pairing: {
     label: "Forced Pairing", group: "content", color: "#c86e6e", bg: "#fff2f2", icon: "⚑",
-    desc: "Forces a specific drink pairing for this course row. Pick separate ALCO/NON-ALCO products from catalog, or override text here.",
+    desc: "Forces a specific drink pairing for this course row. Pick separate ALCO/NON-ALCO products from catalog.",
     fields: [
-      { key: "useCourseForceFields", label: "Use course forced pairing fields first", type: "checkbox" },
-      { key: "title",  label: "Title (EN)", type: "text", placeholder: "KITCHEN MARTINI" },
-      { key: "sub",    label: "Sub (EN)",   type: "text", placeholder: "" },
-      { key: "title_si", label: "Title (SI)", type: "text", placeholder: "" },
-      { key: "sub_si",   label: "Sub (SI)",   type: "text", placeholder: "" },
+      // Product-only flow: configured from the custom ALCO/NON-ALCO pickers in inspector.
     ],
     defaults: {
-      useCourseForceFields: true,
       catalogType: "", catalogItemId: null,
-      catalogTypeAlco: "", catalogItemIdAlco: null,
-      catalogTypeNonAlco: "", catalogItemIdNonAlco: null,
-      title: "", sub: "", title_si: "", sub_si: "",
+      naCatalogType: "", naCatalogItemId: null,
     },
   },
   by_the_glass: {
