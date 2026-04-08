@@ -29,6 +29,7 @@ import { makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM } from
 import { fuzzy, fuzzyDrink } from "./utils/search.js";
 import { useIsMobile } from "./hooks/useIsMobile.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
+import { useOfflineQueue } from "./hooks/useOfflineQueue.js";
 import { AdminLayout } from "./components/admin/index.js";
 import { DIETARY_KEYS, RESTRICTIONS, RESTRICTION_GROUPS, restrLabel, restrCompact } from "./constants/dietary.js";
 import { WATER_OPTS, waterStyle, PAIRINGS, pairingStyle } from "./constants/pairings.js";
@@ -290,6 +291,42 @@ function optionalExtrasFromCourses(menuCourses = []) {
 }
 
 const circBtnSm = { ...mixinCircleButton };
+
+const offlineQueue = useOfflineQueue();
+const enqueueServiceTableUpsert = useCallback(async (rows) => {
+  const payloadRows = Array.isArray(rows) ? rows : [];
+  if (payloadRows.length === 0) return { ok: true };
+
+  const op = async () => {
+    const { error } = await supabase.from(TABLES.SERVICE_TABLES).upsert(payloadRows, { onConflict: "table_id" });
+    if (error) throw error;
+  };
+
+  if (!supabase) return { ok: false, queued: false };
+
+  if (!navigator.onLine) {
+    await offlineQueue.enqueue({
+      kind: "service_tables_upsert",
+      payload: { rows: payloadRows },
+      run: op,
+    });
+    setSyncStatus("local-only");
+    return { ok: true, queued: true };
+  }
+
+  try {
+    await op();
+    return { ok: true, queued: false };
+  } catch (error) {
+    await offlineQueue.enqueue({
+      kind: "service_tables_upsert",
+      payload: { rows: payloadRows },
+      run: op,
+    });
+    setSyncStatus("sync-error");
+    return { ok: false, queued: true, error };
+  }
+}, [offlineQueue]);
 const loadMenuCoursesRef = useRef(null);
 
 // ── Menu Sync Tab ─────────────────────────────────────────────────────────────
@@ -2608,9 +2645,10 @@ export default function App() {
       let lastError;
       for (let attempt = 0; attempt < 4; attempt++) {
         if (attempt > 0) await new Promise(r => setTimeout(r, 500 * attempt));
-        const { error } = await supabase.from(TABLES.SERVICE_TABLES).upsert(changedTables, { onConflict: "table_id" });
-        if (!error) { setSyncStatus("live"); return; }
-        lastError = error;
+        const result = await enqueueServiceTableUpsert(changedTables);
+        if (result?.ok && !result?.queued) { setSyncStatus("live"); return; }
+        if (result?.queued) { return; }
+        lastError = result?.error || new Error("Unknown service table sync error");
       }
       setSyncStatus("sync-error");
       console.error("Save failed after 4 attempts:", lastError);
