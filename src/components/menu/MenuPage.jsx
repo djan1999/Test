@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DEFAULT_MENU_RULES } from "../../utils/menuGenerator.js";
 import { tokens } from "../../styles/tokens.js";
+import MenuGenerator from "./MenuGenerator.jsx";
 
 const FONT = tokens.font;
 

@@ -171,7 +171,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
       layoutStyles,
       menuRules: normalizedMenuRules,
       menuTemplate,
-      catalog: { wines, cocktails, spirits, beers },
+      catalog: { wines: winesCatalog, cocktails: cocktailsCatalog, spirits: spiritsCatalog, beers: beersCatalog },
       _logo: logoDataUri,
     });
     const w = window.open("", "_blank", "width=620,height=880");
@@ -210,7 +210,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
       layoutStyles,
       menuRules: normalizedMenuRules,
       menuTemplate,
-      catalog: { wines, cocktails, spirits, beers },
+      catalog: { wines: winesCatalog, cocktails: cocktailsCatalog, spirits: spiritsCatalog, beers: beersCatalog },
       _logo: logoDataUri,
     });
     setPreviewHtml(html);
