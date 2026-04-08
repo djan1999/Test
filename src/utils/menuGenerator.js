@@ -13,8 +13,8 @@ import { applyCourseRestriction } from "./menuUtils.js";
 import { buildDefaultTemplate, parseWidthPreset } from "./menuTemplateSchema.js";
 
 export const DEFAULT_MENU_RULES = {
-  forceCrayfishPairing: true,
-  forceChickenGizzardBeer: true,
+  forceCrayfishPairing: false,
+  forceChickenGizzardBeer: false,
   overwriteTitleAndThankYouOnLanguageSwitch: true,
   forcePairingCourseKeys: ["crayfish"],
   forceBeerCourseKeys: ["chicken_gizzard"],
@@ -257,8 +257,9 @@ export function generateMenuHTML({
     return { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
   };
 
-  const resolveForcedPairingDrink = (course, rawCourseKey, normKey, override = null) => {
-    // Explicit override from template block (highest priority)
+  const resolveForcedPairingDrink = (override = null) => {
+    // Explicit override from template block.
+    // Product-driven forced pairing is the single source of truth.
     if (override && typeof override === "object") {
       const oT = String(override.title || "").trim();
       const oS = String(override.sub || "").trim();
@@ -271,21 +272,7 @@ export function generateMenuHTML({
         if (oT || oS) return { name: oT, sub: oS };
       }
     }
-    const hasExplicitForcePairing =
-      !!String(course?.force_pairing_title || "").trim() ||
-      !!String(course?.force_pairing_sub || "").trim() ||
-      !!String(course?.force_pairing_title_si || "").trim() ||
-      !!String(course?.force_pairing_sub_si || "").trim();
-    const rawKeyNorm = normalizeCourseToken(rawCourseKey);
-    const isForcedPairingCourse = rules.forcePairingCourseKeys.includes(normKey) || rules.forcePairingCourseKeys.includes(rawKeyNorm);
-    if (!(hasExplicitForcePairing || (rules.forceCrayfishPairing && isForcedPairingCourse))) return null;
-    const fpTLines = String(course?.force_pairing_title || "").split("\n").map(s => s.trim());
-    const fpSLines = String(course?.force_pairing_sub   || "").split("\n").map(s => s.trim());
-    const fpTEn = fpTLines[0] || rules.crayfishFallbackTitleEn || "KITCHEN MARTINI";
-    const fpTSi = course?.force_pairing_title_si || fpTLines[1] || fpTEn;
-    const fpSEn = fpSLines[0] || rules.crayfishFallbackSubEn || "";
-    const fpSSi = course?.force_pairing_sub_si   || fpSLines[1] || rules.crayfishFallbackSubSi || fpSEn;
-    return lang === "si" ? { name: fpTSi, sub: fpSSi } : { name: fpTEn, sub: fpSEn };
+    return null;
   };
 
   const isTruthyShort = (value) => {
@@ -539,10 +526,7 @@ export function generateMenuHTML({
 
       let dish = applyCourseRestriction(resolveCourse(course), restrictions, lang);
       let drink = null;
-      const cn = String(course?.menu?.name || "").trim().toUpperCase();
-      const nameKey = normalizeCourseToken(cn);
-      const isForcedBeerCourse = rules.forceBeerCourseKeys.includes(normKey) || rules.forceBeerCourseKeys.includes(nameKey);
-      const forcedBeerDrink = (rules.forceChickenGizzardBeer && isForcedBeerCourse) ? resolveBeerDrinkForCourse(course) : null;
+      const forcedBeerDrink = null;
 
       const forcedPairingDrink = (() => {
         // Product-only forced_pairing block: choose ALCO or N/A product by seat toggle.
@@ -559,7 +543,7 @@ export function generateMenuHTML({
           const parts = fmtDrinkParts({ ...picked, __type: itemType });
           return { name: parts.title || "", sub: parts.sub || "" };
         }
-        return resolveForcedPairingDrink(course, courseKey, normKey, null);
+        return resolveForcedPairingDrink(null);
       })();
 
       if (lb.showPairing === false && !forcedPairingDrink && rb?.type !== "forced_pairing") {

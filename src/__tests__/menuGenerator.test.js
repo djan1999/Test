@@ -343,27 +343,13 @@ describe("generateMenuHTML — pairing", () => {
     expect(html).toContain("Klinec Mora");
   });
 
-  it("forces beer line for chicken gizzard even when seat has no pairing", () => {
-    const chicken = makeCourse("CHICKEN GIZZARD", "", { position: 1 });
-    const html = render({ pairing: "—" }, {}, [chicken], { beerChoice: "nonalc" });
-    expect(html).toContain("SPENT BREAD KOMBUCHA");
-  });
-
   it("does not force crayfish drink when forced-pairing block has no product", () => {
     const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
     const html = render({ pairing: "—" }, {}, [crayfish]);
     expect(html).not.toContain("KITCHEN MARTINI");
   });
 
-  it("respects menu rule to disable automatic crayfish forcing", () => {
-    const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
-    const html = render({ pairing: "—" }, {}, [crayfish], {
-      menuRules: { forceCrayfishPairing: false },
-    });
-    expect(html).not.toContain("KITCHEN MARTINI");
-  });
-
-  it("ignores crayfish fallback title rules for product-only forced-pairing blocks", () => {
+  it("does not inject fallback text from rules without forced-pairing product", () => {
     const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
     const html = render({ pairing: "—" }, {}, [crayfish], {
       menuRules: { crayfishFallbackTitleEn: "CHEF MARTINI" },
@@ -404,21 +390,12 @@ describe("generateMenuHTML — pairing", () => {
     expect(htmlNa).toContain("Garden Sour");
   });
 
-  it("supports forcing pairing on custom course keys", () => {
+  it("does not auto-force custom keys from menu rules without forced-pairing products", () => {
     const venison = makeCourse("VENISON", "", { position: 1 });
     const html = render({ pairing: "—" }, {}, [venison], {
       menuRules: { forcePairingCourseKeys: ["venison"], crayfishFallbackTitleEn: "HOUSE PAIRING" },
     });
-    expect(html).toContain("HOUSE PAIRING");
-  });
-
-  it("supports forcing beer on custom course keys", () => {
-    const venison = makeCourse("VENISON", "", { position: 1 });
-    const html = render({ pairing: "—" }, {}, [venison], {
-      beerChoice: "nonalc",
-      menuRules: { forceBeerCourseKeys: ["venison"] },
-    });
-    expect(html).toContain("SPENT BREAD KOMBUCHA");
+    expect(html).not.toContain("HOUSE PAIRING");
   });
 });
 
