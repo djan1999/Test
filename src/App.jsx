@@ -292,41 +292,6 @@ function optionalExtrasFromCourses(menuCourses = []) {
 
 const circBtnSm = { ...mixinCircleButton };
 
-const offlineQueue = useOfflineQueue();
-const enqueueServiceTableUpsert = useCallback(async (rows) => {
-  const payloadRows = Array.isArray(rows) ? rows : [];
-  if (payloadRows.length === 0) return { ok: true };
-
-  const op = async () => {
-    const { error } = await supabase.from(TABLES.SERVICE_TABLES).upsert(payloadRows, { onConflict: "table_id" });
-    if (error) throw error;
-  };
-
-  if (!supabase) return { ok: false, queued: false };
-
-  if (!navigator.onLine) {
-    await offlineQueue.enqueue({
-      kind: "service_tables_upsert",
-      payload: { rows: payloadRows },
-      run: op,
-    });
-    setSyncStatus("local-only");
-    return { ok: true, queued: true };
-  }
-
-  try {
-    await op();
-    return { ok: true, queued: false };
-  } catch (error) {
-    await offlineQueue.enqueue({
-      kind: "service_tables_upsert",
-      payload: { rows: payloadRows },
-      run: op,
-    });
-    setSyncStatus("sync-error");
-    return { ok: false, queued: true, error };
-  }
-}, [offlineQueue]);
 const loadMenuCoursesRef = useRef(null);
 
 // ── Menu Sync Tab ─────────────────────────────────────────────────────────────
@@ -2242,6 +2207,61 @@ export default function App() {
   const prevTablesJsonRef  = useRef((initialState.tables || initTables).map(t => JSON.stringify(sanitizeTable(t))));
   const tablesRef          = useRef(tables);
 
+  const offlineQueue = useOfflineQueue();
+  const enqueueServiceTableUpsert = useCallback(async (rows) => {
+    const payloadRows = Array.isArray(rows) ? rows : [];
+    if (payloadRows.length === 0) return { ok: true };
+
+    const op = async () => {
+      const { error } = await supabase.from(TABLES.SERVICE_TABLES).upsert(payloadRows, { onConflict: "table_id" });
+      if (error) throw error;
+    };
+
+    if (!supabase) return { ok: false, queued: false };
+
+    if (!navigator.onLine) {
+      await offlineQueue.enqueue({
+        kind: "service_tables_upsert",
+        payload: { rows: payloadRows },
+        run: op,
+      });
+      setSyncStatus("local-only");
+      return { ok: true, queued: true };
+    }
+
+    try {
+      await op();
+      return { ok: true, queued: false };
+    } catch (error) {
+      await offlineQueue.enqueue({
+        kind: "service_tables_upsert",
+        payload: { rows: payloadRows },
+        run: op,
+      });
+      setSyncStatus("sync-error");
+      return { ok: false, queued: true, error };
+    }
+  }, [offlineQueue]);
+
+  const enqueueReservationMutation = useCallback(async ({ kind, run }) => {
+    if (!supabase) return { ok: false, queued: false };
+
+    if (!navigator.onLine) {
+      await offlineQueue.enqueue({ kind, payload: {}, run });
+      setSyncStatus("local-only");
+      return { ok: true, queued: true };
+    }
+
+    try {
+      await run();
+      return { ok: true, queued: false };
+    } catch (error) {
+      await offlineQueue.enqueue({ kind, payload: {}, run });
+      setSyncStatus("sync-error");
+      return { ok: false, queued: true, error };
+    }
+  }, [offlineQueue]);
+
   const boardState = { tables, cocktails, spirits, beers };
   const tablesJson = useMemo(() => JSON.stringify(tables), [tables]);
   const boardJson  = useMemo(() => JSON.stringify(boardState), [tablesJson, cocktails, spirits, beers]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2521,17 +2541,31 @@ export default function App() {
     const dbRow = { date, table_id, data: rData };
     if (id) {
       if (supabase) {
-        const { error } = await supabase.from("reservations").update(dbRow).eq("id", id);
-        if (!error) setReservations(prev => prev.map(r => r.id === id ? { ...r, ...dbRow } : r));
-        return { ok: !error, error };
+        const result = await enqueueReservationMutation({
+          kind: "reservation_update",
+          run: async () => {
+            const { error } = await supabase.from(TABLES.RESERVATIONS).update(dbRow).eq("id", id);
+            if (error) throw error;
+          },
+        });
+        if (result.ok) setReservations(prev => prev.map(r => r.id === id ? { ...r, ...dbRow } : r));
+        return { ok: result.ok, error: result.error };
       }
       setReservations(prev => prev.map(r => r.id === id ? { ...r, ...dbRow } : r));
       return { ok: true };
     }
     if (supabase) {
-      const { data: inserted, error } = await supabase.from("reservations").insert(dbRow).select().single();
-      if (!error && inserted) setReservations(prev => [...prev, inserted]);
-      return { ok: !error, error, data: inserted };
+      let inserted = null;
+      const result = await enqueueReservationMutation({
+        kind: "reservation_insert",
+        run: async () => {
+          const { data, error } = await supabase.from(TABLES.RESERVATIONS).insert(dbRow).select().single();
+          if (error) throw error;
+          inserted = data;
+        },
+      });
+      if (result.ok && inserted) setReservations(prev => [...prev, inserted]);
+      return { ok: result.ok, error: result.error, data: inserted };
     }
     const local = { ...dbRow, id: crypto.randomUUID(), created_at: new Date().toISOString() };
     setReservations(prev => [...prev, local]);
@@ -2541,8 +2575,14 @@ export default function App() {
   const deleteReservation = async (id) => {
     setReservations(prev => prev.filter(r => r.id !== id));
     if (!supabase) return { ok: true };
-    const { error } = await supabase.from("reservations").delete().eq("id", id);
-    return { ok: !error };
+    const result = await enqueueReservationMutation({
+      kind: "reservation_delete",
+      run: async () => {
+        const { error } = await supabase.from(TABLES.RESERVATIONS).delete().eq("id", id);
+        if (error) throw error;
+      },
+    });
+    return { ok: result.ok };
   };
 
   // Apply reservation data to tables that are still blank (not yet active / named)
