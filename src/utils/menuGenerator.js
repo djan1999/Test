@@ -682,15 +682,22 @@ export function generateMenuHTML({
 
   // ── Render rows to HTML ───────────────────────────────────────────────────
   const menuRowsHtml = rows.map(row => {
-    const gapStyle = row.gap ? `margin-top:${row.gap}pt;` : "";
+    const gapPt = Number(row.gap || 0) || 0;
+    const gapStyle = gapPt ? `margin-top:${gapPt}pt;` : "";
     const pin = row.pinToBottom;
+    const dbgAttrs = _debugSpacing
+      ? ` data-gappt="${esc(gapPt)}"`
+      : "";
 
     if (row.type === "_divider") {
       const t  = row.thickness ?? 0.5;
       const c  = row.color     ?? "#cccccc";
       const mt = (row.marginTop    ?? 3) + (row.gap || 0);
       const mb = row.marginBottom  ?? 3;
-      return `<hr style="border:none;border-top:${t}pt solid ${esc(c)};margin:${mt}pt 0 ${mb}pt;">`;
+      const hrDbg = _debugSpacing
+        ? ` data-kind="divider" data-mtpt="${esc(mt)}" data-mbpt="${esc(mb)}"`
+        : "";
+      return `<hr${hrDbg} style="border:none;border-top:${t}pt solid ${esc(c)};margin:${mt}pt 0 ${mb}pt;">`;
     }
     if (row.type === "section") {
       const ta = row.align && row.align !== "left" ? `text-align:${row.align};` : "";
@@ -705,10 +712,13 @@ export function generateMenuHTML({
       const rightHtml = row.side === "right" ? labelHtml : emptyDiv;
       const reservePt = Number(row.reservePt ?? 0) || 0;
       const reserveStyle = reserveHeight && reservePt > 0 ? `min-height:${reservePt}pt;` : "";
-      return `<div class="menu-row" style="${gapStyle}${reserveStyle}margin-bottom:${mbPt}pt;${gridCols(row.widthPreset)}">${leftHtml}${rightHtml}</div>`;
+      const secDbg = _debugSpacing
+        ? ` data-kind="pairing-label" data-mbpt="${esc(mbPt)}" data-reservept="${esc(reserveHeight ? reservePt : 0)}"`
+        : "";
+      return `<div class="menu-row"${dbgAttrs}${secDbg} style="${gapStyle}${reserveStyle}margin-bottom:${mbPt}pt;${gridCols(row.widthPreset)}">${leftHtml}${rightHtml}</div>`;
     }
     if (row.type === "wine-only") {
-      return `<div class="menu-row wine-only" style="${gapStyle}${gridCols(row.widthPreset)}">${renderBlock(null, "left")}${renderBlock(row.right, "right")}</div>`;
+      return `<div class="menu-row wine-only"${dbgAttrs} style="${gapStyle}${gridCols(row.widthPreset)}">${renderBlock(null, "left")}${renderBlock(row.right, "right")}</div>`;
     }
     if (row.type === "_header") {
       const hasTitle = !!row.titleBlock;
@@ -719,23 +729,27 @@ export function generateMenuHTML({
       const logoHtml = hasLogo
         ? `<div id="logo"><img src="${_logo}" alt="Logo"></div>`
         : "";
-      return `<div class="menu-header-row" style="${gapStyle}">${titleHtml}${logoHtml}</div>`;
+      const hdrDbg = _debugSpacing ? ` data-kind="header"` : "";
+      return `<div class="menu-header-row"${hdrDbg}${dbgAttrs} style="${gapStyle}">${titleHtml}${logoHtml}</div>`;
     }
     if (row.type === "_team") {
       const tmB = row.block || {};
       const spacing = tmB.spacing ?? 1.4;
       const names = teamNames;
       const taStyle = (tmB.align && tmB.align !== "left") ? `text-align:${tmB.align};` : "";
-      return `<div id="team" class="${pin ? "pin-bottom" : ""}" style="${pin ? "" : gapStyle}${taStyle}"><div class="menu-main" style="margin-bottom:${spacing}pt">TEAM:</div><div>${esc(names)}</div></div>`;
+      const teamDbg = _debugSpacing ? ` data-kind="team" data-labelmbpt="${esc(spacing)}"` : "";
+      return `<div id="team"${teamDbg} class="${pin ? "pin-bottom" : ""}" style="${pin ? "" : gapStyle}${taStyle}"><div class="menu-main" style="margin-bottom:${spacing}pt">TEAM:</div><div>${esc(names)}</div></div>`;
     }
     if (row.type === "thankyou") {
       const fs = row.fontSize ? `font-size:${row.fontSize}pt;` : "";
       const ta = (row.align && row.align !== "left") ? `text-align:${row.align};` : "";
-      return `<div class="menu-thankyou ${pin ? "pin-bottom" : ""}" style="${pin ? "" : gapStyle}${fs}${ta}">${esc(row._text)}</div>`;
+      const tyDbg = _debugSpacing ? ` data-kind="thankyou"` : "";
+      return `<div class="menu-thankyou ${pin ? "pin-bottom" : ""}"${tyDbg}${dbgAttrs} style="${pin ? "" : gapStyle}${fs}${ta}">${esc(row._text)}</div>`;
     }
     // course / text rows
     const ckAttr = row.courseKey ? ` data-ck="${esc(row.courseKey)}"` : "";
-    return `<div class="menu-row ${row.rowClass || ""}${pin ? " pin-bottom" : ""}" style="${pin ? "" : gapStyle}${gridCols(row.widthPreset)}"${ckAttr}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
+    const kindDbg = _debugSpacing ? ` data-kind="row"` : "";
+    return `<div class="menu-row ${row.rowClass || ""}${pin ? " pin-bottom" : ""}"${dbgAttrs}${kindDbg} style="${pin ? "" : gapStyle}${gridCols(row.widthPreset)}"${ckAttr}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
   }).join("");
 
   // ── HTML output ───────────────────────────────────────────────────────────
@@ -764,9 +778,10 @@ export function generateMenuHTML({
       const n = parseFloat(String(v).replace('px',''));
       return Number.isFinite(n) ? n : 0;
     }
-    function fmtPx(px){
-      const p = Math.round(px * 10) / 10;
-      return (p === 0 ? "0" : String(p)) + "px";
+    function pxToPt(px){ return px / (96 / 72); }
+    function fmtPt(pt){
+      const p = Math.round(pt * 10) / 10;
+      return (p === 0 ? "0" : String(p)) + "pt";
     }
     function annotate(el, label, right){
       if (!el || el.querySelector(':scope > .__dbg-badge')) return;
@@ -781,20 +796,29 @@ export function generateMenuHTML({
       if (!root) return;
       const kids = Array.from(root.children || []);
       kids.forEach((el) => {
-        const cs = getComputedStyle(el);
-        const mt = toNumPx(cs.marginTop);
-        const mb = toNumPx(cs.marginBottom);
-        if (mt === 0 && mb === 0) return;
+        const ds = el.dataset || {};
+        const gapPt = parseFloat(ds.gappt || "0") || 0;
+        const mbPt = parseFloat(ds.mbpt || "0") || 0;
+        const reservePt = parseFloat(ds.reservept || "0") || 0;
+        const mtPtFromCss = pxToPt(toNumPx(getComputedStyle(el).marginTop));
+        const mbPtFromCss = pxToPt(toNumPx(getComputedStyle(el).marginBottom));
+        const mtPt = gapPt || (Math.round(mtPtFromCss * 10) / 10);
+        const mbPt2 = mbPt || (Math.round(mbPtFromCss * 10) / 10);
+        if (mtPt === 0 && mbPt2 === 0 && reservePt === 0) return;
         const tag = el.tagName.toLowerCase();
         const cls = (el.className || '').toString();
-        const kind =
-          tag === 'hr' ? 'divider' :
+        const kind = ds.kind ||
+          (tag === 'hr' ? 'divider' :
           cls.includes('menu-header-row') ? 'header' :
           cls.includes('menu-thankyou') ? 'thankyou' :
           cls.includes('pin-bottom') ? 'pin' :
           cls.includes('menu-row') ? 'row' :
-          el.id ? el.id : tag;
-        annotate(el, kind + '  mt ' + fmtPx(mt) + ' · mb ' + fmtPx(mb), false);
+          el.id ? el.id : tag);
+        const parts = [];
+        if (mtPt) parts.push('gap ' + fmtPt(mtPt));
+        if (reservePt) parts.push('reserve ' + fmtPt(reservePt));
+        if (mbPt2) parts.push('below ' + fmtPt(mbPt2));
+        annotate(el, kind + ' · ' + parts.join(' · '), false);
       });
     }
     window.addEventListener('load', function(){ setTimeout(run, 60); });
