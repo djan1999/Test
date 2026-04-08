@@ -36,6 +36,48 @@ const BEVERAGE_PAGES = [
   { url: `${BASE}/category/likerji`,      category: "spirit",   label: "Liqueur"         },
 ];
 
+const DEFAULT_SYNC_CONFIG = {
+  winesEnabled: true,
+  beveragesEnabled: true,
+  wineCountries: ["SI", "AT", "IT", "FR", "HR"],
+  beveragePages: [
+    { category: "cocktail", label: "Cocktail", url: `${BASE}/category/cocktails/` },
+    { category: "beer", label: "Beer", url: `${BASE}/category/pivo/` },
+    { category: "spirit", label: "Whisky", url: `${BASE}/category/viski` },
+    { category: "spirit", label: "Cognac / Brandy", url: `${BASE}/category/cognac` },
+    { category: "spirit", label: "Rum", url: `${BASE}/category/rum` },
+    { category: "spirit", label: "Agave", url: `${BASE}/category/agave` },
+    { category: "spirit", label: "Gin", url: `${BASE}/category/gin` },
+    { category: "spirit", label: "Vodka", url: `${BASE}/category/vodka` },
+    { category: "spirit", label: "Other", url: `${BASE}/category/other-ostalo` },
+    { category: "spirit", label: "Liqueur", url: `${BASE}/category/likerji` },
+  ],
+};
+
+function normalizeSyncConfig(raw) {
+  const cfg = raw && typeof raw === "object" ? raw : {};
+  const normalizeCountries = () => {
+    const source = Array.isArray(cfg.wineCountries) ? cfg.wineCountries : DEFAULT_SYNC_CONFIG.wineCountries;
+    return source.map(v => String(v || "").trim().toUpperCase()).filter(Boolean);
+  };
+  const normalizePages = () => {
+    const source = Array.isArray(cfg.beveragePages) ? cfg.beveragePages : DEFAULT_SYNC_CONFIG.beveragePages;
+    return source
+      .map((p) => ({
+        category: String(p?.category || "").trim().toLowerCase(),
+        label: String(p?.label || "").trim(),
+        url: String(p?.url || "").trim(),
+      }))
+      .filter((p) => p.category && p.label && p.url);
+  };
+  return {
+    winesEnabled: cfg.winesEnabled !== false,
+    beveragesEnabled: cfg.beveragesEnabled !== false,
+    wineCountries: normalizeCountries(),
+    beveragePages: normalizePages(),
+  };
+}
+
 async function fetchHtml(url) {
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; MilkaSyncBot/1.0)", Accept: "text/html" },
@@ -156,22 +198,42 @@ export default async function handler(req, res) {
   const dry = new URL(req.url, "http://localhost").searchParams.get("dry") === "true";
 
   try {
+    const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+    const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) throw new Error("Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_KEY)");
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data: syncSettingsRow } = await supabase
+      .from("service_settings")
+      .select("state")
+      .eq("id", "wine_sync_config")
+      .maybeSingle();
+    const syncConfig = normalizeSyncConfig(syncSettingsRow?.state || DEFAULT_SYNC_CONFIG);
+    const enabledWineCountries = WINE_COUNTRIES.filter((c) => syncConfig.wineCountries.includes(String(c.label || "").toUpperCase()));
+    const enabledBeveragePages = BEVERAGE_PAGES.filter((page) => {
+      const normalizedUrl = String(page.url || "").replace(/\/+$/, "");
+      return syncConfig.beveragePages.some((cfgPage) =>
+        cfgPage.category === page.category &&
+        String(cfgPage.url || "").replace(/\/+$/, "") === normalizedUrl
+      );
+    });
+
     const [wineResults, bevResults] = await Promise.all([
-      Promise.allSettled(WINE_COUNTRIES.map(fetchWineCountry)),
-      Promise.allSettled(BEVERAGE_PAGES.map(fetchBeveragePage)),
+      Promise.allSettled((syncConfig.winesEnabled ? enabledWineCountries : []).map(fetchWineCountry)),
+      Promise.allSettled((syncConfig.beveragesEnabled ? enabledBeveragePages : []).map(fetchBeveragePage)),
     ]);
 
     const successfulCountries = wineResults.filter(r => r.status === "fulfilled").map(r => r.value);
-    const failedCountries = WINE_COUNTRIES.filter((_, i) => wineResults[i].status !== "fulfilled");
+    const failedCountries = enabledWineCountries.filter((_, i) => wineResults[i].status !== "fulfilled");
     if (failedCountries.length > 0) {
       console.warn(`[sync] failed countries: ${failedCountries.map(c => c.label).join(", ")}`);
     }
     const allWines = successfulCountries.flatMap(r => r.wines);
     const successfulBeveragePages = bevResults
-      .map((r, i) => ({ result: r, page: BEVERAGE_PAGES[i] }))
+      .map((r, i) => ({ result: r, page: enabledBeveragePages[i] }))
       .filter(x => x.result.status === "fulfilled");
     const failedBeveragePages = bevResults
-      .map((r, i) => ({ result: r, page: BEVERAGE_PAGES[i] }))
+      .map((r, i) => ({ result: r, page: enabledBeveragePages[i] }))
       .filter(x => x.result.status !== "fulfilled")
       .map(x => x.page.label);
     if (failedBeveragePages.length > 0) {
@@ -197,15 +259,10 @@ export default async function handler(req, res) {
       });
     }
 
-    const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
-    const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseKey) throw new Error("Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_KEY)");
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
     // Sync wines — delete existing rows for synced countries, then insert fresh ones.
     // This avoids a huge NOT IN query (400+ keys would exceed PostgREST URL limits).
     let winesUpserted = 0;
-    if (successfulCountries.length > 0) {
+    if (syncConfig.winesEnabled && successfulCountries.length > 0) {
       const seen = new Set();
       const uniqueWines = allWines.filter(w => { if (seen.has(w.key)) return false; seen.add(w.key); return true; });
       const syncedCountryLabels = successfulCountries.map(r => r.label);
@@ -229,8 +286,8 @@ export default async function handler(req, res) {
 
     // Sync beverages — replace all 3 categories fresh every run
     let beveragesUpserted = 0;
-    const allBeveragePagesSucceeded = successfulBeveragePages.length === BEVERAGE_PAGES.length;
-    if (allBeveragePagesSucceeded) {
+    const allBeveragePagesSucceeded = successfulBeveragePages.length === enabledBeveragePages.length;
+    if (syncConfig.beveragesEnabled && allBeveragePagesSucceeded) {
       const catCounters = {};
       const rows = allBeverages.map(b => {
         catCounters[b.category] = (catCounters[b.category] || 0);

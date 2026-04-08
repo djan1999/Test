@@ -58,7 +58,14 @@ export default function AdminLayout({
   layoutStyles = {},
   onUpdateLayoutStyles,
   onSaveLayoutStyles,
-  onResetMenuLayout,
+  layoutProfiles,
+  activeLayoutProfileId,
+  onSelectLayoutProfile,
+  onCreateLayoutProfile,
+  onDeleteLayoutProfile,
+  wineSyncConfig,
+  onUpdateWineSyncConfig,
+  onSaveWineSyncConfig,
   // Quick Access
   quickAccessItems,
   onUpdateQuickAccess,
@@ -288,7 +295,14 @@ export default function AdminLayout({
               layoutStyles={layoutStyles}
               onUpdateLayoutStyles={onUpdateLayoutStyles}
               onSaveLayoutStyles={onSaveLayoutStyles}
-              onResetMenuLayout={onResetMenuLayout}
+              layoutProfiles={layoutProfiles}
+              activeLayoutProfileId={activeLayoutProfileId}
+              onSelectLayoutProfile={onSelectLayoutProfile}
+              onCreateLayoutProfile={onCreateLayoutProfile}
+              onDeleteLayoutProfile={onDeleteLayoutProfile}
+              wineSyncConfig={wineSyncConfig}
+              onUpdateWineSyncConfig={onUpdateWineSyncConfig}
+              onSaveWineSyncConfig={onSaveWineSyncConfig}
             />
           )}
 
