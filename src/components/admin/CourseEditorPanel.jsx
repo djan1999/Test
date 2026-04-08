@@ -156,6 +156,9 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
               <input type="number" value={course.short_order ?? ""} onChange={e => upd("short_order", e.target.value ? Number(e.target.value) : null)} style={{ ...inpSm, width: 60 }} />
             </div>
           </div>
+          <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", marginBottom: 12, lineHeight: 1.4 }}>
+            Forced Pairing is configured in <strong style={{ color: "#777" }}>Menu Layout</strong> blocks only.
+          </div>
 
           {/* Pairings */}
           {activePairings.length > 0 && (
