@@ -43,6 +43,16 @@ const CELL_EMPTY_BORDER = "#e4e2dc";
 // ── Preview data constants ─────────────────────────────────────────────────────
 
 /** Create a fresh blank preview seat for a given 1-based position. */
+const makePreviewSeat = (id) => ({
+  id,
+  pairing: "Wine",
+  extras: {},
+  aperitifs: [],
+  glasses: [],
+  cocktails: [],
+  beers: [],
+  restrictions: [],
+});
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function chipLabel(block, menuCourses) {
