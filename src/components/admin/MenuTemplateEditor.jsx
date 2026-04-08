@@ -419,7 +419,7 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
 
   const setField = (key, val) => onUpdate({ ...block, [key]: val });
 
-  if (fields.length === 0 && block.type !== "optional_pairing") return (
+  if (fields.length === 0 && block.type !== "forced_pairing") return (
     <div>
       <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: meta.color || "#888", textTransform: "uppercase", marginBottom: 8 }}>
         {meta.icon} {meta.label}
@@ -437,8 +437,8 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
         {meta.icon} {meta.label}
       </div>
 
-      {/* Optional Pairing: catalog picker (supplements the schema-driven fields) */}
-      {block.type === "optional_pairing" && (
+      {/* Forced Pairing: catalog picker (supplements the schema-driven fields) */}
+      {block.type === "forced_pairing" && (
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>
             Product reference (alcoholic)
@@ -808,23 +808,16 @@ export default function MenuTemplateEditor({
     onUpdateTemplate({ ...menuTemplate, rows: normalized });
   }, [menuTemplate, onUpdateTemplate]);
 
-  // ── One-time migration: forced_pairing -> optional_pairing and catalogId -> catalogItemId ──
+  // ── One-time migration: forced_pairing catalogId -> catalogItemId ───────────
   useEffect(() => {
     if (!menuTemplate?.rows) return;
     let changed = false;
     const nextRows = menuTemplate.rows.map((r) => {
       const migrate = (b) => {
-        if (!b) return b;
-        if (b.type !== "forced_pairing" && b.type !== "optional_pairing") return b;
-        const nextType = b.type === "forced_pairing" ? "optional_pairing" : b.type;
-        const needsCatalogIdMigration = b.catalogItemId == null && b.catalogId != null;
-        if (!needsCatalogIdMigration && nextType === b.type) return b;
+        if (!b || b.type !== "forced_pairing") return b;
+        if (b.catalogItemId != null || b.catalogId == null) return b;
         changed = true;
-        return {
-          ...b,
-          type: nextType,
-          catalogItemId: needsCatalogIdMigration ? b.catalogId : b.catalogItemId,
-        };
+        return { ...b, catalogItemId: b.catalogId };
       };
       const left = migrate(r.left);
       const right = migrate(r.right);

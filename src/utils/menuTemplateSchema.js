@@ -67,14 +67,13 @@ export const BLOCK_META = {
     ],
     defaults: { text: "", align: "right", reserveWhenNoPairing: null, reserveHeightPt: null, spacing: 6 },
   },
-  optional_pairing: {
-    label: "Optional Pairing", group: "content", color: "#c86e6e", bg: "#fff2f2", icon: "⚑",
-    desc: "Optional pairing product for this course row. Uses per-seat optional pairing toggle (ALCO/NON-ALCO).",
+  forced_pairing: {
+    label: "Forced Pairing", group: "content", color: "#c86e6e", bg: "#fff2f2", icon: "⚑",
+    desc: "Forces a specific drink pairing for this course row. Pick separate ALCO/NON-ALCO products from catalog.",
     fields: [
-      { key: "pairingFlag", label: "Optional pairing key", type: "text", placeholder: "e.g. chicken_dessert_pairing" },
+      // Product-only flow: configured from the custom ALCO/NON-ALCO pickers in inspector.
     ],
     defaults: {
-      pairingFlag: "",
       catalogType: "", catalogItemId: null,
       naCatalogType: "", naCatalogItemId: null,
     },

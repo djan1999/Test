@@ -87,17 +87,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#e8f5fa", Premium: "#f0eeff", "Our Story": "#eaf5ee" };
 
   const normFlag = s => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-  const normCategory = (course) => {
-    const raw = normFlag(course?.course_category);
-    if (raw === "main" || raw === "optional" || raw === "celebration") return raw;
-    return normFlag(course?.optional_flag) ? "optional" : "main";
-  };
   const orderedOptionalSeatsByKey = (menuCourses || []).reduce((acc, course) => {
     const key = normFlag(course?.optional_flag);
     if (!key) return acc;
     acc[key] = seats.filter((s) => !!s.extras?.[key]?.ordered);
     return acc;
   }, {});
+  const isForcedPairingCourse = c => !!String(c.force_pairing_title || c.force_pairing_title_si || "").trim();
+
   const optionalSeatsForCourse = (course) => {
     const key = normFlag(course?.optional_flag);
     if (!key) return [];
@@ -113,8 +110,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   // Courses to show: non-snack, optional extras only when ordered, short menu filtered
   const courses = tableOverriddenCourses.filter(c => {
     if (c.is_snack) return false;
-    const category = normCategory(c);
-    if ((category === "optional" || category === "celebration") && normFlag(c.optional_flag) && optionalSeatsForCourse(c).length === 0) return false;
+    if (normFlag(c.optional_flag) && optionalSeatsForCourse(c).length === 0) return false;
     if (isShort && !isTruthyShort(c.show_on_short)) return false;
     return true;
   }).sort((a, b) => {

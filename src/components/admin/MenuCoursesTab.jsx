@@ -43,7 +43,7 @@ export default function MenuCoursesTab({ menuCourses = [], onUpdateCourses, onSa
       menu_si: null,
       wp: null, wp_si: null, na: null, na_si: null, os: null, os_si: null, premium: null, premium_si: null,
       hazards: null, is_snack: false,
-      course_key: "", course_category: "main", optional_flag: "", optional_pairing_flag: "", optional_pairing_label: "", section_gap_before: false,
+      course_key: "", optional_flag: "", section_gap_before: false,
       show_on_short: false, short_order: null,
       force_pairing_title: "", force_pairing_sub: "",
       force_pairing_title_si: "", force_pairing_sub_si: "",

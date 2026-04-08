@@ -68,8 +68,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
   const activePairings     = PAIRING_KEYS.filter(({ key }) => course[key] != null);
   const availableRestrictions = DIETARY_KEYS.filter(rKey => course.restrictions?.[rKey] == null);
   const availablePairings     = PAIRING_KEYS.filter(({ key }) => course[key] == null);
-  const category = String(course.course_category || "main");
-  const isOptional = category === "optional" || category === "celebration";
+  const isOptional = !!(course.optional_flag || "").trim();
 
   return (
     <div style={{
@@ -114,15 +113,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
           {/* Metadata */}
           <div style={{ marginBottom: 12 }}>
             <div style={labelSm}>Course Key</div>
-            <input value={course.course_key || ""} onChange={e => upd("course_key", e.target.value)} style={inpSm} placeholder="e.g. chicken_dessert" />
-          </div>
-          <div style={{ marginBottom: 12 }}>
-            <div style={labelSm}>Category</div>
-            <select value={category} onChange={e => upd("course_category", e.target.value)} style={inpSm}>
-              <option value="main">main</option>
-              <option value="optional">optional</option>
-              <option value="celebration">celebration</option>
-            </select>
+            <input value={course.course_key || ""} onChange={e => upd("course_key", e.target.value)} style={inpSm} placeholder="e.g. beetroot" />
           </div>
 
           {/* Toggles */}
@@ -131,25 +122,35 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
               <input type="checkbox" checked={!!course.show_on_short} onChange={e => upd("show_on_short", e.target.checked)} />
               Show on Short
             </label>
+            <button
+              onClick={() => upd("optional_flag", isOptional ? "" : "beetroot")}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 10px",
+                border: `1px solid ${isOptional ? "#d4a020" : "#ddd"}`,
+                borderRadius: 2, cursor: "pointer",
+                background: isOptional ? "#fff3d8" : "#fff",
+                color: isOptional ? "#9a6020" : "#aaa",
+              }}
+            >{isOptional ? "OPTIONAL ✓" : "OPTIONAL"}</button>
             {isOptional && (
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <span style={{ fontFamily: FONT, fontSize: 9, color: "#9a6020" }}>type:</span>
                 <select
-                  value={course.optional_flag || ""}
+                  value={course.optional_flag || "beetroot"}
                   onChange={e => upd("optional_flag", e.target.value)}
                   style={{ ...inpSm, fontSize: 9, padding: "3px 6px" }}
                 >
-                  <option value="">(required key)</option>
+                  <option value="beetroot">Beetroot</option>
+                  <option value="cheese">Cheese</option>
+                  <option value="cake">Cake</option>
+                  <option value="custom">Custom…</option>
                 </select>
-                <input value={course.optional_flag || ""} onChange={e => upd("optional_flag", e.target.value)}
-                  style={{ ...inpSm, width: 140, fontSize: 9 }} placeholder="e.g. cheese" />
+                {course.optional_flag === "custom" && (
+                  <input value={course.optional_flag} onChange={e => upd("optional_flag", e.target.value)}
+                    style={{ ...inpSm, width: 90, fontSize: 9 }} placeholder="flag name" />
+                )}
               </div>
             )}
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>Optional pairing key:</span>
-              <input value={course.optional_pairing_flag || ""} onChange={e => upd("optional_pairing_flag", e.target.value)} style={{ ...inpSm, width: 170 }} placeholder="e.g. crayfish_pairing" />
-              <input value={course.optional_pairing_label || ""} onChange={e => upd("optional_pairing_label", e.target.value)} style={{ ...inpSm, width: 150 }} placeholder="label (optional)" />
-            </div>
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <span style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>Short order:</span>
               <input type="number" value={course.short_order ?? ""} onChange={e => upd("short_order", e.target.value ? Number(e.target.value) : null)} style={{ ...inpSm, width: 60 }} />
@@ -277,7 +278,7 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
       menu: { name: "", sub: "" }, menu_si: null,
       wp: null, wp_si: null, na: null, na_si: null, os: null, os_si: null, premium: null, premium_si: null,
       hazards: null, is_snack: false,
-      course_key: "", course_category: "main", optional_flag: "", optional_pairing_flag: "", optional_pairing_label: "", section_gap_before: false,
+      course_key: "", optional_flag: "", section_gap_before: false,
       show_on_short: false, short_order: null,
       force_pairing_title: "", force_pairing_sub: "",
       force_pairing_title_si: "", force_pairing_sub_si: "",
@@ -290,15 +291,10 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>
-          {menuCourses.filter(c => (c.course_category || "main") === "main").length} MAIN
-          {menuCourses.filter(c => (c.course_category || "main") === "optional").length > 0 && (
+          {menuCourses.filter(c => !c.optional_flag).length} COURSES
+          {menuCourses.filter(c => c.optional_flag).length > 0 && (
             <span style={{ color: "#c8a06e", marginLeft: 8 }}>
-              + {menuCourses.filter(c => (c.course_category || "main") === "optional").length} OPTIONAL
-            </span>
-          )}
-          {menuCourses.filter(c => (c.course_category || "main") === "celebration").length > 0 && (
-            <span style={{ color: "#a06ec8", marginLeft: 8 }}>
-              + {menuCourses.filter(c => (c.course_category || "main") === "celebration").length} CELEBRATION
+              + {menuCourses.filter(c => c.optional_flag).length} OPTIONAL
             </span>
           )}
         </div>

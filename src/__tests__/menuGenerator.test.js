@@ -14,7 +14,6 @@ function makeTable(overrides = {}) {
 function makeCourse(name, sub = "", opts = {}) {
   return {
     course_key: name.toLowerCase().replace(/\s+/g, "_"),
-    course_category: opts.course_category || "main",
     menu: { name, sub },
     menu_si: opts.menu_si || null,
     position: opts.position ?? 1,
@@ -227,9 +226,9 @@ describe("generateMenuHTML — restriction substitutions", () => {
 // ── Extras filtering (beetroot / cheese / cake) ───────────────────────────────
 
 describe("generateMenuHTML — extras filtering", () => {
-  const beetrootCourse = makeCourse("BEETROOT", "bear fat", { course_category: "optional", optional_flag: "beetroot" });
-  const cheeseCourse   = makeCourse("CHEESE", "condiments", { course_category: "optional", optional_flag: "cheese" });
-  const cakeCourse     = makeCourse("PEAR", "walnut", { course_category: "celebration", optional_flag: "cake" });
+  const beetrootCourse = makeCourse("BEETROOT", "bear fat", { optional_flag: "beetroot" });
+  const cheeseCourse   = makeCourse("CHEESE", "condiments", { optional_flag: "cheese" });
+  const cakeCourse     = makeCourse("PEAR", "walnut", { optional_flag: "cake" });
   const mainCourse     = makeCourse("LAMB", "rosemary");
 
   it("hides beetroot course when seat has not ordered beetroot", () => {
@@ -350,7 +349,7 @@ describe("generateMenuHTML — pairing", () => {
     expect(html).not.toContain("CHEF MARTINI");
   });
 
-  it("uses ALCO or N/A product in optional-pairing block based on seat optionalPairings mode", () => {
+  it("uses ALCO or N/A product in forced-pairing block based on beerChoice", () => {
     const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
     const template = {
       version: 2,
@@ -360,8 +359,7 @@ describe("generateMenuHTML — pairing", () => {
           id: "c1",
           left: { type: "course", courseKey: crayfish.course_key },
           right: {
-            type: "optional_pairing",
-            pairingFlag: "crayfish_pairing",
+            type: "forced_pairing",
             catalogType: "cocktail",
             catalogItemId: 11,
             naCatalogType: "cocktail",
@@ -378,8 +376,8 @@ describe("generateMenuHTML — pairing", () => {
         { id: 22, name: "Garden Sour", notes: "apple, herbs" },
       ],
     };
-    const htmlAlco = render({ pairing: "—", optionalPairings: { crayfish_pairing: { ordered: true, mode: "alco" } } }, {}, [crayfish], { menuTemplate: template, beverages });
-    const htmlNa = render({ pairing: "—", optionalPairings: { crayfish_pairing: { ordered: true, mode: "nonalc" } } }, {}, [crayfish], { menuTemplate: template, beverages });
+    const htmlAlco = render({ pairing: "—" }, {}, [crayfish], { menuTemplate: template, beverages, beerChoice: "alco" });
+    const htmlNa = render({ pairing: "—" }, {}, [crayfish], { menuTemplate: template, beverages, beerChoice: "nonalc" });
     expect(htmlAlco).toContain("Kitchen Martini");
     expect(htmlNa).toContain("Garden Sour");
   });

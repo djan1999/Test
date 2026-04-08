@@ -5,7 +5,7 @@ describe("makeSeats", () => {
   it("creates n seats with default values", () => {
     const seats = makeSeats(3);
     expect(seats).toHaveLength(3);
-    expect(seats[0]).toEqual({ id: 1, water: "—", aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [], pairing: "", extras: {}, optionalPairings: {} });
+    expect(seats[0]).toEqual({ id: 1, water: "—", aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [], pairing: "", extras: {} });
   });
 
   it("ids start at 1 and increment", () => {

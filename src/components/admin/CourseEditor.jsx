@@ -29,8 +29,6 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
     if (!restrictions[rKey].name && !restrictions[rKey].sub) restrictions[rKey] = null;
     onUpdate({ ...course, restrictions });
   };
-  const category = String(course.course_category || "main");
-  const isOptionalCategory = category === "optional" || category === "celebration";
 
   return (
     <div style={{
@@ -71,18 +69,8 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
 
           {/* ── Metadata ── */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
-            <div><div style={labelSm}>Course Key</div><input value={course.course_key || ""} onChange={e => upd("course_key", e.target.value)} style={inpSm} placeholder="e.g. chicken_dessert" /></div>
-            <div>
-              <div style={labelSm}>Category</div>
-              <select value={category} onChange={e => upd("course_category", e.target.value)} style={inpSm}>
-                <option value="main">main</option>
-                <option value="optional">optional</option>
-                <option value="celebration">celebration</option>
-              </select>
-            </div>
-            <div><div style={labelSm}>Optional Flag</div><input value={course.optional_flag || ""} onChange={e => upd("optional_flag", e.target.value)} style={inpSm} placeholder="e.g. cheese" disabled={!isOptionalCategory} /></div>
-            <div><div style={labelSm}>Optional Pairing Key</div><input value={course.optional_pairing_flag || ""} onChange={e => upd("optional_pairing_flag", e.target.value)} style={inpSm} placeholder="e.g. crayfish_pairing" /></div>
-            <div><div style={labelSm}>Optional Pairing Label</div><input value={course.optional_pairing_label || ""} onChange={e => upd("optional_pairing_label", e.target.value)} style={inpSm} placeholder="e.g. Crayfish Pairing" /></div>
+            <div><div style={labelSm}>Course Key</div><input value={course.course_key || ""} onChange={e => upd("course_key", e.target.value)} style={inpSm} placeholder="e.g. beetroot" /></div>
+            <div><div style={labelSm}>Optional Flag</div><input value={course.optional_flag || ""} onChange={e => upd("optional_flag", e.target.value)} style={inpSm} placeholder="e.g. beetroot" /></div>
             <div><div style={labelSm}>Kitchen Note</div><input value={course.kitchen_note || ""} onChange={e => upd("kitchen_note", e.target.value)} style={inpSm} placeholder="Note for kitchen" /></div>
             <div><div style={labelSm}>Aperitif Btn</div><input value={course.aperitif_btn || ""} onChange={e => upd("aperitif_btn", e.target.value || null)} style={inpSm} placeholder="Button label" /></div>
           </div>

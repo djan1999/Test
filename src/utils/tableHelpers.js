@@ -14,7 +14,6 @@ export const makeSeats = (n, ex = []) =>
     beers:     ex[i]?.beers     ?? [],
     pairing:   ex[i]?.pairing   ?? "",
     extras:    ex[i]?.extras    ?? {},
-    optionalPairings: ex[i]?.optionalPairings ?? {},
   }));
 
 export const fmt = d =>
