@@ -15,7 +15,7 @@ import {
   parseMenuRow, RESTRICTION_KEYS,
 } from "./utils/menuUtils.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
-import { buildDefaultTemplate } from "./utils/menuTemplateSchema.js";
+import { buildDefaultTemplate, makeRowId } from "./utils/menuTemplateSchema.js";
 import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML } from "./utils/weeklyPrintGenerator.js";
 import {
   readLocalBeverages, writeLocalBeverages,
@@ -108,6 +108,71 @@ const DEFAULT_QUICK_ACCESS_ITEMS = parseDefaultQuickAccessItems();
 
 const SITTING_TIMES = DEFAULT_SITTING_TIMES;
 const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
+const MENU_LAYOUT_PROFILES_KEY = "milka_menu_layout_profiles_v1";
+const MENU_ACTIVE_LAYOUT_PROFILE_KEY = "milka_active_layout_profile_v1";
+const SYNC_CONFIG_KEY = "milka_sync_config_v1";
+const DEFAULT_SYNC_CONFIG = {
+  winesEnabled: true,
+  beveragesEnabled: true,
+  wineCountries: ["SI", "AT", "IT", "FR", "HR"],
+  beveragePages: [
+    { category: "cocktail", label: "Cocktail", url: "https://vinska-karta.hotelmilka.si/category/cocktails/" },
+    { category: "beer", label: "Beer", url: "https://vinska-karta.hotelmilka.si/category/pivo/" },
+    { category: "spirit", label: "Whisky", url: "https://vinska-karta.hotelmilka.si/category/viski" },
+    { category: "spirit", label: "Cognac / Brandy", url: "https://vinska-karta.hotelmilka.si/category/cognac" },
+    { category: "spirit", label: "Rum", url: "https://vinska-karta.hotelmilka.si/category/rum" },
+    { category: "spirit", label: "Agave", url: "https://vinska-karta.hotelmilka.si/category/agave" },
+    { category: "spirit", label: "Gin", url: "https://vinska-karta.hotelmilka.si/category/gin" },
+    { category: "spirit", label: "Vodka", url: "https://vinska-karta.hotelmilka.si/category/vodka" },
+    { category: "spirit", label: "Other", url: "https://vinska-karta.hotelmilka.si/category/other-ostalo" },
+    { category: "spirit", label: "Liqueur", url: "https://vinska-karta.hotelmilka.si/category/likerji" },
+  ],
+};
+
+const normalizeSyncConfig = (raw) => {
+  const cfg = raw && typeof raw === "object" ? raw : {};
+  const countries = Array.isArray(cfg.wineCountries) ? cfg.wineCountries : DEFAULT_SYNC_CONFIG.wineCountries;
+  const beveragePages = Array.isArray(cfg.beveragePages) ? cfg.beveragePages : DEFAULT_SYNC_CONFIG.beveragePages;
+  return {
+    winesEnabled: cfg.winesEnabled !== false,
+    beveragesEnabled: cfg.beveragesEnabled !== false,
+    wineCountries: countries.map(c => String(c || "").trim()).filter(Boolean),
+    beveragePages: beveragePages
+      .map((p) => ({
+        category: String(p?.category || "").trim().toLowerCase(),
+        label: String(p?.label || "").trim(),
+        url: String(p?.url || "").trim(),
+      }))
+      .filter((p) => p.category && p.label && p.url),
+  };
+};
+
+const toSyncConfigEditor = (cfg) => ({
+  countriesCsv: (cfg.wineCountries || []).join(","),
+  beverageSourcesText: (cfg.beveragePages || [])
+    .map((p) => `${p.label}|${p.url}|${p.category}`)
+    .join("\n"),
+});
+
+const fromSyncConfigEditor = (editor) => {
+  const countries = String(editor?.countriesCsv || "")
+    .split(",")
+    .map((v) => v.trim().toUpperCase())
+    .filter(Boolean);
+  const beveragePages = String(editor?.beverageSourcesText || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [label, url, category] = line.split("|").map((v) => String(v || "").trim());
+      return { label, url, category: category.toLowerCase() };
+    })
+    .filter((row) => row.label && row.url && row.category);
+  return normalizeSyncConfig({
+    wineCountries: countries.length > 0 ? countries : DEFAULT_SYNC_CONFIG.wineCountries,
+    beveragePages: beveragePages.length > 0 ? beveragePages : DEFAULT_SYNC_CONFIG.beveragePages,
+  });
+};
 
 // Convert a Supabase menu_courses row to the internal shape used throughout the app.
 function supabaseRowToCourse(r) {
@@ -271,22 +336,24 @@ const normalizeOptionalKey = (value) =>
   String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 
 function optionalExtrasFromCourses(menuCourses = []) {
-  const builtins = [
-    { id: 1, key: "beetroot", name: "Beetroot", pairings: ["—", "Champagne", "N/A"] },
-    { id: 2, key: "cheese", name: "Cheese", pairings: ["—", "Wine", "Non-Alc"] },
-    { id: 3, key: "cake", name: "Special Occasion", pairings: ["—"] },
-  ];
-  const byKey = new Map(builtins.map(x => [x.key, x]));
+  const byKey = new Map();
   (menuCourses || []).forEach((c) => {
     const key = normalizeOptionalKey(c?.optional_flag);
     if (!key) return;
-    const existing = byKey.get(key);
+    const existing = byKey.get(key) || null;
     const label = String(c?.menu?.name || existing?.name || key).trim() || key;
+    const pairings = [
+      "—",
+      c?.wp ? "Wine" : null,
+      c?.na ? "Non-Alc" : null,
+      c?.premium ? "Premium" : null,
+      c?.os ? "Our Story" : null,
+    ].filter(Boolean);
     byKey.set(key, {
-      id: existing?.id ?? key,
+      id: key,
       key,
       name: label,
-      pairings: existing?.pairings || ["—", "Wine", "Non-Alc", "Premium", "Our Story"],
+      pairings: pairings.length > 0 ? pairings : ["—"],
     });
   });
   return [...byKey.values()];
@@ -1090,9 +1157,6 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
               const pc      = PC[s.pairing];
               const restr   = allRestr.filter(r => r.pos === s.id);
               const extras  = optionalExtras.filter(d => (s.extras?.[d.key] || s.extras?.[d.id])?.ordered);
-              const beetExtra = s.extras?.beetroot || s.extras?.[1] || { ordered: false, pairing: "—" };
-              const hasBeet   = !!beetExtra.ordered;
-              const hasCheese = !!(s.extras?.cheese || s.extras?.[2])?.ordered;
               const hasContent = (s.water && s.water !== "—") || s.pairing || restr.length > 0 || extras.length > 0;
 
               if (quickMode) {
@@ -1121,26 +1185,25 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                         {WATER_QUICK.map(opt => wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt)))}
                       </div>
                       <div style={{ width: 1, height: 16, background: "#e0e0e0", margin: "0 2px" }} />
-                      {/* Beetroot quick-pair */}
-                      {[["—", "—", "#4a4a4a", "#f5f5f5", "#c0c0c0"], ["Champagne", "Champ", "#7a5020", "#fdf4e8", "#c8a060"], ["N/A", "N/A", "#1f5f73", "#e8f7fb", "#7fc6db"]].map(([pairing, label, col, bg, border]) => {
-                        const active = pairing === "—" ? (beetExtra.ordered && (!beetExtra.pairing || beetExtra.pairing === "—")) : (beetExtra.ordered && beetExtra.pairing === pairing);
+                      {/* Optional extras quick toggles (data-driven from courses optional_flag) */}
+                      {(optionalExtras || []).slice(0, 3).map((dish) => {
+                        const extra = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
+                        const active = !!extra.ordered;
                         return (
-                          <button key={pairing} onClick={() => updSeat && updSeat(t.id, s.id, "extras", {
-                            ...s.extras, beetroot: active ? { ordered: false, pairing: "—" } : { ordered: true, pairing },
-                          })} style={{
-                            fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "3px 9px",
-                            border: `1px solid ${active ? border : "#e8e8e8"}`, borderRadius: 20, cursor: "pointer",
-                            background: active ? bg : "#fff", color: active ? col : "#ccc",
-                            transition: "all 0.1s",
-                          }}>Beet {label}</button>
+                          <button
+                            key={dish.key || dish.id}
+                            onClick={() => updSeat && updSeat(t.id, s.id, "extras", { ...s.extras, [dish.key]: { ...extra, ordered: !extra.ordered } })}
+                            style={{
+                              fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "3px 9px",
+                              border: `1px solid ${active ? "#b0b0b0" : "#e8e8e8"}`, borderRadius: 20, cursor: "pointer",
+                              background: active ? "#f3f3f3" : "#fff", color: active ? "#444" : "#aaa",
+                              transition: "all 0.1s",
+                            }}
+                          >
+                            {String(dish.name || dish.key || "").slice(0, 8)}
+                          </button>
                         );
                       })}
-                      <button onClick={() => { const cur = s.extras?.cheese || s.extras?.[2] || { ordered: false }; updSeat && updSeat(t.id, s.id, "extras", { ...s.extras, cheese: { ...cur, ordered: !cur.ordered } }); }} style={{
-                        fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "3px 8px",
-                        border: `1px solid ${hasCheese ? "#a06830" : "#e0e0e0"}`,
-                        borderRadius: 3, cursor: "pointer",
-                        background: hasCheese ? "#fdf4e8" : "#fff", color: hasCheese ? "#a06830" : "#bbb",
-                      }}>Chse</button>
                     </div>
                     {/* Pairing */}
                     <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", padding: "2px 10px 7px" }}>
@@ -1564,10 +1627,28 @@ export default function App() {
   const [inventoryOpen,  setInventoryOpen]  = useState(false);
   const [syncStatus,   setSyncStatus]   = useState(hasSupabaseConfig ? "connecting" : "local-only");
   const [logoDataUri,  setLogoDataUri]  = useState("");
-  // Print layout state (lifted from MenuPage into App for Admin access)
-  const [globalLayout, setGlobalLayout] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("milka_menu_layout") || "{}"); } catch { return {}; }
+  const [wineSyncConfig, setWineSyncConfig] = useState(() => {
+    try { return normalizeSyncConfig(JSON.parse(localStorage.getItem(SYNC_CONFIG_KEY) || "null")); } catch { return DEFAULT_SYNC_CONFIG; }
   });
+  const syncConfigRef = useRef(wineSyncConfig);
+  syncConfigRef.current = wineSyncConfig;
+  const [layoutProfiles, setLayoutProfiles] = useState(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(MENU_LAYOUT_PROFILES_KEY) || "null");
+      if (Array.isArray(raw) && raw.length > 0) return raw;
+    } catch {}
+    return [{ id: "layout_1", name: "Layout 1", layoutStyles: {}, menuTemplate: null }];
+  });
+  const [activeLayoutProfileId, setActiveLayoutProfileId] = useState(() => {
+    try { return localStorage.getItem(MENU_ACTIVE_LAYOUT_PROFILE_KEY) || "layout_1"; } catch { return "layout_1"; }
+  });
+  // Print layout state (lifted from MenuPage into App for Admin access)
+  const activeLayoutProfile = useMemo(
+    () => layoutProfiles.find(p => p.id === activeLayoutProfileId) || layoutProfiles[0] || null,
+    [layoutProfiles, activeLayoutProfileId]
+  );
+  const [globalLayout, setGlobalLayout] = useState(() => activeLayoutProfile?.layoutStyles || {});
+  const [menuTemplate, setMenuTemplate] = useState(() => activeLayoutProfile?.menuTemplate || null);
   const [layoutSaving, setLayoutSaving] = useState(false);
   const [layoutSaved,  setLayoutSaved]  = useState(false);
   const layoutLoaded = useRef(false);
@@ -1779,7 +1860,10 @@ export default function App() {
   const syncWines = async () => {
     try {
       const secret = import.meta.env.VITE_SYNC_SECRET || "";
-      const url = secret ? `/api/sync-wines?secret=${encodeURIComponent(secret)}` : "/api/sync-wines";
+      const cfg = normalizeSyncConfig(syncConfigRef.current);
+      const payload = encodeURIComponent(JSON.stringify(cfg));
+      const base = secret ? `/api/sync-wines?secret=${encodeURIComponent(secret)}` : "/api/sync-wines";
+      const url = `${base}${base.includes("?") ? "&" : "?"}config=${payload}`;
       const r = await fetch(url);
       const json = await r.json();
       if (!r.ok) return { ok: false, error: json.error || String(r.status) };
@@ -1914,18 +1998,8 @@ export default function App() {
         return { ...blankTable(t.id), active: t.active, arrivedAt: t.arrivedAt, kitchenLog: t.kitchenLog };
       }
       if (!sortedGroup.includes(t.id)) return t;
-      const newSeats = makeSeats(guests, t.seats).map(s => {
-        const newExtras = { ...s.extras };
-        if (birthday) {
-          newExtras[3] = { ordered: true, pairing: "—" };
-        } else {
-          // Clear auto-added cake when birthday is turned off
-          delete newExtras[3];
-        }
-        return { ...s, extras: newExtras };
-      });
-      const ec = birthday ? { ...(t.extrasConfirmed || {}), cake: true } : t.extrasConfirmed || {};
-      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, cakeNote: birthday ? (cakeNote || "") : "", restrictions, notes, lang: lang || "en", tableGroup: sortedGroup, extrasConfirmed: ec };
+      const newSeats = makeSeats(guests, t.seats);
+      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, cakeNote: birthday ? (cakeNote || "") : "", restrictions, notes, lang: lang || "en", tableGroup: sortedGroup };
     }));
     setResModal(null);
   };
@@ -2020,11 +2094,8 @@ export default function App() {
             tableGroup:         group,
             courseOverrides:    d.courseOverrides || {},
             kitchenCourseNotes: d.kitchenCourseNotes || {},
-            extrasConfirmed:   d.birthday ? { cake: true } : {},
-            seats:              makeSeats(d.guests || 2, t.seats).map(s => {
-              if (!d.birthday) return s;
-              return { ...s, extras: { ...s.extras, 3: { ordered: true, pairing: "—" } } };
-            }),
+            extrasConfirmed:   t.extrasConfirmed || {},
+            seats:              makeSeats(d.guests || 2, t.seats),
           };
         }
       }
@@ -2122,69 +2193,117 @@ export default function App() {
       .upsert({ id: "menu_logo", state: { dataUri }, updated_at: new Date().toISOString() }, { onConflict: "id" });
   };
 
-  // ── Load print layout from Supabase on mount ─────────────────────────────
   useEffect(() => {
-    if (!supabase) { layoutLoaded.current = true; return; }
-    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_global").maybeSingle()
-      .then(({ data, error }) => {
-        if (error) console.error("Layout load error:", error);
-        if (data?.state && Object.keys(data.state).length > 0) setGlobalLayout(data.state);
-        layoutLoaded.current = true;
+    try { localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(wineSyncConfig)); } catch {}
+  }, [wineSyncConfig]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "wine_sync_config").maybeSingle()
+      .then(({ data }) => {
+        if (data?.state) setWineSyncConfig(normalizeSyncConfig(data.state));
       });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Persist layout to localStorage
+  const saveWineSyncConfig = async () => {
+    const next = normalizeSyncConfig(wineSyncConfig);
+    setWineSyncConfig(next);
+    if (!supabase) return;
+    await supabase.from(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "wine_sync_config", state: next, updated_at: new Date().toISOString() }, { onConflict: "id" });
+  };
+
   useEffect(() => {
-    try { localStorage.setItem("milka_menu_layout", JSON.stringify(globalLayout)); } catch {}
-  }, [globalLayout]);
+    try { localStorage.setItem(MENU_LAYOUT_PROFILES_KEY, JSON.stringify(layoutProfiles)); } catch {}
+  }, [layoutProfiles]);
+
+  useEffect(() => {
+    try { localStorage.setItem(MENU_ACTIVE_LAYOUT_PROFILE_KEY, activeLayoutProfileId || ""); } catch {}
+  }, [activeLayoutProfileId]);
+
+  const persistLayoutProfiles = async (profiles, activeId) => {
+    if (!supabase) return;
+    await supabase.from(TABLES.SERVICE_SETTINGS)
+      .upsert(
+        { id: "menu_layout_profiles_v1", state: { profiles, activeId }, updated_at: new Date().toISOString() },
+        { onConflict: "id" }
+      );
+  };
+
+  const selectLayoutProfile = (profileId) => {
+    const target = layoutProfiles.find(p => p.id === profileId);
+    if (!target) return;
+    setActiveLayoutProfileId(target.id);
+    setGlobalLayout(target.layoutStyles || {});
+    setMenuTemplate(target.menuTemplate || null);
+  };
+
+  const createLayoutProfile = () => {
+    const nextId = `layout_${Date.now()}`;
+    const nextName = `Layout ${layoutProfiles.length + 1}`;
+    const profile = { id: nextId, name: nextName, layoutStyles: {}, menuTemplate: null };
+    const nextProfiles = [...layoutProfiles, profile];
+    setLayoutProfiles(nextProfiles);
+    setActiveLayoutProfileId(nextId);
+    setGlobalLayout({});
+    setMenuTemplate(null);
+    persistLayoutProfiles(nextProfiles, nextId);
+  };
+
+  const deleteLayoutProfile = (profileId) => {
+    if (layoutProfiles.length <= 1) return;
+    const nextProfiles = layoutProfiles.filter(p => p.id !== profileId);
+    const fallback = nextProfiles[0];
+    const nextActiveId = activeLayoutProfileId === profileId ? fallback.id : activeLayoutProfileId;
+    setLayoutProfiles(nextProfiles);
+    setActiveLayoutProfileId(nextActiveId);
+    const active = nextProfiles.find(p => p.id === nextActiveId) || fallback;
+    setGlobalLayout(active?.layoutStyles || {});
+    setMenuTemplate(active?.menuTemplate || null);
+    persistLayoutProfiles(nextProfiles, nextActiveId);
+  };
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_profiles_v1").maybeSingle()
+      .then(({ data }) => {
+        const profiles = Array.isArray(data?.state?.profiles) ? data.state.profiles : null;
+        if (!profiles?.length) return;
+        setLayoutProfiles(profiles);
+        const activeId = String(data?.state?.activeId || profiles[0]?.id || "");
+        setActiveLayoutProfileId(activeId);
+        const active = profiles.find(p => p.id === activeId) || profiles[0];
+        setGlobalLayout(active?.layoutStyles || {});
+        setMenuTemplate(active?.menuTemplate || null);
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveGlobalLayout = async () => {
     setLayoutSaving(true); setLayoutSaved(false);
     const toSave = globalLayoutRef.current;
-    if (supabase) {
-      const { error } = await supabase.from(TABLES.SERVICE_SETTINGS)
-        .upsert({ id: "menu_layout_global", state: toSave, updated_at: new Date().toISOString() }, { onConflict: "id" });
-      if (error) { console.error("Layout save failed:", error); setLayoutSaving(false); return; }
-    }
+    setLayoutProfiles(prev => {
+      const next = prev.map(p => p.id === activeLayoutProfileId ? { ...p, layoutStyles: toSave } : p);
+      persistLayoutProfiles(next, activeLayoutProfileId);
+      return next;
+    });
     setLayoutSaving(false); setLayoutSaved(true);
     setTimeout(() => setLayoutSaved(false), 2500);
   };
 
 
   // ── Menu template v2 (row-based canvas editor) ───────────────────────────
-  const [menuTemplate, setMenuTemplate] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("milka_menu_template_v2") || "null"); } catch { return null; }
-  });
   const [templateSaving, setTemplateSaving] = useState(false);
   const [templateSaved,  setTemplateSaved]  = useState(false);
   const menuTemplateRef = useRef(menuTemplate);
   menuTemplateRef.current = menuTemplate;
-
-  useEffect(() => {
-    if (!supabase) return;
-    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_v2").maybeSingle()
-      .then(({ data }) => {
-        if (data?.state?.version === 2) {
-          setMenuTemplate(data.state);
-          try { localStorage.setItem("milka_menu_template_v2", JSON.stringify(data.state)); } catch {}
-        }
-      });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!menuTemplate) return;
-    try { localStorage.setItem("milka_menu_template_v2", JSON.stringify(menuTemplate)); } catch {}
-  }, [menuTemplate]);
-
   const saveMenuTemplate = async () => {
     setTemplateSaving(true); setTemplateSaved(false);
     const toSave = menuTemplateRef.current;
-    if (!toSave) { setTemplateSaving(false); return; }
-    if (supabase) {
-      const { error } = await supabase.from(TABLES.SERVICE_SETTINGS)
-        .upsert({ id: "menu_layout_v2", state: toSave, updated_at: new Date().toISOString() }, { onConflict: "id" });
-      if (error) { console.error("Template save failed:", error); setTemplateSaving(false); return; }
-    }
+    setLayoutProfiles(prev => {
+      const next = prev.map(p => p.id === activeLayoutProfileId ? { ...p, menuTemplate: toSave || null } : p);
+      persistLayoutProfiles(next, activeLayoutProfileId);
+      return next;
+    });
     setTemplateSaving(false); setTemplateSaved(true);
     setTimeout(() => setTemplateSaved(false), 2500);
   };
@@ -2486,14 +2605,7 @@ export default function App() {
         const courses = await fetchMenuCourses();
         if (!mounted || !courses) return;
         setMenuCourses(courses);
-        // Auto-generate template v2 from courses if none stored yet
-        if (courses.length > 0 && !menuTemplateRef.current?.rows?.length) {
-          const tmpl = buildDefaultTemplate(courses);
-          if (mounted) {
-            setMenuTemplate(tmpl);
-            try { localStorage.setItem("milka_menu_template_v2", JSON.stringify(tmpl)); } catch {}
-          }
-        }
+        // Layout templates are profile-managed and start blank by default.
       } catch (error) {
         console.warn("Menu courses fetch failed:", error);
       }
@@ -2683,11 +2795,14 @@ export default function App() {
         layoutStyles={globalLayout}
         onUpdateLayoutStyles={setGlobalLayout}
         onSaveLayoutStyles={saveGlobalLayout}
-        onResetMenuLayout={() => {
-          setGlobalLayout({});
-          try { localStorage.removeItem("milka_menu_layout"); } catch {}
-          if (supabase) supabase.from(TABLES.SERVICE_SETTINGS).upsert({ id: "menu_layout_global", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" }).then(() => {});
-        }}
+        layoutProfiles={layoutProfiles}
+        activeLayoutProfileId={activeLayoutProfileId}
+        onSelectLayoutProfile={selectLayoutProfile}
+        onCreateLayoutProfile={createLayoutProfile}
+        onDeleteLayoutProfile={deleteLayoutProfile}
+        wineSyncConfig={wineSyncConfig}
+        onUpdateWineSyncConfig={setWineSyncConfig}
+        onSaveWineSyncConfig={saveWineSyncConfig}
         quickAccessItems={quickAccessItems}
         onUpdateQuickAccess={updateQuickAccess}
         onExit={() => changeMode(null)}

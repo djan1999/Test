@@ -8,7 +8,7 @@ function makeSeat(overrides = {}) {
 }
 
 function makeTable(overrides = {}) {
-  return { menuType: "", restrictions: [], bottleWines: [], birthday: false, ...overrides };
+  return { menuType: "", restrictions: [], bottleWines: [], ...overrides };
 }
 
 function makeCourse(name, sub = "", opts = {}) {
@@ -238,7 +238,7 @@ describe("generateMenuHTML — extras filtering", () => {
   });
 
   it("shows beetroot course when seat has ordered beetroot", () => {
-    const html = render({ extras: { 1: { ordered: true } } }, {}, [mainCourse, beetrootCourse]);
+    const html = render({ extras: { beetroot: { ordered: true } } }, {}, [mainCourse, beetrootCourse]);
     expect(html).toContain("BEETROOT");
   });
 
@@ -248,12 +248,12 @@ describe("generateMenuHTML — extras filtering", () => {
   });
 
   it("shows cheese course when ordered", () => {
-    const html = render({ extras: { 2: { ordered: true } } }, {}, [mainCourse, cheeseCourse]);
+    const html = render({ extras: { cheese: { ordered: true } } }, {}, [mainCourse, cheeseCourse]);
     expect(html).toContain("CHEESE");
   });
 
-  it("shows cake course when table has birthday flag", () => {
-    const html = render({}, { birthday: true }, [mainCourse, cakeCourse]);
+  it("shows cake course when seat has ordered cake optional", () => {
+    const html = render({ extras: { cake: { ordered: true } } }, {}, [mainCourse, cakeCourse]);
     expect(html).toContain("PEAR");
   });
 

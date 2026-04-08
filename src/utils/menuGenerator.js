@@ -137,10 +137,7 @@ export function generateMenuHTML({
   const isShort = String(table.menuType || "").toLowerCase() === "short";
 
   const extras = seat.extras || {};
-  const getExtra = (key, legacyId) => extras[key] || extras[String(legacyId)] || extras[legacyId] || null;
-  const hasBeetroot = !!getExtra("beetroot", 1)?.ordered;
-  const hasCheese   = !!getExtra("cheese", 2)?.ordered;
-  const hasCake     = !!(table.birthday || getExtra("cake", 3)?.ordered);
+  const getExtra = (key) => extras[key] || null;
 
   // Aperitifs: dedicated row above first course
   const aperitifs = Array.isArray(seat.aperitifs)
@@ -234,13 +231,10 @@ export function generateMenuHTML({
     const courseName = String(course?.menu?.name || "").trim().toUpperCase();
     const optionalFlag = normalizeCourseToken(course?.optional_flag || "");
 
-    const isBeetrootCourse = optionalFlag === "beetroot" || courseKey === "beetroot";
-    const isCakeCourse = optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake";
-    const isCheeseExtraCourse = optionalFlag === "cheese" || courseKey === "cheese";
-
-    if (isBeetrootCourse && !hasBeetroot) return;
-    if (isCakeCourse && !hasCake) return;
-    if (isCheeseExtraCourse && !hasCheese) return;
+    if (optionalFlag) {
+      const extra = getExtra(optionalFlag);
+      if (!extra?.ordered) return;
+    }
 
     if (isShort) {
       if (!isTruthyShort(course?.show_on_short)) return;
@@ -499,11 +493,12 @@ export function generateMenuHTML({
         if (pkey) {
           drink = forcedPairingDrink || (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]);
 
-          // Beetroot extra pairing override
-          const isBeetrootC = normalizeCourseToken(course.optional_flag || "") === "beetroot" || normKey === "beetroot";
-          const beetExtra = getExtra("beetroot", 1);
-          if (isBeetrootC && beetExtra?.ordered) {
-            const beetPair = String(beetExtra.pairing || "—").trim();
+          // Optional-course pairing override: if seat selected a pairing for this optional_flag,
+          // use the selected pairing package for this row.
+          const optionalKey = normalizeCourseToken(course.optional_flag || "");
+          const optionalExtra = optionalKey ? getExtra(optionalKey) : null;
+          if (optionalExtra?.ordered) {
+            const beetPair = String(optionalExtra.pairing || "—").trim();
             if (beetPair === "N/A" || beetPair === "Non-Alc") {
               drink = (lang === "si" ? (course.na_si || course.na) : course.na) || null;
             } else if (beetPair === "Champagne" || beetPair === "Wine") {
