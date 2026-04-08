@@ -808,16 +808,23 @@ export default function MenuTemplateEditor({
     onUpdateTemplate({ ...menuTemplate, rows: normalized });
   }, [menuTemplate, onUpdateTemplate]);
 
-  // ── One-time migration: forced_pairing catalogId -> catalogItemId ───────────
+  // ── One-time migration: pairing block compatibility ─────────────────────────
   useEffect(() => {
     if (!menuTemplate?.rows) return;
     let changed = false;
     const nextRows = menuTemplate.rows.map((r) => {
       const migrate = (b) => {
-        if (!b || b.type !== "forced_pairing") return b;
-        if (b.catalogItemId != null || b.catalogId == null) return b;
+        if (!b) return b;
+        let next = b;
+        // Support templates saved with newer block key.
+        if (next.type === "optional_pairing") {
+          next = { ...next, type: "forced_pairing" };
+          changed = true;
+        }
+        if (next.type !== "forced_pairing") return next;
+        if (next.catalogItemId != null || next.catalogId == null) return next;
         changed = true;
-        return { ...b, catalogItemId: b.catalogId };
+        return { ...next, catalogItemId: next.catalogId };
       };
       const left = migrate(r.left);
       const right = migrate(r.right);

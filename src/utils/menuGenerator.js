@@ -320,7 +320,9 @@ export function generateMenuHTML({
   let rows = [];
   let pendingGap = 0;      // deferred spacer gap — applied to the next row that actually renders
 
-  const PAIRING_RIGHT_TYPES = new Set(["pairing", "forced_pairing", "pairing_label", "aperitif"]);
+  // Backward/forward compatibility: support both legacy "forced_pairing"
+  // and newer "optional_pairing" block names.
+  const PAIRING_RIGHT_TYPES = new Set(["pairing", "forced_pairing", "optional_pairing", "pairing_label", "aperitif"]);
   const _courseLeft = Math.min(99, Math.max(1, Math.round(Number(s("courseColSplit", 55)) || 55)));
 
   for (const tRow of effectiveTemplateRows) {
@@ -471,7 +473,7 @@ export function generateMenuHTML({
 
       const forcedPairingDrink = (() => {
         // Product-only forced_pairing block: choose ALCO or N/A product by seat toggle.
-        if (rb?.type === "forced_pairing") {
+        if (rb?.type === "forced_pairing" || rb?.type === "optional_pairing") {
           const isNonAlc = String(beerChoice || "").trim().toLowerCase() === "nonalc";
           const itemId = isNonAlc
             ? (rb.naCatalogItemId ?? null)
@@ -487,9 +489,9 @@ export function generateMenuHTML({
         return resolveForcedPairingDrink(null);
       })();
 
-      if (lb.showPairing === false && !forcedPairingDrink && rb?.type !== "forced_pairing") {
+      if (lb.showPairing === false && !forcedPairingDrink && rb?.type !== "forced_pairing" && rb?.type !== "optional_pairing") {
         // showPairing toggle off — don't resolve any drink for this course row
-      } else if (rb?.type === "pairing" || rb?.type === "forced_pairing" || forcedPairingDrink) {
+      } else if (rb?.type === "pairing" || rb?.type === "forced_pairing" || rb?.type === "optional_pairing" || forcedPairingDrink) {
         if (pkey) {
           drink = forcedPairingDrink || (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]);
 
