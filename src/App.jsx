@@ -370,8 +370,6 @@ function optionalExtrasFromCourses(menuCourses = []) {
 function optionalPairingsFromCourses(menuCourses = []) {
   const byKey = new Map();
   (menuCourses || []).forEach((c) => {
-    const category = normalizeCourseCategory(c?.course_category, c?.optional_flag);
-    if (category !== "main") return;
     const key = normalizeOptionalKey(c?.optional_pairing_flag);
     if (!key) return;
     const label = String(c?.optional_pairing_label || c?.menu?.name || key).trim() || key;

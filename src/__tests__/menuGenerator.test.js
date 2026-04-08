@@ -384,6 +384,41 @@ describe("generateMenuHTML — pairing", () => {
     expect(htmlNa).toContain("Garden Sour");
   });
 
+  it("falls back to course wp/na pairing when optional-pairing block has no selected product", () => {
+    const chickenDessert = makeCourse("CHICKEN DESSERT", "", {
+      position: 1,
+      wp: { name: "Champagne Pairing", sub: "reserve" },
+      na: { name: "Tea Pairing", sub: "forest herbs" },
+    });
+    const template = {
+      version: 2,
+      rows: [
+        { id: "hdr", left: { type: "title" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
+        {
+          id: "c1",
+          left: { type: "course", courseKey: chickenDessert.course_key },
+          right: { type: "optional_pairing", pairingFlag: "chicken_dessert_pairing" },
+          widthPreset: "55/45",
+          gap: 0,
+        },
+      ],
+    };
+    const htmlAlco = render(
+      { pairing: "—", optionalPairings: { chicken_dessert_pairing: { ordered: true, mode: "alco" } } },
+      {},
+      [chickenDessert],
+      { menuTemplate: template }
+    );
+    const htmlNa = render(
+      { pairing: "—", optionalPairings: { chicken_dessert_pairing: { ordered: true, mode: "nonalc" } } },
+      {},
+      [chickenDessert],
+      { menuTemplate: template }
+    );
+    expect(htmlAlco).toContain("Champagne Pairing");
+    expect(htmlNa).toContain("Tea Pairing");
+  });
+
   it("does not auto-force custom keys from menu rules without forced-pairing products", () => {
     const venison = makeCourse("VENISON", "", { position: 1 });
     const html = render({ pairing: "—" }, {}, [venison], {

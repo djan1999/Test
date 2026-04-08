@@ -247,10 +247,13 @@ export function buildDefaultTemplate(menuCourses = []) {
       });
     }
 
+    const optionalPairingKey = norm(course.optional_pairing_flag || "");
     rows.push({
       id: `course_${ck}`,
       left:  { type: "course", courseKey: ck },
-      right: makeBlock("pairing"),
+      right: optionalPairingKey
+        ? { ...makeBlock("optional_pairing"), pairingFlag: optionalPairingKey }
+        : makeBlock("pairing"),
       widthPreset: "55/45",
       gap: 0,
     });

@@ -31,6 +31,7 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
   };
   const category = String(course.course_category || "main");
   const isOptionalCategory = category === "optional" || category === "celebration";
+  const hasOptionalPairing = String(course.optional_pairing_flag || "").trim().length > 0;
 
   return (
     <div style={{
@@ -86,6 +87,11 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
             <div><div style={labelSm}>Kitchen Note</div><input value={course.kitchen_note || ""} onChange={e => upd("kitchen_note", e.target.value)} style={inpSm} placeholder="Note for kitchen" /></div>
             <div><div style={labelSm}>Aperitif Btn</div><input value={course.aperitif_btn || ""} onChange={e => upd("aperitif_btn", e.target.value || null)} style={inpSm} placeholder="Button label" /></div>
           </div>
+          {hasOptionalPairing && (
+            <div style={{ fontFamily: FONT, fontSize: 9, color: "#9a6020", marginBottom: 12 }}>
+              Optional pairing is course-owned and supports <strong>Alcoholic / Non-Alcoholic</strong> output from this course's wp/na fields when no product is linked in layout.
+            </div>
+          )}
 
           {/* ── Toggles ── */}
           <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>

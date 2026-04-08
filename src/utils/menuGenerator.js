@@ -481,7 +481,7 @@ export function generateMenuHTML({
       const optionalPairingDrink = (() => {
         // Optional pairing block: renders only when seat has enabled this pairing key.
         if (isOptionalPairingType(rb?.type)) {
-          const pairingFlag = normalizeCourseToken(rb.pairingFlag || "");
+          const pairingFlag = normalizeCourseToken(rb.pairingFlag || course.optional_pairing_flag || "");
           const pairingState = seat.optionalPairings?.[pairingFlag];
           if (!pairingFlag || !pairingState?.ordered) return null;
           const isNonAlc = String(pairingState.mode || "alco").trim().toLowerCase() === "nonalc";
@@ -492,9 +492,23 @@ export function generateMenuHTML({
             ? (rb.naCatalogType || "")
             : (rb.catalogType || "");
           const picked = itemType && itemId != null ? findBeverage(itemType, itemId) : null;
-          if (!picked) return null;
-          const parts = fmtDrinkParts({ ...picked, __type: itemType });
-          return { name: parts.title || "", sub: parts.sub || "" };
+          if (picked) {
+            const parts = fmtDrinkParts({ ...picked, __type: itemType });
+            return { name: parts.title || "", sub: parts.sub || "" };
+          }
+
+          // Fallback for optional-pairing rows without product mapping:
+          // use course pairing text (same alco/nonalc behavior as optional extras).
+          if (isNonAlc) {
+            const fallback = lang === "si" ? (course.na_si || course.na) : course.na;
+            if (fallback?.name || fallback?.sub) return fallback;
+          } else {
+            const fallback = lang === "si"
+              ? (course.os_si || course.os || course.premium_si || course.premium || course.wp_si || course.wp)
+              : (course.os || course.premium || course.wp);
+            if (fallback?.name || fallback?.sub) return fallback;
+          }
+          return null;
         }
         return resolveForcedPairingDrink(null);
       })();
