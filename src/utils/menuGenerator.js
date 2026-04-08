@@ -173,7 +173,8 @@ export function generateMenuHTML({
   const pairingLabel = seat.pairing === "—" ? "" : (seat.pairing || "");
   const pkey = PAIRING_MAP[pairingLabel] || null;
 
-  const restrictions = (table.restrictions || []).filter(r => !r.pos || r.pos === seatId).map(r => r.note);
+  // Restrictions are seat-specific. `pos: null` entries are considered unassigned (apply to none).
+  const restrictions = (table.restrictions || []).filter(r => r.pos === seatId).map(r => r.note);
   const isShort = String(table.menuType || "").toLowerCase() === "short";
 
   const extras = seat.extras || {};

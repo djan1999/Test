@@ -2075,15 +2075,6 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
                     {restrLabel(r.note)}
                   </span>
                   <div style={{ display: "flex", gap: 3 }}>
-                    <button onClick={() => upd("restrictions", table.restrictions.map((x, idx) =>
-                      idx === i ? { ...x, pos: null } : x
-                    ))} style={{
-                      fontFamily: FONT, fontSize: 9, padding: "3px 6px",
-                      border: `1px solid ${!r.pos ? "#e09090" : "#e8e8e8"}`,
-                      borderRadius: 2, cursor: "pointer",
-                      background: !r.pos ? "#fef0f0" : "#fff",
-                      color: !r.pos ? "#b04040" : "#bbb",
-                    }}>All</button>
                     {Array.from({ length: table.guests }, (_, idx) => {
                       const p = idx + 1; const sel = r.pos === p;
                       return (
@@ -2719,7 +2710,7 @@ function ServiceQuickCard({ table, updSeat, onDetails }) {
                 borderBottom: "1px solid #e8e8e8",
               }}>
                 <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: 2, color: "#888" }}>P{seat.id}</span>
-                {(table.restrictions || []).filter(r => !r.pos || r.pos === seat.id).map((r, i) => (
+                {(table.restrictions || []).filter(r => r.pos === seat.id).map((r, i) => (
                   <span key={i} style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, color: "#b04040" }}>
                     {restrLabel(r.note)}
                   </span>
@@ -2832,7 +2823,8 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
 
   const addKitchenRestr = (note, seatId) => {
     if (!note?.trim()) return;
-    const next = [...restrictions, { note: note.trim(), pos: seatId || null, kitchenAdded: true }];
+    // Seat-specific only. If no seat chosen yet, leave unassigned (pos: null).
+    const next = [...restrictions, { note: note.trim(), pos: (seatId ?? null), kitchenAdded: true }];
     upd(table.id, "restrictions", next);
     setPickingRestr(null);
     setCustomNote("");
@@ -2872,7 +2864,7 @@ function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }
   // Return raw r.note — applyCourseRestriction does its own RESTRICTION_COLUMN_MAP lookup internally.
   const seatRestrKeys = (seat) =>
     (restrictions || [])
-      .filter(r => !r.pos || r.pos === seat.id)
+      .filter(r => r.pos === seat.id)
       .map(r => r.note);
 
   const pairingColor = { Wine: "#7a5020", "Non-Alc": "#1f5f73", Premium: "#5a5a8a", "Our Story": "#3a7a5a" };
@@ -3659,7 +3651,7 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
   // Used to pre-populate the per-seat editor with the already-adjusted menu.
   const getSeatDish = (course, seatId) => {
     const withOv = applyMenuOverride(course, courseOverrides, seatId);
-    const seatRestrKeys = restrictions.filter(r => !r.pos || r.pos === seatId).map(r => r.note);
+    const seatRestrKeys = restrictions.filter(r => r.pos === seatId).map(r => r.note);
     const resolved = lang === "si" && withOv.menu_si?.name ? { ...withOv, menu: withOv.menu_si } : withOv;
     return applyCourseRestriction(resolved, seatRestrKeys, lang) || { name: withOv.menu?.name || "", sub: withOv.menu?.sub || "" };
   };
@@ -3832,7 +3824,7 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Seats</div>
 
         {seats.map(s => {
-          const seatRestr  = restrictions.filter(r => !r.pos || r.pos === s.id);
+          const seatRestr  = restrictions.filter(r => r.pos === s.id);
           const printable  = isPrintable(s);
           const extras     = Object.entries(s.extras || {}).filter(([,v]) => v?.ordered).map(([k]) => +k);
           const glasses    = s.glasses || [];

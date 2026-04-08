@@ -180,7 +180,7 @@ describe("generateMenuHTML — restriction substitutions", () => {
       restrictions: { veg: { name: "MUSHROOM", sub: "truffle" } },
     })];
     const tableWithRestriction = makeTable({
-      restrictions: [{ note: "veg" }],
+      restrictions: [{ note: "veg", pos: 1 }],
     });
     const html = generateMenuHTML({
       seat: makeSeat({ id: 1 }),
