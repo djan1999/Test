@@ -502,8 +502,14 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
                 ));
               })()}
             </select>
+            <input
+              value={block.title_si || ""}
+              onChange={e => setField("title_si", e.target.value)}
+              placeholder="Slovenian name override (optional)"
+              style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
+            />
             <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.5 }}>
-              When set, this will render the product’s name/notes on the menu (no hardcoded text needed).
+              Product picker is the main source. Optional SI name override lets you control Slovenian title.
             </div>
           </div>
         </div>

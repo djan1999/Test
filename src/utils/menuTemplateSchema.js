@@ -72,8 +72,6 @@ export const BLOCK_META = {
     desc: "Forces a specific drink pairing for this course row. Pick a drink product from the catalog (recommended), or override the text here.",
     fields: [
       { key: "useCourseForceFields", label: "Use course forced pairing fields first", type: "checkbox" },
-      { key: "catalogType", label: "Catalog type", type: "select", options: ["", "cocktail", "spirit", "beer", "wine"] },
-      { key: "catalogItemId", label: "Catalog item", type: "catalog_item" },
       { key: "title",  label: "Title (EN)", type: "text", placeholder: "KITCHEN MARTINI" },
       { key: "sub",    label: "Sub (EN)",   type: "text", placeholder: "" },
       { key: "title_si", label: "Title (SI)", type: "text", placeholder: "" },
