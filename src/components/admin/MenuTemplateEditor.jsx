@@ -468,7 +468,7 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
       {block.type === "forced_pairing" && (
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>
-            Product reference
+            Product reference (alcoholic)
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
             <select
@@ -508,8 +508,49 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
               placeholder="Slovenian name override (optional)"
               style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
             />
+            <div style={{ height: 1, background: "#f0f0f0", margin: "4px 0" }} />
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 2 }}>
+              Product reference (non-alcoholic)
+            </div>
+            <select
+              value={block.naCatalogType || ""}
+              onChange={e => setField("naCatalogType", e.target.value)}
+              style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
+            >
+              <option value="">(none)</option>
+              <option value="cocktail">Cocktail</option>
+              <option value="spirit">Spirit</option>
+              <option value="beer">Beer</option>
+              <option value="wine">Wine</option>
+            </select>
+            <select
+              value={block.naCatalogItemId ?? ""}
+              onChange={e => setField("naCatalogItemId", e.target.value ? Number(e.target.value) : null)}
+              disabled={!block.naCatalogType}
+              style={{ ...baseInp, fontSize: 10.5, width: "100%", opacity: block.naCatalogType ? 1 : 0.6 }}
+            >
+              <option value="">(select item)</option>
+              {(() => {
+                const list = block.naCatalogType === "cocktail" ? cocktails
+                  : block.naCatalogType === "spirit" ? spirits
+                  : block.naCatalogType === "beer" ? beers
+                  : block.naCatalogType === "wine" ? wines
+                  : [];
+                return list.map(item => (
+                  <option key={`na-${item.id}`} value={item.id}>
+                    {item.name}{item.vintage ? ` ${item.vintage}` : ""}{item.producer ? ` · ${item.producer}` : ""}{item.notes ? ` · ${item.notes}` : ""}
+                  </option>
+                ));
+              })()}
+            </select>
+            <input
+              value={block.naTitleSi || ""}
+              onChange={e => setField("naTitleSi", e.target.value)}
+              placeholder="Slovenian N/A name override (optional)"
+              style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
+            />
             <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.5 }}>
-              Product picker is the main source. Optional SI name override lets you control Slovenian title.
+              ALCO / N/A product pickers are linked to menu-generation ALCO/N/A toggle. Optional SI overrides control Slovenian names.
             </div>
           </div>
         </div>

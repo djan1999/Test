@@ -546,13 +546,19 @@ export function generateMenuHTML({
 
       const forcedPairingOverride = (() => {
         if (rb?.type !== "forced_pairing") return null;
-        const itemId = rb.catalogItemId ?? rb.catalogId ?? null;
-        const picked = rb.catalogType && itemId != null ? findBeverage(rb.catalogType, itemId) : null;
-        const pickedParts = picked ? fmtDrinkParts({ ...picked, __type: rb.catalogType }) : null;
+        const isNonAlc = String(beerChoice || "").trim().toLowerCase() === "nonalc";
+        const itemId = isNonAlc
+          ? (rb.naCatalogItemId ?? null)
+          : (rb.catalogItemId ?? rb.catalogId ?? null);
+        const itemType = isNonAlc
+          ? (rb.naCatalogType || "")
+          : (rb.catalogType || "");
+        const picked = itemType && itemId != null ? findBeverage(itemType, itemId) : null;
+        const pickedParts = picked ? fmtDrinkParts({ ...picked, __type: itemType }) : null;
         return {
           title: pickedParts?.title || rb.title,
           sub: pickedParts?.sub || rb.sub,
-          title_si: rb.title_si,
+          title_si: isNonAlc ? (rb.naTitleSi || rb.title_si) : rb.title_si,
           sub_si: rb.sub_si,
           useCourseForceFields: rb.useCourseForceFields !== false,
         };
