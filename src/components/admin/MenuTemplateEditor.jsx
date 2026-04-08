@@ -749,14 +749,14 @@ export default function MenuTemplateEditor({
   };
 
   const template = menuTemplate || { version: 2, rows: [] };
-  const rows = template.rows || [];
+  const rows = Array.isArray(template.rows) ? template.rows : [];
 
   // ── One-time migration: convert any old spacer-block rows to gap rows ──────
   // Old templates stored gaps as { left: { type: "spacer", height: N } } rows.
   // We silently fold the spacer height into row.gap so they render as gap rows.
   useEffect(() => {
     if (didMigrateSpacersRef.current) return;
-    if (!menuTemplate?.rows) return;
+    if (!Array.isArray(menuTemplate?.rows)) return;
     const hasSpacers = menuTemplate.rows.some(
       r => r.left?.type === "spacer" || r.right?.type === "spacer"
     );
@@ -790,7 +790,7 @@ export default function MenuTemplateEditor({
   // This makes every gap visible/editable in the row list.
   useEffect(() => {
     if (didNormalizeRowGapsRef.current) return;
-    if (!menuTemplate?.rows) return;
+    if (!Array.isArray(menuTemplate?.rows)) return;
     const needsNormalize = menuTemplate.rows.some(r => (r?.gap || 0) > 0 && (r.left || r.right));
     didNormalizeRowGapsRef.current = true;
     if (!needsNormalize) return;
@@ -810,7 +810,7 @@ export default function MenuTemplateEditor({
 
   // ── One-time migration: pairing block compatibility ─────────────────────────
   useEffect(() => {
-    if (!menuTemplate?.rows) return;
+    if (!Array.isArray(menuTemplate?.rows)) return;
     let changed = false;
     const nextRows = menuTemplate.rows.map((r) => {
       const migrate = (b) => {
