@@ -36,6 +36,14 @@ import { COUNTRY_NAMES } from "./constants/countries.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES } from "./lib/supabaseClient.js";
 import { tokens } from "./styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, chip as mixinChip, circleButton as mixinCircleButton } from "./styles/mixins.js";
+import WaterPicker from "./components/service/WaterPicker.jsx";
+import SwapPicker from "./components/service/SwapPicker.jsx";
+import BlurInput from "./components/ui/BlurInput.jsx";
+import FullModal from "./components/ui/FullModal.jsx";
+import BevEditRow from "./components/menu/BevEditRow.jsx";
+import WineSearch from "./components/service/WineSearch.jsx";
+import DrinkSearch from "./components/service/DrinkSearch.jsx";
+import BeverageSearch from "./components/service/BeverageSearch.jsx";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
@@ -266,315 +274,6 @@ function optionalExtrasFromCourses(menuCourses = []) {
 }
 
 const circBtnSm = { ...mixinCircleButton };
-
-// ── Water Picker ──────────────────────────────────────────────────────────────
-function WaterPicker({ value, onChange }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef();
-  useEffect(() => {
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    document.addEventListener("touchstart", h, { passive: true });
-    return () => {
-      document.removeEventListener("mousedown", h);
-      document.removeEventListener("touchstart", h);
-    };
-  }, []);
-  const ws = waterStyle(value);
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button onClick={() => setOpen(o => !o)} style={{
-        fontFamily: FONT, fontSize: 12, fontWeight: 500,
-        padding: "6px 10px", border: "1px solid #e8e8e8",
-        borderRadius: 2, cursor: "pointer", width: "100%",
-        background: ws.bg, color: ws.color, letterSpacing: 1,
-      }}>{value}</button>
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 3px)", left: 0,
-          background: "#fff", border: "1px solid #e8e8e8", borderRadius: 2,
-          zIndex: 200, overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.08)", minWidth: 70,
-        }}>
-          {WATER_OPTS.map(opt => (
-            <div key={opt} onMouseDown={() => { onChange(opt); setOpen(false); }} style={{
-              padding: "8px 14px", cursor: "pointer",
-              fontFamily: FONT, fontSize: 12, letterSpacing: 1,
-              color: value === opt ? "#1a1a1a" : "#999",
-              background: value === opt ? "#f8f8f8" : "#fff",
-              fontWeight: value === opt ? 500 : 400,
-              borderBottom: "1px solid #f5f5f5",
-            }}>{opt}</div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Wine Search ───────────────────────────────────────────────────────────────
-function WineSearch({ wineObj, wines = [], onChange, placeholder, byGlass = null, compact = false }) {
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState([]);
-  const [open, setOpen] = useState(false);
-  const ref = useRef();
-  useEffect(() => {
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    document.addEventListener("touchstart", h, { passive: true });
-    return () => {
-      document.removeEventListener("mousedown", h);
-      document.removeEventListener("touchstart", h);
-    };
-  }, []);
-  const fs = compact ? 11 : 12;
-  const inputFs = MOBILE_SAFE_INPUT_SIZE;
-  const py = compact ? 5 : 7;
-  return (
-    <div ref={ref} style={{ position: "relative", width: "100%" }}>
-      {wineObj ? (
-        <div style={{
-          display: "flex", alignItems: "center",
-          border: "1px solid #d8d8d8", borderRadius: 2,
-          padding: `${py}px 28px ${py}px 10px`,
-          background: "#fafafa", position: "relative",
-          fontSize: fs, fontFamily: FONT, color: "#4a4a4a",
-        }}>
-          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {wineObj.name} · {wineObj.producer} · {wineObj.vintage}
-          </span>
-          <button onClick={e => { e.stopPropagation(); onChange(null); }} style={{
-            position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
-            background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0,
-          }}>×</button>
-        </div>
-      ) : (
-        <input value={q} onChange={e => {
-          setQ(e.target.value);
-          const r = fuzzy(e.target.value, wines, byGlass);
-          setResults(r); setOpen(r.length > 0);
-          if (!e.target.value) onChange(null);
-        }} onFocus={() => results.length && setOpen(true)}
-          placeholder={placeholder || "search…"}
-          style={{ ...baseInp, fontSize: inputFs, padding: `${py}px 10px`, letterSpacing: 0.3 }} />
-      )}
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0,
-          background: "#fff", border: "1px solid #e8e8e8", borderRadius: 2,
-          zIndex: 200, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", overflow: "hidden",
-        }}>
-          {results.map(w => (
-            <div key={w.id} onMouseDown={() => { setQ(""); setOpen(false); onChange(w); }} style={{
-              padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #f5f5f5",
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-            }}>
-              <div>
-                <span style={{ fontFamily: FONT, fontSize: 12, color: "#1a1a1a" }}>{w.name}</span>
-                <span style={{ fontFamily: FONT, fontSize: 11, color: "#444" }}> · {w.producer} · {w.vintage}</span>
-              </div>
-              {w.byGlass && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#444", border: "1px solid #e8e8e8", borderRadius: 2, padding: "2px 5px" }}>glass</span>}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Drink Search (cocktails / spirits) ────────────────────────────────────────
-function DrinkSearch({ drinkObj, list = [], onChange, placeholder, accentColor = "#7a507a" }) {
-  const [q, setQ]           = useState("");
-  const [results, setResults] = useState([]);
-  const [open, setOpen]     = useState(false);
-  const ref = useRef();
-  useEffect(() => {
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    document.addEventListener("touchstart", h, { passive: true });
-    return () => {
-      document.removeEventListener("mousedown", h);
-      document.removeEventListener("touchstart", h);
-    };
-  }, []);
-
-  return (
-    <div ref={ref} style={{ position: "relative", width: "100%" }}>
-      {drinkObj ? (
-        <div style={{
-          display: "flex", alignItems: "center",
-          border: `1px solid ${accentColor}44`, borderRadius: 2,
-          padding: "5px 28px 5px 10px", background: `${accentColor}08`,
-          position: "relative", fontSize: 11, fontFamily: FONT, color: "#4a4a4a",
-        }}>
-          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {drinkObj.name}{drinkObj.notes ? ` · ${drinkObj.notes}` : ""}
-          </span>
-          <button onClick={e => { e.stopPropagation(); onChange(null); }} style={{
-            position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
-            background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0,
-          }}>×</button>
-        </div>
-      ) : (
-        <input value={q} onChange={e => {
-          setQ(e.target.value);
-          const r = fuzzyDrink(e.target.value, list);
-          setResults(r); setOpen(r.length > 0);
-          if (!e.target.value) onChange(null);
-        }} onFocus={() => results.length && setOpen(true)}
-          placeholder={placeholder || "search…"}
-          style={{ ...baseInp, fontSize: MOBILE_SAFE_INPUT_SIZE, padding: "5px 10px", letterSpacing: 0.3 }} />
-      )}
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0,
-          background: "#fff", border: "1px solid #e8e8e8", borderRadius: 2,
-          zIndex: 200, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", overflow: "hidden",
-        }}>
-          {results.map(d => (
-            <div key={d.id} onMouseDown={() => { setQ(""); setOpen(false); onChange(d); }} style={{
-              padding: "9px 14px", cursor: "pointer", borderBottom: "1px solid #f5f5f5",
-              fontFamily: FONT, fontSize: 12, color: "#1a1a1a",
-            }}>
-              {d.name}{d.notes ? <span style={{ color: "#444" }}> · {d.notes}</span> : ""}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Swap Picker ───────────────────────────────────────────────────────────────
-function SwapPicker({ seatId, totalSeats, onSwap }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef();
-  useEffect(() => {
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    document.addEventListener("touchstart", h, { passive: true });
-    return () => {
-      document.removeEventListener("mousedown", h);
-      document.removeEventListener("touchstart", h);
-    };
-  }, []);
-  const others = Array.from({ length: totalSeats }, (_, i) => i + 1).filter(n => n !== seatId);
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button onClick={() => setOpen(o => !o)} title="Swap position" style={{
-        width: 28, height: 28, borderRadius: 2,
-        border: "1px solid #e8e8e8", background: open ? "#f5f5f5" : "#fff",
-        color: "#555", cursor: "pointer", fontSize: 13,
-        display: "flex", alignItems: "center", justifyContent: "center",
-      }}>⇅</button>
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 3px)", right: 0,
-          background: "#fff", border: "1px solid #e8e8e8", borderRadius: 2,
-          zIndex: 300, overflow: "hidden", minWidth: 80,
-          boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
-        }}>
-          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#555", padding: "7px 12px 4px", textTransform: "uppercase" }}>swap with</div>
-          {others.map(n => (
-            <div key={n} onMouseDown={() => { onSwap(n); setOpen(false); }} style={{
-              padding: "8px 14px", cursor: "pointer",
-              fontFamily: FONT, fontSize: 12, color: "#1a1a1a",
-              borderTop: "1px solid #f5f5f5",
-            }}>P{n}</div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── BeverageSearch — unified single-search across all drink types ──────────────
-function BeverageSearch({ wines, cocktails, spirits, beers, onAdd }) {
-  const [q, setQ]           = useState("");
-  const [results, setResults] = useState([]);
-  const [open, setOpen]     = useState(false);
-  const ref = useRef();
-  const inputRef = useRef();
-
-  useEffect(() => {
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    document.addEventListener("touchstart", h, { passive: true });
-    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("touchstart", h); };
-  }, []);
-
-  const search = val => {
-    if (!val.trim()) { setResults([]); setOpen(false); return; }
-    const lq = val.toLowerCase();
-    const r = [];
-    wines.filter(w => w.byGlass).forEach(w => {
-      if (w.name.toLowerCase().includes(lq) || w.producer?.toLowerCase().includes(lq) || w.vintage?.includes(lq))
-        r.push({ type: "wine",     item: w, label: w.name, sub: `${w.producer} · ${w.vintage}` });
-    });
-    cocktails.forEach(c => {
-      if (c.name.toLowerCase().includes(lq) || (c.notes||"").toLowerCase().includes(lq))
-        r.push({ type: "cocktail", item: c, label: c.name, sub: c.notes || "" });
-    });
-    spirits.forEach(s => {
-      if (s.name.toLowerCase().includes(lq) || (s.notes||"").toLowerCase().includes(lq))
-        r.push({ type: "spirit",   item: s, label: s.name, sub: s.notes || "" });
-    });
-    beers.forEach(b => {
-      if (b.name.toLowerCase().includes(lq) || (b.notes||"").toLowerCase().includes(lq))
-        r.push({ type: "beer",     item: b, label: b.name, sub: b.notes || "" });
-    });
-    setResults(r.slice(0, 10));
-    setOpen(r.length > 0);
-  };
-
-  const handleAdd = entry => {
-    onAdd(entry);
-    setQ("");
-    setResults([]);
-    setOpen(false);
-    inputRef.current?.focus();
-  };
-
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <input
-        ref={inputRef}
-        value={q}
-        onChange={e => { setQ(e.target.value); search(e.target.value); }}
-        onFocus={() => results.length && setOpen(true)}
-        placeholder="search beverages…"
-        autoComplete="off"
-        style={{ ...baseInp, fontSize: MOBILE_SAFE_INPUT_SIZE, padding: "9px 12px", letterSpacing: 0.3 }}
-      />
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0,
-          background: "#fff", border: "1px solid #e8e8e8", borderRadius: 4,
-          zIndex: 300, boxShadow: "0 6px 24px rgba(0,0,0,0.10)", overflow: "hidden",
-        }}>
-          {results.map((r, i) => {
-            const ts = BEV_TYPES[r.type];
-            return (
-              <div key={i} onMouseDown={() => handleAdd(r)} style={{
-                padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #f8f8f8",
-                display: "flex", alignItems: "center", gap: 10,
-                background: "#fff",
-              }}>
-                <span style={{
-                  fontFamily: FONT, fontSize: 8, letterSpacing: 1, fontWeight: 600,
-                  padding: "2px 6px", borderRadius: 2,
-                  color: ts.color, background: ts.bg, border: `1px solid ${ts.border}`,
-                  flexShrink: 0, textTransform: "uppercase",
-                }}>{ts.label}</span>
-                <span style={{ fontFamily: FONT, fontSize: 12, color: "#1a1a1a", flex: 1 }}>{r.label}</span>
-                {r.sub && <span style={{ fontFamily: FONT, fontSize: 11, color: "#999" }}>{r.sub}</span>}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── Menu Sync Tab ─────────────────────────────────────────────────────────────
 // ── Course Editor — inline editing of a single menu course ───────────────────
@@ -892,22 +591,6 @@ function DrinkListEditor({ list, setList, newItem, setNewItem, nextId, label }) 
         }}>+ ADD {label.toUpperCase()}</button>
       </div>
     </>
-  );
-}
-
-// BlurInput: keeps typed value local, only calls onCommit when focus leaves.
-function BlurInput({ committedValue, onCommit, placeholder, style }) {
-  const [local, setLocal] = useState(committedValue ?? "");
-  const prev = useRef(committedValue);
-  if (prev.current !== committedValue) { prev.current = committedValue; setLocal(committedValue ?? ""); }
-  return (
-    <input
-      value={local}
-      onChange={e => setLocal(e.target.value)}
-      onBlur={() => { if (local !== committedValue) onCommit(local); }}
-      placeholder={placeholder}
-      style={style}
-    />
   );
 }
 
@@ -3486,33 +3169,6 @@ function KitchenBoard({ tables, menuCourses, upd, updMany }) {
 const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
 
 
-function BevEditRow({ emoji, label, items, onUpdate }) {
-  const [draft, setDraft] = useState("");
-  const add = () => { const v = draft.trim(); if (!v) return; onUpdate([...(items || []), { name: v }]); setDraft(""); };
-  return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
-      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-        {(items || []).map((item, i) => (
-          <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 6px 2px 8px", borderRadius: 2, border: "1px solid #e0e0e0", background: "#fafafa", display: "flex", alignItems: "center", gap: 4 }}>
-            {emoji} {item.name}
-            <button onClick={() => onUpdate((items || []).filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "#bbb", fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>
-          </span>
-        ))}
-        <input
-          value={draft} onChange={e => setDraft(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") add(); }}
-          placeholder={`add…`}
-          style={{ fontFamily: FONT, fontSize: 10, padding: "3px 8px", border: "1px solid #e8e8e8", borderRadius: 2, outline: "none", width: 120 }}
-        />
-        {draft.trim() && (
-          <button onClick={add} style={{ fontFamily: FONT, fontSize: 9, padding: "3px 8px", border: "1px solid #c8a96e", borderRadius: 2, cursor: "pointer", background: "#fdf4e8", color: "#7a5020" }}>add</button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutStyles = {}, menuTemplate = null, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [], aperitifOptions = [], menuRules = DEFAULT_MENU_RULES }) {
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState(() => readMenuTitle(table.lang || "en"));
@@ -4221,40 +3877,6 @@ function Header({ modeLabel, showAddRes = false, showSummary = false, showMenu =
         <span style={topStatChip}>{activeCount} seated</span>
         <span style={topStatChip}>{reserved} reserved</span>
         <span style={topStatChip}>{seated} guests</span>
-      </div>
-    </div>
-  );
-}
-
-// ── Summary Modal ─────────────────────────────────────────────────────────────
-// ── Shared full-screen modal shell ────────────────────────────────────────────
-function FullModal({ title, onClose, actions, children }) {
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, []);
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "#fff", display: "flex", flexDirection: "column" }}>
-      {/* Sticky top bar */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0 20px", height: 54, borderBottom: "1px solid #ebebeb",
-        background: "#fff", flexShrink: 0,
-      }}>
-        <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#888", textTransform: "uppercase" }}>{title}</span>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {actions}
-          <button onClick={onClose} style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
-            border: "1px solid #e0e0e0", borderRadius: 2,
-            cursor: "pointer", background: "#fff", color: "#555",
-          }}>✕ CLOSE</button>
-        </div>
-      </div>
-      {/* Scrollable body */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "28px 20px 60px" }}>
-        {children}
       </div>
     </div>
   );
