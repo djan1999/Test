@@ -2827,47 +2827,40 @@ export default function App() {
     const onVisibilityChange = () => { if (!document.hidden && isMounted) loadRemoteTables(); };
     document.addEventListener("visibilitychange", onVisibilityChange);
 
-    const channel = supabase
-      .channel("milka-service-tables-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: TABLES.SERVICE_TABLES }, payload => {
-        if (payload.eventType === "DELETE") {
-          const tableId = Number(payload.old?.table_id);
-          if (!tableId) return;
-          applyingRemoteRef.current = true;
-          setTables(prev => prev.map(t => t.id === tableId ? blankTable(tableId) : t));
-          setTimeout(() => { applyingRemoteRef.current = false; }, 0);
-          setSyncStatus("live");
-          return;
-        }
-        if (!payload.new) return;
-        applyRemoteTableRow(payload.new);
-        // Only update the specific table's entry — do NOT overwrite other tables'
-        // entries so locally-pending changes for those tables are not silently dropped.
-        const remoteIdx = tablesRef.current.findIndex(t => t.id === Number(payload.new.table_id));
-        if (remoteIdx !== -1) {
-          const next = [...prevTablesJsonRef.current];
-          next[remoteIdx] = JSON.stringify(sanitizeTable({ id: Number(payload.new.table_id), ...(payload.new.data || {}) }));
-          prevTablesJsonRef.current = next;
-        }
-        setSyncStatus("live");
-      })
-      .subscribe(status => {
-        if (status === "SUBSCRIBED") { setSyncStatus("live"); }
-        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          setSyncStatus("sync-error");
-          // Force a full re-fetch so we don't miss anything while disconnected
-          if (isMounted) loadRemoteTables();
-        }
-      });
-
     return () => {
       isMounted = false;
       clearTimeout(gateTimeout);
       clearInterval(pollInterval);
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      supabase.removeChannel(channel);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useRealtimeTable({
+    supabase,
+    channelName: "milka-service-tables-realtime",
+    table: TABLES.SERVICE_TABLES,
+    onChange: (payload) => {
+      if (payload.eventType === "DELETE") {
+        const tableId = Number(payload.old?.table_id);
+        if (!tableId) return;
+        applyingRemoteRef.current = true;
+        setTables(prev => prev.map(t => t.id === tableId ? blankTable(tableId) : t));
+        setTimeout(() => { applyingRemoteRef.current = false; }, 0);
+        setSyncStatus("live");
+        return;
+      }
+      if (!payload.new) return;
+      applyRemoteTableRow(payload.new);
+      const remoteIdx = tablesRef.current.findIndex(t => t.id === Number(payload.new.table_id));
+      if (remoteIdx !== -1) {
+        const next = [...prevTablesJsonRef.current];
+        next[remoteIdx] = JSON.stringify(sanitizeTable({ id: Number(payload.new.table_id), ...(payload.new.data || {}) }));
+        prevTablesJsonRef.current = next;
+      }
+      setSyncStatus("live");
+    },
+    enabled: Boolean(supabase),
+  });
 
   // ── Beverages: load from Supabase + realtime ─────────────────────────────────
   useEffect(() => {
