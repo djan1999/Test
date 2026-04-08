@@ -68,14 +68,6 @@ describe("normalizeMenuRules", () => {
     expect(rules.overwriteTitleAndThankYouOnLanguageSwitch).toBe(false);
   });
 
-  it("normalizes force course keys from comma-separated strings", () => {
-    const rules = normalizeMenuRules({
-      forcePairingCourseKeys: "Crayfish, Venison Course",
-      forceBeerCourseKeys: "Chicken Gizzard\nLamb",
-    });
-    expect(rules.forcePairingCourseKeys).toEqual(["crayfish", "venison_course"]);
-    expect(rules.forceBeerCourseKeys).toEqual(["chicken_gizzard", "lamb"]);
-  });
 });
 
 // ── Basic structure ────────────────────────────────────────────────────────────

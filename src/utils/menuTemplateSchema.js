@@ -249,7 +249,7 @@ export function buildDefaultTemplate(menuCourses = []) {
     rows.push({
       id: `course_${ck}`,
       left:  { type: "course", courseKey: ck },
-      right: (nck === "crayfish" || nck === "chicken_gizzard") ? makeBlock("forced_pairing") : makeBlock("pairing"),
+      right: makeBlock("pairing"),
       widthPreset: "55/45",
       gap: 0,
     });

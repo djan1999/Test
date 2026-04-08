@@ -783,38 +783,6 @@ export default function MenuTemplateEditor({
     onUpdateTemplate(migrated);
   }, [menuTemplate, onUpdateTemplate]);
 
-  // ── One-time migration: insert forced_pairing blocks for known courses ──────
-  // Existing saved templates won't auto-update when new block types are added.
-  // We only patch rows that look like the default structure:
-  // - left is a course block
-  // - right is empty OR a plain pairing block
-  // and courseKey matches known forced courses.
-  useEffect(() => {
-    if (didInsertForcedPairingBlocksRef.current) return;
-    if (!menuTemplate?.rows) return;
-    didInsertForcedPairingBlocksRef.current = true;
-
-    const norm = (s) => String(s || "").trim().toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-    const forcedKeys = new Set(["crayfish", "chicken_gizzard"]);
-
-    let changed = false;
-    const nextRows = menuTemplate.rows.map(r => {
-      const lb = r?.left;
-      if (lb?.type !== "course") return r;
-      const ck = norm(lb.courseKey || "");
-      if (!forcedKeys.has(ck)) return r;
-      const rb = r?.right;
-      const rightOk = !rb || rb.type === "pairing";
-      if (!rightOk) return r;
-      if (rb?.type === "forced_pairing") return r;
-      changed = true;
-      return { ...r, right: makeBlock("forced_pairing") };
-    });
-
-    if (!changed) return;
-    onUpdateTemplate({ ...menuTemplate, rows: nextRows });
-  }, [menuTemplate, onUpdateTemplate]);
-
   // ── One-time migration: normalize row.gap into explicit gap rows ────────────
   // Older saved templates may have "gap above" stored directly on content rows.
   // Since gaps are now edited only via explicit gap-only rows, we convert:

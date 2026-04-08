@@ -13,15 +13,7 @@ import { applyCourseRestriction } from "./menuUtils.js";
 import { buildDefaultTemplate, parseWidthPreset } from "./menuTemplateSchema.js";
 
 export const DEFAULT_MENU_RULES = {
-  forceCrayfishPairing: false,
-  forceChickenGizzardBeer: false,
   overwriteTitleAndThankYouOnLanguageSwitch: true,
-  forcePairingCourseKeys: ["crayfish"],
-  forceBeerCourseKeys: ["chicken_gizzard"],
-  crayfishFallbackTitleEn: "KITCHEN MARTINI",
-  crayfishFallbackTitleSi: "KITCHEN MARTINI",
-  crayfishFallbackSubEn: "",
-  crayfishFallbackSubSi: "",
 };
 
 const normalizeCourseToken = (value) => String(value || "")
@@ -57,46 +49,12 @@ export function normalizeMenuRules(input = {}) {
     if (typeof value === "string") return value.trim().toLowerCase() !== "false";
     return value !== false;
   };
-  const forceCrayfishFlag = firstDefined(
-    merged.forceCrayfishPairing,
-    merged.forceCrayfishPairingAlways
-  );
-  const forceGizzardBeerFlag = firstDefined(
-    merged.forceChickenGizzardBeer,
-    merged.forceBeerOnChickenGizzard
-  );
   const overwriteTitleAndThankYouFlag = firstDefined(
     merged.overwriteTitleAndThankYouOnLanguageSwitch,
     merged.overwriteTitleAndThankYouOnLangSwitch
   );
-  const forcedPairingKeys = normalizeRuleKeyList(
-    firstDefined(
-      merged.forcePairingCourseKeys,
-      merged.forcePairingCourseKey,
-      merged.forceCrayfishCourseKeys,
-      merged.forceCrayfishCourseKey
-    ),
-    DEFAULT_MENU_RULES.forcePairingCourseKeys
-  );
-  const forcedBeerKeys = normalizeRuleKeyList(
-    firstDefined(
-      merged.forceBeerCourseKeys,
-      merged.forceBeerCourseKey,
-      merged.forceChickenGizzardCourseKeys,
-      merged.forceChickenGizzardCourseKey
-    ),
-    DEFAULT_MENU_RULES.forceBeerCourseKeys
-  );
   return {
-    forceCrayfishPairing: boolWithDefault(forceCrayfishFlag, true),
-    forceChickenGizzardBeer: boolWithDefault(forceGizzardBeerFlag, true),
     overwriteTitleAndThankYouOnLanguageSwitch: boolWithDefault(overwriteTitleAndThankYouFlag, true),
-    forcePairingCourseKeys: forcedPairingKeys,
-    forceBeerCourseKeys: forcedBeerKeys,
-    crayfishFallbackTitleEn: String(firstDefined(merged.crayfishFallbackTitleEn, DEFAULT_MENU_RULES.crayfishFallbackTitleEn) || DEFAULT_MENU_RULES.crayfishFallbackTitleEn),
-    crayfishFallbackTitleSi: String(firstDefined(merged.crayfishFallbackTitleSi, DEFAULT_MENU_RULES.crayfishFallbackTitleSi) || DEFAULT_MENU_RULES.crayfishFallbackTitleSi),
-    crayfishFallbackSubEn: String(firstDefined(merged.crayfishFallbackSubEn, DEFAULT_MENU_RULES.crayfishFallbackSubEn) || ""),
-    crayfishFallbackSubSi: String(firstDefined(merged.crayfishFallbackSubSi, DEFAULT_MENU_RULES.crayfishFallbackSubSi) || ""),
   };
 }
 
@@ -232,11 +190,7 @@ export function generateMenuHTML({
   };
 
   const selectedBeer = (() => {
-    if (beers.length === 0) {
-      return beerChoice === "nonalc"
-        ? { title: "SPENT BREAD KOMBUCHA", sub: "malt, hops" }
-        : { title: "Reservoir Dogs, Crazy Sister", sub: "Nova Gorica, Slovenia" };
-    }
+    if (beers.length === 0) return null;
     const chosen = beers.find(b => {
       const hay = `${b?.name || ""} ${b?.notes || ""}`.toLowerCase();
       const isNA = hay.includes("0.0") || hay.includes("non") || hay.includes("zero") || hay.includes("free") || hay.includes("n/a") || hay.startsWith("na");
@@ -245,15 +199,8 @@ export function generateMenuHTML({
     return fmtDrinkParts({ ...chosen, __type: "beer" });
   })();
 
-  const resolveBeerDrinkForCourse = (course) => {
+  const resolveBeerDrinkForCourse = () => {
     if (!selectedBeer) return null;
-    // If we don't have explicit beer objects and we're rendering SI,
-    // prefer SI pairing labels from the course for natural language output.
-    if (lang === "si" && beers.length === 0) {
-      const siK = beerChoice === "nonalc" ? "na" : "wp";
-      const siD = course?.[`${siK}_si`] || course?.[siK];
-      if (siD?.name || siD?.sub) return { name: siD.name || "", sub: siD.sub || "" };
-    }
     return { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
   };
 
@@ -534,7 +481,7 @@ export function generateMenuHTML({
           const isNonAlc = String(beerChoice || "").trim().toLowerCase() === "nonalc";
           const itemId = isNonAlc
             ? (rb.naCatalogItemId ?? null)
-            : (rb.catalogItemId ?? rb.catalogId ?? null);
+            : (rb.catalogItemId ?? null);
           const itemType = isNonAlc
             ? (rb.naCatalogType || "")
             : (rb.catalogType || "");
