@@ -2,7 +2,6 @@ import { useState } from "react";
 import { FONT } from "./adminStyles.js";
 import MenuLayoutPanel from "./MenuLayoutPanel.jsx";
 import CourseEditorPanel from "./CourseEditorPanel.jsx";
-import DishesPanel from "./DishesPanel.jsx";
 import DrinksPanel from "./DrinksPanel.jsx";
 import InventoryPanel from "./InventoryPanel.jsx";
 import SystemPanel from "./SystemPanel.jsx";
@@ -41,7 +40,6 @@ export default function AdminLayout({
   menuRulesSaved,
   // Dish data
   dishes,
-  onUpdateDishes,
   // Drinks data
   wines,
   cocktails,
@@ -69,7 +67,6 @@ export default function AdminLayout({
 }) {
   const [activeSection, setActiveSection] = useState("menu");
   const [dishesCoursesOpen, setDishesCoursesOpen] = useState(true);
-  const [dishesEditorOpen, setDishesEditorOpen] = useState(true);
   const [navPinned, setNavPinned] = useState(false);
   const [navHover, setNavHover] = useState(false);
 
@@ -238,35 +235,13 @@ export default function AdminLayout({
                   )}
                 </div>
 
-                <div style={{ border: "1px solid #f0f0f0", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
-                  <button
-                    onClick={() => setDishesEditorOpen(v => !v)}
-                    style={{
-                      width: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "10px 14px",
-                      border: "none",
-                      background: "#fafafa",
-                      cursor: "pointer",
-                      fontFamily: FONT,
-                    }}
-                    title={dishesEditorOpen ? "Collapse" : "Expand"}
-                  >
-                    <span style={{ fontSize: 9, letterSpacing: 2, color: "#4b4b88", textTransform: "uppercase", fontWeight: 700 }}>
-                      ◈ Dishes &amp; Restrictions
-                    </span>
-                    <span style={{ fontSize: 12, color: "#bbb" }}>{dishesEditorOpen ? "▾" : "▸"}</span>
-                  </button>
-                  {dishesEditorOpen && (
-                    <div style={{ padding: "14px 14px 16px" }}>
-                      <DishesPanel
-                        dishes={dishes}
-                        onUpdateDishes={onUpdateDishes}
-                      />
-                    </div>
-                  )}
+                <div style={{
+                  fontFamily: FONT, fontSize: 10, color: "#999",
+                  border: "1px solid #f0f0f0", borderRadius: 6,
+                  background: "#fafafa", padding: "12px 14px", lineHeight: 1.5,
+                }}>
+                  Optional extras are now driven directly from each course’s `optional_flag` in Courses.
+                  There is no separate Extra Dishes editor anymore.
                 </div>
               </div>
             </div>
@@ -279,7 +254,6 @@ export default function AdminLayout({
               cocktails={cocktails}
               spirits={spirits}
               beers={beers}
-              onUpdateDishes={onUpdateDishes}
               onUpdateWines={onUpdateWines}
               onSaveBeverages={onSaveBeverages}
             />

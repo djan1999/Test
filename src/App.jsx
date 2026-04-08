@@ -11,8 +11,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   firstFilled, applyMenuOverride, truthyCell, splitMainSubCell,
-  parseBilingual, mergeDishes, applyCourseRestriction,
-  RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, initDishes,
+  parseBilingual, applyCourseRestriction,
+  RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP,
   parseMenuRow, RESTRICTION_KEYS,
 } from "./utils/menuUtils.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
@@ -317,12 +317,37 @@ const supabase = hasSupabaseConfig ? createClient(SUPABASE_URL, SUPABASE_ANON_KE
 
 const defaultBoardState = () => ({
   tables: initTables,
-  dishes: initDishes,
+  dishes: [],
   wines: initWines,
   cocktails: initCocktails,
   spirits: initSpirits,
   beers: initBeers,
 });
+
+const normalizeOptionalKey = (value) =>
+  String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+function optionalExtrasFromCourses(menuCourses = []) {
+  const builtins = [
+    { id: 1, key: "beetroot", name: "Beetroot", pairings: ["—", "Champagne", "N/A"] },
+    { id: 2, key: "cheese", name: "Cheese", pairings: ["—", "Wine", "Non-Alc"] },
+    { id: 3, key: "cake", name: "Special Occasion", pairings: ["—"] },
+  ];
+  const byKey = new Map(builtins.map(x => [x.key, x]));
+  (menuCourses || []).forEach((c) => {
+    const key = normalizeOptionalKey(c?.optional_flag);
+    if (!key) return;
+    const existing = byKey.get(key);
+    const label = String(c?.menu?.name || existing?.name || key).trim() || key;
+    byKey.set(key, {
+      id: existing?.id ?? key,
+      key,
+      name: label,
+      pairings: existing?.pairings || ["—", "Wine", "Non-Alc", "Premium", "Our Story"],
+    });
+  });
+  return [...byKey.values()];
+}
 
 const circBtnSm = {
   width: 36, height: 36, borderRadius: "50%",
@@ -2130,7 +2155,7 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
 
 
 // ── Table Seat Detail (read-only, used in DisplayBoard) ───────────────────────
-function TableSeatDetail({ table, dishes, isMobile }) {
+function TableSeatDetail({ table, isMobile, optionalExtras = [] }) {
 
   const chip = (label, color, bg, border, bold = false) => (
     <span style={{
@@ -2165,7 +2190,7 @@ function TableSeatDetail({ table, dishes, isMobile }) {
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
         {table.seats.map(seat => {
           const seatRestrictions = (table.restrictions || []).filter(r => r.pos === seat.id);
-          const seatExtras = dishes.filter(d => seat.extras?.[d.id]?.ordered);
+          const seatExtras = optionalExtras.filter(d => seat.extras?.[d.key]?.ordered);
           const ws = waterStyle(seat.water);
           const pc = PC[seat.pairing] || PC["Non-Alc"];
           const hasInfo = seatRestrictions.length > 0 || seatExtras.length > 0;
@@ -2201,8 +2226,8 @@ function TableSeatDetail({ table, dishes, isMobile }) {
                     <span key={i} style={{ fontFamily: FONT, fontSize: 11, fontWeight: 500, letterSpacing: 0.3, padding: "4px 9px", borderRadius: 999, background: "#fef0f0", border: "1px solid #e09090", color: "#b04040" }}>⚠ {restrLabel(r.note)}</span>
                   ))}
                   {seatExtras.map(d => {
-                    const ex = seat.extras[d.id];
-                    return <span key={d.id} style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.3, padding: "4px 9px", borderRadius: 999, background: "#e8f5e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>{d.name}{ex.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}</span>;
+                    const ex = seat.extras[d.key];
+                    return <span key={d.key} style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.3, padding: "4px 9px", borderRadius: 999, background: "#e8f5e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>{d.name}{ex.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}</span>;
                   })}
                 </div>
               ) : <div style={{ fontFamily: FONT, fontSize: 11, color: "#777" }}>No extra notes</div>}
@@ -2631,7 +2656,7 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
 // ── Service Quick View ────────────────────────────────────────────────────────
 const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 
-function ServiceQuickCard({ table, updSeat, onDetails }) {
+function ServiceQuickCard({ table, updSeat, onDetails, dishes = [] }) {
   const seats = table.seats || [];
   const toggleExtra = (seat, dishId) => {
     const cur = seat.extras?.[dishId] || { ordered: false, pairing: "—" };
@@ -2691,10 +2716,6 @@ function ServiceQuickCard({ table, updSeat, onDetails }) {
       {/* Per-seat rows */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px" }}>
         {seats.map(seat => {
-          const beetExtra = seat.extras?.[1] || { ordered: false, pairing: "—" };
-          const hasBeet = !!beetExtra.ordered;
-          const hasCheese = !!seat.extras?.[2]?.ordered;
-          const setBeetPairing = (p) => updSeat(table.id, seat.id, "extras", { ...seat.extras, 1: { ...beetExtra, pairing: p } });
           const pairingColor = { Wine: "#7a5020", "Non-Alc": "#3a6a2a", Premium: "#4a3a7a", "Our Story": "#2a5a6a" };
           const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#edf8e8", Premium: "#f0eeff", "Our Story": "#e8f5f8" };
           const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
@@ -2723,23 +2744,29 @@ function ServiceQuickCard({ table, updSeat, onDetails }) {
                   {WATER_QUICK.map(opt => waterBtn(opt, seat.water === opt, () => updSeat(table.id, seat.id, "water", opt)))}
                 </div>
                 <div style={{ width: 1, height: 18, background: "#e8e8e8", margin: "0 2px" }} />
-                <div style={{ display: "flex", gap: 3 }}>
-                  {extraBtn("Beet", hasBeet, "#5a8a3a", () => toggleExtra(seat, 1))}
-                  {hasBeet && ["—", "Champ", "N/A"].map(p => {
-                    const val = p === "Champ" ? "Champagne" : p;
-                    const active = (beetExtra.pairing || "—") === val;
+                <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                  {dishes.slice(0, 3).map((dish) => {
+                    const extra = seat.extras?.[dish.key] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
+                    const active = !!extra.ordered;
                     return (
-                      <button key={p} onClick={() => setBeetPairing(val)} style={{
-                        fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
-                        padding: "4px 6px", border: "1px solid",
-                        borderColor: active ? "#5a8a3a" : "#e0e0e0",
-                        borderRadius: 2, cursor: "pointer", lineHeight: 1,
-                        background: active ? "#edf8e8" : "#fff",
-                        color: active ? "#5a8a3a" : "#aaa",
-                      }}>{p}</button>
+                      <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                        {extraBtn(dish.name.slice(0, 4), active, "#7a7a7a", () => toggleExtra(seat, dish.key))}
+                        {active && (dish.pairings || ["—"]).slice(0, 3).map((p) => {
+                          const sel = (extra.pairing || "—") === p;
+                          return (
+                            <button key={p} onClick={() => updSeat(table.id, seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, pairing: p } })} style={{
+                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
+                              padding: "4px 6px", border: "1px solid",
+                              borderColor: sel ? "#7a7a7a" : "#e0e0e0",
+                              borderRadius: 2, cursor: "pointer", lineHeight: 1,
+                              background: sel ? "#f3f3f3" : "#fff",
+                              color: sel ? "#444" : "#aaa",
+                            }}>{p === "Champagne" ? "Champ" : p}</button>
+                          );
+                        })}
+                      </div>
                     );
                   })}
-                  {extraBtn("Chse", hasCheese, "#a06830", () => toggleExtra(seat, 2))}
                 </div>
               </div>
 
@@ -2769,7 +2796,7 @@ function ServiceQuickCard({ table, updSeat, onDetails }) {
   );
 }
 
-function ServiceQuickView({ tables, updSeat, setSel }) {
+function ServiceQuickView({ tables, updSeat, setSel, dishes = [] }) {
   const activeTables = tables.filter(t => t.active || t.resName || t.resTime);
   if (activeTables.length === 0) return (
     <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
@@ -2779,7 +2806,7 @@ function ServiceQuickView({ tables, updSeat, setSel }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
       {activeTables.map(t => (
-        <ServiceQuickCard key={t.id} table={t} updSeat={updSeat} onDetails={() => setSel(t.id)} />
+        <ServiceQuickCard key={t.id} table={t} updSeat={updSeat} dishes={dishes} onDetails={() => setSel(t.id)} />
       ))}
     </div>
   );
@@ -6237,7 +6264,6 @@ export default function App() {
 
   const [tables,    setTables]    = useState(initialState.tables);
   const [menuCourses, setMenuCourses] = useState([]); // live from Supabase
-  const [dishes,    setDishes]    = useState(mergeDishes(initialState.dishes));
   const [wines,     setWines]     = useState(initialState.wines);
   const [cocktails, setCocktails] = useState(localBev?.cocktails ?? initialState.cocktails ?? initCocktails);
   const [spirits,   setSpirits]   = useState(localBev?.spirits   ?? initialState.spirits   ?? initSpirits);
@@ -6304,12 +6330,14 @@ export default function App() {
   const prevTablesJsonRef  = useRef((initialState.tables || initTables).map(t => JSON.stringify(sanitizeTable(t))));
   const tablesRef          = useRef(tables);
 
-  const boardState = { tables, dishes, cocktails, spirits, beers };
+  const boardState = { tables, cocktails, spirits, beers };
   const tablesJson = useMemo(() => JSON.stringify(tables), [tables]);
-  const boardJson  = useMemo(() => JSON.stringify(boardState), [tablesJson, dishes, cocktails, spirits, beers]); // eslint-disable-line react-hooks/exhaustive-deps
+  const boardJson  = useMemo(() => JSON.stringify(boardState), [tablesJson, cocktails, spirits, beers]); // eslint-disable-line react-hooks/exhaustive-deps
   const boardStateRef = useRef(boardState);
   boardStateRef.current = boardState;
   tablesRef.current = tables;
+
+  const dishes = useMemo(() => optionalExtrasFromCourses(menuCourses), [menuCourses]);
 
   const mergeRemoteTables = rows => {
     const byId = new Map((Array.isArray(rows) ? rows : []).map(row => [Number(row.table_id), sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) })]));
@@ -7254,7 +7282,6 @@ export default function App() {
         menuRulesSaving={menuRulesSaving}
         menuRulesSaved={menuRulesSaved}
         dishes={dishes}
-        onUpdateDishes={setDishes}
         wines={wines}
         cocktails={cocktails}
         spirits={spirits}
