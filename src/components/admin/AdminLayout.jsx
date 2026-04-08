@@ -2,7 +2,6 @@ import { useState } from "react";
 import { FONT } from "./adminStyles.js";
 import MenuLayoutPanel from "./MenuLayoutPanel.jsx";
 import CourseEditorPanel from "./CourseEditorPanel.jsx";
-import DishesPanel from "./DishesPanel.jsx";
 import DrinksPanel from "./DrinksPanel.jsx";
 import InventoryPanel from "./InventoryPanel.jsx";
 import SystemPanel from "./SystemPanel.jsx";
@@ -41,7 +40,6 @@ export default function AdminLayout({
   menuRulesSaved,
   // Dish data
   dishes,
-  onUpdateDishes,
   // Drinks data
   wines,
   cocktails,
@@ -68,7 +66,13 @@ export default function AdminLayout({
   onExit,
 }) {
   const [activeSection, setActiveSection] = useState("menu");
-  const [dishesTab, setDishesTab] = useState("courses");
+  const [dishesCoursesOpen, setDishesCoursesOpen] = useState(true);
+  const [navPinned, setNavPinned] = useState(false);
+  const [navHover, setNavHover] = useState(false);
+
+  const navOpen = navPinned || navHover;
+  const NAV_W_OPEN = 220;
+  const NAV_W_CLOSED = 56;
 
   return (
     <div style={{
@@ -107,18 +111,47 @@ export default function AdminLayout({
       <div style={{ display: "flex", flex: 1 }}>
         {/* Sidebar */}
         <nav style={{
-          width: 220, flexShrink: 0, borderRight: "1px solid #f0f0f0",
+          width: navOpen ? NAV_W_OPEN : NAV_W_CLOSED, flexShrink: 0, borderRight: "1px solid #f0f0f0",
           padding: "20px 0", background: "#fafafa",
           position: "sticky", top: 52, height: "calc(100vh - 52px)",
           overflowY: "auto",
+          transition: "width 0.16s ease",
+          overflowX: "hidden",
         }}>
+          <div style={{ padding: navOpen ? "0 12px 10px" : "0 8px 10px" }}>
+            <button
+              onClick={() => setNavPinned(v => !v)}
+              title={navPinned ? "Unpin sidebar" : "Pin sidebar open"}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: navOpen ? "space-between" : "center",
+                gap: 8,
+                padding: navOpen ? "8px 10px" : "8px 0",
+                border: "1px solid #e8e8e8",
+                borderRadius: 8,
+                background: "#fff",
+                cursor: "pointer",
+                color: navPinned ? "#4b4b88" : "#999",
+                fontFamily: FONT,
+                fontSize: 9,
+                letterSpacing: 1.5,
+                textTransform: "uppercase",
+              }}
+            >
+              <span style={{ fontSize: 14, width: 20, textAlign: "center" }}>{navPinned ? "📌" : "☰"}</span>
+              {navOpen && <span style={{ flex: 1, textAlign: "left" }}>{navPinned ? "Pinned" : "Hover to open"}</span>}
+              {navOpen && <span style={{ color: "#ccc" }}>{navPinned ? "ON" : "OFF"}</span>}
+            </button>
+          </div>
           {SECTIONS.map(s => (
             <button
               key={s.id}
               onClick={() => setActiveSection(s.id)}
               style={{
                 display: "flex", alignItems: "center", gap: 10,
-                width: "100%", padding: "12px 20px", border: "none",
+                width: "100%", padding: navOpen ? "12px 20px" : "12px 0", border: "none",
                 background: activeSection === s.id ? "#fff" : "transparent",
                 borderLeft: activeSection === s.id ? "3px solid #4b4b88" : "3px solid transparent",
                 cursor: "pointer", transition: "all 0.1s",
@@ -126,16 +159,17 @@ export default function AdminLayout({
                 color: activeSection === s.id ? "#1a1a1a" : "#888",
                 fontWeight: activeSection === s.id ? 600 : 400,
                 textAlign: "left",
+                justifyContent: navOpen ? "flex-start" : "center",
               }}
             >
               <span style={{ fontSize: 14, color: activeSection === s.id ? "#4b4b88" : "#ccc", width: 20, textAlign: "center" }}>{s.icon}</span>
-              {s.label}
+              {navOpen && s.label}
             </button>
           ))}
         </nav>
 
         {/* Panel content */}
-        <main style={{ flex: 1, padding: "24px 32px", maxWidth: activeSection === "menu" ? 1400 : 900, overflowY: "auto" }}>
+        <main style={{ flex: 1, padding: "24px 24px", maxWidth: activeSection === "menu" ? "none" : 900, overflowY: "auto" }}>
           {activeSection === "menu" && (
             <div>
               <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 20 }}>
@@ -167,32 +201,49 @@ export default function AdminLayout({
 
           {activeSection === "dishes" && (
             <div>
-              {/* Tab bar */}
-              <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #f0f0f0", marginBottom: 24 }}>
-                {[["courses", "◈ COURSES"], ["dishes", "◈ DISHES & RESTRICTIONS"]].map(([id, label]) => (
-                  <button key={id} onClick={() => setDishesTab(id)} style={{
-                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 16px",
-                    border: "none", borderBottom: `2px solid ${dishesTab === id ? "#4b4b88" : "transparent"}`,
-                    borderRadius: 0, cursor: dishesTab === id ? "default" : "pointer",
-                    background: "transparent",
-                    color: dishesTab === id ? "#4b4b88" : "#aaa",
-                    fontWeight: dishesTab === id ? 700 : 400,
-                  }}>{label}</button>
-                ))}
+              {/* Combined view: Courses + Dishes/Restrictions */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                <div style={{ border: "1px solid #f0f0f0", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
+                  <button
+                    onClick={() => setDishesCoursesOpen(v => !v)}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "10px 14px",
+                      border: "none",
+                      background: "#fafafa",
+                      cursor: "pointer",
+                      fontFamily: FONT,
+                    }}
+                    title={dishesCoursesOpen ? "Collapse" : "Expand"}
+                  >
+                    <span style={{ fontSize: 9, letterSpacing: 2, color: "#4b4b88", textTransform: "uppercase", fontWeight: 700 }}>
+                      ◈ Courses
+                    </span>
+                    <span style={{ fontSize: 12, color: "#bbb" }}>{dishesCoursesOpen ? "▾" : "▸"}</span>
+                  </button>
+                  {dishesCoursesOpen && (
+                    <div style={{ padding: "14px 14px 16px" }}>
+                      <CourseEditorPanel
+                        menuCourses={menuCourses}
+                        onUpdateCourses={onUpdateMenuCourses}
+                        onSaveCourses={onSaveMenuCourses}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{
+                  fontFamily: FONT, fontSize: 10, color: "#999",
+                  border: "1px solid #f0f0f0", borderRadius: 6,
+                  background: "#fafafa", padding: "12px 14px", lineHeight: 1.5,
+                }}>
+                  Optional extras are now driven directly from each course’s `optional_flag` in Courses.
+                  There is no separate Extra Dishes editor anymore.
+                </div>
               </div>
-              {dishesTab === "courses" && (
-                <CourseEditorPanel
-                  menuCourses={menuCourses}
-                  onUpdateCourses={onUpdateMenuCourses}
-                  onSaveCourses={onSaveMenuCourses}
-                />
-              )}
-              {dishesTab === "dishes" && (
-                <DishesPanel
-                  dishes={dishes}
-                  onUpdateDishes={onUpdateDishes}
-                />
-              )}
             </div>
           )}
 
@@ -203,7 +254,6 @@ export default function AdminLayout({
               cocktails={cocktails}
               spirits={spirits}
               beers={beers}
-              onUpdateDishes={onUpdateDishes}
               onUpdateWines={onUpdateWines}
               onSaveBeverages={onSaveBeverages}
             />

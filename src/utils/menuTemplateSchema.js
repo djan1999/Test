@@ -61,9 +61,22 @@ export const BLOCK_META = {
     fields: [
       { key: "text",      label: "Label override",    type: "text",   placeholder: "Leave empty for auto" },
       { key: "align",     label: "Alignment",          type: "select", options: ["left", "center", "right"] },
+      { key: "reserveWhenNoPairing", label: "Keep reserved row when no pairing", type: "checkbox" },
+      { key: "reserveHeightPt",      label: "Pairing-label row height / left gap (pt)", type: "number", step: 0.5, min: 0 },
       { key: "spacing",   label: "Spacing below (pt)", type: "number", step: 0.5 },
     ],
-    defaults: { text: "", align: "right", spacing: 6 },
+    defaults: { text: "", align: "right", reserveWhenNoPairing: null, reserveHeightPt: null, spacing: 6 },
+  },
+  forced_pairing: {
+    label: "Forced Pairing", group: "content", color: "#c86e6e", bg: "#fff2f2", icon: "⚑",
+    desc: "Forces a specific drink pairing for this course row. Pick separate ALCO/NON-ALCO products from catalog.",
+    fields: [
+      // Product-only flow: configured from the custom ALCO/NON-ALCO pickers in inspector.
+    ],
+    defaults: {
+      catalogType: "", catalogItemId: null,
+      naCatalogType: "", naCatalogItemId: null,
+    },
   },
   by_the_glass: {
     label: "By the Glass",  group: "content", color: "#5a9e6e", bg: "#f0f8f2", icon: "◷",
@@ -191,11 +204,12 @@ export function makeRow(left = null, right = null, widthPreset = "55/45", gap = 
  * Builds the initial default template from the current menuCourses.
  * Used for first-time setup and as an auto-migration fallback in generateMenuHTML.
  *
- * Preserves section_gap_before and inserts the pairing label before danube_salmon.
+ * Inserts the pairing label before danube_salmon.
  */
 export function buildDefaultTemplate(menuCourses = []) {
   const sorted = [...menuCourses].sort((a, b) => (a.position || 0) - (b.position || 0));
   const rows = [];
+  const norm = (v) => String(v || "").trim().toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 
   // Header: title left, logo right
   // Note: .menu-header-row CSS already has margin-bottom:headerSpacing mm,
@@ -219,19 +233,7 @@ export function buildDefaultTemplate(menuCourses = []) {
 
   sorted.forEach((course, idx) => {
     const ck = course.course_key || `course_${idx}`;
-
-    // Section gap row (e.g. before danube_salmon or sheep_cheese)
-    // Uses a gap-only row (both cells null) — the gap value is deferred to the
-    // next visible content row in generateMenuHTML, so hidden courses collapse cleanly.
-    if (course.section_gap_before && idx > 0) {
-      rows.push({
-        id: makeRowId("gap"),
-        left:  null,
-        right: null,
-        widthPreset: "100/0",
-        gap: 14.5,
-      });
-    }
+    const nck = norm(ck);
 
     // Pairing section label before danube_salmon
     if (ck === "danube_salmon") {
@@ -247,7 +249,7 @@ export function buildDefaultTemplate(menuCourses = []) {
     rows.push({
       id: `course_${ck}`,
       left:  { type: "course", courseKey: ck },
-      right: makeBlock("pairing"),
+      right: (nck === "crayfish" || nck === "chicken_gizzard") ? makeBlock("forced_pairing") : makeBlock("pairing"),
       widthPreset: "55/45",
       gap: 0,
     });

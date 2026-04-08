@@ -43,7 +43,7 @@ function DrinkListEditor({ list, setList, newItem, setNewItem, nextId, label }) 
 // ── DrinksPanel — manage wines, cocktails, spirits, beers + pairings ──
 export default function DrinksPanel({
   dishes, wines, cocktails, spirits, beers,
-  onUpdateDishes, onUpdateWines, onSaveBeverages,
+  onUpdateWines, onSaveBeverages,
 }) {
   const isMobile = useIsMobile(700);
   const [drinkTab, setDrinkTab] = useState("wines");

@@ -156,6 +156,9 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
               <input type="number" value={course.short_order ?? ""} onChange={e => upd("short_order", e.target.value ? Number(e.target.value) : null)} style={{ ...inpSm, width: 60 }} />
             </div>
           </div>
+          <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", marginBottom: 12, lineHeight: 1.4 }}>
+            Forced Pairing is configured in <strong style={{ color: "#777" }}>Menu Layout</strong> blocks only.
+          </div>
 
           {/* Pairings */}
           {activePairings.length > 0 && (
@@ -175,14 +178,6 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
               ))}
             </>
           )}
-
-          {/* Force Pairing */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginTop: 8, marginBottom: 12 }}>
-            <div><div style={labelSm}>Force Pairing (EN)</div><input value={course.force_pairing_title || ""} onChange={e => upd("force_pairing_title", e.target.value)} style={inpSm} /></div>
-            <div><div style={labelSm}>Force Sub (EN)</div><input value={course.force_pairing_sub || ""} onChange={e => upd("force_pairing_sub", e.target.value)} style={inpSm} /></div>
-            <div><div style={labelSm}>Force Pairing (SI)</div><input value={course.force_pairing_title_si || ""} onChange={e => upd("force_pairing_title_si", e.target.value)} style={inpSm} /></div>
-            <div><div style={labelSm}>Force Sub (SI)</div><input value={course.force_pairing_sub_si || ""} onChange={e => upd("force_pairing_sub_si", e.target.value)} style={inpSm} /></div>
-          </div>
 
           {/* Dietary Restrictions */}
           {activeRestrictions.length > 0 && (
@@ -276,24 +271,6 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
     onUpdateCourses(reordered.map((c, i) => ({ ...c, position: i + 1 })));
   };
 
-  const migrateRestrictionNames = () => {
-    const migrated = menuCourses.map(course => {
-      if (!course.restrictions || Object.keys(course.restrictions).length === 0) return course;
-      const restrictions = { ...course.restrictions };
-      let changed = false;
-      for (const rKey of Object.keys(restrictions)) {
-        const val = restrictions[rKey];
-        if (!val || typeof val !== "object") continue;
-        if (val.name) {
-          restrictions[rKey] = { ...val, sub: val.sub || val.name, name: "" };
-          changed = true;
-        }
-      }
-      return changed ? { ...course, restrictions } : course;
-    });
-    onUpdateCourses(migrated);
-  };
-
   const addCourse = () => {
     const maxPos = menuCourses.reduce((m, c) => Math.max(m, c.position || 0), 0);
     const newCourse = {
@@ -322,11 +299,6 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
           )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={migrateRestrictionNames} title="Move restriction alt-names into alt-desc, then Save" style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-            border: "1px solid #a0a0c8", borderRadius: 2, cursor: "pointer",
-            background: "#f4f4fc", color: "#4b4b88",
-          }}>MIGRATE RESTRICTION SUBS</button>
           <button onClick={addCourse} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
             border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",

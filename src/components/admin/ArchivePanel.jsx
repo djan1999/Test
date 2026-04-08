@@ -1,11 +1,6 @@
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { FONT } from "./adminStyles.js";
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-const supabase = hasSupabaseConfig ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+import { supabase, TABLES } from "../../lib/supabaseClient.js";
 
 // ── ArchivePanel — view, restore, delete saved service archives ──
 export default function ArchivePanel() {
@@ -20,8 +15,8 @@ export default function ArchivePanel() {
     if (!supabase) { setLoading(false); return; }
     setLoading(true);
     Promise.all([
-      supabase.from("service_archive").select("*").is("deleted_at", null).order("created_at", { ascending: false }).limit(60),
-      supabase.from("service_archive").select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(30),
+      supabase.from(TABLES.SERVICE_ARCHIVE).select("*").is("deleted_at", null).order("created_at", { ascending: false }).limit(60),
+      supabase.from(TABLES.SERVICE_ARCHIVE).select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(30),
     ]).then(([active, trash]) => {
       setEntries(active.error ? [] : (active.data || []));
       setDeleted(trash.error ? [] : (trash.data || []));
@@ -33,9 +28,9 @@ export default function ArchivePanel() {
   const deleteEntry = async id => {
     if (!supabase) return;
     setDeleting(id);
-    const { error } = await supabase.from("service_archive").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+    const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).update({ deleted_at: new Date().toISOString() }).eq("id", id);
     if (error) {
-      alert("Delete failed: " + error.message);
+      window.alert("Delete failed: " + error.message);
     } else {
       const entry = entries.find(x => x.id === id);
       setEntries(e => e.filter(x => x.id !== id));
@@ -50,9 +45,9 @@ export default function ArchivePanel() {
     if (!window.confirm("Move ALL archive entries to trash?")) return;
     setDeleting("all");
     const now = new Date().toISOString();
-    const { error } = await supabase.from("service_archive").update({ deleted_at: now }).is("deleted_at", null);
+    const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).update({ deleted_at: now }).is("deleted_at", null);
     if (error) {
-      alert("Delete failed: " + error.message);
+      window.alert("Delete failed: " + error.message);
     } else {
       setDeleted(d => [...entries.map(e => ({ ...e, deleted_at: now })), ...d]);
       setEntries([]);
@@ -64,9 +59,9 @@ export default function ArchivePanel() {
   const restoreEntry = async id => {
     if (!supabase) return;
     setDeleting(id);
-    const { error } = await supabase.from("service_archive").update({ deleted_at: null }).eq("id", id);
+    const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).update({ deleted_at: null }).eq("id", id);
     if (error) {
-      alert("Restore failed: " + error.message);
+      window.alert("Restore failed: " + error.message);
     } else {
       const entry = deleted.find(x => x.id === id);
       setDeleted(d => d.filter(x => x.id !== id));
@@ -79,9 +74,9 @@ export default function ArchivePanel() {
     if (!supabase) return;
     if (!window.confirm("Permanently delete all trashed entries? This cannot be undone.")) return;
     setDeleting("trash");
-    const { error } = await supabase.from("service_archive").delete().not("deleted_at", "is", null);
+    const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).delete().not("deleted_at", "is", null);
     if (error) {
-      alert("Empty trash failed: " + error.message);
+      window.alert("Empty trash failed: " + error.message);
     } else {
       setDeleted([]);
     }

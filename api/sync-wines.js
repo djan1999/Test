@@ -150,16 +150,8 @@ export default async function handler(req, res) {
   const provided = bearerToken ||
     req.headers["x-cron-secret"] ||
     new URL(req.url, "http://localhost").searchParams.get("secret");
-  // Accept if: secret matches, OR request comes from same origin/host (internal call).
-  const host = req.headers.host || "";
-  const origin = req.headers.origin || req.headers.referer || "";
-  const isSameOrigin = req.headers["sec-fetch-site"] === "same-origin"
-    || (origin && origin.includes(host))
-    || !origin; // server-to-server calls have no origin header
-  if (!isSameOrigin && (!secret || provided !== secret)) {
-    if (!secret) return res.status(500).json({ error: "CRON_SECRET not configured" });
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  if (!secret) return res.status(500).json({ error: "CRON_SECRET not configured" });
+  if (provided !== secret) return res.status(401).json({ error: "Unauthorized" });
 
   const dry = new URL(req.url, "http://localhost").searchParams.get("dry") === "true";
 

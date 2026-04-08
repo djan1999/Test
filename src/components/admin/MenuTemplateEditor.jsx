@@ -30,6 +30,8 @@ import {
 } from "../../utils/menuTemplateSchema.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote, readTeamNames } from "../../utils/storage.js";
+import { MenuRulesPanel, LayoutStylesPanel } from "./MenuTemplatePanels.jsx";
+import { PreviewDataPanel } from "./MenuTemplatePreviewParts.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -40,36 +42,7 @@ const CELL_EMPTY_BORDER = "#e4e2dc";
 
 // ── Preview data constants ─────────────────────────────────────────────────────
 
-const PREVIEW_PAIRINGS = [
-  { value: "—",         label: "None"      },
-  { value: "Wine",      label: "Wine"      },
-  { value: "Non-Alc",   label: "Non-Alc"   },
-  { value: "Our Story", label: "Our Story" },
-  { value: "Premium",   label: "Premium"   },
-];
-
-const PREVIEW_RESTRICTIONS = [
-  { key: "veg",         label: "Veg"        },
-  { key: "vegan",       label: "Vegan"      },
-  { key: "gluten",      label: "Gluten-Free"},
-  { key: "dairy",       label: "Dairy-Free" },
-  { key: "nut",         label: "Nut-Free"   },
-  { key: "no_pork",     label: "No Pork"    },
-  { key: "no_red_meat", label: "No Red Meat"},
-  { key: "no_game",     label: "No Game"    },
-  { key: "no_alcohol",  label: "No Alcohol" },
-  { key: "shellfish",   label: "Shellfish"  },
-];
-
-const APERITIF_QUICK_KEYS = ["SFSC", "Slapšak", "Clandestin", "Krug"];
-
 /** Create a fresh blank preview seat for a given 1-based position. */
-const makePreviewSeat = (id) => ({
-  id, pairing: "Wine", extras: {},
-  aperitifs: [], glasses: [], cocktails: [], beers: [],
-  restrictions: [],
-});
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function chipLabel(block, menuCourses) {
@@ -159,43 +132,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
   );
 }
 
-// ── Row settings (width preset + gap) ────────────────────────────────────────
-
-function RowSettings({ row, onUpdate }) {
-  const gap = row.gap ?? 0;
-  const pinned = !!row.pinToBottom;
-  return (
-    <div style={{ padding: "10px 10px 10px 24px", background: "#f8f7f3", borderTop: "1px solid #ede9e0" }}>
-      <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>
-        ROW SETTINGS
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ fontFamily: FONT, fontSize: 7.5, color: "#999", letterSpacing: 1 }}>GAP ABOVE (pt)</div>
-          <input
-            type="number"
-            value={gap}
-            step={0.5}
-            onChange={e => onUpdate({ ...row, gap: parseFloat(e.target.value) || 0 })}
-            style={{ ...baseInp, width: 50, fontSize: 10, padding: "2px 4px" }}
-          />
-        </div>
-        <button
-          onClick={() => onUpdate({ ...row, pinToBottom: !pinned })}
-          title="Pin this row to the bottom of the page (margin-top: auto)"
-          style={{
-            fontFamily: FONT, fontSize: 7.5, letterSpacing: 1, padding: "3px 9px",
-            border: `1px solid ${pinned ? SELECTED_RING : "#ddd"}`,
-            borderRadius: 2, cursor: "pointer",
-            background: pinned ? "#f0f0f8" : "#fff",
-            color: pinned ? SELECTED_RING : "#999",
-            textTransform: "uppercase",
-          }}
-        >⤓ {pinned ? "PINNED TO BOTTOM" : "PIN TO BOTTOM"}</button>
-      </div>
-    </div>
-  );
-}
+// ── Row settings removed ─────────────────────────────────────────────────────
 
 // ── Sortable row (in left panel) ──────────────────────────────────────────────
 
@@ -205,7 +142,6 @@ function SortableRow({
   menuCourses,
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.id });
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -215,7 +151,9 @@ function SortableRow({
 
   const leftSelected  = selectedCell?.rowId === row.id && selectedCell?.side === "left";
   const rightSelected = selectedCell?.rowId === row.id && selectedCell?.side === "right";
-  const isGapRow = !row.left && !row.right;
+  // Gap rows are explicit "spacing" rows: both cells empty AND gap > 0.
+  // Empty content rows (both cells empty, gap = 0) should still allow adding blocks.
+  const isGapRow = !row.left && !row.right && (Number(row.gap || 0) > 0);
 
   return (
     <div ref={setNodeRef} style={{ ...style, marginBottom: 2 }}>
@@ -267,7 +205,7 @@ function SortableRow({
             padding: "3px 4px",
             background: (leftSelected || rightSelected) ? "#f4f3fb" : "#fff",
             border: `1px solid ${(leftSelected || rightSelected) ? "#c8c6e8" : "#ede9e0"}`,
-            borderRadius: settingsOpen ? "3px 3px 0 0" : 3,
+            borderRadius: 3,
           }}>
             {/* Drag handle */}
             <div
@@ -297,16 +235,14 @@ function SortableRow({
               <RowActionBtn title="Insert row above" onClick={() => onInsertAbove(row.id)}>↑</RowActionBtn>
               <RowActionBtn title="Insert row below" onClick={() => onInsertBelow(row.id)}>↓</RowActionBtn>
               <RowActionBtn title="Duplicate row" onClick={() => onDuplicateRow(row.id)}>⎘</RowActionBtn>
-              {row.pinToBottom && <span title="Pinned to bottom" style={{ fontFamily: FONT, fontSize: 9, color: SELECTED_RING, padding: "0 2px" }}>⤓</span>}
-              <RowActionBtn title="Row settings" onClick={() => setSettingsOpen(v => !v)} active={settingsOpen}>⚙</RowActionBtn>
+              <RowActionBtn
+                title={row.pinToBottom ? "Unpin from bottom" : "Pin to bottom"}
+                onClick={() => onUpdateRow({ ...row, pinToBottom: !row.pinToBottom })}
+                active={!!row.pinToBottom}
+              >⤓</RowActionBtn>
               <RowActionBtn title="Delete row" onClick={() => onRemoveRow(row.id)} danger>⊗</RowActionBtn>
             </div>
           </div>
-
-          {/* Inline row settings */}
-          {settingsOpen && (
-            <RowSettings row={row} onUpdate={onUpdateRow} onClose={() => setSettingsOpen(false)} />
-          )}
         </>
       )}
     </div>
@@ -471,7 +407,7 @@ function AlignButtons({ value, onChange }) {
   );
 }
 
-function BlockInspector({ block, onUpdate, menuCourses }) {
+function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = [], spirits = [], beers = [] }) {
   if (!block) return (
     <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#ccc", letterSpacing: 1, padding: "24px 0", textAlign: "center", lineHeight: 2 }}>
       SELECT A CELL<br />TO CONFIGURE
@@ -483,7 +419,7 @@ function BlockInspector({ block, onUpdate, menuCourses }) {
 
   const setField = (key, val) => onUpdate({ ...block, [key]: val });
 
-  if (fields.length === 0) return (
+  if (fields.length === 0 && block.type !== "forced_pairing") return (
     <div>
       <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: meta.color || "#888", textTransform: "uppercase", marginBottom: 8 }}>
         {meta.icon} {meta.label}
@@ -500,6 +436,86 @@ function BlockInspector({ block, onUpdate, menuCourses }) {
       <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: meta.color || "#888", textTransform: "uppercase", marginBottom: 14 }}>
         {meta.icon} {meta.label}
       </div>
+
+      {/* Forced Pairing: catalog picker (supplements the schema-driven fields) */}
+      {block.type === "forced_pairing" && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>
+            Product reference (alcoholic)
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+            <select
+              value={block.catalogType || ""}
+              onChange={e => setField("catalogType", e.target.value)}
+              style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
+            >
+              <option value="">(none)</option>
+              <option value="cocktail">Cocktail</option>
+              <option value="spirit">Spirit</option>
+              <option value="beer">Beer</option>
+              <option value="wine">Wine</option>
+            </select>
+            <select
+              value={block.catalogItemId ?? block.catalogId ?? ""}
+              onChange={e => setField("catalogItemId", e.target.value ? Number(e.target.value) : null)}
+              disabled={!block.catalogType}
+              style={{ ...baseInp, fontSize: 10.5, width: "100%", opacity: block.catalogType ? 1 : 0.6 }}
+            >
+              <option value="">(select item)</option>
+              {(() => {
+                const list = block.catalogType === "cocktail" ? cocktails
+                  : block.catalogType === "spirit" ? spirits
+                  : block.catalogType === "beer" ? beers
+                  : block.catalogType === "wine" ? wines
+                  : [];
+                return list.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}{item.vintage ? ` ${item.vintage}` : ""}{item.producer ? ` · ${item.producer}` : ""}{item.notes ? ` · ${item.notes}` : ""}
+                  </option>
+                ));
+              })()}
+            </select>
+            <div style={{ height: 1, background: "#f0f0f0", margin: "4px 0" }} />
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 2 }}>
+              Product reference (non-alcoholic)
+            </div>
+            <select
+              value={block.naCatalogType || ""}
+              onChange={e => setField("naCatalogType", e.target.value)}
+              style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
+            >
+              <option value="">(none)</option>
+              <option value="cocktail">Cocktail</option>
+              <option value="spirit">Spirit</option>
+              <option value="beer">Beer</option>
+              <option value="wine">Wine</option>
+            </select>
+            <select
+              value={block.naCatalogItemId ?? ""}
+              onChange={e => setField("naCatalogItemId", e.target.value ? Number(e.target.value) : null)}
+              disabled={!block.naCatalogType}
+              style={{ ...baseInp, fontSize: 10.5, width: "100%", opacity: block.naCatalogType ? 1 : 0.6 }}
+            >
+              <option value="">(select item)</option>
+              {(() => {
+                const list = block.naCatalogType === "cocktail" ? cocktails
+                  : block.naCatalogType === "spirit" ? spirits
+                  : block.naCatalogType === "beer" ? beers
+                  : block.naCatalogType === "wine" ? wines
+                  : [];
+                return list.map(item => (
+                  <option key={`na-${item.id}`} value={item.id}>
+                    {item.name}{item.vintage ? ` ${item.vintage}` : ""}{item.producer ? ` · ${item.producer}` : ""}{item.notes ? ` · ${item.notes}` : ""}
+                  </option>
+                ));
+              })()}
+            </select>
+            <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.5 }}>
+              ALCO / N/A product pickers are linked to menu-generation ALCO/N/A toggle.
+            </div>
+          </div>
+        </div>
+      )}
 
       {fields.map(field => (
         <div key={field.key} style={{ marginBottom: 14 }}>
@@ -618,8 +634,15 @@ function LivePreview({ previewHtml, loading, label = "A5" }) {
       <div style={{
         fontFamily: FONT, fontSize: 7.5, letterSpacing: 3, color: "#aaa",
         textTransform: "uppercase", marginBottom: 14, flexShrink: 0,
+        width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
       }}>
-        LIVE PREVIEW {loading ? "· updating…" : `· ${label}`}
+        <span>LIVE PREVIEW {loading ? "· updating…" : `· ${label}`}</span>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, letterSpacing: 1.2, color: "#9a96b5" }}>
+          <input type="checkbox" checked={!!window.__menuSpacingDebug} onChange={(e) => {
+            window.__menuSpacingDebug = e.target.checked;
+          }} />
+          SPACING DEBUG
+        </label>
       </div>
 
       {/* Paper wrapper */}
@@ -654,605 +677,6 @@ function LivePreview({ previewHtml, loading, label = "A5" }) {
 // ── Preview helpers ───────────────────────────────────────────────────────────
 
 /** Compact removable tag for items in preview drink lists */
-function DrinkPill({ label, sub, onRemove }) {
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 4,
-      background: "#f0f0f8", border: "1px solid #d8d8e8", borderRadius: 2,
-      padding: "2px 6px", fontFamily: FONT, fontSize: 8,
-    }}>
-      <span style={{ color: "#444", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {label}{sub ? ` · ${sub}` : ""}
-      </span>
-      <button
-        onClick={onRemove}
-        style={{ border: "none", background: "transparent", cursor: "pointer", color: "#bbb", fontSize: 10, padding: 0, lineHeight: 1 }}
-        onMouseEnter={e => { e.currentTarget.style.color = "#e05050"; }}
-        onMouseLeave={e => { e.currentTarget.style.color = "#bbb"; }}
-      >×</button>
-    </div>
-  );
-}
-
-/** Inline search dropdown for wines and cocktails in the preview data panel */
-function MiniSearch({ wines = [], cocktails = [], spirits = [], beers = [], byGlass = false, bottleOnly = false, placeholder = "search…", onAdd }) {
-  const [q, setQ] = useState("");
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  const results = (() => {
-    if (!q.trim()) return [];
-    const lq = q.toLowerCase();
-    const out = [];
-    const winePool = byGlass ? wines.filter(w => w.byGlass) : wines;
-    winePool.forEach(w => {
-      if ((w.name || "").toLowerCase().includes(lq) || (w.producer || "").toLowerCase().includes(lq) || (w.vintage || "").includes(lq))
-        out.push({ __type: "wine", name: w.name, producer: w.producer, vintage: w.vintage, country: w.country, region: w.region });
-    });
-    if (!bottleOnly && !byGlass) {
-      cocktails.forEach(c => {
-        if ((c.name || "").toLowerCase().includes(lq) || (c.notes || "").toLowerCase().includes(lq))
-          out.push({ __type: "cocktail", name: c.name, notes: c.notes });
-      });
-      spirits.forEach(s => {
-        if ((s.name || "").toLowerCase().includes(lq) || (s.notes || "").toLowerCase().includes(lq))
-          out.push({ __type: "spirit", name: s.name, notes: s.notes });
-      });
-      beers.forEach(b => {
-        if ((b.name || "").toLowerCase().includes(lq) || (b.notes || "").toLowerCase().includes(lq))
-          out.push({ __type: "beer", name: b.name, notes: b.notes });
-      });
-    }
-    return out.slice(0, 8);
-  })();
-
-  const pick = item => { onAdd(item); setQ(""); setOpen(false); };
-
-  return (
-    <div ref={ref} style={{ position: "relative", flex: 1 }}>
-      <input
-        value={q}
-        onChange={e => { setQ(e.target.value); setOpen(e.target.value.trim().length > 0); }}
-        placeholder={placeholder}
-        style={{ ...baseInp, fontSize: 9, padding: "3px 7px", width: "100%" }}
-        autoComplete="off"
-      />
-      {open && results.length > 0 && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, zIndex: 500,
-          background: "#fff", border: "1px solid #e0e0e0", borderRadius: 3,
-          boxShadow: "0 4px 16px rgba(0,0,0,0.12)", maxHeight: 180, overflowY: "auto",
-        }}>
-          {results.map((r, i) => (
-            <div key={i} onMouseDown={() => pick(r)} style={{
-              padding: "6px 10px", cursor: "pointer", fontFamily: FONT,
-              borderBottom: "1px solid #f4f4f4",
-            }}
-              onMouseEnter={e => { e.currentTarget.style.background = "#f4f3fb"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "#fff"; }}
-            >
-              <div style={{ fontSize: 9, fontWeight: 700, color: "#222" }}>{r.name}</div>
-              <div style={{ fontSize: 8, color: "#999" }}>
-                {r.__type === "wine" ? [r.producer, r.vintage, r.country].filter(Boolean).join(" · ") : (r.notes || "")}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** The collapsible preview data configuration panel */
-function PreviewDataPanel({
-  wines, cocktails, spirits, beers,
-  guests, onGuestsChange,
-  seatIdx, onSeatIdxChange,
-  seats, onUpdateSeat,
-  bottleWines, onBottleWinesChange,
-  lang, onLangChange,
-  menuType, onMenuTypeChange,
-  open, onToggle,
-}) {
-  const seat = seats[seatIdx] || makePreviewSeat(seatIdx + 1);
-
-  const updSeat = patch => onUpdateSeat(seatIdx, patch);
-
-  const addGlass  = item => updSeat({ glasses:   [...seat.glasses,   item] });
-  const addAp     = item => updSeat({ aperitifs: [...seat.aperitifs, { ...item, __type: item.__type || "wine" }] });
-  const addCock   = item => updSeat({ cocktails: [...seat.cocktails, item] });
-  const addBottle = item => onBottleWinesChange([...bottleWines, item]);
-
-  const apQuickAdd = label => {
-    const q = label.toLowerCase();
-    const w = wines.find(x => (x.name || "").toLowerCase().includes(q));
-    if (w) { addAp({ __type: "wine", name: w.name, producer: w.producer, vintage: w.vintage, country: w.country, region: w.region }); return; }
-    const sp = spirits.find(x => (x.name || "").toLowerCase().includes(q));
-    if (sp) { addAp({ __type: "cocktail", name: sp.name, notes: sp.notes || "" }); return; }
-    const ck = cocktails.find(x => (x.name || "").toLowerCase().includes(q));
-    if (ck) { addAp({ __type: "cocktail", name: ck.name, notes: ck.notes || "" }); return; }
-    const b = beers.find(x => (x.name || "").toLowerCase().includes(q));
-    if (b) { addAp({ __type: "beer", name: b.name, notes: b.notes || "" }); return; }
-    // No catalog match — do NOT add a bare text label
-  };
-
-  const toggleRestriction = key => {
-    const cur = seat.restrictions || [];
-    updSeat({ restrictions: cur.includes(key) ? cur.filter(k => k !== key) : [...cur, key] });
-  };
-
-  const btnStyle = (active) => ({
-    fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
-    padding: "3px 8px", border: `1px solid ${active ? SELECTED_RING : "#ddd"}`,
-    borderRadius: 2, cursor: "pointer",
-    background: active ? "#f0f0f8" : "#fff",
-    color: active ? SELECTED_RING : "#666",
-  });
-
-  const seatTabStyle = (i) => ({
-    fontFamily: FONT, fontSize: 8.5, letterSpacing: 1, padding: "3px 10px",
-    border: "none", borderBottom: `2px solid ${seatIdx === i ? SELECTED_RING : "transparent"}`,
-    background: "transparent", cursor: "pointer",
-    color: seatIdx === i ? SELECTED_RING : "#aaa", fontWeight: seatIdx === i ? 700 : 400,
-  });
-
-  return (
-    <div style={{
-      borderBottom: "1px solid #ede9e0", background: "#fdf9f4",
-      flexShrink: 0, overflow: "hidden",
-    }}>
-      {/* Header strip — always visible */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 10,
-        padding: "5px 12px", borderBottom: open ? "1px solid #ede9e0" : "none",
-      }}>
-        <button
-          onClick={onToggle}
-          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#c8a96e", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
-        >{open ? "▾ PREVIEW DATA" : "▸ PREVIEW DATA"}</button>
-
-        <div style={{ width: 1, height: 14, background: "#e8e4dc", flexShrink: 0 }} />
-
-        {/* Seat tabs */}
-        {Array.from({ length: guests }, (_, i) => (
-          <button key={i} style={seatTabStyle(i)} onClick={() => onSeatIdxChange(i)}>
-            P{i + 1}
-          </button>
-        ))}
-
-        {/* Guests stepper */}
-        <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 2 }}>
-          <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa", letterSpacing: 1 }}>GUESTS</span>
-          <button onClick={() => onGuestsChange(guests - 1)} disabled={guests <= 1} style={{ ...btnStyle(false), padding: "2px 6px", fontSize: 10 }}>-</button>
-          <span style={{ fontFamily: FONT, fontSize: 9, color: "#444", minWidth: 14, textAlign: "center" }}>{guests}</span>
-          <button onClick={() => onGuestsChange(guests + 1)} disabled={guests >= 8} style={{ ...btnStyle(false), padding: "2px 6px", fontSize: 10 }}>+</button>
-        </div>
-
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
-          {/* Lang toggle */}
-          <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa" }}>LANG</span>
-          {["en","si"].map(l => (
-            <button key={l} onClick={() => onLangChange(l)} style={btnStyle(lang === l)}>{l.toUpperCase()}</button>
-          ))}
-          {/* Menu type toggle */}
-          <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa", marginLeft: 4 }}>MENU</span>
-          <button onClick={() => onMenuTypeChange("")}      style={btnStyle(menuType === "")}>FULL</button>
-          <button onClick={() => onMenuTypeChange("short")} style={btnStyle(menuType === "short")}>SHORT</button>
-        </div>
-      </div>
-
-      {/* Expanded body */}
-      {open && (
-        <div style={{ display: "flex", gap: 0, padding: "10px 12px", overflowX: "auto" }}>
-
-          {/* Column 1: Pairing + Restrictions */}
-          <div style={{ minWidth: 190, marginRight: 16 }}>
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>
-              P{seatIdx + 1} PAIRING
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 12 }}>
-              {PREVIEW_PAIRINGS.map(p => (
-                <button key={p.value} onClick={() => updSeat({ pairing: p.value })} style={btnStyle(seat.pairing === p.value)}>
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>
-              P{seatIdx + 1} RESTRICTIONS
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 12 }}>
-              {PREVIEW_RESTRICTIONS.map(r => (
-                <button key={r.key} onClick={() => toggleRestriction(r.key)} style={btnStyle((seat.restrictions || []).includes(r.key))}>
-                  {r.label}
-                </button>
-              ))}
-            </div>
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>
-              P{seatIdx + 1} EXTRAS
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-              {[{ id: 1, label: "Beetroot" }, { id: 2, label: "Cheese" }].map(ex => {
-                const active = !!(seat.extras || {})[ex.id]?.ordered;
-                return (
-                  <button key={ex.id} onClick={() => {
-                    const cur = { ...(seat.extras || {}) };
-                    cur[ex.id] = { ordered: !active };
-                    updSeat({ extras: cur });
-                  }} style={btnStyle(active)}>{ex.label}</button>
-                );
-              })}
-              <button
-                onClick={() => updSeat({ _birthday: !seat._birthday })}
-                style={btnStyle(!!seat._birthday)}
-              >Birthday / Cake</button>
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div style={{ width: 1, background: "#ede9e0", flexShrink: 0, marginRight: 16 }} />
-
-          {/* Column 2: By-glass + Aperitifs */}
-          <div style={{ minWidth: 200, marginRight: 16 }}>
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 5 }}>
-              P{seatIdx + 1} BY-THE-GLASS
-            </div>
-            <div style={{ display: "flex", gap: 4, marginBottom: 5 }}>
-              <MiniSearch wines={wines} cocktails={[]} spirits={[]} beers={[]} byGlass placeholder="search wine…" onAdd={addGlass} />
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 10 }}>
-              {seat.glasses.map((w, i) => (
-                <DrinkPill key={i} label={w.name} sub={w.vintage} onRemove={() => updSeat({ glasses: seat.glasses.filter((_, j) => j !== i) })} />
-              ))}
-            </div>
-
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 5 }}>
-              P{seatIdx + 1} APERITIFS
-            </div>
-            <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginBottom: 4 }}>
-              {APERITIF_QUICK_KEYS.map(k => (
-                <button key={k} onClick={() => apQuickAdd(k)} style={{ ...btnStyle(false), fontSize: 7.5 }}>{k}</button>
-              ))}
-            </div>
-            <div style={{ display: "flex", gap: 4, marginBottom: 5 }}>
-              <MiniSearch wines={wines} cocktails={cocktails} spirits={spirits} beers={beers} placeholder="search aperitif…" onAdd={addAp} />
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-              {seat.aperitifs.map((a, i) => (
-                <DrinkPill key={i} label={a.name} sub={a.vintage} onRemove={() => updSeat({ aperitifs: seat.aperitifs.filter((_, j) => j !== i) })} />
-              ))}
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div style={{ width: 1, background: "#ede9e0", flexShrink: 0, marginRight: 16 }} />
-
-          {/* Column 3: Cocktails + Bottle wines */}
-          <div style={{ minWidth: 200 }}>
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 5 }}>
-              P{seatIdx + 1} COCKTAILS
-            </div>
-            <div style={{ display: "flex", gap: 4, marginBottom: 5 }}>
-              <MiniSearch wines={[]} cocktails={cocktails} spirits={spirits} beers={beers} placeholder="search cocktail…" onAdd={addCock} />
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 10 }}>
-              {seat.cocktails.map((c, i) => (
-                <DrinkPill key={i} label={c.name || c.label} onRemove={() => updSeat({ cocktails: seat.cocktails.filter((_, j) => j !== i) })} />
-              ))}
-            </div>
-
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 5 }}>
-              TABLE BOTTLE WINES
-            </div>
-            <div style={{ display: "flex", gap: 4, marginBottom: 5 }}>
-              <MiniSearch wines={wines} cocktails={[]} spirits={[]} beers={[]} bottleOnly placeholder="search bottle wine…" onAdd={addBottle} />
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-              {bottleWines.map((w, i) => (
-                <DrinkPill key={i} label={w.name} sub={w.vintage} onRemove={() => onBottleWinesChange(bottleWines.filter((_, j) => j !== i))} />
-              ))}
-            </div>
-          </div>
-
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MenuRulesPanel({
-  menuRules = DEFAULT_MENU_RULES,
-  onUpdateMenuRules,
-  onSaveMenuRules,
-  menuRulesSaving = false,
-  menuRulesSaved = false,
-  open = false,
-  onToggle,
-}) {
-  const rules = normalizeMenuRules(menuRules);
-  const setRule = (key, value) => {
-    if (!onUpdateMenuRules) return;
-    onUpdateMenuRules({ ...rules, [key]: value });
-  };
-
-  return (
-    <div style={{ borderBottom: "1px solid #ede9e0", background: "#f7f8fb", flexShrink: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? "1px solid #ede9e0" : "none" }}>
-        <button
-          onClick={onToggle}
-          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#4b4b88", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
-        >{open ? "▾ MENU RULES" : "▸ MENU RULES"}</button>
-        <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa" }}>Global behavior controls used by preview + print</span>
-        {onSaveMenuRules && (
-          <button
-            onClick={onSaveMenuRules}
-            disabled={menuRulesSaving}
-            style={{
-              marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
-              padding: "4px 10px", border: "none", borderRadius: 3, cursor: menuRulesSaving ? "wait" : "pointer",
-              background: menuRulesSaved ? "#4a9a6a" : "#4b4b88", color: "#fff", textTransform: "uppercase",
-            }}
-          >
-            {menuRulesSaving ? "Saving..." : menuRulesSaved ? "Saved" : "Save Rules"}
-          </button>
-        )}
-      </div>
-      {open && (
-        <div style={{ padding: "10px 12px 12px", display: "grid", gap: 8 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 8 }}>
-            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
-              <input
-                type="checkbox"
-                checked={rules.preservePairingLabelSpacingWithoutPairing !== false}
-                onChange={e => setRule("preservePairingLabelSpacingWithoutPairing", e.target.checked)}
-              />
-              Keep section gap when pairing label is empty
-            </label>
-            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
-              <input
-                type="checkbox"
-                checked={rules.forceCrayfishPairing !== false}
-                onChange={e => setRule("forceCrayfishPairing", e.target.checked)}
-              />
-              Enable forced pairing drink for configured course keys
-            </label>
-            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
-              <input
-                type="checkbox"
-                checked={rules.forceChickenGizzardBeer !== false}
-                onChange={e => setRule("forceChickenGizzardBeer", e.target.checked)}
-              />
-              Enable forced beer for configured course keys
-            </label>
-            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
-              <input
-                type="checkbox"
-                checked={rules.overwriteTitleAndThankYouOnLanguageSwitch !== false}
-                onChange={e => setRule("overwriteTitleAndThankYouOnLanguageSwitch", e.target.checked)}
-              />
-              Overwrite title/thank-you when language changes (menu generator)
-            </label>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 8 }}>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing course keys</div>
-              <input
-                value={(rules.forcePairingCourseKeys || []).join(", ")}
-                onChange={e => setRule("forcePairingCourseKeys", e.target.value)}
-                style={{ ...baseInp, fontSize: 10, width: "100%" }}
-                placeholder="crayfish, next_section_key"
-              />
-            </div>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced beer course keys</div>
-              <input
-                value={(rules.forceBeerCourseKeys || []).join(", ")}
-                onChange={e => setRule("forceBeerCourseKeys", e.target.value)}
-                style={{ ...baseInp, fontSize: 10, width: "100%" }}
-                placeholder="chicken_gizzard, custom_key"
-              />
-            </div>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing drink EN</div>
-              <input
-                value={rules.crayfishFallbackTitleEn || ""}
-                onChange={e => setRule("crayfishFallbackTitleEn", e.target.value)}
-                style={{ ...baseInp, fontSize: 10, width: "100%" }}
-              />
-            </div>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing sub EN</div>
-              <input
-                value={rules.crayfishFallbackSubEn || ""}
-                onChange={e => setRule("crayfishFallbackSubEn", e.target.value)}
-                style={{ ...baseInp, fontSize: 10, width: "100%" }}
-              />
-            </div>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing drink SI</div>
-              <input
-                value={rules.crayfishFallbackTitleSi || ""}
-                onChange={e => setRule("crayfishFallbackTitleSi", e.target.value)}
-                style={{ ...baseInp, fontSize: 10, width: "100%" }}
-              />
-            </div>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2, color: "#999", marginBottom: 4, textTransform: "uppercase" }}>Forced pairing sub SI</div>
-              <input
-                value={rules.crayfishFallbackSubSi || ""}
-                onChange={e => setRule("crayfishFallbackSubSi", e.target.value)}
-                style={{ ...baseInp, fontSize: 10, width: "100%" }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Layout Styles panel ───────────────────────────────────────────────────────
-
-/**
- * One reusable number-input row for a layoutStyles key.
- * Renders inline — no hooks.
- */
-function StyleInput({ label, lkey, def, step, unit, min, layoutStyles, onUpdateLayoutStyles }) {
-  const current = lkey in layoutStyles ? layoutStyles[lkey] : def;
-  const isOverridden = lkey in layoutStyles;
-  return (
-    <div>
-      <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: "#aaa", textTransform: "uppercase", marginBottom: 3 }}>
-        {label}
-        {!isOverridden && <span style={{ color: "#ddd", marginLeft: 4 }}>· default {def}{unit}</span>}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        <input
-          type="number"
-          step={step ?? 0.5}
-          min={min ?? 0}
-          value={current}
-          onChange={e => {
-            const n = parseFloat(e.target.value);
-            const next = { ...layoutStyles };
-            if (!Number.isFinite(n)) delete next[lkey];
-            else next[lkey] = n;
-            onUpdateLayoutStyles(next);
-          }}
-          style={{
-            fontFamily: FONT, fontSize: 9, padding: "2px 5px",
-            border: `1px solid ${isOverridden ? "#9090c0" : "#ddd"}`,
-            borderRadius: 2, width: 52, textAlign: "center",
-            background: isOverridden ? "#f4f3fb" : "#fff",
-          }}
-        />
-        <span style={{ fontFamily: FONT, fontSize: 8, color: "#aaa" }}>{unit}</span>
-        {isOverridden && (
-          <button
-            onClick={() => { const next = { ...layoutStyles }; delete next[lkey]; onUpdateLayoutStyles(next); }}
-            title="Reset to default"
-            style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: "0 2px" }}
-          >↺</button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLayoutStyles, open, onToggle }) {
-  const si = (props) => <StyleInput layoutStyles={layoutStyles} onUpdateLayoutStyles={onUpdateLayoutStyles} {...props} />;
-  return (
-    <div style={{ borderBottom: "1px solid #ede9e0", background: "#f7f6fb", flexShrink: 0 }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? "1px solid #ede9e0" : "none" }}>
-        <button
-          onClick={onToggle}
-          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#4b4b88", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
-        >{open ? "▾ SPACING SETTINGS" : "▸ SPACING SETTINGS"}</button>
-        <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa" }}>
-          Page margins · columns · row gaps · footer — all configurable
-        </span>
-        {onSaveLayoutStyles && (
-          <button
-            onClick={onSaveLayoutStyles}
-            style={{
-              marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
-              padding: "4px 10px", border: "none", borderRadius: 3, cursor: "pointer",
-              background: "#4b4b88", color: "#fff", textTransform: "uppercase",
-            }}
-          >Save Styles</button>
-        )}
-      </div>
-
-      {open && (
-        <div style={{ padding: "12px 14px 14px", display: "flex", flexDirection: "column", gap: 14 }}>
-
-          {/* Page margins */}
-          <div>
-            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Page Margins</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
-              {si({ label: "Top",    lkey: "padTop",    def: 8.4, step: 0.1, unit: "mm" })}
-              {si({ label: "Right",  lkey: "padRight",  def: 12,  step: 0.5, unit: "mm" })}
-              {si({ label: "Bottom", lkey: "padBottom", def: 8.2, step: 0.1, unit: "mm" })}
-              {si({ label: "Left",   lkey: "padLeft",   def: 12,  step: 0.5, unit: "mm" })}
-            </div>
-          </div>
-
-          {/* Columns */}
-          <div>
-            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Columns</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
-              {si({ label: "Column gap",           lkey: "colGap",       def: 9,   step: 0.5, unit: "mm" })}
-              {si({ label: "Header gap (title↔logo)", lkey: "headerColGap", def: 8.6, step: 0.1, unit: "mm" })}
-              <div>
-                <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: "#aaa", textTransform: "uppercase", marginBottom: 3 }}>
-                  Course split (dish / wine)
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <input
-                    type="number"
-                    step={1}
-                    min={20}
-                    max={80}
-                    value={layoutStyles.courseColSplit ?? 55}
-                    onChange={e => {
-                      const n = parseInt(e.target.value, 10);
-                      const next = { ...layoutStyles };
-                      if (isNaN(n)) delete next.courseColSplit;
-                      else next.courseColSplit = Math.min(80, Math.max(20, n));
-                      onUpdateLayoutStyles(next);
-                    }}
-                    style={{
-                      fontFamily: FONT, fontSize: 9, padding: "2px 5px",
-                      border: `1px solid ${"courseColSplit" in layoutStyles ? "#9090c0" : "#ddd"}`,
-                      borderRadius: 2, width: 52, textAlign: "center",
-                      background: "courseColSplit" in layoutStyles ? "#f4f3fb" : "#fff",
-                    }}
-                  />
-                  <span style={{ fontFamily: FONT, fontSize: 8, color: "#aaa" }}>
-                    / {100 - (layoutStyles.courseColSplit ?? 55)} %
-                  </span>
-                  {"courseColSplit" in layoutStyles && (
-                    <button
-                      onClick={() => { const next = { ...layoutStyles }; delete next.courseColSplit; onUpdateLayoutStyles(next); }}
-                      title="Reset to default (55)"
-                      style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: "0 2px" }}
-                    >↺</button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Row spacing */}
-          <div>
-            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Row Spacing</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
-              {si({ label: "Between rows",      lkey: "rowSpacing",     def: 3.15, step: 0.05, unit: "pt" })}
-              {si({ label: "Between wine rows", lkey: "wineRowSpacing", def: 4.5,  step: 0.05, unit: "pt" })}
-            </div>
-          </div>
-
-          {/* Header / footer */}
-          <div>
-            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Header &amp; Footer</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
-              {si({ label: "Header → content gap", lkey: "headerSpacing",   def: 7, step: 0.5, unit: "mm" })}
-              {si({ label: "Thank-you top gap",     lkey: "thankYouSpacing", def: 7, step: 0.5, unit: "pt" })}
-            </div>
-          </div>
-
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function MenuTemplateEditor({
@@ -1287,6 +711,9 @@ export default function MenuTemplateEditor({
   const [menuRulesOpen,    setMenuRulesOpen]    = useState(false);
   const [layoutStylesOpen, setLayoutStylesOpen] = useState(false);
   const previewTimer = useRef(null);
+  const didMigrateSpacersRef = useRef(false);
+  const didNormalizeRowGapsRef = useRef(false);
+  const didInsertForcedPairingBlocksRef = useRef(false);
 
   // ── Preview data state — configurable dummy seat (not persisted) ──
   const [previewDataOpen, setPreviewDataOpen] = useState(false);
@@ -1328,10 +755,12 @@ export default function MenuTemplateEditor({
   // Old templates stored gaps as { left: { type: "spacer", height: N } } rows.
   // We silently fold the spacer height into row.gap so they render as gap rows.
   useEffect(() => {
+    if (didMigrateSpacersRef.current) return;
     if (!menuTemplate?.rows) return;
     const hasSpacers = menuTemplate.rows.some(
       r => r.left?.type === "spacer" || r.right?.type === "spacer"
     );
+    didMigrateSpacersRef.current = true;
     if (!hasSpacers) return;
     const migrated = {
       ...menuTemplate,
@@ -1352,7 +781,83 @@ export default function MenuTemplateEditor({
       }),
     };
     onUpdateTemplate(migrated);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [menuTemplate, onUpdateTemplate]);
+
+  // ── One-time migration: insert forced_pairing blocks for known courses ──────
+  // Existing saved templates won't auto-update when new block types are added.
+  // We only patch rows that look like the default structure:
+  // - left is a course block
+  // - right is empty OR a plain pairing block
+  // and courseKey matches known forced courses.
+  useEffect(() => {
+    if (didInsertForcedPairingBlocksRef.current) return;
+    if (!menuTemplate?.rows) return;
+    didInsertForcedPairingBlocksRef.current = true;
+
+    const norm = (s) => String(s || "").trim().toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    const forcedKeys = new Set(["crayfish", "chicken_gizzard"]);
+
+    let changed = false;
+    const nextRows = menuTemplate.rows.map(r => {
+      const lb = r?.left;
+      if (lb?.type !== "course") return r;
+      const ck = norm(lb.courseKey || "");
+      if (!forcedKeys.has(ck)) return r;
+      const rb = r?.right;
+      const rightOk = !rb || rb.type === "pairing";
+      if (!rightOk) return r;
+      if (rb?.type === "forced_pairing") return r;
+      changed = true;
+      return { ...r, right: makeBlock("forced_pairing") };
+    });
+
+    if (!changed) return;
+    onUpdateTemplate({ ...menuTemplate, rows: nextRows });
+  }, [menuTemplate, onUpdateTemplate]);
+
+  // ── One-time migration: normalize row.gap into explicit gap rows ────────────
+  // Older saved templates may have "gap above" stored directly on content rows.
+  // Since gaps are now edited only via explicit gap-only rows, we convert:
+  //   [ { gap: N, left/right: content } ] → [ { gapRow(N) }, { gap: 0, content } ]
+  // This makes every gap visible/editable in the row list.
+  useEffect(() => {
+    if (didNormalizeRowGapsRef.current) return;
+    if (!menuTemplate?.rows) return;
+    const needsNormalize = menuTemplate.rows.some(r => (r?.gap || 0) > 0 && (r.left || r.right));
+    didNormalizeRowGapsRef.current = true;
+    if (!needsNormalize) return;
+    const normalized = [];
+    for (const r of menuTemplate.rows) {
+      const g = Number(r?.gap || 0) || 0;
+      const hasContent = !!(r?.left || r?.right);
+      if (g > 0 && hasContent) {
+        normalized.push({ ...makeRow(), left: null, right: null, widthPreset: "100/0", gap: g });
+        normalized.push({ ...r, gap: 0 });
+      } else {
+        normalized.push(r);
+      }
+    }
+    onUpdateTemplate({ ...menuTemplate, rows: normalized });
+  }, [menuTemplate, onUpdateTemplate]);
+
+  // ── One-time migration: forced_pairing catalogId -> catalogItemId ───────────
+  useEffect(() => {
+    if (!menuTemplate?.rows) return;
+    let changed = false;
+    const nextRows = menuTemplate.rows.map((r) => {
+      const migrate = (b) => {
+        if (!b || b.type !== "forced_pairing") return b;
+        if (b.catalogItemId != null || b.catalogId == null) return b;
+        changed = true;
+        return { ...b, catalogItemId: b.catalogId };
+      };
+      const left = migrate(r.left);
+      const right = migrate(r.right);
+      if (left === r.left && right === r.right) return r;
+      return { ...r, left, right };
+    });
+    if (changed) onUpdateTemplate({ ...menuTemplate, rows: nextRows });
+  }, [menuTemplate, onUpdateTemplate]);
 
   // menuTitle and thankYouNote come from state (shared localStorage with MenuGenerator)
 
@@ -1532,7 +1037,7 @@ export default function MenuTemplateEditor({
 
   // ── Render ──
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 130px)", minHeight: 500, fontFamily: FONT }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 500, fontFamily: FONT }}>
 
       {/* ── Preview Data Panel (collapsible strip above 3 panels) ── */}
       <PreviewDataPanel
@@ -1806,6 +1311,10 @@ export default function MenuTemplateEditor({
               block={selectedBlock}
               onUpdate={updateSelectedBlock}
               menuCourses={menuCourses}
+              wines={wines}
+              cocktails={cocktails}
+              spirits={spirits}
+              beers={beers}
             />
           </div>
         )}
