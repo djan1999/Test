@@ -446,7 +446,7 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
 
   const setField = (key, val) => onUpdate({ ...block, [key]: val });
 
-  if (fields.length === 0) return (
+  if (fields.length === 0 && block.type !== "forced_pairing") return (
     <div>
       <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: meta.color || "#888", textTransform: "uppercase", marginBottom: 8 }}>
         {meta.icon} {meta.label}
