@@ -204,9 +204,9 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     return allergyHtmlShell("Weekly Allergy Sheet", `<h1 style="margin-top:40pt;font-family:Arial,Helvetica,sans-serif;">No restrictions or edits for ${esc(dateRange)}</h1>`, 0);
   }
 
-  // Courses: all non-snack, non-cake courses in order
+  // Courses: all non-snack main courses in order
   const courses = menuCourses
-    .filter(c => !c.is_snack && c.optional_flag !== "cake")
+    .filter(c => !c.is_snack && String(c.course_category || "main") === "main")
     .sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
 
   let body = "";
