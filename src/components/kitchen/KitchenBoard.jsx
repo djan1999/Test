@@ -100,6 +100,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     if (!key) return [];
     return orderedOptionalSeatsByKey[key] || [];
   };
+  const optionalKeyForCourse = (course) => normFlag(course?.optional_flag || "");
+  const optionalSeatMap = orderedOptionalSeatsByKey;
 
   const isShort = String(table.menuType || "").trim().toLowerCase() === "short";
   const isTruthyShort = v => { const s = String(v ?? "").trim().toLowerCase(); return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr"; };
