@@ -123,6 +123,7 @@ export function generateMenuHTML({
   teamNames = "",
   menuCourses = [],
   beverages = null,
+  catalog = null,
   beerChoice = null,
   lang = "en",
   seatOutputOverrides = {},
@@ -142,7 +143,7 @@ export function generateMenuHTML({
   const s = (key, def) => key in layoutStyles ? layoutStyles[key] : def;
   const rules = normalizeMenuRules(menuRules);
 
-  const bev = beverages || {};
+  const bev = beverages || catalog || {};
   const allBeverageItems = (() => {
     const out = [];
     const add = (type, arr) => {
@@ -178,9 +179,10 @@ export function generateMenuHTML({
   const isShort = String(table.menuType || "").toLowerCase() === "short";
 
   const extras = seat.extras || {};
-  const hasBeetroot = !!extras[1]?.ordered;
-  const hasCheese   = !!extras[2]?.ordered;
-  const hasCake     = !!(table.birthday || extras[3]?.ordered);
+  const getExtra = (key, legacyId) => extras[key] || extras[String(legacyId)] || extras[legacyId] || null;
+  const hasBeetroot = !!getExtra("beetroot", 1)?.ordered;
+  const hasCheese   = !!getExtra("cheese", 2)?.ordered;
+  const hasCake     = !!(table.birthday || getExtra("cake", 3)?.ordered);
 
   // Aperitifs: dedicated row above first course
   const aperitifs = Array.isArray(seat.aperitifs)
@@ -540,17 +542,19 @@ export function generateMenuHTML({
       const isForcedBeerCourse = rules.forceBeerCourseKeys.includes(normKey) || rules.forceBeerCourseKeys.includes(nameKey);
       const forcedBeerDrink = (rules.forceChickenGizzardBeer && isForcedBeerCourse) ? resolveBeerDrinkForCourse(course) : null;
 
-      const forcedPairingOverride = (rb?.type === "forced_pairing")
-        ? {
-            // Allow forcing via course fields (default) but also allow block override
-            ...(rb.useCourseForceFields === false ? {} : null),
-            title: rb.title,
-            sub: rb.sub,
-            title_si: rb.title_si,
-            sub_si: rb.sub_si,
-            useCourseForceFields: rb.useCourseForceFields !== false,
-          }
-        : null;
+      const forcedPairingOverride = (() => {
+        if (rb?.type !== "forced_pairing") return null;
+        const itemId = rb.catalogItemId ?? rb.catalogId ?? null;
+        const picked = rb.catalogType && itemId != null ? findBeverage(rb.catalogType, itemId) : null;
+        const pickedParts = picked ? fmtDrinkParts({ ...picked, __type: rb.catalogType }) : null;
+        return {
+          title: pickedParts?.title || rb.title,
+          sub: pickedParts?.sub || rb.sub,
+          title_si: rb.title_si,
+          sub_si: rb.sub_si,
+          useCourseForceFields: rb.useCourseForceFields !== false,
+        };
+      })();
 
       const forcedPairingDrink = resolveForcedPairingDrink(
         course,
@@ -567,7 +571,7 @@ export function generateMenuHTML({
 
           // Beetroot extra pairing override
           const isBeetrootC = normalizeCourseToken(course.optional_flag || "") === "beetroot" || normKey === "beetroot";
-          const beetExtra = extras[1];
+          const beetExtra = getExtra("beetroot", 1);
           if (isBeetrootC && beetExtra?.ordered) {
             const beetPair = String(beetExtra.pairing || "—").trim();
             if (beetPair === "N/A" || beetPair === "Non-Alc") {

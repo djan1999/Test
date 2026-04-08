@@ -1726,7 +1726,7 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
 }
 
 // ── Detail View ───────────────────────────────────────────────────────────────
-function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages }) {
+function Detail({ table, optionalExtras = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages }) {
   const isMobile = useIsMobile(860);
   const row1 = isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
   const seatCount = table.seats?.length || 0;
@@ -2012,16 +2012,16 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
                 })()}
               </div>
 
-              {/* Extra dishes */}
-              {dishes.length > 0 && (
+              {/* Optional extras (derived from optional_flag) */}
+              {optionalExtras.length > 0 && (
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  {dishes.map(dish => {
-                    const extra = seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                  {optionalExtras.map(dish => {
+                    const extra = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
                     return (
-                      <div key={dish.id} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
+                      <div key={dish.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
                         <div style={{ ...fieldLabel, marginBottom: 4 }}>{dish.name}</div>
                         <button onClick={() => updSeat(seat.id, "extras", {
-                          ...seat.extras, [dish.id]: { ...extra, ordered: !extra.ordered }
+                          ...seat.extras, [dish.key]: { ...extra, ordered: !extra.ordered }
                         })} style={{
                           fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 8px", border: "1px solid",
                           borderColor: extra.ordered ? "#aaddaa" : "#ebebeb", borderRadius: 2, cursor: "pointer",
@@ -2029,7 +2029,7 @@ function Detail({ table, dishes, wines = [], cocktails = [], spirits = [], beers
                           transition: "all 0.1s",
                         }}>{extra.ordered ? "YES" : "NO"}</button>
                         <select value={extra.pairing || dish.pairings[0]} disabled={!extra.ordered}
-                          onChange={e => updSeat(seat.id, "extras", { ...seat.extras, [dish.id]: { ...extra, pairing: e.target.value } })}
+                          onChange={e => updSeat(seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, pairing: e.target.value } })}
                           style={{
                             fontFamily: FONT, fontSize: 10, padding: "4px 5px",
                             border: "1px solid #ebebeb", borderRadius: 2,
@@ -2254,7 +2254,7 @@ const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","P
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
 // cards on every DisplayBoard re-render (which caused the visual overlap animation glitch).
-function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onUnseat, dishes, aperitifOptions, wines = [], cocktails = [] }) {
+function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onUnseat, optionalExtras = [], aperitifOptions, wines = [], cocktails = [] }) {
     const isSeated = t.active;
     const allRestr = (t.restrictions || []).filter(r => r.note);
     const [assigningIdx, setAssigningIdx] = useState(null);
@@ -2397,10 +2397,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
               const ws      = waterStyle(s.water);
               const pc      = PC[s.pairing];
               const restr   = allRestr.filter(r => r.pos === s.id);
-              const extras  = dishes.filter(d => s.extras?.[d.id]?.ordered);
-              const beetExtra = s.extras?.[1] || { ordered: false, pairing: "—" };
+              const extras  = optionalExtras.filter(d => (s.extras?.[d.key] || s.extras?.[d.id])?.ordered);
+              const beetExtra = s.extras?.beetroot || s.extras?.[1] || { ordered: false, pairing: "—" };
               const hasBeet   = !!beetExtra.ordered;
-              const hasCheese = !!s.extras?.[2]?.ordered;
+              const hasCheese = !!(s.extras?.cheese || s.extras?.[2])?.ordered;
               const hasContent = (s.water && s.water !== "—") || s.pairing || restr.length > 0 || extras.length > 0;
 
               if (quickMode) {
@@ -2434,7 +2434,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                         const active = pairing === "—" ? (beetExtra.ordered && (!beetExtra.pairing || beetExtra.pairing === "—")) : (beetExtra.ordered && beetExtra.pairing === pairing);
                         return (
                           <button key={pairing} onClick={() => updSeat && updSeat(t.id, s.id, "extras", {
-                            ...s.extras, 1: active ? { ordered: false, pairing: "—" } : { ordered: true, pairing },
+                            ...s.extras, beetroot: active ? { ordered: false, pairing: "—" } : { ordered: true, pairing },
                           })} style={{
                             fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "3px 9px",
                             border: `1px solid ${active ? border : "#e8e8e8"}`, borderRadius: 20, cursor: "pointer",
@@ -2443,7 +2443,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                           }}>Beet {label}</button>
                         );
                       })}
-                      <button onClick={() => { const cur = s.extras?.[2] || { ordered: false }; updSeat && updSeat(t.id, s.id, "extras", { ...s.extras, 2: { ...cur, ordered: !cur.ordered } }); }} style={{
+                      <button onClick={() => { const cur = s.extras?.cheese || s.extras?.[2] || { ordered: false }; updSeat && updSeat(t.id, s.id, "extras", { ...s.extras, cheese: { ...cur, ordered: !cur.ordered } }); }} style={{
                         fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "3px 8px",
                         border: `1px solid ${hasCheese ? "#a06830" : "#e0e0e0"}`,
                         borderRadius: 3, cursor: "pointer",
@@ -2518,9 +2518,9 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                     <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, background: pc.bg, border: `1px solid ${pc.border}`, color: pc.color, fontWeight: 500 }}>{s.pairing}</span>
                   )}
                   {extras.map(d => {
-                    const ex = s.extras[d.id];
+                    const ex = s.extras[d.key] || s.extras[d.id];
                     return (
-                      <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>
+                      <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>
                         {d.name}{ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}
                       </span>
                     );
@@ -2555,12 +2555,12 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
               <button onClick={() => {
                 const seats = t.seats || [];
                 const alertSeats = seats.map(s => {
-                  const beetExtra = s.extras?.[1];
+                  const beetExtra = s.extras?.beetroot || s.extras?.[1];
                   return {
                     id: s.id,
                     pairing: s.pairing || null,
                     beet: beetExtra?.ordered ? { pairing: beetExtra.pairing || "—" } : null,
-                    cheese: !!s.extras?.[2]?.ordered,
+                    cheese: !!(s.extras?.cheese || s.extras?.[2])?.ordered,
                   };
                 });
                 upd(t.id, "kitchenAlert", {
@@ -2588,7 +2588,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
     );
 }
 
-function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [] }) {
+function DisplayBoard({ tables, optionalExtras = [], upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [] }) {
   const isMobile = useIsMobile(700);
 
   const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
@@ -2639,7 +2639,7 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
                   onCardClick={onCardClick}
                   onSeat={onSeat}
                   onUnseat={onUnseat}
-                  dishes={dishes}
+                  optionalExtras={optionalExtras}
                   aperitifOptions={aperitifOptions}
                   wines={wines}
                   cocktails={cocktails}
@@ -2656,7 +2656,7 @@ function DisplayBoard({ tables, dishes, upd, quickMode = false, updSeat, onCardC
 // ── Service Quick View ────────────────────────────────────────────────────────
 const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 
-function ServiceQuickCard({ table, updSeat, onDetails, dishes = [] }) {
+function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
   const seats = table.seats || [];
   const toggleExtra = (seat, dishId) => {
     const cur = seat.extras?.[dishId] || { ordered: false, pairing: "—" };
@@ -2745,8 +2745,8 @@ function ServiceQuickCard({ table, updSeat, onDetails, dishes = [] }) {
                 </div>
                 <div style={{ width: 1, height: 18, background: "#e8e8e8", margin: "0 2px" }} />
                 <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                  {dishes.slice(0, 3).map((dish) => {
-                    const extra = seat.extras?.[dish.key] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
+                  {optionalExtras.slice(0, 3).map((dish) => {
+                    const extra = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
                     const active = !!extra.ordered;
                     return (
                       <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
@@ -2796,7 +2796,7 @@ function ServiceQuickCard({ table, updSeat, onDetails, dishes = [] }) {
   );
 }
 
-function ServiceQuickView({ tables, updSeat, setSel, dishes = [] }) {
+function ServiceQuickView({ tables, updSeat, setSel, optionalExtras = [] }) {
   const activeTables = tables.filter(t => t.active || t.resName || t.resTime);
   if (activeTables.length === 0) return (
     <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
@@ -2806,7 +2806,7 @@ function ServiceQuickView({ tables, updSeat, setSel, dishes = [] }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
       {activeTables.map(t => (
-        <ServiceQuickCard key={t.id} table={t} updSeat={updSeat} dishes={dishes} onDetails={() => setSel(t.id)} />
+        <ServiceQuickCard key={t.id} table={t} updSeat={updSeat} optionalExtras={optionalExtras} onDetails={() => setSel(t.id)} />
       ))}
     </div>
   );
@@ -4360,7 +4360,7 @@ function FullModal({ title, onClose, actions, children }) {
 }
 
 // ── Summary Modal ─────────────────────────────────────────────────────────────
-function SummaryModal({ tables, dishes = [], onClose }) {
+function SummaryModal({ tables, optionalExtras = [], onClose }) {
   const active = tables.filter(t => t.active || t.arrivedAt);
 
   const copyText = () => {
@@ -4382,7 +4382,7 @@ function SummaryModal({ tables, dishes = [], onClose }) {
         if (cs.length) parts.push("cocktail:" + cs.join(","));
         if (sp.length) parts.push("spirit:"   + sp.join(","));
         if (bs.length) parts.push("beer:"     + bs.join(","));
-        const extras = dishes.filter(d => s.extras?.[d.id]?.ordered);
+        const extras = optionalExtras.filter(d => (s.extras?.[d.key] || s.extras?.[d.id])?.ordered);
         if (extras.length) parts.push(extras.map(d => d.name).join(","));
         const restr = (t.restrictions || []).filter(r => r.pos === s.id);
         if (restr.length) parts.push("⚠" + restr.map(r => r.note).join(","));
@@ -4415,7 +4415,7 @@ function SummaryModal({ tables, dishes = [], onClose }) {
               {t.seats.map(s => {
                 const ws      = waterStyle(s.water);
                 const restr   = (t.restrictions || []).filter(r => r.pos === s.id);
-                const extras  = dishes.filter(d => s.extras?.[d.id]?.ordered);
+                const extras  = optionalExtras.filter(d => (s.extras?.[d.key] || s.extras?.[d.id])?.ordered);
                 const allBevs = [
                   ...(s.aperitifs || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.aperitif })),
                   ...(s.glasses   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.wine })),
@@ -4428,7 +4428,7 @@ function SummaryModal({ tables, dishes = [], onClose }) {
                     <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: restr.length ? "#b04040" : "#999", minWidth: 28, letterSpacing: 0.5 }}>P{s.id}</span>
                     {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, background: ws.bg || "#f5f5f5", color: "#333", border: "1px solid #e0e0e0" }}>{s.water}</span>}
                     {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, border: "1px solid #e0e0e0", color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa" }}>{s.pairing}</span>}
-                    {extras.map(d => { const ex = s.extras[d.id]; return <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}{ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}</span>; })}
+                    {extras.map(d => { const ex = s.extras[d.key] || s.extras[d.id]; return <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}{ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}</span>; })}
                     {allBevs.map((b, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
                     {restr.map((r, i) => <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
                   </div>
@@ -4463,7 +4463,7 @@ function SummaryModal({ tables, dishes = [], onClose }) {
 }
 
 // ── Archive Modal ─────────────────────────────────────────────────────────────
-function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onSeedTest, onClose, onRestoreTicket, menuCourses }) {
+function ArchiveModal({ tables, optionalExtras = [], onArchiveAndClear, onClearAll, onSeedTest, onClose, onRestoreTicket, menuCourses }) {
   const [entries, setEntries]         = useState([]);
   const [deleted, setDeleted]         = useState([]);
   const [loading, setLoading]         = useState(true);
@@ -4642,7 +4642,7 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onSeedTes
                             {(t.seats || []).map(s => {
                               const ws = waterStyle(s.water);
                               const restr = (t.restrictions || []).filter(r => r.pos === s.id);
-                              const extra = (dishes || []).filter(d => s.extras?.[d.id]?.ordered);
+                              const extra = (optionalExtras || []).filter(d => (s.extras?.[d.key] || s.extras?.[d.id])?.ordered);
                               const bevs = [
                                 ...(s.aperitifs || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.aperitif })),
                                 ...(s.glasses   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.wine })),
@@ -4656,7 +4656,7 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onSeedTes
                                   {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
                                   {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
                                   {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
-                                  {extra.map(d => <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
+                                  {extra.map(d => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
                                   {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
                                 </div>
                               );
@@ -4739,7 +4739,7 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onSeedTes
                           {(t.seats || []).map(s => {
                             const ws    = waterStyle(s.water);
                             const restr = (t.restrictions || []).filter(r => r.pos === s.id);
-                            const extra = (entry.state?.dishes || dishes).filter(d => s.extras?.[d.id]?.ordered);
+                            const extra = (optionalExtras || []).filter(d => (s.extras?.[d.key] || s.extras?.[d.id])?.ordered);
                             const bevs  = [
                               ...(s.aperitifs || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.aperitif })),
                               ...(s.glasses   || []).filter(Boolean).map(x => ({ label: x.name, ts: BEV_TYPES.wine })),
@@ -4753,7 +4753,7 @@ function ArchiveModal({ tables, dishes, onArchiveAndClear, onClearAll, onSeedTes
                                 {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
                                 {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
                                 {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
-                                {extra.map(d => <span key={d.id} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
+                                {extra.map(d => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
                                 {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
                               </div>
                             );
@@ -7229,7 +7229,7 @@ export default function App() {
       </div>
       {archiveOpen && (
         <ArchiveModal
-          tables={tables} dishes={dishes}
+          tables={tables} optionalExtras={dishes}
           onArchiveAndClear={archiveAndClearAll}
           onClearAll={clearAll}
           onSeedTest={seedTestData}
@@ -7380,7 +7380,7 @@ export default function App() {
             return (
               <DisplayBoard
                 tables={visibleTables}
-                dishes={dishes}
+                optionalExtras={dishes}
                 upd={upd}
                 quickMode={quickView === "service"}
                 updSeat={updSeat}
@@ -7397,7 +7397,7 @@ export default function App() {
       ) : (
         <Detail
           table={selTable}
-          dishes={dishes}
+          optionalExtras={dishes}
           wines={wines}
           cocktails={cocktails}
           spirits={spirits}
@@ -7416,11 +7416,11 @@ export default function App() {
       )}
 
       {summaryOpen && (
-        <SummaryModal tables={tables} dishes={dishes} onClose={() => setSummaryOpen(false)} />
+        <SummaryModal tables={tables} optionalExtras={dishes} onClose={() => setSummaryOpen(false)} />
       )}
       {archiveOpen && (
         <ArchiveModal
-          tables={tables} dishes={dishes}
+          tables={tables} optionalExtras={dishes}
           onArchiveAndClear={archiveAndClearAll}
           onClearAll={clearAll}
           onSeedTest={seedTestData}

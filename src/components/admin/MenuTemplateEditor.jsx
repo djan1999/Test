@@ -483,8 +483,8 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
               <option value="wine">Wine</option>
             </select>
             <select
-              value={block.catalogId ?? ""}
-              onChange={e => setField("catalogId", e.target.value ? Number(e.target.value) : null)}
+              value={block.catalogItemId ?? block.catalogId ?? ""}
+              onChange={e => setField("catalogItemId", e.target.value ? Number(e.target.value) : null)}
               disabled={!block.catalogType}
               style={{ ...baseInp, fontSize: 10.5, width: "100%", opacity: block.catalogType ? 1 : 0.6 }}
             >
@@ -1432,6 +1432,25 @@ export default function MenuTemplateEditor({
       }
     }
     onUpdateTemplate({ ...menuTemplate, rows: normalized });
+  }, [menuTemplate, onUpdateTemplate]);
+
+  // ── One-time migration: forced_pairing catalogId -> catalogItemId ───────────
+  useEffect(() => {
+    if (!menuTemplate?.rows) return;
+    let changed = false;
+    const nextRows = menuTemplate.rows.map((r) => {
+      const migrate = (b) => {
+        if (!b || b.type !== "forced_pairing") return b;
+        if (b.catalogItemId != null || b.catalogId == null) return b;
+        changed = true;
+        return { ...b, catalogItemId: b.catalogId };
+      };
+      const left = migrate(r.left);
+      const right = migrate(r.right);
+      if (left === r.left && right === r.right) return r;
+      return { ...r, left, right };
+    });
+    if (changed) onUpdateTemplate({ ...menuTemplate, rows: nextRows });
   }, [menuTemplate, onUpdateTemplate]);
 
   // menuTitle and thankYouNote come from state (shared localStorage with MenuGenerator)
