@@ -1613,7 +1613,7 @@ export default function App() {
   const prevTablesJsonRef  = useRef((initialState.tables || initTables).map(t => JSON.stringify(sanitizeTable(t))));
   const tablesRef          = useRef(tables);
 
-  const offlineQueue = useOfflineQueue();
+  const offlineQueue = useOfflineQueue({ supabase });
   const enqueueServiceTableUpsert = useCallback(async (rows) => {
     const payloadRows = Array.isArray(rows) ? rows : [];
     if (payloadRows.length === 0) return { ok: true };

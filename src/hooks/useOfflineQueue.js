@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { enqueue, readQueue, removeAt } from "../lib/syncQueue.js";
 
-export function useOfflineQueue({ supabase, onFlushed }) {
+export function useOfflineQueue({ supabase, onFlushed } = {}) {
   const flushingRef = useRef(false);
 
   const flushQueue = useCallback(async () => {
@@ -43,5 +43,5 @@ export function useOfflineQueue({ supabase, onFlushed }) {
     return () => window.removeEventListener("online", onOnline);
   }, [supabase, flushQueue]);
 
-  return { enqueueWrite, flushQueue };
+  return { enqueueWrite, flushQueue, enqueue: enqueueWrite };
 }
