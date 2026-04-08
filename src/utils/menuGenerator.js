@@ -464,7 +464,9 @@ export function generateMenuHTML({
           type: "section",
           // Preserve section break spacing even when the seat has no pairing.
           label: hasPairing ? label : "",
-          reserveHeight: !hasPairing,
+          // If this row is rendered at all, reservePt should always control row height.
+          // (Previously this only applied when no pairing was selected.)
+          reserveHeight: true,
           reservePt: plBlock.reserveHeightPt ?? plBlock.reserveMinHeight ?? null,
           side: plSide,
           align: plBlock.align || "right",
