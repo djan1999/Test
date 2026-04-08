@@ -1588,6 +1588,19 @@ const writeAccess = () => {
   try { localStorage.setItem(ACCESS_KEY, JSON.stringify({ ts: Date.now() })); } catch {}
 };
 
+const sanitizeLayoutProfiles = (profiles) => {
+  const list = Array.isArray(profiles) ? profiles : [];
+  const out = list
+    .filter((p) => p && typeof p === "object")
+    .map((p, idx) => ({
+      id: String(p.id || `layout_${idx + 1}`),
+      name: String(p.name || `Layout ${idx + 1}`),
+      layoutStyles: p.layoutStyles && typeof p.layoutStyles === "object" ? p.layoutStyles : {},
+      menuTemplate: p.menuTemplate && typeof p.menuTemplate === "object" ? p.menuTemplate : null,
+    }));
+  return out.length > 0 ? out : [{ id: "layout_1", name: "Layout 1", layoutStyles: {}, menuTemplate: null }];
+};
+
 function GlobalStyle() {
   return (
     <style>{`
@@ -1693,7 +1706,7 @@ export default function App() {
   const prevTablesJsonRef  = useRef((initialState.tables || initTables).map(t => JSON.stringify(sanitizeTable(t))));
   const tablesRef          = useRef(tables);
 
-  const offlineQueue = useOfflineQueue();
+  const offlineQueue = useOfflineQueue({ supabase });
   const enqueueServiceTableUpsert = useCallback(async (rows) => {
     const payloadRows = Array.isArray(rows) ? rows : [];
     if (payloadRows.length === 0) return { ok: true };
