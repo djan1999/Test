@@ -109,14 +109,6 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
             </div>
           ))}
 
-          {/* ── Force Pairing ── */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginTop: 8, marginBottom: 12 }}>
-            <div><div style={labelSm}>Force Pairing (EN)</div><input value={course.force_pairing_title || ""} onChange={e => upd("force_pairing_title", e.target.value)} style={inpSm} /></div>
-            <div><div style={labelSm}>Force Sub (EN)</div><input value={course.force_pairing_sub || ""} onChange={e => upd("force_pairing_sub", e.target.value)} style={inpSm} /></div>
-            <div><div style={labelSm}>Force Pairing (SI)</div><input value={course.force_pairing_title_si || ""} onChange={e => upd("force_pairing_title_si", e.target.value)} style={inpSm} /></div>
-            <div><div style={labelSm}>Force Sub (SI)</div><input value={course.force_pairing_sub_si || ""} onChange={e => upd("force_pairing_sub_si", e.target.value)} style={inpSm} /></div>
-          </div>
-
           {/* ── Restrictions ── */}
           <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: "#888" }}>DIETARY RESTRICTIONS</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 14 }}>
