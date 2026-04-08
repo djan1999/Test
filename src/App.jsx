@@ -12,7 +12,7 @@ import {
   firstFilled, applyMenuOverride, truthyCell, splitMainSubCell,
   parseBilingual, applyCourseRestriction,
   RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP,
-  parseMenuRow, RESTRICTION_KEYS,
+  parseMenuRow, RESTRICTION_KEYS, normalizeCourseCategory,
 } from "./utils/menuUtils.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
 import { buildDefaultTemplate, makeRowId } from "./utils/menuTemplateSchema.js";
@@ -210,7 +210,10 @@ function supabaseRowToCourse(r) {
     is_snack: r.is_snack,
     menu_si,
     course_key: r.course_key || "",
+    course_category: normalizeCourseCategory(r.course_category, r.optional_flag || ""),
     optional_flag: r.optional_flag || "",
+    optional_pairing_flag: r.optional_pairing_flag || "",
+    optional_pairing_label: r.optional_pairing_label || "",
     section_gap_before: false,
     show_on_short: !!r.show_on_short,
     short_order: r.short_order || null,
@@ -253,7 +256,10 @@ function courseToSupabaseRow(course) {
     hazards: course.hazards,
     is_snack: course.is_snack,
     course_key: course.course_key,
+    course_category: normalizeCourseCategory(course.course_category, course.optional_flag),
     optional_flag: course.optional_flag,
+    optional_pairing_flag: course.optional_pairing_flag || "",
+    optional_pairing_label: course.optional_pairing_label || "",
     section_gap_before: false,
     show_on_short: course.show_on_short,
     short_order: course.short_order,
@@ -338,6 +344,8 @@ const normalizeOptionalKey = (value) =>
 function optionalExtrasFromCourses(menuCourses = []) {
   const byKey = new Map();
   (menuCourses || []).forEach((c) => {
+    const category = normalizeCourseCategory(c?.course_category, c?.optional_flag);
+    if (category !== "optional" && category !== "celebration") return;
     const key = normalizeOptionalKey(c?.optional_flag);
     if (!key) return;
     const existing = byKey.get(key) || null;
@@ -355,6 +363,19 @@ function optionalExtrasFromCourses(menuCourses = []) {
       name: label,
       pairings: pairings.length > 0 ? pairings : ["—"],
     });
+  });
+  return [...byKey.values()];
+}
+
+function optionalPairingsFromCourses(menuCourses = []) {
+  const byKey = new Map();
+  (menuCourses || []).forEach((c) => {
+    const category = normalizeCourseCategory(c?.course_category, c?.optional_flag);
+    if (category !== "main") return;
+    const key = normalizeOptionalKey(c?.optional_pairing_flag);
+    if (!key) return;
+    const label = String(c?.optional_pairing_label || c?.menu?.name || key).trim() || key;
+    byKey.set(key, { key, label });
   });
   return [...byKey.values()];
 }
@@ -496,6 +517,7 @@ function Detail({ table, optionalExtras = [], wines = [], cocktails = [], spirit
     (s.beers?.length || 0) > 0 ||
     (s.pairing && s.pairing !== "—")
   );
+  const optionalPairings = optionalPairingsFromCourses(menuCourses);
   return (
     <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "20px 12px 28px" : "24px 16px", overflowX: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
@@ -794,6 +816,41 @@ function Detail({ table, optionalExtras = [], wines = [], cocktails = [], spirit
                             opacity: extra.ordered ? 1 : 0.3, width: "100%",
                           }}>
                           {dish.pairings.map(p => <option key={p}>{p}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {optionalPairings.length > 0 && (
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+                  {optionalPairings.map(opt => {
+                    const cur = seat.optionalPairings?.[opt.key] || { ordered: false, mode: "alco" };
+                    const active = !!cur.ordered;
+                    return (
+                      <div key={opt.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 120 }}>
+                        <div style={{ ...fieldLabel, marginBottom: 4 }}>{opt.label}</div>
+                        <button onClick={() => updSeat(seat.id, "optionalPairings", {
+                          ...(seat.optionalPairings || {}),
+                          [opt.key]: { ...cur, ordered: !cur.ordered, mode: cur.mode || "alco" },
+                        })} style={{
+                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 8px", border: "1px solid",
+                          borderColor: active ? "#e0c8c8" : "#ebebeb", borderRadius: 2, cursor: "pointer",
+                          background: active ? "#fff5f5" : "#fff", color: active ? "#9a5050" : "#555",
+                        }}>{active ? "ENABLED" : "DISABLED"}</button>
+                        <select value={cur.mode || "alco"} disabled={!active}
+                          onChange={e => updSeat(seat.id, "optionalPairings", {
+                            ...(seat.optionalPairings || {}),
+                            [opt.key]: { ...cur, ordered: true, mode: e.target.value === "nonalc" ? "nonalc" : "alco" },
+                          })}
+                          style={{
+                            fontFamily: FONT, fontSize: 10, padding: "4px 5px",
+                            border: "1px solid #ebebeb", borderRadius: 2,
+                            background: "#fff", color: "#1a1a1a", outline: "none",
+                            opacity: active ? 1 : 0.3, width: "100%",
+                          }}>
+                          <option value="alco">Alcoholic</option>
+                          <option value="nonalc">Non-Alcoholic</option>
                         </select>
                       </div>
                     );
@@ -1814,6 +1871,9 @@ export default function App() {
     const clonedExtras = source.extras
       ? Object.fromEntries(Object.entries(source.extras).map(([k, v]) => [k, v ? { ...v } : v]))
       : {};
+    const clonedOptionalPairings = source.optionalPairings
+      ? Object.fromEntries(Object.entries(source.optionalPairings).map(([k, v]) => [k, v ? { ...v } : v]))
+      : {};
     const nextSeats = seats.map(s => (
       s.id === source.id
         ? s
@@ -1827,6 +1887,7 @@ export default function App() {
             spirits: [...(source.spirits || [])],
             beers: [...(source.beers || [])],
             extras: clonedExtras,
+            optionalPairings: clonedOptionalPairings,
           }
     ));
     return { ...t, seats: nextSeats };

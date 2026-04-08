@@ -23,6 +23,12 @@ const normalizeCourseToken = (value) => String(value || "")
   .replace(/[^a-z0-9]+/g, "_")
   .replace(/^_+|_+$/g, "");
 
+const normalizeCourseCategory = (value, optionalFlag = "") => {
+  const raw = normalizeCourseToken(value);
+  if (raw === "main" || raw === "optional" || raw === "celebration") return raw;
+  return normalizeCourseToken(optionalFlag) ? "optional" : "main";
+};
+
 const normalizeRuleKeyList = (value, fallback = []) => {
   const rawList = (() => {
     if (Array.isArray(value)) return value;
@@ -230,8 +236,8 @@ export function generateMenuHTML({
     const courseKey = normalizeCourseToken(course?.course_key || course?.key || course?.menu?.name);
     const courseName = String(course?.menu?.name || "").trim().toUpperCase();
     const optionalFlag = normalizeCourseToken(course?.optional_flag || "");
-
-    if (optionalFlag) {
+    const category = normalizeCourseCategory(course?.course_category, optionalFlag);
+    if ((category === "optional" || category === "celebration") && optionalFlag) {
       const extra = getExtra(optionalFlag);
       if (!extra?.ordered) return;
     }
@@ -320,9 +326,10 @@ export function generateMenuHTML({
   let rows = [];
   let pendingGap = 0;      // deferred spacer gap — applied to the next row that actually renders
 
-  // Backward/forward compatibility: support both legacy "forced_pairing"
-  // and newer "optional_pairing" block names.
+  // Backward compatibility: legacy templates may still contain forced_pairing.
+  // Runtime behavior uses optional_pairing, but width logic should handle both keys.
   const PAIRING_RIGHT_TYPES = new Set(["pairing", "forced_pairing", "optional_pairing", "pairing_label", "aperitif"]);
+  const isOptionalPairingType = (type) => type === "optional_pairing" || type === "forced_pairing";
   const _courseLeft = Math.min(99, Math.max(1, Math.round(Number(s("courseColSplit", 55)) || 55)));
 
   for (const tRow of effectiveTemplateRows) {
@@ -471,10 +478,13 @@ export function generateMenuHTML({
       let drink = null;
       const forcedBeerDrink = null;
 
-      const forcedPairingDrink = (() => {
-        // Product-only forced_pairing block: choose ALCO or N/A product by seat toggle.
-        if (rb?.type === "forced_pairing" || rb?.type === "optional_pairing") {
-          const isNonAlc = String(beerChoice || "").trim().toLowerCase() === "nonalc";
+      const optionalPairingDrink = (() => {
+        // Optional pairing block: renders only when seat has enabled this pairing key.
+        if (isOptionalPairingType(rb?.type)) {
+          const pairingFlag = normalizeCourseToken(rb.pairingFlag || "");
+          const pairingState = seat.optionalPairings?.[pairingFlag];
+          if (!pairingFlag || !pairingState?.ordered) return null;
+          const isNonAlc = String(pairingState.mode || "alco").trim().toLowerCase() === "nonalc";
           const itemId = isNonAlc
             ? (rb.naCatalogItemId ?? null)
             : (rb.catalogItemId ?? null);
@@ -489,11 +499,11 @@ export function generateMenuHTML({
         return resolveForcedPairingDrink(null);
       })();
 
-      if (lb.showPairing === false && !forcedPairingDrink && rb?.type !== "forced_pairing" && rb?.type !== "optional_pairing") {
+      if (lb.showPairing === false && !optionalPairingDrink && !isOptionalPairingType(rb?.type)) {
         // showPairing toggle off — don't resolve any drink for this course row
-      } else if (rb?.type === "pairing" || rb?.type === "forced_pairing" || rb?.type === "optional_pairing" || forcedPairingDrink) {
+      } else if (rb?.type === "pairing" || isOptionalPairingType(rb?.type) || optionalPairingDrink) {
         if (pkey) {
-          drink = forcedPairingDrink || (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]);
+          drink = optionalPairingDrink || (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]);
 
           // Optional-course pairing override: if seat selected a pairing for this optional_flag,
           // use the selected pairing package for this row.
@@ -519,8 +529,8 @@ export function generateMenuHTML({
             drink = { name: d.title || "", sub: d.sub || "" };
           }
         } else {
-          if (forcedPairingDrink) {
-            drink = forcedPairingDrink;
+          if (optionalPairingDrink) {
+            drink = optionalPairingDrink;
           }
           if (forcedBeerDrink) {
             drink = forcedBeerDrink;
