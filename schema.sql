@@ -125,7 +125,7 @@ create table if not exists public.menu_courses (
   os_si jsonb,
   premium jsonb,                           -- Premium pairing
   premium_si jsonb,
-  -- Forced pairing override (e.g. kitchen martini)
+  -- Legacy forced pairing override (deprecated; replaced by optional_pairing block config)
   force_pairing_title text not null default '',
   force_pairing_sub text not null default '',
   force_pairing_title_si text not null default '',
@@ -134,7 +134,10 @@ create table if not exists public.menu_courses (
   hazards jsonb,
   is_snack boolean not null default false,
   course_key text not null default '',
+  course_category text not null default 'main',
   optional_flag text not null default '',
+  optional_pairing_flag text not null default '',
+  optional_pairing_label text not null default '',
   section_gap_before boolean not null default false,
   show_on_short boolean not null default false,
   short_order integer,
@@ -152,7 +155,10 @@ alter table public.menu_courses
   add column if not exists premium_si jsonb,
   add column if not exists restrictions_si jsonb,
   add column if not exists course_key text not null default '',
+  add column if not exists course_category text not null default 'main',
   add column if not exists optional_flag text not null default '',
+  add column if not exists optional_pairing_flag text not null default '',
+  add column if not exists optional_pairing_label text not null default '',
   add column if not exists section_gap_before boolean not null default false,
   add column if not exists show_on_short boolean not null default false,
   add column if not exists short_order integer,

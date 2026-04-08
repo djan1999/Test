@@ -56,12 +56,6 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     upd(table.id, "restrictions", next);
   };
 
-  const extrasConfirmed = table.extrasConfirmed || {};
-  const confirmExtra = (type) => {
-    const next = { ...extrasConfirmed, [type]: true };
-    upd(table.id, "extrasConfirmed", next);
-  };
-
   const fire = (courseKey) => {
     const now = fmt(new Date());
     const newLog = { ...log, [courseKey]: { firedAt: now } };
@@ -93,17 +87,24 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#e8f5fa", Premium: "#f0eeff", "Our Story": "#eaf5ee" };
 
   const normFlag = s => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-  const isBeetCourse    = c => { const f = normFlag(c.optional_flag), k = normFlag(c.course_key || c.menu?.name); return f === "beetroot" || k === "beetroot"; };
-  const isCheeseCourse  = c => { const f = normFlag(c.optional_flag), k = normFlag(c.course_key || c.menu?.name); return f === "cheese"   || k === "cheese";   };
-  // Also check normalized menu name directly (matches menuGenerator.js isCakeCourse logic)
-  const isCakeCourse    = c => { const f = normFlag(c.optional_flag), k = normFlag(c.course_key || c.menu?.name), kn = normFlag(c.menu?.name); return f === "cake" || k === "pear" || k === "pear_cake" || kn === "pear"; };
-  const isForcedPairingCourse = c => !!String(c.force_pairing_title || c.force_pairing_title_si || "").trim();
-
-  // Extras ordered per seat — must come before courses filter
-  const beetSeats   = seats.filter(s => s.extras?.[1]?.ordered);
-  const cheeseSeats = seats.filter(s => s.extras?.[2]?.ordered);
-  const cakeSeats   = seats.filter(s => s.extras?.[3]?.ordered);
-  const hasCake     = cakeSeats.length > 0;
+  const normCategory = (course) => {
+    const raw = normFlag(course?.course_category);
+    if (raw === "main" || raw === "optional" || raw === "celebration") return raw;
+    return normFlag(course?.optional_flag) ? "optional" : "main";
+  };
+  const orderedOptionalSeatsByKey = (menuCourses || []).reduce((acc, course) => {
+    const key = normFlag(course?.optional_flag);
+    if (!key) return acc;
+    acc[key] = seats.filter((s) => !!s.extras?.[key]?.ordered);
+    return acc;
+  }, {});
+  const optionalSeatsForCourse = (course) => {
+    const key = normFlag(course?.optional_flag);
+    if (!key) return [];
+    return orderedOptionalSeatsByKey[key] || [];
+  };
+  const optionalKeyForCourse = (course) => normFlag(course?.optional_flag || "");
+  const optionalSeatMap = orderedOptionalSeatsByKey;
 
   const isShort = String(table.menuType || "").trim().toLowerCase() === "short";
   const isTruthyShort = v => { const s = String(v ?? "").trim().toLowerCase(); return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr"; };
@@ -114,12 +115,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   // Courses to show: non-snack, optional extras only when ordered, short menu filtered
   const courses = tableOverriddenCourses.filter(c => {
     if (c.is_snack) return false;
-    if (isBeetCourse(c)   && beetSeats.length   === 0) return false;
-    if (isBeetCourse(c)   && !extrasConfirmed.beetroot) return false;
-    if (isCheeseCourse(c) && cheeseSeats.length === 0) return false;
-    if (isCheeseCourse(c) && !extrasConfirmed.cheese) return false;
-    if (isCakeCourse(c)   && cakeSeats.length   === 0 && !table.birthday) return false;
-    if (isCakeCourse(c)   && !extrasConfirmed.cake && !table.birthday) return false;
+    const category = normCategory(c);
+    if ((category === "optional" || category === "celebration") && normFlag(c.optional_flag) && optionalSeatsForCourse(c).length === 0) return false;
     if (isShort && !isTruthyShort(c.show_on_short)) return false;
     return true;
   }).sort((a, b) => {
@@ -353,34 +350,6 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         })()}
       </div>
 
-
-      {/* ── Extras backup confirm — shown only when ordered but Send was never clicked ── */}
-      {upd && (beetSeats.length > 0 && !extrasConfirmed.beetroot || cheeseSeats.length > 0 && !extrasConfirmed.cheese) && (
-        <div style={{ background: "#fff8ee", borderBottom: "1px solid #f0d080", padding: "6px 10px", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#a07020", textTransform: "uppercase", flexShrink: 0 }}>⚠ Not sent</span>
-          {beetSeats.length > 0 && !extrasConfirmed.beetroot && (
-            <button
-              onPointerDown={e => e.stopPropagation()}
-              onClick={e => { e.stopPropagation(); confirmExtra("beetroot"); }}
-              style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 10px",
-                border: "1px solid #c8a060", borderRadius: 3, cursor: "pointer",
-                background: "#fdf4e8", color: "#7a5020", touchAction: "manipulation",
-              }}>BEETROOT ({beetSeats.map(s => `P${s.id}`).join(" ")}) — CONFIRM</button>
-          )}
-          {cheeseSeats.length > 0 && !extrasConfirmed.cheese && (
-            <button
-              onPointerDown={e => e.stopPropagation()}
-              onClick={e => { e.stopPropagation(); confirmExtra("cheese"); }}
-              style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 10px",
-                border: "1px solid #c8a060", borderRadius: 3, cursor: "pointer",
-                background: "#fdf4e8", color: "#7a5020", touchAction: "manipulation",
-              }}>CHEESE ({cheeseSeats.map(s => `P${s.id}`).join(" ")}) — CONFIRM</button>
-          )}
-        </div>
-      )}
-
       {/* ── Courses ── */}
       <div style={{ display: "flex", flexDirection: "column" }}>
         {courses.map((course, idx) => {
@@ -434,10 +403,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             return g;
           })();
           const extraLabel = (() => {
-            if (isBeetCourse(course))    return beetSeats.map(s => `P${s.id}`).join(" ");
-            if (isCheeseCourse(course))  return cheeseSeats.map(s => `P${s.id}`).join(" ");
-            if (isCakeCourse(course))    return cakeSeats.map(s => `P${s.id}`).join(" ") + (table.cakeNote ? ` — ${table.cakeNote}` : "");
-            return null;
+            const optKey = optionalKeyForCourse(course);
+            if (!optKey) return null;
+            const marks = (optionalSeatMap[optKey] || []).map(s => `P${s.id}`).join(" ");
+            return marks + ((optKey === "cake" && table.cakeNote) ? ` — ${table.cakeNote}` : "");
           })();
 
           const kcNote = kitchenCourseNotes[key] || {};
@@ -709,8 +678,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany }) {
     .map(t => ({ tableId: t.id, alert: t.kitchenAlert }));
 
   const confirmAlert = (tableId) => {
-    // Batch both field updates into a single state change → one render, one Supabase save
-    updMany(tableId, { kitchenAlert: null, extrasConfirmed: { beetroot: true, cheese: true, cake: true } });
+    updMany(tableId, { kitchenAlert: null });
   };
 
   if (activeTables.length === 0) return (

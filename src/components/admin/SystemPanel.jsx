@@ -12,10 +12,20 @@ export default function SystemPanel({
   layoutStyles = {},
   onUpdateLayoutStyles,
   onSaveLayoutStyles,
-  onResetMenuLayout,
+  layoutProfiles = [],
+  activeLayoutProfileId = "",
+  onSelectLayoutProfile,
+  onCreateLayoutProfile,
+  onDeleteLayoutProfile,
+  wineSyncConfig,
+  onUpdateWineSyncConfig,
+  onSaveWineSyncConfig,
 }) {
+  const safeProfiles = Array.isArray(layoutProfiles) ? layoutProfiles : [];
+  const safeWineSyncConfig = wineSyncConfig || { wineCountries: [], beveragePages: [] };
   const [debugOpen, setDebugOpen] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
+  const [syncConfigSaving, setSyncConfigSaving] = useState(false);
 
   const handleManualSync = async () => {
     setSyncResult("syncing");
@@ -28,6 +38,7 @@ export default function SystemPanel({
 
   const statusColor = syncStatus === "live" ? "#2a7a2a" : syncStatus === "local-only" ? "#888" : syncStatus === "connecting" ? "#c8a06e" : "#c04040";
   const statusLabel = syncStatus === "live" ? "Connected" : syncStatus === "local-only" ? "Local Only" : syncStatus === "connecting" ? "Connecting..." : "Error";
+  const activeProfile = safeProfiles.find(p => p.id === activeLayoutProfileId) || safeProfiles[0] || null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -106,18 +117,80 @@ export default function SystemPanel({
         </div>
       </div>
 
-      {/* Layout reset */}
+      {/* Layout profiles */}
       <div>
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Print Layout</div>
-        <div style={{ border: "1px solid #f8e8e8", borderRadius: 4, padding: "16px 18px", background: "#fffafa" }}>
-          <div style={{ fontFamily: FONT, fontSize: 10, color: "#444", marginBottom: 6 }}>Reset to factory defaults</div>
-          <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginBottom: 14 }}>
-            Clears all saved layout customisations (row spacing, padding, font size, etc.) and restores the original values.
+        <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, padding: "16px 18px", background: "#fafafa" }}>
+          <div style={{ fontFamily: FONT, fontSize: 10, color: "#444", marginBottom: 6 }}>Layout versions</div>
+          <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginBottom: 12 }}>
+            No factory defaults. Each layout is an editable version with its own template + spacing.
           </div>
-          <button
-            onClick={() => { if (window.confirm("Reset print layout to factory defaults?")) onResetMenuLayout(); }}
-            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #e08080", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#c04040" }}
-          >RESET LAYOUT TO DEFAULTS</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <select
+              value={activeLayoutProfileId}
+              onChange={(e) => onSelectLayoutProfile?.(e.target.value)}
+              style={{ fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: "1px solid #ddd", borderRadius: 2, minWidth: 220 }}
+            >
+              {safeProfiles.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            <button onClick={() => onCreateLayoutProfile?.()} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#1a1a1a" }}>NEW BLANK LAYOUT</button>
+            <button
+              onClick={() => activeProfile && onDeleteLayoutProfile?.(activeProfile.id)}
+              disabled={safeProfiles.length <= 1}
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #e08080", borderRadius: 2, cursor: safeProfiles.length <= 1 ? "not-allowed" : "pointer", background: "#fff", color: "#c04040", opacity: safeProfiles.length <= 1 ? 0.6 : 1 }}
+            >
+              DELETE LAYOUT
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Wine sync configuration */}
+      <div>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Wine Sync Configuration</div>
+        <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, padding: "16px 18px", background: "#fafafa", display: "flex", flexDirection: "column", gap: 10 }}>
+          <label style={{ fontFamily: FONT, fontSize: 9, color: "#666" }}>
+            Countries (CSV: SI,AT,IT,FR,HR)
+            <input
+              value={(safeWineSyncConfig.wineCountries || []).join(",")}
+              onChange={(e) => onUpdateWineSyncConfig?.({
+                ...safeWineSyncConfig,
+                wineCountries: e.target.value.split(",").map(v => v.trim().toUpperCase()).filter(Boolean),
+              })}
+              style={{ marginTop: 4, width: "100%", fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: "1px solid #ddd", borderRadius: 2 }}
+            />
+          </label>
+          <label style={{ fontFamily: FONT, fontSize: 9, color: "#666" }}>
+            Beverage categories (one per line: label|url|category)
+            <textarea
+              value={(safeWineSyncConfig.beveragePages || []).map(p => `${p.label}|${p.url}|${p.category}`).join("\n")}
+              onChange={(e) => onUpdateWineSyncConfig?.({
+                ...safeWineSyncConfig,
+                beveragePages: e.target.value
+                  .split("\n")
+                  .map(line => line.trim())
+                  .filter(Boolean)
+                  .map(line => {
+                    const [label = "", url = "", category = ""] = line.split("|").map(s => s.trim());
+                    return { label, url, category };
+                  })
+                  .filter(p => p.label && p.url && p.category),
+              })}
+              rows={6}
+              style={{ marginTop: 4, width: "100%", fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: "1px solid #ddd", borderRadius: 2, resize: "vertical" }}
+            />
+          </label>
+          <div>
+            <button
+              onClick={async () => { setSyncConfigSaving(true); try { await onSaveWineSyncConfig?.(); } finally { setSyncConfigSaving(false); } }}
+              disabled={syncConfigSaving}
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: syncConfigSaving ? "not-allowed" : "pointer", background: "#1a1a1a", color: "#fff" }}
+            >
+              {syncConfigSaving ? "SAVING..." : "SAVE SYNC CONFIG"}
+            </button>
+          </div>
         </div>
       </div>
 

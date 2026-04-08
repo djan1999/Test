@@ -23,6 +23,12 @@ const normalizeCourseToken = (value) => String(value || "")
   .replace(/[^a-z0-9]+/g, "_")
   .replace(/^_+|_+$/g, "");
 
+const normalizeCourseCategory = (value, optionalFlag = "") => {
+  const raw = normalizeCourseToken(value);
+  if (raw === "main" || raw === "optional" || raw === "celebration") return raw;
+  return normalizeCourseToken(optionalFlag) ? "optional" : "main";
+};
+
 const normalizeRuleKeyList = (value, fallback = []) => {
   const rawList = (() => {
     if (Array.isArray(value)) return value;
@@ -137,10 +143,7 @@ export function generateMenuHTML({
   const isShort = String(table.menuType || "").toLowerCase() === "short";
 
   const extras = seat.extras || {};
-  const getExtra = (key, legacyId) => extras[key] || extras[String(legacyId)] || extras[legacyId] || null;
-  const hasBeetroot = !!getExtra("beetroot", 1)?.ordered;
-  const hasCheese   = !!getExtra("cheese", 2)?.ordered;
-  const hasCake     = !!(table.birthday || getExtra("cake", 3)?.ordered);
+  const getExtra = (key) => extras[key] || null;
 
   // Aperitifs: dedicated row above first course
   const aperitifs = Array.isArray(seat.aperitifs)
@@ -233,14 +236,11 @@ export function generateMenuHTML({
     const courseKey = normalizeCourseToken(course?.course_key || course?.key || course?.menu?.name);
     const courseName = String(course?.menu?.name || "").trim().toUpperCase();
     const optionalFlag = normalizeCourseToken(course?.optional_flag || "");
-
-    const isBeetrootCourse = optionalFlag === "beetroot" || courseKey === "beetroot";
-    const isCakeCourse = optionalFlag === "cake" || courseKey === "pear" || courseKey === "pear_cake";
-    const isCheeseExtraCourse = optionalFlag === "cheese" || courseKey === "cheese";
-
-    if (isBeetrootCourse && !hasBeetroot) return;
-    if (isCakeCourse && !hasCake) return;
-    if (isCheeseExtraCourse && !hasCheese) return;
+    const category = normalizeCourseCategory(course?.course_category, optionalFlag);
+    if ((category === "optional" || category === "celebration") && optionalFlag) {
+      const extra = getExtra(optionalFlag);
+      if (!extra?.ordered) return;
+    }
 
     if (isShort) {
       if (!isTruthyShort(course?.show_on_short)) return;
@@ -326,7 +326,10 @@ export function generateMenuHTML({
   let rows = [];
   let pendingGap = 0;      // deferred spacer gap — applied to the next row that actually renders
 
-  const PAIRING_RIGHT_TYPES = new Set(["pairing", "forced_pairing", "pairing_label", "aperitif"]);
+  // Backward compatibility: legacy templates may still contain forced_pairing.
+  // Runtime behavior uses optional_pairing, but width logic should handle both keys.
+  const PAIRING_RIGHT_TYPES = new Set(["pairing", "forced_pairing", "optional_pairing", "pairing_label", "aperitif"]);
+  const isOptionalPairingType = (type) => type === "optional_pairing" || type === "forced_pairing";
   const _courseLeft = Math.min(99, Math.max(1, Math.round(Number(s("courseColSplit", 55)) || 55)));
 
   for (const tRow of effectiveTemplateRows) {
@@ -475,10 +478,13 @@ export function generateMenuHTML({
       let drink = null;
       const forcedBeerDrink = null;
 
-      const forcedPairingDrink = (() => {
-        // Product-only forced_pairing block: choose ALCO or N/A product by seat toggle.
-        if (rb?.type === "forced_pairing") {
-          const isNonAlc = String(beerChoice || "").trim().toLowerCase() === "nonalc";
+      const optionalPairingDrink = (() => {
+        // Optional pairing block: renders only when seat has enabled this pairing key.
+        if (isOptionalPairingType(rb?.type)) {
+          const pairingFlag = normalizeCourseToken(rb.pairingFlag || course.optional_pairing_flag || "");
+          const pairingState = seat.optionalPairings?.[pairingFlag];
+          if (!pairingFlag || !pairingState?.ordered) return null;
+          const isNonAlc = String(pairingState.mode || "alco").trim().toLowerCase() === "nonalc";
           const itemId = isNonAlc
             ? (rb.naCatalogItemId ?? null)
             : (rb.catalogItemId ?? null);
@@ -486,24 +492,39 @@ export function generateMenuHTML({
             ? (rb.naCatalogType || "")
             : (rb.catalogType || "");
           const picked = itemType && itemId != null ? findBeverage(itemType, itemId) : null;
-          if (!picked) return null;
-          const parts = fmtDrinkParts({ ...picked, __type: itemType });
-          return { name: parts.title || "", sub: parts.sub || "" };
+          if (picked) {
+            const parts = fmtDrinkParts({ ...picked, __type: itemType });
+            return { name: parts.title || "", sub: parts.sub || "" };
+          }
+
+          // Fallback for optional-pairing rows without product mapping:
+          // use course pairing text (same alco/nonalc behavior as optional extras).
+          if (isNonAlc) {
+            const fallback = lang === "si" ? (course.na_si || course.na) : course.na;
+            if (fallback?.name || fallback?.sub) return fallback;
+          } else {
+            const fallback = lang === "si"
+              ? (course.os_si || course.os || course.premium_si || course.premium || course.wp_si || course.wp)
+              : (course.os || course.premium || course.wp);
+            if (fallback?.name || fallback?.sub) return fallback;
+          }
+          return null;
         }
         return resolveForcedPairingDrink(null);
       })();
 
-      if (lb.showPairing === false && !forcedPairingDrink && rb?.type !== "forced_pairing") {
+      if (lb.showPairing === false && !optionalPairingDrink && !isOptionalPairingType(rb?.type)) {
         // showPairing toggle off — don't resolve any drink for this course row
-      } else if (rb?.type === "pairing" || rb?.type === "forced_pairing" || forcedPairingDrink) {
+      } else if (rb?.type === "pairing" || isOptionalPairingType(rb?.type) || optionalPairingDrink) {
         if (pkey) {
-          drink = forcedPairingDrink || (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]);
+          drink = optionalPairingDrink || (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]);
 
-          // Beetroot extra pairing override
-          const isBeetrootC = normalizeCourseToken(course.optional_flag || "") === "beetroot" || normKey === "beetroot";
-          const beetExtra = getExtra("beetroot", 1);
-          if (isBeetrootC && beetExtra?.ordered) {
-            const beetPair = String(beetExtra.pairing || "—").trim();
+          // Optional-course pairing override: if seat selected a pairing for this optional_flag,
+          // use the selected pairing package for this row.
+          const optionalKey = normalizeCourseToken(course.optional_flag || "");
+          const optionalExtra = optionalKey ? getExtra(optionalKey) : null;
+          if (optionalExtra?.ordered) {
+            const beetPair = String(optionalExtra.pairing || "—").trim();
             if (beetPair === "N/A" || beetPair === "Non-Alc") {
               drink = (lang === "si" ? (course.na_si || course.na) : course.na) || null;
             } else if (beetPair === "Champagne" || beetPair === "Wine") {
@@ -522,8 +543,8 @@ export function generateMenuHTML({
             drink = { name: d.title || "", sub: d.sub || "" };
           }
         } else {
-          if (forcedPairingDrink) {
-            drink = forcedPairingDrink;
+          if (optionalPairingDrink) {
+            drink = optionalPairingDrink;
           }
           if (forcedBeerDrink) {
             drink = forcedBeerDrink;

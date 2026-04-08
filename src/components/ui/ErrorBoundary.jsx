@@ -10,6 +10,16 @@ export class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error("App crash:", error, info);
+    try {
+      sessionStorage.setItem(
+        "milka_last_runtime_error",
+        JSON.stringify({
+          message: error?.message || "Unknown error",
+          stack: error?.stack || "",
+          when: new Date().toISOString(),
+        })
+      );
+    } catch {}
   }
 
   render() {
@@ -57,6 +67,30 @@ export class ErrorBoundary extends Component {
           }}
         >
           RELOAD
+        </button>
+        <button
+          onClick={() => {
+            try {
+              localStorage.removeItem("milka_menu_layout_profiles_v1");
+              localStorage.removeItem("milka_active_layout_profile_v1");
+              localStorage.removeItem("milka_menu_template_v2");
+              localStorage.removeItem("milka_menu_layout");
+              localStorage.removeItem("milka_menu_rules");
+            } catch {}
+            window.location.reload();
+          }}
+          style={{
+            fontFamily: tokens.font,
+            fontSize: tokens.fontSize.xs,
+            letterSpacing: 1.5,
+            padding: "6px 16px",
+            border: tokens.borderLight,
+            background: tokens.colors.white,
+            color: tokens.colors.gray700,
+            cursor: "pointer",
+          }}
+        >
+          RESET LAYOUT CACHE
         </button>
       </div>
     );
