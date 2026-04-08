@@ -290,6 +290,7 @@ function optionalExtrasFromCourses(menuCourses = []) {
 }
 
 const circBtnSm = { ...mixinCircleButton };
+const loadMenuCoursesRef = useRef(null);
 
 // ── Menu Sync Tab ─────────────────────────────────────────────────────────────
 
@@ -2579,7 +2580,7 @@ export default function App() {
     } catch {}
     // Pre-populate tables from reservations when entering live modes
     if ((nextMode === "service" || nextMode === "display") && serviceDate && supabase) {
-      supabase.from("reservations").select("*").eq("date", serviceDate)
+      supabase.from(TABLES.RESERVATIONS).select("*").eq("date", serviceDate)
         .then(({ data }) => { if (data?.length) prePopulateFromReservations(data); });
     }
   };
@@ -2970,7 +2971,7 @@ export default function App() {
     // Load reservations for -7 days … +30 days so the planner is pre-populated
     const past   = new Date(); past.setDate(past.getDate() - 7);
     const future = new Date(); future.setDate(future.getDate() + 30);
-    supabase.from("reservations").select("*")
+    supabase.from(TABLES.RESERVATIONS).select("*")
       .gte("date", toLocalDateISO(past))
       .lte("date", toLocalDateISO(future))
       .order("date").order("created_at")
@@ -2979,22 +2980,25 @@ export default function App() {
         setReservations(data);
       });
 
-    const ch = supabase.channel("milka-reservations")
-      .on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, payload => {
-        if (!mounted) return;
-        if (payload.eventType === "DELETE") {
-          setReservations(prev => prev.filter(r => r.id !== payload.old?.id));
-        } else if (payload.new) {
-          setReservations(prev => {
-            const without = prev.filter(r => r.id !== payload.new.id);
-            return [...without, payload.new];
-          });
-        }
-      })
-      .subscribe();
-
-    return () => { mounted = false; supabase.removeChannel(ch); };
+    return () => { mounted = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useRealtimeTable({
+    supabase,
+    channelName: "milka-reservations",
+    table: TABLES.RESERVATIONS,
+    onChange: (payload) => {
+      if (payload.eventType === "DELETE") {
+        setReservations(prev => prev.filter(r => r.id !== payload.old?.id));
+      } else if (payload.new) {
+        setReservations(prev => {
+          const without = prev.filter(r => r.id !== payload.new.id);
+          return [...without, payload.new];
+        });
+      }
+    },
+    enabled: Boolean(supabase),
+  });
 
   // ── Menu courses: load from Supabase (app is the source of truth) ───────────
   useEffect(() => {
@@ -3018,18 +3022,19 @@ export default function App() {
       }
     };
 
+    loadMenuCoursesRef.current = loadCourses;
     loadCourses();
 
-    // Subscribe to realtime changes so edits from other devices appear instantly
-    if (!supabase) return;
-    const ch = supabase.channel("milka-menu-courses")
-      .on("postgres_changes", { event: "*", schema: "public", table: "menu_courses" }, () => {
-        if (mounted) loadCourses();
-      })
-      .subscribe();
-
-    return () => { mounted = false; supabase.removeChannel(ch); };
+    return () => { mounted = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useRealtimeTable({
+    supabase,
+    channelName: "milka-menu-courses",
+    table: TABLES.MENU_COURSES,
+    onChange: () => { loadMenuCoursesRef.current?.(); },
+    enabled: Boolean(supabase),
+  });
 
   // Only count primary tables in groups (secondaries have same guest count stamped on them)
   const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
@@ -3098,7 +3103,7 @@ export default function App() {
           setMode(target);
           try { localStorage.setItem("milka_mode", target); } catch {}
           if ((target === "service" || target === "display") && supabase) {
-            supabase.from("reservations").select("*").eq("date", date)
+            supabase.from(TABLES.RESERVATIONS).select("*").eq("date", date)
               .then(({ data }) => { if (data?.length) prePopulateFromReservations(data); });
           }
         }
