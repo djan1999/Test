@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { createClient } from "@supabase/supabase-js";
 import {
   DndContext, PointerSensor, TouchSensor,
   useSensor, useSensors, DragOverlay, rectIntersection,
@@ -30,13 +29,13 @@ import { makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM } from
 import { fuzzy, fuzzyDrink } from "./utils/search.js";
 import { useIsMobile } from "./hooks/useIsMobile.js";
 import { AdminLayout } from "./components/admin/index.js";
-
-// All dietary restriction keys used in the DB schema
-const DIETARY_KEYS = [
-  "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
-  "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
-  "no_garlic_onion","halal","low_fodmap",
-];
+import { DIETARY_KEYS, RESTRICTIONS, RESTRICTION_GROUPS, restrLabel, restrCompact } from "./constants/dietary.js";
+import { WATER_OPTS, waterStyle, PAIRINGS, pairingStyle } from "./constants/pairings.js";
+import { BEV_TYPES } from "./constants/beverageTypes.js";
+import { COUNTRY_NAMES } from "./constants/countries.js";
+import { supabase, hasSupabaseConfig, supabaseUrl, TABLES } from "./lib/supabaseClient.js";
+import { tokens } from "./styles/tokens.js";
+import { baseInput, fieldLabel as mixinFieldLabel, chip as mixinChip, circleButton as mixinCircleButton } from "./styles/mixins.js";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
@@ -181,7 +180,7 @@ function courseToSupabaseRow(course) {
 async function fetchMenuCourses() {
   if (!supabase) return null;
   const { data, error } = await supabase
-    .from("menu_courses")
+    .from(TABLES.MENU_COURSES)
     .select("*")
     .order("position", { ascending: true });
   if (error) throw error;
@@ -189,8 +188,8 @@ async function fetchMenuCourses() {
 }
 
 
-const FONT = "'Roboto Mono', monospace";
-const MOBILE_SAFE_INPUT_SIZE = 16;
+const FONT = tokens.font;
+const MOBILE_SAFE_INPUT_SIZE = tokens.mobileInputSize;
 
 // ── Wine DB ───────────────────────────────────────────────────────────────────
 const initWines = [];
@@ -212,90 +211,13 @@ const esc = (v) => String(v ?? "")
   .replace(/>/g, "&gt;")
   .replace(/"/g, "&quot;");
 
-// ── Water ─────────────────────────────────────────────────────────────────────
-const WATER_OPTS = ["—", "XC", "XW", "OC", "OW"];
-const waterStyle = v => {
-  if (v === "XC" || v === "XW") return { color: "#1a1a1a", bg: "#f0f0f0" };
-  if (v === "OC" || v === "OW") return { color: "#1a1a1a", bg: "#e8e8e8" };
-  return { color: "#555", bg: "transparent" };
-};
-
-// ── Pairings ──────────────────────────────────────────────────────────────────
-const PAIRINGS = ["—", "Wine", "Non-Alc", "Premium", "Our Story"];
-
-const COUNTRY_NAMES = {
-  FR: "France", IT: "Italy", ES: "Spain", DE: "Germany", AT: "Austria",
-  SI: "Slovenia", PT: "Portugal", GR: "Greece", HU: "Hungary", HR: "Croatia",
-  CH: "Switzerland", GE: "Georgia", RO: "Romania", BG: "Bulgaria", RS: "Serbia",
-  CZ: "Czech Republic", SK: "Slovakia", MD: "Moldova", AM: "Armenia",
-  US: "USA", AR: "Argentina", CL: "Chile", AU: "Australia", NZ: "New Zealand",
-  ZA: "South Africa", UY: "Uruguay",
-};
-// ── Restriction definitions ───────────────────────────────────────────────────
-const RESTRICTIONS = [
-  // Dietary
-  { key: "veg",          label: "Vegetarian",      emoji: "🥦", group: "dietary"  },
-  { key: "vegan",        label: "Vegan",            emoji: "🌱", group: "dietary"  },
-  { key: "pescetarian",  label: "Pescetarian",      emoji: "🐟", group: "dietary"  },
-  { key: "no_red_meat",  label: "No Red Meat",      emoji: "🚫🥩", group: "dietary" },
-  { key: "no_pork",      label: "No Pork",          emoji: "🚫🐷", group: "dietary" },
-  { key: "no_game",      label: "No Game",          emoji: "🚫🦌", group: "dietary" },
-  { key: "no_offal",     label: "No Offal",         emoji: "🚫🫀", group: "dietary" },
-  // Allergies / Intolerances
-  { key: "gluten",       label: "Gluten Free",      emoji: "🌾", group: "allergy"  },
-  { key: "dairy",        label: "Dairy Free",       emoji: "🥛", group: "allergy"  },
-  { key: "nut",          label: "Nut Free",         emoji: "🥜", group: "allergy"  },
-  { key: "shellfish",    label: "Shellfish Free",   emoji: "🦐", group: "allergy"  },
-  { key: "egg_free",     label: "Egg Free",         emoji: "🥚", group: "allergy"  },
-  { key: "no_garlic_onion", label: "No Garlic/Onion", emoji: "🧅", group: "allergy" },
-  // Lifestyle / Religious
-  { key: "no_alcohol",   label: "No Alcohol",       emoji: "🚱", group: "other"    },
-  { key: "halal",        label: "Halal",            emoji: "☪️",  group: "other"    },
-  { key: "low_fodmap",   label: "Low FODMAP",       emoji: "📋", group: "other"    },
-];
-const RESTRICTION_GROUPS = { dietary: "Dietary", allergy: "Allergies & Intolerances", other: "Lifestyle & Religious" };
-const restrLabel = (key) => { const d = RESTRICTIONS.find(r => r.key === key); return d ? `${d.emoji} ${d.label}` : key; };
-const restrCompact = (key) => { const d = RESTRICTIONS.find(r => r.key === key); return d ? d.label : key; };
-
-
-
-
-
-const pairingStyle = {
-  "—":        { color: "#666", border: "#d8d8d8", bg: "#f5f5f5" },
-  "Non-Alc":  { color: "#1f5f73", border: "#7fc6db88", bg: "#7fc6db12" },
-  "Wine":      { color: "#8a6030", border: "#c8a06088", bg: "#c8a06008" },
-  "Premium":   { color: "#5a5a8a", border: "#8888bb88", bg: "#8888bb08" },
-  "Our Story": { color: "#3a7a5a", border: "#5aaa7a88", bg: "#5aaa7a08" },
-};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
-const baseInp = {
-  fontFamily: FONT, fontSize: MOBILE_SAFE_INPUT_SIZE, // 16px prevents iOS auto-zoom
-  padding: "10px 12px", border: "1px solid #e8e8e8",
-  borderRadius: 2, outline: "none",
-  color: "#1a1a1a", background: "#fff",
-  boxSizing: "border-box", width: "100%", minWidth: 0,
-  WebkitAppearance: "none", // removes iOS styling
-};
-const fieldLabel = {
-  fontFamily: FONT, fontSize: 9,
-  letterSpacing: 3, color: "#444",
-  textTransform: "uppercase", marginBottom: 8,
-};
-const topStatChip = {
-  fontFamily: FONT,
-  fontSize: 10,
-  color: "#1a1a1a",
-  letterSpacing: 1,
-  padding: "6px 10px",
-  border: "1px solid #e8e8e8",
-  borderRadius: 999,
-  background: "#fff",
-  whiteSpace: "nowrap",
-};
+const baseInp = { ...baseInput };
+const fieldLabel = { ...mixinFieldLabel };
+const topStatChip = { ...mixinChip };
 const statusPill = (isLive, label) => ({
   fontFamily: FONT,
   fontSize: 9,
@@ -308,12 +230,6 @@ const statusPill = (isLive, label) => ({
   fontWeight: 600,
   whiteSpace: "nowrap",
 });
-
-const SERVICE_TABLES_TABLE = import.meta.env.VITE_SUPABASE_SERVICE_TABLES || "service_tables";
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-const supabase = hasSupabaseConfig ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 const defaultBoardState = () => ({
   tables: initTables,
@@ -349,13 +265,7 @@ function optionalExtrasFromCourses(menuCourses = []) {
   return [...byKey.values()];
 }
 
-const circBtnSm = {
-  width: 36, height: 36, borderRadius: "50%",
-  border: "1px solid #e8e8e8", background: "#fff",
-  color: "#444", fontSize: 18, cursor: "pointer",
-  display: "flex", alignItems: "center", justifyContent: "center",
-  fontFamily: FONT, lineHeight: 1, touchAction: "manipulation",
-};
+const circBtnSm = { ...mixinCircleButton };
 
 // ── Water Picker ──────────────────────────────────────────────────────────────
 function WaterPicker({ value, onChange }) {
@@ -576,15 +486,6 @@ function SwapPicker({ seatId, totalSeats, onSwap }) {
     </div>
   );
 }
-
-// ── Beverage type styles (shared) ─────────────────────────────────────────────
-const BEV_TYPES = {
-  wine:     { label: "Glass",    color: "#7a5020", bg: "#fdf4e8", border: "#c8a060", dot: "#c8a060" },
-  cocktail: { label: "Cocktail", color: "#5a3878", bg: "#f5eeff", border: "#b898d8", dot: "#b898d8" },
-  spirit:   { label: "Spirit",   color: "#7a5020", bg: "#fff3e0", border: "#d4a870", dot: "#d4a870" },
-  beer:     { label: "Beer",     color: "#3a6a2a", bg: "#edf8e8", border: "#88bb70", dot: "#88bb70" },
-  aperitif: { label: "Aperitif", color: "#a07040", bg: "#fdf8f0", border: "#d0c0a8", dot: "#d0c0a8" },
-};
 
 // ── BeverageSearch — unified single-search across all drink types ──────────────
 function BeverageSearch({ wines, cocktails, spirits, beers, onAdd }) {
@@ -3636,8 +3537,8 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
   useEffect(() => {
     if (!supabase) { genLoaded.current = true; return; }
     Promise.all([
-      supabase.from("service_settings").select("state").eq("id", "menu_gen_team").single(),
-      supabase.from("service_settings").select("state").eq("id", "menu_gen_title").single(),
+      supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_team").single(),
+      supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_title").single(),
     ]).then(([teamRes, titleRes]) => {
       if (teamRes.data?.state?.value) setTeamNames(teamRes.data.state.value);
       if (titleRes.data?.state?.value) setMenuTitle(titleRes.data.state.value);
@@ -3649,7 +3550,7 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
   useEffect(() => {
     writeTeamNames(teamNames);
     if (!genLoaded.current || !supabase) return;
-    supabase.from("service_settings")
+    supabase.from(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "menu_gen_team", state: { value: teamNames }, updated_at: new Date().toISOString() }, { onConflict: "id" })
       .then(() => {});
   }, [teamNames]);
@@ -3662,7 +3563,7 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
   // Save menu title to Supabase when changed
   useEffect(() => {
     if (!genLoaded.current || !supabase) return;
-    supabase.from("service_settings")
+    supabase.from(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "menu_gen_title", state: { value: menuTitle }, updated_at: new Date().toISOString() }, { onConflict: "id" })
       .then(() => {});
   }, [menuTitle]);
@@ -4475,8 +4376,8 @@ function ArchiveModal({ tables, optionalExtras = [], onArchiveAndClear, onClearA
     if (!supabase) { setLoading(false); return; }
     setLoading(true);
     Promise.all([
-      supabase.from("service_archive").select("*").is("deleted_at", null).order("created_at", { ascending: false }).limit(60),
-      supabase.from("service_archive").select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(30),
+      supabase.from(TABLES.SERVICE_ARCHIVE).select("*").is("deleted_at", null).order("created_at", { ascending: false }).limit(60),
+      supabase.from(TABLES.SERVICE_ARCHIVE).select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(30),
     ]).then(([active, trash]) => {
       setEntries(active.error ? [] : (active.data || []));
       setDeleted(trash.error ? [] : (trash.data || []));
@@ -4488,7 +4389,7 @@ function ArchiveModal({ tables, optionalExtras = [], onArchiveAndClear, onClearA
   const deleteEntry = async id => {
     if (!supabase) return;
     setDeleting(id);
-    const { error } = await supabase.from("service_archive").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+    const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).update({ deleted_at: new Date().toISOString() }).eq("id", id);
     if (error) {
       alert("Delete failed: " + error.message + "\n\nYou may need to enable UPDATE on the service_archive table in Supabase (Policies → anon → UPDATE).");
     } else {
@@ -4505,7 +4406,7 @@ function ArchiveModal({ tables, optionalExtras = [], onArchiveAndClear, onClearA
     if (!window.confirm("Move ALL archive entries to trash? You can restore them from Recently Deleted.")) return;
     setDeleting("all");
     const now = new Date().toISOString();
-    const { error } = await supabase.from("service_archive").update({ deleted_at: now }).is("deleted_at", null);
+    const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).update({ deleted_at: now }).is("deleted_at", null);
     if (error) {
       alert("Delete failed: " + error.message + "\n\nYou may need to enable UPDATE on the service_archive table in Supabase (Policies → anon → UPDATE).");
     } else {
@@ -4519,7 +4420,7 @@ function ArchiveModal({ tables, optionalExtras = [], onArchiveAndClear, onClearA
   const restoreEntry = async id => {
     if (!supabase) return;
     setDeleting(id);
-    const { error } = await supabase.from("service_archive").update({ deleted_at: null }).eq("id", id);
+    const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).update({ deleted_at: null }).eq("id", id);
     if (error) {
       alert("Restore failed: " + error.message);
     } else {
@@ -4534,7 +4435,7 @@ function ArchiveModal({ tables, optionalExtras = [], onArchiveAndClear, onClearA
     if (!supabase) return;
     if (!window.confirm("Permanently delete all trashed entries? This cannot be undone.")) return;
     setDeleting("trash");
-    const { error } = await supabase.from("service_archive").delete().not("deleted_at", "is", null);
+    const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).delete().not("deleted_at", "is", null);
     if (error) {
       alert("Empty trash failed: " + error.message);
     } else {
@@ -4875,7 +4776,7 @@ function InventoryModal({ wines, onClose }) {
   // Save to Supabase (called inside debounce)
   const flushToSupabase = async (state) => {
     if (!supabase || !navigator.onLine) { setSyncSt("offline"); return; }
-    const { error } = await supabase.from("service_settings").upsert(
+    const { error } = await supabase.from(TABLES.SERVICE_SETTINGS).upsert(
       { id: INV_SETTINGS_ID, state, updated_at: new Date().toISOString() },
       { onConflict: "id" }
     );
@@ -4925,7 +4826,7 @@ function InventoryModal({ wines, onClose }) {
   // Load from Supabase on mount
   useEffect(() => {
     if (!supabase) { setSyncSt(navigator.onLine ? "synced" : "offline"); return; }
-    supabase.from("service_settings").select("state").eq("id", INV_SETTINGS_ID).single()
+    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", INV_SETTINGS_ID).single()
       .then(({ data, error }) => {
         const remoteD = (!error && data?.state?.d) ? data.state.d : {};
         // Assign my label: Device N based on position in the remote map
@@ -6230,31 +6131,6 @@ function GlobalStyle() {
   );
 }
 
-// ── Error Boundary ────────────────────────────────────────────────────────────
-import { Component } from "react";
-export class ErrorBoundary extends Component {
-  constructor(props) { super(props); this.state = { error: null }; }
-  static getDerivedStateFromError(error) { return { error }; }
-  render() {
-    if (!this.state.error) return this.props.children;
-    return (
-      <div style={{ fontFamily: "monospace", padding: 40, textAlign: "center", marginTop: "20vh" }}>
-        <div style={{ fontSize: 32, marginBottom: 16 }}>⚠</div>
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Something went wrong</div>
-        <div style={{ fontSize: 11, color: "#888", marginBottom: 32, maxWidth: 320, margin: "0 auto 32px" }}>
-          {String(this.state.error?.message || this.state.error)}
-        </div>
-        <button
-          onClick={() => window.location.reload()}
-          style={{ fontFamily: "monospace", fontSize: 12, letterSpacing: 2, padding: "12px 28px", background: "#1a1a1a", color: "#fff", border: "none", borderRadius: 3, cursor: "pointer" }}
-        >
-          RELOAD
-        </button>
-      </div>
-    );
-  }
-}
-
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
   const localSnapshot = readLocalBoardState();
@@ -6457,13 +6333,13 @@ export default function App() {
     if (!supabase) return;
     const rows = courses.map(c => courseToSupabaseRow(c));
     const { error } = await supabase
-      .from("menu_courses")
+      .from(TABLES.MENU_COURSES)
       .upsert(rows, { onConflict: "position" });
     if (error) { console.error("Menu save failed:", error); return; }
     // Remove courses that no longer exist
     const positions = courses.map(c => c.position);
     if (positions.length > 0) {
-      await supabase.from("menu_courses").delete().not("position", "in", `(${positions.join(",")})`);
+      await supabase.from(TABLES.MENU_COURSES).delete().not("position", "in", `(${positions.join(",")})`);
     }
   };
 
@@ -6478,8 +6354,8 @@ export default function App() {
       ...newS.map((item, i) => ({ category: "spirit",   name: item.name, notes: item.notes || "", position: i })),
       ...newB.map((item, i) => ({ category: "beer",     name: item.name, notes: item.notes || "", position: i })),
     ];
-    await supabase.from("beverages").delete().in("category", ["cocktail", "spirit", "beer"]);
-    if (rows.length > 0) await supabase.from("beverages").insert(rows);
+    await supabase.from(TABLES.BEVERAGES).delete().in("category", ["cocktail", "spirit", "beer"]);
+    if (rows.length > 0) await supabase.from(TABLES.BEVERAGES).insert(rows);
   };
 
   const clearAll = () => {
@@ -6531,7 +6407,7 @@ export default function App() {
     const dateStr = new Date().toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
     const activeTables = snap.tables.filter(t => t.active || t.arrivedAt || t.resName || t.resTime);
     if (supabase) {
-      const { error } = await supabase.from("service_archive").insert({
+      const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).insert({
         date: toLocalDateISO(),
         label: dateStr,
         state: { ...snap, tables: activeTables, menuCourses: menuCourses },
@@ -6600,7 +6476,7 @@ export default function App() {
       else      localStorage.removeItem("milka_service_date");
     } catch {}
     if (!supabase) return;
-    await supabase.from("service_settings")
+    await supabase.from(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "service_date", state: date ? { date } : {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
   };
 
@@ -6733,7 +6609,7 @@ export default function App() {
       let lastError;
       for (let attempt = 0; attempt < 4; attempt++) {
         if (attempt > 0) await new Promise(r => setTimeout(r, 500 * attempt));
-        const { error } = await supabase.from(SERVICE_TABLES_TABLE).upsert(changedTables, { onConflict: "table_id" });
+        const { error } = await supabase.from(TABLES.SERVICE_TABLES).upsert(changedTables, { onConflict: "table_id" });
         if (!error) { setSyncStatus("live"); return; }
         lastError = error;
       }
@@ -6752,21 +6628,21 @@ export default function App() {
         .then(svg => setLogoDataUri(`data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`))
         .catch(() => {});
     if (!supabase) { loadDefault(); return; }
-    supabase.from("service_settings").select("state").eq("id", "menu_logo").single()
+    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_logo").single()
       .then(({ data }) => { data?.state?.dataUri ? setLogoDataUri(data.state.dataUri) : loadDefault(); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveLogo = async (dataUri) => {
     setLogoDataUri(dataUri);
     if (!supabase) return;
-    await supabase.from("service_settings")
+    await supabase.from(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "menu_logo", state: { dataUri }, updated_at: new Date().toISOString() }, { onConflict: "id" });
   };
 
   // ── Load print layout from Supabase on mount ─────────────────────────────
   useEffect(() => {
     if (!supabase) { layoutLoaded.current = true; return; }
-    supabase.from("service_settings").select("state").eq("id", "menu_layout_global").maybeSingle()
+    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_global").maybeSingle()
       .then(({ data, error }) => {
         if (error) console.error("Layout load error:", error);
         if (data?.state && Object.keys(data.state).length > 0) setGlobalLayout(data.state);
@@ -6783,7 +6659,7 @@ export default function App() {
     setLayoutSaving(true); setLayoutSaved(false);
     const toSave = globalLayoutRef.current;
     if (supabase) {
-      const { error } = await supabase.from("service_settings")
+      const { error } = await supabase.from(TABLES.SERVICE_SETTINGS)
         .upsert({ id: "menu_layout_global", state: toSave, updated_at: new Date().toISOString() }, { onConflict: "id" });
       if (error) { console.error("Layout save failed:", error); setLayoutSaving(false); return; }
     }
@@ -6803,7 +6679,7 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) return;
-    supabase.from("service_settings").select("state").eq("id", "menu_layout_v2").maybeSingle()
+    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_v2").maybeSingle()
       .then(({ data }) => {
         if (data?.state?.version === 2) {
           setMenuTemplate(data.state);
@@ -6822,7 +6698,7 @@ export default function App() {
     const toSave = menuTemplateRef.current;
     if (!toSave) { setTemplateSaving(false); return; }
     if (supabase) {
-      const { error } = await supabase.from("service_settings")
+      const { error } = await supabase.from(TABLES.SERVICE_SETTINGS)
         .upsert({ id: "menu_layout_v2", state: toSave, updated_at: new Date().toISOString() }, { onConflict: "id" });
       if (error) { console.error("Template save failed:", error); setTemplateSaving(false); return; }
     }
@@ -6837,7 +6713,7 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) return;
-    supabase.from("service_settings").select("state").eq("id", "menu_gen_rules").maybeSingle()
+    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_rules").maybeSingle()
       .then(({ data }) => {
         if (data?.state && typeof data.state === "object") {
           setMenuRules(normalizeMenuRules(data.state));
@@ -6858,7 +6734,7 @@ export default function App() {
     setMenuRulesSaving(true);
     setMenuRulesSaved(false);
     if (supabase) {
-      const { error } = await supabase.from("service_settings")
+      const { error } = await supabase.from(TABLES.SERVICE_SETTINGS)
         .upsert({ id: "menu_gen_rules", state: menuRulesRef.current, updated_at: new Date().toISOString() }, { onConflict: "id" });
       if (error) {
         console.error("Menu rules save failed:", error);
@@ -6878,7 +6754,7 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) return;
-    supabase.from("service_settings").select("state").eq("id", "quick_access").maybeSingle()
+    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "quick_access").maybeSingle()
       .then(({ data }) => {
         if (data?.state?.items?.length) setQuickAccessItems(data.state.items);
       });
@@ -6887,7 +6763,7 @@ export default function App() {
   const updateQuickAccess = (items) => {
     setQuickAccessItems(items);
     if (supabase) {
-      supabase.from("service_settings")
+      supabase.from(TABLES.SERVICE_SETTINGS)
         .upsert({ id: "quick_access", state: { items }, updated_at: new Date().toISOString() }, { onConflict: "id" })
         .then(() => {});
     }
@@ -6914,7 +6790,7 @@ export default function App() {
 
     const loadRemoteTables = async () => {
       const { data, error } = await supabase
-        .from(SERVICE_TABLES_TABLE)
+        .from(TABLES.SERVICE_TABLES)
         .select("table_id, data, updated_at")
         .order("table_id", { ascending: true });
 
@@ -6954,7 +6830,7 @@ export default function App() {
 
     const channel = supabase
       .channel("milka-service-tables-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: SERVICE_TABLES_TABLE }, payload => {
+      .on("postgres_changes", { event: "*", schema: "public", table: TABLES.SERVICE_TABLES }, payload => {
         if (payload.eventType === "DELETE") {
           const tableId = Number(payload.old?.table_id);
           if (!tableId) return;
@@ -7001,7 +6877,7 @@ export default function App() {
 
     const loadBevs = async () => {
       const { data, error } = await supabase
-        .from("beverages")
+        .from(TABLES.BEVERAGES)
         .select("id, category, name, notes, position")
         .order("position", { ascending: true });
       if (!mounted || error || !data) return;
@@ -7020,7 +6896,7 @@ export default function App() {
     loadBevs();
 
     const bevChannel = supabase.channel("milka-beverages")
-      .on("postgres_changes", { event: "*", schema: "public", table: "beverages" }, loadBevs)
+      .on("postgres_changes", { event: "*", schema: "public", table: TABLES.BEVERAGES }, loadBevs)
       .subscribe();
 
     return () => { mounted = false; supabase.removeChannel(bevChannel); };
@@ -7030,7 +6906,7 @@ export default function App() {
   const loadWines = useCallback(async () => {
     if (!supabase) return;
     const { data, error } = await supabase
-      .from("wines")
+      .from(TABLES.WINES)
       .select("key, name, wine_name, producer, vintage, region, country, by_glass")
       .order("name", { ascending: true });
     if (error || !data) return;
@@ -7046,7 +6922,7 @@ export default function App() {
     if (!supabase) return;
     loadWines();
     const wineChannel = supabase.channel("milka-wines")
-      .on("postgres_changes", { event: "*", schema: "public", table: "wines" }, loadWines)
+      .on("postgres_changes", { event: "*", schema: "public", table: TABLES.WINES }, loadWines)
       .subscribe();
     return () => supabase.removeChannel(wineChannel);
   }, [loadWines]);
@@ -7057,7 +6933,7 @@ export default function App() {
     let mounted = true;
 
     // Restore service date saved by a previous session
-    supabase.from("service_settings").select("state").eq("id", "service_date").single()
+    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "service_date").single()
       .then(({ data }) => {
         if (!mounted || !data?.state?.date) return;
         setServiceDate(d => d || data.state.date); // local state wins if already set
@@ -7290,7 +7166,7 @@ export default function App() {
         onSaveBeverages={saveBeverages}
         onSyncWines={syncWines}
         syncStatus={syncStatus}
-        supabaseUrl={SUPABASE_URL}
+        supabaseUrl={supabaseUrl}
         hasSupabase={hasSupabaseConfig}
         logoDataUri={logoDataUri}
         onSaveLogo={saveLogo}
@@ -7300,7 +7176,7 @@ export default function App() {
         onResetMenuLayout={() => {
           setGlobalLayout({});
           try { localStorage.removeItem("milka_menu_layout"); } catch {}
-          if (supabase) supabase.from("service_settings").upsert({ id: "menu_layout_global", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" }).then(() => {});
+          if (supabase) supabase.from(TABLES.SERVICE_SETTINGS).upsert({ id: "menu_layout_global", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" }).then(() => {});
         }}
         quickAccessItems={quickAccessItems}
         onUpdateQuickAccess={updateQuickAccess}
