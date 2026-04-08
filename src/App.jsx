@@ -28,6 +28,7 @@ import {
 import { makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM } from "./utils/tableHelpers.js";
 import { fuzzy, fuzzyDrink } from "./utils/search.js";
 import { useIsMobile } from "./hooks/useIsMobile.js";
+import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { AdminLayout } from "./components/admin/index.js";
 import { DIETARY_KEYS, RESTRICTIONS, RESTRICTION_GROUPS, restrLabel, restrCompact } from "./constants/dietary.js";
 import { WATER_OPTS, waterStyle, PAIRINGS, pairingStyle } from "./constants/pairings.js";
@@ -2892,12 +2893,36 @@ export default function App() {
 
     loadBevs();
 
-    const bevChannel = supabase.channel("milka-beverages")
-      .on("postgres_changes", { event: "*", schema: "public", table: TABLES.BEVERAGES }, loadBevs)
-      .subscribe();
-
-    return () => { mounted = false; supabase.removeChannel(bevChannel); };
+    return () => { mounted = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useRealtimeTable({
+    supabase,
+    channelName: "milka-beverages",
+    table: TABLES.BEVERAGES,
+    onChange: () => {
+      if (supabase) {
+        supabase
+          .from(TABLES.BEVERAGES)
+          .select("id, category, name, notes, position")
+          .order("position", { ascending: true })
+          .then(({ data, error }) => {
+            if (error || !data) return;
+            const byCat = cat => data
+              .filter(r => r.category === cat)
+              .map((r, i) => ({ id: r.id, name: r.name, notes: r.notes || "", position: r.position ?? i }));
+            const c = byCat("cocktail");
+            const s = byCat("spirit");
+            const b = byCat("beer");
+            setCocktails(c);
+            setSpirits(s);
+            setBeers(b);
+            writeLocalBeverages({ cocktails: c, spirits: s, beers: b });
+          });
+      }
+    },
+    enabled: Boolean(supabase),
+  });
 
   // ── Wines: load from Supabase wines table + realtime ─────────────────────────
   const loadWines = useCallback(async () => {
@@ -2918,11 +2943,16 @@ export default function App() {
   useEffect(() => {
     if (!supabase) return;
     loadWines();
-    const wineChannel = supabase.channel("milka-wines")
-      .on("postgres_changes", { event: "*", schema: "public", table: TABLES.WINES }, loadWines)
-      .subscribe();
-    return () => supabase.removeChannel(wineChannel);
+    return undefined;
   }, [loadWines]);
+
+  useRealtimeTable({
+    supabase,
+    channelName: "milka-wines",
+    table: TABLES.WINES,
+    onChange: () => { loadWines(); },
+    enabled: Boolean(supabase),
+  });
 
   // ── Service date + reservations: load from Supabase + realtime ──────────────
   useEffect(() => {
