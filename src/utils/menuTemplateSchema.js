@@ -69,15 +69,17 @@ export const BLOCK_META = {
   },
   forced_pairing: {
     label: "Forced Pairing", group: "content", color: "#c86e6e", bg: "#fff2f2", icon: "⚑",
-    desc: "Forces a specific drink pairing for this course row. Use course force_pairing fields, or override the text here.",
+    desc: "Forces a specific drink pairing for this course row. Pick a drink product from the catalog (recommended), or override the text here.",
     fields: [
       { key: "useCourseForceFields", label: "Use course forced pairing fields first", type: "checkbox" },
+      { key: "catalogType", label: "Catalog type", type: "select", options: ["", "cocktail", "spirit", "beer", "wine"] },
+      { key: "catalogItemId", label: "Catalog item", type: "catalog_item" },
       { key: "title",  label: "Title (EN)", type: "text", placeholder: "KITCHEN MARTINI" },
       { key: "sub",    label: "Sub (EN)",   type: "text", placeholder: "" },
       { key: "title_si", label: "Title (SI)", type: "text", placeholder: "" },
       { key: "sub_si",   label: "Sub (SI)",   type: "text", placeholder: "" },
     ],
-    defaults: { useCourseForceFields: true, title: "", sub: "", title_si: "", sub_si: "" },
+    defaults: { useCourseForceFields: true, catalogType: "", catalogItemId: null, title: "", sub: "", title_si: "", sub_si: "" },
   },
   by_the_glass: {
     label: "By the Glass",  group: "content", color: "#5a9e6e", bg: "#f0f8f2", icon: "◷",

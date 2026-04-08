@@ -3732,6 +3732,7 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
       layoutStyles,
       menuRules: normalizedMenuRules,
       menuTemplate,
+      catalog: { wines, cocktails, spirits, beers },
       _logo: logoDataUri,
     });
     const w = window.open("", "_blank", "width=620,height=880");
@@ -3770,6 +3771,7 @@ function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutSty
       layoutStyles,
       menuRules: normalizedMenuRules,
       menuTemplate,
+      catalog: { wines, cocktails, spirits, beers },
       _logo: logoDataUri,
     });
     setPreviewHtml(html);

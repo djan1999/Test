@@ -434,7 +434,7 @@ function AlignButtons({ value, onChange }) {
   );
 }
 
-function BlockInspector({ block, onUpdate, menuCourses }) {
+function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = [], spirits = [], beers = [] }) {
   if (!block) return (
     <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#ccc", letterSpacing: 1, padding: "24px 0", textAlign: "center", lineHeight: 2 }}>
       SELECT A CELL<br />TO CONFIGURE
@@ -463,6 +463,51 @@ function BlockInspector({ block, onUpdate, menuCourses }) {
       <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: meta.color || "#888", textTransform: "uppercase", marginBottom: 14 }}>
         {meta.icon} {meta.label}
       </div>
+
+      {/* Forced Pairing: catalog picker (supplements the schema-driven fields) */}
+      {block.type === "forced_pairing" && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>
+            Product reference
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+            <select
+              value={block.catalogType || ""}
+              onChange={e => setField("catalogType", e.target.value)}
+              style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
+            >
+              <option value="">(none)</option>
+              <option value="cocktail">Cocktail</option>
+              <option value="spirit">Spirit</option>
+              <option value="beer">Beer</option>
+              <option value="wine">Wine</option>
+            </select>
+            <select
+              value={block.catalogId ?? ""}
+              onChange={e => setField("catalogId", e.target.value ? Number(e.target.value) : null)}
+              disabled={!block.catalogType}
+              style={{ ...baseInp, fontSize: 10.5, width: "100%", opacity: block.catalogType ? 1 : 0.6 }}
+            >
+              <option value="">(select item)</option>
+              {(() => {
+                const list = block.catalogType === "cocktail" ? cocktails
+                  : block.catalogType === "spirit" ? spirits
+                  : block.catalogType === "beer" ? beers
+                  : block.catalogType === "wine" ? wines
+                  : [];
+                return list.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}{item.vintage ? ` ${item.vintage}` : ""}{item.producer ? ` · ${item.producer}` : ""}{item.notes ? ` · ${item.notes}` : ""}
+                  </option>
+                ));
+              })()}
+            </select>
+            <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.5 }}>
+              When set, this will render the product’s name/notes on the menu (no hardcoded text needed).
+            </div>
+          </div>
+        </div>
+      )}
 
       {fields.map(field => (
         <div key={field.key} style={{ marginBottom: 14 }}>
@@ -1841,6 +1886,10 @@ export default function MenuTemplateEditor({
               block={selectedBlock}
               onUpdate={updateSelectedBlock}
               menuCourses={menuCourses}
+              wines={wines}
+              cocktails={cocktails}
+              spirits={spirits}
+              beers={beers}
             />
           </div>
         )}

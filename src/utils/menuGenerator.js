@@ -122,6 +122,7 @@ export function generateMenuHTML({
   menuTitle = "WINTER MENU",
   teamNames = "",
   menuCourses = [],
+  beverages = null,
   beerChoice = null,
   lang = "en",
   seatOutputOverrides = {},
@@ -140,6 +141,24 @@ export function generateMenuHTML({
 }) {
   const s = (key, def) => key in layoutStyles ? layoutStyles[key] : def;
   const rules = normalizeMenuRules(menuRules);
+
+  const bev = beverages || {};
+  const allBeverageItems = (() => {
+    const out = [];
+    const add = (type, arr) => {
+      (Array.isArray(arr) ? arr : []).forEach(item => {
+        if (!item) return;
+        const id = item.id ?? item.key ?? item.name;
+        out.push({ type, id: String(id), item });
+      });
+    };
+    add("wine", bev.wines);
+    add("cocktail", bev.cocktails);
+    add("spirit", bev.spirits);
+    add("beer", bev.beers);
+    return out;
+  })();
+  const findBeverage = (type, id) => allBeverageItems.find(x => x.type === type && x.id === String(id))?.item || null;
 
   const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
   const PAIRING_LABELS = lang === "si"
