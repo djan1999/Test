@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
+import { baseInput } from "../../styles/mixins.js";
 
 const FONT = tokens.font;
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
@@ -74,10 +75,10 @@ export default function GateScreen({ onPass }) {
               autoCapitalize="off"
               spellCheck={false}
               style={{
-                ...baseInp,
+                ...baseInput,
                 textAlign: "center",
                 letterSpacing: show ? 2 : 6,
-                fontSize: MOBILE_SAFE_INPUT_SIZE,
+                fontSize: tokens.mobileInputSize,
                 paddingRight: 44,
                 borderColor: shake ? "#f0c0c0" : "#e8e8e8",
                 transition: "border-color 0.2s",

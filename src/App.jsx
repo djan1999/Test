@@ -294,8 +294,6 @@ function optionalExtrasFromCourses(menuCourses = []) {
 
 const circBtnSm = { ...mixinCircleButton };
 
-const loadMenuCoursesRef = useRef(null);
-
 // ── Menu Sync Tab ─────────────────────────────────────────────────────────────
 
 // ── Admin Panel ───────────────────────────────────────────────────────────────
@@ -1612,6 +1610,7 @@ export default function App() {
   const saveTimerRef       = useRef(null);
   const prevTablesJsonRef  = useRef((initialState.tables || initTables).map(t => JSON.stringify(sanitizeTable(t))));
   const tablesRef          = useRef(tables);
+  const loadMenuCoursesRef = useRef(null);
 
   const offlineQueue = useOfflineQueue({ supabase });
   const enqueueServiceTableUpsert = useCallback(async (rows) => {
