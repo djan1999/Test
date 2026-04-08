@@ -382,8 +382,6 @@ function optionalPairingsFromCourses(menuCourses = []) {
 
 const circBtnSm = { ...mixinCircleButton };
 
-const loadMenuCoursesRef = useRef(null);
-
 // ── Menu Sync Tab ─────────────────────────────────────────────────────────────
 
 // ── Admin Panel ───────────────────────────────────────────────────────────────
@@ -1664,6 +1662,7 @@ export default function App() {
   const initialState  = localSnapshot || defaultBoardState();
 
   const localBev = readLocalBeverages();
+  const loadMenuCoursesRef = useRef(null);
 
   const [tables,    setTables]    = useState(initialState.tables);
   const [menuCourses, setMenuCourses] = useState([]); // live from Supabase
