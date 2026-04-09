@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 import { writeTeamNames, readTeamNames, writeMenuTitle, readMenuTitle, writeThankYouNote, readThankYouNote } from "../../utils/storage.js";
-import { applyMenuOverride, applyCourseRestriction, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, optionalExtrasFromCourses } from "../../utils/menuUtils.js";
+import { applyMenuOverride, applyCourseRestriction, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, optionalExtrasFromCourses, optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 import { TABLES, supabase } from "../../lib/supabaseClient.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
@@ -46,7 +46,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
   const [previewHtml, setPreviewHtml] = useState("");
   const genLoaded = useRef(false);
 
-  const optionalExtras = useMemo(() => optionalExtrasFromCourses(menuCourses), [menuCourses]);
+  const optionalExtras   = useMemo(() => optionalExtrasFromCourses(menuCourses),  [menuCourses]);
+  const optionalPairings = useMemo(() => optionalPairingsFromCourses(menuCourses), [menuCourses]);
 
   const updSeat = (seatId, field, value) => {
     if (!upd) return;
@@ -566,6 +567,27 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                     })()}
                   </div>
                   {/* Optional extras (data-driven from courses optional_flag) */}
+                  {optionalPairings.length > 0 && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e8f0f8" }}>
+                      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Optional Pairings</div>
+                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                        {optionalPairings.map(opt => {
+                          const active = !!s.optionalPairings?.[opt.key]?.ordered;
+                          return (
+                            <button key={opt.key} onClick={() => updSeat(s.id, "optionalPairings", {
+                              ...(s.optionalPairings || {}),
+                              [opt.key]: { ordered: !active },
+                            })} style={{
+                              fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                              border: `1px solid ${active ? "#a0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                              background: active ? "#f4f8e8" : "#fff",
+                              color: active ? "#5a7820" : "#bbb",
+                            }}>{opt.label} {active ? "✓" : ""}</button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   {optionalExtras.length > 0 && (
                     <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e8f0f8" }}>
                       <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Extras</div>

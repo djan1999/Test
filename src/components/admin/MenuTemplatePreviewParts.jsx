@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FONT, baseInp } from "./adminStyles.js";
-import { optionalExtrasFromCourses } from "../../utils/menuUtils.js";
+import { optionalExtrasFromCourses, optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 
 const SELECTED_RING = "#4b4b88";
 
@@ -144,7 +144,8 @@ export function PreviewDataPanel({
 
   const updSeat = patch => onUpdateSeat(seatIdx, patch);
 
-  const optionalExtras = useMemo(() => optionalExtrasFromCourses(menuCourses), [menuCourses]);
+  const optionalExtras   = useMemo(() => optionalExtrasFromCourses(menuCourses),  [menuCourses]);
+  const optionalPairings = useMemo(() => optionalPairingsFromCourses(menuCourses), [menuCourses]);
 
   const addGlass  = item => updSeat({ glasses:   [...seat.glasses,   item] });
   const addAp     = item => updSeat({ aperitifs: [...seat.aperitifs, { ...item, __type: item.__type || "wine" }] });
@@ -255,6 +256,23 @@ export function PreviewDataPanel({
                 </button>
               ))}
             </div>
+            {optionalPairings.length > 0 && (<>
+              <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6, marginTop: 8 }}>
+                P{seatIdx + 1} OPT. PAIRINGS
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 6 }}>
+                {optionalPairings.map(opt => {
+                  const active = !!(seat.optionalPairings || {})[opt.key]?.ordered;
+                  return (
+                    <button key={opt.key} onClick={() => {
+                      const cur = { ...(seat.optionalPairings || {}) };
+                      cur[opt.key] = { ordered: !active };
+                      updSeat({ optionalPairings: cur });
+                    }} style={btnStyle(active)}>{opt.label}</button>
+                  );
+                })}
+              </div>
+            </>)}
             {optionalExtras.length > 0 && (<>
               <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>
                 P{seatIdx + 1} EXTRAS

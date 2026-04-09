@@ -13,6 +13,7 @@ import {
   parseBilingual, applyCourseRestriction,
   RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP,
   parseMenuRow, RESTRICTION_KEYS, normalizeCourseCategory,
+  optionalPairingsFromCourses,
 } from "./utils/menuUtils.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
 import { buildDefaultTemplate, makeRowId } from "./utils/menuTemplateSchema.js";
@@ -367,16 +368,6 @@ function optionalExtrasFromCourses(menuCourses = []) {
   return [...byKey.values()];
 }
 
-function optionalPairingsFromCourses(menuCourses = []) {
-  const byKey = new Map();
-  (menuCourses || []).forEach((c) => {
-    const key = normalizeOptionalKey(c?.optional_pairing_flag);
-    if (!key) return;
-    const label = String(c?.optional_pairing_label || c?.menu?.name || key).trim() || key;
-    byKey.set(key, { key, label });
-  });
-  return [...byKey.values()];
-}
 
 const circBtnSm = { ...mixinCircleButton };
 // ── Menu Sync Tab ─────────────────────────────────────────────────────────────
@@ -501,7 +492,7 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
 }
 
 // ── Detail View ───────────────────────────────────────────────────────────────
-function Detail({ table, optionalExtras = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages }) {
+function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages }) {
   const isMobile = useIsMobile(860);
   const row1 = isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
   const seatCount = table.seats?.length || 0;
@@ -514,7 +505,6 @@ function Detail({ table, optionalExtras = [], wines = [], cocktails = [], spirit
     (s.beers?.length || 0) > 0 ||
     (s.pairing && s.pairing !== "—")
   );
-  const optionalPairings = optionalPairingsFromCourses(menuCourses);
   return (
     <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "20px 12px 28px" : "24px 16px", overflowX: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
@@ -822,33 +812,19 @@ function Detail({ table, optionalExtras = [], wines = [], cocktails = [], spirit
               {optionalPairings.length > 0 && (
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
                   {optionalPairings.map(opt => {
-                    const cur = seat.optionalPairings?.[opt.key] || { ordered: false, mode: "alco" };
-                    const active = !!cur.ordered;
+                    const active = !!seat.optionalPairings?.[opt.key]?.ordered;
                     return (
-                      <div key={opt.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 120 }}>
+                      <div key={opt.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
                         <div style={{ ...fieldLabel, marginBottom: 4 }}>{opt.label}</div>
                         <button onClick={() => updSeat(seat.id, "optionalPairings", {
                           ...(seat.optionalPairings || {}),
-                          [opt.key]: { ...cur, ordered: !cur.ordered, mode: cur.mode || "alco" },
+                          [opt.key]: { ordered: !active },
                         })} style={{
                           fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 8px", border: "1px solid",
-                          borderColor: active ? "#e0c8c8" : "#ebebeb", borderRadius: 2, cursor: "pointer",
-                          background: active ? "#fff5f5" : "#fff", color: active ? "#9a5050" : "#555",
-                        }}>{active ? "ENABLED" : "DISABLED"}</button>
-                        <select value={cur.mode || "alco"} disabled={!active}
-                          onChange={e => updSeat(seat.id, "optionalPairings", {
-                            ...(seat.optionalPairings || {}),
-                            [opt.key]: { ...cur, ordered: true, mode: e.target.value === "nonalc" ? "nonalc" : "alco" },
-                          })}
-                          style={{
-                            fontFamily: FONT, fontSize: 10, padding: "4px 5px",
-                            border: "1px solid #ebebeb", borderRadius: 2,
-                            background: "#fff", color: "#1a1a1a", outline: "none",
-                            opacity: active ? 1 : 0.3, width: "100%",
-                          }}>
-                          <option value="alco">Alcoholic</option>
-                          <option value="nonalc">Non-Alcoholic</option>
-                        </select>
+                          borderColor: active ? "#aaddaa" : "#ebebeb", borderRadius: 2, cursor: "pointer",
+                          background: active ? "#f0faf0" : "#fff", color: active ? "#4a8a4a" : "#555",
+                          transition: "all 0.1s",
+                        }}>{active ? "YES" : "NO"}</button>
                       </div>
                     );
                   })}
@@ -1065,7 +1041,7 @@ const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","P
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
 // cards on every DisplayBoard re-render (which caused the visual overlap animation glitch).
-function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onUnseat, optionalExtras = [], aperitifOptions, wines = [], cocktails = [] }) {
+function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onUnseat, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [] }) {
     const isSeated = t.active;
     const allRestr = (t.restrictions || []).filter(r => r.note);
     const [assigningIdx, setAssigningIdx] = useState(null);
@@ -1237,7 +1213,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                         {WATER_QUICK.map(opt => wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt)))}
                       </div>
                       <div style={{ width: 1, height: 16, background: "#e0e0e0", margin: "0 2px" }} />
-                      {/* Optional extras quick toggles (data-driven from courses optional_flag) */}
+                      {/* Optional extras quick toggles */}
                       {(optionalExtras || []).slice(0, 3).map((dish) => {
                         const extra = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
                         const active = !!extra.ordered;
@@ -1253,6 +1229,27 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                             }}
                           >
                             {String(dish.name || dish.key || "").slice(0, 8)}
+                          </button>
+                        );
+                      })}
+                      {/* Optional pairing quick toggles */}
+                      {(optionalPairings || []).slice(0, 3).map((opt) => {
+                        const active = !!s.optionalPairings?.[opt.key]?.ordered;
+                        return (
+                          <button
+                            key={opt.key}
+                            onClick={() => updSeat && updSeat(t.id, s.id, "optionalPairings", {
+                              ...(s.optionalPairings || {}),
+                              [opt.key]: { ordered: !active },
+                            })}
+                            style={{
+                              fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "3px 9px",
+                              border: `1px solid ${active ? "#a0c8a0" : "#e8e8e8"}`, borderRadius: 20, cursor: "pointer",
+                              background: active ? "#eaf4ea" : "#fff", color: active ? "#3a7a3a" : "#aaa",
+                              transition: "all 0.1s",
+                            }}
+                          >
+                            {String(opt.label || opt.key || "").slice(0, 8)}
                           </button>
                         );
                       })}
@@ -1396,7 +1393,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
     );
 }
 
-function DisplayBoard({ tables, optionalExtras = [], upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [] }) {
+function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [] }) {
   const isMobile = useIsMobile(700);
 
   const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
@@ -1448,6 +1445,7 @@ function DisplayBoard({ tables, optionalExtras = [], upd, quickMode = false, upd
                   onSeat={onSeat}
                   onUnseat={onUnseat}
                   optionalExtras={optionalExtras}
+                  optionalPairings={optionalPairings}
                   aperitifOptions={aperitifOptions}
                   wines={wines}
                   cocktails={cocktails}
@@ -1823,7 +1821,8 @@ export default function App() {
   boardStateRef.current = boardState;
   tablesRef.current = tables;
 
-  const dishes = useMemo(() => optionalExtrasFromCourses(menuCourses), [menuCourses]);
+  const dishes   = useMemo(() => optionalExtrasFromCourses(menuCourses),  [menuCourses]);
+  const pairings = useMemo(() => optionalPairingsFromCourses(menuCourses), [menuCourses]);
 
   const mergeRemoteTables = rows => {
     const byId = new Map((Array.isArray(rows) ? rows : []).map(row => [Number(row.table_id), sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) })]));
@@ -1869,9 +1868,7 @@ export default function App() {
     const clonedExtras = source.extras
       ? Object.fromEntries(Object.entries(source.extras).map(([k, v]) => [k, v ? { ...v } : v]))
       : {};
-    const clonedOptionalPairings = source.optionalPairings
-      ? Object.fromEntries(Object.entries(source.optionalPairings).map(([k, v]) => [k, v ? { ...v } : v]))
-      : {};
+    const clonedOptionalPairings = source.optionalPairings ? { ...source.optionalPairings } : {};
     const nextSeats = seats.map(s => (
       s.id === source.id
         ? s
@@ -2997,6 +2994,7 @@ export default function App() {
               <DisplayBoard
                 tables={visibleTables}
                 optionalExtras={dishes}
+                optionalPairings={pairings}
                 upd={upd}
                 quickMode={quickView === "service"}
                 updSeat={updSeat}
@@ -3014,6 +3012,7 @@ export default function App() {
         <Detail
           table={selTable}
           optionalExtras={dishes}
+          optionalPairings={pairings}
           wines={wines}
           cocktails={cocktails}
           spirits={spirits}

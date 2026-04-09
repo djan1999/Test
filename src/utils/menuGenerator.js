@@ -484,7 +484,7 @@ export function generateMenuHTML({
           const pairingFlag = normalizeCourseToken(rb.pairingFlag || course.optional_pairing_flag || "");
           const pairingState = seat.optionalPairings?.[pairingFlag];
           if (!pairingFlag || !pairingState?.ordered) return null;
-          const isNonAlc = String(pairingState.mode || "alco").trim().toLowerCase() === "nonalc";
+          const isNonAlc = String(seat.pairing || "").trim() === "Non-Alc";
           const itemId = isNonAlc
             ? (rb.naCatalogItemId ?? null)
             : (rb.catalogItemId ?? null);

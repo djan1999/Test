@@ -32,7 +32,18 @@ export const normalizeCourseCategory = (value, optionalFlag = "") => {
 };
 
 export const normalizeOptionalKey = (value) =>
-  String(value ?? "").toLowerCase().trim().replace(/[^a-z0-9]/g, "") || null;
+  String(value ?? "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || null;
+
+export const optionalPairingsFromCourses = (menuCourses = []) => {
+  const byKey = new Map();
+  (menuCourses || []).forEach((c) => {
+    const key = normalizeOptionalKey(c?.optional_pairing_flag);
+    if (!key) return;
+    const label = String(c?.optional_pairing_label || c?.menu?.name || key).trim() || key;
+    byKey.set(key, { key, label });
+  });
+  return [...byKey.values()];
+};
 
 export const optionalExtrasFromCourses = (menuCourses = []) => {
   const byKey = new Map();

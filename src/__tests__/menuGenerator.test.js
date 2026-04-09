@@ -350,7 +350,7 @@ describe("generateMenuHTML — pairing", () => {
     expect(html).not.toContain("CHEF MARTINI");
   });
 
-  it("uses ALCO or N/A product in optional-pairing block based on seat optionalPairings mode", () => {
+  it("uses ALCO or N/A product in optional-pairing block based on seat pairing", () => {
     const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
     const template = {
       version: 2,
@@ -378,8 +378,8 @@ describe("generateMenuHTML — pairing", () => {
         { id: 22, name: "Garden Sour", notes: "apple, herbs" },
       ],
     };
-    const htmlAlco = render({ pairing: "—", optionalPairings: { crayfish_pairing: { ordered: true, mode: "alco" } } }, {}, [crayfish], { menuTemplate: template, beverages });
-    const htmlNa = render({ pairing: "—", optionalPairings: { crayfish_pairing: { ordered: true, mode: "nonalc" } } }, {}, [crayfish], { menuTemplate: template, beverages });
+    const htmlAlco = render({ pairing: "Wine",    optionalPairings: { crayfish_pairing: { ordered: true } } }, {}, [crayfish], { menuTemplate: template, beverages });
+    const htmlNa   = render({ pairing: "Non-Alc", optionalPairings: { crayfish_pairing: { ordered: true } } }, {}, [crayfish], { menuTemplate: template, beverages });
     expect(htmlAlco).toContain("Kitchen Martini");
     expect(htmlNa).toContain("Garden Sour");
   });
@@ -404,13 +404,13 @@ describe("generateMenuHTML — pairing", () => {
       ],
     };
     const htmlAlco = render(
-      { pairing: "—", optionalPairings: { chicken_dessert_pairing: { ordered: true, mode: "alco" } } },
+      { pairing: "Wine",    optionalPairings: { chicken_dessert_pairing: { ordered: true } } },
       {},
       [chickenDessert],
       { menuTemplate: template }
     );
     const htmlNa = render(
-      { pairing: "—", optionalPairings: { chicken_dessert_pairing: { ordered: true, mode: "nonalc" } } },
+      { pairing: "Non-Alc", optionalPairings: { chicken_dessert_pairing: { ordered: true } } },
       {},
       [chickenDessert],
       { menuTemplate: template }
