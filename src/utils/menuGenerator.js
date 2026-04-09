@@ -460,20 +460,23 @@ export function generateMenuHTML({
       continue;
     }
 
+    // All standalone drink rows use the courseColSplit so they align with course pairing text.
+    const drinkRowWp = `${_courseLeft}/${100 - _courseLeft}`;
+
     // ── aperitif ──
     if (lb?.type === "aperitif" || rb?.type === "aperitif") {
-      if (aQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(aQ.shift()), widthPreset: wp, gap: consumeGap() });
+      if (aQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(aQ.shift()), widthPreset: drinkRowWp, gap: consumeGap() });
       continue;
     }
 
     // ── Standalone drinks block (by_the_glass / bottle) outside a course row ──
     const standaloneSrc = normDrinkSource(lb) || normDrinkSource(rb);
     if (standaloneSrc === "by_the_glass" || (lb?.type === "by_the_glass" || rb?.type === "by_the_glass")) {
-      if (gQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(gQ.shift()), widthPreset: wp, gap: consumeGap() });
+      if (gQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(gQ.shift()), widthPreset: drinkRowWp, gap: consumeGap() });
       continue;
     }
     if (standaloneSrc === "bottle" || (lb?.type === "bottle" || rb?.type === "bottle")) {
-      if (bQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(bQ.shift()), widthPreset: wp, gap: consumeGap() });
+      if (bQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(bQ.shift()), widthPreset: drinkRowWp, gap: consumeGap() });
       continue;
     }
 
@@ -601,8 +604,9 @@ export function generateMenuHTML({
 
 
   // ── Append leftover drink queues after template walk ──────────────────────
-  while (gQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(gQ.shift()), widthPreset: "55/45" });
-  while (bQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(bQ.shift()), widthPreset: "55/45" });
+  const _drinkRowWp = `${_courseLeft}/${100 - _courseLeft}`;
+  while (gQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(gQ.shift()), widthPreset: _drinkRowWp });
+  while (bQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(bQ.shift()), widthPreset: _drinkRowWp });
 
   if (_rowsOnly) return rows;
 
