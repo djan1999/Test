@@ -572,11 +572,12 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                       <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Optional Pairings</div>
                       <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
                         {optionalPairings.map(opt => {
-                          const active = !!s.optionalPairings?.[opt.key];
+                          const raw = s.optionalPairings?.[opt.key];
+                          const active = raw?.ordered !== undefined ? !!raw.ordered : opt.defaultOn !== false;
                           return (
                             <button key={opt.key} onClick={() => updSeat(s.id, "optionalPairings", {
                               ...(s.optionalPairings || {}),
-                              [opt.key]: !active,
+                              [opt.key]: { ordered: !active },
                             })} style={{
                               fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
                               border: `1px solid ${active ? "#a0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",

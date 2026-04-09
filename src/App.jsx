@@ -1255,7 +1255,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                       })}
                       {/* Optional pairing quick toggles */}
                       {(optionalPairings || []).slice(0, 3).map((opt) => {
-                        const active = !!s.optionalPairings?.[opt.key]?.ordered;
+                        const raw = s.optionalPairings?.[opt.key];
+                        const active = raw?.ordered !== undefined ? !!raw.ordered : opt.defaultOn !== false;
                         return (
                           <button
                             key={opt.key}

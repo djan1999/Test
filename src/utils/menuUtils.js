@@ -39,8 +39,6 @@ export const optionalPairingsFromCourses = (menuCourses = []) => {
   (menuCourses || []).forEach((c) => {
     const key = normalizeOptionalKey(c?.optional_pairing_flag);
     if (!key) return;
-    const enabled = c?.optional_pairing_enabled !== false;
-    if (!enabled) return;
     const label = String(c?.optional_pairing_label || c?.menu?.name || key).trim() || key;
     const hasAlco = !!(
       c?.optional_pairing_alco?.name || c?.optional_pairing_alco?.sub ||

@@ -262,7 +262,8 @@ export function PreviewDataPanel({
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 6 }}>
                 {optionalPairings.map(opt => {
-                  const active = !!(seat.optionalPairings || {})[opt.key]?.ordered;
+                  const raw = (seat.optionalPairings || {})[opt.key];
+                  const active = raw?.ordered !== undefined ? !!raw.ordered : opt.defaultOn !== false;
                   return (
                     <button key={opt.key} onClick={() => {
                       const cur = { ...(seat.optionalPairings || {}) };

@@ -496,8 +496,12 @@ export function generateMenuHTML({
       const optionalPairingDrink = (() => {
         if (rbSource !== "optional_pairing") return null;
         const pairingFlag = normalizeCourseToken(course.optional_pairing_flag || "");
+        if (!pairingFlag) return null;
         const pairingState = seat.optionalPairings?.[pairingFlag];
-        if (!pairingFlag || !pairingState?.ordered) return null;
+        const isOrdered = pairingState?.ordered !== undefined
+          ? !!pairingState.ordered
+          : course.optional_pairing_default_on !== false;
+        if (!isOrdered) return null;
         const isNonAlc = String(seat.pairing || "").trim() === "Non-Alc";
         if (isNonAlc) {
           const d = lang === "si"
