@@ -39,8 +39,19 @@ export const optionalPairingsFromCourses = (menuCourses = []) => {
   (menuCourses || []).forEach((c) => {
     const key = normalizeOptionalKey(c?.optional_pairing_flag);
     if (!key) return;
+    const enabled = c?.optional_pairing_enabled !== false;
+    if (!enabled) return;
     const label = String(c?.optional_pairing_label || c?.menu?.name || key).trim() || key;
-    byKey.set(key, { key, label });
+    const hasAlco = !!(c?.wp?.name || c?.wp?.sub || c?.os?.name || c?.os?.sub || c?.premium?.name || c?.premium?.sub);
+    const hasNonAlco = !!(c?.na?.name || c?.na?.sub);
+    if (!hasAlco && !hasNonAlco) return;
+    byKey.set(key, {
+      key,
+      label,
+      hasAlco,
+      hasNonAlco,
+      defaultOn: c?.optional_pairing_default_on !== false,
+    });
   });
   return [...byKey.values()];
 };

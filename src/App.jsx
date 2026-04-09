@@ -13,6 +13,7 @@ import {
   parseBilingual, applyCourseRestriction,
   RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP,
   parseMenuRow, RESTRICTION_KEYS, normalizeCourseCategory,
+  normalizeOptionalKey, optionalPairingsFromCourses,
 } from "./utils/menuUtils.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
 import { buildDefaultTemplate, makeRowId } from "./utils/menuTemplateSchema.js";
@@ -342,9 +343,6 @@ const defaultBoardState = () => ({
   beers: initBeers,
 });
 
-const normalizeOptionalKey = (value) =>
-  String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-
 function optionalExtrasFromCourses(menuCourses = []) {
   const byKey = new Map();
   (menuCourses || []).forEach((c) => {
@@ -366,28 +364,6 @@ function optionalExtrasFromCourses(menuCourses = []) {
       key,
       name: label,
       pairings: pairings.length > 0 ? pairings : ["—"],
-    });
-  });
-  return [...byKey.values()];
-}
-
-function optionalPairingsFromCourses(menuCourses = []) {
-  const byKey = new Map();
-  (menuCourses || []).forEach((c) => {
-    const key = normalizeOptionalKey(c?.optional_pairing_flag);
-    if (!key) return;
-    const enabled = c?.optional_pairing_enabled !== false;
-    if (!enabled) return;
-    const label = String(c?.optional_pairing_label || c?.menu?.name || key).trim() || key;
-    const hasAlco = !!(c?.wp?.name || c?.wp?.sub || c?.os?.name || c?.os?.sub || c?.premium?.name || c?.premium?.sub);
-    const hasNonAlco = !!(c?.na?.name || c?.na?.sub);
-    if (!hasAlco && !hasNonAlco) return;
-    byKey.set(key, {
-      key,
-      label,
-      hasAlco,
-      hasNonAlco,
-      defaultOn: c?.optional_pairing_default_on !== false,
     });
   });
   return [...byKey.values()];

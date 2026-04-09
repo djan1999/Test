@@ -14,7 +14,10 @@ export const makeSeats = (n, ex = []) =>
     beers:     ex[i]?.beers     ?? [],
     pairing:   ex[i]?.pairing   ?? "",
     extras:    ex[i]?.extras    ?? {},
-    optionalPairings: ex[i]?.optionalPairings ?? {},
+    // Normalize legacy shape by dropping deprecated `mode` from optionalPairings entries.
+    optionalPairings: Object.fromEntries(
+      Object.entries(ex[i]?.optionalPairings || {}).map(([k, v]) => [k, { ordered: !!v?.ordered }])
+    ),
   }));
 
 export const fmt = d =>

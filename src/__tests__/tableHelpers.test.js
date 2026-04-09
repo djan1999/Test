@@ -14,12 +14,13 @@ describe("makeSeats", () => {
   });
 
   it("carries over existing seat values from the ex array", () => {
-    const ex = [{ water: "XC", glasses: ["g1"], cocktails: [], spirits: [], beers: [], pairing: "Wine", extras: { cake: true } }];
+    const ex = [{ water: "XC", glasses: ["g1"], cocktails: [], spirits: [], beers: [], pairing: "Wine", extras: { cake: true }, optionalPairings: { crayfish: { ordered: true, mode: "alco" } } }];
     const seats = makeSeats(2, ex);
     expect(seats[0].water).toBe("XC");
     expect(seats[0].glasses).toEqual(["g1"]);
     expect(seats[0].pairing).toBe("Wine");
     expect(seats[0].extras).toEqual({ cake: true });
+    expect(seats[0].optionalPairings).toEqual({ crayfish: { ordered: true } });
   });
 
   it("uses defaults for seats beyond the ex array length", () => {
