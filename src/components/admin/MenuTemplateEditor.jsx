@@ -869,7 +869,7 @@ export default function MenuTemplateEditor({
           menuType: previewMenuType,
           restrictions: (seat.restrictions || []).map(key => ({ note: key, pos: seat.id })),
           bottleWines: previewBottles,
-          birthday: !!seat._birthday,
+          birthday: false,
         };
         const html = generateMenuHTML({
           seat,

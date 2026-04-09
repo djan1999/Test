@@ -572,9 +572,28 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
     }}>
       {alerts.map(({ tableId, alert }) => {
         const seats = alert.seats || [];
-        const pairSeats   = seats.filter(s => s.pairing && s.pairing !== "—");
-        const beetSeats   = seats.filter(s => s.beet);
-        const cheeseSeats = seats.filter(s => s.cheese);
+        const pairSeats = seats.filter(s => s.pairing && s.pairing !== "—");
+        // Build extras groups — support both new array format and legacy {beet, cheese} format
+        const extrasMap = {};
+        seats.forEach(s => {
+          if (Array.isArray(s.extras)) {
+            s.extras.forEach(ex => {
+              if (!extrasMap[ex.key]) extrasMap[ex.key] = { name: ex.name, seats: [] };
+              extrasMap[ex.key].seats.push({ id: s.id, pairing: ex.pairing });
+            });
+          } else {
+            // legacy format
+            if (s.beet) {
+              if (!extrasMap.beetroot) extrasMap.beetroot = { name: "Beetroot", seats: [] };
+              extrasMap.beetroot.seats.push({ id: s.id, pairing: s.beet.pairing });
+            }
+            if (s.cheese) {
+              if (!extrasMap.cheese) extrasMap.cheese = { name: "Cheese", seats: [] };
+              extrasMap.cheese.seats.push({ id: s.id, pairing: "—" });
+            }
+          }
+        });
+        const extrasGroups = Object.values(extrasMap);
         const ts = new Date(alert.timestamp);
         const timeStr = `${String(ts.getHours()).padStart(2,"0")}:${String(ts.getMinutes()).padStart(2,"0")}`;
         return (
@@ -610,27 +629,17 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   })}
                 </div>
               )}
-              {beetSeats.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#666", minWidth: 60 }}>BEETROOT</span>
-                  {beetSeats.map(s => (
+              {extrasGroups.map(group => (
+                <div key={group.name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#666", minWidth: 60 }}>{group.name.toUpperCase()}</span>
+                  {group.seats.map(s => (
                     <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "#edf8e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>
-                      P{s.id}{s.beet.pairing && s.beet.pairing !== "—" ? ` · ${s.beet.pairing}` : ""}
+                      P{s.id}{s.pairing && s.pairing !== "—" ? ` · ${s.pairing}` : ""}
                     </span>
                   ))}
                 </div>
-              )}
-              {cheeseSeats.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#666", minWidth: 60 }}>CHEESE</span>
-                  {cheeseSeats.map(s => (
-                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "#fdf4e8", border: "1px solid #c8a060", color: "#7a5020" }}>
-                      P{s.id}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {pairSeats.length === 0 && beetSeats.length === 0 && cheeseSeats.length === 0 && (
+              ))}
+              {pairSeats.length === 0 && extrasGroups.length === 0 && (
                 <span style={{ fontFamily: FONT, fontSize: 11, color: "#bbb" }}>No extras noted</span>
               )}
             </div>

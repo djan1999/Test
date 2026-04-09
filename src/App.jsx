@@ -1361,15 +1361,16 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
             {quickMode && upd ? (
               <button onClick={() => {
                 const seats = t.seats || [];
-                const alertSeats = seats.map(s => {
-                  const beetExtra = s.extras?.beetroot || s.extras?.[1];
-                  return {
-                    id: s.id,
-                    pairing: s.pairing || null,
-                    beet: beetExtra?.ordered ? { pairing: beetExtra.pairing || "—" } : null,
-                    cheese: !!(s.extras?.cheese || s.extras?.[2])?.ordered,
-                  };
-                });
+                const alertSeats = seats.map(s => ({
+                  id: s.id,
+                  pairing: s.pairing || null,
+                  extras: (optionalExtras || [])
+                    .filter(d => !!(s.extras?.[d.key] || s.extras?.[d.id])?.ordered)
+                    .map(d => {
+                      const ex = s.extras?.[d.key] || s.extras?.[d.id];
+                      return { key: d.key, name: d.name, pairing: ex?.pairing || "—" };
+                    }),
+                }));
                 upd(t.id, "kitchenAlert", {
                   timestamp: new Date().toISOString(),
                   tableName: t.resName || null,
