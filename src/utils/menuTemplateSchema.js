@@ -46,14 +46,23 @@ export const BLOCK_META = {
     ],
     defaults: { courseKey: "", showPairing: true },
   },
-  pairing: {
-    label: "Pairing",       group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "◎",
-    desc: "Drink pairing for this seat's selection (Wine / Non-Alc / OS / Premium). Falls back to by-the-glass from Danube Salmon onwards.",
+  drinks: {
+    label: "Drinks",        group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "◎",
+    desc: "Configurable drink column — select source: pairing, optional pairing, by-the-glass, or bottle.",
     fields: [
-      { key: "showByGlass", label: "Show by-the-glass fallback", type: "checkbox" },
-      { key: "showBottle",  label: "Show bottle wine fallback",  type: "checkbox" },
+      { key: "drinkSource", label: "Source", type: "select", options: ["pairing", "optional_pairing", "by_the_glass", "bottle"] },
+      { key: "pairingFlag", label: "Optional pairing key", type: "text", placeholder: "e.g. crayfish_pairing" },
+      { key: "showByGlass", label: "By-the-glass fallback", type: "checkbox" },
+      { key: "showBottle",  label: "Bottle wine fallback",  type: "checkbox" },
     ],
-    defaults: { showByGlass: true, showBottle: true },
+    defaults: {
+      drinkSource: "pairing",
+      pairingFlag: "",
+      showByGlass: true,
+      showBottle: true,
+      catalogType: "", catalogItemId: null,
+      naCatalogType: "", naCatalogItemId: null,
+    },
   },
   pairing_label: {
     label: "Pairing Label", group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "T",
@@ -66,30 +75,6 @@ export const BLOCK_META = {
       { key: "spacing",   label: "Spacing below (pt)", type: "number", step: 0.5 },
     ],
     defaults: { text: "", align: "right", reserveWhenNoPairing: null, reserveHeightPt: null, spacing: 6 },
-  },
-  optional_pairing: {
-    label: "Optional Pairing", group: "content", color: "#c86e6e", bg: "#fff2f2", icon: "⚑",
-    desc: "Optional pairing output for this course row. Source text lives in the course editor; product refs are optional overrides.",
-    fields: [
-      { key: "pairingFlag", label: "Optional pairing key", type: "text", placeholder: "e.g. chicken_dessert_pairing" },
-    ],
-    defaults: {
-      pairingFlag: "",
-      catalogType: "", catalogItemId: null,
-      naCatalogType: "", naCatalogItemId: null,
-    },
-  },
-  by_the_glass: {
-    label: "By the Glass",  group: "content", color: "#5a9e6e", bg: "#f0f8f2", icon: "◷",
-    desc: "Consumes the next by-the-glass wine from the seat's glass queue",
-    fields: [],
-    defaults: {},
-  },
-  bottle: {
-    label: "Bottle Wine",   group: "content", color: "#5a9e6e", bg: "#f0f8f2", icon: "◫",
-    desc: "Consumes next table bottle wine from the queue",
-    fields: [],
-    defaults: {},
   },
   aperitif: {
     label: "Aperitif",      group: "content", color: "#7a6e9e", bg: "#f4f0fa", icon: "◇",
@@ -248,12 +233,13 @@ export function buildDefaultTemplate(menuCourses = []) {
     }
 
     const optionalPairingKey = norm(course.optional_pairing_flag || "");
+    const rightBlock = optionalPairingKey
+      ? { ...makeBlock("drinks"), drinkSource: "optional_pairing", pairingFlag: optionalPairingKey }
+      : makeBlock("drinks");
     rows.push({
       id: `course_${ck}`,
       left:  { type: "course", courseKey: ck },
-      right: optionalPairingKey
-        ? { ...makeBlock("optional_pairing"), pairingFlag: optionalPairingKey }
-        : makeBlock("pairing"),
+      right: rightBlock,
       widthPreset: "55/45",
       gap: 0,
     });

@@ -429,7 +429,10 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
 
   const setField = (key, val) => onUpdate({ ...block, [key]: val });
 
-  if (fields.length === 0 && block.type !== "optional_pairing") return (
+  const isDrinks = block.type === "drinks";
+  const drinkSource = isDrinks ? (block.drinkSource || "pairing") : null;
+
+  if (fields.length === 0 && !isDrinks) return (
     <div>
       <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: meta.color || "#888", textTransform: "uppercase", marginBottom: 8 }}>
         {meta.icon} {meta.label}
@@ -447,83 +450,68 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
         {meta.icon} {meta.label}
       </div>
 
-      {/* Optional Pairing: catalog picker (supplements the schema-driven fields) */}
-      {block.type === "optional_pairing" && (
+      {isDrinks && (
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>
-            Product reference (alcoholic)
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
-            <select
-              value={block.catalogType || ""}
-              onChange={e => setField("catalogType", e.target.value)}
-              style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
-            >
-              <option value="">(none)</option>
-              <option value="cocktail">Cocktail</option>
-              <option value="spirit">Spirit</option>
-              <option value="beer">Beer</option>
-              <option value="wine">Wine</option>
-            </select>
-            <select
-              value={block.catalogItemId ?? ""}
-              onChange={e => setField("catalogItemId", e.target.value ? Number(e.target.value) : null)}
-              disabled={!block.catalogType}
-              style={{ ...baseInp, fontSize: 10.5, width: "100%", opacity: block.catalogType ? 1 : 0.6 }}
-            >
-              <option value="">(select item)</option>
-              {(() => {
-                const list = block.catalogType === "cocktail" ? cocktails
-                  : block.catalogType === "spirit" ? spirits
-                  : block.catalogType === "beer" ? beers
-                  : block.catalogType === "wine" ? wines
-                  : [];
-                return list.map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}{item.vintage ? ` ${item.vintage}` : ""}{item.producer ? ` · ${item.producer}` : ""}{item.notes ? ` · ${item.notes}` : ""}
-                  </option>
-                ));
-              })()}
-            </select>
-            <div style={{ height: 1, background: "#f0f0f0", margin: "4px 0" }} />
-            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 2 }}>
-              Product reference (non-alcoholic)
+          <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>Source</div>
+          <select
+            value={drinkSource}
+            onChange={e => setField("drinkSource", e.target.value)}
+            style={{ ...baseInp, fontSize: 10.5, width: "100%", marginBottom: 12 }}
+          >
+            <option value="pairing">Pairing (Wine / Non-Alc / OS / Premium)</option>
+            <option value="optional_pairing">Optional Pairing (course-owned)</option>
+            <option value="by_the_glass">By the Glass</option>
+            <option value="bottle">Bottle Wine</option>
+          </select>
+
+          {drinkSource === "pairing" && (<>
+            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <input type="checkbox" checked={block.showByGlass !== false} onChange={e => setField("showByGlass", e.target.checked)} />
+              By-the-glass fallback
+            </label>
+            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <input type="checkbox" checked={block.showBottle !== false} onChange={e => setField("showBottle", e.target.checked)} />
+              Bottle wine fallback
+            </label>
+          </>)}
+
+          {drinkSource === "optional_pairing" && (<>
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>Optional pairing key</div>
+            <input value={block.pairingFlag || ""} onChange={e => setField("pairingFlag", e.target.value)} style={{ ...baseInp, fontSize: 10.5, width: "100%", marginBottom: 10 }} placeholder="e.g. crayfish_pairing" />
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>Product override (alcoholic)</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, marginBottom: 8 }}>
+              <select value={block.catalogType || ""} onChange={e => setField("catalogType", e.target.value)} style={{ ...baseInp, fontSize: 10.5, width: "100%" }}>
+                <option value="">(none — use course text)</option>
+                <option value="cocktail">Cocktail</option><option value="spirit">Spirit</option><option value="beer">Beer</option><option value="wine">Wine</option>
+              </select>
+              <select value={block.catalogItemId ?? ""} onChange={e => setField("catalogItemId", e.target.value ? Number(e.target.value) : null)} disabled={!block.catalogType} style={{ ...baseInp, fontSize: 10.5, width: "100%", opacity: block.catalogType ? 1 : 0.6 }}>
+                <option value="">(select item)</option>
+                {(block.catalogType === "cocktail" ? cocktails : block.catalogType === "spirit" ? spirits : block.catalogType === "beer" ? beers : block.catalogType === "wine" ? wines : []).map(item => (
+                  <option key={item.id} value={item.id}>{item.name}{item.vintage ? ` ${item.vintage}` : ""}{item.producer ? ` · ${item.producer}` : ""}</option>
+                ))}
+              </select>
             </div>
-            <select
-              value={block.naCatalogType || ""}
-              onChange={e => setField("naCatalogType", e.target.value)}
-              style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
-            >
-              <option value="">(none)</option>
-              <option value="cocktail">Cocktail</option>
-              <option value="spirit">Spirit</option>
-              <option value="beer">Beer</option>
-              <option value="wine">Wine</option>
-            </select>
-            <select
-              value={block.naCatalogItemId ?? ""}
-              onChange={e => setField("naCatalogItemId", e.target.value ? Number(e.target.value) : null)}
-              disabled={!block.naCatalogType}
-              style={{ ...baseInp, fontSize: 10.5, width: "100%", opacity: block.naCatalogType ? 1 : 0.6 }}
-            >
-              <option value="">(select item)</option>
-              {(() => {
-                const list = block.naCatalogType === "cocktail" ? cocktails
-                  : block.naCatalogType === "spirit" ? spirits
-                  : block.naCatalogType === "beer" ? beers
-                  : block.naCatalogType === "wine" ? wines
-                  : [];
-                return list.map(item => (
-                  <option key={`na-${item.id}`} value={item.id}>
-                    {item.name}{item.vintage ? ` ${item.vintage}` : ""}{item.producer ? ` · ${item.producer}` : ""}{item.notes ? ` · ${item.notes}` : ""}
-                  </option>
-                ));
-              })()}
-            </select>
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>Product override (non-alcoholic)</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, marginBottom: 8 }}>
+              <select value={block.naCatalogType || ""} onChange={e => setField("naCatalogType", e.target.value)} style={{ ...baseInp, fontSize: 10.5, width: "100%" }}>
+                <option value="">(none — use course text)</option>
+                <option value="cocktail">Cocktail</option><option value="spirit">Spirit</option><option value="beer">Beer</option><option value="wine">Wine</option>
+              </select>
+              <select value={block.naCatalogItemId ?? ""} onChange={e => setField("naCatalogItemId", e.target.value ? Number(e.target.value) : null)} disabled={!block.naCatalogType} style={{ ...baseInp, fontSize: 10.5, width: "100%", opacity: block.naCatalogType ? 1 : 0.6 }}>
+                <option value="">(select item)</option>
+                {(block.naCatalogType === "cocktail" ? cocktails : block.naCatalogType === "spirit" ? spirits : block.naCatalogType === "beer" ? beers : block.naCatalogType === "wine" ? wines : []).map(item => (
+                  <option key={`na-${item.id}`} value={item.id}>{item.name}{item.vintage ? ` ${item.vintage}` : ""}{item.producer ? ` · ${item.producer}` : ""}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.5 }}>Product overrides are optional. When empty, course editor text is used.</div>
+          </>)}
+
+          {(drinkSource === "by_the_glass" || drinkSource === "bottle") && (
             <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.5 }}>
-              ALCO / N/A product pickers are linked to menu-generation ALCO/N/A toggle.
+              Consumes next {drinkSource === "by_the_glass" ? "by-the-glass wine" : "bottle wine"} from the seat/table queue.
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -723,7 +711,7 @@ export default function MenuTemplateEditor({
   const previewTimer = useRef(null);
   const didMigrateSpacersRef = useRef(false);
   const didNormalizeRowGapsRef = useRef(false);
-  const didInsertForcedPairingBlocksRef = useRef(false);
+  const didMigrateDrinksRef = useRef(false);
 
   // ── Preview data state — configurable dummy seat (not persisted) ──
   const [previewDataOpen, setPreviewDataOpen] = useState(false);
@@ -816,6 +804,41 @@ export default function MenuTemplateEditor({
       }
     }
     onUpdateTemplate({ ...menuTemplate, rows: normalized });
+  }, [menuTemplate, onUpdateTemplate]);
+
+  // ── One-time migration: convert legacy block types to unified drinks ─────────
+  useEffect(() => {
+    if (didMigrateDrinksRef.current) return;
+    if (!Array.isArray(menuTemplate?.rows)) return;
+    const LEGACY_TYPES = new Set(["pairing", "optional_pairing", "forced_pairing", "by_the_glass", "bottle"]);
+    const hasLegacy = menuTemplate.rows.some(r =>
+      LEGACY_TYPES.has(r.left?.type) || LEGACY_TYPES.has(r.right?.type)
+    );
+    didMigrateDrinksRef.current = true;
+    if (!hasLegacy) return;
+    const migrate = (b) => {
+      if (!b || !LEGACY_TYPES.has(b.type)) return b;
+      const source =
+        b.type === "optional_pairing" || b.type === "forced_pairing" ? "optional_pairing"
+        : b.type === "by_the_glass" ? "by_the_glass"
+        : b.type === "bottle" ? "bottle"
+        : "pairing";
+      return {
+        ...b,
+        type: "drinks",
+        drinkSource: source,
+        catalogItemId: b.catalogItemId ?? b.catalogId ?? null,
+      };
+    };
+    const migrated = {
+      ...menuTemplate,
+      rows: menuTemplate.rows.map(r => ({
+        ...r,
+        left: migrate(r.left),
+        right: migrate(r.right),
+      })),
+    };
+    onUpdateTemplate(migrated);
   }, [menuTemplate, onUpdateTemplate]);
 
   // menuTitle and thankYouNote come from state (shared localStorage with MenuGenerator)

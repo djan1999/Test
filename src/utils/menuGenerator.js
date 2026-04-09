@@ -334,8 +334,16 @@ export function generateMenuHTML({
   let rows = [];
   let pendingGap = 0;      // deferred spacer gap — applied to the next row that actually renders
 
-  const PAIRING_RIGHT_TYPES = new Set(["pairing", "optional_pairing", "pairing_label", "aperitif"]);
-  const isOptionalPairingType = (type) => type === "optional_pairing";
+  const PAIRING_RIGHT_TYPES = new Set(["drinks", "pairing", "optional_pairing", "pairing_label", "aperitif"]);
+  const normDrinkSource = (b) => {
+    if (!b) return null;
+    if (b.type === "drinks") return b.drinkSource || "pairing";
+    if (b.type === "pairing") return "pairing";
+    if (b.type === "optional_pairing") return "optional_pairing";
+    if (b.type === "by_the_glass") return "by_the_glass";
+    if (b.type === "bottle") return "bottle";
+    return null;
+  };
   const _courseLeft = Math.min(99, Math.max(1, Math.round(Number(s("courseColSplit", 55)) || 55)));
 
   for (const tRow of effectiveTemplateRows) {
@@ -458,14 +466,13 @@ export function generateMenuHTML({
       continue;
     }
 
-    // ── by_the_glass (explicit standalone block) ──
-    if (lb?.type === "by_the_glass" || rb?.type === "by_the_glass") {
+    // ── Standalone drinks block (by_the_glass / bottle) outside a course row ──
+    const standaloneSrc = normDrinkSource(lb) || normDrinkSource(rb);
+    if (standaloneSrc === "by_the_glass" || (lb?.type === "by_the_glass" || rb?.type === "by_the_glass")) {
       if (gQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(gQ.shift()), widthPreset: wp, gap: consumeGap() });
       continue;
     }
-
-    // ── bottle (explicit standalone block) ──
-    if (lb?.type === "bottle" || rb?.type === "bottle") {
+    if (standaloneSrc === "bottle" || (lb?.type === "bottle" || rb?.type === "bottle")) {
       if (bQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(bQ.shift()), widthPreset: wp, gap: consumeGap() });
       continue;
     }
@@ -484,46 +491,46 @@ export function generateMenuHTML({
       let drink = null;
       const forcedBeerDrink = null;
 
-      const optionalPairingDrink = (() => {
-        // Optional pairing block: renders only when seat has enabled this pairing key.
-        if (isOptionalPairingType(rb?.type)) {
-          const pairingFlag = normalizeCourseToken(rb.pairingFlag || course.optional_pairing_flag || "");
-          const pairingState = seat.optionalPairings?.[pairingFlag];
-          if (!pairingFlag || !pairingState?.ordered) return null;
-          const isNonAlc = String(seat.pairing || "").trim() === "Non-Alc";
-          const itemId = isNonAlc
-            ? (rb.naCatalogItemId ?? null)
-            : (rb.catalogItemId ?? null);
-          const itemType = isNonAlc
-            ? (rb.naCatalogType || "")
-            : (rb.catalogType || "");
-          const picked = itemType && itemId != null ? findBeverage(itemType, itemId) : null;
-          if (picked) {
-            const parts = fmtDrinkParts({ ...picked, __type: itemType });
-            return { name: parts.title || "", sub: parts.sub || "" };
-          }
+      const rbSource = normDrinkSource(rb);
 
-          // Fallback for optional-pairing rows without product mapping:
-          // use course pairing text (same alco/nonalc behavior as optional extras).
-          if (isNonAlc) {
-            const fallback = lang === "si"
-              ? (course.optional_pairing_na_si || course.optional_pairing_na || course.na_si || course.na)
-              : (course.optional_pairing_na || course.na);
-            if (fallback?.name || fallback?.sub) return fallback;
-          } else {
-            const fallback = lang === "si"
-              ? (course.optional_pairing_alco_si || course.optional_pairing_alco || course.os_si || course.os || course.premium_si || course.premium || course.wp_si || course.wp)
-              : (course.optional_pairing_alco || course.os || course.premium || course.wp);
-            if (fallback?.name || fallback?.sub) return fallback;
-          }
-          return null;
+      const optionalPairingDrink = (() => {
+        if (rbSource !== "optional_pairing") return null;
+        const pairingFlag = normalizeCourseToken(rb.pairingFlag || course.optional_pairing_flag || "");
+        const pairingState = seat.optionalPairings?.[pairingFlag];
+        if (!pairingFlag || !pairingState?.ordered) return null;
+        const isNonAlc = String(seat.pairing || "").trim() === "Non-Alc";
+        const itemId = isNonAlc ? (rb.naCatalogItemId ?? null) : (rb.catalogItemId ?? null);
+        const itemType = isNonAlc ? (rb.naCatalogType || "") : (rb.catalogType || "");
+        const picked = itemType && itemId != null ? findBeverage(itemType, itemId) : null;
+        if (picked) {
+          const parts = fmtDrinkParts({ ...picked, __type: itemType });
+          return { name: parts.title || "", sub: parts.sub || "" };
         }
-        return resolveForcedPairingDrink(null);
+        if (isNonAlc) {
+          const fallback = lang === "si"
+            ? (course.optional_pairing_na_si || course.optional_pairing_na || course.na_si || course.na)
+            : (course.optional_pairing_na || course.na);
+          if (fallback?.name || fallback?.sub) return fallback;
+        } else {
+          const fallback = lang === "si"
+            ? (course.optional_pairing_alco_si || course.optional_pairing_alco || course.os_si || course.os || course.premium_si || course.premium || course.wp_si || course.wp)
+            : (course.optional_pairing_alco || course.os || course.premium || course.wp);
+          if (fallback?.name || fallback?.sub) return fallback;
+        }
+        return null;
       })();
 
-      if (lb.showPairing === false && !optionalPairingDrink && !isOptionalPairingType(rb?.type)) {
+      // by_the_glass or bottle source on a course row — consume from queue
+      if (rbSource === "by_the_glass") {
+        if (gQ.length > 0) drink = (() => { const d = fmtDrinkParts(gQ.shift()); return { name: d.title || "", sub: d.sub || "" }; })();
+      }
+      if (rbSource === "bottle") {
+        if (bQ.length > 0) drink = (() => { const d = fmtDrinkParts(bQ.shift()); return { name: d.title || "", sub: d.sub || "" }; })();
+      }
+
+      if (lb.showPairing === false && !optionalPairingDrink && rbSource !== "optional_pairing" && rbSource !== "by_the_glass" && rbSource !== "bottle") {
         // showPairing toggle off — don't resolve any drink for this course row
-      } else if (rb?.type === "pairing" || isOptionalPairingType(rb?.type) || optionalPairingDrink) {
+      } else if (rbSource === "pairing" || rbSource === "optional_pairing" || optionalPairingDrink || drink) {
         if (pkey) {
           drink = optionalPairingDrink || (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]);
 
