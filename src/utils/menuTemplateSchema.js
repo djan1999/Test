@@ -48,20 +48,12 @@ export const BLOCK_META = {
   },
   drinks: {
     label: "Drinks",        group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "◎",
-    desc: "Configurable drink column — select source: pairing, optional pairing, by-the-glass, or bottle.",
-    fields: [
-      { key: "drinkSource", label: "Source", type: "select", options: ["pairing", "optional_pairing", "by_the_glass", "bottle"] },
-      { key: "pairingFlag", label: "Optional pairing key", type: "text", placeholder: "e.g. crayfish_pairing" },
-      { key: "showByGlass", label: "By-the-glass fallback", type: "checkbox" },
-      { key: "showBottle",  label: "Bottle wine fallback",  type: "checkbox" },
-    ],
+    desc: "Configurable drink column — select source: pairing, optional pairing, by-the-glass, or bottle. Data comes from course editor.",
+    fields: [],
     defaults: {
       drinkSource: "pairing",
-      pairingFlag: "",
       showByGlass: true,
       showBottle: true,
-      catalogType: "", catalogItemId: null,
-      naCatalogType: "", naCatalogItemId: null,
     },
   },
   pairing_label: {

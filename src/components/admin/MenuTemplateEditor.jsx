@@ -475,37 +475,11 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
             </label>
           </>)}
 
-          {drinkSource === "optional_pairing" && (<>
-            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>Optional pairing key</div>
-            <input value={block.pairingFlag || ""} onChange={e => setField("pairingFlag", e.target.value)} style={{ ...baseInp, fontSize: 10.5, width: "100%", marginBottom: 10 }} placeholder="e.g. crayfish_pairing" />
-            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>Product override (alcoholic)</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, marginBottom: 8 }}>
-              <select value={block.catalogType || ""} onChange={e => setField("catalogType", e.target.value)} style={{ ...baseInp, fontSize: 10.5, width: "100%" }}>
-                <option value="">(none — use course text)</option>
-                <option value="cocktail">Cocktail</option><option value="spirit">Spirit</option><option value="beer">Beer</option><option value="wine">Wine</option>
-              </select>
-              <select value={block.catalogItemId ?? ""} onChange={e => setField("catalogItemId", e.target.value ? Number(e.target.value) : null)} disabled={!block.catalogType} style={{ ...baseInp, fontSize: 10.5, width: "100%", opacity: block.catalogType ? 1 : 0.6 }}>
-                <option value="">(select item)</option>
-                {(block.catalogType === "cocktail" ? cocktails : block.catalogType === "spirit" ? spirits : block.catalogType === "beer" ? beers : block.catalogType === "wine" ? wines : []).map(item => (
-                  <option key={item.id} value={item.id}>{item.name}{item.vintage ? ` ${item.vintage}` : ""}{item.producer ? ` · ${item.producer}` : ""}</option>
-                ))}
-              </select>
+          {drinkSource === "optional_pairing" && (
+            <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.5 }}>
+              Uses optional pairing data from the course editor (ALCO / N/A, EN / SI). Auto-selects based on seat pairing type.
             </div>
-            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>Product override (non-alcoholic)</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, marginBottom: 8 }}>
-              <select value={block.naCatalogType || ""} onChange={e => setField("naCatalogType", e.target.value)} style={{ ...baseInp, fontSize: 10.5, width: "100%" }}>
-                <option value="">(none — use course text)</option>
-                <option value="cocktail">Cocktail</option><option value="spirit">Spirit</option><option value="beer">Beer</option><option value="wine">Wine</option>
-              </select>
-              <select value={block.naCatalogItemId ?? ""} onChange={e => setField("naCatalogItemId", e.target.value ? Number(e.target.value) : null)} disabled={!block.naCatalogType} style={{ ...baseInp, fontSize: 10.5, width: "100%", opacity: block.naCatalogType ? 1 : 0.6 }}>
-                <option value="">(select item)</option>
-                {(block.naCatalogType === "cocktail" ? cocktails : block.naCatalogType === "spirit" ? spirits : block.naCatalogType === "beer" ? beers : block.naCatalogType === "wine" ? wines : []).map(item => (
-                  <option key={`na-${item.id}`} value={item.id}>{item.name}{item.vintage ? ` ${item.vintage}` : ""}{item.producer ? ` · ${item.producer}` : ""}</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.5 }}>Product overrides are optional. When empty, course editor text is used.</div>
-          </>)}
+          )}
 
           {(drinkSource === "by_the_glass" || drinkSource === "bottle") && (
             <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.5 }}>

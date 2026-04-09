@@ -19,6 +19,14 @@ function makeCourse(name, sub = "", opts = {}) {
     menu_si: opts.menu_si || null,
     position: opts.position ?? 1,
     optional_flag: opts.optional_flag || "",
+    optional_pairing_flag: opts.optional_pairing_flag || "",
+    optional_pairing_label: opts.optional_pairing_label || "",
+    optional_pairing_enabled: opts.optional_pairing_enabled ?? false,
+    optional_pairing_default_on: opts.optional_pairing_default_on ?? true,
+    optional_pairing_alco: opts.optional_pairing_alco || null,
+    optional_pairing_alco_si: opts.optional_pairing_alco_si || null,
+    optional_pairing_na: opts.optional_pairing_na || null,
+    optional_pairing_na_si: opts.optional_pairing_na_si || null,
     show_on_short: opts.show_on_short || false,
     short_order: opts.short_order || null,
     section_gap_before: false,
@@ -350,45 +358,12 @@ describe("generateMenuHTML — pairing", () => {
     expect(html).not.toContain("CHEF MARTINI");
   });
 
-  it("uses ALCO or N/A product in optional-pairing block based on seat pairing type", () => {
-    const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
-    const template = {
-      version: 2,
-      rows: [
-        { id: "hdr", left: { type: "title" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
-        {
-          id: "c1",
-          left: { type: "course", courseKey: crayfish.course_key },
-          right: {
-            type: "optional_pairing",
-            pairingFlag: "crayfish_pairing",
-            catalogType: "cocktail",
-            catalogItemId: 11,
-            naCatalogType: "cocktail",
-            naCatalogItemId: 22,
-          },
-          widthPreset: "55/45",
-          gap: 0,
-        },
-      ],
-    };
-    const beverages = {
-      cocktails: [
-        { id: 11, name: "Kitchen Martini", notes: "aquavit, pickles" },
-        { id: 22, name: "Garden Sour", notes: "apple, herbs" },
-      ],
-    };
-    const htmlAlco = render({ pairing: "Wine", optionalPairings: { crayfish_pairing: { ordered: true } } }, {}, [crayfish], { menuTemplate: template, beverages });
-    const htmlNa = render({ pairing: "Non-Alc", optionalPairings: { crayfish_pairing: { ordered: true } } }, {}, [crayfish], { menuTemplate: template, beverages });
-    expect(htmlAlco).toContain("Kitchen Martini");
-    expect(htmlNa).toContain("Garden Sour");
-  });
-
-  it("falls back to course wp/na pairing when optional-pairing block has no selected product", () => {
-    const chickenDessert = makeCourse("CHICKEN DESSERT", "", {
+  it("renders optional pairing from course data based on seat pairing type", () => {
+    const crayfish = makeCourse("CRAYFISH", "", {
       position: 1,
-      wp: { name: "Champagne Pairing", sub: "reserve" },
-      na: { name: "Tea Pairing", sub: "forest herbs" },
+      optional_pairing_flag: "crayfish_pairing",
+      wp: { name: "Kitchen Martini", sub: "aquavit" },
+      na: { name: "Garden Sour", sub: "apple" },
     });
     const template = {
       version: 2,
@@ -396,32 +371,23 @@ describe("generateMenuHTML — pairing", () => {
         { id: "hdr", left: { type: "title" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
         {
           id: "c1",
-          left: { type: "course", courseKey: chickenDessert.course_key },
-          right: { type: "optional_pairing", pairingFlag: "chicken_dessert_pairing" },
+          left: { type: "course", courseKey: crayfish.course_key },
+          right: { type: "drinks", drinkSource: "optional_pairing" },
           widthPreset: "55/45",
           gap: 0,
         },
       ],
     };
-    const htmlAlco = render(
-      { pairing: "Premium", optionalPairings: { chicken_dessert_pairing: { ordered: true } } },
-      {},
-      [chickenDessert],
-      { menuTemplate: template }
-    );
-    const htmlNa = render(
-      { pairing: "Non-Alc", optionalPairings: { chicken_dessert_pairing: { ordered: true } } },
-      {},
-      [chickenDessert],
-      { menuTemplate: template }
-    );
-    expect(htmlAlco).toContain("Champagne Pairing");
-    expect(htmlNa).toContain("Tea Pairing");
+    const htmlAlco = render({ pairing: "Wine", optionalPairings: { crayfish_pairing: { ordered: true } } }, {}, [crayfish], { menuTemplate: template });
+    const htmlNa = render({ pairing: "Non-Alc", optionalPairings: { crayfish_pairing: { ordered: true } } }, {}, [crayfish], { menuTemplate: template });
+    expect(htmlAlco).toContain("Kitchen Martini");
+    expect(htmlNa).toContain("Garden Sour");
   });
 
   it("defaults optional pairing to ALCO mode when seat pairing is unset", () => {
     const course = makeCourse("CRAYFISH", "", {
       position: 1,
+      optional_pairing_flag: "crayfish_pairing",
       wp: { name: "Kitchen Martini", sub: "aquavit" },
       na: { name: "Garden Sour", sub: "apple" },
     });
@@ -432,7 +398,7 @@ describe("generateMenuHTML — pairing", () => {
         {
           id: "c1",
           left: { type: "course", courseKey: course.course_key },
-          right: { type: "optional_pairing", pairingFlag: "crayfish_pairing" },
+          right: { type: "drinks", drinkSource: "optional_pairing" },
           widthPreset: "55/45",
           gap: 0,
         },

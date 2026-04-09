@@ -495,29 +495,20 @@ export function generateMenuHTML({
 
       const optionalPairingDrink = (() => {
         if (rbSource !== "optional_pairing") return null;
-        const pairingFlag = normalizeCourseToken(rb.pairingFlag || course.optional_pairing_flag || "");
+        const pairingFlag = normalizeCourseToken(course.optional_pairing_flag || "");
         const pairingState = seat.optionalPairings?.[pairingFlag];
         if (!pairingFlag || !pairingState?.ordered) return null;
         const isNonAlc = String(seat.pairing || "").trim() === "Non-Alc";
-        const itemId = isNonAlc ? (rb.naCatalogItemId ?? null) : (rb.catalogItemId ?? null);
-        const itemType = isNonAlc ? (rb.naCatalogType || "") : (rb.catalogType || "");
-        const picked = itemType && itemId != null ? findBeverage(itemType, itemId) : null;
-        if (picked) {
-          const parts = fmtDrinkParts({ ...picked, __type: itemType });
-          return { name: parts.title || "", sub: parts.sub || "" };
-        }
         if (isNonAlc) {
-          const fallback = lang === "si"
+          const d = lang === "si"
             ? (course.optional_pairing_na_si || course.optional_pairing_na || course.na_si || course.na)
             : (course.optional_pairing_na || course.na);
-          if (fallback?.name || fallback?.sub) return fallback;
-        } else {
-          const fallback = lang === "si"
-            ? (course.optional_pairing_alco_si || course.optional_pairing_alco || course.os_si || course.os || course.premium_si || course.premium || course.wp_si || course.wp)
-            : (course.optional_pairing_alco || course.os || course.premium || course.wp);
-          if (fallback?.name || fallback?.sub) return fallback;
+          return (d?.name || d?.sub) ? d : null;
         }
-        return null;
+        const d = lang === "si"
+          ? (course.optional_pairing_alco_si || course.optional_pairing_alco || course.os_si || course.os || course.premium_si || course.premium || course.wp_si || course.wp)
+          : (course.optional_pairing_alco || course.os || course.premium || course.wp);
+        return (d?.name || d?.sub) ? d : null;
       })();
 
       // by_the_glass or bottle source on a course row — consume from queue
