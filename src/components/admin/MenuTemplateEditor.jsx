@@ -1030,6 +1030,7 @@ export default function MenuTemplateEditor({
         guests={previewGuests}     onGuestsChange={setPreviewGuests}
         seatIdx={previewSeatIdx}   onSeatIdxChange={setPreviewSeatIdx}
         seats={previewSeats}       onUpdateSeat={updatePreviewSeat}
+        menuCourses={menuCourses}
         bottleWines={previewBottles} onBottleWinesChange={setPreviewBottles}
         lang={previewLang}         onLangChange={handleLangChange}
         menuType={previewMenuType} onMenuTypeChange={setPreviewMenuType}

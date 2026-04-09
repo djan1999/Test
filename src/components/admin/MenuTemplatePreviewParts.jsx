@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FONT, baseInp } from "./adminStyles.js";
+import { optionalExtrasFromCourses } from "../../utils/menuUtils.js";
 
 const SELECTED_RING = "#4b4b88";
 
@@ -133,6 +134,7 @@ export function PreviewDataPanel({
   guests, onGuestsChange,
   seatIdx, onSeatIdxChange,
   seats, onUpdateSeat,
+  menuCourses = [],
   bottleWines, onBottleWinesChange,
   lang, onLangChange,
   menuType, onMenuTypeChange,
@@ -141,6 +143,8 @@ export function PreviewDataPanel({
   const seat = seats[seatIdx] || makePreviewSeat(seatIdx + 1);
 
   const updSeat = patch => onUpdateSeat(seatIdx, patch);
+
+  const optionalExtras = useMemo(() => optionalExtrasFromCourses(menuCourses), [menuCourses]);
 
   const addGlass  = item => updSeat({ glasses:   [...seat.glasses,   item] });
   const addAp     = item => updSeat({ aperitifs: [...seat.aperitifs, { ...item, __type: item.__type || "wine" }] });
@@ -251,25 +255,23 @@ export function PreviewDataPanel({
                 </button>
               ))}
             </div>
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>
-              P{seatIdx + 1} EXTRAS
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-              {[{ id: 1, label: "Beetroot" }, { id: 2, label: "Cheese" }].map(ex => {
-                const active = !!(seat.extras || {})[ex.id]?.ordered;
-                return (
-                  <button key={ex.id} onClick={() => {
-                    const cur = { ...(seat.extras || {}) };
-                    cur[ex.id] = { ordered: !active };
-                    updSeat({ extras: cur });
-                  }} style={btnStyle(active)}>{ex.label}</button>
-                );
-              })}
-              <button
-                onClick={() => updSeat({ _birthday: !seat._birthday })}
-                style={btnStyle(!!seat._birthday)}
-              >Birthday / Cake</button>
-            </div>
+            {optionalExtras.length > 0 && (<>
+              <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>
+                P{seatIdx + 1} EXTRAS
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                {optionalExtras.map(dish => {
+                  const active = !!(seat.extras || {})[dish.key]?.ordered;
+                  return (
+                    <button key={dish.key} onClick={() => {
+                      const cur = { ...(seat.extras || {}) };
+                      cur[dish.key] = { ordered: !active, pairing: dish.pairings[0] };
+                      updSeat({ extras: cur });
+                    }} style={btnStyle(active)}>{dish.name}</button>
+                  );
+                })}
+              </div>
+            </>)}
           </div>
 
           {/* Divider */}
