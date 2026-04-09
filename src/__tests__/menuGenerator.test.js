@@ -414,6 +414,36 @@ describe("generateMenuHTML — pairing", () => {
     expect(html).not.toContain("Garden Sour");
   });
 
+  it("uses explicit optional pairing mode override even when seat pairing is Wine", () => {
+    const course = makeCourse("CRAYFISH", "", {
+      position: 1,
+      optional_pairing_flag: "crayfish_pairing",
+      wp: { name: "Kitchen Martini", sub: "aquavit" },
+      na: { name: "Garden Sour", sub: "apple" },
+    });
+    const template = {
+      version: 2,
+      rows: [
+        { id: "hdr", left: { type: "title" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
+        {
+          id: "c1",
+          left: { type: "course", courseKey: course.course_key },
+          right: { type: "drinks", drinkSource: "optional_pairing" },
+          widthPreset: "55/45",
+          gap: 0,
+        },
+      ],
+    };
+    const html = render(
+      { pairing: "Wine", optionalPairings: { crayfish_pairing: { ordered: true, mode: "nonalc" } } },
+      {},
+      [course],
+      { menuTemplate: template }
+    );
+    expect(html).toContain("Garden Sour");
+    expect(html).not.toContain("Kitchen Martini");
+  });
+
   it("does not auto-force custom keys from menu rules without forced-pairing products", () => {
     const venison = makeCourse("VENISON", "", { position: 1 });
     const html = render({ pairing: "—" }, {}, [venison], {

@@ -505,7 +505,10 @@ export function generateMenuHTML({
           ? !!pairingState.ordered
           : course.optional_pairing_default_on !== false;
         if (!isOrdered) return null;
-        const isNonAlc = String(seat.pairing || "").trim() === "Non-Alc";
+        const explicitMode = String(pairingState?.mode || "").trim().toLowerCase();
+        const isNonAlc = explicitMode
+          ? explicitMode === "nonalc"
+          : String(seat.pairing || "").trim() === "Non-Alc";
         if (isNonAlc) {
           const d = lang === "si"
             ? (course.optional_pairing_na_si || course.optional_pairing_na || course.na_si || course.na)

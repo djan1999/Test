@@ -30,6 +30,10 @@ const baseInp = {
 
 // ── Menu Generator ────────────────────────────────────────────────────────────
 const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
+const OPTIONAL_PAIRING_MODE_OPTS = [
+  { val: "alco", label: "ALCO" },
+  { val: "nonalc", label: "N/A" },
+];
 
 
 export default function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutStyles = {}, menuTemplate = null, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [], aperitifOptions = [], menuRules = DEFAULT_MENU_RULES }) {
@@ -142,6 +146,14 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
   const setBeer = (seatId, val) => setBeerChoices(prev => ({ ...prev, [seatId]: val }));
   const normalizedMenuRules = normalizeMenuRules(menuRules);
+  const defaultOptionalPairingMode = (seat, opt) => {
+    const seatPair = String(seat?.pairing || "").trim();
+    if (seatPair === "Non-Alc") return "nonalc";
+    if (seatPair && seatPair !== "—") return "alco";
+    if (opt?.hasAlco && !opt?.hasNonAlco) return "alco";
+    if (!opt?.hasAlco && opt?.hasNonAlco) return "nonalc";
+    return "alco";
+  };
 
   const setLanguageWithDefaults = (nextLang) => {
     writeMenuTitle(lang, menuTitle);
@@ -574,16 +586,37 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                         {optionalPairings.map(opt => {
                           const raw = s.optionalPairings?.[opt.key];
                           const active = raw?.ordered !== undefined ? !!raw.ordered : opt.defaultOn !== false;
+                          const mode = raw?.mode || defaultOptionalPairingMode(s, opt);
                           return (
-                            <button key={opt.key} onClick={() => updSeat(s.id, "optionalPairings", {
-                              ...(s.optionalPairings || {}),
-                              [opt.key]: { ordered: !active },
-                            })} style={{
-                              fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                              border: `1px solid ${active ? "#a0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                              background: active ? "#f4f8e8" : "#fff",
-                              color: active ? "#5a7820" : "#bbb",
-                            }}>{opt.label} {active ? "✓" : ""}</button>
+                            <div key={opt.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                              <button onClick={() => updSeat(s.id, "optionalPairings", {
+                                ...(s.optionalPairings || {}),
+                                [opt.key]: { ordered: false, mode },
+                              })} style={{
+                                fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "3px 7px",
+                                border: `1px solid ${!active ? "#c8a060" : "#e8e8e8"}`,
+                                borderRadius: 2, cursor: "pointer",
+                                background: !active ? "#fdf4e8" : "#fff",
+                                color: !active ? "#7a5020" : "#bbb",
+                              }}>{opt.label} OFF</button>
+                              {OPTIONAL_PAIRING_MODE_OPTS.map(m => {
+                                const disabled = m.val === "alco" ? !opt.hasAlco : !opt.hasNonAlco;
+                                const selected = active && mode === m.val;
+                                return (
+                                  <button key={m.val} disabled={disabled} onClick={() => updSeat(s.id, "optionalPairings", {
+                                    ...(s.optionalPairings || {}),
+                                    [opt.key]: { ordered: true, mode: m.val },
+                                  })} style={{
+                                    fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "3px 7px",
+                                    border: `1px solid ${selected ? "#c8a96e" : "#e8e8e8"}`,
+                                    borderRadius: 2, cursor: disabled ? "not-allowed" : "pointer",
+                                    background: selected ? "#fdf4e8" : "#fff",
+                                    color: disabled ? "#d0d0d0" : (selected ? "#7a5020" : "#bbb"),
+                                    opacity: disabled ? 0.65 : 1,
+                                  }}>{m.label}</button>
+                                );
+                              })}
+                            </div>
                           );
                         })}
                       </div>
