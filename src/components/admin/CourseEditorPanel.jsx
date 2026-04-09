@@ -70,6 +70,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
   const availablePairings     = PAIRING_KEYS.filter(({ key }) => course[key] == null);
   const category = String(course.course_category || "main");
   const isOptional = category === "optional" || category === "celebration";
+  const optionalPairingEnabled = !!course.optional_pairing_enabled;
 
   return (
     <div style={{
@@ -124,6 +125,38 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
               <option value="celebration">celebration</option>
             </select>
           </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={labelSm}>Optional Pairing</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ fontFamily: FONT, fontSize: 10, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={optionalPairingEnabled}
+                  onChange={e => {
+                    const enabled = e.target.checked;
+                    const next = { ...course, optional_pairing_enabled: enabled };
+                    if (enabled && !String(next.optional_pairing_flag || "").trim()) {
+                      next.optional_pairing_flag = String(next.course_key || "").trim();
+                    }
+                    if (enabled && !String(next.optional_pairing_label || "").trim()) {
+                      next.optional_pairing_label = String(next.menu?.name || next.course_key || "").trim();
+                    }
+                    onUpdate(next);
+                  }}
+                />
+                Enabled
+              </label>
+              <label style={{ fontFamily: FONT, fontSize: 10, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={course.optional_pairing_default_on !== false}
+                  disabled={!optionalPairingEnabled}
+                  onChange={e => upd("optional_pairing_default_on", e.target.checked)}
+                />
+                Default ON
+              </label>
+            </div>
+          </div>
 
           {/* Toggles */}
           <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
@@ -147,17 +180,36 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <span style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>Optional pairing key:</span>
-              <input value={course.optional_pairing_flag || ""} onChange={e => upd("optional_pairing_flag", e.target.value)} style={{ ...inpSm, width: 170 }} placeholder="e.g. crayfish_pairing" />
-              <input value={course.optional_pairing_label || ""} onChange={e => upd("optional_pairing_label", e.target.value)} style={{ ...inpSm, width: 150 }} placeholder="label (optional)" />
+              <input value={course.optional_pairing_flag || ""} onChange={e => upd("optional_pairing_flag", e.target.value)} style={{ ...inpSm, width: 170 }} placeholder="e.g. crayfish_pairing" disabled={!optionalPairingEnabled} />
+              <input value={course.optional_pairing_label || ""} onChange={e => upd("optional_pairing_label", e.target.value)} style={{ ...inpSm, width: 150 }} placeholder="label (optional)" disabled={!optionalPairingEnabled} />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <span style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>Short order:</span>
               <input type="number" value={course.short_order ?? ""} onChange={e => upd("short_order", e.target.value ? Number(e.target.value) : null)} style={{ ...inpSm, width: 60 }} />
             </div>
           </div>
-          <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", marginBottom: 12, lineHeight: 1.4 }}>
-            Optional Pairing is configured in <strong style={{ color: "#777" }}>Menu Layout</strong> blocks. Alco/Non-Alc variant follows the seat's main pairing.
-          </div>
+          {optionalPairingEnabled && (
+            <div style={{ marginBottom: 12, padding: "8px 10px", border: "1px solid #f0d8d8", borderRadius: 4, background: "#fff8f8" }}>
+              <div style={{ ...labelSm, marginBottom: 6, color: "#a04a4a" }}>Optional Pairing Text (course-owned)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "66px 1fr 1fr 1fr 1fr", gap: 6, marginBottom: 5, alignItems: "center" }}>
+                <span style={{ fontFamily: FONT, fontSize: 9, color: "#a04a4a", fontWeight: 600 }}>ALCO</span>
+                <input value={course.optional_pairing_alco?.name || ""} onChange={e => upd("optional_pairing_alco", { ...(course.optional_pairing_alco || {}), name: e.target.value })} style={inpSm} placeholder="Name (EN)" />
+                <input value={course.optional_pairing_alco?.sub || ""} onChange={e => upd("optional_pairing_alco", { ...(course.optional_pairing_alco || {}), sub: e.target.value })} style={inpSm} placeholder="Sub (EN)" />
+                <input value={course.optional_pairing_alco_si?.name || ""} onChange={e => upd("optional_pairing_alco_si", { ...(course.optional_pairing_alco_si || {}), name: e.target.value })} style={inpSm} placeholder="Name (SI)" />
+                <input value={course.optional_pairing_alco_si?.sub || ""} onChange={e => upd("optional_pairing_alco_si", { ...(course.optional_pairing_alco_si || {}), sub: e.target.value })} style={inpSm} placeholder="Sub (SI)" />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "66px 1fr 1fr 1fr 1fr", gap: 6, alignItems: "center" }}>
+                <span style={{ fontFamily: FONT, fontSize: 9, color: "#a04a4a", fontWeight: 600 }}>N/A</span>
+                <input value={course.optional_pairing_na?.name || ""} onChange={e => upd("optional_pairing_na", { ...(course.optional_pairing_na || {}), name: e.target.value })} style={inpSm} placeholder="Name (EN)" />
+                <input value={course.optional_pairing_na?.sub || ""} onChange={e => upd("optional_pairing_na", { ...(course.optional_pairing_na || {}), sub: e.target.value })} style={inpSm} placeholder="Sub (EN)" />
+                <input value={course.optional_pairing_na_si?.name || ""} onChange={e => upd("optional_pairing_na_si", { ...(course.optional_pairing_na_si || {}), name: e.target.value })} style={inpSm} placeholder="Name (SI)" />
+                <input value={course.optional_pairing_na_si?.sub || ""} onChange={e => upd("optional_pairing_na_si", { ...(course.optional_pairing_na_si || {}), sub: e.target.value })} style={inpSm} placeholder="Sub (SI)" />
+              </div>
+              <div style={{ fontFamily: FONT, fontSize: 9, color: "#8f6f6f", marginTop: 7 }}>
+                Auto mode: Wine / Premium / Our Story {"=>"} ALCO, Non-Alc {"=>"} N/A.
+              </div>
+            </div>
+          )}
 
           {/* Pairings */}
           {activePairings.length > 0 && (
@@ -278,6 +330,12 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
       wp: null, wp_si: null, na: null, na_si: null, os: null, os_si: null, premium: null, premium_si: null,
       hazards: null, is_snack: false,
       course_key: "", course_category: "main", optional_flag: "", optional_pairing_flag: "", optional_pairing_label: "", section_gap_before: false,
+      optional_pairing_enabled: false,
+      optional_pairing_default_on: true,
+      optional_pairing_alco: null,
+      optional_pairing_alco_si: null,
+      optional_pairing_na: null,
+      optional_pairing_na_si: null,
       show_on_short: false, short_order: null,
       force_pairing_title: "", force_pairing_sub: "",
       force_pairing_title_si: "", force_pairing_sub_si: "",

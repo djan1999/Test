@@ -506,12 +506,14 @@ export function generateMenuHTML({
           // Fallback for optional-pairing rows without product mapping:
           // use course pairing text (same alco/nonalc behavior as optional extras).
           if (isNonAlc) {
-            const fallback = lang === "si" ? (course.na_si || course.na) : course.na;
+            const fallback = lang === "si"
+              ? (course.optional_pairing_na_si || course.optional_pairing_na || course.na_si || course.na)
+              : (course.optional_pairing_na || course.na);
             if (fallback?.name || fallback?.sub) return fallback;
           } else {
             const fallback = lang === "si"
-              ? (course.os_si || course.os || course.premium_si || course.premium || course.wp_si || course.wp)
-              : (course.os || course.premium || course.wp);
+              ? (course.optional_pairing_alco_si || course.optional_pairing_alco || course.os_si || course.os || course.premium_si || course.premium || course.wp_si || course.wp)
+              : (course.optional_pairing_alco || course.os || course.premium || course.wp);
             if (fallback?.name || fallback?.sub) return fallback;
           }
           return null;

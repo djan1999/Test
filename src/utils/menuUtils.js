@@ -42,8 +42,16 @@ export const optionalPairingsFromCourses = (menuCourses = []) => {
     const enabled = c?.optional_pairing_enabled !== false;
     if (!enabled) return;
     const label = String(c?.optional_pairing_label || c?.menu?.name || key).trim() || key;
-    const hasAlco = !!(c?.wp?.name || c?.wp?.sub || c?.os?.name || c?.os?.sub || c?.premium?.name || c?.premium?.sub);
-    const hasNonAlco = !!(c?.na?.name || c?.na?.sub);
+    const hasAlco = !!(
+      c?.optional_pairing_alco?.name || c?.optional_pairing_alco?.sub ||
+      c?.optional_pairing_alco_si?.name || c?.optional_pairing_alco_si?.sub ||
+      c?.wp?.name || c?.wp?.sub || c?.os?.name || c?.os?.sub || c?.premium?.name || c?.premium?.sub
+    );
+    const hasNonAlco = !!(
+      c?.optional_pairing_na?.name || c?.optional_pairing_na?.sub ||
+      c?.optional_pairing_na_si?.name || c?.optional_pairing_na_si?.sub ||
+      c?.na?.name || c?.na?.sub
+    );
     if (!hasAlco && !hasNonAlco) return;
     byKey.set(key, {
       key,
@@ -283,6 +291,10 @@ export function parseMenuRow(row) {
     optional_pairing_label: String(firstFilled(row.optional_pairing_label)).trim(),
     optional_pairing_enabled: truthyCell(firstFilled(row.optional_pairing_enabled, true)),
     optional_pairing_default_on: truthyCell(firstFilled(row.optional_pairing_default_on, true)),
+    optional_pairing_alco: parseBilingual(row.optional_pairing_alco, row.optional_pairing_alco_sub).en,
+    optional_pairing_alco_si: parseBilingual(row.optional_pairing_alco, row.optional_pairing_alco_sub).si,
+    optional_pairing_na: parseBilingual(row.optional_pairing_na, row.optional_pairing_na_sub).en,
+    optional_pairing_na_si: parseBilingual(row.optional_pairing_na, row.optional_pairing_na_sub).si,
     section_gap_before: truthyCell(firstFilled(row.section_gap_before)),
     show_on_short: truthyCell(firstFilled(row.show_on_short)),
     short_order: Number(firstFilled(row.short_order)) || null,
