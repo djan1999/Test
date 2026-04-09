@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 import { writeTeamNames, readTeamNames, writeMenuTitle, readMenuTitle, writeThankYouNote, readThankYouNote } from "../../utils/storage.js";
-import { applyMenuOverride, applyCourseRestriction, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP } from "../../utils/menuUtils.js";
+import { applyMenuOverride, applyCourseRestriction, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, optionalExtrasFromCourses } from "../../utils/menuUtils.js";
 import { TABLES, supabase } from "../../lib/supabaseClient.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
@@ -45,6 +45,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
   const [previewSeatId, setPreviewSeatId] = useState(null);
   const [previewHtml, setPreviewHtml] = useState("");
   const genLoaded = useRef(false);
+
+  const optionalExtras = useMemo(() => optionalExtrasFromCourses(menuCourses), [menuCourses]);
 
   const updSeat = (seatId, field, value) => {
     if (!upd) return;
@@ -273,7 +275,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
         {seats.map(s => {
           const seatRestr  = restrictions.filter(r => r.pos === s.id);
           const printable  = isPrintable(s);
-          const extras     = Object.entries(s.extras || {}).filter(([,v]) => v?.ordered).map(([k]) => +k);
+          const orderedExtras = optionalExtras.filter(d => !!(s.extras?.[d.key] || s.extras?.[d.id])?.ordered);
           const glasses    = s.glasses || [];
           const cocktails  = s.cocktails || [];
           const bottles    = seatBottles(s);
@@ -311,8 +313,9 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                     </span>
                   );
                 })}
-                {extras.includes(1) && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+BEETROOT</span>}
-                {extras.includes(2) && <span style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+CHEESE</span>}
+                {orderedExtras.map(d => (
+                  <span key={d.key} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+{String(d.name).toUpperCase()}</span>
+                ))}
 
                 {/* Manually added beverages */}
                 {glasses.map((w, i) => (
@@ -562,48 +565,41 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                       );
                     })()}
                   </div>
-                  {/* Beetroot & Cheese */}
-                  {(() => {
-                    const beetExtra = s.extras?.[1] || { ordered: false, pairing: "—" };
-                    const hasCheese = !!s.extras?.[2]?.ordered;
-                    return (
-                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e8f0f8" }}>
-                        <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Extras</div>
-                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-                          {/* Beetroot — off + 3 pairing options */}
-                          {[["off", "Beet off"], ["—", "Beet —"], ["Champagne", "Beet Champ"], ["N/A", "Beet N/A"]].map(([p, label]) => {
-                            const active = p === "off"
-                              ? !beetExtra.ordered
-                              : beetExtra.ordered && (beetExtra.pairing || "—") === p;
-                            return (
-                              <button key={p} onClick={() => {
-                                const newExtras = { ...s.extras };
-                                if (p === "off") { newExtras[1] = { ordered: false, pairing: "—" }; }
-                                else { newExtras[1] = { ordered: true, pairing: p }; }
-                                updSeat(s.id, "extras", newExtras);
-                              }} style={{
+                  {/* Optional extras (data-driven from courses optional_flag) */}
+                  {optionalExtras.length > 0 && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e8f0f8" }}>
+                      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Extras</div>
+                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                        {optionalExtras.map((dish, di) => {
+                          const extra = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                          return (
+                            <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                              {di > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}
+                              {/* Off button */}
+                              <button onClick={() => updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: false, pairing: dish.pairings[0] } })} style={{
                                 fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                border: `1px solid ${active ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                background: active ? "#fdf4e8" : "#fff",
-                                color: active ? "#7a5020" : "#bbb",
-                              }}>{label}</button>
-                            );
-                          })}
-                          <div style={{ width: 1, height: 18, background: "#e0e0e0" }} />
-                          {/* Cheese toggle */}
-                          <button onClick={() => {
-                            const cur = s.extras?.[2] || { ordered: false };
-                            updSeat(s.id, "extras", { ...s.extras, 2: { ...cur, ordered: !cur.ordered } });
-                          }} style={{
-                            fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                            border: `1px solid ${hasCheese ? "#a06830" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                            background: hasCheese ? "#fdf4e8" : "#fff",
-                            color: hasCheese ? "#a06830" : "#bbb",
-                          }}>Cheese {hasCheese ? "✓" : ""}</button>
-                        </div>
+                                border: `1px solid ${!extra.ordered ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                                background: !extra.ordered ? "#fdf4e8" : "#fff",
+                                color: !extra.ordered ? "#7a5020" : "#bbb",
+                              }}>{dish.name} off</button>
+                              {/* Pairing buttons */}
+                              {dish.pairings.map(p => {
+                                const active = extra.ordered && (extra.pairing || dish.pairings[0]) === p;
+                                return (
+                                  <button key={p} onClick={() => updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: true, pairing: p } })} style={{
+                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                                    border: `1px solid ${active ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                                    background: active ? "#fdf4e8" : "#fff",
+                                    color: active ? "#7a5020" : "#bbb",
+                                  }}>{dish.name.slice(0, 4)} {p}</button>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })()}
+                    </div>
+                  )}
                 </div>
               )}
 

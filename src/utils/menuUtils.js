@@ -31,6 +31,35 @@ export const normalizeCourseCategory = (value, optionalFlag = "") => {
   return String(optionalFlag || "").trim() ? "optional" : "main";
 };
 
+export const normalizeOptionalKey = (value) =>
+  String(value ?? "").toLowerCase().trim().replace(/[^a-z0-9]/g, "") || null;
+
+export const optionalExtrasFromCourses = (menuCourses = []) => {
+  const byKey = new Map();
+  (menuCourses || []).forEach((c) => {
+    const category = normalizeCourseCategory(c?.course_category, c?.optional_flag);
+    if (category !== "optional" && category !== "celebration") return;
+    const key = normalizeOptionalKey(c?.optional_flag);
+    if (!key) return;
+    const existing = byKey.get(key) || null;
+    const label = String(c?.menu?.name || existing?.name || key).trim() || key;
+    const pairings = [
+      "—",
+      c?.wp ? "Wine" : null,
+      c?.na ? "Non-Alc" : null,
+      c?.premium ? "Premium" : null,
+      c?.os ? "Our Story" : null,
+    ].filter(Boolean);
+    byKey.set(key, {
+      id: key,
+      key,
+      name: label,
+      pairings: pairings.length > 0 ? pairings : ["—"],
+    });
+  });
+  return [...byKey.values()];
+};
+
 // Parse a bilingual cell with optional kitchen note:
 //   Line 1 = EN  (menu generator)
 //   Line 2 = SI  (menu generator)
