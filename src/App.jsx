@@ -2063,6 +2063,11 @@ export default function App() {
     const sortedGroup = [...group].sort((a, b) => a - b);
     // Find old group to clear tables that are no longer part of it
     const oldGroup = tables.find(t => t.id === id)?.tableGroup || [id];
+    // Celebration-category dish keys to sync with the birthday flag
+    const celebrationKeys = (menuCourses || [])
+      .filter(c => normalizeCourseCategory(c?.course_category, c?.optional_flag) === "celebration")
+      .map(c => normalizeOptionalKey(c?.optional_flag))
+      .filter(Boolean);
     setTables(p => p.map(t => {
       // Clear tables that were in the old group but aren't in the new group
       if (oldGroup.includes(t.id) && !sortedGroup.includes(t.id)) {
@@ -2070,7 +2075,18 @@ export default function App() {
       }
       if (!sortedGroup.includes(t.id)) return t;
       const newSeats = makeSeats(guests, t.seats);
-      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats: newSeats, birthday, cakeNote: birthday ? (cakeNote || "") : "", restrictions, notes, lang: lang || "en", tableGroup: sortedGroup };
+      const seats = celebrationKeys.length > 0
+        ? newSeats.map(s => ({
+            ...s,
+            extras: {
+              ...s.extras,
+              ...Object.fromEntries(
+                celebrationKeys.map(k => [k, { ordered: !!birthday, pairing: s.extras?.[k]?.pairing || "—" }])
+              ),
+            },
+          }))
+        : newSeats;
+      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats, birthday, cakeNote: birthday ? (cakeNote || "") : "", restrictions, notes, lang: lang || "en", tableGroup: sortedGroup };
     }));
     setResModal(null);
   };
