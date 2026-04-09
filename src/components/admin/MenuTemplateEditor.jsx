@@ -466,7 +466,7 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
               <option value="wine">Wine</option>
             </select>
             <select
-              value={block.catalogItemId ?? block.catalogId ?? ""}
+              value={block.catalogItemId ?? ""}
               onChange={e => setField("catalogItemId", e.target.value ? Number(e.target.value) : null)}
               disabled={!block.catalogType}
               style={{ ...baseInp, fontSize: 10.5, width: "100%", opacity: block.catalogType ? 1 : 0.6 }}
@@ -816,32 +816,6 @@ export default function MenuTemplateEditor({
       }
     }
     onUpdateTemplate({ ...menuTemplate, rows: normalized });
-  }, [menuTemplate, onUpdateTemplate]);
-
-  // ── One-time migration: forced_pairing -> optional_pairing and catalogId -> catalogItemId ──
-  useEffect(() => {
-    if (!Array.isArray(menuTemplate?.rows)) return;
-    let changed = false;
-    const nextRows = menuTemplate.rows.map((r) => {
-      const migrate = (b) => {
-        if (!b) return b;
-        if (b.type !== "forced_pairing" && b.type !== "optional_pairing") return b;
-        const nextType = b.type === "forced_pairing" ? "optional_pairing" : b.type;
-        const needsCatalogIdMigration = b.catalogItemId == null && b.catalogId != null;
-        if (!needsCatalogIdMigration && nextType === b.type) return b;
-        changed = true;
-        return {
-          ...b,
-          type: nextType,
-          catalogItemId: needsCatalogIdMigration ? b.catalogId : b.catalogItemId,
-        };
-      };
-      const left = migrate(r.left);
-      const right = migrate(r.right);
-      if (left === r.left && right === r.right) return r;
-      return { ...r, left, right };
-    });
-    if (changed) onUpdateTemplate({ ...menuTemplate, rows: nextRows });
   }, [menuTemplate, onUpdateTemplate]);
 
   // menuTitle and thankYouNote come from state (shared localStorage with MenuGenerator)

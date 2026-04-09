@@ -156,7 +156,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
             </div>
           </div>
           <div style={{ fontFamily: FONT, fontSize: 9, color: "#999", marginBottom: 12, lineHeight: 1.4 }}>
-            Forced Pairing is configured in <strong style={{ color: "#777" }}>Menu Layout</strong> blocks only.
+            Optional Pairing is configured in <strong style={{ color: "#777" }}>Menu Layout</strong> blocks. Alco/Non-Alc variant follows the seat's main pairing.
           </div>
 
           {/* Pairings */}

@@ -89,7 +89,7 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
           </div>
           {hasOptionalPairing && (
             <div style={{ fontFamily: FONT, fontSize: 9, color: "#9a6020", marginBottom: 12 }}>
-              Optional pairing is course-owned and supports <strong>Alcoholic / Non-Alcoholic</strong> output from this course's wp/na fields when no product is linked in layout.
+              Optional pairing shows when enabled per seat. Alco/Non-Alc variant follows the seat's main pairing. Configure the layout block in <strong>Menu Layout</strong>.
             </div>
           )}
 

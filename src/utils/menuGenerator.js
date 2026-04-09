@@ -326,10 +326,8 @@ export function generateMenuHTML({
   let rows = [];
   let pendingGap = 0;      // deferred spacer gap — applied to the next row that actually renders
 
-  // Backward compatibility: legacy templates may still contain forced_pairing.
-  // Runtime behavior uses optional_pairing, but width logic should handle both keys.
-  const PAIRING_RIGHT_TYPES = new Set(["pairing", "forced_pairing", "optional_pairing", "pairing_label", "aperitif"]);
-  const isOptionalPairingType = (type) => type === "optional_pairing" || type === "forced_pairing";
+  const PAIRING_RIGHT_TYPES = new Set(["pairing", "optional_pairing", "pairing_label", "aperitif"]);
+  const isOptionalPairingType = (type) => type === "optional_pairing";
   const _courseLeft = Math.min(99, Math.max(1, Math.round(Number(s("courseColSplit", 55)) || 55)));
 
   for (const tRow of effectiveTemplateRows) {
