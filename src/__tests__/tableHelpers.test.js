@@ -20,7 +20,7 @@ describe("makeSeats", () => {
     expect(seats[0].glasses).toEqual(["g1"]);
     expect(seats[0].pairing).toBe("Wine");
     expect(seats[0].extras).toEqual({ cake: true });
-    expect(seats[0].optionalPairings).toEqual({ crayfish: { ordered: true } });
+    expect(seats[0].optionalPairings).toEqual({ crayfish: { ordered: true, mode: "alco" } });
   });
 
   it("uses defaults for seats beyond the ex array length", () => {

@@ -264,12 +264,38 @@ export function PreviewDataPanel({
                 {optionalPairings.map(opt => {
                   const raw = (seat.optionalPairings || {})[opt.key];
                   const active = raw?.ordered !== undefined ? !!raw.ordered : opt.defaultOn !== false;
+                  const currentMode = String(raw?.mode || "").trim().toLowerCase() === "nonalc" ? "nonalc" : "alco";
+                  const canAlco = opt.hasAlco !== false;
+                  const canNonAlco = !!opt.hasNonAlco;
+                  const nextMode = currentMode === "nonalc" ? "nonalc" : "alco";
                   return (
-                    <button key={opt.key} onClick={() => {
-                      const cur = { ...(seat.optionalPairings || {}) };
-                      cur[opt.key] = { ordered: !active };
-                      updSeat({ optionalPairings: cur });
-                    }} style={btnStyle(active)}>{opt.label}</button>
+                    <div key={opt.key} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      <button onClick={() => {
+                        const cur = { ...(seat.optionalPairings || {}) };
+                        cur[opt.key] = { ordered: !active, ...(raw?.mode ? { mode: nextMode } : {}) };
+                        updSeat({ optionalPairings: cur });
+                      }} style={btnStyle(active)}>{opt.label}</button>
+                      <button
+                        onClick={() => {
+                          if (!canAlco) return;
+                          const cur = { ...(seat.optionalPairings || {}) };
+                          cur[opt.key] = { ordered: true, mode: "alco" };
+                          updSeat({ optionalPairings: cur });
+                        }}
+                        disabled={!canAlco}
+                        style={btnStyle(active && nextMode === "alco")}
+                      >ALCO</button>
+                      <button
+                        onClick={() => {
+                          if (!canNonAlco) return;
+                          const cur = { ...(seat.optionalPairings || {}) };
+                          cur[opt.key] = { ordered: true, mode: "nonalc" };
+                          updSeat({ optionalPairings: cur });
+                        }}
+                        disabled={!canNonAlco}
+                        style={btnStyle(active && nextMode === "nonalc")}
+                      >N/A</button>
+                    </div>
                   );
                 })}
               </div>

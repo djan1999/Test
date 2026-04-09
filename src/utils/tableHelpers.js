@@ -14,9 +14,15 @@ export const makeSeats = (n, ex = []) =>
     beers:     ex[i]?.beers     ?? [],
     pairing:   ex[i]?.pairing   ?? "",
     extras:    ex[i]?.extras    ?? {},
-    // Normalize legacy shape by dropping deprecated `mode` from optionalPairings entries.
+    // Normalize optionalPairings shape and keep explicit ALCO/N/A selection mode.
     optionalPairings: Object.fromEntries(
-      Object.entries(ex[i]?.optionalPairings || {}).map(([k, v]) => [k, { ordered: !!v?.ordered }])
+      Object.entries(ex[i]?.optionalPairings || {}).map(([k, v]) => ([
+        k,
+        {
+          ordered: !!v?.ordered,
+          ...(String(v?.mode || "").trim() ? { mode: String(v.mode).trim().toLowerCase() === "nonalc" ? "nonalc" : "alco" } : {}),
+        },
+      ]))
     ),
   }));
 
