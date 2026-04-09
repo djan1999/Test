@@ -13,7 +13,6 @@ import {
   parseBilingual, applyCourseRestriction,
   RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP,
   parseMenuRow, RESTRICTION_KEYS, normalizeCourseCategory,
-  optionalPairingsFromCourses,
 } from "./utils/menuUtils.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
 import { buildDefaultTemplate, makeRowId } from "./utils/menuTemplateSchema.js";
