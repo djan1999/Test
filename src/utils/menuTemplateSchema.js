@@ -69,7 +69,7 @@ export const BLOCK_META = {
   },
   optional_pairing: {
     label: "Optional Pairing", group: "content", color: "#c86e6e", bg: "#fff2f2", icon: "⚑",
-    desc: "Optional pairing product for this course row. Uses per-seat optional pairing toggle (ALCO/NON-ALCO).",
+    desc: "Optional pairing output for this course row. Source text lives in the course editor; product refs are optional overrides.",
     fields: [
       { key: "pairingFlag", label: "Optional pairing key", type: "text", placeholder: "e.g. chicken_dessert_pairing" },
     ],

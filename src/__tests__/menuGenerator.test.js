@@ -350,7 +350,7 @@ describe("generateMenuHTML — pairing", () => {
     expect(html).not.toContain("CHEF MARTINI");
   });
 
-  it("uses ALCO or N/A product in optional-pairing block based on seat pairing", () => {
+  it("uses ALCO or N/A product in optional-pairing block based on seat pairing type", () => {
     const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
     const template = {
       version: 2,
@@ -378,8 +378,8 @@ describe("generateMenuHTML — pairing", () => {
         { id: 22, name: "Garden Sour", notes: "apple, herbs" },
       ],
     };
-    const htmlAlco = render({ pairing: "Wine",    optionalPairings: { crayfish_pairing: { ordered: true } } }, {}, [crayfish], { menuTemplate: template, beverages });
-    const htmlNa   = render({ pairing: "Non-Alc", optionalPairings: { crayfish_pairing: { ordered: true } } }, {}, [crayfish], { menuTemplate: template, beverages });
+    const htmlAlco = render({ pairing: "Wine", optionalPairings: { crayfish_pairing: { ordered: true } } }, {}, [crayfish], { menuTemplate: template, beverages });
+    const htmlNa = render({ pairing: "Non-Alc", optionalPairings: { crayfish_pairing: { ordered: true } } }, {}, [crayfish], { menuTemplate: template, beverages });
     expect(htmlAlco).toContain("Kitchen Martini");
     expect(htmlNa).toContain("Garden Sour");
   });
@@ -404,7 +404,7 @@ describe("generateMenuHTML — pairing", () => {
       ],
     };
     const htmlAlco = render(
-      { pairing: "Wine",    optionalPairings: { chicken_dessert_pairing: { ordered: true } } },
+      { pairing: "Premium", optionalPairings: { chicken_dessert_pairing: { ordered: true } } },
       {},
       [chickenDessert],
       { menuTemplate: template }
@@ -417,6 +417,35 @@ describe("generateMenuHTML — pairing", () => {
     );
     expect(htmlAlco).toContain("Champagne Pairing");
     expect(htmlNa).toContain("Tea Pairing");
+  });
+
+  it("defaults optional pairing to ALCO mode when seat pairing is unset", () => {
+    const course = makeCourse("CRAYFISH", "", {
+      position: 1,
+      wp: { name: "Kitchen Martini", sub: "aquavit" },
+      na: { name: "Garden Sour", sub: "apple" },
+    });
+    const template = {
+      version: 2,
+      rows: [
+        { id: "hdr", left: { type: "title" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
+        {
+          id: "c1",
+          left: { type: "course", courseKey: course.course_key },
+          right: { type: "optional_pairing", pairingFlag: "crayfish_pairing" },
+          widthPreset: "55/45",
+          gap: 0,
+        },
+      ],
+    };
+    const html = render(
+      { pairing: "—", optionalPairings: { crayfish_pairing: { ordered: true } } },
+      {},
+      [course],
+      { menuTemplate: template }
+    );
+    expect(html).toContain("Kitchen Martini");
+    expect(html).not.toContain("Garden Sour");
   });
 
   it("does not auto-force custom keys from menu rules without forced-pairing products", () => {

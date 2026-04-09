@@ -47,6 +47,14 @@ const normalizeRuleKeyList = (value, fallback = []) => {
   return out;
 };
 
+const pairingModeFromSeatSelection = (pairingLabel) => {
+  const raw = String(pairingLabel || "").trim().toLowerCase();
+  if (!raw || raw === "—" || raw === "-") return null;
+  if (raw.includes("non") || raw.includes("na") || raw.includes("n/a")) return "nonalc";
+  // Wine, Premium and Our Story are all alcoholic pairing families.
+  return "alco";
+};
+
 export function normalizeMenuRules(input = {}) {
   const merged = { ...DEFAULT_MENU_RULES, ...(input || {}) };
   const firstDefined = (...vals) => vals.find(v => v !== undefined);

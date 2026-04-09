@@ -270,6 +270,8 @@ export function parseMenuRow(row) {
     optional_flag: String(firstFilled(row.optional_flag)).trim().toLowerCase(),
     optional_pairing_flag: String(firstFilled(row.optional_pairing_flag)).trim().toLowerCase(),
     optional_pairing_label: String(firstFilled(row.optional_pairing_label)).trim(),
+    optional_pairing_enabled: truthyCell(firstFilled(row.optional_pairing_enabled, true)),
+    optional_pairing_default_on: truthyCell(firstFilled(row.optional_pairing_default_on, true)),
     section_gap_before: truthyCell(firstFilled(row.section_gap_before)),
     show_on_short: truthyCell(firstFilled(row.show_on_short)),
     short_order: Number(firstFilled(row.short_order)) || null,

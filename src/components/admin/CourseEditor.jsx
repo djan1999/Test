@@ -31,7 +31,13 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
   };
   const category = String(course.course_category || "main");
   const isOptionalCategory = category === "optional" || category === "celebration";
-  const hasOptionalPairing = String(course.optional_pairing_flag || "").trim().length > 0;
+  const hasOptionalPairing = !!course.optional_pairing_enabled;
+  const hasPairingData = !!(
+    course.wp?.name || course.wp?.sub ||
+    course.na?.name || course.na?.sub ||
+    course.os?.name || course.os?.sub ||
+    course.premium?.name || course.premium?.sub
+  );
 
   return (
     <div style={{
@@ -82,14 +88,40 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
               </select>
             </div>
             <div><div style={labelSm}>Optional Flag</div><input value={course.optional_flag || ""} onChange={e => upd("optional_flag", e.target.value)} style={inpSm} placeholder="e.g. cheese" disabled={!isOptionalCategory} /></div>
-            <div><div style={labelSm}>Optional Pairing Key</div><input value={course.optional_pairing_flag || ""} onChange={e => upd("optional_pairing_flag", e.target.value)} style={inpSm} placeholder="e.g. crayfish_pairing" /></div>
-            <div><div style={labelSm}>Optional Pairing Label</div><input value={course.optional_pairing_label || ""} onChange={e => upd("optional_pairing_label", e.target.value)} style={inpSm} placeholder="e.g. Crayfish Pairing" /></div>
+            <div>
+              <div style={labelSm}>Optional Pairing</div>
+              <label style={{ fontFamily: FONT, fontSize: 10, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={!!course.optional_pairing_enabled}
+                  onChange={e => {
+                    const enabled = e.target.checked;
+                    const next = { ...course, optional_pairing_enabled: enabled };
+                    if (enabled && !String(next.optional_pairing_flag || "").trim()) {
+                      next.optional_pairing_flag = String(next.course_key || "").trim();
+                    }
+                    if (enabled && !String(next.optional_pairing_label || "").trim()) {
+                      next.optional_pairing_label = String(next.menu?.name || next.course_key || "").trim();
+                    }
+                    onUpdate(next);
+                  }}
+                />
+                Enabled
+              </label>
+            </div>
+            <div><div style={labelSm}>Optional Pairing Key</div><input value={course.optional_pairing_flag || ""} onChange={e => upd("optional_pairing_flag", e.target.value)} style={inpSm} placeholder="e.g. crayfish_pairing" disabled={!course.optional_pairing_enabled} /></div>
+            <div><div style={labelSm}>Optional Pairing Label</div><input value={course.optional_pairing_label || ""} onChange={e => upd("optional_pairing_label", e.target.value)} style={inpSm} placeholder="e.g. Crayfish Pairing" disabled={!course.optional_pairing_enabled} /></div>
             <div><div style={labelSm}>Kitchen Note</div><input value={course.kitchen_note || ""} onChange={e => upd("kitchen_note", e.target.value)} style={inpSm} placeholder="Note for kitchen" /></div>
             <div><div style={labelSm}>Aperitif Btn</div><input value={course.aperitif_btn || ""} onChange={e => upd("aperitif_btn", e.target.value || null)} style={inpSm} placeholder="Button label" /></div>
           </div>
           {hasOptionalPairing && (
             <div style={{ fontFamily: FONT, fontSize: 9, color: "#9a6020", marginBottom: 12 }}>
-              Optional pairing shows when enabled per seat. Alco/Non-Alc variant follows the seat's main pairing. Configure the layout block in <strong>Menu Layout</strong>.
+              Optional pairing is course-owned. Menu generation auto-picks <strong>Alcoholic</strong> for Wine / Premium / Our Story pairings and <strong>Non-Alcoholic</strong> for Non-Alc pairing. Uses this course pairings in the active language.
+            </div>
+          )}
+          {hasOptionalPairing && !hasPairingData && (
+            <div style={{ fontFamily: FONT, fontSize: 9, color: "#b07040", marginBottom: 12 }}>
+              Add pairing data below (WP/NA/OS/Premium). Optional pairing is only available when course pairing data exists.
             </div>
           )}
 

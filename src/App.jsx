@@ -215,6 +215,8 @@ function supabaseRowToCourse(r) {
     optional_flag: r.optional_flag || "",
     optional_pairing_flag: r.optional_pairing_flag || "",
     optional_pairing_label: r.optional_pairing_label || "",
+    optional_pairing_enabled: r.optional_pairing_enabled !== false,
+    optional_pairing_default_on: r.optional_pairing_default_on !== false,
     section_gap_before: false,
     show_on_short: !!r.show_on_short,
     short_order: r.short_order || null,
@@ -261,6 +263,8 @@ function courseToSupabaseRow(course) {
     optional_flag: course.optional_flag,
     optional_pairing_flag: course.optional_pairing_flag || "",
     optional_pairing_label: course.optional_pairing_label || "",
+    optional_pairing_enabled: course.optional_pairing_enabled !== false,
+    optional_pairing_default_on: course.optional_pairing_default_on !== false,
     section_gap_before: false,
     show_on_short: course.show_on_short,
     short_order: course.short_order,
@@ -368,6 +372,27 @@ function optionalExtrasFromCourses(menuCourses = []) {
   return [...byKey.values()];
 }
 
+function optionalPairingsFromCourses(menuCourses = []) {
+  const byKey = new Map();
+  (menuCourses || []).forEach((c) => {
+    const key = normalizeOptionalKey(c?.optional_pairing_flag);
+    if (!key) return;
+    const enabled = c?.optional_pairing_enabled !== false;
+    if (!enabled) return;
+    const label = String(c?.optional_pairing_label || c?.menu?.name || key).trim() || key;
+    const hasAlco = !!(c?.wp?.name || c?.wp?.sub || c?.os?.name || c?.os?.sub || c?.premium?.name || c?.premium?.sub);
+    const hasNonAlco = !!(c?.na?.name || c?.na?.sub);
+    if (!hasAlco && !hasNonAlco) return;
+    byKey.set(key, {
+      key,
+      label,
+      hasAlco,
+      hasNonAlco,
+      defaultOn: c?.optional_pairing_default_on !== false,
+    });
+  });
+  return [...byKey.values()];
+}
 
 const circBtnSm = { ...mixinCircleButton };
 // ── Menu Sync Tab ─────────────────────────────────────────────────────────────
@@ -812,19 +837,32 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
               {optionalPairings.length > 0 && (
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
                   {optionalPairings.map(opt => {
-                    const active = !!seat.optionalPairings?.[opt.key]?.ordered;
+                    const cur = seat.optionalPairings?.[opt.key] || { ordered: opt.defaultOn !== false };
+                    const active = !!cur.ordered;
+                    const seatPairing = String(seat.pairing || "").trim();
+                    const wantsNonAlco = seatPairing === "Non-Alc";
+                    const hasDataForSeatPairing = seatPairing
+                      ? (wantsNonAlco ? opt.hasNonAlco : opt.hasAlco)
+                      : true;
                     return (
                       <div key={opt.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
                         <div style={{ ...fieldLabel, marginBottom: 4 }}>{opt.label}</div>
                         <button onClick={() => updSeat(seat.id, "optionalPairings", {
                           ...(seat.optionalPairings || {}),
-                          [opt.key]: { ordered: !active },
+                          [opt.key]: { ...cur, ordered: !cur.ordered },
                         })} style={{
                           fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 8px", border: "1px solid",
-                          borderColor: active ? "#aaddaa" : "#ebebeb", borderRadius: 2, cursor: "pointer",
-                          background: active ? "#f0faf0" : "#fff", color: active ? "#4a8a4a" : "#555",
-                          transition: "all 0.1s",
-                        }}>{active ? "YES" : "NO"}</button>
+                          borderColor: active ? "#e0c8c8" : "#ebebeb", borderRadius: 2, cursor: "pointer",
+                          background: active ? "#fff5f5" : "#fff", color: active ? "#9a5050" : "#555",
+                        }}>{active ? "ENABLED" : "DISABLED"}</button>
+                        <div style={{
+                          fontFamily: FONT, fontSize: 9, color: hasDataForSeatPairing ? "#666" : "#b07070",
+                          border: "1px solid #ebebeb", borderRadius: 2, padding: "5px 6px",
+                          background: hasDataForSeatPairing ? "#fafafa" : "#fff5f5",
+                        }}>
+                          {seatPairing === "Non-Alc" ? "AUTO: NON-ALCO" : seatPairing ? "AUTO: ALCO" : "AUTO: WAITING FOR PAIRING"}
+                          {!hasDataForSeatPairing ? " · NO DATA" : ""}
+                        </div>
                       </div>
                     );
                   })}
