@@ -95,7 +95,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const orderedOptionalSeatsByKey = (menuCourses || []).reduce((acc, course) => {
     const key = normFlag(course?.optional_flag);
     if (!key) return acc;
-    acc[key] = seats.filter((s) => !!s.extras?.[key]?.ordered);
+    // Celebration courses (e.g. Cake) auto-include all seats when table.birthday is on
+    const category = normFlag(course?.course_category);
+    const isCelebration = category === "celebration" || (category !== "optional" && category !== "main" && normFlag(course?.optional_flag));
+    if (isCelebration && table.birthday) {
+      acc[key] = [...seats];
+    } else {
+      acc[key] = seats.filter((s) => !!s.extras?.[key]?.ordered);
+    }
     return acc;
   }, {});
   const optionalSeatsForCourse = (course) => {
@@ -106,6 +113,31 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const optionalKeyForCourse = (course) => normFlag(course?.optional_flag || "");
   const optionalSeatMap = orderedOptionalSeatsByKey;
 
+  // Per-seat optional pairing state for courses with optional_pairing_flag
+  const optionalPairingAlertByPairingKey = (() => {
+    const result = {};
+    (menuCourses || []).forEach(course => {
+      const pKey = normFlag(course?.optional_pairing_flag);
+      if (!pKey) return;
+      const defaultOn = course.optional_pairing_default_on !== false;
+      const alco = [], nonalc = [];
+      seats.forEach(s => {
+        const ps = s.optionalPairings?.[pKey];
+        const ordered = ps?.ordered !== undefined ? !!ps.ordered : defaultOn;
+        if (!ordered) return;
+        const isNonAlc = ps?.mode === "nonalc" || (!ps?.mode && String(s.pairing || "").trim() === "Non-Alc");
+        (isNonAlc ? nonalc : alco).push(s.id);
+      });
+      if (alco.length || nonalc.length) {
+        const parts = [];
+        if (alco.length) parts.push(`${alco.map(id => `P${id}`).join(" ")} ALCO`);
+        if (nonalc.length) parts.push(`${nonalc.map(id => `P${id}`).join(" ")} N/A`);
+        result[pKey] = parts.join(" · ");
+      }
+    });
+    return result;
+  })();
+
   const isShort = String(table.menuType || "").trim().toLowerCase() === "short";
   const isTruthyShort = v => { const s = String(v ?? "").trim().toLowerCase(); return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr"; };
 
@@ -113,9 +145,11 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const tableOverriddenCourses = (menuCourses || []).map(c => applyMenuOverride(c, table.courseOverrides || {}));
 
   // Courses to show: non-snack, optional extras only when ordered, short menu filtered
+  // Celebration courses auto-show when table.birthday is on
   const courses = tableOverriddenCourses.filter(c => {
     if (c.is_snack) return false;
     const category = normCategory(c);
+    if (category === "celebration" && table.birthday) return true;
     if ((category === "optional" || category === "celebration") && normFlag(c.optional_flag) && optionalSeatsForCourse(c).length === 0) return false;
     if (isShort && !isTruthyShort(c.show_on_short)) return false;
     return true;
@@ -405,8 +439,19 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const extraLabel = (() => {
             const optKey = optionalKeyForCourse(course);
             if (!optKey) return null;
-            const marks = (optionalSeatMap[optKey] || []).map(s => `P${s.id}`).join(" ");
+            const orderedSeats = optionalSeatMap[optKey] || [];
+            if (orderedSeats.length === 0) return null;
+            const marks = table.birthday && normCategory(course) === "celebration"
+              ? "ALL"
+              : orderedSeats.map(s => `P${s.id}`).join(" ");
             return marks + ((optKey === "cake" && table.cakeNote) ? ` — ${table.cakeNote}` : "");
+          })();
+
+          // Optional drink pairing alert (e.g. Martini, Beer) — per-seat alco/n/a
+          const pairingAlert = (() => {
+            const pKey = normFlag(course?.optional_pairing_flag);
+            if (!pKey) return null;
+            return optionalPairingAlertByPairingKey[pKey] || null;
           })();
 
           const kcNote = kitchenCourseNotes[key] || {};
@@ -417,7 +462,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             <div key={key} style={{
               borderBottom: "1px solid #f2f2f2",
               background: fired ? "#f3fcf5" : "#fff",
-              borderLeft: fired ? "4px solid #4a9a6a" : kcNote.name || kcNote.note ? "4px solid #c04040" : "4px solid transparent",
+              borderLeft: fired ? "4px solid #4a9a6a" : kcNote.name || kcNote.note ? "4px solid #c04040" : pairingAlert ? "4px solid #c8a060" : "4px solid transparent",
             }}>
               <div
                 onClick={() => !isEditingThis && (fired ? unfire(key) : fire(key))}
@@ -434,8 +479,9 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     {kcNote.name && <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 400, color: "#aaa", marginLeft: 5 }}>({line1})</span>}
                     {extraLabel && <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 400, color: "#bbb", marginLeft: 6 }}>{extraLabel}</span>}
                   </div>
-                  {(modGroups || kitchenNote || kcNote.note) && !fired && (
+                  {(pairingAlert || modGroups || kitchenNote || kcNote.note) && !fired && (
                     <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
+                      {pairingAlert && <span style={{ fontFamily: FONT, fontSize: 10, color: "#7a5020", fontWeight: 700 }}>⬡ {pairingAlert}</span>}
                       {modGroups && Object.entries(modGroups).sort(([a], [b]) => (a === baseName ? -1 : 1) - (b === baseName ? -1 : 1)).map(([name, count]) => (
                         <span key={name} style={{ fontFamily: FONT, fontSize: 10, color: name === baseName ? "#444" : "#c04040", fontWeight: 600 }}>{count}× {name}</span>
                       ))}
