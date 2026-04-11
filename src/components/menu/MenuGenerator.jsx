@@ -575,6 +575,10 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                           const raw = s.optionalPairings?.[opt.key];
                           const active = raw?.ordered !== undefined ? !!raw.ordered : opt.defaultOn !== false;
                           const mode = raw?.mode || null;
+                          const seatIsNonAlc = String(s.pairing || "").trim() === "Non-Alc";
+                          const seatPairingSet = String(s.pairing || "").trim() !== "" && String(s.pairing || "").trim() !== "—";
+                          const alcoActive = active && (mode === "alco" || (mode === null && seatPairingSet && !seatIsNonAlc));
+                          const nonAlcoActive = active && (mode === "nonalc" || (mode === null && seatIsNonAlc));
                           const updOpt = (patch) => updSeat(s.id, "optionalPairings", {
                             ...(s.optionalPairings || {}),
                             [opt.key]: { ...(raw || {}), ...patch },
@@ -588,27 +592,21 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                                 background: !active ? "#f4f8e8" : "#fff",
                                 color: !active ? "#5a7820" : "#bbb",
                               }}>{opt.label} off</button>
-                              <button onClick={() => updOpt({ ordered: true, mode: null })} style={{
-                                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                border: `1px solid ${active && !mode ? "#a0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                background: active && !mode ? "#f4f8e8" : "#fff",
-                                color: active && !mode ? "#5a7820" : "#bbb",
-                              }}>{opt.label} ✓</button>
                               {opt.hasAlco && (
                                 <button onClick={() => updOpt({ ordered: true, mode: "alco" })} style={{
-                                  fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 8px",
-                                  border: `1px solid ${active && mode === "alco" ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                  background: active && mode === "alco" ? "#fdf4e8" : "#fff",
-                                  color: active && mode === "alco" ? "#7a5020" : "#bbb",
-                                }}>ALC</button>
+                                  fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                                  border: `1px solid ${alcoActive ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                                  background: alcoActive ? "#fdf4e8" : "#fff",
+                                  color: alcoActive ? "#7a5020" : "#bbb",
+                                }}>{opt.alcoName || "ALC"}</button>
                               )}
                               {opt.hasNonAlco && (
                                 <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} style={{
-                                  fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 8px",
-                                  border: `1px solid ${active && mode === "nonalc" ? "#60a8c8" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                  background: active && mode === "nonalc" ? "#e8f4fd" : "#fff",
-                                  color: active && mode === "nonalc" ? "#205a7a" : "#bbb",
-                                }}>N-ALC</button>
+                                  fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                                  border: `1px solid ${nonAlcoActive ? "#60a8c8" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                                  background: nonAlcoActive ? "#e8f4fd" : "#fff",
+                                  color: nonAlcoActive ? "#205a7a" : "#bbb",
+                                }}>{opt.nonAlcoName || "N-ALC"}</button>
                               )}
                             </div>
                           );

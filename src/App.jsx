@@ -849,14 +849,14 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                               fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
                               borderColor: mode === "alco" ? "#c8a060" : "#ebebeb", borderRadius: 2, cursor: "pointer",
                               background: mode === "alco" ? "#fdf4e8" : "#fff", color: mode === "alco" ? "#7a5020" : "#aaa", flex: 1,
-                            }}>ALC</button>
+                            }}>{opt.alcoName || "ALC"}</button>
                           )}
                           {opt.hasNonAlco && (
                             <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} style={{
                               fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
                               borderColor: mode === "nonalc" ? "#60a0c8" : "#ebebeb", borderRadius: 2, cursor: "pointer",
                               background: mode === "nonalc" ? "#e8f4fd" : "#fff", color: mode === "nonalc" ? "#205a7a" : "#aaa", flex: 1,
-                            }}>N-ALC</button>
+                            }}>{opt.nonAlcoName || "N-ALC"}</button>
                           )}
                         </div>
                         <div style={{

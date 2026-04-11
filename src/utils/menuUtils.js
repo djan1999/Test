@@ -51,11 +51,21 @@ export const optionalPairingsFromCourses = (menuCourses = []) => {
       c?.na?.name || c?.na?.sub
     );
     if (!hasAlco && !hasNonAlco) return;
+    const alcoName = (
+      c?.optional_pairing_alco?.name || c?.optional_pairing_alco?.sub ||
+      c?.os?.name || c?.premium?.name || c?.wp?.name || ""
+    ).trim();
+    const nonAlcoName = (
+      c?.optional_pairing_na?.name || c?.optional_pairing_na?.sub ||
+      c?.na?.name || ""
+    ).trim();
     byKey.set(key, {
       key,
       label,
       hasAlco,
       hasNonAlco,
+      alcoName,
+      nonAlcoName,
       defaultOn: c?.optional_pairing_default_on !== false,
     });
   });
