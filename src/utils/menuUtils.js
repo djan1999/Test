@@ -53,6 +53,7 @@ export const optionalPairingsFromCourses = (menuCourses = []) => {
     if (!hasAlco && !hasNonAlco) return;
     const alcoName = (c?.optional_pairing_alco?.name || c?.optional_pairing_alco?.sub || "").trim();
     const nonAlcoName = (c?.optional_pairing_na?.name || c?.optional_pairing_na?.sub || "").trim();
+    const extraKey = normalizeOptionalKey(c?.optional_flag) || null;
     byKey.set(key, {
       key,
       label,
@@ -60,6 +61,7 @@ export const optionalPairingsFromCourses = (menuCourses = []) => {
       hasNonAlco,
       alcoName,
       nonAlcoName,
+      extraKey,
       defaultOn: c?.optional_pairing_default_on !== false,
     });
   });

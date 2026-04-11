@@ -566,64 +566,62 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                       );
                     })()}
                   </div>
-                  {/* Optional extras (data-driven from courses optional_flag) */}
-                  {optionalPairings.length > 0 && (
-                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e8f0f8" }}>
-                      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Optional Pairings</div>
-                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-                        {optionalPairings.map((opt, oi) => {
-                          const raw = s.optionalPairings?.[opt.key];
-                          const active = raw?.ordered !== undefined ? !!raw.ordered : opt.defaultOn !== false;
-                          const mode = raw?.mode || null;
-                          const seatIsNonAlc = String(s.pairing || "").trim() === "Non-Alc";
-                          const seatPairingSet = !["", "—", "-"].includes(String(s.pairing || "").trim());
-                          const hasBoth = !!(opt.alcoName && opt.nonAlcoName);
-                          const alcoActive = hasBoth && active && (mode === "alco" || (mode === null && seatPairingSet && !seatIsNonAlc));
-                          const nonAlcoActive = hasBoth && active && (mode === "nonalc" || (mode === null && seatIsNonAlc));
-                          const singleLabel = opt.alcoName || opt.nonAlcoName || `${opt.label} ✓`;
-                          const trunc = (str, n = 16) => str.length > n ? str.slice(0, n) + "…" : str;
-                          const updOpt = (patch) => updSeat(s.id, "optionalPairings", {
-                            ...(s.optionalPairings || {}),
-                            [opt.key]: { ...(raw || {}), ...patch },
-                          });
-                          return (
-                            <div key={opt.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
-                              {oi > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}
-                              <button onClick={() => updOpt({ ordered: false })} style={{
-                                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                border: `1px solid ${!active ? "#a0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                background: !active ? "#f4f8e8" : "#fff",
-                                color: !active ? "#5a7820" : "#bbb",
-                              }}>{opt.label} off</button>
-                              {hasBoth ? (
-                                <>
-                                  <button onClick={() => updOpt({ ordered: true, mode: "alco" })} title={opt.alcoName} style={{
-                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                    border: `1px solid ${alcoActive ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                    background: alcoActive ? "#fdf4e8" : "#fff",
-                                    color: alcoActive ? "#7a5020" : "#bbb",
-                                  }}>{trunc(opt.alcoName)}</button>
-                                  <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} title={opt.nonAlcoName} style={{
-                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                    border: `1px solid ${nonAlcoActive ? "#60a8c8" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                    background: nonAlcoActive ? "#e8f4fd" : "#fff",
-                                    color: nonAlcoActive ? "#205a7a" : "#bbb",
-                                  }}>{trunc(opt.nonAlcoName)}</button>
-                                </>
-                              ) : (
-                                <button onClick={() => updOpt({ ordered: true, mode: null })} title={singleLabel} style={{
+                  {/* Optional pairings (data-driven from courses optional_pairing_flag) */}
+                  {(() => {
+                    const visiblePairings = optionalPairings.filter(opt => {
+                      if (!opt.extraKey) return true;
+                      const extra = s.extras?.[opt.extraKey];
+                      return extra?.ordered;
+                    });
+                    if (!visiblePairings.length) return null;
+                    return (
+                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e8f0f8" }}>
+                        <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Optional Pairings</div>
+                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                          {visiblePairings.map((opt, oi) => {
+                            const raw = s.optionalPairings?.[opt.key];
+                            const active = raw?.ordered !== undefined ? !!raw.ordered : opt.defaultOn !== false;
+                            const mode = raw?.mode || null;
+                            const seatIsNonAlc = String(s.pairing || "").trim() === "Non-Alc";
+                            const seatSet = !["", "—", "-"].includes(String(s.pairing || "").trim());
+                            const alcoOn = active && (mode === "alco" || (mode === null && seatSet && !seatIsNonAlc));
+                            const naOn = active && (mode === "nonalc" || (mode === null && seatIsNonAlc));
+                            const updOpt = (patch) => updSeat(s.id, "optionalPairings", {
+                              ...(s.optionalPairings || {}),
+                              [opt.key]: { ...(raw || {}), ...patch },
+                            });
+                            return (
+                              <div key={opt.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                                {oi > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}
+                                <button onClick={() => updOpt({ ordered: false })} style={{
                                   fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                  border: `1px solid ${active ? "#a0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                  background: active ? "#f4f8e8" : "#fff",
-                                  color: active ? "#5a7820" : "#bbb",
-                                }}>{trunc(singleLabel)}</button>
-                              )}
-                            </div>
-                          );
-                        })}
+                                  border: `1px solid ${!active ? "#a0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                                  background: !active ? "#f4f8e8" : "#fff",
+                                  color: !active ? "#5a7820" : "#bbb",
+                                }}>{opt.label} off</button>
+                                {opt.hasAlco && (
+                                  <button onClick={() => updOpt({ ordered: true, mode: "alco" })} style={{
+                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                                    border: `1px solid ${alcoOn ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                                    background: alcoOn ? "#fdf4e8" : "#fff",
+                                    color: alcoOn ? "#7a5020" : "#bbb",
+                                  }}>ALCO</button>
+                                )}
+                                {opt.hasNonAlco && (
+                                  <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} style={{
+                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                                    border: `1px solid ${naOn ? "#60a8c8" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                                    background: naOn ? "#e8f4fd" : "#fff",
+                                    color: naOn ? "#205a7a" : "#bbb",
+                                  }}>N/A</button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                   {optionalExtras.length > 0 && (
                     <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e8f0f8" }}>
                       <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Extras</div>

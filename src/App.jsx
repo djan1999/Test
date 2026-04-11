@@ -817,56 +817,58 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                   })}
                 </div>
               )}
-              {optionalPairings.length > 0 && (
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
-                  {optionalPairings.map(opt => {
-                    const cur = seat.optionalPairings?.[opt.key] || { ordered: opt.defaultOn !== false };
-                    const active = !!cur.ordered;
-                    const mode = cur.mode || null;
-                    const seatPairing = String(seat.pairing || "").trim();
-                    const wantsNonAlco = seatPairing === "Non-Alc";
-                    const hasBoth = !!(opt.alcoName && opt.nonAlcoName);
-                    const alcoActive = hasBoth && active && (mode === "alco" || (mode === null && seatPairing && !wantsNonAlco));
-                    const nonAlcoActive = hasBoth && active && (mode === "nonalc" || (mode === null && wantsNonAlco));
-                    const updOpt = (patch) => updSeat(seat.id, "optionalPairings", {
-                      ...(seat.optionalPairings || {}),
-                      [opt.key]: { ...cur, ...patch },
-                    });
-                    return (
-                      <div key={opt.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
-                        <div style={{ ...fieldLabel, marginBottom: 4 }}>{opt.label}</div>
-                        <button onClick={() => updOpt({ ordered: !active })} style={{
-                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 8px", border: "1px solid",
-                          borderColor: active ? "#e0c8c8" : "#ebebeb", borderRadius: 2, cursor: "pointer",
-                          background: active ? "#fff5f5" : "#fff", color: active ? "#9a5050" : "#555",
-                        }}>{active ? "ENABLED" : "DISABLED"}</button>
-                        {hasBoth && (
+              {(() => {
+                const visPairings = optionalPairings.filter(opt => {
+                  if (!opt.extraKey) return true;
+                  const extra = seat.extras?.[opt.extraKey];
+                  return extra?.ordered;
+                });
+                if (!visPairings.length) return null;
+                return (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+                    {visPairings.map(opt => {
+                      const cur = seat.optionalPairings?.[opt.key] || { ordered: opt.defaultOn !== false };
+                      const active = !!cur.ordered;
+                      const mode = cur.mode || null;
+                      const seatPairing = String(seat.pairing || "").trim();
+                      const seatIsNonAlc = seatPairing === "Non-Alc";
+                      const seatSet = seatPairing && seatPairing !== "—";
+                      const alcoOn = active && (mode === "alco" || (mode === null && seatSet && !seatIsNonAlc));
+                      const naOn = active && (mode === "nonalc" || (mode === null && seatIsNonAlc));
+                      const updOpt = (patch) => updSeat(seat.id, "optionalPairings", {
+                        ...(seat.optionalPairings || {}),
+                        [opt.key]: { ...cur, ...patch },
+                      });
+                      return (
+                        <div key={opt.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
+                          <div style={{ ...fieldLabel, marginBottom: 4 }}>{opt.label}</div>
                           <div style={{ display: "flex", gap: 3 }}>
-                            <button onClick={() => updOpt({ ordered: true, mode: "alco" })} title={opt.alcoName} style={{
+                            <button onClick={() => updOpt({ ordered: false })} style={{
                               fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
-                              borderColor: alcoActive ? "#c8a060" : "#ebebeb", borderRadius: 2, cursor: "pointer",
-                              background: alcoActive ? "#fdf4e8" : "#fff", color: alcoActive ? "#7a5020" : "#aaa", flex: 1,
-                            }}>{opt.alcoName}</button>
-                            <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} title={opt.nonAlcoName} style={{
-                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
-                              borderColor: nonAlcoActive ? "#60a0c8" : "#ebebeb", borderRadius: 2, cursor: "pointer",
-                              background: nonAlcoActive ? "#e8f4fd" : "#fff", color: nonAlcoActive ? "#205a7a" : "#aaa", flex: 1,
-                            }}>{opt.nonAlcoName}</button>
+                              borderColor: !active ? "#a0c060" : "#ebebeb", borderRadius: 2, cursor: "pointer",
+                              background: !active ? "#f4f8e8" : "#fff", color: !active ? "#5a7820" : "#aaa", flex: 1,
+                            }}>OFF</button>
+                            {opt.hasAlco && (
+                              <button onClick={() => updOpt({ ordered: true, mode: "alco" })} style={{
+                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                                borderColor: alcoOn ? "#c8a060" : "#ebebeb", borderRadius: 2, cursor: "pointer",
+                                background: alcoOn ? "#fdf4e8" : "#fff", color: alcoOn ? "#7a5020" : "#aaa", flex: 1,
+                              }}>ALCO</button>
+                            )}
+                            {opt.hasNonAlco && (
+                              <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} style={{
+                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                                borderColor: naOn ? "#60a0c8" : "#ebebeb", borderRadius: 2, cursor: "pointer",
+                                background: naOn ? "#e8f4fd" : "#fff", color: naOn ? "#205a7a" : "#aaa", flex: 1,
+                              }}>N/A</button>
+                            )}
                           </div>
-                        )}
-                        <div style={{
-                          fontFamily: FONT, fontSize: 9, color: "#666",
-                          border: "1px solid #ebebeb", borderRadius: 2, padding: "5px 6px", background: "#fafafa",
-                        }}>
-                          {hasBoth
-                            ? (mode === "nonalc" ? "OVERRIDE: NON-ALCO" : mode === "alco" ? "OVERRIDE: ALCO" : (wantsNonAlco ? "AUTO: NON-ALCO" : seatPairing ? "AUTO: ALCO" : "AUTO: WAITING"))
-                            : (wantsNonAlco ? "AUTO: NON-ALCO" : seatPairing ? "AUTO: ALCO" : "AUTO: WAITING FOR PAIRING")}
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         );
@@ -1270,7 +1272,11 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                         );
                       })}
                       {/* Optional pairing quick toggles */}
-                      {(optionalPairings || []).slice(0, 3).map((opt) => {
+                      {(optionalPairings || []).filter(opt => {
+                        if (!opt.extraKey) return true;
+                        const extra = s.extras?.[opt.extraKey];
+                        return extra?.ordered;
+                      }).slice(0, 3).map((opt) => {
                         const raw = s.optionalPairings?.[opt.key];
                         const active = raw?.ordered !== undefined ? !!raw.ordered : opt.defaultOn !== false;
                         return (
@@ -1278,7 +1284,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                             key={opt.key}
                             onClick={() => updSeat && updSeat(t.id, s.id, "optionalPairings", {
                               ...(s.optionalPairings || {}),
-                              [opt.key]: { ordered: !active },
+                              [opt.key]: { ...(raw || {}), ordered: !active },
                             })}
                             style={{
                               fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "3px 9px",
