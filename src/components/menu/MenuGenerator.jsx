@@ -546,33 +546,33 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                           const mode = raw?.mode || null;
                           const seatIsNonAlc = String(s.pairing || "").trim() === "Non-Alc";
                           const seatSet = !["", "—", "-"].includes(String(s.pairing || "").trim());
-                          const alcoOn = active && (mode === "alco" || (mode === null && seatSet && !seatIsNonAlc));
-                          const naOn = active && (mode === "nonalc" || (mode === null && seatIsNonAlc));
-                          const updOpt = (patch) => updSeat(s.id, "optionalPairings", {
-                            ...(s.optionalPairings || {}), [opt.key]: { ...(raw || {}), ...patch },
+                          const states = ["off", ...(opt.hasAlco ? ["alco"] : []), ...(opt.hasNonAlco ? ["nonalc"] : [])];
+                          let cur;
+                          if (!active) cur = "off";
+                          else if (mode === "alco") cur = "alco";
+                          else if (mode === "nonalc") cur = "nonalc";
+                          else cur = (seatSet && !seatIsNonAlc) ? "alco" : "nonalc";
+                          if (!states.includes(cur)) cur = states[1] || "off";
+                          const next = states[(states.indexOf(cur) + 1) % states.length];
+                          const applyNext = () => updSeat(s.id, "optionalPairings", {
+                            ...(s.optionalPairings || {}),
+                            [opt.key]: { ...(raw || {}), ordered: next !== "off", ...(next === "alco" ? { mode: "alco" } : next === "nonalc" ? { mode: "nonalc" } : { mode: null }) },
                           });
+                          const styleMap = {
+                            off:    { border: "#a0c060", bg: "#f4f8e8", color: "#5a7820" },
+                            alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
+                            nonalc: { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" },
+                          };
+                          const labelMap = { off: `${opt.label} off`, alco: `${opt.label} · ALCO`, nonalc: `${opt.label} · N/A` };
+                          const st = styleMap[cur];
                           return (
                             <div key={opt.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
                               {oi > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}
-                              <button onClick={() => updOpt({ ordered: false })} style={{
+                              <button onClick={applyNext} style={{
                                 fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                border: `1px solid ${!active ? "#a0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                background: !active ? "#f4f8e8" : "#fff", color: !active ? "#5a7820" : "#bbb",
-                              }}>{opt.label} off</button>
-                              {opt.hasAlco && (
-                                <button onClick={() => updOpt({ ordered: true, mode: "alco" })} style={{
-                                  fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                  border: `1px solid ${alcoOn ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                  background: alcoOn ? "#fdf4e8" : "#fff", color: alcoOn ? "#7a5020" : "#bbb",
-                                }}>ALCO</button>
-                              )}
-                              {opt.hasNonAlco && (
-                                <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} style={{
-                                  fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                  border: `1px solid ${naOn ? "#60a8c8" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                  background: naOn ? "#e8f4fd" : "#fff", color: naOn ? "#205a7a" : "#bbb",
-                                }}>N/A</button>
-                              )}
+                                border: `1px solid ${st.border}`, borderRadius: 2, cursor: "pointer",
+                                background: st.bg, color: st.color,
+                              }}>{labelMap[cur]}</button>
                             </div>
                           );
                         })}
@@ -637,25 +637,34 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                               );
                             }
 
-                            // Plain extra (no linked drink pairing) — multi-button as before
+                            // Plain extra (no linked drink pairing) — single cycling button
+                            const pStates = ["off", ...dish.pairings];
+                            const curP = !dishOn ? "off" : (extra.pairing || dish.pairings[0]);
+                            const nextP = pStates[(pStates.indexOf(curP) + 1) % pStates.length];
+                            const applyNextP = () => updSeat(s.id, "extras", {
+                              ...s.extras,
+                              [dish.key]: nextP === "off"
+                                ? { ordered: false, pairing: dish.pairings[0] }
+                                : { ordered: true, pairing: nextP },
+                            });
+                            const pLabel = curP === "off"
+                              ? `${dish.name} off`
+                              : curP === "—"
+                              ? `${dish.name} ✓`
+                              : `${dish.name.slice(0, 4)} · ${curP}`;
+                            const pColors = curP === "off"
+                              ? { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" }
+                              : curP === "—"
+                              ? { border: "#a0c060", bg: "#f4f8e8", color: "#5a7820" }
+                              : { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" };
                             return (
                               <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
                                 {di > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}
-                                <button onClick={() => updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: false, pairing: dish.pairings[0] } })} style={{
+                                <button onClick={applyNextP} style={{
                                   fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                  border: `1px solid ${!dishOn ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                  background: !dishOn ? "#fdf4e8" : "#fff", color: !dishOn ? "#7a5020" : "#bbb",
-                                }}>{dish.name} off</button>
-                                {dish.pairings.map(p => {
-                                  const sel = dishOn && (extra.pairing || dish.pairings[0]) === p;
-                                  return (
-                                    <button key={p} onClick={() => updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: true, pairing: p } })} style={{
-                                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                      border: `1px solid ${sel ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                      background: sel ? "#fdf4e8" : "#fff", color: sel ? "#7a5020" : "#bbb",
-                                    }}>{dish.name.slice(0, 4)} {p}</button>
-                                  );
-                                })}
+                                  border: `1px solid ${pColors.border}`, borderRadius: 2, cursor: "pointer",
+                                  background: pColors.bg, color: pColors.color,
+                                }}>{pLabel}</button>
                               </div>
                             );
                           });
