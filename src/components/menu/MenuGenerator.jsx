@@ -591,62 +591,71 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                             const extra = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
                             const dishOn = !!extra.ordered;
                             const linked = pairingByExtraKey.get(dish.key);
-                            const raw = linked ? s.optionalPairings?.[linked.key] : null;
-                            const pmode = raw?.mode || null;
-                            const seatIsNonAlc = String(s.pairing || "").trim() === "Non-Alc";
-                            const seatSet = !["", "—", "-"].includes(String(s.pairing || "").trim());
-                            const pairingOn = linked ? (raw?.ordered !== undefined ? !!raw.ordered : linked.defaultOn !== false) : false;
-                            const alcoOn = dishOn && pairingOn && (pmode === "alco" || (pmode === null && seatSet && !seatIsNonAlc));
-                            const naOn = dishOn && pairingOn && (pmode === "nonalc" || (pmode === null && seatIsNonAlc));
+
+                            if (linked) {
+                              // Cycling button: off → on → on·ALCO → on·N/A → off
+                              const raw = s.optionalPairings?.[linked.key];
+                              const pairingOrdered = raw?.ordered !== undefined ? !!raw.ordered : false;
+                              const pmode = raw?.mode || null;
+                              const states = ["off", "on"];
+                              if (linked.hasAlco) states.push("alco");
+                              if (linked.hasNonAlco) states.push("nonalc");
+                              // Determine current state
+                              let cur;
+                              if (!dishOn) cur = "off";
+                              else if (!pairingOrdered) cur = "on";
+                              else if (pmode === "alco") cur = "alco";
+                              else if (pmode === "nonalc") cur = "nonalc";
+                              else cur = "on";
+                              const next = states[(states.indexOf(cur) + 1) % states.length];
+                              const applyNext = () => {
+                                const extrasNext = { ...s.extras, [dish.key]: { ordered: next !== "off", pairing: dish.pairings[0] } };
+                                const pairingNext = { ...(s.optionalPairings || {}), [linked.key]: {
+                                  ...(raw || {}),
+                                  ordered: next === "alco" || next === "nonalc",
+                                  ...(next === "alco" ? { mode: "alco" } : next === "nonalc" ? { mode: "nonalc" } : { mode: null }),
+                                }};
+                                updSeat(s.id, "extras", extrasNext);
+                                updSeat(s.id, "optionalPairings", pairingNext);
+                              };
+                              const labels = { off: `${dish.name} off`, on: `${dish.name} ✓`, alco: `${dish.name.slice(0,4)} · ALCO`, nonalc: `${dish.name.slice(0,4)} · N/A` };
+                              const colors = {
+                                off:    { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
+                                on:     { border: "#a0c060", bg: "#f4f8e8", color: "#5a7820" },
+                                alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
+                                nonalc: { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" },
+                              }[cur];
+                              return (
+                                <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                                  {di > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}
+                                  <button onClick={applyNext} style={{
+                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                                    border: `1px solid ${colors.border}`, borderRadius: 2, cursor: "pointer",
+                                    background: colors.bg, color: colors.color,
+                                  }}>{labels[cur]}</button>
+                                </div>
+                              );
+                            }
+
+                            // Plain extra (no linked drink pairing) — multi-button as before
                             return (
                               <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
                                 {di > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}
-                                {/* Off — always shown */}
-                                <button onClick={() => {
-                                  updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: false, pairing: dish.pairings[0] } });
-                                  if (linked) updSeat(s.id, "optionalPairings", { ...(s.optionalPairings || {}), [linked.key]: { ...(raw || {}), ordered: false } });
-                                }} style={{
+                                <button onClick={() => updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: false, pairing: dish.pairings[0] } })} style={{
                                   fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
                                   border: `1px solid ${!dishOn ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
                                   background: !dishOn ? "#fdf4e8" : "#fff", color: !dishOn ? "#7a5020" : "#bbb",
                                 }}>{dish.name} off</button>
-                                {linked ? (
-                                  /* Dish with optional drink: combined [NAME · ALCO] / [NAME · N/A] buttons */
-                                  <>
-                                    {linked.hasAlco && (
-                                      <button onClick={() => {
-                                        updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: true, pairing: dish.pairings[0] } });
-                                        updSeat(s.id, "optionalPairings", { ...(s.optionalPairings || {}), [linked.key]: { ...(raw || {}), ordered: true, mode: "alco" } });
-                                      }} style={{
-                                        fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                        border: `1px solid ${alcoOn ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                        background: alcoOn ? "#fdf4e8" : "#fff", color: alcoOn ? "#7a5020" : "#bbb",
-                                      }}>{dish.name.slice(0, 4)} · ALCO</button>
-                                    )}
-                                    {linked.hasNonAlco && (
-                                      <button onClick={() => {
-                                        updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: true, pairing: dish.pairings[0] } });
-                                        updSeat(s.id, "optionalPairings", { ...(s.optionalPairings || {}), [linked.key]: { ...(raw || {}), ordered: true, mode: "nonalc" } });
-                                      }} style={{
-                                        fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                        border: `1px solid ${naOn ? "#60a8c8" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                        background: naOn ? "#e8f4fd" : "#fff", color: naOn ? "#205a7a" : "#bbb",
-                                      }}>{dish.name.slice(0, 4)} · N/A</button>
-                                    )}
-                                  </>
-                                ) : (
-                                  /* Plain extra: dish pairing variant buttons */
-                                  dish.pairings.map(p => {
-                                    const sel = dishOn && (extra.pairing || dish.pairings[0]) === p;
-                                    return (
-                                      <button key={p} onClick={() => updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: true, pairing: p } })} style={{
-                                        fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                        border: `1px solid ${sel ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                        background: sel ? "#fdf4e8" : "#fff", color: sel ? "#7a5020" : "#bbb",
-                                      }}>{dish.name.slice(0, 4)} {p}</button>
-                                    );
-                                  })
-                                )}
+                                {dish.pairings.map(p => {
+                                  const sel = dishOn && (extra.pairing || dish.pairings[0]) === p;
+                                  return (
+                                    <button key={p} onClick={() => updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: true, pairing: p } })} style={{
+                                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                                      border: `1px solid ${sel ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                                      background: sel ? "#fdf4e8" : "#fff", color: sel ? "#7a5020" : "#bbb",
+                                    }}>{dish.name.slice(0, 4)} {p}</button>
+                                  );
+                                })}
                               </div>
                             );
                           });
