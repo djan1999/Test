@@ -558,7 +558,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                             ...(s.optionalPairings || {}),
                             [opt.key]: { ...(raw || {}), ordered: next !== "off", ...(next === "alco" ? { mode: "alco" } : next === "nonalc" ? { mode: "nonalc" } : { mode: null }) },
                           });
-                          const drinkName = (cur === "nonalc" && opt.nonAlcoName) ? opt.nonAlcoName : (opt.alcoName || opt.nonAlcoName || opt.label);
+                          const drinkName = s.optionalPairings?.[opt.key]?.label ?? opt.label;
                           const btnStyleMap = {
                             off:    { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" },
                             alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
@@ -569,7 +569,18 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                           return (
                             <div key={opt.key} style={{ display: "flex", gap: 4, alignItems: "center" }}>
                               {oi > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}
-                              <span style={{ fontFamily: FONT, fontSize: 9, color: "#888", letterSpacing: 0.3, whiteSpace: "nowrap" }}>{drinkName}</span>
+                              <input
+                                value={drinkName}
+                                onChange={e => updSeat(s.id, "optionalPairings", {
+                                  ...(s.optionalPairings || {}),
+                                  [opt.key]: { ...(s.optionalPairings?.[opt.key] || {}), label: e.target.value },
+                                })}
+                                style={{
+                                  fontFamily: FONT, fontSize: 9, color: "#666", letterSpacing: 0.3,
+                                  border: "none", borderBottom: "1px dashed #ccc", background: "transparent",
+                                  outline: "none", padding: "0 2px", width: Math.max(30, drinkName.length * 6),
+                                }}
+                              />
                               <button onClick={applyNext} style={{
                                 fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "3px 8px",
                                 border: `1px solid ${st.border}`, borderRadius: 2, cursor: "pointer",
