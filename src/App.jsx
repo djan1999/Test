@@ -822,29 +822,50 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                   {optionalPairings.map(opt => {
                     const cur = seat.optionalPairings?.[opt.key] || { ordered: opt.defaultOn !== false };
                     const active = !!cur.ordered;
+                    const mode = cur.mode || null;
                     const seatPairing = String(seat.pairing || "").trim();
                     const wantsNonAlco = seatPairing === "Non-Alc";
-                    const hasDataForSeatPairing = seatPairing
-                      ? (wantsNonAlco ? opt.hasNonAlco : opt.hasAlco)
-                      : true;
+                    const hasDataForMode = mode === "nonalc" ? opt.hasNonAlco : mode === "alco" ? opt.hasAlco : (seatPairing ? (wantsNonAlco ? opt.hasNonAlco : opt.hasAlco) : true);
+                    const updOpt = (patch) => updSeat(seat.id, "optionalPairings", {
+                      ...(seat.optionalPairings || {}),
+                      [opt.key]: { ...cur, ...patch },
+                    });
                     return (
                       <div key={opt.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
                         <div style={{ ...fieldLabel, marginBottom: 4 }}>{opt.label}</div>
-                        <button onClick={() => updSeat(seat.id, "optionalPairings", {
-                          ...(seat.optionalPairings || {}),
-                          [opt.key]: { ...cur, ordered: !cur.ordered },
-                        })} style={{
+                        <button onClick={() => updOpt({ ordered: !active })} style={{
                           fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 8px", border: "1px solid",
                           borderColor: active ? "#e0c8c8" : "#ebebeb", borderRadius: 2, cursor: "pointer",
                           background: active ? "#fff5f5" : "#fff", color: active ? "#9a5050" : "#555",
                         }}>{active ? "ENABLED" : "DISABLED"}</button>
+                        <div style={{ display: "flex", gap: 3 }}>
+                          <button onClick={() => updOpt({ mode: null })} style={{
+                            fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                            borderColor: !mode ? "#8ab0d0" : "#ebebeb", borderRadius: 2, cursor: "pointer",
+                            background: !mode ? "#e8f0f8" : "#fff", color: !mode ? "#3a6080" : "#aaa", flex: 1,
+                          }}>AUTO</button>
+                          {opt.hasAlco && (
+                            <button onClick={() => updOpt({ ordered: true, mode: "alco" })} style={{
+                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                              borderColor: mode === "alco" ? "#c8a060" : "#ebebeb", borderRadius: 2, cursor: "pointer",
+                              background: mode === "alco" ? "#fdf4e8" : "#fff", color: mode === "alco" ? "#7a5020" : "#aaa", flex: 1,
+                            }}>ALC</button>
+                          )}
+                          {opt.hasNonAlco && (
+                            <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} style={{
+                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                              borderColor: mode === "nonalc" ? "#60a0c8" : "#ebebeb", borderRadius: 2, cursor: "pointer",
+                              background: mode === "nonalc" ? "#e8f4fd" : "#fff", color: mode === "nonalc" ? "#205a7a" : "#aaa", flex: 1,
+                            }}>N-ALC</button>
+                          )}
+                        </div>
                         <div style={{
-                          fontFamily: FONT, fontSize: 9, color: hasDataForSeatPairing ? "#666" : "#b07070",
+                          fontFamily: FONT, fontSize: 9, color: hasDataForMode ? "#666" : "#b07070",
                           border: "1px solid #ebebeb", borderRadius: 2, padding: "5px 6px",
-                          background: hasDataForSeatPairing ? "#fafafa" : "#fff5f5",
+                          background: hasDataForMode ? "#fafafa" : "#fff5f5",
                         }}>
-                          {seatPairing === "Non-Alc" ? "AUTO: NON-ALCO" : seatPairing ? "AUTO: ALCO" : "AUTO: WAITING FOR PAIRING"}
-                          {!hasDataForSeatPairing ? " · NO DATA" : ""}
+                          {mode === "nonalc" ? "OVERRIDE: NON-ALCO" : mode === "alco" ? "OVERRIDE: ALCO" : (seatPairing === "Non-Alc" ? "AUTO: NON-ALCO" : seatPairing ? "AUTO: ALCO" : "AUTO: WAITING FOR PAIRING")}
+                          {!hasDataForMode ? " · NO DATA" : ""}
                         </div>
                       </div>
                     );
