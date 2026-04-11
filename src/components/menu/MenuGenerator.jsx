@@ -128,19 +128,6 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
     setSeatEdits(prev => { const n = { ...prev }; delete n[seatId]; return n; });
   };
 
-  const defaultBeer = (s) => {
-    if (s.pairing === "Non-Alc") return "nonalc";
-    if (s.pairing && s.pairing !== "—") return "alco";
-    return "alco";
-  };
-
-  const [beerChoices, setBeerChoices] = useState(() => {
-    const init = {};
-    seats.forEach(s => { init[s.id] = defaultBeer(s); });
-    return init;
-  });
-
-  const setBeer = (seatId, val) => setBeerChoices(prev => ({ ...prev, [seatId]: val }));
   const normalizedMenuRules = normalizeMenuRules(menuRules);
 
   const setLanguageWithDefaults = (nextLang) => {
@@ -167,7 +154,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
       menuTitle,
       teamNames,
       menuCourses: seatCourses,
-      beerChoice: beerChoices[seat.id] || defaultBeer(seat),
+      beerChoice: seat.pairing === "Non-Alc" ? "nonalc" : "alco",
       lang,
       seatOutputOverrides: seatEdits[seat.id] || {},
       thankYouNote,
@@ -206,7 +193,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
       menuTitle,
       teamNames,
       menuCourses: seatCourses,
-      beerChoice: beerChoices[seat.id] || defaultBeer(seat),
+      beerChoice: seat.pairing === "Non-Alc" ? "nonalc" : "alco",
       lang,
       seatOutputOverrides: seatEdits[seat.id] || {},
       thankYouNote,
@@ -225,10 +212,6 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
   const pairingColor = { Wine: "#7a5020", "Non-Alc": "#3a6a2a", Premium: "#4a3a7a", "Our Story": "#2a5a6a" };
   const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#edf8e8", Premium: "#f0eeff", "Our Story": "#e8f5f8" };
 
-  const BEER_OPTS = [
-    { val: "alco",   label: "ALCO" },
-    { val: "nonalc", label: "N/A" },
-  ];
 
   return (
     <FullModal title="Generate Menus" onClose={onClose}>
@@ -339,20 +322,6 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                     🍺 {b.name}
                   </span>
                 ))}
-
-                {/* Beer selector */}
-                <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#bbb", textTransform: "uppercase" }}>beer</span>
-                  {BEER_OPTS.map(opt => (
-                    <button key={opt.val} onClick={() => setBeer(s.id, opt.val)} style={{
-                      fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "3px 7px",
-                      border: `1px solid ${beerChoices[s.id] === opt.val ? "#c8a96e" : "#e8e8e8"}`,
-                      borderRadius: 2, cursor: "pointer",
-                      background: beerChoices[s.id] === opt.val ? "#fdf4e8" : "#fff",
-                      color: beerChoices[s.id] === opt.val ? "#7a5020" : "#bbb",
-                    }}>{opt.label}</button>
-                  ))}
-                </div>
 
                 {/* Edit button — opens per-seat ephemeral course editor */}
                 <button onClick={() => { setExpandedSeatId(isExpanded ? null : s.id); setExpandedDrinksId(null); setPreviewSeatId(null); }} style={{
