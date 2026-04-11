@@ -558,21 +558,23 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                             ...(s.optionalPairings || {}),
                             [opt.key]: { ...(raw || {}), ordered: next !== "off", ...(next === "alco" ? { mode: "alco" } : next === "nonalc" ? { mode: "nonalc" } : { mode: null }) },
                           });
-                          const styleMap = {
-                            off:    { border: "#a0c060", bg: "#f4f8e8", color: "#5a7820" },
+                          const drinkName = (cur === "nonalc" && opt.nonAlcoName) ? opt.nonAlcoName : (opt.alcoName || opt.nonAlcoName || opt.label);
+                          const btnStyleMap = {
+                            off:    { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" },
                             alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
                             nonalc: { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" },
                           };
-                          const labelMap = { off: `${opt.label} off`, alco: `${opt.label} · ALCO`, nonalc: `${opt.label} · N/A` };
-                          const st = styleMap[cur];
+                          const btnLabelMap = { off: "off", alco: "alco", nonalc: "n/a" };
+                          const st = btnStyleMap[cur];
                           return (
-                            <div key={opt.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                            <div key={opt.key} style={{ display: "flex", gap: 4, alignItems: "center" }}>
                               {oi > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}
+                              <span style={{ fontFamily: FONT, fontSize: 9, color: "#888", letterSpacing: 0.3, whiteSpace: "nowrap" }}>{drinkName}</span>
                               <button onClick={applyNext} style={{
-                                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "3px 8px",
                                 border: `1px solid ${st.border}`, borderRadius: 2, cursor: "pointer",
                                 background: st.bg, color: st.color,
-                              }}>{labelMap[cur]}</button>
+                              }}>{btnLabelMap[cur]}</button>
                             </div>
                           );
                         })}
