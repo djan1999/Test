@@ -49,10 +49,17 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
   const optionalExtras   = useMemo(() => optionalExtrasFromCourses(menuCourses),  [menuCourses]);
   const optionalPairings = useMemo(() => optionalPairingsFromCourses(menuCourses), [menuCourses]);
 
-  const updSeat = (seatId, field, value) => {
+  const updSeat = (seatId, field, valueOrFn) => {
     if (!upd) return;
-    // Use functional update to avoid stale closure (e.g. adding aperitif then pairing in quick succession)
-    upd(table.id, "seats", prev => (prev || []).map(s => s.id === seatId ? { ...s, [field]: value } : s));
+    upd(table.id, "seats", prev => (prev || []).map(s =>
+      s.id === seatId ? { ...s, [field]: typeof valueOrFn === "function" ? valueOrFn(s[field], s) : valueOrFn } : s
+    ));
+  };
+  // Atomically update multiple fields (or the whole seat) from latest committed state.
+  // fn receives the latest seat object and returns the updated seat.
+  const updSeatFull = (seatId, fn) => {
+    if (!upd) return;
+    upd(table.id, "seats", prev => (prev || []).map(s => s.id === seatId ? fn(s) : s));
   };
 
   // Load team names + menu title from Supabase on mount
@@ -553,10 +560,24 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                           else if (mode === "nonalc") cur = "nonalc";
                           else cur = (seatSet && !seatIsNonAlc) ? "alco" : "nonalc";
                           if (!states.includes(cur)) cur = states[1] || "off";
-                          const next = states[(states.indexOf(cur) + 1) % states.length];
-                          const applyNext = () => updSeat(s.id, "optionalPairings", {
-                            ...(s.optionalPairings || {}),
-                            [opt.key]: { ...(raw || {}), ordered: next !== "off", ...(next === "alco" ? { mode: "alco" } : next === "nonalc" ? { mode: "nonalc" } : { mode: null }) },
+                          // applyNext reads latest committed seat state inside the updater — no stale closure
+                          const applyNext = () => updSeatFull(s.id, seat => {
+                            const r = seat.optionalPairings?.[opt.key];
+                            const a = r?.ordered !== undefined ? !!r.ordered : opt.defaultOn !== false;
+                            const m = r?.mode || null;
+                            const sNonAlc = String(seat.pairing || "").trim() === "Non-Alc";
+                            const sSet = !["", "—", "-"].includes(String(seat.pairing || "").trim());
+                            let c;
+                            if (!a) c = "off";
+                            else if (m === "alco") c = "alco";
+                            else if (m === "nonalc") c = "nonalc";
+                            else c = (sSet && !sNonAlc) ? "alco" : "nonalc";
+                            if (!states.includes(c)) c = states[1] || "off";
+                            const nx = states[(states.indexOf(c) + 1) % states.length];
+                            return { ...seat, optionalPairings: {
+                              ...(seat.optionalPairings || {}),
+                              [opt.key]: { ...(r || {}), ordered: nx !== "off", ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }) },
+                            }};
                           });
                           const drinkName = s.optionalPairings?.[opt.key]?.label ?? opt.label;
                           const btnStyleMap = {
@@ -620,17 +641,29 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                               else if (pmode === "alco") cur = "alco";
                               else if (pmode === "nonalc") cur = "nonalc";
                               else cur = "on";
-                              const next = states[(states.indexOf(cur) + 1) % states.length];
-                              const applyNext = () => {
-                                const extrasNext = { ...s.extras, [dish.key]: { ordered: next !== "off", pairing: dish.pairings[0] } };
-                                const pairingNext = { ...(s.optionalPairings || {}), [linked.key]: {
-                                  ...(raw || {}),
-                                  ordered: next === "alco" || next === "nonalc",
-                                  ...(next === "alco" ? { mode: "alco" } : next === "nonalc" ? { mode: "nonalc" } : { mode: null }),
-                                }};
-                                updSeat(s.id, "extras", extrasNext);
-                                updSeat(s.id, "optionalPairings", pairingNext);
-                              };
+                              // Single atomic update — reads latest committed seat state, no stale closure
+                              const applyNext = () => updSeatFull(s.id, seat => {
+                                const xtra = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                                const r = seat.optionalPairings?.[linked.key];
+                                const po = r?.ordered !== undefined ? !!r.ordered : false;
+                                const pm = r?.mode || null;
+                                let c;
+                                if (!xtra.ordered) c = "off";
+                                else if (!po) c = "on";
+                                else if (pm === "alco") c = "alco";
+                                else if (pm === "nonalc") c = "nonalc";
+                                else c = "on";
+                                const nx = states[(states.indexOf(c) + 1) % states.length];
+                                return {
+                                  ...seat,
+                                  extras: { ...seat.extras, [dish.key]: { ordered: nx !== "off", pairing: dish.pairings[0] } },
+                                  optionalPairings: { ...(seat.optionalPairings || {}), [linked.key]: {
+                                    ...(r || {}),
+                                    ordered: nx === "alco" || nx === "nonalc",
+                                    ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }),
+                                  }},
+                                };
+                              });
                               const labels = { off: `${dish.name} off`, on: `${dish.name} ✓`, alco: `${dish.name.slice(0,4)} · ALCO`, nonalc: `${dish.name.slice(0,4)} · N/A` };
                               const colors = {
                                 off:    { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
@@ -653,12 +686,14 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                             // Plain extra (no linked drink pairing) — single cycling button
                             const pStates = ["off", ...dish.pairings];
                             const curP = !dishOn ? "off" : (extra.pairing || dish.pairings[0]);
-                            const nextP = pStates[(pStates.indexOf(curP) + 1) % pStates.length];
-                            const applyNextP = () => updSeat(s.id, "extras", {
-                              ...s.extras,
-                              [dish.key]: nextP === "off"
+                            const applyNextP = () => updSeatFull(s.id, seat => {
+                              const xtra = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                              const c = !xtra.ordered ? "off" : (xtra.pairing || dish.pairings[0]);
+                              const nx = pStates[(pStates.indexOf(c) + 1) % pStates.length];
+                              return { ...seat, extras: { ...seat.extras, [dish.key]: nx === "off"
                                 ? { ordered: false, pairing: dish.pairings[0] }
-                                : { ordered: true, pairing: nextP },
+                                : { ordered: true, pairing: nx },
+                              }};
                             });
                             const pLabel = curP === "off"
                               ? `${dish.name} off`
