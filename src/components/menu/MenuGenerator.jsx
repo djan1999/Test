@@ -535,53 +535,96 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                       );
                     })()}
                   </div>
-                  {/* Optional pairings (data-driven from courses optional_pairing_flag) */}
+                  {/* Combined extras & optional pairings */}
                   {(() => {
-                    const visiblePairings = optionalPairings.filter(opt => {
-                      if (!opt.extraKey) return true;
-                      const extra = s.extras?.[opt.extraKey];
-                      return extra?.ordered;
+                    const pairingByExtraKey = new Map();
+                    optionalPairings.forEach(opt => { if (opt.extraKey) pairingByExtraKey.set(opt.extraKey, opt); });
+                    const items = [];
+                    const usedPairingKeys = new Set();
+                    // Standalone pairings first (not linked to any extra)
+                    optionalPairings.forEach(opt => {
+                      if (!opt.extraKey) items.push({ dish: null, opt });
                     });
-                    if (!visiblePairings.length) return null;
+                    // Extras (may have linked pairings)
+                    optionalExtras.forEach(dish => {
+                      const linked = pairingByExtraKey.get(dish.key);
+                      if (linked) usedPairingKeys.add(linked.key);
+                      items.push({ dish, opt: linked || null });
+                    });
+                    if (!items.length) return null;
                     return (
                       <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e8f0f8" }}>
-                        <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Optional Pairings</div>
+                        <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Extras</div>
                         <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-                          {visiblePairings.map((opt, oi) => {
-                            const raw = s.optionalPairings?.[opt.key];
-                            const active = raw?.ordered !== undefined ? !!raw.ordered : opt.defaultOn !== false;
+                          {items.map((item, ii) => {
+                            const { dish, opt } = item;
+                            const key = dish?.key || opt?.key;
+                            // Extra state (for dishes)
+                            const extra = dish ? (s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] }) : null;
+                            const dishOn = dish ? !!extra.ordered : true;
+                            // Pairing state
+                            const raw = opt ? s.optionalPairings?.[opt.key] : null;
+                            const pairingOn = opt ? (raw?.ordered !== undefined ? !!raw.ordered : opt.defaultOn !== false) : false;
                             const mode = raw?.mode || null;
                             const seatIsNonAlc = String(s.pairing || "").trim() === "Non-Alc";
                             const seatSet = !["", "—", "-"].includes(String(s.pairing || "").trim());
-                            const alcoOn = active && (mode === "alco" || (mode === null && seatSet && !seatIsNonAlc));
-                            const naOn = active && (mode === "nonalc" || (mode === null && seatIsNonAlc));
-                            const updOpt = (patch) => updSeat(s.id, "optionalPairings", {
-                              ...(s.optionalPairings || {}),
-                              [opt.key]: { ...(raw || {}), ...patch },
-                            });
+                            const alcoOn = pairingOn && (mode === "alco" || (mode === null && seatSet && !seatIsNonAlc));
+                            const naOn = pairingOn && (mode === "nonalc" || (mode === null && seatIsNonAlc));
                             return (
-                              <div key={opt.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
-                                {oi > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}
-                                <button onClick={() => updOpt({ ordered: false })} style={{
-                                  fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                  border: `1px solid ${!active ? "#a0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                  background: !active ? "#f4f8e8" : "#fff",
-                                  color: !active ? "#5a7820" : "#bbb",
-                                }}>{opt.label} off</button>
-                                {opt.hasAlco && (
-                                  <button onClick={() => updOpt({ ordered: true, mode: "alco" })} style={{
+                              <div key={key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                                {ii > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}
+                                {dish ? (
+                                  <>
+                                    {/* Extra: off */}
+                                    <button onClick={() => {
+                                      updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: false, pairing: dish.pairings[0] } });
+                                      if (opt) updSeat(s.id, "optionalPairings", { ...(s.optionalPairings || {}), [opt.key]: { ...(raw || {}), ordered: false } });
+                                    }} style={{
+                                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                                      border: `1px solid ${!dishOn ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                                      background: !dishOn ? "#fdf4e8" : "#fff", color: !dishOn ? "#7a5020" : "#bbb",
+                                    }}>{dish.name} off</button>
+                                    {/* Extra: pairing variants */}
+                                    {dish.pairings.map(p => {
+                                      const sel = dishOn && (extra.pairing || dish.pairings[0]) === p;
+                                      return (
+                                        <button key={p} onClick={() => updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: true, pairing: p } })} style={{
+                                          fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                                          border: `1px solid ${sel ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                                          background: sel ? "#fdf4e8" : "#fff", color: sel ? "#7a5020" : "#bbb",
+                                        }}>{dish.name.slice(0, 4)} {p}</button>
+                                      );
+                                    })}
+                                  </>
+                                ) : (
+                                  /* Standalone pairing: off */
+                                  <button onClick={() => updSeat(s.id, "optionalPairings", {
+                                    ...(s.optionalPairings || {}), [opt.key]: { ...(raw || {}), ordered: false },
+                                  })} style={{
+                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                                    border: `1px solid ${!pairingOn ? "#a0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                                    background: !pairingOn ? "#f4f8e8" : "#fff", color: !pairingOn ? "#5a7820" : "#bbb",
+                                  }}>{opt.label} off</button>
+                                )}
+                                {/* ALCO / N/A for items with optional pairings */}
+                                {opt && opt.hasAlco && (
+                                  <button onClick={() => {
+                                    if (dish && !dishOn) updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ...extra, ordered: true } });
+                                    updSeat(s.id, "optionalPairings", { ...(s.optionalPairings || {}), [opt.key]: { ...(raw || {}), ordered: true, mode: "alco" } });
+                                  }} style={{
                                     fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
                                     border: `1px solid ${alcoOn ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                    background: alcoOn ? "#fdf4e8" : "#fff",
-                                    color: alcoOn ? "#7a5020" : "#bbb",
+                                    background: alcoOn ? "#fdf4e8" : "#fff", color: alcoOn ? "#7a5020" : "#bbb",
                                   }}>ALCO</button>
                                 )}
-                                {opt.hasNonAlco && (
-                                  <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} style={{
+                                {opt && opt.hasNonAlco && (
+                                  <button onClick={() => {
+                                    if (dish && !dishOn) updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ...extra, ordered: true } });
+                                    updSeat(s.id, "optionalPairings", { ...(s.optionalPairings || {}), [opt.key]: { ...(raw || {}), ordered: true, mode: "nonalc" } });
+                                  }} style={{
                                     fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
                                     border: `1px solid ${naOn ? "#60a8c8" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                    background: naOn ? "#e8f4fd" : "#fff",
-                                    color: naOn ? "#205a7a" : "#bbb",
+                                    background: naOn ? "#e8f4fd" : "#fff", color: naOn ? "#205a7a" : "#bbb",
                                   }}>N/A</button>
                                 )}
                               </div>
@@ -591,40 +634,6 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                       </div>
                     );
                   })()}
-                  {optionalExtras.length > 0 && (
-                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e8f0f8" }}>
-                      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Extras</div>
-                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-                        {optionalExtras.map((dish, di) => {
-                          const extra = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
-                          return (
-                            <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
-                              {di > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}
-                              {/* Off button */}
-                              <button onClick={() => updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: false, pairing: dish.pairings[0] } })} style={{
-                                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                border: `1px solid ${!extra.ordered ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                background: !extra.ordered ? "#fdf4e8" : "#fff",
-                                color: !extra.ordered ? "#7a5020" : "#bbb",
-                              }}>{dish.name} off</button>
-                              {/* Pairing buttons */}
-                              {dish.pairings.map(p => {
-                                const active = extra.ordered && (extra.pairing || dish.pairings[0]) === p;
-                                return (
-                                  <button key={p} onClick={() => updSeat(s.id, "extras", { ...s.extras, [dish.key]: { ordered: true, pairing: p } })} style={{
-                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
-                                    border: `1px solid ${active ? "#c8a060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                                    background: active ? "#fdf4e8" : "#fff",
-                                    color: active ? "#7a5020" : "#bbb",
-                                  }}>{dish.name.slice(0, 4)} {p}</button>
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
