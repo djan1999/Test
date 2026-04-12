@@ -666,7 +666,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                               });
                               const labels = { off: `${dish.name} off`, on: `${dish.name} ✓`, alco: `${dish.name.slice(0,4)} · ALCO`, nonalc: `${dish.name.slice(0,4)} · N/A` };
                               const colors = {
-                                off:    { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
+                                off:    { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" },
                                 on:     { border: "#a0c060", bg: "#f4f8e8", color: "#5a7820" },
                                 alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
                                 nonalc: { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" },
@@ -701,7 +701,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                               ? `${dish.name} ✓`
                               : `${dish.name.slice(0, 4)} · ${curP}`;
                             const pColors = curP === "off"
-                              ? { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" }
+                              ? { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" }
                               : curP === "—"
                               ? { border: "#a0c060", bg: "#f4f8e8", color: "#5a7820" }
                               : { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" };
