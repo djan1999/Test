@@ -21,4 +21,11 @@ button, input, select, textarea {
   font: inherit;
 }
 
+/* Eliminate the 300ms tap delay on all interactive elements.
+   touch-action: manipulation disables double-tap-to-zoom so the browser
+   fires click immediately on touch — critical for service-speed UI. */
+button, [role="button"], a {
+  touch-action: manipulation;
+}
+
 body { color: #1a1a1a; background: #fff; }
