@@ -14,9 +14,13 @@ export const makeSeats = (n, ex = []) =>
     beers:     ex[i]?.beers     ?? [],
     pairing:   ex[i]?.pairing   ?? "",
     extras:    ex[i]?.extras    ?? {},
-    // Normalize legacy shape by dropping deprecated `mode` from optionalPairings entries.
+    // Preserve ordered, mode (alco/nonalc override) and label (custom drink name).
     optionalPairings: Object.fromEntries(
-      Object.entries(ex[i]?.optionalPairings || {}).map(([k, v]) => [k, { ordered: !!v?.ordered }])
+      Object.entries(ex[i]?.optionalPairings || {}).map(([k, v]) => [k, {
+        ordered: !!v?.ordered,
+        ...(v?.mode  != null ? { mode:  v.mode  } : {}),
+        ...(v?.label != null ? { label: v.label } : {}),
+      }])
     ),
   }));
 
