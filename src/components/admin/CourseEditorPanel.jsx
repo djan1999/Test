@@ -181,7 +181,11 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <span style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>Optional pairing key:</span>
               <input value={course.optional_pairing_flag || ""} onChange={e => upd("optional_pairing_flag", e.target.value)} style={{ ...inpSm, width: 170 }} placeholder="e.g. crayfish_pairing" disabled={!optionalPairingEnabled} />
-              <input value={course.optional_pairing_label || ""} onChange={e => upd("optional_pairing_label", e.target.value)} style={{ ...inpSm, width: 150 }} placeholder="label (optional)" disabled={!optionalPairingEnabled} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>Drink label:</span>
+              <input value={course.optional_pairing_label || ""} onChange={e => upd("optional_pairing_label", e.target.value)} style={{ ...inpSm, width: 200 }} placeholder="e.g. Crayfish Martini" disabled={!optionalPairingEnabled} />
+              <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb" }}>shown in service UI</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <span style={{ fontFamily: FONT, fontSize: 10, color: "#555" }}>Short order:</span>
