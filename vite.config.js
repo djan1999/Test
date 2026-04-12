@@ -70,6 +70,12 @@ export default defineConfig({
             },
           },
 
+          // Sync endpoint — long-running scrape, never cache, no SW timeout.
+          {
+            urlPattern: /\/api\/sync-wines.*/i,
+            handler: 'NetworkOnly',
+          },
+
           // Local serverless API routes (/api/*) — network-first with fallback.
           {
             urlPattern: /\/api\/.*/i,

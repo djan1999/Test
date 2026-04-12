@@ -173,8 +173,17 @@ export default function QuickAccessPanel({
                 <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{item.label}</div>
                 <div style={{ fontFamily: FONT, fontSize: 9, color: "#999" }}>
                   search: <span style={{ color: "#4b4b88" }}>{item.searchKey}</span> · {item.type}
+                  {item.menuOnly && <span style={{ marginLeft: 6, color: "#c8a060", fontWeight: 600 }}>menu only</span>}
                 </div>
               </div>
+
+              <button onClick={() => onUpdateQuickAccess(quickAccessItems.map(i => i.id === item.id ? { ...i, menuOnly: !i.menuOnly } : i))} style={{
+                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "4px 8px", border: "1px solid",
+                borderColor: item.menuOnly ? "#c8a060" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
+                background: item.menuOnly ? "#fdf4e8" : "#fff",
+                color: item.menuOnly ? "#7a5020" : "#bbb", flexShrink: 0,
+                whiteSpace: "nowrap",
+              }}>MENU ONLY</button>
 
               <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                 <button onClick={() => moveItem(item.id, -1)} disabled={idx === 0}

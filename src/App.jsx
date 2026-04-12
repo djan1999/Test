@@ -2014,7 +2014,7 @@ export default function App() {
       await loadWines(); // explicit reload after sync completes
       return { ok: true, wines: json.wines, cocktails: json.cocktails, beers: json.beers, spirits: json.spirits, failedCountries: json.failedCountries };
     } catch (e) {
-      return { ok: false, error: e.message };
+      return { ok: false, error: e.message || e.name || "Request failed" };
     }
   };
 
@@ -2030,6 +2030,33 @@ export default function App() {
     const positions = courses.map(c => c.position);
     if (positions.length > 0) {
       await supabase.from(TABLES.MENU_COURSES).delete().not("position", "in", `(${positions.join(",")})`);
+    }
+  };
+
+  const saveWines = async (updatedWines) => {
+    setWines(updatedWines);
+    if (!supabase) return;
+    const BATCH = 200;
+    const rows = updatedWines.map(w => ({
+      key: typeof w.id === "string" ? w.id : `manual|${(w.producer||"").toLowerCase().replace(/\s/g,"_")}|${(w.name||"").toLowerCase().replace(/\s/g,"_")}|${w.vintage||"NV"}`,
+      wine_name: w.name,
+      name: w.producer ? `${w.producer} – ${w.name}` : w.name,
+      producer: w.producer || "",
+      vintage: w.vintage || "NV",
+      region: w.region || "",
+      country: w.country || "",
+      by_glass: w.byGlass ?? false,
+    }));
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const { error } = await supabase.from(TABLES.WINES).upsert(rows.slice(i, i + BATCH), { onConflict: "key" });
+      if (error) { console.error("Wine save error:", error); return; }
+    }
+    // Remove wines that were deleted
+    const savedKeys = new Set(rows.map(r => r.key));
+    const originalKeys = wines.map(w => typeof w.id === "string" ? w.id : null).filter(Boolean);
+    const deletedKeys = originalKeys.filter(k => !savedKeys.has(k));
+    if (deletedKeys.length > 0) {
+      await supabase.from(TABLES.WINES).delete().in("key", deletedKeys);
     }
   };
 
@@ -2554,7 +2581,8 @@ export default function App() {
   };
 
   // ── Aperitif quick-button options (data-driven from Quick Access config) ──
-  // aperitifOptions: array of { label, searchKey, type } — preserves searchKey from config
+  // aperitifOptions: all enabled items (used in MenuGenerator — full list incl. menuOnly).
+  // serviceAperitifOptions: excludes items marked menuOnly (used in service DisplayBoard).
   const aperitifOptions = useMemo(() => {
     const fromQuickAccess = quickAccessItems.filter(i => i.enabled)
       .map(i => ({ label: i.label, searchKey: i.searchKey || i.label, type: i.type || "wine" }));
@@ -2564,6 +2592,11 @@ export default function App() {
     if (fromSheet.length > 0) return fromSheet.map(l => ({ label: l, searchKey: l, type: "wine" }));
     return DEFAULT_QUICK_ACCESS_ITEMS.filter(i => i.enabled).map(i => ({ label: i.label, searchKey: i.searchKey || i.label, type: i.type || "wine" }));
   }, [quickAccessItems, menuCourses]);
+
+  const serviceAperitifOptions = useMemo(() =>
+    quickAccessItems.filter(i => i.enabled && !i.menuOnly)
+      .map(i => ({ label: i.label, searchKey: i.searchKey || i.label, type: i.type || "wine" })),
+  [quickAccessItems]);
 
   // ── Load service tables from Supabase + subscribe realtime ────────────────
   useEffect(() => {
@@ -2972,7 +3005,7 @@ export default function App() {
         cocktails={cocktails}
         spirits={spirits}
         beers={beers}
-        onUpdateWines={setWines}
+        onUpdateWines={saveWines}
         onSaveBeverages={saveBeverages}
         onSyncWines={syncWines}
         syncStatus={syncStatus}
@@ -3077,7 +3110,7 @@ export default function App() {
                 onCardClick={id => setSel(id)}
                 onSeat={seatTable}
                 onUnseat={unseatTable}
-                aperitifOptions={aperitifOptions}
+                aperitifOptions={serviceAperitifOptions}
                 wines={wines}
                 cocktails={cocktails}
               />
@@ -3094,7 +3127,7 @@ export default function App() {
           spirits={spirits}
           beers={beers}
           menuCourses={menuCourses}
-          aperitifOptions={aperitifOptions}
+          aperitifOptions={serviceAperitifOptions}
           mode={mode}
           onBack={() => setSel(null)}
           upd={(f, v) => upd(sel, f, v)}
