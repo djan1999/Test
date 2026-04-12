@@ -535,19 +535,23 @@ export function generateMenuHTML({
         if (pkey) {
           drink = optionalPairingDrink || (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]);
 
-          // Optional-course pairing override: if seat selected a pairing for this optional_flag,
-          // use the selected pairing package for this row.
-          const optionalKey = normalizeCourseToken(course.optional_flag || "");
-          const optionalExtra = optionalKey ? getExtra(optionalKey) : null;
-          if (optionalExtra?.ordered) {
-            const beetPair = String(optionalExtra.pairing || "—").trim();
-            if (beetPair === "N/A" || beetPair === "Non-Alc") {
-              drink = (lang === "si" ? (course.na_si || course.na) : course.na) || null;
-            } else if (beetPair === "Champagne" || beetPair === "Wine") {
-              drink = (lang === "si"
-                ? (course.os_si || course.os || course.premium_si || course.premium || course.wp_si || course.wp)
-                : (course.os || course.premium || course.wp)) || null;
-            } else { drink = null; }
+          // Legacy optional-course pairing override (extras.pairing string).
+          // Skip when the new optionalPairings system already resolved the drink —
+          // the new mode-based system takes precedence and the legacy pairing field
+          // is always "—" for cycling-button extras, which would null the drink.
+          if (!optionalPairingDrink) {
+            const optionalKey = normalizeCourseToken(course.optional_flag || "");
+            const optionalExtra = optionalKey ? getExtra(optionalKey) : null;
+            if (optionalExtra?.ordered) {
+              const beetPair = String(optionalExtra.pairing || "—").trim();
+              if (beetPair === "N/A" || beetPair === "Non-Alc") {
+                drink = (lang === "si" ? (course.na_si || course.na) : course.na) || null;
+              } else if (beetPair === "Champagne" || beetPair === "Wine") {
+                drink = (lang === "si"
+                  ? (course.os_si || course.os || course.premium_si || course.premium || course.wp_si || course.wp)
+                  : (course.os || course.premium || course.wp)) || null;
+              } else { drink = null; }
+            }
           }
 
           // Forced beer substitution for configured course keys.
