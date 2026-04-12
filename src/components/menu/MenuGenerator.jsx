@@ -472,16 +472,10 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                         const type = ap.type || "wine";
                         return (
                           <button key={label} onClick={() => {
+                            const wHit = (w) => { const wn=(w.name||"").toLowerCase(),wp=(w.producer||"").toLowerCase(); return wn.includes(sk)||wp.includes(sk)||(wn.length>=4&&sk.includes(wn))||(wp.length>=4&&sk.includes(wp)); };
                             const found = type === "wine"
-                              ? winesCatalog.filter(w => w.byGlass).find(w => {
-                                  const wn = (w.name || "").toLowerCase();
-                                  const wp = (w.producer || "").toLowerCase();
-                                  return wn.includes(sk) || wp.includes(sk) || (wn.length >= 4 && sk.includes(wn)) || (wp.length >= 4 && sk.includes(wp));
-                                })
-                              : cocktailsCatalog?.find(c => {
-                                  const cn = (c.name || "").toLowerCase();
-                                  return cn.includes(sk) || (cn.length >= 4 && sk.includes(cn));
-                                });
+                              ? (winesCatalog.find(w => w.byGlass && wHit(w)) || winesCatalog.find(wHit))
+                              : cocktailsCatalog?.find(c => { const cn=(c.name||"").toLowerCase(); return cn.includes(sk)||(cn.length>=4&&sk.includes(cn)); });
                             const item = found || { name: label, notes: "", __cocktail: true };
                             updSeat(s.id, "aperitifs", [...(s.aperitifs || []), item]);
                           }} style={{

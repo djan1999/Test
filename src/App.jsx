@@ -701,11 +701,8 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                   {aperitifOptions.map(ap => (
                     <button key={ap.label} onClick={() => {
                       const lk = (ap.searchKey || ap.label).toLowerCase();
-                      const found = wines.filter(w => w.byGlass).find(w => {
-                        const wn = (w.name || "").toLowerCase();
-                        const wp = (w.producer || "").toLowerCase();
-                        return wn.includes(lk) || wp.includes(lk) || (wn.length >= 4 && lk.includes(wn)) || (wp.length >= 4 && lk.includes(wp));
-                      });
+                      const wineHit = (w) => { const wn=(w.name||"").toLowerCase(),wp=(w.producer||"").toLowerCase(); return wn.includes(lk)||wp.includes(lk)||(wn.length>=4&&lk.includes(wn))||(wp.length>=4&&lk.includes(wp)); };
+                      const found = wines.find(w => w.byGlass && wineHit(w)) || wines.find(wineHit);
                       const item = found || { name: ap.searchKey || ap.label, notes: "", __cocktail: true };
                       updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
                     }} style={{
@@ -1355,24 +1352,23 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                         {aperitifOptions.map(opt => {
                           const label = opt.label ?? opt;
                           const sk = (opt.searchKey ?? opt).toLowerCase();
-                          const active = (s.aperitifs || []).some(x => x?.name?.toLowerCase().includes(sk) || x?.producer?.toLowerCase().includes(sk));
+                          const apMatch = (x) => {
+                            const xn = (x?.name || "").toLowerCase();
+                            const xp = (x?.producer || "").toLowerCase();
+                            return xn.includes(sk) || xp.includes(sk) || (xn.length >= 4 && sk.includes(xn)) || (xp.length >= 4 && sk.includes(xp));
+                          };
+                          const active = (s.aperitifs || []).some(apMatch);
                           return (
                             <button key={label} onClick={() => {
                               if (!updSeat) return;
                               if (active) {
-                                updSeat(t.id, s.id, "aperitifs", (s.aperitifs || []).filter(x => !x?.name?.toLowerCase().includes(sk) && !x?.producer?.toLowerCase().includes(sk)));
+                                updSeat(t.id, s.id, "aperitifs", (s.aperitifs || []).filter(x => !apMatch(x)));
                               } else {
                                 const type = opt.type || "wine";
+                                const wHit = (w) => { const wn=(w.name||"").toLowerCase(),wp=(w.producer||"").toLowerCase(); return wn.includes(sk)||wp.includes(sk)||(wn.length>=4&&sk.includes(wn))||(wp.length>=4&&sk.includes(wp)); };
                                 const found = type === "wine"
-                                  ? wines.filter(w => w.byGlass).find(w => {
-                                      const wn = (w.name || "").toLowerCase();
-                                      const wp = (w.producer || "").toLowerCase();
-                                      return wn.includes(sk) || wp.includes(sk) || (wn.length >= 4 && sk.includes(wn)) || (wp.length >= 4 && sk.includes(wp));
-                                    })
-                                  : cocktails?.find(c => {
-                                      const cn = (c.name || "").toLowerCase();
-                                      return cn.includes(sk) || (cn.length >= 4 && sk.includes(cn));
-                                    });
+                                  ? (wines.find(w => w.byGlass && wHit(w)) || wines.find(wHit))
+                                  : cocktails?.find(c => { const cn=(c.name||"").toLowerCase(); return cn.includes(sk)||(cn.length>=4&&sk.includes(cn)); });
                                 const item = found || { name: label, notes: "", __cocktail: true };
                                 updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item]);
                               }
