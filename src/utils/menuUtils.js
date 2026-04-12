@@ -86,7 +86,7 @@ export const optionalExtrasFromCourses = (menuCourses = []) => {
       id: key,
       key,
       name: label,
-      pairings: pairings.length > 0 ? pairings : ["—"],
+      pairings,
     });
   });
   return [...byKey.values()];
@@ -293,10 +293,8 @@ export function parseMenuRow(row) {
     optional_pairing_label: String(firstFilled(row.optional_pairing_label)).trim(),
     optional_pairing_enabled: truthyCell(firstFilled(row.optional_pairing_enabled, true)),
     optional_pairing_default_on: truthyCell(firstFilled(row.optional_pairing_default_on, true)),
-    optional_pairing_alco: parseBilingual(row.optional_pairing_alco, row.optional_pairing_alco_sub).en,
-    optional_pairing_alco_si: parseBilingual(row.optional_pairing_alco, row.optional_pairing_alco_sub).si,
-    optional_pairing_na: parseBilingual(row.optional_pairing_na, row.optional_pairing_na_sub).en,
-    optional_pairing_na_si: parseBilingual(row.optional_pairing_na, row.optional_pairing_na_sub).si,
+    ...(() => { const { en, si } = parseBilingual(row.optional_pairing_alco, row.optional_pairing_alco_sub); return { optional_pairing_alco: en, optional_pairing_alco_si: si }; })(),
+    ...(() => { const { en, si } = parseBilingual(row.optional_pairing_na, row.optional_pairing_na_sub); return { optional_pairing_na: en, optional_pairing_na_si: si }; })(),
     section_gap_before: truthyCell(firstFilled(row.section_gap_before)),
     show_on_short: truthyCell(firstFilled(row.show_on_short)),
     short_order: Number(firstFilled(row.short_order)) || null,

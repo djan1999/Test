@@ -214,7 +214,7 @@ export function buildDefaultTemplate(menuCourses = []) {
     const nck = norm(ck);
 
     // Pairing section label before danube_salmon
-    if (ck === "danube_salmon") {
+    if (norm(ck) === "danube_salmon") {
       rows.push({
         id: "pairing_label_row",
         left:  null,

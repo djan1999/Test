@@ -34,7 +34,7 @@ export function readTeamNames() {
 export function writeTeamNames(value) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(TEAM_STORAGE_KEY, value || DEFAULT_TEAM_NAMES || "");
+    window.localStorage.setItem(TEAM_STORAGE_KEY, value ?? "");
   } catch {}
 }
 

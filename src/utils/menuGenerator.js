@@ -210,11 +210,6 @@ export function generateMenuHTML({
     return fmtDrinkParts({ ...chosen, __type: "beer" });
   })();
 
-  const resolveBeerDrinkForCourse = () => {
-    if (!selectedBeer) return null;
-    return { name: selectedBeer.title || "", sub: selectedBeer.sub || "" };
-  };
-
   const resolveForcedPairingDrink = (override = null) => {
     // Explicit override from template block.
     // Product-driven forced pairing is the single source of truth.
@@ -492,7 +487,6 @@ export function generateMenuHTML({
 
       let dish = applyCourseRestriction(resolveCourse(course), restrictions, lang);
       let drink = null;
-      const forcedBeerDrink = null;
 
       const rbSource = normDrinkSource(rb);
 
@@ -554,9 +548,6 @@ export function generateMenuHTML({
             }
           }
 
-          // Forced beer substitution for configured course keys.
-          if (forcedBeerDrink) drink = forcedBeerDrink;
-
           // By-the-glass fallback from Danube Salmon onwards
           if (!drink && i >= DANUBE_SALMON_IDX && gQ.length > 0 && rb?.showByGlass !== false) {
             const d = fmtDrinkParts(gQ.shift());
@@ -565,9 +556,6 @@ export function generateMenuHTML({
         } else {
           if (optionalPairingDrink) {
             drink = optionalPairingDrink;
-          }
-          if (forcedBeerDrink) {
-            drink = forcedBeerDrink;
           }
           // No pairing package — by-the-glass or bottle from Danube onwards
           if (!drink && i >= DANUBE_SALMON_IDX && gQ.length > 0 && rb?.showByGlass !== false) {
