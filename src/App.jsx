@@ -1252,51 +1252,83 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                         {WATER_QUICK.map(opt => wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt)))}
                       </div>
                       <div style={{ width: 1, height: 16, background: "#e0e0e0", margin: "0 2px" }} />
-                      {/* Optional extras quick toggles */}
-                      {(optionalExtras || []).slice(0, 3).map((dish) => {
-                        const extra = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
-                        const active = !!extra.ordered;
-                        return (
-                          <button
-                            key={dish.key || dish.id}
-                            onClick={() => updSeat && updSeat(t.id, s.id, "extras", { ...s.extras, [dish.key]: { ...extra, ordered: !extra.ordered } })}
-                            style={{
-                              fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "3px 9px",
-                              border: `1px solid ${active ? "#b0b0b0" : "#e8e8e8"}`, borderRadius: 20, cursor: "pointer",
-                              background: active ? "#f3f3f3" : "#fff", color: active ? "#444" : "#aaa",
-                              transition: "all 0.1s",
-                            }}
-                          >
-                            {String(dish.name || dish.key || "").slice(0, 8)}
-                          </button>
-                        );
-                      })}
-                      {/* Optional pairing quick toggles */}
-                      {(optionalPairings || []).filter(opt => {
-                        if (!opt.extraKey) return true;
-                        const extra = s.extras?.[opt.extraKey];
-                        return extra?.ordered;
-                      }).slice(0, 3).map((opt) => {
-                        const raw = s.optionalPairings?.[opt.key];
-                        const active = raw?.ordered !== undefined ? !!raw.ordered : opt.defaultOn !== false;
-                        return (
-                          <button
-                            key={opt.key}
-                            onClick={() => updSeat && updSeat(t.id, s.id, "optionalPairings", {
-                              ...(s.optionalPairings || {}),
-                              [opt.key]: { ...(raw || {}), ordered: !active },
-                            })}
-                            style={{
-                              fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "3px 9px",
-                              border: `1px solid ${active ? "#a0c8a0" : "#e8e8e8"}`, borderRadius: 20, cursor: "pointer",
-                              background: active ? "#eaf4ea" : "#fff", color: active ? "#3a7a3a" : "#aaa",
-                              transition: "all 0.1s",
-                            }}
-                          >
-                            {String(opt.label || opt.key || "").slice(0, 8)}
-                          </button>
-                        );
-                      })}
+                      {/* Optional extras — cycling for linked pairings (Beetroot), simple toggle for plain */}
+                      {(() => {
+                        const pairingByExtraKey = new Map();
+                        (optionalPairings || []).forEach(opt => { if (opt.extraKey) pairingByExtraKey.set(opt.extraKey, opt); });
+                        return (optionalExtras || []).slice(0, 4).map(dish => {
+                          const extra = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
+                          const dishOn = !!extra.ordered;
+                          const linked = pairingByExtraKey.get(dish.key);
+
+                          if (linked) {
+                            const raw = s.optionalPairings?.[linked.key];
+                            const pairingOrdered = raw?.ordered !== undefined ? !!raw.ordered : false;
+                            const pmode = raw?.mode || null;
+                            const states = ["off", "on"];
+                            if (linked.hasAlco) states.push("alco");
+                            if (linked.hasNonAlco) states.push("nonalc");
+                            let cur;
+                            if (!dishOn) cur = "off";
+                            else if (!pairingOrdered) cur = "on";
+                            else if (pmode === "alco") cur = "alco";
+                            else if (pmode === "nonalc") cur = "nonalc";
+                            else cur = "on";
+                            const labelMap = {
+                              off:    `${dish.name} off`,
+                              on:     `${dish.name} ✓`,
+                              alco:   `${String(dish.name).slice(0,4)} · alco`,
+                              nonalc: `${String(dish.name).slice(0,4)} · n/a`,
+                            };
+                            const styleMap = {
+                              off:    { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" },
+                              on:     { border: "#a0c060", bg: "#f4f8e8", color: "#5a7820" },
+                              alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
+                              nonalc: { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" },
+                            }[cur];
+                            return (
+                              <button key={dish.key || dish.id} onClick={() => upd && upd(t.id, "seats", prev => (prev || []).map(seat => {
+                                if (seat.id !== s.id) return seat;
+                                const r = seat.optionalPairings?.[linked.key];
+                                const xtra = seat.extras?.[dish.key] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
+                                const po = r?.ordered !== undefined ? !!r.ordered : false;
+                                const pm = r?.mode || null;
+                                let c;
+                                if (!xtra.ordered) c = "off";
+                                else if (!po) c = "on";
+                                else if (pm === "alco") c = "alco";
+                                else if (pm === "nonalc") c = "nonalc";
+                                else c = "on";
+                                const nx = states[(states.indexOf(c) + 1) % states.length];
+                                return {
+                                  ...seat,
+                                  extras: { ...seat.extras, [dish.key]: { ordered: nx !== "off", pairing: dish.pairings?.[0] || "—" } },
+                                  optionalPairings: { ...(seat.optionalPairings || {}), [linked.key]: {
+                                    ...(r || {}),
+                                    ordered: nx === "alco" || nx === "nonalc",
+                                    ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }),
+                                  }},
+                                };
+                              }))} style={{
+                                fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "3px 9px",
+                                border: `1px solid ${styleMap.border}`, borderRadius: 20, cursor: "pointer",
+                                background: styleMap.bg, color: styleMap.color,
+                              }}>{labelMap[cur]}</button>
+                            );
+                          }
+
+                          // Plain extra — simple toggle
+                          return (
+                            <button key={dish.key || dish.id}
+                              onClick={() => updSeat && updSeat(t.id, s.id, "extras", { ...s.extras, [dish.key]: { ...extra, ordered: !dishOn } })}
+                              style={{
+                                fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "3px 9px",
+                                border: `1px solid ${dishOn ? "#b0b0b0" : "#e8e8e8"}`, borderRadius: 20, cursor: "pointer",
+                                background: dishOn ? "#f3f3f3" : "#fff", color: dishOn ? "#444" : "#aaa",
+                              }}>{String(dish.name || dish.key || "").slice(0, 8)}</button>
+                          );
+                        });
+                      })()}
                     </div>
                     {/* Pairing */}
                     <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", padding: "2px 10px 7px" }}>
