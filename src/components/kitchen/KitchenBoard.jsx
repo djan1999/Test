@@ -447,10 +447,12 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             return marks + ((optKey === "cake" && table.cakeNote) ? ` — ${table.cakeNote}` : "");
           })();
 
-          // Optional drink pairing alert (e.g. Martini, Beer) — per-seat alco/n/a
+          // Optional drink pairing alert — only shown for the Crayfish course;
+          // all other courses with optional_pairing_flag are not surfaced on the ticket.
           const pairingAlert = (() => {
             const pKey = normFlag(course?.optional_pairing_flag);
             if (!pKey) return null;
+            if (normFlag(course?.course_key) !== "crayfish") return null;
             return optionalPairingAlertByPairingKey[pKey] || null;
           })();
 
@@ -462,7 +464,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             <div key={key} style={{
               borderBottom: "1px solid #f2f2f2",
               background: fired ? "#f3fcf5" : "#fff",
-              borderLeft: fired ? "4px solid #4a9a6a" : kcNote.name || kcNote.note ? "4px solid #c04040" : pairingAlert ? "4px solid #c8a060" : "4px solid transparent",
+              borderLeft: fired ? "4px solid #4a9a6a" : kcNote.name || kcNote.note ? "4px solid #c04040" : "4px solid transparent",
             }}>
               <div
                 onClick={() => !isEditingThis && (fired ? unfire(key) : fire(key))}
@@ -481,7 +483,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                   </div>
                   {(pairingAlert || modGroups || kitchenNote || kcNote.note) && !fired && (
                     <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
-                      {pairingAlert && <span style={{ fontFamily: FONT, fontSize: 10, color: "#7a5020", fontWeight: 700 }}>⬡ {pairingAlert}</span>}
+                      {pairingAlert && <span style={{ fontFamily: FONT, fontSize: 10, color: "#888", fontWeight: 600 }}>{pairingAlert}</span>}
                       {modGroups && Object.entries(modGroups).sort(([a], [b]) => (a === baseName ? -1 : 1) - (b === baseName ? -1 : 1)).map(([name, count]) => (
                         <span key={name} style={{ fontFamily: FONT, fontSize: 10, color: name === baseName ? "#444" : "#c04040", fontWeight: 600 }}>{count}× {name}</span>
                       ))}
