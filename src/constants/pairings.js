@@ -1,8 +1,8 @@
 export const WATER_OPTS = ["—", "XC", "XW", "OC", "OW"];
 
 export const waterStyle = (v) => {
-  if (v === "XC" || v === "XW") return { color: "#1a1a1a", bg: "#f0f0f0" };
-  if (v === "OC" || v === "OW") return { color: "#1a1a1a", bg: "#e8e8e8" };
+  if (v === "XC" || v === "XW") return { color: "#2a4a6e", bg: "#eef3f9" };
+  if (v === "OC" || v === "OW") return { color: "#6a4818", bg: "#fdf6ea" };
   return { color: "#555", bg: "transparent" };
 };
 
