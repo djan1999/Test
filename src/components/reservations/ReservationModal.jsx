@@ -198,10 +198,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                       <button key={r} onClick={() => setRoom(x => x === r ? "" : r)} style={{
                         fontFamily: FONT, fontSize: 13, fontWeight: 500, letterSpacing: 1,
                         padding: "12px 16px", border: "1px solid",
-                        borderColor: room === r ? "#c8a06e" : "#e8e8e8",
+                        borderColor: room === r ? UI.line : "#e8e8e8",
                         borderRadius: 2, cursor: "pointer",
-                        background: room === r ? "#fdf6ec" : "#fff",
-                        color: room === r ? "#a07040" : "#444",
+                        background: room === r ? UI.selectedBg : "#fff",
+                        color: room === r ? UI.ink : "#444",
                         transition: "all 0.12s",
                       }}>{r}</button>
                     ))}
@@ -220,10 +220,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                 <button key={String(val)} onClick={() => setBirthday(val)} style={{
                   fontFamily: FONT, fontSize: 12, letterSpacing: 1,
                   padding: "14px 0", flex: 1, border: "1px solid",
-                  borderColor: birthday === val ? (val ? "#d4b888" : "#e8e8e8") : "#e8e8e8",
+                  borderColor: birthday === val ? UI.line : "#e8e8e8",
                   borderRadius: 2, cursor: "pointer",
-                  background: birthday === val ? (val ? "#fdf8f0" : "#fafafa") : "#fff",
-                  color: birthday === val ? (val ? "#a07040" : "#1a1a1a") : "#555",
+                  background: birthday === val ? (val ? UI.selectedBg : "#fafafa") : "#fff",
+                  color: birthday === val ? UI.ink : "#555",
                   transition: "all 0.12s",
                 }}>{val ? "YES" : "NO"}</button>
               ))}

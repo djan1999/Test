@@ -93,9 +93,9 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
           <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a1a1a" }}>{course.menu?.name || "(unnamed)"}</span>
           {course.menu?.sub && <span style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginLeft: 8 }}>{course.menu.sub}</span>}
         </div>
-        {isOptional && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#9a6020", background: "#fff3d8", border: "1px solid #e8d090", borderRadius: 2, padding: "2px 6px" }}>OPTIONAL · {course.optional_flag}</span>}
+        {isOptional && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: UI.ink, background: "#fff", border: `1px solid ${UI.line}`, borderRadius: 2, padding: "2px 6px" }}>OPTIONAL · {course.optional_flag}</span>}
         {activeRestrictions.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#b04040", border: "1px solid #f0cccc", borderRadius: 2, padding: "2px 6px" }}>{activeRestrictions.length}R</span>}
-        {activePairings.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 2, padding: "2px 6px" }}>{activePairings.length}P</span>}
+        {activePairings.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: UI.ink, border: `1px solid ${UI.border}`, borderRadius: 2, padding: "2px 6px" }}>{activePairings.length}P</span>}
         <div style={{ display: "flex", gap: 4 }}>
           <button onClick={e => { e.stopPropagation(); onMoveUp(); }} disabled={isFirst} style={{ background: "none", border: "none", cursor: isFirst ? "default" : "pointer", color: isFirst ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▲</button>
           <button onClick={e => { e.stopPropagation(); onMoveDown(); }} disabled={isLast} style={{ background: "none", border: "none", cursor: isLast ? "default" : "pointer", color: isLast ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▼</button>
@@ -223,7 +223,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
               <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: "#888" }}>PAIRINGS</div>
               {activePairings.map(({ key, label }) => (
                 <div key={key} style={{ display: "grid", gridTemplateColumns: "60px 1fr 1fr 1fr 1fr 20px", gap: 6, marginBottom: 4, alignItems: "center" }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, color: "#c8a06e", fontWeight: 600 }}>{label}</span>
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: UI.ink, fontWeight: 600 }}>{label}</span>
                   <input value={course[key]?.name || ""} onChange={e => updPairing(key, "en", "name", e.target.value)} style={inpSm} placeholder="Name (EN)" />
                   <input value={course[key]?.sub || ""} onChange={e => updPairing(key, "en", "sub", e.target.value)} style={inpSm} placeholder="Sub (EN)" />
                   <input value={course[`${key}_si`]?.name || ""} onChange={e => updPairing(key, "si", "name", e.target.value)} style={inpSm} placeholder="Name (SI)" />
@@ -277,7 +277,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
               <select
                 value=""
                 onChange={e => { addPairing(e.target.value); e.target.value = ""; }}
-                style={{ ...inpSm, fontSize: 9, color: "#c8a06e", borderColor: "#e8d8b8", cursor: "pointer", minWidth: 120 }}
+                style={{ ...inpSm, fontSize: 9, color: UI.ink, borderColor: UI.border, cursor: "pointer", minWidth: 120 }}
               >
                 <option value="" disabled>+ Add pairing…</option>
                 {availablePairings.map(({ key, label }) => (
@@ -356,12 +356,12 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
         <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>
           {menuCourses.filter(c => (c.course_category || "main") === "main").length} MAIN
           {menuCourses.filter(c => (c.course_category || "main") === "optional").length > 0 && (
-            <span style={{ color: "#c8a06e", marginLeft: 8 }}>
+            <span style={{ color: UI.ink, marginLeft: 8 }}>
               + {menuCourses.filter(c => (c.course_category || "main") === "optional").length} OPTIONAL
             </span>
           )}
           {menuCourses.filter(c => (c.course_category || "main") === "celebration").length > 0 && (
-            <span style={{ color: "#a06ec8", marginLeft: 8 }}>
+            <span style={{ color: "#666", marginLeft: 8 }}>
               + {menuCourses.filter(c => (c.course_category || "main") === "celebration").length} CELEBRATION
             </span>
           )}
@@ -374,10 +374,10 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
           }}>+ ADD COURSE</button>
           <button onClick={handleSave} disabled={saving} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-            border: `1px solid ${saved ? "#4a9a6a" : "#c8a06e"}`, borderRadius: tokens.radius,
+            border: `1px solid ${saved ? "#2f7a45" : UI.line}`, borderRadius: tokens.radius,
             cursor: saving ? "default" : "pointer",
-            background: saved ? "#eef8f1" : "#fdf9f2",
-            color: saved ? "#2f7a45" : "#7a5020",
+            background: "#ffffff",
+            color: saved ? "#2f7a45" : UI.ink,
             fontWeight: 600,
           }}>{saving ? "SAVING..." : saved ? "SAVED" : "SAVE ALL COURSES"}</button>
         </div>

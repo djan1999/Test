@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
+import { outlineBtn } from "../../styles/uiChrome.js";
 
 export default function BevEditRow({ emoji, label, items, onUpdate }) {
   const [draft, setDraft] = useState("");
@@ -29,7 +30,7 @@ export default function BevEditRow({ emoji, label, items, onUpdate }) {
           style={{ fontFamily: tokens.font, fontSize: 10, padding: "3px 8px", border: "1px solid #e8e8e8", borderRadius: 2, outline: "none", width: 120 }}
         />
         {draft.trim() && (
-          <button onClick={add} style={{ fontFamily: tokens.font, fontSize: 9, padding: "3px 8px", border: "1px solid #c8a96e", borderRadius: 2, cursor: "pointer", background: "#fdf4e8", color: "#7a5020" }}>add</button>
+          <button onClick={add} style={{ fontFamily: tokens.font, fontSize: 9, padding: "3px 8px", borderRadius: 2, cursor: "pointer", ...outlineBtn }}>add</button>
         )}
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
+import { outlineBtn } from "../../styles/uiChrome.js";
 
 const FONT = tokens.font;
 
@@ -46,11 +47,11 @@ export default function WineSyncTab({ onSyncWines }) {
             fontSize: 9,
             letterSpacing: 2,
             padding: "10px 20px",
-            border: "1px solid #c8a06e",
             borderRadius: 2,
             cursor: status === "syncing" ? "not-allowed" : "pointer",
-            background: "#c8a06e",
-            color: "#fff",
+            opacity: status === "syncing" ? 0.65 : 1,
+            fontWeight: 600,
+            ...outlineBtn,
           }}
         >
           {status === "syncing" ? "SYNCING…" : "SYNC WINES & BEVERAGES"}

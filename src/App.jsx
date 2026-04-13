@@ -422,7 +422,7 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
             </span>
           )}
           {table.pace && (() => {
-            const pc = { Slow: { color: "#7a5020", bg: "#fdf4e8", border: "#c8a060" }, Fast: { color: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" } }[table.pace] || {};
+            const pc = { Slow: { color: "#1a1a1a", bg: "#ffffff", border: "#1a1a1a" }, Fast: { color: "#6a2a2a", bg: "#fff5f5", border: "#c04040" } }[table.pace] || {};
             return <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, border: `1px solid ${pc.border}`, borderRadius: tokens.radius, padding: "2px 6px", background: pc.bg, color: pc.color }}>{table.pace}</span>;
           })()}
           {table.active && (
@@ -709,8 +709,8 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
             {/* ── Beverages + Extras ── */}
             <div style={{ paddingLeft: isMobile ? 0 : 48, display: "flex", flexDirection: "column", gap: 12 }}>
               {/* ── Aperitif ── generates above Sour Soup */}
-              <div style={{ background: "#fdf8f0", border: "1px solid #e8dcc8", borderRadius: 8, padding: isMobile ? "10px" : "12px" }}>
-                <div style={{ ...fieldLabel, marginBottom: 8, color: "#a07040" }}>Aperitif</div>
+              <div style={{ background: "#ffffff", border: "1px solid #1a1a1a", borderRadius: 8, padding: isMobile ? "10px" : "12px" }}>
+                <div style={{ ...fieldLabel, marginBottom: 8, color: "#444" }}>Aperitif</div>
                 {/* Quick-add buttons */}
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                   {aperitifOptions.map(ap => (
@@ -722,8 +722,8 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                       updSeat(seat.id, "aperitifs", prev => [...(prev || []), item]);
                     }} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
-                      border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
-                      background: "#fff", color: "#7a5020", transition: "all 0.1s",
+                      border: "1px solid #1a1a1a", borderRadius: 3, cursor: "pointer",
+                      background: "#fff", color: "#1a1a1a", transition: "all 0.1s",
                     }}>{ap.label}</button>
                   ))}
                 </div>
@@ -908,10 +908,10 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                         else st = "on";
                         const labelMap = { off: "off", on: "on", alco: "wine", nonalc: "n/a" };
                         const styleMap = {
-                          off:    { border: "#d8d8d8", bg: "#fafafa", color: "#999" },
-                          on:     { border: "#9bc48a", bg: "#f2f8ee", color: "#3d6a30" },
-                          alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
-                          nonalc: { border: "#7ab8d4", bg: "#e8f4fd", color: "#205a7a" },
+                          off:    { border: "#d0d0d0", bg: "#ffffff", color: "#888" },
+                          on:     { border: "#1a1a1a", bg: "#ffffff", color: "#1a1a1a" },
+                          alco:   { border: "#1a1a1a", bg: "#f5f5f5", color: "#1a1a1a" },
+                          nonalc: { border: "#1a1a1a", bg: "#f5f5f5", color: "#1a1a1a" },
                         }[st];
                         const short = String(opt.label || opt.key || "").replace(/\s+/g, " ").trim().slice(0, 14) || opt.key;
                         return (
@@ -957,21 +957,21 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                           <div style={{ display: "flex", gap: 3 }}>
                             <button onClick={() => updOpt({ ordered: false })} style={{
                               fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
-                              borderColor: !active ? "#a0c060" : "#ebebeb", borderRadius: 2, cursor: "pointer",
-                              background: !active ? "#f4f8e8" : "#fff", color: !active ? "#5a7820" : "#aaa", flex: 1,
+                              borderColor: !active ? "#1a1a1a" : "#e0e0e0", borderRadius: 2, cursor: "pointer",
+                              background: !active ? "#f5f5f5" : "#fff", color: !active ? "#1a1a1a" : "#aaa", flex: 1,
                             }}>OFF</button>
                             {opt.hasAlco && (
                               <button onClick={() => updOpt({ ordered: true, mode: "alco" })} style={{
                                 fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
-                                borderColor: alcoOn ? "#c8a060" : "#ebebeb", borderRadius: 2, cursor: "pointer",
-                                background: alcoOn ? "#fdf4e8" : "#fff", color: alcoOn ? "#7a5020" : "#aaa", flex: 1,
+                                borderColor: alcoOn ? "#1a1a1a" : "#e0e0e0", borderRadius: 2, cursor: "pointer",
+                                background: alcoOn ? "#f5f5f5" : "#fff", color: alcoOn ? "#1a1a1a" : "#aaa", flex: 1,
                               }}>ALCO</button>
                             )}
                             {opt.hasNonAlco && (
                               <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} style={{
                                 fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
-                                borderColor: naOn ? "#60a0c8" : "#ebebeb", borderRadius: 2, cursor: "pointer",
-                                background: naOn ? "#e8f4fd" : "#fff", color: naOn ? "#205a7a" : "#aaa", flex: 1,
+                                borderColor: naOn ? "#1a1a1a" : "#e0e0e0", borderRadius: 2, cursor: "pointer",
+                                background: naOn ? "#f5f5f5" : "#fff", color: naOn ? "#1a1a1a" : "#aaa", flex: 1,
                               }}>N/A</button>
                             )}
                           </div>
@@ -1180,15 +1180,15 @@ function TableSeatDetail({ table, isMobile, optionalExtras = [] }) {
 
 // ── Display Board ─────────────────────────────────────────────────────────────
 const PC = {
-  "—":         { color: "#666",    bg: "#f5f5f5", border: "#d8d8d8" },
-  "Wine":      { color: "#7a5020", bg: "#f5ead8", border: "#c8a060" },
-  "Non-Alc":   { color: "#1f5f73", bg: "#e8f7fb", border: "#7fc6db" },
-  "Premium":   { color: "#3a3a7a", bg: "#eaeaf5", border: "#8888bb" },
-  "Our Story": { color: "#2a6a4a", bg: "#e0f5ea", border: "#5aaa7a" },
+  "—":         { color: "#444444", bg: "#ffffff", border: "#1a1a1a" },
+  "Wine":      { color: "#333333", bg: "#ffffff", border: "#1a1a1a" },
+  "Non-Alc":   { color: "#1f5f73", bg: "#ffffff", border: "#1a1a1a" },
+  "Premium":   { color: "#3a3a6a", bg: "#ffffff", border: "#1a1a1a" },
+  "Our Story": { color: "#2a5a42", bg: "#ffffff", border: "#1a1a1a" },
 };
 // Flat color/bg maps used by Summary, Archive, and other read-only views
-const PAIRING_COLOR = { Wine: "#8a6030", "Non-Alc": "#1f5f73", Premium: "#3a3a7a", "Our Story": "#2a6a4a" };
-const PAIRING_BG    = { Wine: "#fdf4e8", "Non-Alc": "#e8f7fb", Premium: "#eaeaf5", "Our Story": "#e0f5ea" };
+const PAIRING_COLOR = { Wine: "#1a1a1a", "Non-Alc": "#1a1a1a", Premium: "#1a1a1a", "Our Story": "#1a1a1a" };
+const PAIRING_BG    = { Wine: "#ffffff", "Non-Alc": "#ffffff", Premium: "#ffffff", "Our Story": "#ffffff" };
 const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
@@ -1225,10 +1225,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
     const wBtn = (opt, active, onClick) => (
       <button key={opt} onClick={onClick} style={{
         fontFamily: FONT, fontSize: 10, letterSpacing: 0.3, padding: "4px 8px",
-        border: `1px solid ${active ? (opt === "OC" || opt === "OW" ? "#c8a060" : "#6a8ab0") : "#e8e8e8"}`,
+        border: `1px solid ${active ? "#1a1a1a" : "#e0e0e0"}`,
         borderRadius: quickMode ? 0 : 3, cursor: "pointer", lineHeight: 1,
-        background: active ? (opt === "OC" || opt === "OW" ? "#fdf4e8" : "#eef3f9") : "#fff",
-        color: active ? (opt === "OC" || opt === "OW" ? "#7a5020" : "#2a4a6e") : "#aaa",
+        background: active ? "#f5f5f5" : "#fff",
+        color: active ? "#1a1a1a" : "#aaa",
         ...(quickMode ? {} : { transition: "all 0.1s" }),
       }}>{opt}</button>
     );
@@ -1290,10 +1290,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
             {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: "1px solid #e8e8e8", color: "#666" }}>{t.menuType}</span>}
             {t.lang === "si" && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: "1px solid #c0ccee", color: "#3050a0", background: "#f0f4ff", fontWeight: 700 }}>SI</span>}
             {t.pace && (() => {
-              const pc = { Slow: { color: "#7a5020", bg: "#fdf4e8", border: "#c8a060" }, Fast: { color: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" } }[t.pace] || {};
+              const pc = { Slow: { color: "#1a1a1a", bg: "#ffffff", border: "#1a1a1a" }, Fast: { color: "#6a2a2a", bg: "#fff5f5", border: "#c04040" } }[t.pace] || {};
               return <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: `1px solid ${pc.border}`, background: pc.bg, color: pc.color, fontWeight: 700 }}>{t.pace}</span>;
             })()}
-            {t.guestType === "hotel" && t.room && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: "1px solid #d4b888", color: "#a07040", background: "#fffaf2", fontWeight: 600 }}>#{t.room}</span>}
+            {t.guestType === "hotel" && t.room && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: "1px solid #1a1a1a", color: "#1a1a1a", background: "#fff", fontWeight: 600 }}>#{t.room}</span>}
             {t.birthday && <span style={{ fontSize: 12 }}>🎂</span>}
           </div>
         </div>
@@ -1432,9 +1432,9 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                                 const sub = { off: "off", on: "on", alco: "wine", nonalc: "n/a" }[cur];
                                 const styleMap = {
                                   off:    { border: "#dedede", bg: "#fff", color: qm.muted },
-                                  on:     { border: "#9bc48a", bg: "#f7fbf4", color: "#3a6a32" },
-                                  alco:   { border: "#c8a060", bg: "#fdf9f2", color: "#6a4818" },
-                                  nonalc: { border: "#7ab0c8", bg: "#f4f9fc", color: "#1f5f73" },
+                                  on:     { border: "#1a1a1a", bg: "#fff", color: "#1a1a1a" },
+                                  alco:   { border: "#1a1a1a", bg: "#f5f5f5", color: "#1a1a1a" },
+                                  nonalc: { border: "#1a1a1a", bg: "#f5f5f5", color: "#1a1a1a" },
                                 }[cur];
                                 return (
                                   <button key={dish.key || dish.id} type="button" onClick={() => applySeatPatch(s.id, seat => {
@@ -1477,8 +1477,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                                   })}
                                   style={{
                                     fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "6px 12px",
-                                    border: `1px solid ${dishOn ? "#9bc48a" : "#dedede"}`, borderRadius: 0, cursor: "pointer",
-                                    background: dishOn ? "#f7fbf4" : "#fff", color: dishOn ? "#3a6a32" : qm.muted, minWidth: 72, textAlign: "left",
+                                    border: `1px solid ${dishOn ? "#1a1a1a" : "#dedede"}`, borderRadius: 0, cursor: "pointer",
+                                    background: dishOn ? "#f5f5f5" : "#fff", color: dishOn ? "#1a1a1a" : qm.muted, minWidth: 72, textAlign: "left",
                                   }}>
                                   <span style={{ fontWeight: 600 }}>{short}</span>
                                   <span style={{ marginLeft: 6, fontWeight: 400 }}>{dishOn ? "on" : "off"}</span>
@@ -1517,10 +1517,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                                   }
                                 }} style={{
                                   fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "5px 10px",
-                                  border: `1px solid ${active ? "#c8a060" : "#dedede"}`,
+                                  border: `1px solid ${active ? "#1a1a1a" : "#dedede"}`,
                                   borderRadius: 0, cursor: "pointer",
-                                  background: active ? "#fdf9f2" : "#fff",
-                                  color: active ? "#6a4818" : qm.muted,
+                                  background: active ? "#f5f5f5" : "#fff",
+                                  color: active ? "#1a1a1a" : qm.muted,
                                 }}>{label}</button>
                               );
                             })}
@@ -1743,14 +1743,14 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
     }}>{opt}</button>
   );
 
-  const extraBtn = (label, active, color, onClick) => (
+  const extraBtn = (label, active, _color, onClick) => (
     <button onClick={onClick} style={{
       fontFamily: FONT, fontSize: 9, letterSpacing: 1,
       padding: "5px 9px", border: "1px solid",
-      borderColor: active ? color : "#e0e0e0",
+      borderColor: active ? UI.line : "#e0e0e0",
       borderRadius: tokens.radius, cursor: "pointer", lineHeight: 1,
-      background: active ? `${color}14` : "#fff",
-      color: active ? color : "#aaa",
+      background: active ? UI.selectedBg : "#fff",
+      color: active ? UI.ink : "#aaa",
       textTransform: "uppercase",
     }}>{label}</button>
   );
@@ -1771,7 +1771,7 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
           {table.resTime && <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", letterSpacing: 1 }}>{table.resTime}</span>}
           <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb" }}>{seats.length}p</span>
         </div>
-        <span style={{ fontFamily: FONT, fontSize: 11, color: "#c8a96e" }}>→</span>
+        <span style={{ fontFamily: FONT, fontSize: 11, color: "#888" }}>→</span>
       </div>
 
       {/* All water quick row */}
@@ -1785,8 +1785,8 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
       {/* Per-seat rows */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px" }}>
         {seats.map(seat => {
-          const pairingColor = { Wine: "#7a5020", "Non-Alc": "#3a6a2a", Premium: "#4a3a7a", "Our Story": "#2a5a6a" };
-          const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#edf8e8", Premium: "#f0eeff", "Our Story": "#e8f5f8" };
+          const pairingColor = { Wine: "#1a1a1a", "Non-Alc": "#1a1a1a", Premium: "#1a1a1a", "Our Story": "#1a1a1a", "—": "#1a1a1a" };
+          const pairingBg   = { Wine: "#ffffff", "Non-Alc": "#ffffff", Premium: "#ffffff", "Our Story": "#ffffff", "—": "#ffffff" };
           const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
           return (
             <div key={seat.id} style={{

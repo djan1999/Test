@@ -47,7 +47,7 @@ export const BLOCK_META = {
     defaults: { courseKey: "", showPairing: true },
   },
   drinks: {
-    label: "Drinks",        group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "◎",
+    label: "Drinks",        group: "content", color: "#1a1a1a", bg: "#ffffff", icon: "◎",
     desc: "Configurable drink column — select source: pairing, optional pairing, by-the-glass, or bottle. Data comes from course editor.",
     fields: [],
     defaults: {
@@ -57,7 +57,7 @@ export const BLOCK_META = {
     },
   },
   pairing_label: {
-    label: "Pairing Label", group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "T",
+    label: "Pairing Label", group: "content", color: "#1a1a1a", bg: "#ffffff", icon: "T",
     desc: "Auto-resolves label from pairing type (Wine/Non-Alc/etc). Text field overrides only. Section spacing is preserved even when seat has no pairing.",
     fields: [
       { key: "text",      label: "Label override",    type: "text",   placeholder: "Leave empty for auto" },

@@ -85,8 +85,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       .filter(r => r.pos === seat.id)
       .map(r => r.note);
 
-  const pairingColor = { Wine: "#7a5020", "Non-Alc": "#1f5f73", Premium: "#5a5a8a", "Our Story": "#3a7a5a" };
-  const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#e8f5fa", Premium: "#f0eeff", "Our Story": "#eaf5ee" };
+  const pairingColor = { Wine: "#1a1a1a", "Non-Alc": "#1a1a1a", Premium: "#1a1a1a", "Our Story": "#1a1a1a" };
+  const pairingBg   = { Wine: "#ffffff", "Non-Alc": "#ffffff", Premium: "#ffffff", "Our Story": "#ffffff" };
 
   const normFlag = s => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   const normCategory = (course) => {
@@ -266,7 +266,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8a060", borderRadius: 3, cursor: "pointer", background: "#fdf4e8", color: "#7a5020", fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #1a1a1a", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#1a1a1a", fontWeight: 700, touchAction: "manipulation" }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, s.id); }}
                     style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
@@ -288,7 +288,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8a060", borderRadius: 3, cursor: "pointer", background: "#fdf4e8", color: "#7a5020", fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #1a1a1a", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#1a1a1a", fontWeight: 700, touchAction: "manipulation" }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, s.id); }}
                     style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
@@ -305,7 +305,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       <div style={{ borderBottom: "1px solid #e8e8e8", padding: "5px 10px", display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", flexShrink: 0 }}>Pace</span>
         {["Slow", "Fast"].map(p => {
-          const colors = { Slow: { on: "#7a5020", bg: "#fdf4e8", border: "#c8a060" }, Fast: { on: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" } };
+          const colors = { Slow: { on: "#1a1a1a", bg: "#ffffff", border: "#1a1a1a" }, Fast: { on: "#6a2a2a", bg: "#fff5f5", border: "#c04040" } };
           const active = table.pace === p;
           const col = colors[p];
           return (
@@ -608,10 +608,10 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
 export function KitchenAlertOverlay({ alerts, onConfirm }) {
   if (alerts.length === 0) return null;
   const PAIR_COLORS = {
-    Wine:      { color: "#7a5020", bg: "transparent", border: "#c8a060" },
-    "Non-Alc": { color: "#1f5f73", bg: "transparent", border: "#7fc6db" },
-    Premium:   { color: "#5a5a8a", bg: "transparent", border: "#aaaacc" },
-    "Our Story":{ color: "#3a7a5a", bg: "transparent", border: "#7abf9a" },
+    Wine:      { color: "#1a1a1a", bg: "transparent", border: "#1a1a1a" },
+    "Non-Alc": { color: "#1a1a1a", bg: "transparent", border: "#1a1a1a" },
+    Premium:   { color: "#1a1a1a", bg: "transparent", border: "#1a1a1a" },
+    "Our Story":{ color: "#1a1a1a", bg: "transparent", border: "#1a1a1a" },
   };
   return (
     <div style={{

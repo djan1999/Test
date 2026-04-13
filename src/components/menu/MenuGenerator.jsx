@@ -250,8 +250,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
     setExpandedDrinksId(null);
   };
 
-  const pairingColor = { Wine: "#7a5020", "Non-Alc": "#3a6a2a", Premium: "#4a3a7a", "Our Story": "#2a5a6a" };
-  const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#edf8e8", Premium: "#f0eeff", "Our Story": "#e8f5f8" };
+  const pairingColor = { Wine: "#1a1a1a", "Non-Alc": "#1a1a1a", Premium: "#1a1a1a", "Our Story": "#1a1a1a" };
+  const pairingBg   = { Wine: "#ffffff", "Non-Alc": "#ffffff", Premium: "#ffffff", "Our Story": "#ffffff" };
 
 
   return (
@@ -313,8 +313,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
           return (
             <div key={s.id} style={{
-              border: `1px solid ${seatHasEdits ? "#f0c060" : "#f0f0f0"}`, borderRadius: 4, marginBottom: 8,
-              background: seatHasEdits ? "#fffdf4" : "#fff",
+              border: `1px solid ${seatHasEdits ? "#1a1a1a" : "#f0f0f0"}`, borderRadius: 4, marginBottom: 8,
+              background: seatHasEdits ? "#fafafa" : "#fff",
             }}>
               {/* Main row */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", flexWrap: "wrap" }}>
@@ -339,27 +339,27 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                   );
                 })}
                 {orderedExtras.map(d => (
-                  <span key={d.key} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+{String(d.name).toUpperCase()}</span>
+                  <span key={d.key} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fff", color: "#1a1a1a", border: "1px solid #1a1a1a" }}>+{String(d.name).toUpperCase()}</span>
                 ))}
 
                 {/* Manually added beverages */}
                 {glasses.map((w, i) => (
-                  <span key={`g${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #c8a060", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span key={`g${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fff", color: "#1a1a1a", border: "1px solid #1a1a1a", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🍷 {w.name}
                   </span>
                 ))}
                 {cocktails.map((c, i) => (
-                  <span key={`c${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#f5eeff", color: "#5a3878", border: "1px solid #b898d8", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span key={`c${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fff", color: "#1a1a1a", border: "1px solid #1a1a1a", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🍹 {c.name}
                   </span>
                 ))}
                 {spirits.map((sp, i) => (
-                  <span key={`s${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fff3e0", color: "#7a5020", border: "1px solid #d4a870", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span key={`s${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fff", color: "#1a1a1a", border: "1px solid #1a1a1a", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🥃 {sp.name}
                   </span>
                 ))}
                 {beers.map((b, i) => (
-                  <span key={`b${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#edf8e8", color: "#3a6a2a", border: "1px solid #88bb70", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span key={`b${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fff", color: "#1a1a1a", border: "1px solid #1a1a1a", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🍺 {b.name}
                   </span>
                 ))}
@@ -367,9 +367,9 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                 {/* Edit button — opens per-seat ephemeral course editor */}
                 <button onClick={() => { setExpandedSeatId(isExpanded ? null : s.id); setExpandedDrinksId(null); setPreviewSeatId(null); }} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
-                  border: `1px solid ${seatHasEdits ? "#f0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                  background: seatHasEdits ? "#fff8e0" : "#fafafa",
-                  color: seatHasEdits ? "#a07020" : "#aaa",
+                  border: `1px solid ${seatHasEdits ? "#1a1a1a" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                  background: seatHasEdits ? "#f5f5f5" : "#fafafa",
+                  color: seatHasEdits ? "#1a1a1a" : "#aaa",
                 }}>{isExpanded ? "▲" : (seatHasEdits ? "✎ EDITED" : "✎")}</button>
 
                 {/* Drinks edit button */}
@@ -428,7 +428,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                           borderRadius: 2, padding: "2px 4px",
                           background: hasEdit ? "#fffdf0" : "transparent",
                         }}>
-                          <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: hasEdit ? "#a07020" : "#bbb",
+                          <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: hasEdit ? "#1a1a1a" : "#bbb",
                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {baseDish?.name || "—"}
                           </span>
@@ -498,7 +498,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                   </div>
                   {/* ── Aperitif — generates above Sour Soup ── */}
                   <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#a07040", textTransform: "uppercase", marginBottom: 6 }}>Aperitif</div>
+                    <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Aperitif</div>
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                       {aperitifOptions.map(ap => {
                         const label = ap.label ?? ap;
@@ -514,8 +514,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                             updSeat(s.id, "aperitifs", [...(s.aperitifs || []), item]);
                           }} style={{
                             fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
-                            border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
-                            background: "#fff", color: "#7a5020",
+                            border: "1px solid #1a1a1a", borderRadius: 3, cursor: "pointer",
+                            background: "#fff", color: "#1a1a1a",
                           }}>{label}</button>
                         );
                       })}
@@ -615,9 +615,9 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                             }};
                           });
                           const btnStyleMap = {
-                            off:    { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" },
-                            alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
-                            nonalc: { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" },
+                            off:    { border: "#d0d0d0", bg: "#ffffff", color: "#888" },
+                            alco:   { border: "#1a1a1a", bg: "#f5f5f5", color: "#1a1a1a" },
+                            nonalc: { border: "#1a1a1a", bg: "#f5f5f5", color: "#1a1a1a" },
                           };
                           const btnLabelMap = { off: "off", alco: "alco", nonalc: "n/a" };
                           const st = btnStyleMap[cur];
@@ -689,10 +689,10 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                               });
                               const labels = { off: `${dish.name} off`, on: `${dish.name} ✓`, alco: `${dish.name.slice(0,4)} · ALCO`, nonalc: `${dish.name.slice(0,4)} · N/A` };
                               const colors = {
-                                off:    { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" },
-                                on:     { border: "#a0c060", bg: "#f4f8e8", color: "#5a7820" },
-                                alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
-                                nonalc: { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" },
+                                off:    { border: "#d0d0d0", bg: "#ffffff", color: "#888" },
+                                on:     { border: "#1a1a1a", bg: "#ffffff", color: "#1a1a1a" },
+                                alco:   { border: "#1a1a1a", bg: "#f5f5f5", color: "#1a1a1a" },
+                                nonalc: { border: "#1a1a1a", bg: "#f5f5f5", color: "#1a1a1a" },
                               }[cur];
                               return (
                                 <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>

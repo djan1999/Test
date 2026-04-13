@@ -169,7 +169,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                     <div style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       {d.resTime && <span>{d.resTime}</span>}
                       <span>{d.guests || 2} guests</span>
-                      {d.menuType && <span style={{ color: "#c8a06e", textTransform: "uppercase", letterSpacing: 1 }}>{d.menuType}</span>}
+                      {d.menuType && <span style={{ color: UI.ink, textTransform: "uppercase", letterSpacing: 1 }}>{d.menuType}</span>}
                       {d.lang === "si" && <span style={{ color: "#6080c0" }}>SLO</span>}
                       {d.birthday && <span>🎂{d.cakeNote ? ` ${d.cakeNote}` : ""}</span>}
                       {d.guestType === "hotel" && d.room && <span style={{ color: "#a07040" }}>Room {d.room}</span>}

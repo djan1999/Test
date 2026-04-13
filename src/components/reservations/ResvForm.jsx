@@ -188,10 +188,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               {ROOM_OPTIONS.map((r) => (
                 <button key={r} onClick={() => setRoom((x) => x === r ? "" : r)} style={{
                   fontFamily: FONT, fontSize: 11, padding: "7px 10px",
-                  border: "1px solid", borderColor: room === r ? "#c8a06e" : "#e8e8e8",
+                  border: "1px solid", borderColor: room === r ? UI.line : "#e8e8e8",
                   borderRadius: 2, cursor: "pointer",
-                  background: room === r ? "#fdf6ec" : "#fff",
-                  color: room === r ? "#a07040" : "#555",
+                  background: room === r ? UI.selectedBg : "#fff",
+                  color: room === r ? UI.ink : "#555",
                 }}>{r}</button>
               ))}
             </div>

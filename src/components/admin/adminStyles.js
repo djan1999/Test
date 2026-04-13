@@ -25,10 +25,10 @@ export const panelBtn = (active = false) => ({
 
 export const saveBtn = (saved = false) => ({
   fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
-  border: `1px solid ${saved ? "#4a9a6a" : "#c8a06e"}`, borderRadius: tokens.radius,
+  border: `1px solid ${saved ? "#2f7a45" : UI.line}`, borderRadius: tokens.radius,
   cursor: "pointer",
-  background: saved ? "#eef8f1" : "#fdf9f2",
-  color: saved ? "#2f7a45" : "#7a5020",
+  background: saved ? "#ffffff" : "#ffffff",
+  color: saved ? "#2f7a45" : UI.ink,
   fontWeight: 600,
 });
 

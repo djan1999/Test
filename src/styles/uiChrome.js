@@ -17,3 +17,23 @@ export const UI = {
   selectedBorder: "#1a1a1a",
   radius: 0,
 };
+
+/** White fill + black outline — default for action buttons app-wide */
+export const outlineBtn = {
+  background: "#ffffff",
+  color: "#1a1a1a",
+  border: "1px solid #1a1a1a",
+};
+
+export const outlineBtnActive = {
+  background: "#f5f5f5",
+  color: "#1a1a1a",
+  border: "1px solid #1a1a1a",
+};
+
+/** Softer outline for secondary actions */
+export const outlineBtnGhost = {
+  background: "#ffffff",
+  color: "#555555",
+  border: "1px solid #d0d0d0",
+};
