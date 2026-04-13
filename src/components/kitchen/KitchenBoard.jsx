@@ -659,7 +659,6 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
             <div style={{
               background: "#fafafa",
               borderBottom: "1px solid #e8e8e8",
-              borderLeft: "3px solid #5aaa70",
               padding: "14px 18px",
               display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12,
             }}>

@@ -1250,7 +1250,6 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
         overflow: "hidden",
         boxShadow: quickMode ? "none" : (isSeated ? "0 2px 12px rgba(74,154,106,0.10)" : "0 1px 4px rgba(0,0,0,0.04)"),
         transition: "box-shadow 0.15s",
-        ...(quickMode && isSeated ? { borderLeft: `3px solid ${accentColor}` } : {}),
       }}>
         {/* Accent bar — hidden in quick mode (left border carries status) */}
         {!quickMode && <div style={{ height: 3, background: accentColor }} />}
