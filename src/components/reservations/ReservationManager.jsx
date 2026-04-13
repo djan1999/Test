@@ -66,11 +66,10 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
         setDraftFromReservation(null);
         return;
       }
-      onExit();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [weeklyPreview, selectedDay, ticketId, editingId, onExit]);
+  }, [weeklyPreview, selectedDay, ticketId, editingId]);
 
   const todayStr = toLocalDateISO();
 

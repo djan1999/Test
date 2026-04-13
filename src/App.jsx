@@ -2599,7 +2599,7 @@ export default function App() {
 
   const switchMode = () => { changeMode(null); setSel(null); };
 
-  /** Escape = back: close overlays/modals first, then drill up (e.g. table → board), then leave mode. */
+  /** Escape = one step back: overlays/modals, then in-service drill-up only (no mode exit — use EXIT). */
   useEffect(() => {
     const typing = (t) => t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
 
@@ -2658,18 +2658,7 @@ export default function App() {
           setQuickView("board");
           return;
         }
-        e.preventDefault();
-        e.stopPropagation();
-        changeMode(null);
-        setSel(null);
         return;
-      }
-
-      if (mode === "admin" || mode === "menu" || mode === "display") {
-        e.preventDefault();
-        e.stopPropagation();
-        changeMode(null);
-        setSel(null);
       }
     };
 
@@ -2677,7 +2666,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [
     authed, hydrated, mode, showServiceDatePicker, inventoryOpen, archiveOpen, summaryOpen,
-    sel, quickView, changeMode,
+    sel, quickView,
   ]);
 
   // ── Persist locally + sync changed tables to Supabase ─────────────────────
