@@ -2599,6 +2599,87 @@ export default function App() {
 
   const switchMode = () => { changeMode(null); setSel(null); };
 
+  /** Escape = back: close overlays/modals first, then drill up (e.g. table → board), then leave mode. */
+  useEffect(() => {
+    const typing = (t) => t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (!authed || !hydrated) return;
+      if (typing(e.target)) return;
+      if (mode === "reservation") return;
+
+      if (!mode) {
+        if (showServiceDatePicker) {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowServiceDatePicker(false);
+          setPendingModeAfterDate(null);
+        }
+        return;
+      }
+
+      if (showServiceDatePicker) {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowServiceDatePicker(false);
+        setPendingModeAfterDate(null);
+        return;
+      }
+      if (inventoryOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setInventoryOpen(false);
+        return;
+      }
+      if (archiveOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setArchiveOpen(false);
+        return;
+      }
+      if (summaryOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setSummaryOpen(false);
+        return;
+      }
+
+      if (mode === "service") {
+        if (sel != null) {
+          e.preventDefault();
+          e.stopPropagation();
+          setSel(null);
+          return;
+        }
+        if (quickView === "service") {
+          e.preventDefault();
+          e.stopPropagation();
+          setQuickView("board");
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        changeMode(null);
+        setSel(null);
+        return;
+      }
+
+      if (mode === "admin" || mode === "menu" || mode === "display") {
+        e.preventDefault();
+        e.stopPropagation();
+        changeMode(null);
+        setSel(null);
+      }
+    };
+
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [
+    authed, hydrated, mode, showServiceDatePicker, inventoryOpen, archiveOpen, summaryOpen,
+    sel, quickView, changeMode,
+  ]);
+
   // ── Persist locally + sync changed tables to Supabase ─────────────────────
   useEffect(() => {
     if (!hydrated) return;

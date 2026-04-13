@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML } from "../../utils/weeklyPrintGenerator.js";
 import { blankTable, makeSeats } from "../../utils/tableHelpers.js";
 import { RESTRICTIONS } from "../../constants/dietary.js";
@@ -39,6 +39,38 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
   const [ticketId,    setTicketId]    = useState(null);    // reservation id showing kitchen preview
   const [weeklyPreview, setWeeklyPreview] = useState(null); // "reservations" | "allergies" | null
   const [draftFromReservation, setDraftFromReservation] = useState(null);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      e.preventDefault();
+      if (weeklyPreview) {
+        setWeeklyPreview(null);
+        return;
+      }
+      if (selectedDay) {
+        if (ticketId) {
+          setTicketId(null);
+          return;
+        }
+        if (editingId) {
+          setEditingId(null);
+          setDraftFromReservation(null);
+          return;
+        }
+        setSelectedDay(null);
+        setEditingId(null);
+        setTicketId(null);
+        setDraftFromReservation(null);
+        return;
+      }
+      onExit();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [weeklyPreview, selectedDay, ticketId, editingId, onExit]);
 
   const todayStr = toLocalDateISO();
 

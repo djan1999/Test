@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { UI } from "../../styles/uiChrome.js";
 
@@ -13,6 +13,18 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
   const todayStr = toLocalDateISO();
   const [selected, setSelected] = useState(defaultDate || todayStr);
   const [weekOffset, setWeekOffset] = useState(0);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      e.preventDefault();
+      onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
 
   const weekDays = useMemo(() => {
     const today = new Date();
