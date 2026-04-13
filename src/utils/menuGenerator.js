@@ -459,8 +459,11 @@ export function generateMenuHTML({
     const drinkRowWp = `${_courseLeft}/${100 - _courseLeft}`;
 
     // ── aperitif ──
+    // Use course-type (rowSpacing) rather than wine-only (wineRowSpacing) so the
+    // dedicated aperitif row has the same margin-bottom as the overflow aperitif
+    // rows that fill course right-columns, keeping all aperitifs evenly spaced.
     if (lb?.type === "aperitif" || rb?.type === "aperitif") {
-      if (aQ.length > 0) rows.push({ type: "wine-only", right: fmtDrinkParts(aQ.shift()), widthPreset: drinkRowWp, gap: consumeGap() });
+      if (aQ.length > 0) rows.push({ type: "course", courseKey: null, left: null, right: fmtDrinkParts(aQ.shift()), rowClass: "", widthPreset: drinkRowWp, gap: consumeGap() });
       continue;
     }
 

@@ -76,21 +76,26 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
     ]).then(([teamRes, titleRes, thankYouRes]) => {
       if (teamRes.data?.state?.value) setTeamNames(teamRes.data.state.value);
 
-      // Support both old { value } format and new { en, si } format.
+      // Only apply Supabase values when in the new bilingual { en, si } format.
+      // The legacy { value } format has no language tag — applying it blindly
+      // would overwrite the correct language's localStorage value (e.g. showing
+      // the SI title when opening in EN mode). If the row is still in the old
+      // format, leave the state as-is (already seeded from localStorage in useState).
       const titleState = titleRes.data?.state;
-      if (titleState) {
-        const val = typeof titleState.en === "string" || typeof titleState.si === "string"
-          ? (titleState[currentLang] ?? "")
-          : (titleState.value ?? "");
+      if (titleState && (typeof titleState.en === "string" || typeof titleState.si === "string")) {
+        const val = titleState[currentLang] ?? "";
         if (val) setMenuTitle(val);
+        // Hydrate the other language into localStorage so lang-switch works offline.
+        const otherLang = currentLang === "en" ? "si" : "en";
+        if (titleState[otherLang]) writeMenuTitle(otherLang, titleState[otherLang]);
       }
 
       const thankYouState = thankYouRes.data?.state;
-      if (thankYouState) {
-        const val = typeof thankYouState.en === "string" || typeof thankYouState.si === "string"
-          ? (thankYouState[currentLang] ?? "")
-          : (thankYouState.value ?? "");
+      if (thankYouState && (typeof thankYouState.en === "string" || typeof thankYouState.si === "string")) {
+        const val = thankYouState[currentLang] ?? "";
         if (val) setThankYouNote(val);
+        const otherLang = currentLang === "en" ? "si" : "en";
+        if (thankYouState[otherLang]) writeThankYouNote(otherLang, thankYouState[otherLang]);
       }
 
       genLoaded.current = true;
