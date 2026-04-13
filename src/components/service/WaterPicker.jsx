@@ -66,8 +66,8 @@ export default function WaterPicker({ value, onChange, variant = "default" }) {
                 fontFamily: tokens.font,
                 fontSize: 12,
                 letterSpacing: 1,
-                color: value === opt ? "#1a1a1a" : "#999",
-                background: value === opt ? (sharp ? "#f5f5f5" : "#f8f8f8") : "#fff",
+                color: value === opt ? (sharp ? "#1f5f73" : "#1a1a1a") : "#999",
+                background: value === opt ? (sharp ? "#e8f4fa" : "#f5f5f5") : "#fff",
                 fontWeight: value === opt ? 500 : 400,
                 borderBottom: "1px solid #f5f5f5",
               }}

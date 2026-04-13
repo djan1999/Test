@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { FONT, baseInp, fieldLabel, primaryBtn } from "./adminStyles.js";
-import { outlineBtn, toggleOnSoft, toggleOff } from "../../styles/uiChrome.js";
+import { outlineBtn, toggleOnSoft, toggleOff, primaryAction } from "../../styles/uiChrome.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 
 // ── DrinkListEditor — generic editor for cocktails, spirits, beers ──
@@ -93,7 +93,7 @@ export default function DrinksPanel({
         <button onClick={handleSaveDrinks} style={{
           fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", borderRadius: 2, cursor: "pointer",
           marginLeft: "auto", fontWeight: 600,
-          ...(saved ? { ...outlineBtn, border: "1px solid #2f7a45", color: "#2f7a45" } : outlineBtn),
+          ...(saved ? primaryAction : outlineBtn),
         }}>{saved ? "SAVED" : "SAVE DRINKS"}</button>
       </div>
 

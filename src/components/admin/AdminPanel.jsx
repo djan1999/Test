@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 import { tokens } from "../../styles/tokens.js";
-import { UI, outlineBtn, toggleOnSoft, toggleOff } from "../../styles/uiChrome.js";
+import { UI, outlineBtn, toggleOnSoft, toggleOff, primaryAction } from "../../styles/uiChrome.js";
 import { baseInput, fieldLabel as mixinFieldLabel } from "../../styles/mixins.js";
 import MenuCoursesTab from "./MenuCoursesTab.jsx";
 import DrinkListEditor from "./DrinkListEditor.jsx";
@@ -136,7 +136,7 @@ export default function AdminPanel({
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", borderRadius: tokens.radius, cursor: "pointer",
                   fontWeight: 600,
                   marginLeft: "auto",
-                  ...(drinksSaved ? { ...outlineBtn, border: "1px solid #2f7a45", color: "#2f7a45" } : outlineBtn),
+                  ...(drinksSaved ? primaryAction : outlineBtn),
                 }}>{drinksSaved ? "SAVED" : "SAVE DRINKS"}</button>
               </div>
 

@@ -5,14 +5,14 @@ import { supabase, TABLES } from "../../lib/supabaseClient.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
 import { restrLabel } from "../../constants/dietary.js";
-import { waterStyle } from "../../constants/pairings.js";
+import { waterStyle, pairingStyle, PAIRINGS } from "../../constants/pairings.js";
 import { parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 import { outlineBtn, toggleOn } from "../../styles/uiChrome.js";
 
 const FONT = tokens.font;
-const PAIRING_COLOR = { Wine: "#1a1a1a", "Non-Alc": "#1a1a1a", Premium: "#1a1a1a", "Our Story": "#1a1a1a" };
-const PAIRING_BG = { Wine: "#ffffff", "Non-Alc": "#ffffff", Premium: "#ffffff", "Our Story": "#ffffff" };
+const PAIRING_COLOR = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].color]));
+const PAIRING_BG = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].bg]));
 
 export default function ArchiveModal({
   tables,

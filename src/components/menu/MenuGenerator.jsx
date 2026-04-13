@@ -6,9 +6,9 @@ import { TABLES, supabase } from "../../lib/supabaseClient.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
 import { restrLabel } from "../../constants/dietary.js";
-import { waterStyle } from "../../constants/pairings.js";
+import { waterStyle, pairingStyle } from "../../constants/pairings.js";
 import { tokens } from "../../styles/tokens.js";
-import { UI, outlineBtn, toggleOnSoft, toggleOff } from "../../styles/uiChrome.js";
+import { UI, outlineBtn, toggleOnSoft, toggleOff, primaryAction } from "../../styles/uiChrome.js";
 import FullModal from "../ui/FullModal.jsx";
 import BlurInput from "../ui/BlurInput.jsx";
 import BeverageSearch from "../service/BeverageSearch.jsx";
@@ -332,8 +332,9 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                   return (
                     <span key={i} style={{
                       fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: tokens.radius,
-                      ...toggleOn,
-                      ...(isDietary ? {} : { border: "1px solid #c04040", color: "#c04040" }),
+                      ...(isDietary
+                        ? { background: UI.okSoft, color: UI.okText, border: `1px solid ${UI.okBorder}` }
+                        : { background: UI.errSoft, color: UI.errText, border: `1px solid ${UI.errBorder}` }),
                     }}>
                       {isDietary ? restrLabel(r.note) : `⚠ ${restrLabel(r.note)}`}
                     </span>
@@ -367,30 +368,32 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
                 {/* Edit button — opens per-seat ephemeral course editor */}
                 <button onClick={() => { setExpandedSeatId(isExpanded ? null : s.id); setExpandedDrinksId(null); setPreviewSeatId(null); }} style={{
-                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
-                  border: `1px solid ${seatHasEdits ? "#1a1a1a" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                  background: seatHasEdits ? "#f5f5f5" : "#fafafa",
-                  color: seatHasEdits ? "#1a1a1a" : "#aaa",
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px", borderRadius: 2, cursor: "pointer",
+                  ...(seatHasEdits ? { background: "#fff8e6", color: "#8a6020", border: "1px solid #e8c878" } : { background: UI.surface2, color: "#aaa", border: `1px solid ${UI.border}` }),
                 }}>{isExpanded ? "▲" : (seatHasEdits ? "✎ EDITED" : "✎")}</button>
 
                 {/* Drinks edit button */}
                 {upd && (
                   <button onClick={() => { setExpandedDrinksId(expandedDrinksId === s.id ? null : s.id); setExpandedSeatId(null); setPreviewSeatId(null); }} style={{
                     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px", borderRadius: 2, cursor: "pointer",
-                    ...(expandedDrinksId === s.id ? toggleOnSoft : toggleOff),
+                    ...(expandedDrinksId === s.id
+                      ? { background: UI.infoSoft, color: UI.infoText, border: `1px solid ${UI.infoBorder}` }
+                      : toggleOff),
                   }}>🍷</button>
                 )}
 
                 {/* Preview button */}
                 <button onClick={() => previewSeatId === s.id ? setPreviewSeatId(null) : openPreview(s)} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px", borderRadius: 2, cursor: "pointer",
-                  ...(previewSeatId === s.id ? toggleOnSoft : toggleOff),
+                  ...(previewSeatId === s.id
+                    ? { background: UI.infoSoft, color: UI.infoText, border: `1px solid ${UI.infoBorder}` }
+                    : toggleOff),
                 }}>👁</button>
 
                 <button onClick={() => openPrint(s)} style={{
                   marginLeft: "auto", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
                   padding: "8px 16px", borderRadius: 2, cursor: "pointer", fontWeight: 600,
-                  ...outlineBtn,
+                  ...primaryAction,
                 }}>PDF</button>
               </div>
 
@@ -473,8 +476,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
               {/* Drinks editor */}
               {expandedDrinksId === s.id && (
-                <div style={{ borderTop: `1px solid ${UI.border}`, padding: "12px 16px 14px", background: UI.surface2 }}>
-                  <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: UI.textMuted, textTransform: "uppercase", marginBottom: 12 }}>Drinks & Pairing — P{s.id}</div>
+                <div style={{ borderTop: `1px solid ${UI.infoBorder}`, padding: "12px 16px 14px", background: UI.infoSoft }}>
+                  <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: UI.infoText, textTransform: "uppercase", marginBottom: 12 }}>Drinks & Pairing — P{s.id}</div>
                   {/* Pairing selector */}
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Pairing</div>
@@ -484,7 +487,13 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                         return (
                           <button key={p} onClick={() => updSeat(s.id, "pairing", p === "—" ? "—" : p)} style={{
                             fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px", borderRadius: 2, cursor: "pointer",
-                            ...(active ? toggleOnSoft : toggleOff),
+                            ...(active
+                              ? {
+                                background: pairingStyle[p]?.bg || UI.okSoft,
+                                color: pairingStyle[p]?.color || UI.okText,
+                                border: `1px solid ${pairingStyle[p]?.border || UI.okBorder}`,
+                              }
+                              : toggleOff),
                           }}>{p}</button>
                         );
                       })}

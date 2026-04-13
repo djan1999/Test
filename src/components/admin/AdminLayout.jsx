@@ -102,10 +102,10 @@ export default function AdminLayout({
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px",
-            border: `1px solid ${syncStatus === "live" ? "#2f7a45" : UI.border}`,
+            border: `1px solid ${syncStatus === "live" ? UI.okBorder : UI.border}`,
             borderRadius: tokens.radius,
-            background: "#fff",
-            color: syncStatus === "live" ? "#2f7a45" : "#555",
+            background: syncStatus === "live" ? UI.okSoft : UI.surface2,
+            color: syncStatus === "live" ? UI.okText : "#555",
             fontWeight: 600, whiteSpace: "nowrap",
           }}>{syncStatus === "live" ? "SYNC" : syncStatus === "local-only" ? "LOCAL" : syncStatus === "connecting" ? "LINK" : "ERROR"}</span>
           <button onClick={onExit} style={{

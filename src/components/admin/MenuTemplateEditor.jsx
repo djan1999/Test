@@ -1109,7 +1109,7 @@ export default function MenuTemplateEditor({
               width: "100%", fontFamily: FONT, fontSize: 8, letterSpacing: 2,
               padding: "7px 0", border: "none", borderRadius: 3, cursor: saving ? "wait" : "pointer",
               textTransform: "uppercase", marginBottom: 6, fontWeight: 600,
-              ...(saved ? { ...outlineBtn, border: "1px solid #2f7a45", color: "#2f7a45" } : outlineBtn),
+              ...(saved ? { background: UI.okSoft, color: UI.okText, border: `1px solid ${UI.okBorder}` } : outlineBtn),
             }}
           >{saving ? "SAVING…" : saved ? "✓ SAVED" : "SAVE TEMPLATE"}</button>}
 

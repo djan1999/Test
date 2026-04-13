@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { FONT, baseInp } from "./adminStyles.js";
 import { tokens } from "../../styles/tokens.js";
-import { UI } from "../../styles/uiChrome.js";
+import { UI, toggleOn, toggleOff } from "../../styles/uiChrome.js";
 import { fuzzy, fuzzyDrink } from "../../utils/search.js";
 
 // ── WinePickerInput — mirrors the WineSearch in App.jsx ──────────────────────
@@ -165,10 +165,9 @@ export default function QuickAccessPanel({
             {/* Row */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px" }}>
               <button onClick={() => toggleItem(item.id)} style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px", border: "1px solid",
-                borderColor: item.enabled ? UI.line : "#ddd", borderRadius: 2, cursor: "pointer",
-                background: item.enabled ? UI.selectedBg : "#fff",
-                color: item.enabled ? UI.ink : "#aaa", flexShrink: 0,
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px", borderRadius: 2, cursor: "pointer",
+                flexShrink: 0,
+                ...(item.enabled ? toggleOn : toggleOff),
               }}>{item.enabled ? "ON" : "OFF"}</button>
 
               <div style={{ flex: 1 }}>
@@ -180,11 +179,10 @@ export default function QuickAccessPanel({
               </div>
 
               <button onClick={() => onUpdateQuickAccess(quickAccessItems.map(i => i.id === item.id ? { ...i, menuOnly: !i.menuOnly } : i))} style={{
-                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "4px 8px", border: "1px solid",
-                borderColor: item.menuOnly ? UI.line : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                background: item.menuOnly ? UI.selectedBg : "#fff",
-                color: item.menuOnly ? UI.ink : "#bbb", flexShrink: 0,
+                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "4px 8px", borderRadius: 2, cursor: "pointer",
+                flexShrink: 0,
                 whiteSpace: "nowrap",
+                ...(item.menuOnly ? { background: UI.infoSoft, color: UI.infoText, border: `1px solid ${UI.infoBorder}` } : toggleOff),
               }}>MENU ONLY</button>
 
               <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>

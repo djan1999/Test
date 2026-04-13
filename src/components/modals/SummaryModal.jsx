@@ -1,5 +1,5 @@
 import FullModal from "../ui/FullModal.jsx";
-import { waterStyle } from "../../constants/pairings.js";
+import { waterStyle, pairingStyle, PAIRINGS } from "../../constants/pairings.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
 import { tokens } from "../../styles/tokens.js";
@@ -7,8 +7,8 @@ import { UI, toggleOn } from "../../styles/uiChrome.js";
 import { restrLabel } from "../../constants/dietary.js";
 
 const FONT = tokens.font;
-const PAIRING_COLOR = { Wine: "#1a1a1a", "Non-Alc": "#1a1a1a", Premium: "#1a1a1a", "Our Story": "#1a1a1a" };
-const PAIRING_BG = { Wine: "#ffffff", "Non-Alc": "#ffffff", Premium: "#ffffff", "Our Story": "#ffffff" };
+const PAIRING_COLOR = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].color]));
+const PAIRING_BG = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].bg]));
 
 export default function SummaryModal({ tables, optionalExtras = [], onClose }) {
   const active = tables.filter((t) => t.active || t.arrivedAt);
@@ -80,8 +80,8 @@ export default function SummaryModal({ tables, optionalExtras = [], onClose }) {
                 return (
                   <div key={s.id} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", padding: "8px 4px", borderBottom: "1px solid #f5f5f5" }}>
                     <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: restr.length ? "#b04040" : "#999", minWidth: 28, letterSpacing: 0.5 }}>P{s.id}</span>
-                    {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, background: ws.bg || "#f5f5f5", color: "#333", border: "1px solid #e0e0e0" }}>{s.water}</span>}
-                    {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, border: "1px solid #e0e0e0", color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa" }}>{s.pairing}</span>}
+                    {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, background: ws.bg || "#f5f5f5", color: ws.color || "#333", border: `1px solid ${ws.border || "#e0e0e0"}` }}>{s.water}</span>}
+                    {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, border: `1px solid ${pairingStyle[s.pairing]?.border || "#e0e0e0"}`, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa" }}>{s.pairing}</span>}
                     {extras.map((d) => {
                       const ex = s.extras[d.key] || s.extras[d.id];
                       return (

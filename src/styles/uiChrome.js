@@ -1,6 +1,6 @@
 /**
- * App-wide chrome: white / neutral gray surfaces, black (#1a1a1a) for text & outlines only.
- * No black-filled bars or primary buttons — use light fills + border instead.
+ * App-wide chrome: neutral surfaces + semantic color (green good, red bad, blue info).
+ * Avoid heavy black fills; use soft tints + colored borders for state.
  */
 export const UI = {
   ink: "#1a1a1a",
@@ -12,56 +12,79 @@ export const UI = {
   surface3: "#f0f0f0",
   border: "#e0e0e0",
   borderLight: "#eaeaea",
-  /** Selected / emphasis: never full black fill */
   selectedBg: "#f0f0f0",
   selectedBorder: "#1a1a1a",
   radius: 0,
+
+  /** Success / on / confirmed */
+  ok: "#2f7a45",
+  okSoft: "#eef8f1",
+  okBorder: "#8fc39f",
+  okText: "#1e5a32",
+
+  /** Danger / error / destructive */
+  err: "#c04040",
+  errSoft: "#fff5f5",
+  errBorder: "#e89898",
+  errText: "#a02828",
+
+  /** Info / neutral-accent (pairing, documents, water) */
+  info: "#2a5580",
+  infoSoft: "#eef4fa",
+  infoBorder: "#a8c4dc",
+  infoText: "#1a4060",
+
+  /** Default action buttons (not harsh black ring) */
+  neutralBtnBorder: "#c8c8c8",
 };
 
-/** White fill + black outline — default for action buttons app-wide */
+/** Secondary toolbar / nav actions — white + neutral border */
 export const outlineBtn = {
   background: "#ffffff",
-  color: "#1a1a1a",
-  border: "1px solid #1a1a1a",
+  color: UI.ink,
+  border: `1px solid ${UI.neutralBtnBorder}`,
 };
 
 export const outlineBtnActive = {
-  background: "#f5f5f5",
-  color: "#1a1a1a",
-  border: "1px solid #1a1a1a",
+  background: UI.surface3,
+  color: UI.ink,
+  border: `1px solid ${UI.line}`,
 };
 
-/** Softer outline for secondary actions */
 export const outlineBtnGhost = {
   background: "#ffffff",
   color: "#555555",
-  border: "1px solid #d0d0d0",
+  border: `1px solid ${UI.border}`,
 };
 
-/** Same visual language for every “on” toggle (extras, yes/no, tabs) — no green/black fills */
+/** Positive primary (save, add, confirm) */
+export const primaryAction = {
+  background: UI.okSoft,
+  color: UI.okText,
+  border: `1px solid ${UI.okBorder}`,
+};
+
+/** Toggle / chip ON — green = active (universal) */
 export const toggleOn = {
-  background: "#ffffff",
-  color: "#1a1a1a",
-  border: "1px solid #1a1a1a",
+  background: UI.okSoft,
+  color: UI.okText,
+  border: `1px solid ${UI.okBorder}`,
+};
+
+export const toggleOnSoft = {
+  background: "#f4fbf6",
+  color: UI.okText,
+  border: `1px solid ${UI.okBorder}`,
 };
 
 export const toggleOff = {
   background: "#ffffff",
-  color: "#888888",
-  border: "1px solid #e0e0e0",
+  color: UI.textMuted,
+  border: `1px solid ${UI.border}`,
 };
 
-/** Selected list row / soft emphasis — still no dark fill */
-export const toggleOnSoft = {
-  background: "#f5f5f5",
-  color: "#1a1a1a",
-  border: "1px solid #1a1a1a",
-};
+export const statusOk = { color: UI.ok, border: `1px solid ${UI.okBorder}` };
+export const statusErr = { color: UI.err, border: `1px solid ${UI.errBorder}` };
 
-/** Positive status: outline + text only (no filled buttons) */
-export const statusOk = { color: "#2f7a45", border: "1px solid #2f7a45" };
-export const statusErr = { color: "#c04040", border: "1px solid #c04040" };
-
-/** Section chrome — one neutral strip everywhere */
-export const panelHeaderBg = "#fafafa";
-export const panelBorder = "#e8e8e8";
+export const panelHeaderBg = UI.surface2;
+export const panelBorder = UI.border;

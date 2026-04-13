@@ -38,7 +38,7 @@ import { BEV_TYPES } from "./constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "./constants/countries.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES } from "./lib/supabaseClient.js";
 import { tokens } from "./styles/tokens.js";
-import { UI, toggleOn, toggleOff, toggleOnSoft, panelHeaderBg, panelBorder } from "./styles/uiChrome.js";
+import { UI, toggleOn, toggleOff, toggleOnSoft, primaryAction, panelHeaderBg, panelBorder } from "./styles/uiChrome.js";
 import { baseInput, fieldLabel as mixinFieldLabel, chip as mixinChip, circleButton as mixinCircleButton } from "./styles/mixins.js";
 import WaterPicker from "./components/service/WaterPicker.jsx";
 import SwapPicker from "./components/service/SwapPicker.jsx";
@@ -1171,16 +1171,11 @@ function TableSeatDetail({ table, isMobile, optionalExtras = [] }) {
 }
 
 // ── Display Board ─────────────────────────────────────────────────────────────
-const PC = {
-  "—":         { color: "#444444", bg: "#ffffff", border: "#1a1a1a" },
-  "Wine":      { color: "#333333", bg: "#ffffff", border: "#1a1a1a" },
-  "Non-Alc":   { color: "#1f5f73", bg: "#ffffff", border: "#1a1a1a" },
-  "Premium":   { color: "#3a3a6a", bg: "#ffffff", border: "#1a1a1a" },
-  "Our Story": { color: "#2a5a42", bg: "#ffffff", border: "#1a1a1a" },
-};
-// Flat color/bg maps used by Summary, Archive, and other read-only views
-const PAIRING_COLOR = { Wine: "#1a1a1a", "Non-Alc": "#1a1a1a", Premium: "#1a1a1a", "Our Story": "#1a1a1a" };
-const PAIRING_BG    = { Wine: "#ffffff", "Non-Alc": "#ffffff", Premium: "#ffffff", "Our Story": "#ffffff" };
+const PC = Object.fromEntries(
+  PAIRINGS.map((k) => [k, { color: pairingStyle[k].color, bg: pairingStyle[k].bg, border: pairingStyle[k].border }])
+);
+const PAIRING_COLOR = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].color]));
+const PAIRING_BG    = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].bg]));
 const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
@@ -1600,7 +1595,9 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                 borderRadius: quickMode ? 0 : 3, cursor: "pointer",
                 fontWeight: 700, textTransform: "uppercase",
                 transition: "background 0.15s, border-color 0.15s, color 0.15s",
-                ...(sendAck ? { ...toggleOn, border: "1px solid #2f7a45", color: "#2f7a45" } : toggleOn),
+                ...(sendAck
+                  ? { ...primaryAction, border: `1px solid ${UI.ok}` }
+                  : { background: UI.infoSoft, color: UI.infoText, border: `1px solid ${UI.infoBorder}` }),
               }}>{sendAck ? "Sent ✓" : "Send"}</button>
             ) : <span />}
             {onUnseat && (
@@ -1776,8 +1773,8 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
       {/* Per-seat rows */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px" }}>
         {seats.map(seat => {
-          const pairingColor = { Wine: "#1a1a1a", "Non-Alc": "#1a1a1a", Premium: "#1a1a1a", "Our Story": "#1a1a1a", "—": "#1a1a1a" };
-          const pairingBg   = { Wine: "#ffffff", "Non-Alc": "#ffffff", Premium: "#ffffff", "Our Story": "#ffffff", "—": "#ffffff" };
+          const pairingColor = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].color]));
+          const pairingBg   = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].bg]));
           const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
           return (
             <div key={seat.id} style={{

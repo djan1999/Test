@@ -40,6 +40,6 @@ export const dangerBtn = {
 
 export const primaryBtn = {
   fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 20px",
-  border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: "pointer",
-  background: UI.surface2, color: UI.ink, fontWeight: 600,
+  border: `1px solid ${UI.okBorder}`, borderRadius: tokens.radius, cursor: "pointer",
+  background: UI.okSoft, color: UI.okText, fontWeight: 600,
 };

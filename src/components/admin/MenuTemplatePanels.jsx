@@ -33,7 +33,7 @@ export function MenuRulesPanel({
               marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
               padding: "4px 10px", borderRadius: 3, cursor: menuRulesSaving ? "wait" : "pointer",
               textTransform: "uppercase", fontWeight: 600,
-              ...(menuRulesSaved ? { ...outlineBtn, border: "1px solid #2f7a45", color: "#2f7a45" } : outlineBtn),
+              ...(menuRulesSaved ? { background: UI.okSoft, color: UI.okText, border: `1px solid ${UI.okBorder}` } : outlineBtn),
             }}
           >
             {menuRulesSaving ? "Saving..." : menuRulesSaved ? "Saved" : "Save Rules"}
@@ -125,7 +125,7 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
             style={{
               marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
               padding: "4px 10px", borderRadius: 3, cursor: "pointer",
-              textTransform: "uppercase", fontWeight: 600, ...outlineBtn,
+              textTransform: "uppercase", fontWeight: 600, ...outlineBtn, background: UI.surface2,
             }}
           >Save Styles</button>
         )}

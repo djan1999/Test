@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { FONT } from "./adminStyles.js";
 import { tokens } from "../../styles/tokens.js";
-import { UI, outlineBtn } from "../../styles/uiChrome.js";
+import { UI, outlineBtn, primaryAction } from "../../styles/uiChrome.js";
 
 // ── SystemPanel — Supabase connection status, realtime, environment, debug ──
 export default function SystemPanel({
@@ -78,7 +78,7 @@ export default function SystemPanel({
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
             borderRadius: 2, cursor: syncResult === "syncing" ? "not-allowed" : "pointer",
             opacity: syncResult === "syncing" ? 0.65 : 1,
-            ...(syncResult === "ok" ? { ...outlineBtn, border: "1px solid #2f7a45", color: "#2f7a45" } : syncResult === "err" ? { ...outlineBtn, border: "1px solid #c04040", color: "#c04040" } : outlineBtn),
+            ...(syncResult === "ok" ? primaryAction : syncResult === "err" ? { background: UI.errSoft, color: UI.errText, border: `1px solid ${UI.errBorder}` } : outlineBtn),
           }}>
             {syncResult === "syncing" ? "SYNCING..." : syncResult === "ok" ? "SYNCED" : syncResult === "err" ? "FAILED" : "RESYNC WINES"}
           </button>
