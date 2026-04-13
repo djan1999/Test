@@ -617,7 +617,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
         <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", flexShrink: 0 }}>All water</span>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           {WATER_OPTS.map(opt => (
-            <button key={opt} onClick={() => table.seats.forEach(s => updSeat(s.id, "water", opt))} style={{
+            <button key={opt} onClick={() => table.seats.forEach(s => updSeat(s.id, "water", () => opt))} style={{
               fontFamily: FONT, fontSize: 11, letterSpacing: 0.5,
               padding: "5px 10px", border: "1px solid",
               borderColor: table.seats.every(s => s.water === opt) ? "#6a8ab0" : "#e0e0e0",
@@ -660,7 +660,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
               }}>P{seat.id}</div>
 
               {/* Water */}
-              <WaterPicker value={seat.water} onChange={v => updSeat(seat.id, "water", v)} variant={mode === "service" ? "service" : "default"} />
+              <WaterPicker value={seat.water} onChange={v => updSeat(seat.id, "water", () => v)} variant={mode === "service" ? "service" : "default"} />
 
               {/* Pairing — full row in admin; single cycle control in service */}
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
@@ -668,25 +668,25 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                   const p = seat.pairing || "—";
                   const ps = pairingStyle[p] || pairingStyle["—"];
                   const lab = p === "—" ? "None" : p === "Non-Alc" ? "N/A" : p === "Our Story" ? "Story" : p;
-                  const next = PAIRINGS[(PAIRINGS.indexOf(p) + 1) % PAIRINGS.length];
                   return (
-                    <button type="button" onClick={() => updSeat(seat.id, "pairing", next)} style={{
+                    <button type="button" onClick={() => updSeat(seat.id, "pairing", (cur, s) => {
+                      const p0 = s.pairing || "—";
+                      return PAIRINGS[(PAIRINGS.indexOf(p0) + 1) % PAIRINGS.length];
+                    })} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
                       padding: "5px 10px", border: `1px solid ${ps.border}`, borderRadius: 0, cursor: "pointer",
                       background: ps.bg, color: ps.color, minWidth: 0, textAlign: "left",
-                      transition: "all 0.1s",
                     }}>Pair · {lab} →</button>
                   );
                 })() : PAIRINGS.map(p => {
                   const ps = pairingStyle[p];
                   const on = seat.pairing === p;
                   return (
-                    <button key={p} onClick={() => updSeat(seat.id, "pairing", p)} style={{
+                    <button key={p} onClick={() => updSeat(seat.id, "pairing", () => p)} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
                       padding: "5px 8px", border: "1px solid",
                       borderColor: on ? ps.border : "#ebebeb", borderRadius: 2, cursor: "pointer",
                       background: on ? ps.bg : "#fff", color: on ? ps.color : "#555",
-                      transition: "all 0.1s",
                     }}>{p}</button>
                   );
                 })}
@@ -719,7 +719,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                       const wineHit = (w) => { const wn=(w.name||"").toLowerCase(),wp=(w.producer||"").toLowerCase(); return wn.includes(lk)||wp.includes(lk)||(wn.length>=4&&lk.includes(wn))||(wp.length>=4&&lk.includes(wp)); };
                       const found = wines.find(w => w.byGlass && wineHit(w)) || wines.find(wineHit);
                       const item = found || { name: ap.searchKey || ap.label, notes: "", __cocktail: true };
-                      updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
+                      updSeat(seat.id, "aperitifs", prev => [...(prev || []), item]);
                     }} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
                       border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
@@ -730,7 +730,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                 <BeverageSearch
                   wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
                   onAdd={({ type, item }) => {
-                    updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
+                    updSeat(seat.id, "aperitifs", prev => [...(prev || []), item]);
                   }}
                 />
                 {/* Aperitif chips */}
@@ -749,7 +749,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                           <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>
                             {label}{sub ? ` · ${sub}` : ""}
                           </span>
-                          <button onClick={() => updSeat(seat.id, "aperitifs", (seat.aperitifs||[]).filter((_,idx)=>idx!==i))} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
+                          <button onClick={() => updSeat(seat.id, "aperitifs", prev => (prev || []).filter((_,idx)=>idx!==i))} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
                         </div>
                       );
                     })}
@@ -763,19 +763,19 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                 <BeverageSearch
                   wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
                   onAdd={({ type, item }) => {
-                    if (type === "wine")     updSeat(seat.id, "glasses",   [...(seat.glasses   || []), item]);
-                    if (type === "cocktail") updSeat(seat.id, "cocktails", [...(seat.cocktails || []), item]);
-                    if (type === "spirit")   updSeat(seat.id, "spirits",   [...(seat.spirits   || []), item]);
-                    if (type === "beer")     updSeat(seat.id, "beers",     [...(seat.beers     || []), item]);
+                    if (type === "wine")     updSeat(seat.id, "glasses",   prev => [...(prev || []), item]);
+                    if (type === "cocktail") updSeat(seat.id, "cocktails", prev => [...(prev || []), item]);
+                    if (type === "spirit")   updSeat(seat.id, "spirits",   prev => [...(prev || []), item]);
+                    if (type === "beer")     updSeat(seat.id, "beers",     prev => [...(prev || []), item]);
                   }}
                 />
                 {/* By the Glass chips */}
                 {(() => {
                   const allBevs = [
-                    ...(seat.glasses   || []).map((x, i) => ({ key: `g${i}`,  type: "wine",     label: x?.name, sub: x?.producer, onRemove: () => updSeat(seat.id, "glasses",   (seat.glasses||[]).filter((_,idx)=>idx!==i)) })),
-                    ...(seat.cocktails || []).map((x, i) => ({ key: `c${i}`,  type: "cocktail", label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "cocktails", (seat.cocktails||[]).filter((_,idx)=>idx!==i)) })),
-                    ...(seat.spirits   || []).map((x, i) => ({ key: `s${i}`,  type: "spirit",   label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "spirits",   (seat.spirits||[]).filter((_,idx)=>idx!==i)) })),
-                    ...(seat.beers     || []).map((x, i) => ({ key: `b${i}`,  type: "beer",     label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "beers",     (seat.beers||[]).filter((_,idx)=>idx!==i)) })),
+                    ...(seat.glasses   || []).map((x, i) => ({ key: `g${i}`,  type: "wine",     label: x?.name, sub: x?.producer, onRemove: () => updSeat(seat.id, "glasses",   prev => (prev || []).filter((_,idx)=>idx!==i)) })),
+                    ...(seat.cocktails || []).map((x, i) => ({ key: `c${i}`,  type: "cocktail", label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "cocktails", prev => (prev || []).filter((_,idx)=>idx!==i)) })),
+                    ...(seat.spirits   || []).map((x, i) => ({ key: `s${i}`,  type: "spirit",   label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "spirits",   prev => (prev || []).filter((_,idx)=>idx!==i)) })),
+                    ...(seat.beers     || []).map((x, i) => ({ key: `b${i}`,  type: "beer",     label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "beers",     prev => (prev || []).filter((_,idx)=>idx!==i)) })),
                   ];
                   if (allBevs.length === 0) return null;
                   return (
@@ -809,17 +809,23 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                     if (mode === "service") {
                       const curPair = extra.pairing || opts[0];
                       const cycleExtra = () => {
-                        if (!extra.ordered) {
-                          updSeat(seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, ordered: true, pairing: opts[0] } });
-                          return;
-                        }
-                        const pi = opts.indexOf(curPair);
-                        const hasNext = pi >= 0 && pi < opts.length - 1;
-                        if (hasNext) {
-                          updSeat(seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, pairing: opts[pi + 1] } });
-                        } else {
-                          updSeat(seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, ordered: false, pairing: opts[0] } });
-                        }
+                        updSeat(seat.id, "extras", (_, s) => {
+                          const base = { ...(s.extras || {}) };
+                          const ex = base[dish.key] || base[dish.id] || { ordered: false, pairing: opts[0] };
+                          if (!ex.ordered) {
+                            base[dish.key] = { ...ex, ordered: true, pairing: opts[0] };
+                            return base;
+                          }
+                          const pair = ex.pairing || opts[0];
+                          const pi = opts.indexOf(pair);
+                          const hasNext = pi >= 0 && pi < opts.length - 1;
+                          if (hasNext) {
+                            base[dish.key] = { ...ex, pairing: opts[pi + 1] };
+                          } else {
+                            base[dish.key] = { ...ex, ordered: false, pairing: opts[0] };
+                          }
+                          return base;
+                        });
                       };
                       const short = String(dish.name || "").replace(/\s+/g, " ").trim().slice(0, 14) || dish.key;
                       const pairBit = extra.ordered && curPair && curPair !== "—" ? ` · ${curPair}` : "";
@@ -835,8 +841,9 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                     return (
                       <div key={dish.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
                         <div style={{ ...fieldLabel, marginBottom: 4 }}>{dish.name}</div>
-                        <button onClick={() => updSeat(seat.id, "extras", {
-                          ...seat.extras, [dish.key]: { ...extra, ordered: !extra.ordered }
+                        <button onClick={() => updSeat(seat.id, "extras", (_, s) => {
+                          const ex = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                          return { ...s.extras, [dish.key]: { ...ex, ordered: !ex.ordered } };
                         })} style={{
                           fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 8px", border: "1px solid",
                           borderColor: extra.ordered ? "#aaddaa" : "#ebebeb", borderRadius: 2, cursor: "pointer",
@@ -844,7 +851,10 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                           transition: "all 0.1s",
                         }}>{extra.ordered ? "YES" : "NO"}</button>
                         <select value={extra.pairing || dish.pairings[0]} disabled={!extra.ordered}
-                          onChange={e => updSeat(seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, pairing: e.target.value } })}
+                          onChange={e => updSeat(seat.id, "extras", (_, s) => {
+                            const ex = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                            return { ...s.extras, [dish.key]: { ...ex, pairing: e.target.value } };
+                          })}
                           style={{
                             fontFamily: FONT, fontSize: 10, padding: "4px 5px",
                             border: "1px solid #ebebeb", borderRadius: 2,
@@ -876,9 +886,12 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                       const seatSet = seatPairing && seatPairing !== "—";
                       const alcoOn = active && (pmode === "alco" || (pmode === null && seatSet && !seatIsNonAlc));
                       const naOn = active && (pmode === "nonalc" || (pmode === null && seatIsNonAlc));
-                      const updOpt = (patch) => updSeat(seat.id, "optionalPairings", {
-                        ...(seat.optionalPairings || {}),
-                        [opt.key]: { ...cur, ...patch },
+                      const updOpt = (patch) => updSeat(seat.id, "optionalPairings", (_, s) => {
+                        const cur0 = s.optionalPairings?.[opt.key] || { ordered: opt.defaultOn !== false };
+                        return {
+                          ...(s.optionalPairings || {}),
+                          [opt.key]: { ...cur0, ...patch },
+                        };
                       });
                       if (mode === "service") {
                         const extraKey = opt.extraKey;
@@ -903,33 +916,34 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                         const short = String(opt.label || opt.key || "").replace(/\s+/g, " ").trim().slice(0, 14) || opt.key;
                         return (
                           <button key={opt.key} type="button" onClick={() => {
-                            const r = seat.optionalPairings?.[opt.key];
-                            const xOrdered = extraKey ? !!(seat.extras?.[extraKey]?.ordered) : true;
-                            const po = r?.ordered !== undefined ? !!r.ordered : false;
-                            const pm = r?.mode || null;
-                            let c;
-                            if (extraKey && !xOrdered) c = "off";
-                            else if (!po) c = "on";
-                            else if (pm === "alco") c = "alco";
-                            else if (pm === "nonalc") c = "nonalc";
-                            else c = "on";
-                            const nx = states[(states.indexOf(c) + 1) % states.length];
-                            const baseExtras = { ...seat.extras };
-                            if (extraKey) {
-                              const xtra = seat.extras?.[extraKey] || { ordered: false, pairing: "—" };
-                              baseExtras[extraKey] = { ...xtra, ordered: nx !== "off", pairing: xtra.pairing || "—" };
-                            }
-                            const nextOptP = {
-                              ...(seat.optionalPairings || {}),
-                              [opt.key]: {
-                                ...(r || {}),
-                                ordered: nx === "alco" || nx === "nonalc",
-                                ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }),
-                              },
-                            };
-                            upd("seats", (table.seats || []).map(s => (
-                              s.id !== seat.id ? s : { ...s, extras: extraKey ? baseExtras : s.extras, optionalPairings: nextOptP }
-                            )));
+                            upd("seats", prevSeats => (prevSeats || []).map(s => {
+                              if (s.id !== seat.id) return s;
+                              const r = s.optionalPairings?.[opt.key];
+                              const xOrdered = extraKey ? !!(s.extras?.[extraKey]?.ordered) : true;
+                              const po = r?.ordered !== undefined ? !!r.ordered : false;
+                              const pm = r?.mode || null;
+                              let c;
+                              if (extraKey && !xOrdered) c = "off";
+                              else if (!po) c = "on";
+                              else if (pm === "alco") c = "alco";
+                              else if (pm === "nonalc") c = "nonalc";
+                              else c = "on";
+                              const nx = states[(states.indexOf(c) + 1) % states.length];
+                              const baseExtras = { ...(s.extras || {}) };
+                              if (extraKey) {
+                                const xtra = s.extras?.[extraKey] || { ordered: false, pairing: "—" };
+                                baseExtras[extraKey] = { ...xtra, ordered: nx !== "off", pairing: xtra.pairing || "—" };
+                              }
+                              const nextOptP = {
+                                ...(s.optionalPairings || {}),
+                                [opt.key]: {
+                                  ...(r || {}),
+                                  ordered: nx === "alco" || nx === "nonalc",
+                                  ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }),
+                                },
+                              };
+                              return { ...s, extras: extraKey ? baseExtras : s.extras, optionalPairings: nextOptP };
+                            }));
                           }} style={{
                             fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "6px 10px",
                             border: `1px solid ${styleMap.border}`, borderRadius: 0, cursor: "pointer",
@@ -1215,7 +1229,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
         borderRadius: quickMode ? 0 : 3, cursor: "pointer", lineHeight: 1,
         background: active ? (opt === "OC" || opt === "OW" ? "#fdf4e8" : "#eef3f9") : "#fff",
         color: active ? (opt === "OC" || opt === "OW" ? "#7a5020" : "#2a4a6e") : "#aaa",
-        transition: "all 0.1s",
+        ...(quickMode ? {} : { transition: "all 0.1s" }),
       }}>{opt}</button>
     );
 
@@ -1331,7 +1345,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: `1px solid ${qm.hairline}`, background: "#fafafa" }}>
             <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.6, color: qm.label, textTransform: "uppercase", minWidth: 28 }}>All</span>
             <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-              {WATER_QUICK.map(opt => wBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat && updSeat(t.id, s.id, "water", opt))))}
+              {WATER_QUICK.map(opt => wBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat && updSeat(t.id, s.id, "water", () => opt))))}
             </div>
           </div>
         )}
@@ -1350,7 +1364,6 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                 const pairingByExtraKey = new Map();
                 (optionalPairings || []).forEach(opt => { if (opt.extraKey) pairingByExtraKey.set(opt.extraKey, opt); });
                 const pCur = s.pairing || "—";
-                const pNext = PAIRINGS[(PAIRINGS.indexOf(pCur) + 1) % PAIRINGS.length];
                 const pLab = pCur === "—" ? "—" : pCur === "Non-Alc" ? "N/A" : pCur === "Our Story" ? "Story" : pCur === "Premium" ? "Prem" : pCur === "Wine" ? "Wine" : pCur;
                 return (
                   <div key={s.id} style={{
@@ -1377,12 +1390,15 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                         <div style={{ flex: "1 1 140px", minWidth: 0 }}>
                           <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.4, color: qm.label, marginBottom: 5, textTransform: "uppercase" }}>Water</div>
                           <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-                            {WATER_QUICK.map(opt => wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt)))}
+                            {WATER_QUICK.map(opt => wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", () => opt)))}
                           </div>
                         </div>
                         <div style={{ flex: "1 1 120px", minWidth: 0 }}>
                           <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.4, color: qm.label, marginBottom: 5, textTransform: "uppercase" }}>Pairing</div>
-                          <button type="button" onClick={() => updSeat && updSeat(t.id, s.id, "pairing", pNext)} style={{
+                          <button type="button" onClick={() => updSeat && updSeat(t.id, s.id, "pairing", (cur, seat) => {
+                            const p0 = seat.pairing || "—";
+                            return PAIRINGS[(PAIRINGS.indexOf(p0) + 1) % PAIRINGS.length];
+                          })} style={{
                             fontFamily: FONT, fontSize: 10, letterSpacing: 0.3, padding: "6px 12px", width: "100%",
                             border: `1px solid ${(pairingStyle[pCur] || pairingStyle["—"]).border}`,
                             borderRadius: 0, cursor: "pointer", textAlign: "left",
@@ -1456,7 +1472,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 
                               return (
                                 <button key={dish.key || dish.id} type="button"
-                                  onClick={() => updSeat && updSeat(t.id, s.id, "extras", { ...s.extras, [dish.key]: { ...extra, ordered: !dishOn } })}
+                                  onClick={() => updSeat && updSeat(t.id, s.id, "extras", (_, seat) => {
+                                    const ex = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
+                                    return { ...seat.extras, [dish.key]: { ...ex, ordered: !ex.ordered } };
+                                  })}
                                   style={{
                                     fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "6px 12px",
                                     border: `1px solid ${dishOn ? "#9bc48a" : "#dedede"}`, borderRadius: 0, cursor: "pointer",
@@ -1487,7 +1506,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                                 <button key={label} type="button" onClick={() => {
                                   if (!updSeat) return;
                                   if (active) {
-                                    updSeat(t.id, s.id, "aperitifs", (s.aperitifs || []).filter(x => !apMatch(x)));
+                                    updSeat(t.id, s.id, "aperitifs", prev => (prev || []).filter(x => !apMatch(x)));
                                   } else {
                                     const type = opt.type || "wine";
                                     const wHit = (w) => { const wn=(w.name||"").toLowerCase(),wp=(w.producer||"").toLowerCase(); return wn.includes(sk)||wp.includes(sk)||(wn.length>=4&&sk.includes(wn))||(wp.length>=4&&sk.includes(wp)); };
@@ -1495,7 +1514,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                                       ? (wines.find(w => w.byGlass && wHit(w)) || wines.find(wHit))
                                       : cocktails?.find(c => { const cn=(c.name||"").toLowerCase(); return cn.includes(sk)||(cn.length>=4&&sk.includes(cn)); });
                                     const item = found || { name: label, notes: "", __cocktail: true };
-                                    updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item]);
+                                    updSeat(t.id, s.id, "aperitifs", prev => [...(prev || []), item]);
                                   }
                                 }} style={{
                                   fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "5px 10px",
@@ -1707,9 +1726,11 @@ const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 
 function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
   const seats = table.seats || [];
-  const toggleExtra = (seat, dishId) => {
-    const cur = seat.extras?.[dishId] || { ordered: false, pairing: "—" };
-    updSeat(table.id, seat.id, "extras", { ...seat.extras, [dishId]: { ...cur, ordered: !cur.ordered } });
+  const toggleExtra = (seatId, dishId) => {
+    updSeat(table.id, seatId, "extras", (_, s) => {
+      const cur = s.extras?.[dishId] || { ordered: false, pairing: "—" };
+      return { ...s.extras, [dishId]: { ...cur, ordered: !cur.ordered } };
+    });
   };
 
   const waterBtn = (opt, active, onClick) => (
@@ -1758,7 +1779,7 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderBottom: "1px solid #f8f8f8", background: "#fdfdfd" }}>
         <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", minWidth: 28 }}>ALL</span>
         <div style={{ display: "flex", gap: 4 }}>
-          {WATER_QUICK.map(opt => waterBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat(table.id, s.id, "water", opt))))}
+          {WATER_QUICK.map(opt => waterBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat(table.id, s.id, "water", () => opt))))}
         </div>
       </div>
 
@@ -1790,7 +1811,7 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
               {/* Water + extras */}
               <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap", padding: "7px 10px 5px" }}>
                 <div style={{ display: "flex", gap: 3 }}>
-                  {WATER_QUICK.map(opt => waterBtn(opt, seat.water === opt, () => updSeat(table.id, seat.id, "water", opt)))}
+                  {WATER_QUICK.map(opt => waterBtn(opt, seat.water === opt, () => updSeat(table.id, seat.id, "water", () => opt)))}
                 </div>
                 <div style={{ width: 1, height: 18, background: "#e8e8e8", margin: "0 2px" }} />
                 <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
@@ -1799,11 +1820,14 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
                     const active = !!extra.ordered;
                     return (
                       <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
-                        {extraBtn(dish.name.slice(0, 4), active, "#7a7a7a", () => toggleExtra(seat, dish.key))}
+                        {extraBtn(dish.name.slice(0, 4), active, "#7a7a7a", () => toggleExtra(seat.id, dish.key))}
                         {active && (dish.pairings || ["—"]).slice(0, 3).map((p) => {
                           const sel = (extra.pairing || "—") === p;
                           return (
-                            <button key={p} onClick={() => updSeat(table.id, seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, pairing: p } })} style={{
+                            <button key={p} onClick={() => updSeat(table.id, seat.id, "extras", (_, s) => {
+                              const ex = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
+                              return { ...s.extras, [dish.key]: { ...ex, pairing: p } };
+                            })} style={{
                               fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
                               padding: "4px 6px", border: "1px solid",
                               borderColor: sel ? "#7a7a7a" : "#e0e0e0",
@@ -1826,7 +1850,7 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
                   const col = pairingColor[val];
                   const bg = pairingBg[val];
                   return (
-                    <button key={val} onClick={() => updSeat(table.id, seat.id, "pairing", val)} style={{
+                    <button key={val} onClick={() => updSeat(table.id, seat.id, "pairing", () => val)} style={{
                       fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
                       padding: "4px 7px", border: "1px solid",
                       borderColor: active && val !== "—" ? col : active ? UI.line : "#e0e0e0",
@@ -2094,9 +2118,19 @@ export default function App() {
   // Batch multiple field updates in one setTables call (one render, one Supabase save)
   const updMany = (id, changes) => setTables(p => p.map(t => t.id === id ? { ...t, ...changes } : t));
 
-  const updSeat = (tid, sid, f, v) => setTables(p => p.map(t =>
-    t.id !== tid ? t : { ...t, seats: t.seats.map(s => s.id === sid ? { ...s, [f]: v } : s) }
-  ));
+  /** Seat field update. Pass a function `v(prevField, seat)` to derive from latest state (fixes rapid-click flicker). */
+  const updSeat = (tid, sid, f, v) => setTables(p => p.map(t => {
+    if (t.id !== tid) return t;
+    const seats = t.seats || [];
+    return {
+      ...t,
+      seats: seats.map(s => {
+        if (s.id !== sid) return s;
+        const next = typeof v === "function" ? v(s[f], s) : v;
+        return { ...s, [f]: next };
+      }),
+    };
+  }));
 
   const setGuests = (tid, n) => setTables(p => p.map(t =>
     t.id !== tid ? t : { ...t, guests: n, seats: makeSeats(n, t.seats) }
