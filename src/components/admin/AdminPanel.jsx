@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useCallback } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel } from "../../styles/mixins.js";
@@ -54,11 +54,14 @@ export default function AdminPanel({
   const [newBeer, setNewBeer] = useState({ name: "", notes: "" });
   const nextBeerId = useRef(Math.max(...beers.map(b => b.id), 0) + 1);
 
-  const handleSaveDrinks = () => {
+  const [drinksSaved, setDrinksSaved] = useState(false);
+  const handleSaveDrinks = useCallback(async () => {
     onUpdateDishes(localDishes);
-    onUpdateWines(localWines);
-    onSaveBeverages({ cocktails: localCocktails, spirits: localSpirits, beers: localBeers });
-  };
+    await onUpdateWines(localWines);
+    await onSaveBeverages({ cocktails: localCocktails, spirits: localSpirits, beers: localBeers });
+    setDrinksSaved(true);
+    setTimeout(() => setDrinksSaved(false), 2000);
+  }, [localDishes, localWines, localCocktails, localSpirits, localBeers, onUpdateDishes, onUpdateWines, onSaveBeverages]);
 
   const SECTIONS = [
     { id: "menu",         label: "Menu Layout" },
@@ -130,9 +133,10 @@ export default function AdminPanel({
                 ))}
                 <button onClick={handleSaveDrinks} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-                  border: "1px solid #4a9a6a", borderRadius: 2, cursor: "pointer",
-                  background: "#4a9a6a", color: "#fff", marginLeft: "auto",
-                }}>SAVE DRINKS</button>
+                  border: `1px solid ${drinksSaved ? "#888" : "#4a9a6a"}`, borderRadius: 2, cursor: "pointer",
+                  background: drinksSaved ? "#888" : "#4a9a6a", color: "#fff", marginLeft: "auto",
+                  transition: "background 0.2s, border-color 0.2s",
+                }}>{drinksSaved ? "SAVED" : "SAVE DRINKS"}</button>
               </div>
 
               {drinkTab === "wines" && (

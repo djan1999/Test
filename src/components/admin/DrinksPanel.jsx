@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { FONT, baseInp, fieldLabel, primaryBtn } from "./adminStyles.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 
@@ -50,7 +50,7 @@ export default function DrinksPanel({
 
   // Local state for editing
   const [localWines, setLocalWines] = useState(wines.map(w => ({ ...w })));
-  const [newWine, setNewWine] = useState({ name: "", producer: "", vintage: "", byGlass: false });
+  const [newWine, setNewWine] = useState({ name: "", producer: "", vintage: "", region: "", byGlass: false });
   const nextWineId = useRef(Math.max(...wines.map(w => w.id), 0) + 1);
   const addWine    = () => { if (!newWine.name.trim()) return; setLocalWines(l => [...l, { ...newWine, id: nextWineId.current++ }]); setNewWine({ name: "", producer: "", vintage: "", byGlass: false }); };
   const removeWine = id       => setLocalWines(l => l.filter(w => w.id !== id));
@@ -68,10 +68,13 @@ export default function DrinksPanel({
   const [newBeer, setNewBeer] = useState({ name: "", notes: "" });
   const nextBeerId = useRef(Math.max(...beers.map(b => b.id), 0) + 1);
 
-  const handleSaveDrinks = () => {
-    onUpdateWines(localWines);
-    onSaveBeverages({ cocktails: localCocktails, spirits: localSpirits, beers: localBeers });
-  };
+  const [saved, setSaved] = useState(false);
+  const handleSaveDrinks = useCallback(async () => {
+    await onUpdateWines(localWines);
+    await onSaveBeverages({ cocktails: localCocktails, spirits: localSpirits, beers: localBeers });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }, [localWines, localCocktails, localSpirits, localBeers, onUpdateWines, onSaveBeverages]);
 
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
@@ -90,25 +93,27 @@ export default function DrinksPanel({
         ))}
         <button onClick={handleSaveDrinks} style={{
           fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-          border: "1px solid #4a9a6a", borderRadius: 2, cursor: "pointer",
-          background: "#4a9a6a", color: "#fff", marginLeft: "auto",
-        }}>SAVE DRINKS</button>
+          border: `1px solid ${saved ? "#888" : "#4a9a6a"}`, borderRadius: 2, cursor: "pointer",
+          background: saved ? "#888" : "#4a9a6a", color: "#fff", marginLeft: "auto",
+          transition: "background 0.2s, border-color 0.2s",
+        }}>{saved ? "SAVED" : "SAVE DRINKS"}</button>
       </div>
 
       {drinkTab === "wines" && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 52px 28px", gap: 8, marginBottom: 8 }}>
-            {(isMobile ? ["Name", "Producer"] : ["Name", "Producer", "Vintage", "Glass", ""]).map((h, i) => (
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 1fr 52px 28px", gap: 8, marginBottom: 8 }}>
+            {(isMobile ? ["Name", "Producer"] : ["Name", "Producer", "Vintage", "Region", "Glass", ""]).map((h, i) => (
               <div key={i} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#666", textTransform: "uppercase" }}>{h}</div>
             ))}
           </div>
           <div style={{ borderTop: "1px solid #f0f0f0", marginBottom: 10 }} />
           <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 20 }}>
             {localWines.map(w => (
-              <div key={w.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr auto" : "1fr 1fr 70px 52px 28px", gap: 8, alignItems: "center" }}>
+              <div key={w.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr auto" : "1fr 1fr 70px 1fr 52px 28px", gap: 8, alignItems: "center" }}>
                 <input value={w.name} onChange={e => updWine(w.id, "name", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Name" />
                 <input value={w.producer} onChange={e => updWine(w.id, "producer", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Producer" />
                 {!isMobile && <input value={w.vintage} onChange={e => updWine(w.id, "vintage", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="2020" />}
+                {!isMobile && <input value={w.region || ""} onChange={e => updWine(w.id, "region", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="e.g. Dolenjska, Slovenia" />}
                 <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
                   borderColor: w.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
@@ -120,10 +125,11 @@ export default function DrinksPanel({
           </div>
           <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 16 }}>
             <div style={fieldLabel}>Add wine</div>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 52px", gap: 8, marginBottom: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 1fr 52px", gap: 8, marginBottom: 10 }}>
               <input value={newWine.name} onChange={e => setNewWine(w => ({ ...w, name: e.target.value }))} placeholder="Name" style={{ ...baseInp, padding: "5px 8px" }} />
               <input value={newWine.producer} onChange={e => setNewWine(w => ({ ...w, producer: e.target.value }))} placeholder="Producer" style={{ ...baseInp, padding: "5px 8px" }} />
               {!isMobile && <input value={newWine.vintage} onChange={e => setNewWine(w => ({ ...w, vintage: e.target.value }))} placeholder="2020" style={{ ...baseInp, padding: "5px 8px" }} />}
+              {!isMobile && <input value={newWine.region} onChange={e => setNewWine(w => ({ ...w, region: e.target.value }))} placeholder="e.g. Dolenjska, Slovenia" style={{ ...baseInp, padding: "5px 8px" }} />}
               <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
                 borderColor: newWine.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",

@@ -1477,8 +1477,35 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [] }) {
   const isMobile = useIsMobile(700);
 
+  // Auto-detect tables that share the same resName + resTime and have no explicit
+  // tableGroup — treat them as a merged group for display only (no data mutation).
+  const autoGroupMap = (() => {
+    const byKey = new Map();
+    tables.forEach(t => {
+      if (t.tableGroup?.length) return; // already explicitly grouped
+      const n = (t.resName || "").trim();
+      const r = (t.resTime || "").trim();
+      if (!n || !r) return;
+      const k = `${n}|${r}`;
+      byKey.set(k, [...(byKey.get(k) || []), t.id]);
+    });
+    const m = new Map();
+    byKey.forEach(ids => {
+      if (ids.length < 2) return;
+      const sorted = [...ids].sort((a, b) => a - b);
+      sorted.forEach(id => m.set(id, sorted));
+    });
+    return m;
+  })();
+
+  // Augment table objects with computed tableGroup where applicable
+  const effectiveTables = tables.map(t => {
+    const eg = autoGroupMap.get(t.id);
+    return eg ? { ...t, tableGroup: eg } : t;
+  });
+
   const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
-  const visible = tables.filter(t => t.active || t.resTime || t.resName).filter(isPrimary);
+  const visible = effectiveTables.filter(t => t.active || t.resTime || t.resName).filter(isPrimary);
   const rowsData = SITTING_TIMES.map(time => ({
     time,
     tables: visible
