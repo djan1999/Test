@@ -2024,6 +2024,20 @@ export default function App() {
   const saveTimerRef       = useRef(null);
   const prevTablesJsonRef  = useRef((initialState.tables || initTables).map(t => JSON.stringify(sanitizeTable(t))));
   const tablesRef          = useRef(tables);
+  /** Client monotonic clock (ms) of last local mutation per table — stale remote rows are ignored to stop realtime/poll flicker. */
+  const tableLocalFreshRef = useRef(new Map());
+
+  const parseRemoteUpdatedAt = (raw) => {
+    if (raw == null || raw === "") return 0;
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw > 1e12 ? raw : raw * 1000;
+    const ms = Date.parse(String(raw));
+    return Number.isFinite(ms) ? ms : 0;
+  };
+
+  const bumpLocalTableFresh = useCallback((tableId) => {
+    if (tableId == null || Number.isNaN(Number(tableId))) return;
+    tableLocalFreshRef.current.set(Number(tableId), Date.now());
+  }, []);
 
   const offlineQueue = useOfflineQueue({ supabase });
   const enqueueServiceTableUpsert = useCallback(async (rows) => {
@@ -2091,8 +2105,19 @@ export default function App() {
   const pairings = useMemo(() => optionalPairingsFromCourses(menuCourses), [menuCourses]);
 
   const mergeRemoteTables = rows => {
-    const byId = new Map((Array.isArray(rows) ? rows : []).map(row => [Number(row.table_id), sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) })]));
-    const nextTables = initTables.map(base => byId.get(base.id) || base);
+    const arr = Array.isArray(rows) ? rows : [];
+    const rawById = new Map(arr.map(row => [Number(row.table_id), row]));
+    const nextTables = initTables.map(base => {
+      const row = rawById.get(base.id);
+      if (!row) return base;
+      const remoteTs = parseRemoteUpdatedAt(row.updated_at);
+      const localTs = tableLocalFreshRef.current.get(base.id) || 0;
+      if (remoteTs > 0 && localTs > 0 && remoteTs < localTs) {
+        const cur = tablesRef.current.find(t => t.id === base.id);
+        return cur ? { ...cur } : base;
+      }
+      return sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) });
+    });
     // Snapshot prevTablesJsonRef BEFORE setTables so the save-useEffect sees no diff
     // after a full poll and doesn't re-save the entire remote state.
     prevTablesJsonRef.current = nextTables.map(t => JSON.stringify(sanitizeTable(t)));
@@ -2104,6 +2129,9 @@ export default function App() {
   const applyRemoteTableRow = row => {
     const tableId = Number(row?.table_id);
     if (!tableId) return;
+    const remoteTs = parseRemoteUpdatedAt(row.updated_at);
+    const localTs = tableLocalFreshRef.current.get(tableId) || 0;
+    if (remoteTs > 0 && localTs > 0 && remoteTs < localTs) return;
     const nextTable = sanitizeTable({ id: tableId, ...(row.data || {}) });
     applyingRemoteRef.current = true;
     setTables(prev => prev.map(t => t.id === tableId ? nextTable : t));
@@ -2113,12 +2141,20 @@ export default function App() {
   const selTable   = tables.find(t => t.id === sel);
   const modalTable = tables.find(t => t.id === resModal);
 
-  const upd = (id, f, v) => setTables(p => p.map(t => t.id === id ? { ...t, [f]: typeof v === "function" ? v(t[f]) : v } : t));
+  const upd = (id, f, v) => {
+    bumpLocalTableFresh(id);
+    setTables(p => p.map(t => t.id === id ? { ...t, [f]: typeof v === "function" ? v(t[f]) : v } : t));
+  };
   // Batch multiple field updates in one setTables call (one render, one Supabase save)
-  const updMany = (id, changes) => setTables(p => p.map(t => t.id === id ? { ...t, ...changes } : t));
+  const updMany = (id, changes) => {
+    bumpLocalTableFresh(id);
+    setTables(p => p.map(t => t.id === id ? { ...t, ...changes } : t));
+  };
 
   /** Seat field update. Pass a function `v(prevField, seat)` to derive from latest state (fixes rapid-click flicker). */
-  const updSeat = (tid, sid, f, v) => setTables(p => p.map(t => {
+  const updSeat = (tid, sid, f, v) => {
+    bumpLocalTableFresh(tid);
+    setTables(p => p.map(t => {
     if (t.id !== tid) return t;
     const seats = t.seats || [];
     return {
@@ -2130,12 +2166,18 @@ export default function App() {
       }),
     };
   }));
+  };
 
-  const setGuests = (tid, n) => setTables(p => p.map(t =>
+  const setGuests = (tid, n) => {
+    bumpLocalTableFresh(tid);
+    setTables(p => p.map(t =>
     t.id !== tid ? t : { ...t, guests: n, seats: makeSeats(n, t.seats) }
   ));
+  };
 
-  const applySeatTemplateToAll = (tableId, sourceSeatId = 1) => setTables(prev => prev.map(t => {
+  const applySeatTemplateToAll = (tableId, sourceSeatId = 1) => {
+    bumpLocalTableFresh(tableId);
+    setTables(prev => prev.map(t => {
     if (t.id !== tableId) return t;
     const seats = t.seats || [];
     if (seats.length <= 1) return t;
@@ -2163,8 +2205,11 @@ export default function App() {
     ));
     return { ...t, seats: nextSeats };
   }));
+  };
 
-  const clearSeatBeverages = (tableId) => setTables(prev => prev.map(t => {
+  const clearSeatBeverages = (tableId) => {
+    bumpLocalTableFresh(tableId);
+    setTables(prev => prev.map(t => {
     if (t.id !== tableId) return t;
     const nextSeats = (t.seats || []).map(s => ({
       ...s,
@@ -2177,11 +2222,13 @@ export default function App() {
     }));
     return { ...t, seats: nextSeats };
   }));
+  };
 
   const seatTable = id => {
     const now = fmt(new Date());
     const group = tables.find(t => t.id === id)?.tableGroup;
     const ids = group?.length > 1 ? group : [id];
+    ids.forEach(tid => bumpLocalTableFresh(tid));
     setTables(p => p.map(t =>
       !ids.includes(t.id) ? t : { ...t, active: true, arrivedAt: now, seats: makeSeats(t.guests, t.seats) }
     ));
@@ -2190,6 +2237,7 @@ export default function App() {
   const unseatTable = id => {
     const group = tables.find(t => t.id === id)?.tableGroup;
     const ids = group?.length > 1 ? group : [id];
+    ids.forEach(tid => bumpLocalTableFresh(tid));
     setTables(p => p.map(t =>
       !ids.includes(t.id) ? t : { ...t, active: false, arrivedAt: null }
     ));
@@ -2197,6 +2245,7 @@ export default function App() {
 
   const clear = id => {
     if (typeof window !== "undefined" && !window.confirm("Clear this table and reset its details?")) return;
+    bumpLocalTableFresh(id);
     setTables(p => p.map(t => t.id !== id ? t : blankTable(id)));
     setSel(null);
   };
@@ -2289,6 +2338,7 @@ export default function App() {
 
   const clearAll = () => {
     if (typeof window !== "undefined" && !window.confirm("Clear ALL tables?")) return;
+    tableLocalFreshRef.current = new Map();
     setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     setSel(null);
     setArchiveOpen(false);
@@ -2303,6 +2353,7 @@ export default function App() {
     const restrPool = ["vegetarian","vegan","gluten free","lactose free","nut allergy","shellfish allergy","no pork"];
     const rng = (arr) => arr[Math.floor(Math.random() * arr.length)];
     const now = fmt(new Date());
+    for (let i = 1; i <= 10; i++) bumpLocalTableFresh(i);
     setTables(Array.from({ length: 10 }, (_, i) => {
       const id = i + 1;
       const n = pax[i];
@@ -2346,6 +2397,7 @@ export default function App() {
         return;
       }
     }
+    tableLocalFreshRef.current = new Map();
     setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     setSel(null);
     setArchiveOpen(false);
@@ -2359,16 +2411,22 @@ export default function App() {
     await archiveAndClearAll();
   };
 
-  const swapSeats = (tid, aId, bId) => setTables(p => p.map(t => {
-    if (t.id !== tid) return t;
-    const sA = t.seats.find(s => s.id === aId);
-    const sB = t.seats.find(s => s.id === bId);
-    return { ...t, seats: t.seats.map(s => {
-      if (s.id === aId) return { ...sB, id: aId };
-      if (s.id === bId) return { ...sA, id: bId };
-      return s;
-    })};
-  }));
+  const swapSeats = (tid, aId, bId) => {
+    bumpLocalTableFresh(tid);
+    setTables(p => p.map(t => {
+      if (t.id !== tid) return t;
+      const sA = t.seats.find(s => s.id === aId);
+      const sB = t.seats.find(s => s.id === bId);
+      return {
+        ...t,
+        seats: t.seats.map(s => {
+          if (s.id === aId) return { ...sB, id: aId };
+          if (s.id === bId) return { ...sA, id: bId };
+          return s;
+        }),
+      };
+    }));
+  };
 
   const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, birthday, cakeNote, restrictions, notes, lang }) => {
     const group = tableIds ?? (tableId ? [tableId] : [id]);
@@ -2380,6 +2438,7 @@ export default function App() {
       .filter(c => normalizeCourseCategory(c?.course_category, c?.optional_flag) === "celebration")
       .map(c => normalizeOptionalKey(c?.optional_flag))
       .filter(Boolean);
+    [...new Set([...oldGroup, ...sortedGroup])].forEach(tid => bumpLocalTableFresh(tid));
     setTables(p => p.map(t => {
       // Clear tables that were in the old group but aren't in the new group
       if (oldGroup.includes(t.id) && !sortedGroup.includes(t.id)) {
@@ -2873,6 +2932,7 @@ export default function App() {
       if (payload.eventType === "DELETE") {
         const tableId = Number(payload.old?.table_id);
         if (!tableId) return;
+        bumpLocalTableFresh(tableId);
         applyingRemoteRef.current = true;
         setTables(prev => prev.map(t => t.id === tableId ? blankTable(tableId) : t));
         setTimeout(() => { applyingRemoteRef.current = false; }, 0);
