@@ -926,7 +926,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                                 ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }),
                               },
                             };
-                            upd("seats", (prevSeats || []).map(s => (
+                            upd("seats", (table.seats || []).map(s => (
                               s.id !== seat.id ? s : { ...s, extras: extraKey ? baseExtras : s.extras, optionalPairings: nextOptP }
                             )));
                           }} style={{
@@ -1118,28 +1118,29 @@ function TableSeatDetail({ table, isMobile, optionalExtras = [] }) {
           const pc = PC[seat.pairing] || PC["Non-Alc"];
           const hasInfo = seatRestrictions.length > 0 || seatExtras.length > 0;
           return (
-            <div key={seat.id} style={{ border: "1px solid #ececec", borderRadius: 10, padding: "12px", background: "#fff" }}>
+            <div key={seat.id} style={{ border: "1px solid #e6e6e6", borderRadius: 0, padding: "12px", background: "#fff" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{
-                    width: 30, height: 30, borderRadius: "50%",
-                    border: `1px solid ${seatRestrictions.length ? "#e08080" : "#d0d0d0"}`,
+                    width: 28, height: 28, borderRadius: 0,
+                    border: `1px solid ${seatRestrictions.length ? "#d08080" : "#e0e0e0"}`,
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontFamily: FONT, fontSize: 10, fontWeight: 600,
-                    color: seatRestrictions.length ? "#b04040" : "#444",
+                    color: seatRestrictions.length ? "#b04040" : "#666",
                   }}>P{seat.id}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
                   <span style={{
-                    fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.5,
-                    padding: "4px 10px", borderRadius: 999,
-                    background: seat.water === "—" ? "#f5f5f5" : (ws.bg || "#f0f0f0"),
-                    color: seat.water === "—" ? "#666" : "#1a1a1a", border: "1px solid #e0e0e0",
+                    fontFamily: FONT, fontSize: 11, fontWeight: 500, letterSpacing: 0.4,
+                    padding: "3px 8px", borderRadius: 0,
+                    background: "transparent",
+                    color: seat.water === "—" ? "#999" : (ws.color || "#444"),
+                    border: `1px solid ${seat.water === "—" ? "#e4e4e4" : "#d8d8d8"}`,
                   }}>{seat.water}</span>
                   {seat.pairing && <span style={{
-                    fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.4,
-                    padding: "4px 10px", borderRadius: 999,
-                    background: pc.bg, border: `1px solid ${pc.border}`, color: pc.color,
+                    fontFamily: FONT, fontSize: 11, fontWeight: 500, letterSpacing: 0.3,
+                    padding: "3px 8px", borderRadius: 0,
+                    background: "transparent", border: `1px solid ${pc.border}`, color: pc.color,
                   }}>{seat.pairing}</span>}
                 </div>
               </div>
@@ -1200,6 +1201,12 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 
     const allWaterMatch = opt => seats.length > 0 && seats.every(s => s.water === opt);
 
+    /** Single-seat patch without stale closure bugs (used by quick-mode linked extras). */
+    const applySeatPatch = (seatId, patchFn) => {
+      if (!upd) return;
+      upd(t.id, "seats", prev => (prev || []).map(seat => (seat.id !== seatId ? seat : patchFn(seat))));
+    };
+
     const wBtn = (opt, active, onClick) => (
       <button key={opt} onClick={onClick} style={{
         fontFamily: FONT, fontSize: 10, letterSpacing: 0.3, padding: "4px 8px",
@@ -1212,18 +1219,26 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
     );
 
     const accentColor = isSeated ? "#5aaa70" : "#88a8c8";
+    const qm = quickMode ? {
+      cardBorder: "#dcdcdc",
+      hairline: "#eaeaea",
+      label: "#9a9a9a",
+      text: "#2a2a2a",
+      muted: "#b0b0b0",
+    } : null;
 
     return (
       <div style={{
         background: "#fff",
-        border: "1px solid #e8e8e8",
+        border: quickMode ? `1px solid ${qm.cardBorder}` : "1px solid #e8e8e8",
         borderRadius: quickMode ? 0 : 8,
         overflow: "hidden",
-        boxShadow: isSeated ? "0 2px 12px rgba(74,154,106,0.10)" : "0 1px 4px rgba(0,0,0,0.04)",
+        boxShadow: quickMode ? "none" : (isSeated ? "0 2px 12px rgba(74,154,106,0.10)" : "0 1px 4px rgba(0,0,0,0.04)"),
         transition: "box-shadow 0.15s",
+        ...(quickMode && isSeated ? { borderLeft: `3px solid ${accentColor}` } : {}),
       }}>
-        {/* Accent bar */}
-        <div style={{ height: 3, background: accentColor }} />
+        {/* Accent bar — hidden in quick mode (left border carries status) */}
+        {!quickMode && <div style={{ height: 3, background: accentColor }} />}
 
         {/* Header */}
         <div
@@ -1312,9 +1327,9 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 
         {/* Quick mode — ALL water row */}
         {quickMode && isSeated && seats.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderBottom: "1px solid #f0f0f0", background: "#fafafa" }}>
-            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#ccc", textTransform: "uppercase", minWidth: 30 }}>ALL</span>
-            <div style={{ display: "flex", gap: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: `1px solid ${qm.hairline}`, background: "#fafafa" }}>
+            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.6, color: qm.label, textTransform: "uppercase", minWidth: 28 }}>All</span>
+            <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
               {WATER_QUICK.map(opt => wBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat && updSeat(t.id, s.id, "water", opt))))}
             </div>
           </div>
@@ -1333,62 +1348,57 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
               if (quickMode) {
                 const pairingByExtraKey = new Map();
                 (optionalPairings || []).forEach(opt => { if (opt.extraKey) pairingByExtraKey.set(opt.extraKey, opt); });
+                const pCur = s.pairing || "—";
+                const pNext = PAIRINGS[(PAIRINGS.indexOf(pCur) + 1) % PAIRINGS.length];
+                const pLab = pCur === "—" ? "—" : pCur === "Non-Alc" ? "N/A" : pCur === "Our Story" ? "Story" : pCur === "Premium" ? "Prem" : pCur === "Wine" ? "Wine" : pCur;
                 return (
                   <div key={s.id} style={{
-                    border: `1px solid ${restr.length ? "#f0d0d0" : "#e4e4e4"}`,
+                    border: `1px solid ${restr.length ? "#e8c8c8" : qm.hairline}`,
                     borderRadius: 0, overflow: "hidden",
-                    background: restr.length ? "#fffdfd" : "#fff",
+                    background: restr.length ? "#fffafa" : "#fff",
                   }}>
                     <div style={{
-                      display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
-                      padding: "5px 10px", background: restr.length ? "#fff5f5" : "#f7f7f7",
-                      borderBottom: "1px solid #eaeaea",
+                      display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+                      padding: "6px 12px", background: restr.length ? "#fff6f6" : "#fafafa",
+                      borderBottom: `1px solid ${qm.hairline}`,
                     }}>
-                      <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 1.2, color: restr.length ? "#b04040" : "#555", minWidth: 22 }}>P{s.id}</span>
+                      <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: restr.length ? "#b04040" : qm.text, minWidth: 26 }}>P{s.id}</span>
                       {restr.length === 0
-                        ? <span style={{ fontFamily: FONT, fontSize: 8, color: "#bbb", letterSpacing: 0.5 }}>No allergy flags</span>
+                        ? null
                         : restr.map((r, i) => (
-                          <span key={i} style={{ fontFamily: FONT, fontSize: 8, color: "#b04040", fontWeight: 500 }}>
-                            ⚠ {restrLabel(r.note)}
+                          <span key={i} style={{ fontFamily: FONT, fontSize: 9, color: "#b04040", fontWeight: 500 }}>
+                            {restrLabel(r.note)}
                           </span>
                         ))}
                     </div>
-                    <div style={{ padding: "6px 10px 8px", display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div>
-                        <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: "#aaa", marginBottom: 4, textTransform: "uppercase" }}>Water</div>
-                        <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                          {WATER_QUICK.map(opt => wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt)))}
+                    <div style={{ padding: "10px 12px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 10 }}>
+                        <div style={{ flex: "1 1 140px", minWidth: 0 }}>
+                          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.4, color: qm.label, marginBottom: 5, textTransform: "uppercase" }}>Water</div>
+                          <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                            {WATER_QUICK.map(opt => wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt)))}
+                          </div>
                         </div>
-                      </div>
-                      <div>
-                        <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: "#aaa", marginBottom: 4, textTransform: "uppercase" }}>Menu pairing</div>
-                        <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-                          {PAIRING_OPTS.map(([val, label]) => {
-                            const active = s.pairing === val || (val === "—" && !s.pairing);
-                            const col = PC[val];
-                            const ps = pairingStyle[val];
-                            const border = active && val !== "—" ? (col?.border || ps?.border || "#d8d8d8") : active ? "#6a8ab0" : "#e4e4e4";
-                            const bg = active && val !== "—" ? (col?.bg || ps?.bg || "#f5f5f5") : active ? "#eef3f9" : "#fff";
-                            const color = active && val !== "—" ? (col?.color || ps?.color || "#444") : active ? "#2a4a6e" : "#bbb";
-                            return (
-                              <button key={val} onClick={() => updSeat && updSeat(t.id, s.id, "pairing", val)} style={{
-                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.3, padding: "4px 8px",
-                                border: `1px solid ${border}`, borderRadius: 0, cursor: "pointer",
-                                background: bg, color: color, fontWeight: active ? 600 : 400,
-                              }}>{label}</button>
-                            );
-                          })}
+                        <div style={{ flex: "1 1 120px", minWidth: 0 }}>
+                          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.4, color: qm.label, marginBottom: 5, textTransform: "uppercase" }}>Pairing</div>
+                          <button type="button" onClick={() => updSeat && updSeat(t.id, s.id, "pairing", pNext)} style={{
+                            fontFamily: FONT, fontSize: 10, letterSpacing: 0.3, padding: "6px 12px", width: "100%",
+                            border: `1px solid ${(pairingStyle[pCur] || pairingStyle["—"]).border}`,
+                            borderRadius: 0, cursor: "pointer", textAlign: "left",
+                            background: (pairingStyle[pCur] || pairingStyle["—"]).bg,
+                            color: (pairingStyle[pCur] || pairingStyle["—"]).color,
+                          }}>{pLab} <span style={{ color: qm.muted, fontWeight: 400 }}>→ next</span></button>
                         </div>
                       </div>
                       {serviceExtrasList.length > 0 && (
                         <div>
-                          <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: "#aaa", marginBottom: 4, textTransform: "uppercase" }}>Extras · tap to cycle</div>
-                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.4, color: qm.label, marginBottom: 5, textTransform: "uppercase" }}>Extras</div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "stretch" }}>
                             {serviceExtrasList.map(dish => {
                               const extra = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
                               const dishOn = !!extra.ordered;
                               const linked = pairingByExtraKey.get(dish.key);
-                              const short = String(dish.name || dish.key || "").replace(/\s+/g, " ").trim().slice(0, 10) || dish.key;
+                              const short = String(dish.name || dish.key || "").replace(/\s+/g, " ").trim().slice(0, 12) || dish.key;
 
                               if (linked) {
                                 const raw = s.optionalPairings?.[linked.key];
@@ -1403,16 +1413,15 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                                 else if (pmode === "alco") cur = "alco";
                                 else if (pmode === "nonalc") cur = "nonalc";
                                 else cur = "on";
-                                const labelMap = { off: `${short} · off`, on: `${short} · on`, alco: `${short} · wine`, nonalc: `${short} · n/a` };
+                                const sub = { off: "off", on: "on", alco: "wine", nonalc: "n/a" }[cur];
                                 const styleMap = {
-                                  off:    { border: "#d8d8d8", bg: "#fafafa", color: "#999" },
-                                  on:     { border: "#9bc48a", bg: "#f2f8ee", color: "#3d6a30" },
-                                  alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
-                                  nonalc: { border: "#7ab8d4", bg: "#e8f4fd", color: "#205a7a" },
+                                  off:    { border: "#dedede", bg: "#fff", color: qm.muted },
+                                  on:     { border: "#9bc48a", bg: "#f7fbf4", color: "#3a6a32" },
+                                  alco:   { border: "#c8a060", bg: "#fdf9f2", color: "#6a4818" },
+                                  nonalc: { border: "#7ab0c8", bg: "#f4f9fc", color: "#1f5f73" },
                                 }[cur];
                                 return (
-                                  <button key={dish.key || dish.id} onClick={() => upd && upd(t.id, "seats", prev => (prev || []).map(seat => {
-                                    if (seat.id !== s.id) return seat;
+                                  <button key={dish.key || dish.id} type="button" onClick={() => applySeatPatch(s.id, seat => {
                                     const r0 = seat.optionalPairings?.[linked.key];
                                     const xtra = seat.extras?.[dish.key] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
                                     const po = r0?.ordered !== undefined ? !!r0.ordered : false;
@@ -1433,22 +1442,28 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                                         ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }),
                                       }},
                                     };
-                                  }))} style={{
-                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "4px 10px",
+                                  })} style={{
+                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "6px 12px",
                                     border: `1px solid ${styleMap.border}`, borderRadius: 0, cursor: "pointer",
-                                    background: styleMap.bg, color: styleMap.color,
-                                  }}>{labelMap[cur]}</button>
+                                    background: styleMap.bg, color: styleMap.color, minWidth: 88, textAlign: "left",
+                                  }}>
+                                    <span style={{ fontWeight: 600 }}>{short}</span>
+                                    <span style={{ color: qm.muted, fontWeight: 400, marginLeft: 6 }}>{sub}</span>
+                                  </button>
                                 );
                               }
 
                               return (
-                                <button key={dish.key || dish.id}
+                                <button key={dish.key || dish.id} type="button"
                                   onClick={() => updSeat && updSeat(t.id, s.id, "extras", { ...s.extras, [dish.key]: { ...extra, ordered: !dishOn } })}
                                   style={{
-                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "4px 10px",
-                                    border: `1px solid ${dishOn ? "#9bc48a" : "#e4e4e4"}`, borderRadius: 0, cursor: "pointer",
-                                    background: dishOn ? "#f2f8ee" : "#fff", color: dishOn ? "#3d6a30" : "#999",
-                                  }}>{short}{dishOn ? " ✓" : ""}</button>
+                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "6px 12px",
+                                    border: `1px solid ${dishOn ? "#9bc48a" : "#dedede"}`, borderRadius: 0, cursor: "pointer",
+                                    background: dishOn ? "#f7fbf4" : "#fff", color: dishOn ? "#3a6a32" : qm.muted, minWidth: 72, textAlign: "left",
+                                  }}>
+                                  <span style={{ fontWeight: 600 }}>{short}</span>
+                                  <span style={{ marginLeft: 6, fontWeight: 400 }}>{dishOn ? "on" : "off"}</span>
+                                </button>
                               );
                             })}
                           </div>
@@ -1456,8 +1471,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                       )}
                       {aperitifOptions && aperitifOptions.length > 0 && (
                         <div>
-                          <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: "#aaa", marginBottom: 4, textTransform: "uppercase" }}>Aperitif</div>
-                          <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.4, color: qm.label, marginBottom: 5, textTransform: "uppercase" }}>Aperitif</div>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                             {aperitifOptions.map(opt => {
                               const label = opt.label ?? opt;
                               const sk = (opt.searchKey ?? opt).toLowerCase();
@@ -1468,7 +1483,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                               };
                               const active = (s.aperitifs || []).some(apMatch);
                               return (
-                                <button key={label} onClick={() => {
+                                <button key={label} type="button" onClick={() => {
                                   if (!updSeat) return;
                                   if (active) {
                                     updSeat(t.id, s.id, "aperitifs", (s.aperitifs || []).filter(x => !apMatch(x)));
@@ -1482,11 +1497,11 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                                     updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item]);
                                   }
                                 }} style={{
-                                  fontFamily: FONT, fontSize: 8, letterSpacing: 0.3, padding: "3px 8px",
-                                  border: `1px solid ${active ? "#c8a060" : "#e4e4e4"}`,
+                                  fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "5px 10px",
+                                  border: `1px solid ${active ? "#c8a060" : "#dedede"}`,
                                   borderRadius: 0, cursor: "pointer",
-                                  background: active ? "#fdf4e8" : "#fff",
-                                  color: active ? "#7a5020" : "#aaa",
+                                  background: active ? "#fdf9f2" : "#fff",
+                                  color: active ? "#6a4818" : qm.muted,
                                 }}>{label}</button>
                               );
                             })}
@@ -1506,12 +1521,12 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                   background: restr.length ? "#fffaf9" : "transparent",
                 }}>
                   <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, minWidth: 22, color: restr.length ? "#b04040" : "#aaa", letterSpacing: 0.5 }}>P{s.id}</span>
-                  {!hasContent && <span style={{ fontFamily: FONT, fontSize: 10, color: "#e8e8e8" }}>—</span>}
+                  {!hasContent && <span style={{ fontFamily: FONT, fontSize: 10, color: "#e0e0e0" }}>—</span>}
                   {s.water && s.water !== "—" && (
-                    <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, background: ws.bg || "#f5f5f5", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>
+                    <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 0, background: "transparent", color: ws.color || "#555", border: "1px solid #d8d8d8" }}>{s.water}</span>
                   )}
                   {s.pairing && pc && (
-                    <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, background: pc.bg, border: `1px solid ${pc.border}`, color: pc.color, fontWeight: 500 }}>{s.pairing}</span>
+                    <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 0, background: "transparent", border: `1px solid ${pc.border}`, color: pc.color, fontWeight: 500 }}>{s.pairing}</span>
                   )}
                   {extras.map(d => {
                     const ex = s.extras[d.key] || s.extras[d.id];
