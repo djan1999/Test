@@ -8,7 +8,7 @@ import { COUNTRY_NAMES } from "../../constants/countries.js";
 import { restrLabel } from "../../constants/dietary.js";
 import { waterStyle } from "../../constants/pairings.js";
 import { tokens } from "../../styles/tokens.js";
-import { UI } from "../../styles/uiChrome.js";
+import { UI, outlineBtn, toggleOnSoft, toggleOff } from "../../styles/uiChrome.js";
 import FullModal from "../ui/FullModal.jsx";
 import BlurInput from "../ui/BlurInput.jsx";
 import BeverageSearch from "../service/BeverageSearch.jsx";
@@ -330,10 +330,11 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                 {seatRestr.map((r, i) => {
                   const isDietary = ["veg","vegan","pescetarian"].includes(r.note);
                   return (
-                    <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2,
-                      background: isDietary ? "#edf8e8" : "#fef0f0",
-                      color: isDietary ? "#2a6a2a" : "#b04040",
-                      border: `1px solid ${isDietary ? "#88cc88" : "#e09090"}` }}>
+                    <span key={i} style={{
+                      fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: tokens.radius,
+                      ...toggleOn,
+                      ...(isDietary ? {} : { border: "1px solid #c04040", color: "#c04040" }),
+                    }}>
                       {isDietary ? restrLabel(r.note) : `⚠ ${restrLabel(r.note)}`}
                     </span>
                   );
@@ -375,26 +376,21 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                 {/* Drinks edit button */}
                 {upd && (
                   <button onClick={() => { setExpandedDrinksId(expandedDrinksId === s.id ? null : s.id); setExpandedSeatId(null); setPreviewSeatId(null); }} style={{
-                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
-                    border: `1px solid ${expandedDrinksId === s.id ? "#6a9abf" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                    background: expandedDrinksId === s.id ? "#eef4fa" : "#fafafa",
-                    color: expandedDrinksId === s.id ? "#2a5a80" : "#aaa",
+                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px", borderRadius: 2, cursor: "pointer",
+                    ...(expandedDrinksId === s.id ? toggleOnSoft : toggleOff),
                   }}>🍷</button>
                 )}
 
                 {/* Preview button */}
                 <button onClick={() => previewSeatId === s.id ? setPreviewSeatId(null) : openPreview(s)} style={{
-                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
-                  border: `1px solid ${previewSeatId === s.id ? "#4a7a9a" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                  background: previewSeatId === s.id ? "#e8f0f8" : "#fafafa",
-                  color: previewSeatId === s.id ? "#2a5a80" : "#aaa",
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px", borderRadius: 2, cursor: "pointer",
+                  ...(previewSeatId === s.id ? toggleOnSoft : toggleOff),
                 }}>👁</button>
 
                 <button onClick={() => openPrint(s)} style={{
                   marginLeft: "auto", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
-                  padding: "8px 16px", border: "1px solid #c8a96e",
-                  borderRadius: 2, cursor: "pointer",
-                  background: "#c8a96e", color: "#fff",
+                  padding: "8px 16px", borderRadius: 2, cursor: "pointer", fontWeight: 600,
+                  ...outlineBtn,
                 }}>PDF</button>
               </div>
 
@@ -477,8 +473,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
               {/* Drinks editor */}
               {expandedDrinksId === s.id && (
-                <div style={{ borderTop: "1px solid #e8f0f8", padding: "12px 16px 14px", background: "#f7fafd" }}>
-                  <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#6a9abf", textTransform: "uppercase", marginBottom: 12 }}>Drinks & Pairing — P{s.id}</div>
+                <div style={{ borderTop: `1px solid ${UI.border}`, padding: "12px 16px 14px", background: UI.surface2 }}>
+                  <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: UI.textMuted, textTransform: "uppercase", marginBottom: 12 }}>Drinks & Pairing — P{s.id}</div>
                   {/* Pairing selector */}
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Pairing</div>
@@ -487,10 +483,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                         const active = (s.pairing || "—") === p;
                         return (
                           <button key={p} onClick={() => updSeat(s.id, "pairing", p === "—" ? "—" : p)} style={{
-                            fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-                            border: `1px solid ${active ? "#2a5a80" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                            background: active ? "#2a5a80" : "#fff",
-                            color: active ? "#fff" : "#888",
+                            fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px", borderRadius: 2, cursor: "pointer",
+                            ...(active ? toggleOnSoft : toggleOff),
                           }}>{p}</button>
                         );
                       })}

@@ -3,6 +3,7 @@ import { waterStyle } from "../../constants/pairings.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
 import { tokens } from "../../styles/tokens.js";
+import { UI, toggleOn } from "../../styles/uiChrome.js";
 import { restrLabel } from "../../constants/dietary.js";
 
 const FONT = tokens.font;
@@ -84,7 +85,7 @@ export default function SummaryModal({ tables, optionalExtras = [], onClose }) {
                     {extras.map((d) => {
                       const ex = s.extras[d.key] || s.extras[d.id];
                       return (
-                        <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>
+                        <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: tokens.radius, ...toggleOn }}>
                           {d.name}
                           {ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}
                         </span>

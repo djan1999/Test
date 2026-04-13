@@ -689,7 +689,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                 <div key={group.name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, rowGap: 8 }}>
                   <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.6, color: "#999", minWidth: 72, textTransform: "uppercase" }}>{group.name}</span>
                   {group.seats.map(s => (
-                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "4px 10px", borderRadius: 0, background: "transparent", border: "1px solid #9bc48a", color: "#3a6a32" }}>
+                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "4px 10px", borderRadius: 0, background: "#fff", border: "1px solid #1a1a1a", color: "#1a1a1a" }}>
                       P{s.id}{s.pairing && s.pairing !== "—" ? ` · ${s.pairing}` : ""}
                     </span>
                   ))}

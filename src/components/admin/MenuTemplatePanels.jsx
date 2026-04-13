@@ -1,4 +1,5 @@
 import { FONT, baseInp } from "./adminStyles.js";
+import { UI, outlineBtn } from "../../styles/uiChrome.js";
 import { DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 
 export function MenuRulesPanel({
@@ -17,11 +18,11 @@ export function MenuRulesPanel({
   };
 
   return (
-    <div style={{ borderBottom: "1px solid #ede9e0", background: "#f7f8fb", flexShrink: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? "1px solid #ede9e0" : "none" }}>
+    <div style={{ borderBottom: `1px solid ${UI.border}`, background: UI.surface2, flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? `1px solid ${UI.border}` : "none" }}>
         <button
           onClick={onToggle}
-          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#4b4b88", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: UI.ink, background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
         >{open ? "▾ MENU RULES" : "▸ MENU RULES"}</button>
         <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa" }}>Global behavior controls used by preview + print</span>
         {onSaveMenuRules && (
@@ -30,8 +31,9 @@ export function MenuRulesPanel({
             disabled={menuRulesSaving}
             style={{
               marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
-              padding: "4px 10px", border: "none", borderRadius: 3, cursor: menuRulesSaving ? "wait" : "pointer",
-              background: menuRulesSaved ? "#4a9a6a" : "#4b4b88", color: "#fff", textTransform: "uppercase",
+              padding: "4px 10px", borderRadius: 3, cursor: menuRulesSaving ? "wait" : "pointer",
+              textTransform: "uppercase", fontWeight: 600,
+              ...(menuRulesSaved ? { ...outlineBtn, border: "1px solid #2f7a45", color: "#2f7a45" } : outlineBtn),
             }}
           >
             {menuRulesSaving ? "Saving..." : menuRulesSaved ? "Saved" : "Save Rules"}
@@ -107,12 +109,12 @@ function StyleInput({ label, lkey, def, step, unit, min, layoutStyles, onUpdateL
 export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLayoutStyles, open, onToggle }) {
   const si = (props) => <StyleInput layoutStyles={layoutStyles} onUpdateLayoutStyles={onUpdateLayoutStyles} {...props} />;
   return (
-    <div style={{ borderBottom: "1px solid #ede9e0", background: "#f7f6fb", flexShrink: 0 }}>
+    <div style={{ borderBottom: `1px solid ${UI.border}`, background: UI.surface2, flexShrink: 0 }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? "1px solid #ede9e0" : "none" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? `1px solid ${UI.border}` : "none" }}>
         <button
           onClick={onToggle}
-          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#4b4b88", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: UI.ink, background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
         >{open ? "▾ SPACING SETTINGS" : "▸ SPACING SETTINGS"}</button>
         <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa" }}>
           Page margins · columns · row gaps · footer — all configurable
@@ -122,8 +124,8 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
             onClick={onSaveLayoutStyles}
             style={{
               marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
-              padding: "4px 10px", border: "none", borderRadius: 3, cursor: "pointer",
-              background: "#4b4b88", color: "#fff", textTransform: "uppercase",
+              padding: "4px 10px", borderRadius: 3, cursor: "pointer",
+              textTransform: "uppercase", fontWeight: 600, ...outlineBtn,
             }}
           >Save Styles</button>
         )}

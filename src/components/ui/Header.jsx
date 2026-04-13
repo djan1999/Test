@@ -31,7 +31,7 @@ export default function Header({
   onSeed,
   onEndService,
 }) {
-  const modeColor = modeLabel === "ADMIN" ? "#4b4b88" : modeLabel === "SERVICE" ? "#2f7a45" : "#555";
+  const modeColor = UI.ink;
   const [sSt, setSSt] = useState(null);
   const handleSyncAll = async () => {
     if (!onSyncAll || sSt === "syncing") return;
@@ -77,7 +77,7 @@ export default function Header({
               {sSt === "syncing" ? "SYNCING…" : sSt === "ok" ? "✓ SYNCED" : sSt === "err" ? "✗ FAILED" : "↻ SYNC"}
             </button>
           )}
-          <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: `1px solid ${syncLive ? "#8fc39f" : "#d8d8d8"}`, borderRadius: R, background: syncLive ? "#eef8f1" : "#f6f6f6", color: syncLive ? "#2f7a45" : "#555", fontWeight: 600, whiteSpace: "nowrap" }}>{syncLabel}</span>
+          <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: `1px solid ${syncLive ? "#2f7a45" : UI.border}`, borderRadius: R, background: "#fff", color: syncLive ? "#2f7a45" : "#555", fontWeight: 600, whiteSpace: "nowrap" }}>{syncLabel}</span>
           {showEndService && <button onClick={onEndService} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: "1px solid #c04040", borderRadius: R, cursor: "pointer", background: "#fff0f0", color: "#c04040", fontWeight: 600, flexShrink: 0 }}>END SERVICE</button>}
           <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", borderRadius: R, cursor: "pointer", flexShrink: 0, ...outlineBtnGhost }}>EXIT</button>
         </div>

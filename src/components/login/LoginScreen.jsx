@@ -128,8 +128,9 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
             {[0,1,2,3].map(i => (
               <div key={i} style={{
                 width: 14, height: 14, borderRadius: tokens.radius,
-                background: i < pin.length ? "#1a1a1a" : "#e8e8e8",
-                transition: "background 0.1s",
+                border: `1px solid ${i < pin.length ? "#1a1a1a" : "#e0e0e0"}`,
+                background: i < pin.length ? "#fff" : "#fafafa",
+                transition: "background 0.1s, border-color 0.1s",
               }} />
             ))}
           </div>

@@ -8,7 +8,7 @@ import { restrLabel } from "../../constants/dietary.js";
 import { waterStyle } from "../../constants/pairings.js";
 import { parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
-import { outlineBtn } from "../../styles/uiChrome.js";
+import { outlineBtn, toggleOn } from "../../styles/uiChrome.js";
 
 const FONT = tokens.font;
 const PAIRING_COLOR = { Wine: "#1a1a1a", "Non-Alc": "#1a1a1a", Premium: "#1a1a1a", "Our Story": "#1a1a1a" };
@@ -219,7 +219,7 @@ export default function ArchiveModal({
                                   {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
                                   {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
                                   {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
-                                  {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
+                                  {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: tokens.radius, ...toggleOn }}>{d.name}</span>)}
                                   {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
                                 </div>
                               );
@@ -314,7 +314,7 @@ export default function ArchiveModal({
                                 {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
                                 {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
                                 {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
-                                {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
+                                {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: tokens.radius, ...toggleOn }}>{d.name}</span>)}
                                 {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
                               </div>
                             );

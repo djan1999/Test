@@ -35,7 +35,7 @@ function WinePickerInput({ value, onChange, type, wines, cocktails, spirits, bee
     <div ref={ref} style={{ position: "relative" }}>
       {value && (
         <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
-          <span style={{ fontFamily: FONT, fontSize: 9, color: "#4b4b88", background: "#f4f4fc", border: "1px solid #c8c6e8", borderRadius: 2, padding: "2px 6px", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <span style={{ fontFamily: FONT, fontSize: 9, color: UI.ink, background: UI.surface2, border: `1px solid ${UI.border}`, borderRadius: 2, padding: "2px 6px", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {value}
           </span>
           <button onClick={() => onChange("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>
@@ -65,7 +65,7 @@ function WinePickerInput({ value, onChange, type, wines, cocktails, spirits, bee
               <span style={{ fontWeight: 600, color: "#1a1a1a" }}>{item.name}</span>
               {item.producer && <span style={{ color: "#888" }}> · {item.producer}</span>}
               {item.vintage  && <span style={{ color: "#aaa" }}> · {item.vintage}</span>}
-              {item.byGlass  && <span style={{ color: "#4a9a6a", marginLeft: 4, fontSize: 8 }}>BTG</span>}
+              {item.byGlass  && <span style={{ color: UI.textMuted, marginLeft: 4, fontSize: 8 }}>BTG</span>}
             </div>
           ))}
         </div>
@@ -166,15 +166,15 @@ export default function QuickAccessPanel({
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px" }}>
               <button onClick={() => toggleItem(item.id)} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px", border: "1px solid",
-                borderColor: item.enabled ? "#4a9a6a" : "#ddd", borderRadius: 2, cursor: "pointer",
-                background: item.enabled ? "#f0faf0" : "#fff",
-                color: item.enabled ? "#4a9a6a" : "#aaa", flexShrink: 0,
+                borderColor: item.enabled ? UI.line : "#ddd", borderRadius: 2, cursor: "pointer",
+                background: item.enabled ? UI.selectedBg : "#fff",
+                color: item.enabled ? UI.ink : "#aaa", flexShrink: 0,
               }}>{item.enabled ? "ON" : "OFF"}</button>
 
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{item.label}</div>
                 <div style={{ fontFamily: FONT, fontSize: 9, color: "#999" }}>
-                  search: <span style={{ color: "#4b4b88" }}>{item.searchKey}</span> · {item.type}
+                  search: <span style={{ color: UI.ink }}>{item.searchKey}</span> · {item.type}
                   {item.menuOnly && <span style={{ marginLeft: 6, color: UI.ink, fontWeight: 600 }}>menu only</span>}
                 </div>
               </div>
@@ -198,10 +198,10 @@ export default function QuickAccessPanel({
                 onClick={() => editingId === item.id ? saveEdit() : startEdit(item)}
                 style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px",
-                  border: `1px solid ${editingId === item.id ? "#4b4b88" : "#ddd"}`,
+                  border: `1px solid ${editingId === item.id ? UI.line : "#ddd"}`,
                   borderRadius: 2, cursor: "pointer",
-                  background: editingId === item.id ? "#4b4b88" : "#fff",
-                  color: editingId === item.id ? "#fff" : "#888", flexShrink: 0,
+                  background: editingId === item.id ? UI.selectedBg : "#fff",
+                  color: editingId === item.id ? UI.ink : "#888", flexShrink: 0,
                 }}>{editingId === item.id ? "SAVE" : "EDIT"}</button>
 
               <button onClick={() => removeItem(item.id)} style={{

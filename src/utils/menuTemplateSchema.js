@@ -38,7 +38,7 @@ export function parseWidthPreset(preset) {
 export const BLOCK_META = {
   // ── Content blocks — resolve live data per seat ───────────────────────────
   course: {
-    label: "Course",        group: "content", color: "#4b4b88", bg: "#f0f0f8", icon: "◈",
+    label: "Course",        group: "content", color: "#1a1a1a", bg: "#fafafa", icon: "◈",
     desc: "Dish text for a specific course — respects seat restrictions",
     fields: [
       { key: "courseKey",   label: "Course",              type: "course_select" },

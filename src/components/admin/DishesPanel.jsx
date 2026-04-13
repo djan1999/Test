@@ -36,7 +36,7 @@ export default function DishesPanel({ dishes, onUpdateDishes }) {
         background: "#fafafa", border: "1px solid #f0f0f0", borderRadius: 4, marginBottom: 28,
         lineHeight: 1.6,
       }}>
-        Main dish names, descriptions, dietary flags, restriction variants, course keys, and kitchen notes are managed in <strong style={{ color: "#4b4b88" }}>Menu Layout</strong>.
+        Main dish names, descriptions, dietary flags, restriction variants, course keys, and kitchen notes are managed in <strong style={{ color: "#1a1a1a" }}>Menu Layout</strong>.
         <br />
         Use the + button on each course to add restrictions and pairings.
       </div>

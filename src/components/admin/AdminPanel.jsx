@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 import { tokens } from "../../styles/tokens.js";
-import { UI } from "../../styles/uiChrome.js";
+import { UI, outlineBtn, toggleOnSoft, toggleOff } from "../../styles/uiChrome.js";
 import { baseInput, fieldLabel as mixinFieldLabel } from "../../styles/mixins.js";
 import MenuCoursesTab from "./MenuCoursesTab.jsx";
 import DrinkListEditor from "./DrinkListEditor.jsx";
@@ -133,13 +133,10 @@ export default function AdminPanel({
                   }} onClick={() => setDrinkTab(t)}>{t.toUpperCase()}</button>
                 ))}
                 <button onClick={handleSaveDrinks} style={{
-                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-                  border: `1px solid ${drinksSaved ? "#888" : "#4a9a6a"}`, borderRadius: tokens.radius, cursor: "pointer",
-                  background: drinksSaved ? "#f0f0f0" : "#eef8f1",
-                  color: drinksSaved ? "#555" : "#2f7a45",
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", borderRadius: tokens.radius, cursor: "pointer",
                   fontWeight: 600,
                   marginLeft: "auto",
-                  transition: "background 0.2s, border-color 0.2s",
+                  ...(drinksSaved ? { ...outlineBtn, border: "1px solid #2f7a45", color: "#2f7a45" } : outlineBtn),
                 }}>{drinksSaved ? "SAVED" : "SAVE DRINKS"}</button>
               </div>
 
@@ -158,9 +155,8 @@ export default function AdminPanel({
                         <input value={w.producer} onChange={e => updWine(w.id, "producer", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Producer" />
                         {!isMobile && <input value={w.vintage} onChange={e => updWine(w.id, "vintage", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="2020" />}
                         <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
-                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                          borderColor: w.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                          background: w.byGlass ? "#f0faf0" : "#fff", color: w.byGlass ? "#4a8a4a" : "#555",
+                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", borderRadius: 2, cursor: "pointer",
+                          ...(w.byGlass ? toggleOnSoft : toggleOff),
                         }}>{w.byGlass ? "YES" : "NO"}</button>
                         <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
                       </div>
@@ -173,9 +169,8 @@ export default function AdminPanel({
                       <input value={newWine.producer} onChange={e => setNewWine(w => ({ ...w, producer: e.target.value }))} placeholder="Producer" style={{ ...baseInp, padding: "5px 8px" }} />
                       {!isMobile && <input value={newWine.vintage} onChange={e => setNewWine(w => ({ ...w, vintage: e.target.value }))} placeholder="2020" style={{ ...baseInp, padding: "5px 8px" }} />}
                       <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
-                        fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                        borderColor: newWine.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                        background: newWine.byGlass ? "#f0faf0" : "#fff", color: newWine.byGlass ? "#4a8a4a" : "#555",
+                        fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", borderRadius: 2, cursor: "pointer",
+                        ...(newWine.byGlass ? toggleOnSoft : toggleOff),
                       }}>{newWine.byGlass ? "YES" : "NO"}</button>
                     </div>
                     <button onClick={addWine} style={{

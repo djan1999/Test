@@ -38,7 +38,7 @@ import { BEV_TYPES } from "./constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "./constants/countries.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES } from "./lib/supabaseClient.js";
 import { tokens } from "./styles/tokens.js";
-import { UI } from "./styles/uiChrome.js";
+import { UI, toggleOn, toggleOff, toggleOnSoft, panelHeaderBg, panelBorder } from "./styles/uiChrome.js";
 import { baseInput, fieldLabel as mixinFieldLabel, chip as mixinChip, circleButton as mixinCircleButton } from "./styles/mixins.js";
 import WaterPicker from "./components/service/WaterPicker.jsx";
 import SwapPicker from "./components/service/SwapPicker.jsx";
@@ -619,12 +619,9 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
           {WATER_OPTS.map(opt => (
             <button key={opt} onClick={() => table.seats.forEach(s => updSeat(s.id, "water", () => opt))} style={{
               fontFamily: FONT, fontSize: 11, letterSpacing: 0.5,
-              padding: "5px 10px", border: "1px solid",
-              borderColor: table.seats.every(s => s.water === opt) ? "#6a8ab0" : "#e0e0e0",
-              borderRadius: mode === "service" ? 0 : 2, cursor: "pointer",
-              background: table.seats.every(s => s.water === opt) ? "#eef3f9" : "#fff",
-              color: table.seats.every(s => s.water === opt) ? "#2a4a6e" : "#555",
+              padding: "5px 10px", borderRadius: mode === "service" ? 0 : 2, cursor: "pointer",
               transition: "all 0.1s",
+              ...(table.seats.every(s => s.water === opt) ? toggleOnSoft : toggleOff),
             }}>{opt}</button>
           ))}
         </div>
@@ -831,10 +828,9 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                       const pairBit = extra.ordered && curPair && curPair !== "—" ? ` · ${curPair}` : "";
                       return (
                         <button key={dish.key} type="button" onClick={cycleExtra} style={{
-                          fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "6px 10px", border: "1px solid",
-                          borderColor: extra.ordered ? "#9bc48a" : "#e4e4e4", borderRadius: 0, cursor: "pointer",
-                          background: extra.ordered ? "#f2f8ee" : "#fff", color: extra.ordered ? "#3d6a30" : "#888",
+                          fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "6px 10px", borderRadius: 0, cursor: "pointer",
                           textAlign: "left", maxWidth: "100%",
+                          ...(extra.ordered ? toggleOnSoft : toggleOff),
                         }}>{short}{extra.ordered ? ` · on${pairBit}` : " · off"}</button>
                       );
                     }
@@ -845,10 +841,9 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                           const ex = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
                           return { ...s.extras, [dish.key]: { ...ex, ordered: !ex.ordered } };
                         })} style={{
-                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 8px", border: "1px solid",
-                          borderColor: extra.ordered ? "#aaddaa" : "#ebebeb", borderRadius: 2, cursor: "pointer",
-                          background: extra.ordered ? "#f0faf0" : "#fff", color: extra.ordered ? "#4a8a4a" : "#555",
+                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 8px", borderRadius: 2, cursor: "pointer",
                           transition: "all 0.1s",
+                          ...(extra.ordered ? toggleOnSoft : toggleOff),
                         }}>{extra.ordered ? "YES" : "NO"}</button>
                         <select value={extra.pairing || dish.pairings[0]} disabled={!extra.ordered}
                           onChange={e => updSeat(seat.id, "extras", (_, s) => {
@@ -1014,12 +1009,9 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
             {["Long", "Short"].map(opt => (
               <button key={opt} onClick={() => upd("menuType", table.menuType === opt ? "" : opt)} style={{
                 fontFamily: FONT, fontSize: 10, letterSpacing: 2,
-                padding: "9px 22px", border: "1px solid",
-                borderColor: table.menuType === opt ? (mode === "service" ? "#6a8ab0" : UI.line) : "#e8e8e8",
-                borderRadius: tokens.radius, cursor: "pointer",
-                background: table.menuType === opt ? (mode === "service" ? "#eef3f9" : UI.selectedBg) : "#fff",
-                color: table.menuType === opt ? (mode === "service" ? "#2a4a6e" : UI.ink) : "#888",
+                padding: "9px 22px", borderRadius: tokens.radius, cursor: "pointer",
                 textTransform: "uppercase",
+                ...(table.menuType === opt ? toggleOnSoft : toggleOff),
               }}>{opt}</button>
             ))}
           </div>
@@ -1166,7 +1158,7 @@ function TableSeatDetail({ table, isMobile, optionalExtras = [] }) {
                   ))}
                   {seatExtras.map(d => {
                     const ex = seat.extras[d.key];
-                    return <span key={d.key} style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.3, padding: "4px 9px", borderRadius: tokens.radius, background: "#e8f5e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>{d.name}{ex.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}</span>;
+                    return <span key={d.key} style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.3, padding: "4px 9px", borderRadius: tokens.radius, ...toggleOn }}>{d.name}{ex.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}</span>;
                   })}
                 </div>
               ) : <div style={{ fontFamily: FONT, fontSize: 11, color: "#777" }}>No extra notes</div>}
@@ -1550,7 +1542,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                   {extras.map(d => {
                     const ex = s.extras[d.key] || s.extras[d.id];
                     return (
-                      <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>
+                      <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: tokens.radius, ...toggleOn }}>
                         {d.name}{ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}
                       </span>
                     );
@@ -1605,11 +1597,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                 sendAckTimer.current = setTimeout(() => { setSendAck(false); sendAckTimer.current = null; }, 2200);
               }} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 16px",
-                border: `1px solid ${sendAck ? "#6ab080" : "#6a8ab0"}`,
                 borderRadius: quickMode ? 0 : 3, cursor: "pointer",
-                background: sendAck ? "#e8f5ec" : "#eef3f9",
-                color: sendAck ? "#2d6a45" : "#2a4a6e", fontWeight: 700, textTransform: "uppercase",
+                fontWeight: 700, textTransform: "uppercase",
                 transition: "background 0.15s, border-color 0.15s, color 0.15s",
+                ...(sendAck ? { ...toggleOn, border: "1px solid #2f7a45", color: "#2f7a45" } : toggleOn),
               }}>{sendAck ? "Sent ✓" : "Send"}</button>
             ) : <span />}
             {onUnseat && (
@@ -3423,12 +3414,10 @@ export default function App() {
               onClick={() => setQuickView(v => v === "service" ? "board" : "service")}
               style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "7px 16px",
-                border: `1.5px solid ${quickView === "service" ? "#6a8ab0" : "#d8d8d8"}`,
-                background: quickView === "service" ? "#eef3f9" : "#fff",
-                color: quickView === "service" ? "#2a4a6e" : "#999",
                 borderRadius: 0, cursor: "pointer",
                 transition: "all 0.15s",
                 display: "flex", alignItems: "center", gap: 6,
+                ...(quickView === "service" ? toggleOnSoft : toggleOff),
               }}
             >
               <span style={{ fontSize: 10 }}>◈</span> QUICK ACCESS
