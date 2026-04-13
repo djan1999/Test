@@ -2026,13 +2026,25 @@ export default function App() {
   // Save menu courses directly to Supabase (the app is now the source of truth)
   const saveMenuCourses = async (courses) => {
     if (!supabase) return;
-    const rows = courses.map(c => courseToSupabaseRow(c));
+    // Auto-generate course_key from dish name when empty so the layout editor
+    // can always reference every course (keyless courses produce value="" which
+    // collides with the "(none)" dropdown option and silently clears the block).
+    const withKeys = courses.map(c => {
+      if (c.course_key) return c;
+      const rawName = c.menu?.name || "";
+      const generated = rawName.trim().toLowerCase()
+        .replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+      return generated ? { ...c, course_key: generated } : c;
+    });
+    const rows = withKeys.map(c => courseToSupabaseRow(c));
     const { error } = await supabase
       .from(TABLES.MENU_COURSES)
       .upsert(rows, { onConflict: "position" });
     if (error) { console.error("Menu save failed:", error); return; }
+    // Reflect any auto-generated keys back into local state so the UI shows them.
+    setMenuCourses(withKeys);
     // Remove courses that no longer exist
-    const positions = courses.map(c => c.position);
+    const positions = withKeys.map(c => c.position);
     if (positions.length > 0) {
       await supabase.from(TABLES.MENU_COURSES).delete().not("position", "in", `(${positions.join(",")})`);
     }

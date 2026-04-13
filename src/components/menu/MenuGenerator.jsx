@@ -62,15 +62,37 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
     upd(table.id, "seats", prev => (prev || []).map(s => s.id === seatId ? fn(s) : s));
   };
 
-  // Load team names + menu title from Supabase on mount
+  // Load team names, menu title, and thank-you note from Supabase on mount.
+  // Title and thank-you are stored as { en, si } so both languages persist
+  // independently — storing a single value caused the last-switched language
+  // to overwrite the other language on the next open.
   useEffect(() => {
     if (!supabase) { genLoaded.current = true; return; }
+    const currentLang = lang;
     Promise.all([
       supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_team").single(),
       supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_title").single(),
-    ]).then(([teamRes, titleRes]) => {
+      supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_thankyou").single(),
+    ]).then(([teamRes, titleRes, thankYouRes]) => {
       if (teamRes.data?.state?.value) setTeamNames(teamRes.data.state.value);
-      if (titleRes.data?.state?.value) setMenuTitle(titleRes.data.state.value);
+
+      // Support both old { value } format and new { en, si } format.
+      const titleState = titleRes.data?.state;
+      if (titleState) {
+        const val = typeof titleState.en === "string" || typeof titleState.si === "string"
+          ? (titleState[currentLang] ?? "")
+          : (titleState.value ?? "");
+        if (val) setMenuTitle(val);
+      }
+
+      const thankYouState = thankYouRes.data?.state;
+      if (thankYouState) {
+        const val = typeof thankYouState.en === "string" || typeof thankYouState.si === "string"
+          ? (thankYouState[currentLang] ?? "")
+          : (thankYouState.value ?? "");
+        if (val) setThankYouNote(val);
+      }
+
       genLoaded.current = true;
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -84,18 +106,24 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
       .then(() => {});
   }, [teamNames]);
 
-  // Persist menu title and thank-you note per language to localStorage
-  // Note: writes happen directly in onChange and setLanguageWithDefaults — NOT here as a
-  // side-effect — to avoid a React batching race where lang changes before menuTitle does,
-  // causing the wrong language's key to get overwritten.
-
-  // Save menu title to Supabase when changed
+  // Save menu title to Supabase when changed — store both languages so switching
+  // lang never clobbers the other language's stored value.
+  // Note: localStorage writes happen directly in onChange and setLanguageWithDefaults
+  // (not here) to avoid a React batching race where lang changes before menuTitle.
   useEffect(() => {
     if (!genLoaded.current || !supabase) return;
     supabase.from(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "menu_gen_title", state: { value: menuTitle }, updated_at: new Date().toISOString() }, { onConflict: "id" })
+      .upsert({ id: "menu_gen_title", state: { en: readMenuTitle("en"), si: readMenuTitle("si") }, updated_at: new Date().toISOString() }, { onConflict: "id" })
       .then(() => {});
   }, [menuTitle]);
+
+  // Save thank-you note to Supabase when changed — same multi-lang approach.
+  useEffect(() => {
+    if (!genLoaded.current || !supabase) return;
+    supabase.from(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "menu_gen_thankyou", state: { en: readThankYouNote("en"), si: readThankYouNote("si") }, updated_at: new Date().toISOString() }, { onConflict: "id" })
+      .then(() => {});
+  }, [thankYouNote]);
 
   const seats        = table.seats        || [];
   const restrictions = table.restrictions || [];

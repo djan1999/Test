@@ -25,7 +25,9 @@ export function readTeamNames() {
   if (typeof window === "undefined") return DEFAULT_TEAM_NAMES || "";
   try {
     const raw = window.localStorage.getItem(TEAM_STORAGE_KEY);
-    return raw && raw.trim() ? raw : (DEFAULT_TEAM_NAMES || "");
+    // null means the key was never set → fall back to the env default.
+    // An empty string means the user deliberately cleared the field → respect it.
+    return raw !== null ? raw : (DEFAULT_TEAM_NAMES || "");
   } catch {
     return DEFAULT_TEAM_NAMES || "";
   }

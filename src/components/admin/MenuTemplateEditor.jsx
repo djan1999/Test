@@ -30,6 +30,7 @@ import {
 } from "../../utils/menuTemplateSchema.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote, readTeamNames } from "../../utils/storage.js";
+import { supabase, TABLES } from "../../lib/supabaseClient.js";
 import { MenuRulesPanel, LayoutStylesPanel } from "./MenuTemplatePanels.jsx";
 import { PreviewDataPanel } from "./MenuTemplatePreviewParts.jsx";
 
@@ -502,7 +503,7 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
               style={{ ...baseInp, fontSize: 10.5, width: "100%" }}
             >
               <option value="">(none)</option>
-              {menuCourses.map(c => (
+              {menuCourses.filter(c => c.course_key).map(c => (
                 <option key={c.course_key} value={c.course_key}>
                   {c.menu?.name || c.course_key}
                 </option>
@@ -700,10 +701,27 @@ export default function MenuTemplateEditor({
   const [menuTitle,    setMenuTitle]    = useState(() => readMenuTitle("en"));
   const [thankYouNote, setThankYouNote] = useState(() => readThankYouNote("en"));
 
-  // When language is switched, load stored values for the new language
+  // Persist both languages to Supabase so MenuGenerator's on-mount load sees
+  // the admin's latest edits and doesn't overwrite them with a stale value.
+  const syncTitleToSupabase = () => {
+    if (!supabase) return;
+    supabase.from(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "menu_gen_title", state: { en: readMenuTitle("en"), si: readMenuTitle("si") }, updated_at: new Date().toISOString() }, { onConflict: "id" })
+      .then(() => {});
+  };
+  const syncThankYouToSupabase = () => {
+    if (!supabase) return;
+    supabase.from(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "menu_gen_thankyou", state: { en: readThankYouNote("en"), si: readThankYouNote("si") }, updated_at: new Date().toISOString() }, { onConflict: "id" })
+      .then(() => {});
+  };
+
+  // When language is switched, save current lang to storage then load the next lang
   const handleLangChange = (nextLang) => {
     writeMenuTitle(previewLang, menuTitle);
     writeThankYouNote(previewLang, thankYouNote);
+    syncTitleToSupabase();
+    syncThankYouToSupabase();
     setPreviewLang(nextLang);
     setMenuTitle(readMenuTitle(nextLang));
     setThankYouNote(readThankYouNote(nextLang));
@@ -1014,7 +1032,7 @@ export default function MenuTemplateEditor({
           <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", whiteSpace: "nowrap" }}>Menu Title</span>
           <input
             value={menuTitle}
-            onChange={e => { setMenuTitle(e.target.value); writeMenuTitle(previewLang, e.target.value); }}
+            onChange={e => { setMenuTitle(e.target.value); writeMenuTitle(previewLang, e.target.value); syncTitleToSupabase(); }}
             style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", flex: 1, minWidth: 80 }}
           />
         </div>
@@ -1022,7 +1040,7 @@ export default function MenuTemplateEditor({
           <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", whiteSpace: "nowrap" }}>Thank You Note</span>
           <input
             value={thankYouNote}
-            onChange={e => { setThankYouNote(e.target.value); writeThankYouNote(previewLang, e.target.value); }}
+            onChange={e => { setThankYouNote(e.target.value); writeThankYouNote(previewLang, e.target.value); syncThankYouToSupabase(); }}
             style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", flex: 1, minWidth: 140 }}
           />
         </div>
