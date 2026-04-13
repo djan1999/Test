@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { FONT } from "./adminStyles.js";
+import { tokens } from "../../styles/tokens.js";
+import { UI } from "../../styles/uiChrome.js";
 
 // ── SystemPanel — Supabase connection status, realtime, environment, debug ──
 export default function SystemPanel({
@@ -98,7 +100,7 @@ export default function SystemPanel({
             <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginBottom: 8 }}>
               Upload PNG, JPG, or SVG. Will be embedded in all printed menus.
             </div>
-            <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff", display: "inline-block" }}>
+            <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: "pointer", background: UI.surface2, color: UI.ink, display: "inline-block", fontWeight: 600 }}>
               UPLOAD LOGO
               <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
                 const file = e.target.files[0];
@@ -186,7 +188,7 @@ export default function SystemPanel({
             <button
               onClick={async () => { setSyncConfigSaving(true); try { await onSaveWineSyncConfig?.(); } finally { setSyncConfigSaving(false); } }}
               disabled={syncConfigSaving}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: syncConfigSaving ? "not-allowed" : "pointer", background: "#1a1a1a", color: "#fff" }}
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: syncConfigSaving ? "not-allowed" : "pointer", background: UI.surface2, color: UI.ink, fontWeight: 600 }}
             >
               {syncConfigSaving ? "SAVING..." : "SAVE SYNC CONFIG"}
             </button>

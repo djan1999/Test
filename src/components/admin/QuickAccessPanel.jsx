@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { FONT, baseInp } from "./adminStyles.js";
+import { tokens } from "../../styles/tokens.js";
+import { UI } from "../../styles/uiChrome.js";
 import { fuzzy, fuzzyDrink } from "../../utils/search.js";
 
 // ── WinePickerInput — mirrors the WineSearch in App.jsx ──────────────────────
@@ -257,8 +259,8 @@ export default function QuickAccessPanel({
         </div>
         <button onClick={addItem} style={{
           fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
-          border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
-          background: "#1a1a1a", color: "#fff",
+          border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: "pointer",
+          background: UI.surface2, color: UI.ink, fontWeight: 600,
         }}>+ ADD ITEM</button>
       </div>
     </div>

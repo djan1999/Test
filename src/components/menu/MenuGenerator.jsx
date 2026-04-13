@@ -8,6 +8,7 @@ import { COUNTRY_NAMES } from "../../constants/countries.js";
 import { restrLabel } from "../../constants/dietary.js";
 import { waterStyle } from "../../constants/pairings.js";
 import { tokens } from "../../styles/tokens.js";
+import { UI } from "../../styles/uiChrome.js";
 import FullModal from "../ui/FullModal.jsx";
 import BlurInput from "../ui/BlurInput.jsx";
 import BeverageSearch from "../service/BeverageSearch.jsx";
@@ -18,9 +19,9 @@ const baseInp = {
   fontSize: tokens.mobileInputSize,
   padding: "10px 12px",
   border: "1px solid #e8e8e8",
-  borderRadius: 2,
+  borderRadius: tokens.radius,
   outline: "none",
-  color: "#1a1a1a",
+  color: UI.ink,
   background: "#fff",
   boxSizing: "border-box",
   width: "100%",
@@ -265,10 +266,10 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
               setLanguageWithDefaults(opt.val);
             }} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-              border: `1px solid ${lang === opt.val ? "#1a1a1a" : "#e0e0e0"}`,
-              borderRadius: 2, cursor: "pointer",
-              background: lang === opt.val ? "#1a1a1a" : "#fff",
-              color: lang === opt.val ? "#fff" : "#aaa",
+              border: `1px solid ${lang === opt.val ? UI.line : "#e0e0e0"}`,
+              borderRadius: tokens.radius, cursor: "pointer",
+              background: lang === opt.val ? UI.selectedBg : "#fff",
+              color: lang === opt.val ? UI.ink : "#aaa",
             }}>{opt.label}</button>
           ))}
         </div>
@@ -532,7 +533,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                           const label = x?.name || x?.producer || "?";
                           const sub = x?.producer && x?.name ? x.producer : (x?.notes || "");
                           return (
-                            <div key={`ap${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: 999, background: ts.bg, border: `1px solid ${ts.border}` }}>
+                            <div key={`ap${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: tokens.radius, background: ts.bg, border: `1px solid ${ts.border}` }}>
                               <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>{label}{sub ? ` · ${sub}` : ""}</span>
                               <button onClick={() => updSeat(s.id, "aperitifs", (s.aperitifs||[]).filter((_,idx)=>idx!==i))} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
                             </div>
@@ -566,7 +567,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                           {allBevs.map(bev => {
                             const ts = BEV_TYPES[bev.type];
                             return (
-                              <div key={bev.key} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: 999, background: ts.bg, border: `1px solid ${ts.border}` }}>
+                              <div key={bev.key} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: tokens.radius, background: ts.bg, border: `1px solid ${ts.border}` }}>
                                 <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>{bev.label}{bev.sub ? ` · ${bev.sub}` : ""}</span>
                                 <button onClick={bev.onRemove} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
                               </div>
@@ -789,8 +790,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => printSelected(seats.map(s => s.id))} style={{
                 flex: 1, fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "12px",
-                border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
-                background: "#1a1a1a", color: "#fff",
+                border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: "pointer",
+                background: UI.surface2, color: UI.ink, fontWeight: 600,
               }}>PRINT ALL SEATS</button>
             </div>
           </div>

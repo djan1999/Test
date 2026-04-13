@@ -5,8 +5,10 @@ import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
 import { applyCourseRestriction, applyMenuOverride, RESTRICTION_COLUMN_MAP, RESTRICTION_PRIORITY_KEYS } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
+import { UI } from "../../styles/uiChrome.js";
 
 const FONT = tokens.font;
+const R = tokens.radius;
 
 export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }) {
   const seats = table.seats || [];
@@ -202,10 +204,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             onClick={e => { e.stopPropagation(); setShowEdit(v => !v); setPickingRestr(null); setCustomNote(""); setEditingCourse(null); }}
             style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 7px",
-              border: `1px solid ${showEdit ? "#1a1a1a" : "#ddd"}`,
-              borderRadius: 3, cursor: "pointer",
-              background: showEdit ? "#1a1a1a" : "#fff",
-              color: showEdit ? "#fff" : "#888",
+              border: `1px solid ${showEdit ? UI.line : "#ddd"}`,
+              borderRadius: R, cursor: "pointer",
+              background: showEdit ? UI.selectedBg : "#fff",
+              color: showEdit ? UI.ink : "#888",
               touchAction: "manipulation",
             }}>✏ EDIT</button>
         </div>
@@ -498,10 +500,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     onClick={e => { e.stopPropagation(); if (isEditingThis) { saveCourseDraft(key, editName, editNote); setEditingCourse(null); } else { startEditCourse(key); } }}
                     style={{
                       fontFamily: FONT, fontSize: 9, padding: "2px 6px", flexShrink: 0,
-                      border: `1px solid ${isEditingThis ? "#1a1a1a" : "#ddd"}`,
-                      borderRadius: 3, cursor: "pointer",
-                      background: isEditingThis ? "#1a1a1a" : "#fff",
-                      color: isEditingThis ? "#fff" : "#aaa",
+                      border: `1px solid ${isEditingThis ? UI.line : "#ddd"}`,
+                      borderRadius: R, cursor: "pointer",
+                      background: isEditingThis ? UI.selectedBg : "#fff",
+                      color: isEditingThis ? UI.ink : "#aaa",
                       touchAction: "manipulation",
                     }}>✏</button>
                 )}
