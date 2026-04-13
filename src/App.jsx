@@ -659,7 +659,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
               }}>P{seat.id}</div>
 
               {/* Water */}
-              <WaterPicker value={seat.water} onChange={v => updSeat(seat.id, "water", v)} />
+              <WaterPicker value={seat.water} onChange={v => updSeat(seat.id, "water", v)} variant={mode === "service" ? "service" : "default"} />
 
               {/* Pairing — full row in admin; single cycle control in service */}
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
@@ -1000,10 +1000,10 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
               <button key={opt} onClick={() => upd("menuType", table.menuType === opt ? "" : opt)} style={{
                 fontFamily: FONT, fontSize: 10, letterSpacing: 2,
                 padding: "9px 22px", border: "1px solid",
-                borderColor: table.menuType === opt ? "#1a1a1a" : "#e8e8e8",
-                borderRadius: 2, cursor: "pointer",
-                background: table.menuType === opt ? "#1a1a1a" : "#fff",
-                color: table.menuType === opt ? "#fff" : "#888",
+                borderColor: table.menuType === opt ? (mode === "service" ? "#6a8ab0" : "#1a1a1a") : "#e8e8e8",
+                borderRadius: mode === "service" ? 0 : 2, cursor: "pointer",
+                background: table.menuType === opt ? (mode === "service" ? "#eef3f9" : "#1a1a1a") : "#fff",
+                color: table.menuType === opt ? (mode === "service" ? "#2a4a6e" : "#fff") : "#888",
                 textTransform: "uppercase",
               }}>{opt}</button>
             ))}
