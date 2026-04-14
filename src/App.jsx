@@ -38,7 +38,10 @@ import { BEV_TYPES } from "./constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "./constants/countries.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES } from "./lib/supabaseClient.js";
 import { tokens } from "./styles/tokens.js";
-import { UI, toggleOn, toggleOff, toggleOnSoft, primaryAction, panelHeaderBg, panelBorder } from "./styles/uiChrome.js";
+import {
+  UI, toggleOn, toggleOff, toggleOnSoft, primaryAction, outlineBtn,
+  panelHeaderBg, panelBorder, cycleSelected, cycleIdle, neutralPanel,
+} from "./styles/uiChrome.js";
 import { baseInput, fieldLabel as mixinFieldLabel, chip as mixinChip, circleButton as mixinCircleButton } from "./styles/mixins.js";
 import WaterPicker from "./components/service/WaterPicker.jsx";
 import SwapPicker from "./components/service/SwapPicker.jsx";
@@ -422,7 +425,7 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
             </span>
           )}
           {table.pace && (() => {
-            const pc = { Slow: { color: "#1a1a1a", bg: "#ffffff", border: "#1a1a1a" }, Fast: { color: "#6a2a2a", bg: "#fff5f5", border: "#c04040" } }[table.pace] || {};
+            const pc = { Slow: { color: UI.ink, bg: UI.surface2, border: UI.line }, Fast: { color: "#6a2a2a", bg: "#fff5f5", border: "#c04040" } }[table.pace] || {};
             return <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, border: `1px solid ${pc.border}`, borderRadius: tokens.radius, padding: "2px 6px", background: pc.bg, color: pc.color }}>{table.pace}</span>;
           })()}
           {table.active && (
@@ -706,7 +709,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
             {/* ── Beverages + Extras ── */}
             <div style={{ paddingLeft: isMobile ? 0 : 48, display: "flex", flexDirection: "column", gap: 12 }}>
               {/* ── Aperitif ── generates above Sour Soup */}
-              <div style={{ background: "#ffffff", border: "1px solid #1a1a1a", borderRadius: 8, padding: isMobile ? "10px" : "12px" }}>
+              <div style={{ ...neutralPanel, borderRadius: 8, padding: isMobile ? "10px" : "12px" }}>
                 <div style={{ ...fieldLabel, marginBottom: 8, color: "#444" }}>Aperitif</div>
                 {/* Quick-add buttons */}
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
@@ -719,8 +722,8 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                       updSeat(seat.id, "aperitifs", prev => [...(prev || []), item]);
                     }} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
-                      border: "1px solid #1a1a1a", borderRadius: 3, cursor: "pointer",
-                      background: "#fff", color: "#1a1a1a", transition: "all 0.1s",
+                      borderRadius: 3, cursor: "pointer",
+                      ...outlineBtn, transition: "all 0.1s",
                     }}>{ap.label}</button>
                   ))}
                 </div>
@@ -903,10 +906,10 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                         else st = "on";
                         const labelMap = { off: "off", on: "on", alco: "wine", nonalc: "n/a" };
                         const styleMap = {
-                          off:    { border: "#d0d0d0", bg: "#ffffff", color: "#888" },
-                          on:     { border: "#1a1a1a", bg: "#ffffff", color: "#1a1a1a" },
-                          alco:   { border: "#1a1a1a", bg: "#f5f5f5", color: "#1a1a1a" },
-                          nonalc: { border: "#1a1a1a", bg: "#f5f5f5", color: "#1a1a1a" },
+                          off:    { border: cycleIdle.border, bg: cycleIdle.background, color: cycleIdle.color },
+                          on:     { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
+                          alco:   { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
+                          nonalc: { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
                         }[st];
                         const short = String(opt.label || opt.key || "").replace(/\s+/g, " ").trim().slice(0, 14) || opt.key;
                         return (
@@ -951,22 +954,19 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                           <div style={{ ...fieldLabel, marginBottom: 4 }}>{opt.label}</div>
                           <div style={{ display: "flex", gap: 3 }}>
                             <button onClick={() => updOpt({ ordered: false })} style={{
-                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
-                              borderColor: !active ? "#1a1a1a" : "#e0e0e0", borderRadius: 2, cursor: "pointer",
-                              background: !active ? "#f5f5f5" : "#fff", color: !active ? "#1a1a1a" : "#aaa", flex: 1,
+                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", borderRadius: 2, cursor: "pointer", flex: 1,
+                              ...(!active ? cycleSelected : cycleIdle),
                             }}>OFF</button>
                             {opt.hasAlco && (
                               <button onClick={() => updOpt({ ordered: true, mode: "alco" })} style={{
-                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
-                                borderColor: alcoOn ? "#1a1a1a" : "#e0e0e0", borderRadius: 2, cursor: "pointer",
-                                background: alcoOn ? "#f5f5f5" : "#fff", color: alcoOn ? "#1a1a1a" : "#aaa", flex: 1,
+                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", borderRadius: 2, cursor: "pointer", flex: 1,
+                                ...(alcoOn ? cycleSelected : cycleIdle),
                               }}>ALCO</button>
                             )}
                             {opt.hasNonAlco && (
                               <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} style={{
-                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
-                                borderColor: naOn ? "#1a1a1a" : "#e0e0e0", borderRadius: 2, cursor: "pointer",
-                                background: naOn ? "#f5f5f5" : "#fff", color: naOn ? "#1a1a1a" : "#aaa", flex: 1,
+                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", borderRadius: 2, cursor: "pointer", flex: 1,
+                                ...(naOn ? cycleSelected : cycleIdle),
                               }}>N/A</button>
                             )}
                           </div>
@@ -1212,10 +1212,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
     const wBtn = (opt, active, onClick) => (
       <button key={opt} onClick={onClick} style={{
         fontFamily: FONT, fontSize: 10, letterSpacing: 0.3, padding: "4px 8px",
-        border: `1px solid ${active ? "#1a1a1a" : "#e0e0e0"}`,
         borderRadius: quickMode ? 0 : 3, cursor: "pointer", lineHeight: 1,
-        background: active ? "#f5f5f5" : "#fff",
-        color: active ? "#1a1a1a" : "#aaa",
+        ...(active ? cycleSelected : cycleIdle),
         ...(quickMode ? {} : { transition: "all 0.1s" }),
       }}>{opt}</button>
     );
@@ -1277,10 +1275,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
             {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: "1px solid #e8e8e8", color: "#666" }}>{t.menuType}</span>}
             {t.lang === "si" && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: "1px solid #c0ccee", color: "#3050a0", background: "#f0f4ff", fontWeight: 700 }}>SI</span>}
             {t.pace && (() => {
-              const pc = { Slow: { color: "#1a1a1a", bg: "#ffffff", border: "#1a1a1a" }, Fast: { color: "#6a2a2a", bg: "#fff5f5", border: "#c04040" } }[t.pace] || {};
+              const pc = { Slow: { color: UI.ink, bg: UI.surface2, border: UI.line }, Fast: { color: "#6a2a2a", bg: "#fff5f5", border: "#c04040" } }[t.pace] || {};
               return <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: `1px solid ${pc.border}`, background: pc.bg, color: pc.color, fontWeight: 700 }}>{t.pace}</span>;
             })()}
-            {t.guestType === "hotel" && t.room && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: "1px solid #1a1a1a", color: "#1a1a1a", background: "#fff", fontWeight: 600 }}>#{t.room}</span>}
+            {t.guestType === "hotel" && t.room && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: `1px solid ${UI.line}`, color: UI.ink, background: UI.surface2, fontWeight: 600 }}>#{t.room}</span>}
             {t.birthday && <span style={{ fontSize: 12 }}>🎂</span>}
           </div>
         </div>
@@ -1418,10 +1416,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                                 else cur = "on";
                                 const sub = { off: "off", on: "on", alco: "wine", nonalc: "n/a" }[cur];
                                 const styleMap = {
-                                  off:    { border: "#dedede", bg: "#fff", color: qm.muted },
-                                  on:     { border: "#1a1a1a", bg: "#fff", color: "#1a1a1a" },
-                                  alco:   { border: "#1a1a1a", bg: "#f5f5f5", color: "#1a1a1a" },
-                                  nonalc: { border: "#1a1a1a", bg: "#f5f5f5", color: "#1a1a1a" },
+                                  off:    { border: cycleIdle.border, bg: cycleIdle.background, color: qm.muted },
+                                  on:     { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
+                                  alco:   { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
+                                  nonalc: { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
                                 }[cur];
                                 return (
                                   <button key={dish.key || dish.id} type="button" onClick={() => applySeatPatch(s.id, seat => {
@@ -1463,9 +1461,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                                     return { ...seat.extras, [dish.key]: { ...ex, ordered: !ex.ordered } };
                                   })}
                                   style={{
-                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "6px 12px",
-                                    border: `1px solid ${dishOn ? "#1a1a1a" : "#dedede"}`, borderRadius: 0, cursor: "pointer",
-                                    background: dishOn ? "#f5f5f5" : "#fff", color: dishOn ? "#1a1a1a" : qm.muted, minWidth: 72, textAlign: "left",
+                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "6px 12px", borderRadius: 0, cursor: "pointer",
+                                    ...(dishOn ? toggleOnSoft : cycleIdle), minWidth: 72, textAlign: "left",
                                   }}>
                                   <span style={{ fontWeight: 600 }}>{short}</span>
                                   <span style={{ marginLeft: 6, fontWeight: 400 }}>{dishOn ? "on" : "off"}</span>
@@ -1504,10 +1501,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                                   }
                                 }} style={{
                                   fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "5px 10px",
-                                  border: `1px solid ${active ? "#1a1a1a" : "#dedede"}`,
                                   borderRadius: 0, cursor: "pointer",
-                                  background: active ? "#f5f5f5" : "#fff",
-                                  color: active ? "#1a1a1a" : qm.muted,
+                                  ...(active ? toggleOnSoft : cycleIdle),
                                 }}>{label}</button>
                               );
                             })}
@@ -1723,22 +1718,16 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
   const waterBtn = (opt, active, onClick) => (
     <button key={opt} onClick={onClick} style={{
       fontFamily: FONT, fontSize: 10, letterSpacing: 0.5,
-      padding: "5px 9px", border: "1px solid",
-      borderColor: active ? UI.line : "#e0e0e0",
-      borderRadius: tokens.radius, cursor: "pointer", lineHeight: 1,
-      background: active ? UI.selectedBg : "#fff",
-      color: active ? UI.ink : "#666",
+      padding: "5px 9px", borderRadius: tokens.radius, cursor: "pointer", lineHeight: 1,
+      ...(active ? cycleSelected : cycleIdle),
     }}>{opt}</button>
   );
 
   const extraBtn = (label, active, _color, onClick) => (
     <button onClick={onClick} style={{
       fontFamily: FONT, fontSize: 9, letterSpacing: 1,
-      padding: "5px 9px", border: "1px solid",
-      borderColor: active ? UI.line : "#e0e0e0",
-      borderRadius: tokens.radius, cursor: "pointer", lineHeight: 1,
-      background: active ? UI.selectedBg : "#fff",
-      color: active ? UI.ink : "#aaa",
+      padding: "5px 9px", borderRadius: tokens.radius, cursor: "pointer", lineHeight: 1,
+      ...(active ? toggleOnSoft : cycleIdle),
       textTransform: "uppercase",
     }}>{label}</button>
   );
@@ -1840,9 +1829,9 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
                     <button key={val} onClick={() => updSeat(table.id, seat.id, "pairing", () => val)} style={{
                       fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
                       padding: "4px 7px", border: "1px solid",
-                      borderColor: active && val !== "—" ? col : active ? UI.line : "#e0e0e0",
+                      borderColor: active && val !== "—" ? col : active ? UI.lineStrong : UI.border,
                       borderRadius: tokens.radius, cursor: "pointer", lineHeight: 1,
-                      background: active && val !== "—" ? bg : active ? UI.selectedBg : "#fff",
+                      background: active && val !== "—" ? bg : active ? UI.surface3 : UI.surface2,
                       color: active && val !== "—" ? col : active ? UI.ink : "#bbb",
                     }}>{label}</button>
                   );

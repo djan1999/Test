@@ -162,7 +162,7 @@ export default function AdminLayout({
                 display: "flex", alignItems: "center", gap: 10,
                 width: "100%", padding: navOpen ? "12px 20px" : "12px 0", border: "none",
                 background: activeSection === s.id ? "#fff" : "transparent",
-                borderLeft: activeSection === s.id ? `3px solid ${UI.line}` : "3px solid transparent",
+                borderLeft: activeSection === s.id ? `3px solid ${UI.accent}` : "3px solid transparent",
                 cursor: "pointer", transition: "all 0.1s",
                 fontFamily: FONT, fontSize: 10, letterSpacing: 1,
                 color: activeSection === s.id ? "#1a1a1a" : "#888",

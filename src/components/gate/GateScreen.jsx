@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
+import { outlineBtn } from "../../styles/uiChrome.js";
 import { baseInput } from "../../styles/mixins.js";
 
 const FONT = tokens.font;
@@ -95,9 +96,9 @@ export default function GateScreen({ onPass }) {
 
         <button onClick={() => attempt(pw)} style={{
           width: "100%", fontFamily: FONT, fontSize: 11, letterSpacing: 3,
-          padding: "14px", border: "1px solid #1a1a1a", borderRadius: 0,
-          cursor: "pointer", background: "#f5f5f5", color: "#1a1a1a",
-          textTransform: "uppercase", marginTop: 8, fontWeight: 600,
+          padding: "14px", borderRadius: 0,
+          cursor: "pointer", textTransform: "uppercase", marginTop: 8, fontWeight: 600,
+          ...outlineBtn,
         }}>Enter</button>
       </div>
 

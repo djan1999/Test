@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { TABLES, supabase } from "../../lib/supabaseClient.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
 import { tokens } from "../../styles/tokens.js";
+import { outlineBtn } from "../../styles/uiChrome.js";
 import { baseInput } from "../../styles/mixins.js";
 import FullModal from "../ui/FullModal.jsx";
 
@@ -340,8 +341,9 @@ export default function InventoryModal({ wines, onClose }) {
                 </span>
               ))}
               <span style={{
-                fontFamily: FONT, fontSize: 10, fontWeight: 700, color: "#1a1a1a",
-                padding: "3px 10px", borderRadius: 999, border: "1px solid #1a1a1a", background: "#fff",
+                fontFamily: FONT, fontSize: 10, fontWeight: 700,
+                padding: "3px 10px", borderRadius: tokens.radius,
+                ...outlineBtn,
               }}>TOTAL: {fmtCount(grandTotal)}</span>
             </div>
           </div>

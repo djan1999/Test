@@ -136,7 +136,7 @@ export default function SystemPanel({
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
-            <button onClick={() => onCreateLayoutProfile?.()} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#1a1a1a" }}>NEW BLANK LAYOUT</button>
+            <button onClick={() => onCreateLayoutProfile?.()} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", borderRadius: 2, cursor: "pointer", ...outlineBtn }}>NEW BLANK LAYOUT</button>
             <button
               onClick={() => activeProfile && onDeleteLayoutProfile?.(activeProfile.id)}
               disabled={safeProfiles.length <= 1}

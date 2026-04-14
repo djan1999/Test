@@ -5,7 +5,8 @@ import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
 import { applyCourseRestriction, applyMenuOverride, RESTRICTION_COLUMN_MAP, RESTRICTION_PRIORITY_KEYS } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
-import { UI } from "../../styles/uiChrome.js";
+import { UI, outlineBtn, cycleSelected, cycleIdle } from "../../styles/uiChrome.js";
+import { pairingStyle } from "../../constants/pairings.js";
 
 const FONT = tokens.font;
 const R = tokens.radius;
@@ -85,8 +86,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       .filter(r => r.pos === seat.id)
       .map(r => r.note);
 
-  const pairingColor = { Wine: "#1a1a1a", "Non-Alc": "#1a1a1a", Premium: "#1a1a1a", "Our Story": "#1a1a1a" };
-  const pairingBg   = { Wine: "#ffffff", "Non-Alc": "#ffffff", Premium: "#ffffff", "Our Story": "#ffffff" };
+  const pairingColor = { Wine: pairingStyle.Wine.color, "Non-Alc": pairingStyle["Non-Alc"].color, Premium: pairingStyle.Premium.color, "Our Story": pairingStyle["Our Story"].color };
+  const pairingBg   = { Wine: pairingStyle.Wine.bg, "Non-Alc": pairingStyle["Non-Alc"].bg, Premium: pairingStyle.Premium.bg, "Our Story": pairingStyle["Our Story"].bg };
 
   const normFlag = s => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   const normCategory = (course) => {
@@ -266,7 +267,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #1a1a1a", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#1a1a1a", fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", borderRadius: 3, cursor: "pointer", fontWeight: 700, touchAction: "manipulation", ...outlineBtn }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, s.id); }}
                     style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
@@ -288,7 +289,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #1a1a1a", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#1a1a1a", fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", borderRadius: 3, cursor: "pointer", fontWeight: 700, touchAction: "manipulation", ...outlineBtn }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, s.id); }}
                     style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
@@ -305,7 +306,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       <div style={{ borderBottom: "1px solid #e8e8e8", padding: "5px 10px", display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", flexShrink: 0 }}>Pace</span>
         {["Slow", "Fast"].map(p => {
-          const colors = { Slow: { on: "#1a1a1a", bg: "#ffffff", border: "#1a1a1a" }, Fast: { on: "#6a2a2a", bg: "#fff5f5", border: "#c04040" } };
+          const colors = { Slow: { on: UI.ink, bg: UI.surface2, border: UI.line }, Fast: { on: "#6a2a2a", bg: "#fff5f5", border: "#c04040" } };
           const active = table.pace === p;
           const col = colors[p];
           return (
@@ -608,10 +609,10 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
 export function KitchenAlertOverlay({ alerts, onConfirm }) {
   if (alerts.length === 0) return null;
   const PAIR_COLORS = {
-    Wine:      { color: "#1a1a1a", bg: "transparent", border: "#1a1a1a" },
-    "Non-Alc": { color: "#1a1a1a", bg: "transparent", border: "#1a1a1a" },
-    Premium:   { color: "#1a1a1a", bg: "transparent", border: "#1a1a1a" },
-    "Our Story":{ color: "#1a1a1a", bg: "transparent", border: "#1a1a1a" },
+    Wine:      { color: pairingStyle.Wine.color, bg: pairingStyle.Wine.bg, border: pairingStyle.Wine.border },
+    "Non-Alc": { color: pairingStyle["Non-Alc"].color, bg: pairingStyle["Non-Alc"].bg, border: pairingStyle["Non-Alc"].border },
+    Premium:   { color: pairingStyle.Premium.color, bg: pairingStyle.Premium.bg, border: pairingStyle.Premium.border },
+    "Our Story":{ color: pairingStyle["Our Story"].color, bg: pairingStyle["Our Story"].bg, border: pairingStyle["Our Story"].border },
   };
   return (
     <div style={{
