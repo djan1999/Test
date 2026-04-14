@@ -1,12 +1,10 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { tokens } from "../styles/tokens.js";
 import { RESTRICTIONS } from "../constants/dietary.js";
 
 const FONT = tokens.font;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-const pad2 = (n) => String(n).padStart(2, "0");
-
 function formatDateHeader(dateStr) {
   if (!dateStr) return "";
   const d = new Date(dateStr + "T00:00:00");
@@ -31,13 +29,31 @@ function tableLabel(r) {
   return `T${String(r.table_id).padStart(2, "0")}`;
 }
 
-// Build the bullet lines that get auto-filled under each reservation from
-// existing reservation data. This matches the reference screenshot style:
-//  - Long menu
-//  - No dietaries or SO
-//  - From Germany
-//  - Hotel #22 (5% C&F)
-//  - notes lines
+// Group identical restrictions by count. Returns an array of display strings
+// like ["2x Vegetarian", "Gluten Free"]. Grouped items (count > 1) sort first,
+// then singletons, alphabetical within each group.
+function groupRestrictions(restrictions) {
+  const counts = new Map();
+  for (const r of restrictions || []) {
+    const key = (r && (r.note || r.key)) || "";
+    if (!key) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const entries = [...counts.entries()].map(([key, count]) => {
+    const def = RESTRICTIONS.find((x) => x.key === key);
+    const label = def ? def.label : key;
+    return { key, label, count };
+  });
+  entries.sort((a, b) => {
+    const aGrouped = a.count > 1;
+    const bGrouped = b.count > 1;
+    if (aGrouped !== bGrouped) return aGrouped ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
+  return entries.map((e) => (e.count > 1 ? `${e.count}x ${e.label}` : e.label));
+}
+
+// Build the auto-seeded bullet lines for a reservation.
 function bulletsForReservation(r) {
   const d = r.data || {};
   const out = [];
@@ -49,26 +65,19 @@ function bulletsForReservation(r) {
     out.push(`${pretty} menu`);
   }
 
-  // Dietaries / allergies / cake summary
-  const restrictions = Array.isArray(d.restrictions) ? d.restrictions : [];
-  const restrLabels = restrictions
-    .map((rs) => {
-      const def = RESTRICTIONS.find((x) => x.key === rs.note);
-      return def ? def.label : rs.note;
-    })
-    .filter(Boolean);
-
+  // Dietaries / allergies / cake summary — grouped with counts
+  const grouped = groupRestrictions(d.restrictions);
   const cakeChunks = [];
   if (d.birthday) {
     const note = d.cakeNote ? `CAKE(${d.cakeNote})` : "CAKE";
     cakeChunks.push(`1x ${note}`);
   }
 
-  if (restrLabels.length === 0 && cakeChunks.length === 0) {
+  if (grouped.length === 0 && cakeChunks.length === 0) {
     out.push("No dietaries or SO");
   } else {
     const parts = [];
-    if (restrLabels.length > 0) parts.push(restrLabels.join(", "));
+    if (grouped.length > 0) parts.push(grouped.join(", "));
     else parts.push("No dietaries");
     if (cakeChunks.length > 0) parts.push(cakeChunks.join(", "));
     out.push(parts.join(", "));
@@ -95,7 +104,7 @@ function bulletsForReservation(r) {
   return out;
 }
 
-// Group reservations by their time slot, sorted ascending.
+// Group reservations by time slot, sorted ascending, stable order within.
 function groupByTimeSlot(reservations) {
   const map = new Map();
   for (const r of reservations) {
@@ -104,45 +113,172 @@ function groupByTimeSlot(reservations) {
     map.get(t).push(r);
   }
   const slots = [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  // Sort each slot's reservations by table id for a stable display
   for (const [, list] of slots) {
     list.sort((a, b) => (a.table_id || 0) - (b.table_id || 0));
   }
-  return slots; // [ [timeLabel, reservations[]], ... ]
+  return slots;
 }
 
-// ── Component ───────────────────────────────────────────────────────────────
-export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
-  const [intel, setIntel] = useState({}); // { [reservationId]: string }
-  const [bread, setBread] = useState("");
-  const [announcements, setAnnouncements] = useState(["", "", "", ""]);
-
-  const slots = useMemo(() => groupByTimeSlot(reservations || []), [reservations]);
-
-  // Header summary: total reservation tables and total guests for the day.
-  const totalReservations = (reservations || []).length;
+// Build the initial editable document state by pre-filling from reservations.
+function buildInitialState(dateStr, reservations) {
+  const total = (reservations || []).length;
   const totalGuests = (reservations || []).reduce(
     (a, r) => a + (r.data?.guests || 2),
     0
   );
+  const slots = groupByTimeSlot(reservations || []);
 
-  // Two-column split — first half of slots to left, second half to right.
-  const mid = Math.ceil(slots.length / 2);
-  const leftSlots = slots.slice(0, mid);
-  const rightSlots = slots.slice(mid);
-
-  const handleIntel = (id, v) => setIntel((p) => ({ ...p, [id]: v }));
-  const handleAnnouncement = (i, v) =>
-    setAnnouncements((p) => p.map((x, idx) => (idx === i ? v : x)));
-
-  const onPrint = () => {
-    window.print();
+  return {
+    headerText: formatDateHeader(dateStr),
+    summaryText: `${total} table${total !== 1 ? "s" : ""}, ${totalGuests} guest${totalGuests !== 1 ? "s" : ""}`,
+    slots: slots.map(([time, list]) => ({
+      key: time,
+      label: `${time} - ${list.length} table${list.length !== 1 ? "s" : ""}`,
+      reservations: list.map((r) => {
+        const d = r.data || {};
+        const name = (d.resName || "—").trim();
+        const pax = d.guests || 2;
+        return {
+          id: r.id,
+          headerText: `${tableLabel(r)}: ${name} [${pax} pax]`,
+          bullets: bulletsForReservation(r),
+          intel: "",
+        };
+      }),
+    })),
+    bread: "",
+    announcements: ["", "", "", ""],
   };
+}
 
-  const header = formatDateHeader(dateStr);
+// ── Editable building blocks ────────────────────────────────────────────────
+const plainInputStyle = {
+  border: "none",
+  background: "transparent",
+  fontFamily: "inherit",
+  fontSize: "inherit",
+  color: "#000",
+  width: "100%",
+  padding: 0,
+  margin: 0,
+  outline: "none",
+  borderRadius: 0,
+};
+
+function PlainInput({ value, onChange, bold, center, style }) {
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        ...plainInputStyle,
+        fontWeight: bold ? 700 : "inherit",
+        textAlign: center ? "center" : "left",
+        ...style,
+      }}
+    />
+  );
+}
+
+// Auto-growing single-row textarea used for bullet lines. Grows vertically
+// when a line wraps so nothing is clipped in print.
+function AutoTextarea({ value, onChange, style }) {
+  const resize = (el) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  return (
+    <textarea
+      ref={(el) => resize(el)}
+      value={value}
+      onChange={(e) => {
+        onChange(e.target.value);
+        resize(e.target);
+      }}
+      rows={1}
+      style={{
+        ...plainInputStyle,
+        resize: "none",
+        overflow: "hidden",
+        lineHeight: 1.45,
+        ...style,
+      }}
+    />
+  );
+}
+
+// ── Component ───────────────────────────────────────────────────────────────
+export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
+  const [doc, setDoc] = useState(() => buildInitialState(dateStr, reservations));
+
+  const updateHeader = (v) => setDoc((p) => ({ ...p, headerText: v }));
+  const updateSummary = (v) => setDoc((p) => ({ ...p, summaryText: v }));
+  const updateSlotLabel = (si, v) =>
+    setDoc((p) => ({
+      ...p,
+      slots: p.slots.map((s, i) => (i === si ? { ...s, label: v } : s)),
+    }));
+  const updateResvHeader = (si, ri, v) =>
+    setDoc((p) => ({
+      ...p,
+      slots: p.slots.map((s, i) =>
+        i !== si
+          ? s
+          : {
+              ...s,
+              reservations: s.reservations.map((r, j) =>
+                j === ri ? { ...r, headerText: v } : r
+              ),
+            }
+      ),
+    }));
+  const updateBullet = (si, ri, bi, v) =>
+    setDoc((p) => ({
+      ...p,
+      slots: p.slots.map((s, i) =>
+        i !== si
+          ? s
+          : {
+              ...s,
+              reservations: s.reservations.map((r, j) =>
+                j !== ri
+                  ? r
+                  : {
+                      ...r,
+                      bullets: r.bullets.map((b, k) => (k === bi ? v : b)),
+                    }
+              ),
+            }
+      ),
+    }));
+  const updateIntel = (si, ri, v) =>
+    setDoc((p) => ({
+      ...p,
+      slots: p.slots.map((s, i) =>
+        i !== si
+          ? s
+          : {
+              ...s,
+              reservations: s.reservations.map((r, j) =>
+                j === ri ? { ...r, intel: v } : r
+              ),
+            }
+      ),
+    }));
+  const updateBread = (v) => setDoc((p) => ({ ...p, bread: v }));
+  const updateAnnouncement = (i, v) =>
+    setDoc((p) => ({
+      ...p,
+      announcements: p.announcements.map((a, idx) => (idx === i ? v : a)),
+    }));
+
+  const onPrint = () => window.print();
 
   return (
     <div
+      className="service-breakdown-overlay"
       style={{
         position: "fixed",
         inset: 0,
@@ -153,25 +289,23 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
         overflow: "auto",
         padding: "24px 16px",
       }}
-      className="service-breakdown-overlay"
     >
       <PrintStyles />
 
       {/* Top bar — not printed */}
       <div
-        className="sb-topbar"
+        className="sb-topbar no-print"
         style={{
           display: "flex",
           justifyContent: "flex-end",
           gap: 8,
-          maxWidth: 900,
+          maxWidth: 1100,
           width: "100%",
           margin: "0 auto 12px",
         }}
       >
         <button
           onClick={onPrint}
-          className="sb-no-print"
           style={{
             fontFamily: FONT,
             fontSize: 10,
@@ -189,7 +323,6 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
         </button>
         <button
           onClick={onClose}
-          className="sb-no-print"
           style={{
             fontFamily: FONT,
             fontSize: 10,
@@ -216,7 +349,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
           fontFamily: FONT,
           fontSize: 11,
           lineHeight: 1.45,
-          maxWidth: 900,
+          maxWidth: 1100,
           width: "100%",
           margin: "0 auto",
           padding: "36px 42px",
@@ -226,49 +359,102 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
       >
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: 4 }}>
-          <div style={{ fontWeight: 700, fontSize: 12 }}>{header}</div>
-          <div style={{ fontSize: 11, marginTop: 2 }}>
-            {totalReservations} table{totalReservations !== 1 ? "s" : ""},{" "}
-            {totalGuests} guest{totalGuests !== 1 ? "s" : ""}
-          </div>
+          <PlainInput
+            value={doc.headerText}
+            onChange={updateHeader}
+            bold
+            center
+            style={{ fontSize: 12 }}
+          />
+          <PlainInput
+            value={doc.summaryText}
+            onChange={updateSummary}
+            center
+            style={{ fontSize: 11, marginTop: 2 }}
+          />
         </div>
 
-        {/* Two columns */}
+        {/* Reservation column flow — CSS multi-column so print overflow moves
+            from column 1 -> column 2 -> page 2, rather than a fixed grid. */}
         <div
-          className="sb-columns"
+          className="service-breakdown-print-area sb-columns"
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            columnGap: 32,
             marginTop: 24,
+            columnCount: 2,
+            columnGap: 32,
+            columnFill: "auto",
           }}
         >
-          <div>
-            {leftSlots.map(([time, list]) => (
-              <SlotBlock
-                key={time}
-                time={time}
-                list={list}
-                intel={intel}
-                onIntel={handleIntel}
-              />
-            ))}
-          </div>
-          <div>
-            {rightSlots.map(([time, list]) => (
-              <SlotBlock
-                key={time}
-                time={time}
-                list={list}
-                intel={intel}
-                onIntel={handleIntel}
-              />
-            ))}
-          </div>
+          {doc.slots.map((slot, si) => (
+            <div key={slot.key} className="slot-block" style={{ marginBottom: 20 }}>
+              <div
+                style={{
+                  borderBottom: "1px solid #000",
+                  paddingBottom: 2,
+                  marginBottom: 8,
+                }}
+              >
+                <PlainInput
+                  value={slot.label}
+                  onChange={(v) => updateSlotLabel(si, v)}
+                  bold
+                  style={{ fontSize: 11 }}
+                />
+              </div>
+              {slot.reservations.map((r, ri) => (
+                <div
+                  key={r.id}
+                  className="reservation-block"
+                  style={{ marginBottom: 14 }}
+                >
+                  <PlainInput
+                    value={r.headerText}
+                    onChange={(v) => updateResvHeader(si, ri, v)}
+                    bold
+                  />
+                  <div style={{ padding: "0 0 0 8px", marginTop: 2 }}>
+                    {r.bullets.map((b, bi) => (
+                      <div
+                        key={bi}
+                        style={{ display: "flex", alignItems: "flex-start", gap: 4 }}
+                      >
+                        <span style={{ flexShrink: 0 }}>-</span>
+                        <AutoTextarea
+                          value={b}
+                          onChange={(v) => updateBullet(si, ri, bi, v)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <textarea
+                    value={r.intel}
+                    onChange={(e) => updateIntel(si, ri, e.target.value)}
+                    placeholder="Guest intel / notes"
+                    rows={2}
+                    className="sb-intel"
+                    style={{
+                      width: "100%",
+                      marginTop: 4,
+                      fontFamily: "inherit",
+                      fontSize: "0.8rem",
+                      color: "#000",
+                      border: "1px dashed #aaa",
+                      background: "#f5f5f5",
+                      padding: "3px 6px",
+                      resize: "none",
+                      outline: "none",
+                      borderRadius: 0,
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
 
-        {/* Bottom section */}
+        {/* Bottom section — always rendered after the column flow */}
         <div
+          className="bottom-section"
           style={{
             marginTop: 32,
             paddingTop: 12,
@@ -283,11 +469,13 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
               marginBottom: 10,
             }}
           >
-            <span style={{ fontWeight: 700 }}>Extra bread count:</span>
+            <span style={{ fontWeight: 700, flexShrink: 0 }}>
+              Extra bread count:
+            </span>
             <input
               type="text"
-              value={bread}
-              onChange={(e) => setBread(e.target.value)}
+              value={doc.bread}
+              onChange={(e) => updateBread(e.target.value)}
               className="sb-inline"
               style={{
                 flex: 1,
@@ -307,7 +495,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
             Service Announcements:
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {announcements.map((v, i) => (
+            {doc.announcements.map((v, i) => (
               <div
                 key={i}
                 style={{ display: "flex", alignItems: "flex-start", gap: 6 }}
@@ -315,7 +503,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                 <span>-</span>
                 <textarea
                   value={v}
-                  onChange={(e) => handleAnnouncement(i, e.target.value)}
+                  onChange={(e) => updateAnnouncement(i, e.target.value)}
                   rows={1}
                   className="sb-announcement"
                   style={{
@@ -341,71 +529,6 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
   );
 }
 
-function SlotBlock({ time, list, intel, onIntel }) {
-  const count = list.length;
-  return (
-    <div style={{ marginBottom: 20 }}>
-      <div
-        style={{
-          fontWeight: 700,
-          fontSize: 11,
-          borderBottom: "1px solid #000",
-          paddingBottom: 2,
-          marginBottom: 8,
-        }}
-      >
-        {time} - {count} table{count !== 1 ? "s" : ""}
-      </div>
-      {list.map((r) => {
-        const d = r.data || {};
-        const name = (d.resName || "—").trim();
-        const pax = d.guests || 2;
-        const bullets = bulletsForReservation(r);
-        return (
-          <div key={r.id} style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 700 }}>
-              {tableLabel(r)}: {name} [{pax} pax]
-            </div>
-            <ul
-              style={{
-                listStyle: "none",
-                margin: "2px 0 0 0",
-                padding: "0 0 0 8px",
-              }}
-            >
-              {bullets.map((b, i) => (
-                <li key={i} style={{ whiteSpace: "pre-wrap" }}>
-                  - {b}
-                </li>
-              ))}
-            </ul>
-            <textarea
-              value={intel[r.id] || ""}
-              onChange={(e) => onIntel(r.id, e.target.value)}
-              placeholder="Guest intel / notes"
-              rows={2}
-              className="sb-intel"
-              style={{
-                width: "100%",
-                marginTop: 4,
-                fontFamily: "inherit",
-                fontSize: "0.8rem",
-                color: "#000",
-                border: "1px dashed #aaa",
-                background: "#f5f5f5",
-                padding: "3px 6px",
-                resize: "none",
-                outline: "none",
-                borderRadius: 0,
-              }}
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function PrintStyles() {
   return (
     <style>{`
@@ -414,7 +537,10 @@ function PrintStyles() {
         font-family: inherit;
       }
       @media print {
-        @page { size: A4; margin: 15mm; }
+        @page {
+          size: A4 landscape;
+          margin: 12mm 15mm;
+        }
         html, body { background: #ffffff !important; }
         body * { visibility: hidden !important; }
         .service-breakdown-overlay,
@@ -434,12 +560,11 @@ function PrintStyles() {
           width: 100% !important;
           margin: 0 !important;
         }
-        .sb-no-print,
+        .no-print,
         .sb-topbar {
           display: none !important;
         }
-        .service-breakdown-overlay textarea,
-        .service-breakdown-overlay input {
+        input, textarea {
           border: none !important;
           background: transparent !important;
           box-shadow: none !important;
@@ -447,15 +572,26 @@ function PrintStyles() {
           resize: none !important;
           padding: 0 !important;
           color: #000 !important;
+          -webkit-print-color-adjust: exact;
         }
         .sb-inline {
           border-bottom: 1px solid #000 !important;
         }
-        .sb-columns {
-          display: grid !important;
-          grid-template-columns: 1fr 1fr !important;
-          column-gap: 32px !important;
-          page-break-inside: auto;
+        .service-breakdown-print-area {
+          column-count: 2;
+          column-gap: 20mm;
+          column-fill: auto;
+        }
+        .reservation-block {
+          break-inside: avoid;
+          page-break-inside: avoid;
+        }
+        .slot-block {
+          break-inside: avoid-column;
+        }
+        .bottom-section {
+          break-before: avoid;
+          page-break-before: avoid;
         }
       }
     `}</style>
