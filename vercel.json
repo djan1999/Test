@@ -1,8 +1,10 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
       "path": "/api/sync-wines",
       "schedule": "0 2 * * *"
     }
-  ]
+  ],
+  "ignoreCommand": "[ \"$VERCEL_ENV\" = \"preview\" ] && exit 0 || exit 1"
 }
