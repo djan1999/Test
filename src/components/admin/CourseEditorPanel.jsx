@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { FONT, baseInp } from "./adminStyles.js";
+import { tokens } from "../../styles/tokens.js";
+import { UI } from "../../styles/uiChrome.js";
 
 // ── Dietary restriction keys ──────────────────────────────────────────────────
 const DIETARY_KEYS = [
@@ -387,14 +389,16 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={addCourse} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-            border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
-            background: "#1a1a1a", color: "#fff",
+            border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: "pointer",
+            background: UI.surface2, color: UI.ink, fontWeight: 600,
           }}>+ ADD COURSE</button>
           <button onClick={handleSave} disabled={saving} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-            border: `1px solid ${saved ? "#4a9a6a" : "#c8a06e"}`, borderRadius: 2,
+            border: `1px solid ${saved ? "#4a9a6a" : "#c8a06e"}`, borderRadius: tokens.radius,
             cursor: saving ? "default" : "pointer",
-            background: saved ? "#4a9a6a" : "#c8a06e", color: "#fff",
+            background: saved ? "#eef8f1" : "#fdf9f2",
+            color: saved ? "#2f7a45" : "#7a5020",
+            fontWeight: 600,
           }}>{saving ? "SAVING..." : saved ? "SAVED" : "SAVE ALL COURSES"}</button>
         </div>
       </div>

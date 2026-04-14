@@ -3,6 +3,7 @@ import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML } from "../..
 import { blankTable, makeSeats } from "../../utils/tableHelpers.js";
 import { RESTRICTIONS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
+import { UI } from "../../styles/uiChrome.js";
 import { baseInput, fieldLabel as fieldLabelMixin, circleButton } from "../../styles/mixins.js";
 import ServiceDatePicker from "./ServiceDatePicker.jsx";
 import ResvForm from "./ResvForm.jsx";
@@ -10,6 +11,7 @@ import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
 import ServiceBreakdown from "../ServiceBreakdown.jsx";
 
 const FONT = tokens.font;
+const R = tokens.radius;
 const baseInp = { ...baseInput };
 const fieldLabel = { ...fieldLabelMixin };
 const circBtnSm = { ...circleButton };
@@ -62,7 +64,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
     return `${weekDays[0].toLocaleDateString("en-GB", o)} – ${weekDays[6].toLocaleDateString("en-GB", o)}`.toUpperCase();
   };
 
-  const navBtn = { fontFamily: FONT, fontSize: 12, padding: "6px 10px", border: "1px solid #e8e8e8", borderRadius: 4, cursor: "pointer", background: "#fff", color: "#555" };
+  const navBtn = { fontFamily: FONT, fontSize: 12, padding: "6px 10px", border: `1px solid ${UI.border}`, borderRadius: R, cursor: "pointer", background: UI.surface, color: "#555" };
 
   const resvForDate = (ds) => reservations
     .filter(r => r.date === ds)
@@ -96,9 +98,9 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
         {/* Sticky header */}
         <div style={{ borderBottom: "1px solid #f0f0f0", padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 50, gap: 12 }}>
           <button onClick={() => { setSelectedDay(null); setEditingId(null); setTicketId(null); setDraftFromReservation(null); }}
-            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#1a1a1a", flexShrink: 0 }}>← WEEK</button>
+            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: `1px solid ${UI.border}`, borderRadius: R, cursor: "pointer", background: UI.surface, color: UI.ink, flexShrink: 0 }}>← WEEK</button>
           <div style={{ flex: 1, textAlign: "center" }}>
-            <div style={{ fontSize: 10, letterSpacing: 3, color: isService ? "#2f7a45" : "#1a1a1a", fontWeight: 600 }}>{dayLabel}</div>
+            <div style={{ fontSize: 10, letterSpacing: 3, color: isService ? "#2f7a45" : UI.ink, fontWeight: 600 }}>{dayLabel}</div>
             <div style={{ fontSize: 8, letterSpacing: 2, color: "#aaa", marginTop: 2 }}>
               {dayResv.length} reservation{dayResv.length !== 1 ? "s" : ""} · {totalGuests} guests
               {isService && <span style={{ color: "#2f7a45", marginLeft: 6 }}>● ACTIVE SERVICE</span>}
@@ -113,7 +115,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
               setEditingId(next);
               setDraftFromReservation(null);
             }}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: "pointer", background: editingId === "new" ? "#1a1a1a" : "#fff", color: editingId === "new" ? "#fff" : "#1a1a1a", fontWeight: 600 }}>+ ADD</button>
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: `1px solid ${editingId === "new" ? UI.line : UI.border}`, borderRadius: R, cursor: "pointer", background: editingId === "new" ? UI.selectedBg : UI.surface, color: UI.ink, fontWeight: 600 }}>+ ADD</button>
           </div>
         </div>
 
@@ -165,16 +167,16 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
 
             return (
               <div key={r.id} style={{
-                border: "1px solid #e8e8e8", borderRadius: 6, marginBottom: 10,
+                border: `1px solid ${UI.border}`, borderRadius: R, marginBottom: 10,
                 background: "#fff", overflow: "hidden",
               }}>
                 {/* Card header — always visible */}
                 <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
                   {/* Table badge */}
-                  <div style={{ background: "#1a1a1a", color: "#fff", fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 1, padding: "8px 12px", borderRadius: 4, minWidth: 48, textAlign: "center" }}>{tLabel}</div>
+                  <div style={{ background: UI.surface2, color: UI.ink, fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 1, padding: "8px 12px", border: `1px solid ${UI.line}`, borderRadius: R, minWidth: 48, textAlign: "center" }}>{tLabel}</div>
                   {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: FONT, fontSize: 13, color: "#1a1a1a", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontFamily: FONT, fontSize: 13, color: UI.ink, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {d.resName || "—"}
                     </div>
                     <div style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -198,9 +200,9 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                   {/* Action buttons */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
                     <button onClick={() => { setEditingId(isEditing ? null : r.id); if (!isEditing) setTicketId(null); }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid " + (isEditing ? "#1a1a1a" : "#d0d0d0"), borderRadius: 4, cursor: "pointer", background: isEditing ? "#1a1a1a" : "#fff", color: isEditing ? "#fff" : "#555" }}>EDIT</button>
+                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: `1px solid ${isEditing ? UI.line : UI.border}`, borderRadius: R, cursor: "pointer", background: isEditing ? UI.selectedBg : UI.surface, color: UI.ink }}>EDIT</button>
                     <button onClick={() => { setTicketId(showTicket ? null : r.id); if (!showTicket) setEditingId(null); }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid " + (showTicket ? "#1a1a1a" : "#d0d0d0"), borderRadius: 4, cursor: "pointer", background: showTicket ? "#1a1a1a" : "#fff", color: showTicket ? "#fff" : "#555" }}>TICKET</button>
+                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: `1px solid ${showTicket ? UI.line : UI.border}`, borderRadius: R, cursor: "pointer", background: showTicket ? UI.selectedBg : UI.surface, color: UI.ink }}>TICKET</button>
                     <button onClick={() => {
                       setEditingId("new");
                       setTicketId(null);
@@ -210,9 +212,9 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                         date: selectedDay,
                       });
                     }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid #d0d0d0", borderRadius: 4, cursor: "pointer", background: "#fff", color: "#666" }}>COPY</button>
+                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: `1px solid ${UI.border}`, borderRadius: R, cursor: "pointer", background: UI.surface, color: "#666" }}>COPY</button>
                     <button onClick={async () => { if (window.confirm(`Delete reservation for ${d.resName || tLabel}?`)) { await onDelete(r.id); setEditingId(null); setTicketId(null); } }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid #f0c0c0", borderRadius: 4, cursor: "pointer", background: "#fff8f8", color: "#c04040" }}>DEL</button>
+                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid #f0c0c0", borderRadius: R, cursor: "pointer", background: "#fff8f8", color: "#c04040" }}>DEL</button>
                   </div>
                 </div>
 
@@ -235,7 +237,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 {showTicket && ticketVirtualTable && (
                   <div style={{ borderTop: "1px solid #f0f0f0", padding: "12px 16px" }}>
                     <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 3, color: "#bbb", marginBottom: 8, textTransform: "uppercase" }}>Kitchen Ticket Preview</div>
-                    <div style={{ border: "1px solid #f0f0f0", borderRadius: 4, overflow: "hidden", background: "#fff" }}>
+                    <div style={{ border: `1px solid ${UI.borderLight}`, borderRadius: R, overflow: "hidden", background: UI.surface }}>
                       <KitchenTicket table={ticketVirtualTable} menuCourses={menuCourses} upd={updForTicket} />
                     </div>
                   </div>
@@ -255,16 +257,16 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
 
       {/* Sticky header */}
       <div style={{ borderBottom: "1px solid #f0f0f0", padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 50, gap: 12 }}>
-        <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#1a1a1a", flexShrink: 0 }}>← EXIT</button>
+        <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: `1px solid ${UI.border}`, borderRadius: R, cursor: "pointer", background: UI.surface, color: UI.ink, flexShrink: 0 }}>← EXIT</button>
         <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#999", flex: 1, textAlign: "center" }}>RESERVATIONS</span>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           <button onClick={() => setWeeklyPreview(weeklyPreview === "reservations" ? null : "reservations")}
-            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "reservations" ? "#1a1a1a" : "#d0d0d0"}`, borderRadius: 999, cursor: "pointer", background: weeklyPreview === "reservations" ? "#1a1a1a" : "#fff", color: weeklyPreview === "reservations" ? "#fff" : "#555", fontWeight: 600, flexShrink: 0 }}>OVERVIEW</button>
+            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "reservations" ? UI.line : UI.border}`, borderRadius: R, cursor: "pointer", background: weeklyPreview === "reservations" ? UI.selectedBg : UI.surface, color: UI.ink, fontWeight: 600, flexShrink: 0 }}>OVERVIEW</button>
           <button onClick={() => setWeeklyPreview(weeklyPreview === "allergies" ? null : "allergies")}
-            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "allergies" ? "#1a1a1a" : "#d0d0d0"}`, borderRadius: 999, cursor: "pointer", background: weeklyPreview === "allergies" ? "#1a1a1a" : "#fff", color: weeklyPreview === "allergies" ? "#fff" : "#555", fontWeight: 600, flexShrink: 0 }}>ALLERGIES</button>
+            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "allergies" ? UI.line : UI.border}`, borderRadius: R, cursor: "pointer", background: weeklyPreview === "allergies" ? UI.selectedBg : UI.surface, color: UI.ink, fontWeight: 600, flexShrink: 0 }}>ALLERGIES</button>
           <button onClick={() => setWeekOffset(w => w - 1)} style={navBtn}>◀</button>
           <button onClick={() => setWeekOffset(0)}
-            style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#888", minWidth: 110, textAlign: "center", background: "none", border: "1px solid #f0f0f0", borderRadius: 4, padding: "5px 0", cursor: "pointer" }}>{fmtRange()}</button>
+            style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#888", minWidth: 110, textAlign: "center", background: "none", border: `1px solid ${UI.borderLight}`, borderRadius: R, padding: "5px 0", cursor: "pointer" }}>{fmtRange()}</button>
           <button onClick={() => setWeekOffset(w => w + 1)} style={navBtn}>▶</button>
         </div>
       </div>
@@ -311,7 +313,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                   w.document.write(html); w.document.close(); w.focus();
                   setTimeout(() => w.print(), 800);
                 }}
-                  style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: "pointer", background: "#1a1a1a", color: "#fff", fontWeight: 600 }}>PRINT</button>
+                  style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px", border: `1px solid ${UI.line}`, borderRadius: R, cursor: "pointer", background: UI.surface2, color: UI.ink, fontWeight: 600 }}>PRINT</button>
                 <button onClick={() => setWeeklyPreview(null)}
                   style={{ fontFamily: FONT, fontSize: 10, background: "none", border: "none", cursor: "pointer", color: "#aaa", padding: "0 4px" }}>×</button>
               </div>

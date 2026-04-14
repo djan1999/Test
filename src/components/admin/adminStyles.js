@@ -1,5 +1,6 @@
 // Shared styles and constants for admin panel components
 import { tokens } from "../../styles/tokens.js";
+import { UI } from "../../styles/uiChrome.js";
 import { baseInput, fieldLabel as fieldLabelMixin } from "../../styles/mixins.js";
 
 export const FONT = tokens.font;
@@ -16,27 +17,29 @@ export const sectionHeader = {
 
 export const panelBtn = (active = false) => ({
   fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
-  border: `1px solid ${active ? tokens.colors.black : "#e8e8e8"}`,
-  borderRadius: 2, cursor: "pointer",
-  background: active ? tokens.colors.black : tokens.colors.white,
-  color: active ? tokens.colors.white : tokens.colors.gray500,
+  border: `1px solid ${active ? UI.line : "#e8e8e8"}`,
+  borderRadius: tokens.radius, cursor: "pointer",
+  background: active ? UI.selectedBg : tokens.colors.white,
+  color: active ? UI.ink : tokens.colors.gray500,
 });
 
 export const saveBtn = (saved = false) => ({
   fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
-  border: `1px solid ${saved ? "#4a9a6a" : "#c8a06e"}`, borderRadius: 2,
+  border: `1px solid ${saved ? "#4a9a6a" : "#c8a06e"}`, borderRadius: tokens.radius,
   cursor: "pointer",
-  background: saved ? "#4a9a6a" : "#c8a06e", color: tokens.colors.white,
+  background: saved ? "#eef8f1" : "#fdf9f2",
+  color: saved ? "#2f7a45" : "#7a5020",
+  fontWeight: 600,
 });
 
 export const dangerBtn = {
   fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
-  border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
+  border: "1px solid #ffcccc", borderRadius: tokens.radius, cursor: "pointer",
   background: "#fff9f9", color: "#c04040",
 };
 
 export const primaryBtn = {
   fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 20px",
-  border: `1px solid ${tokens.colors.black}`, borderRadius: 2, cursor: "pointer",
-  background: tokens.colors.black, color: tokens.colors.white,
+  border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: "pointer",
+  background: UI.surface2, color: UI.ink, fontWeight: 600,
 };

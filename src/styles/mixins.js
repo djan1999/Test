@@ -5,7 +5,7 @@ export const baseInput = {
   fontSize: tokens.mobileInputSize,
   padding: "10px 12px",
   border: "1px solid #e8e8e8",
-  borderRadius: 2,
+  borderRadius: tokens.radius,
   outline: "none",
   color: tokens.colors.black,
   background: tokens.colors.white,
@@ -31,7 +31,7 @@ export const chip = {
   letterSpacing: 1,
   padding: "6px 10px",
   border: "1px solid #e8e8e8",
-  borderRadius: 999,
+  borderRadius: tokens.radius,
   background: tokens.colors.white,
   whiteSpace: "nowrap",
 };
@@ -39,7 +39,7 @@ export const chip = {
 export const circleButton = {
   width: 36,
   height: 36,
-  borderRadius: "50%",
+  borderRadius: tokens.radius,
   border: "1px solid #e8e8e8",
   background: tokens.colors.white,
   color: "#444",

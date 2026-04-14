@@ -5,8 +5,10 @@ import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
 import { applyCourseRestriction, applyMenuOverride, RESTRICTION_COLUMN_MAP, RESTRICTION_PRIORITY_KEYS } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
+import { UI } from "../../styles/uiChrome.js";
 
 const FONT = tokens.font;
+const R = tokens.radius;
 
 export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }) {
   const seats = table.seats || [];
@@ -202,10 +204,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             onClick={e => { e.stopPropagation(); setShowEdit(v => !v); setPickingRestr(null); setCustomNote(""); setEditingCourse(null); }}
             style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 7px",
-              border: `1px solid ${showEdit ? "#1a1a1a" : "#ddd"}`,
-              borderRadius: 3, cursor: "pointer",
-              background: showEdit ? "#1a1a1a" : "#fff",
-              color: showEdit ? "#fff" : "#888",
+              border: `1px solid ${showEdit ? UI.line : "#ddd"}`,
+              borderRadius: R, cursor: "pointer",
+              background: showEdit ? UI.selectedBg : "#fff",
+              color: showEdit ? UI.ink : "#888",
               touchAction: "manipulation",
             }}>✏ EDIT</button>
         </div>
@@ -498,10 +500,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     onClick={e => { e.stopPropagation(); if (isEditingThis) { saveCourseDraft(key, editName, editNote); setEditingCourse(null); } else { startEditCourse(key); } }}
                     style={{
                       fontFamily: FONT, fontSize: 9, padding: "2px 6px", flexShrink: 0,
-                      border: `1px solid ${isEditingThis ? "#1a1a1a" : "#ddd"}`,
-                      borderRadius: 3, cursor: "pointer",
-                      background: isEditingThis ? "#1a1a1a" : "#fff",
-                      color: isEditingThis ? "#fff" : "#aaa",
+                      border: `1px solid ${isEditingThis ? UI.line : "#ddd"}`,
+                      borderRadius: R, cursor: "pointer",
+                      background: isEditingThis ? UI.selectedBg : "#fff",
+                      color: isEditingThis ? UI.ink : "#aaa",
                       touchAction: "manipulation",
                     }}>✏</button>
                 )}
@@ -606,15 +608,17 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
 export function KitchenAlertOverlay({ alerts, onConfirm }) {
   if (alerts.length === 0) return null;
   const PAIR_COLORS = {
-    Wine:      { color: "#7a5020", bg: "#fdf4e8", border: "#c8a060" },
-    "Non-Alc": { color: "#1f5f73", bg: "#e8f7fb", border: "#7fc6db" },
-    Premium:   { color: "#5a5a8a", bg: "#f0eeff", border: "#aaaacc" },
-    "Our Story":{ color: "#3a7a5a", bg: "#eaf5ee", border: "#7abf9a" },
+    Wine:      { color: "#7a5020", bg: "transparent", border: "#c8a060" },
+    "Non-Alc": { color: "#1f5f73", bg: "transparent", border: "#7fc6db" },
+    Premium:   { color: "#5a5a8a", bg: "transparent", border: "#aaaacc" },
+    "Our Story":{ color: "#3a7a5a", bg: "transparent", border: "#7abf9a" },
   };
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 9999,
-      background: "rgba(0,0,0,0.72)",
+      background: "rgba(32, 42, 54, 0.52)",
+      backdropFilter: "blur(4px)",
+      WebkitBackdropFilter: "blur(4px)",
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       gap: 16, padding: "24px 16px", overflowY: "auto",
     }}>
@@ -646,42 +650,46 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
         const timeStr = `${String(ts.getHours()).padStart(2,"0")}:${String(ts.getMinutes()).padStart(2,"0")}`;
         return (
           <div key={tableId} style={{
-            background: "#fff", borderRadius: 10, maxWidth: 480, width: "100%",
-            boxShadow: "0 16px 48px rgba(0,0,0,0.4)",
+            background: "#fff", borderRadius: 0, maxWidth: 440, width: "100%",
+            border: "1px solid #e0e0e0",
+            boxShadow: "0 12px 40px rgba(0,0,0,0.12)",
             overflow: "hidden",
           }}>
-            {/* Header */}
+            {/* Header — light, no black bar */}
             <div style={{
-              background: "#1a1a1a", padding: "14px 20px",
-              display: "flex", alignItems: "center", justifyContent: "space-between",
+              background: "#fafafa",
+              borderBottom: "1px solid #e8e8e8",
+              padding: "14px 18px",
+              display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12,
             }}>
               <div>
-                <span style={{ fontFamily: FONT, fontSize: 16, fontWeight: 700, letterSpacing: 2, color: "#fff" }}>
-                  TABLE {tableId}{alert.tableName ? ` — ${alert.tableName}` : ""}
+                <span style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 2, color: "#888", display: "block", marginBottom: 4 }}>KITCHEN ALERT</span>
+                <span style={{ fontFamily: FONT, fontSize: 15, fontWeight: 600, letterSpacing: 0.5, color: "#333" }}>
+                  Table {String(tableId).padStart(2, "0")}{alert.tableName ? ` · ${alert.tableName}` : ""}
                 </span>
               </div>
-              <span style={{ fontFamily: FONT, fontSize: 10, color: "#888", letterSpacing: 1 }}>{timeStr}</span>
+              <span style={{ fontFamily: FONT, fontSize: 10, color: "#aaa", letterSpacing: 0.5, flexShrink: 0 }}>{timeStr}</span>
             </div>
             {/* Body */}
-            <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
               {pairSeats.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#666", minWidth: 60 }}>PAIRING</span>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, rowGap: 8 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.6, color: "#999", minWidth: 72, textTransform: "uppercase" }}>Pairing</span>
                   {pairSeats.map(s => {
                     const c = PAIR_COLORS[s.pairing] || {};
                     return (
-                      <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: c.bg || "#f5f5f5", border: `1px solid ${c.border || "#ddd"}`, color: c.color || "#444" }}>
-                        P{s.id} {s.pairing}
+                      <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "4px 10px", borderRadius: 0, background: "transparent", border: `1px solid ${c.border || "#ddd"}`, color: c.color || "#444" }}>
+                        P{s.id} · {s.pairing}
                       </span>
                     );
                   })}
                 </div>
               )}
               {extrasGroups.map(group => (
-                <div key={group.name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#666", minWidth: 60 }}>{group.name.toUpperCase()}</span>
+                <div key={group.name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, rowGap: 8 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.6, color: "#999", minWidth: 72, textTransform: "uppercase" }}>{group.name}</span>
                   {group.seats.map(s => (
-                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "#edf8e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>
+                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "4px 10px", borderRadius: 0, background: "transparent", border: "1px solid #9bc48a", color: "#3a6a32" }}>
                       P{s.id}{s.pairing && s.pairing !== "—" ? ` · ${s.pairing}` : ""}
                     </span>
                   ))}
@@ -692,11 +700,11 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
               )}
             </div>
             {/* Confirm */}
-            <div style={{ padding: "12px 20px", borderTop: "1px solid #f0f0f0", display: "flex", justifyContent: "flex-end" }}>
-              <button onClick={() => onConfirm(tableId)} style={{
-                fontFamily: FONT, fontSize: 11, letterSpacing: 1.5, padding: "10px 28px",
-                border: "none", borderRadius: 4, cursor: "pointer",
-                background: "#1a1a1a", color: "#fff", fontWeight: 700, textTransform: "uppercase",
+            <div style={{ padding: "12px 18px 16px", borderTop: "1px solid #eee", display: "flex", justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => onConfirm(tableId)} style={{
+                fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
+                border: "1px solid #5aaa70", borderRadius: 0, cursor: "pointer",
+                background: "#f4fbf6", color: "#2d6a42", fontWeight: 700, textTransform: "uppercase",
               }}>Confirm</button>
             </div>
           </div>

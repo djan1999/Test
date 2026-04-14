@@ -2,9 +2,11 @@ import { useState } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 import { RESTRICTIONS, RESTRICTION_GROUPS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
+import { UI } from "../../styles/uiChrome.js";
 import { baseInput, fieldLabel as mixinFieldLabel, circleButton as mixinCircleButton } from "../../styles/mixins.js";
 
 const FONT = tokens.font;
+const R = tokens.radius;
 const baseInp = { ...baseInput };
 const fieldLabel = { ...mixinFieldLabel };
 const circBtnSm = { ...mixinCircleButton };
@@ -90,10 +92,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   style={{
                     fontFamily: FONT, fontSize: 13, fontWeight: 500, letterSpacing: 1,
                     padding: "12px 0", border: "1px solid",
-                    borderColor: isSel ? "#1a1a1a" : isActive ? "#f0f0f0" : isBooked ? "#f0c8a8" : "#e8e8e8",
-                    borderRadius: 2, cursor: isActive ? "not-allowed" : "pointer",
-                    background: isSel ? "#1a1a1a" : isActive ? "#f8f8f8" : isBooked ? "#fff8f2" : "#fff",
-                    color: isSel ? "#fff" : isActive ? "#ccc" : isBooked ? "#c07840" : "#444",
+                    borderColor: isSel ? UI.line : isActive ? "#f0f0f0" : isBooked ? "#f0c8a8" : "#e8e8e8",
+                    borderRadius: R, cursor: isActive ? "not-allowed" : "pointer",
+                    background: isSel ? UI.selectedBg : isActive ? "#f8f8f8" : isBooked ? "#fff8f2" : "#fff",
+                    color: isSel ? UI.ink : isActive ? "#ccc" : isBooked ? "#c07840" : "#444",
                     transition: "all 0.1s",
                   }}>
                   T{String(tid).padStart(2, "0")}
@@ -121,10 +123,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                 <button key={t} onClick={() => setTime(t)} style={{
                   fontFamily: FONT, fontSize: 13, letterSpacing: 1,
                   padding: "14px 0", flex: 1, border: "1px solid",
-                  borderColor: time === t ? "#1a1a1a" : "#e8e8e8",
-                  borderRadius: 2, cursor: "pointer",
-                  background: time === t ? "#1a1a1a" : "#fff",
-                  color: time === t ? "#fff" : "#888",
+                  borderColor: time === t ? UI.line : "#e8e8e8",
+                  borderRadius: R, cursor: "pointer",
+                  background: time === t ? UI.selectedBg : "#fff",
+                  color: time === t ? UI.ink : "#888",
                   transition: "all 0.12s",
                 }}>{t}</button>
               ))}
@@ -137,10 +139,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   <button key={opt} onClick={() => setMenuType(m => m === opt ? "" : opt)} style={{
                     fontFamily: FONT, fontSize: 10, letterSpacing: 2,
                     padding: "10px 24px", border: "1px solid",
-                    borderColor: menuType === opt ? "#1a1a1a" : "#e8e8e8",
-                    borderRadius: 2, cursor: "pointer",
-                    background: menuType === opt ? "#1a1a1a" : "#fff",
-                    color: menuType === opt ? "#fff" : "#888",
+                    borderColor: menuType === opt ? UI.line : "#e8e8e8",
+                    borderRadius: R, cursor: "pointer",
+                    background: menuType === opt ? UI.selectedBg : "#fff",
+                    color: menuType === opt ? UI.ink : "#888",
                     textTransform: "uppercase",
                   }}>{opt}</button>
                 ))}
@@ -154,10 +156,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                 <button key={opt.v} onClick={() => setLang(opt.v)} style={{
                   fontFamily: FONT, fontSize: 10, letterSpacing: 2,
                   padding: "10px 24px", border: "1px solid",
-                  borderColor: lang === opt.v ? "#1a1a1a" : "#e8e8e8",
-                  borderRadius: 2, cursor: "pointer",
-                  background: lang === opt.v ? "#1a1a1a" : "#fff",
-                  color: lang === opt.v ? "#fff" : "#888",
+                  borderColor: lang === opt.v ? UI.line : "#e8e8e8",
+                  borderRadius: R, cursor: "pointer",
+                  background: lang === opt.v ? UI.selectedBg : "#fff",
+                  color: lang === opt.v ? UI.ink : "#888",
                   textTransform: "uppercase",
                 }}>{opt.l}</button>
               ))}
@@ -180,10 +182,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   <button key={type} onClick={() => { setGuestType(t => t === type ? "" : type); setRoom(""); }} style={{
                     fontFamily: FONT, fontSize: 11, letterSpacing: 1,
                     padding: "12px 0", flex: 1, border: "1px solid",
-                    borderColor: guestType === type ? "#1a1a1a" : "#e8e8e8",
-                    borderRadius: 2, cursor: "pointer",
-                    background: guestType === type ? "#1a1a1a" : "#fff",
-                    color: guestType === type ? "#fff" : "#444",
+                    borderColor: guestType === type ? UI.line : "#e8e8e8",
+                    borderRadius: R, cursor: "pointer",
+                    background: guestType === type ? UI.selectedBg : "#fff",
+                    color: guestType === type ? UI.ink : "#444",
                     transition: "all 0.12s", textTransform: "uppercase",
                   }}>{type}</button>
                 ))}
@@ -259,7 +261,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                             <span style={{
                               marginLeft: 5,
                               background: "#e09090", color: "#fff",
-                              borderRadius: 99, fontSize: 9, fontWeight: 700,
+                              borderRadius: R, fontSize: 9, fontWeight: 700,
                               padding: "1px 5px", verticalAlign: "middle",
                             }}>{count}</span>
                           )}
@@ -309,11 +311,11 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
         <div style={{ display: "flex", gap: 10, marginTop: 28 }}>
           <button onClick={onClose} style={{
             flex: 1, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
-            padding: "14px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#444",
+            padding: "14px", border: `1px solid ${UI.border}`, borderRadius: R, cursor: "pointer", background: UI.surface, color: UI.ink,
           }}>CANCEL</button>
           <button onClick={() => onSave({ tableIds, name, time, menuType, guests, guestType, room, birthday, restrictions, notes, lang })} style={{
             flex: 2, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
-            padding: "14px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff",
+            padding: "14px", border: `1px solid ${UI.line}`, borderRadius: R, cursor: "pointer", background: UI.surface2, color: UI.ink, fontWeight: 600,
           }}>SAVE</button>
         </div>
       </div>
