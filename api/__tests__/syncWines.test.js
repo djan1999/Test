@@ -4,6 +4,8 @@ import {
   parseWinesFromHtml,
   parseBeveragesFromHtml,
   withRetry,
+  isAuthorizedSyncSecret,
+  parseSyncConfigFromRequestUrl,
 } from "../sync-wines.js";
 import handler from "../sync-wines.js";
 
@@ -253,6 +255,70 @@ describe("withRetry", () => {
 });
 
 // ── handler auth ────────────────────────────────────────────────────────────────
+
+describe("isAuthorizedSyncSecret", () => {
+  it("accepts CRON_SECRET when set", () => {
+    const prevCron = process.env.CRON_SECRET;
+    const prevSync = process.env.SYNC_SECRET;
+    process.env.CRON_SECRET = "cron-only";
+    delete process.env.SYNC_SECRET;
+    try {
+      expect(isAuthorizedSyncSecret("cron-only")).toBe(true);
+      expect(isAuthorizedSyncSecret("wrong")).toBe(false);
+    } finally {
+      if (prevCron === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = prevCron;
+      if (prevSync === undefined) delete process.env.SYNC_SECRET;
+      else process.env.SYNC_SECRET = prevSync;
+    }
+  });
+
+  it("accepts SYNC_SECRET when CRON_SECRET is unset", () => {
+    const prevCron = process.env.CRON_SECRET;
+    const prevSync = process.env.SYNC_SECRET;
+    delete process.env.CRON_SECRET;
+    process.env.SYNC_SECRET = "sync-only";
+    try {
+      expect(isAuthorizedSyncSecret("sync-only")).toBe(true);
+      expect(isAuthorizedSyncSecret("wrong")).toBe(false);
+    } finally {
+      if (prevCron === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = prevCron;
+      if (prevSync === undefined) delete process.env.SYNC_SECRET;
+      else process.env.SYNC_SECRET = prevSync;
+    }
+  });
+
+  it("accepts either secret when both are set", () => {
+    const prevCron = process.env.CRON_SECRET;
+    const prevSync = process.env.SYNC_SECRET;
+    process.env.CRON_SECRET = "a";
+    process.env.SYNC_SECRET = "b";
+    try {
+      expect(isAuthorizedSyncSecret("a")).toBe(true);
+      expect(isAuthorizedSyncSecret("b")).toBe(true);
+      expect(isAuthorizedSyncSecret("c")).toBe(false);
+    } finally {
+      if (prevCron === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = prevCron;
+      if (prevSync === undefined) delete process.env.SYNC_SECRET;
+      else process.env.SYNC_SECRET = prevSync;
+    }
+  });
+});
+
+describe("parseSyncConfigFromRequestUrl", () => {
+  it("returns null when config param is absent", () => {
+    expect(parseSyncConfigFromRequestUrl("http://localhost/api/sync-wines?secret=x")).toBeNull();
+  });
+
+  it("parses JSON config from query string", () => {
+    const cfg = { wineCountries: ["SI"], beveragesEnabled: false };
+    const encoded = encodeURIComponent(JSON.stringify(cfg));
+    const parsed = parseSyncConfigFromRequestUrl(`http://localhost/api/sync-wines?config=${encoded}`);
+    expect(parsed).toEqual(cfg);
+  });
+});
 
 describe("sync-wines handler auth", () => {
   it("requires CRON secret even when sec-fetch-site is same-origin", async () => {

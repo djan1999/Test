@@ -137,7 +137,7 @@ const normalizeSyncConfig = (raw) => {
   return {
     winesEnabled: cfg.winesEnabled !== false,
     beveragesEnabled: cfg.beveragesEnabled !== false,
-    wineCountries: countries.map(c => String(c || "").trim()).filter(Boolean),
+    wineCountries: countries.map(c => String(c || "").trim().toUpperCase()).filter(Boolean),
     beveragePages: beveragePages
       .map((p) => ({
         category: String(p?.category || "").trim().toLowerCase(),
