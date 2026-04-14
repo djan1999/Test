@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { WATER_OPTS, waterStyle } from "../../constants/pairings.js";
 import { tokens } from "../../styles/tokens.js";
 
-export default function WaterPicker({ value, onChange }) {
+export default function WaterPicker({ value, onChange, variant = "default" }) {
+  const sharp = variant === "service";
   const [open, setOpen] = useState(false);
   const ref = useRef();
   useEffect(() => {
@@ -27,7 +28,7 @@ export default function WaterPicker({ value, onChange }) {
           fontWeight: 500,
           padding: "6px 10px",
           border: "1px solid #e8e8e8",
-          borderRadius: 2,
+          borderRadius: sharp ? 0 : 2,
           cursor: "pointer",
           width: "100%",
           background: ws.bg,
@@ -45,7 +46,7 @@ export default function WaterPicker({ value, onChange }) {
             left: 0,
             background: "#fff",
             border: "1px solid #e8e8e8",
-            borderRadius: 2,
+            borderRadius: sharp ? 0 : 2,
             zIndex: 200,
             overflow: "hidden",
             boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
@@ -65,8 +66,8 @@ export default function WaterPicker({ value, onChange }) {
                 fontFamily: tokens.font,
                 fontSize: 12,
                 letterSpacing: 1,
-                color: value === opt ? "#1a1a1a" : "#999",
-                background: value === opt ? "#f8f8f8" : "#fff",
+                color: value === opt ? (sharp ? "#1f5f73" : "#1a1a1a") : "#999",
+                background: value === opt ? (sharp ? "#e8f4fa" : "#f5f5f5") : "#fff",
                 fontWeight: value === opt ? 500 : 400,
                 borderBottom: "1px solid #f5f5f5",
               }}

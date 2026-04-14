@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FONT, baseInp } from "./adminStyles.js";
+import { UI } from "../../styles/uiChrome.js";
 import { optionalExtrasFromCourses, optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 
-const SELECTED_RING = "#4b4b88";
+const SELECTED_RING = UI.line;
 
 const PREVIEW_PAIRINGS = [
   { value: "—",         label: "None"      },
@@ -37,7 +38,7 @@ export function DrinkPill({ label, sub, onRemove }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 4,
-      background: "#f0f0f8", border: "1px solid #d8d8e8", borderRadius: 2,
+      background: UI.surface2, border: `1px solid ${UI.border}`, borderRadius: 2,
       padding: "2px 6px", fontFamily: FONT, fontSize: 8,
     }}>
       <span style={{ color: "#444", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -113,7 +114,7 @@ export function MiniSearch({ wines = [], cocktails = [], spirits = [], beers = [
               padding: "6px 10px", cursor: "pointer", fontFamily: FONT,
               borderBottom: "1px solid #f4f4f4",
             }}
-              onMouseEnter={e => { e.currentTarget.style.background = "#f4f3fb"; }}
+              onMouseEnter={e => { e.currentTarget.style.background = UI.surface2; }}
               onMouseLeave={e => { e.currentTarget.style.background = "#fff"; }}
             >
               <div style={{ fontSize: 9, fontWeight: 700, color: "#222" }}>{r.name}</div>
@@ -174,8 +175,8 @@ export function PreviewDataPanel({
     fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
     padding: "3px 8px", border: `1px solid ${active ? SELECTED_RING : "#ddd"}`,
     borderRadius: 2, cursor: "pointer",
-    background: active ? "#f0f0f8" : "#fff",
-    color: active ? SELECTED_RING : "#666",
+    background: active ? UI.selectedBg : "#fff",
+    color: active ? UI.ink : "#666",
   });
 
   const seatTabStyle = (i) => ({
@@ -187,7 +188,7 @@ export function PreviewDataPanel({
 
   return (
     <div style={{
-      borderBottom: "1px solid #ede9e0", background: "#fdf9f4",
+      borderBottom: `1px solid ${UI.border}`, background: UI.surface2,
       flexShrink: 0, overflow: "hidden",
     }}>
       {/* Header strip — always visible */}
@@ -197,7 +198,7 @@ export function PreviewDataPanel({
       }}>
         <button
           onClick={onToggle}
-          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#c8a96e", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: UI.textMuted, background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
         >{open ? "▾ PREVIEW DATA" : "▸ PREVIEW DATA"}</button>
 
         <div style={{ width: 1, height: 14, background: "#e8e4dc", flexShrink: 0 }} />

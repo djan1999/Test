@@ -1,17 +1,17 @@
 export const WATER_OPTS = ["—", "XC", "XW", "OC", "OW"];
 
 export const waterStyle = (v) => {
-  if (v === "XC" || v === "XW") return { color: "#1a1a1a", bg: "#f0f0f0" };
-  if (v === "OC" || v === "OW") return { color: "#1a1a1a", bg: "#e8e8e8" };
+  if (v === "XC" || v === "XW") return { color: "#1f5f73", bg: "#e8f4fa", border: "#7fc6db" };
+  if (v === "OC" || v === "OW") return { color: "#6a4818", bg: "#fdf4e8", border: "#d4b888" };
   return { color: "#555", bg: "transparent" };
 };
 
 export const PAIRINGS = ["—", "Wine", "Non-Alc", "Premium", "Our Story"];
 
 export const pairingStyle = {
-  "—": { color: "#666", border: "#d8d8d8", bg: "#f5f5f5" },
-  "Non-Alc": { color: "#1f5f73", border: "#7fc6db88", bg: "#7fc6db12" },
-  Wine: { color: "#8a6030", border: "#c8a06088", bg: "#c8a06008" },
-  Premium: { color: "#5a5a8a", border: "#8888bb88", bg: "#8888bb08" },
-  "Our Story": { color: "#3a7a5a", border: "#5aaa7a88", bg: "#5aaa7a08" },
+  "—": { color: "#555555", border: "#c8c8c8", bg: "#f5f5f5" },
+  "Non-Alc": { color: "#1f5f73", border: "#7fc6db", bg: "#e8f5fa" },
+  Wine: { color: "#6a3a20", border: "#c8a060", bg: "#fdf4e8" },
+  Premium: { color: "#4a3a7a", border: "#a8a0d0", bg: "#f0eeff" },
+  "Our Story": { color: "#2a6a4a", border: "#7abf9a", bg: "#eaf5ee" },
 };

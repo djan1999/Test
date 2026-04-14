@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { FONT } from "./adminStyles.js";
+import { UI } from "../../styles/uiChrome.js";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
 
 // ── ArchivePanel — view, restore, delete saved service archives ──
@@ -131,7 +132,7 @@ export default function ArchivePanel() {
                       <span style={{ fontFamily: FONT, fontSize: 16, fontWeight: 300, color: "#999" }}>{String(t.id).padStart(2, "0")}</span>
                       {t.resName && <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{t.resName}</span>}
                       <span style={{ fontFamily: FONT, fontSize: 10, color: "#888" }}>{t.guests || 0} guests</span>
-                      {t.menuType && <span style={{ fontFamily: FONT, fontSize: 9, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 2, padding: "1px 6px" }}>{t.menuType}</span>}
+                      {t.menuType && <span style={{ fontFamily: FONT, fontSize: 9, color: UI.ink, border: `1px solid ${UI.border}`, borderRadius: 2, padding: "1px 6px" }}>{t.menuType}</span>}
                       {t.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a" }}>{t.arrivedAt}</span>}
                     </div>
                   </div>

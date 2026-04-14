@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { FONT } from "./adminStyles.js";
+import { tokens } from "../../styles/tokens.js";
+import { UI, outlineBtn, primaryAction } from "../../styles/uiChrome.js";
 
 // ── SystemPanel — Supabase connection status, realtime, environment, debug ──
 export default function SystemPanel({
@@ -36,7 +38,7 @@ export default function SystemPanel({
     setTimeout(() => setSyncResult(null), 3000);
   };
 
-  const statusColor = syncStatus === "live" ? "#2a7a2a" : syncStatus === "local-only" ? "#888" : syncStatus === "connecting" ? "#c8a06e" : "#c04040";
+  const statusColor = syncStatus === "live" ? "#2a7a2a" : syncStatus === "local-only" ? "#888" : syncStatus === "connecting" ? "#666" : "#c04040";
   const statusLabel = syncStatus === "live" ? "Connected" : syncStatus === "local-only" ? "Local Only" : syncStatus === "connecting" ? "Connecting..." : "Error";
   const activeProfile = safeProfiles.find(p => p.id === activeLayoutProfileId) || safeProfiles[0] || null;
 
@@ -74,10 +76,9 @@ export default function SystemPanel({
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button onClick={handleManualSync} disabled={syncResult === "syncing"} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
-            border: `1px solid ${syncResult === "ok" ? "#8fc39f" : syncResult === "err" ? "#e89898" : "#c8a06e"}`,
             borderRadius: 2, cursor: syncResult === "syncing" ? "not-allowed" : "pointer",
-            background: syncResult === "ok" ? "#eef8f1" : syncResult === "err" ? "#fff0f0" : "#fffaf4",
-            color: syncResult === "ok" ? "#2f7a45" : syncResult === "err" ? "#c04040" : "#8a6020",
+            opacity: syncResult === "syncing" ? 0.65 : 1,
+            ...(syncResult === "ok" ? primaryAction : syncResult === "err" ? { background: UI.errSoft, color: UI.errText, border: `1px solid ${UI.errBorder}` } : outlineBtn),
           }}>
             {syncResult === "syncing" ? "SYNCING..." : syncResult === "ok" ? "SYNCED" : syncResult === "err" ? "FAILED" : "RESYNC WINES"}
           </button>
@@ -98,7 +99,7 @@ export default function SystemPanel({
             <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginBottom: 8 }}>
               Upload PNG, JPG, or SVG. Will be embedded in all printed menus.
             </div>
-            <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff", display: "inline-block" }}>
+            <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: "pointer", background: UI.surface2, color: UI.ink, display: "inline-block", fontWeight: 600 }}>
               UPLOAD LOGO
               <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
                 const file = e.target.files[0];
@@ -135,7 +136,7 @@ export default function SystemPanel({
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
-            <button onClick={() => onCreateLayoutProfile?.()} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#1a1a1a" }}>NEW BLANK LAYOUT</button>
+            <button onClick={() => onCreateLayoutProfile?.()} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", borderRadius: 2, cursor: "pointer", ...outlineBtn }}>NEW BLANK LAYOUT</button>
             <button
               onClick={() => activeProfile && onDeleteLayoutProfile?.(activeProfile.id)}
               disabled={safeProfiles.length <= 1}
@@ -186,7 +187,7 @@ export default function SystemPanel({
             <button
               onClick={async () => { setSyncConfigSaving(true); try { await onSaveWineSyncConfig?.(); } finally { setSyncConfigSaving(false); } }}
               disabled={syncConfigSaving}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: syncConfigSaving ? "not-allowed" : "pointer", background: "#1a1a1a", color: "#fff" }}
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: syncConfigSaving ? "not-allowed" : "pointer", background: UI.surface2, color: UI.ink, fontWeight: 600 }}
             >
               {syncConfigSaving ? "SAVING..." : "SAVE SYNC CONFIG"}
             </button>

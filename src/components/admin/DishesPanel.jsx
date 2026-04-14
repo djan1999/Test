@@ -1,5 +1,7 @@
 import { useState, useRef } from "react";
 import { FONT, baseInp, fieldLabel, primaryBtn } from "./adminStyles.js";
+import { UI } from "../../styles/uiChrome.js";
+import { tokens } from "../../styles/tokens.js";
 
 // ── DishesPanel — manage dishes and restrictions ──
 // Contains:
@@ -34,7 +36,7 @@ export default function DishesPanel({ dishes, onUpdateDishes }) {
         background: "#fafafa", border: "1px solid #f0f0f0", borderRadius: 4, marginBottom: 28,
         lineHeight: 1.6,
       }}>
-        Main dish names, descriptions, dietary flags, restriction variants, course keys, and kitchen notes are managed in <strong style={{ color: "#4b4b88" }}>Menu Layout</strong>.
+        Main dish names, descriptions, dietary flags, restriction variants, course keys, and kitchen notes are managed in <strong style={{ color: "#1a1a1a" }}>Menu Layout</strong>.
         <br />
         Use the + button on each course to add restrictions and pairings.
       </div>
@@ -80,7 +82,7 @@ export default function DishesPanel({ dishes, onUpdateDishes }) {
       <div style={{ borderTop: "1px solid #f0f0f0", marginTop: 24, paddingTop: 14 }}>
         <button onClick={() => onUpdateDishes(localDishes)} style={{
           fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
-          border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff",
+          border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: "pointer", background: UI.surface2, color: UI.ink, fontWeight: 600,
         }}>SAVE EXTRAS</button>
       </div>
     </>

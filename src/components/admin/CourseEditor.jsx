@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DIETARY_KEYS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput } from "../../styles/mixins.js";
+import { UI } from "../../styles/uiChrome.js";
 
 const FONT = tokens.font;
 const baseInp = { ...baseInput };
@@ -57,7 +58,7 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
           <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a1a1a" }}>{course.menu?.name || "(unnamed)"}</span>
           {course.menu?.sub && <span style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginLeft: 8 }}>{course.menu.sub}</span>}
         </div>
-        {course.is_snack && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 2, padding: "2px 6px" }}>SNACK</span>}
+        {course.is_snack && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: UI.ink, border: `1px solid ${UI.border}`, borderRadius: 2, padding: "2px 6px" }}>SNACK</span>}
         <div style={{ display: "flex", gap: 4 }}>
           <button onClick={e => { e.stopPropagation(); onMoveUp(); }} disabled={isFirst} style={{ background: "none", border: "none", cursor: isFirst ? "default" : "pointer", color: isFirst ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▲</button>
           <button onClick={e => { e.stopPropagation(); onMoveDown(); }} disabled={isLast} style={{ background: "none", border: "none", cursor: isLast ? "default" : "pointer", color: isLast ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▼</button>
@@ -115,12 +116,12 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
             <div><div style={labelSm}>Aperitif Btn</div><input value={course.aperitif_btn || ""} onChange={e => upd("aperitif_btn", e.target.value || null)} style={inpSm} placeholder="Button label" /></div>
           </div>
           {hasOptionalPairing && (
-            <div style={{ fontFamily: FONT, fontSize: 9, color: "#9a6020", marginBottom: 12 }}>
+            <div style={{ fontFamily: FONT, fontSize: 9, color: "#666", marginBottom: 12 }}>
               Optional pairing is course-owned. Menu generation auto-picks <strong>Alcoholic</strong> for Wine / Premium / Our Story pairings and <strong>Non-Alcoholic</strong> for Non-Alc pairing. Uses this course pairings in the active language.
             </div>
           )}
           {hasOptionalPairing && !hasPairingData && (
-            <div style={{ fontFamily: FONT, fontSize: 9, color: "#b07040", marginBottom: 12 }}>
+            <div style={{ fontFamily: FONT, fontSize: 9, color: "#666", marginBottom: 12 }}>
               Add pairing data below (WP/NA/OS/Premium). Optional pairing is only available when course pairing data exists.
             </div>
           )}
@@ -151,7 +152,7 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
             { key: "premium", label: "Premium" },
           ].map(({ key, label }) => (
             <div key={key} style={{ display: "grid", gridTemplateColumns: "70px 1fr 1fr 1fr 1fr", gap: 6, marginBottom: 4, alignItems: "center" }}>
-              <span style={{ fontFamily: FONT, fontSize: 9, color: "#c8a06e", fontWeight: 600 }}>{label}</span>
+              <span style={{ fontFamily: FONT, fontSize: 9, color: UI.ink, fontWeight: 600 }}>{label}</span>
               <input value={course[key]?.name || ""} onChange={e => updPairing(key, "en", "name", e.target.value)} style={inpSm} placeholder="Name (EN)" />
               <input value={course[key]?.sub || ""} onChange={e => updPairing(key, "en", "sub", e.target.value)} style={inpSm} placeholder="Sub (EN)" />
               <input value={course[`${key}_si`]?.name || ""} onChange={e => updPairing(key, "si", "name", e.target.value)} style={inpSm} placeholder="Name (SI)" />

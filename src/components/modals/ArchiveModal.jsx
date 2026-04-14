@@ -5,13 +5,14 @@ import { supabase, TABLES } from "../../lib/supabaseClient.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
 import { restrLabel } from "../../constants/dietary.js";
-import { waterStyle } from "../../constants/pairings.js";
+import { waterStyle, pairingStyle, PAIRINGS } from "../../constants/pairings.js";
 import { parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
+import { outlineBtn, toggleOn } from "../../styles/uiChrome.js";
 
 const FONT = tokens.font;
-const PAIRING_COLOR = { Wine: "#8a6030", "Non-Alc": "#1f5f73", Premium: "#3a3a7a", "Our Story": "#2a6a4a" };
-const PAIRING_BG = { Wine: "#fdf4e8", "Non-Alc": "#e8f7fb", Premium: "#eaeaf5", "Our Story": "#e0f5ea" };
+const PAIRING_COLOR = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].color]));
+const PAIRING_BG = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].bg]));
 
 export default function ArchiveModal({
   tables,
@@ -111,15 +112,15 @@ export default function ArchiveModal({
     <div style={{ display: "flex", gap: 8 }}>
       <button onClick={onSeedTest} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 14px",
-        border: "1px solid #b0d8b0", borderRadius: 2, cursor: "pointer", background: "#f0fbf0", color: "#307030",
+        borderRadius: 2, cursor: "pointer", ...outlineBtn,
       }}>SEED TEST</button>
       <button onClick={onClearAll} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 14px",
-        border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888",
+        borderRadius: 2, cursor: "pointer", border: "1px solid #d0d0d0", background: "#fff", color: "#555",
       }}>CLEAR ALL</button>
       <button onClick={async () => { await onArchiveAndClear(); loadEntries(); }} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
-        border: "1px solid #c8a06e", borderRadius: 2, cursor: "pointer", background: "#fdf8f0", color: "#8a6030",
+        borderRadius: 2, cursor: "pointer", ...outlineBtn, fontWeight: 600,
       }}>ARCHIVE & CLEAR ({activeTables.length})</button>
     </div>
   );
@@ -218,7 +219,7 @@ export default function ArchiveModal({
                                   {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
                                   {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
                                   {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
-                                  {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
+                                  {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: tokens.radius, ...toggleOn }}>{d.name}</span>)}
                                   {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
                                 </div>
                               );
@@ -313,7 +314,7 @@ export default function ArchiveModal({
                                 {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
                                 {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
                                 {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
-                                {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
+                                {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: tokens.radius, ...toggleOn }}>{d.name}</span>)}
                                 {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
                               </div>
                             );

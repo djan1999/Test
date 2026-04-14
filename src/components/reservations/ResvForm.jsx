@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { RESTRICTIONS, RESTRICTION_GROUPS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
+import { UI } from "../../styles/uiChrome.js";
 import { baseInput, fieldLabel as mixinFieldLabel, circleButton } from "../../styles/mixins.js";
 
 const FONT = tokens.font;
+const R = tokens.radius;
 const MOBILE_SAFE_INPUT_SIZE = tokens.mobileInputSize;
 const baseInp = { ...baseInput };
 const fieldLabel = { ...mixinFieldLabel };
@@ -89,10 +91,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                 style={{
                   fontFamily: FONT, fontSize: 11, padding: "9px 0",
                   border: "1px solid",
-                  borderColor: isSel ? "#1a1a1a" : conflict ? "#f0d0b0" : "#e0e0e0",
-                  borderRadius: 2,
-                  background: isSel ? "#1a1a1a" : conflict ? "#fff8f2" : "#fff",
-                  color: isSel ? "#fff" : conflict ? "#c07840" : "#555",
+                  borderColor: isSel ? UI.line : conflict ? "#f0d0b0" : "#e0e0e0",
+                  borderRadius: R,
+                  background: isSel ? UI.selectedBg : conflict ? "#fff8f2" : "#fff",
+                  color: isSel ? UI.ink : conflict ? "#c07840" : "#555",
                   cursor: conflict ? "not-allowed" : "pointer",
                 }}
               >
@@ -115,10 +117,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             {SITTING_TIMES.map((t) => (
               <button key={t} onClick={() => setTime(t === time ? "" : t)} style={{
                 fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "8px 0",
-                border: "1px solid", borderColor: time === t ? "#1a1a1a" : "#e8e8e8",
-                borderRadius: 2, cursor: "pointer",
-                background: time === t ? "#1a1a1a" : "#fff",
-                color: time === t ? "#fff" : "#666",
+                border: "1px solid", borderColor: time === t ? UI.line : "#e8e8e8",
+                borderRadius: R, cursor: "pointer",
+                background: time === t ? UI.selectedBg : "#fff",
+                color: time === t ? UI.ink : "#666",
               }}>{t}</button>
             ))}
           </div>
@@ -132,10 +134,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             {[["long", "Long"], ["short", "Short"]].map(([v, l]) => (
               <button key={v} onClick={() => setMenuType(menuType === v ? "" : v)} style={{
                 fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "8px 0", flex: 1,
-                border: "1px solid", borderColor: menuType === v ? "#1a1a1a" : "#e8e8e8",
-                borderRadius: 2, cursor: "pointer",
-                background: menuType === v ? "#1a1a1a" : "#fff",
-                color: menuType === v ? "#fff" : "#666",
+                border: "1px solid", borderColor: menuType === v ? UI.line : "#e8e8e8",
+                borderRadius: R, cursor: "pointer",
+                background: menuType === v ? UI.selectedBg : "#fff",
+                color: menuType === v ? UI.ink : "#666",
               }}>{l}</button>
             ))}
           </div>
@@ -146,10 +148,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             {[["en", "EN"], ["si", "SLO"]].map(([v, l]) => (
               <button key={v} onClick={() => setLang(v)} style={{
                 fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "8px 0", flex: 1,
-                border: "1px solid", borderColor: lang === v ? "#1a1a1a" : "#e8e8e8",
-                borderRadius: 2, cursor: "pointer",
-                background: lang === v ? "#1a1a1a" : "#fff",
-                color: lang === v ? "#fff" : "#666",
+                border: "1px solid", borderColor: lang === v ? UI.line : "#e8e8e8",
+                borderRadius: R, cursor: "pointer",
+                background: lang === v ? UI.selectedBg : "#fff",
+                color: lang === v ? UI.ink : "#666",
               }}>{l}</button>
             ))}
           </div>
@@ -171,10 +173,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             {[["", "Regular"], ["hotel", "Hotel"], ["outside", "Outside"]].map(([v, l]) => (
               <button key={v || "r"} onClick={() => { setGuestType(v); if (v !== "hotel") setRoom(""); }} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "8px 0", flex: 1,
-                border: "1px solid", borderColor: guestType === v ? "#1a1a1a" : "#e8e8e8",
-                borderRadius: 2, cursor: "pointer",
-                background: guestType === v ? "#1a1a1a" : "#fff",
-                color: guestType === v ? "#fff" : "#666",
+                border: "1px solid", borderColor: guestType === v ? UI.line : "#e8e8e8",
+                borderRadius: R, cursor: "pointer",
+                background: guestType === v ? UI.selectedBg : "#fff",
+                color: guestType === v ? UI.ink : "#666",
               }}>{l}</button>
             ))}
           </div>
@@ -186,10 +188,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               {ROOM_OPTIONS.map((r) => (
                 <button key={r} onClick={() => setRoom((x) => x === r ? "" : r)} style={{
                   fontFamily: FONT, fontSize: 11, padding: "7px 10px",
-                  border: "1px solid", borderColor: room === r ? "#c8a06e" : "#e8e8e8",
+                  border: "1px solid", borderColor: room === r ? UI.line : "#e8e8e8",
                   borderRadius: 2, cursor: "pointer",
-                  background: room === r ? "#fdf6ec" : "#fff",
-                  color: room === r ? "#a07040" : "#555",
+                  background: room === r ? UI.selectedBg : "#fff",
+                  color: room === r ? UI.ink : "#555",
                 }}>{r}</button>
               ))}
             </div>
@@ -230,7 +232,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                       fontWeight: cnt > 0 ? 600 : 400,
                     }}>
                       {opt.emoji} {opt.label}
-                      {cnt > 0 && <span style={{ marginLeft: 4, background: "#e09090", color: "#fff", borderRadius: 99, fontSize: 8, padding: "1px 4px" }}>{cnt}</span>}
+                      {cnt > 0 && <span style={{ marginLeft: 4, background: "#e09090", color: "#fff", borderRadius: R, fontSize: 8, padding: "1px 4px" }}>{cnt}</span>}
                     </button>
                   );
                 })}
@@ -260,8 +262,8 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
       </div>
 
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <button onClick={onCancel} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px", border: "1px solid #e0e0e0", borderRadius: 4, cursor: "pointer", background: "#fff", color: "#666" }}>CANCEL</button>
-        <button onClick={handleSave} disabled={!primaryId || saving} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 20px", border: "1px solid #1a1a1a", borderRadius: 4, cursor: "pointer", background: "#1a1a1a", color: "#fff", fontWeight: 600, opacity: (!primaryId || saving) ? 0.5 : 1 }}>
+        <button onClick={onCancel} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px", border: `1px solid ${UI.border}`, borderRadius: R, cursor: "pointer", background: UI.surface, color: "#666" }}>CANCEL</button>
+        <button onClick={handleSave} disabled={!primaryId || saving} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 20px", border: `1px solid ${UI.line}`, borderRadius: R, cursor: "pointer", background: UI.surface2, color: UI.ink, fontWeight: 600, opacity: (!primaryId || saving) ? 0.5 : 1 }}>
           {saving ? "SAVING…" : "SAVE"}
         </button>
       </div>

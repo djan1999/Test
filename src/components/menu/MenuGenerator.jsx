@@ -6,8 +6,11 @@ import { TABLES, supabase } from "../../lib/supabaseClient.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
 import { restrLabel } from "../../constants/dietary.js";
-import { waterStyle } from "../../constants/pairings.js";
+import { waterStyle, pairingStyle } from "../../constants/pairings.js";
 import { tokens } from "../../styles/tokens.js";
+import {
+  UI, outlineBtn, toggleOn, toggleOnSoft, toggleOff, primaryAction, cycleSelected, cycleIdle,
+} from "../../styles/uiChrome.js";
 import FullModal from "../ui/FullModal.jsx";
 import BlurInput from "../ui/BlurInput.jsx";
 import BeverageSearch from "../service/BeverageSearch.jsx";
@@ -18,9 +21,9 @@ const baseInp = {
   fontSize: tokens.mobileInputSize,
   padding: "10px 12px",
   border: "1px solid #e8e8e8",
-  borderRadius: 2,
+  borderRadius: tokens.radius,
   outline: "none",
-  color: "#1a1a1a",
+  color: UI.ink,
   background: "#fff",
   boxSizing: "border-box",
   width: "100%",
@@ -249,8 +252,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
     setExpandedDrinksId(null);
   };
 
-  const pairingColor = { Wine: "#7a5020", "Non-Alc": "#3a6a2a", Premium: "#4a3a7a", "Our Story": "#2a5a6a" };
-  const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#edf8e8", Premium: "#f0eeff", "Our Story": "#e8f5f8" };
+  const pairingColor = { Wine: pairingStyle.Wine.color, "Non-Alc": pairingStyle["Non-Alc"].color, Premium: pairingStyle.Premium.color, "Our Story": pairingStyle["Our Story"].color };
+  const pairingBg   = { Wine: pairingStyle.Wine.bg, "Non-Alc": pairingStyle["Non-Alc"].bg, Premium: pairingStyle.Premium.bg, "Our Story": pairingStyle["Our Story"].bg };
 
 
   return (
@@ -265,10 +268,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
               setLanguageWithDefaults(opt.val);
             }} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-              border: `1px solid ${lang === opt.val ? "#1a1a1a" : "#e0e0e0"}`,
-              borderRadius: 2, cursor: "pointer",
-              background: lang === opt.val ? "#1a1a1a" : "#fff",
-              color: lang === opt.val ? "#fff" : "#aaa",
+              borderRadius: tokens.radius, cursor: "pointer",
+              ...(lang === opt.val ? cycleSelected : cycleIdle),
             }}>{opt.label}</button>
           ))}
         </div>
@@ -312,8 +313,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
           return (
             <div key={s.id} style={{
-              border: `1px solid ${seatHasEdits ? "#f0c060" : "#f0f0f0"}`, borderRadius: 4, marginBottom: 8,
-              background: seatHasEdits ? "#fffdf4" : "#fff",
+              border: `1px solid ${seatHasEdits ? UI.lineStrong : "#f0f0f0"}`, borderRadius: 4, marginBottom: 8,
+              background: seatHasEdits ? UI.surface2 : UI.surface,
             }}>
               {/* Main row */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", flexWrap: "wrap" }}>
@@ -321,7 +322,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
                 {/* Pairing badge */}
                 {s.pairing && s.pairing !== "—"
-                  ? <span style={{ fontFamily: FONT, fontSize: 10, padding: "3px 9px", borderRadius: 2, background: pairingBg[s.pairing] || "#f5f5f5", color: pairingColor[s.pairing] || "#555", border: "1px solid #e0e0e0", fontWeight: 500 }}>{s.pairing}</span>
+                  ? <span style={{ fontFamily: FONT, fontSize: 10, padding: "3px 9px", borderRadius: 2, background: pairingBg[s.pairing] || UI.surface2, color: pairingColor[s.pairing] || "#555", border: `1px solid ${pairingStyle[s.pairing]?.border || UI.border}`, fontWeight: 500 }}>{s.pairing}</span>
                   : glasses.length > 0 || cocktails.length > 0 || tableBottles.length > 0
                     ? <span style={{ fontFamily: FONT, fontSize: 10, padding: "3px 9px", borderRadius: 2, background: "#f5f5f5", color: "#888", border: "1px solid #e8e8e8" }}>drinks</span>
                     : <span style={{ fontFamily: FONT, fontSize: 10, color: "#ccc" }}>no pairing</span>}
@@ -329,71 +330,70 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                 {seatRestr.map((r, i) => {
                   const isDietary = ["veg","vegan","pescetarian"].includes(r.note);
                   return (
-                    <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2,
-                      background: isDietary ? "#edf8e8" : "#fef0f0",
-                      color: isDietary ? "#2a6a2a" : "#b04040",
-                      border: `1px solid ${isDietary ? "#88cc88" : "#e09090"}` }}>
+                    <span key={i} style={{
+                      fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: tokens.radius,
+                      ...(isDietary
+                        ? { background: UI.okSoft, color: UI.okText, border: `1px solid ${UI.okBorder}` }
+                        : { background: UI.errSoft, color: UI.errText, border: `1px solid ${UI.errBorder}` }),
+                    }}>
                       {isDietary ? restrLabel(r.note) : `⚠ ${restrLabel(r.note)}`}
                     </span>
                   );
                 })}
                 {orderedExtras.map(d => (
-                  <span key={d.key} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+{String(d.name).toUpperCase()}</span>
+                  <span key={d.key} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: tokens.radius, ...toggleOn }}>+{String(d.name).toUpperCase()}</span>
                 ))}
 
                 {/* Manually added beverages */}
                 {glasses.map((w, i) => (
-                  <span key={`g${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #c8a060", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span key={`g${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: BEV_TYPES.wine.bg, color: BEV_TYPES.wine.color, border: `1px solid ${BEV_TYPES.wine.border}`, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🍷 {w.name}
                   </span>
                 ))}
                 {cocktails.map((c, i) => (
-                  <span key={`c${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#f5eeff", color: "#5a3878", border: "1px solid #b898d8", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span key={`c${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: BEV_TYPES.cocktail.bg, color: BEV_TYPES.cocktail.color, border: `1px solid ${BEV_TYPES.cocktail.border}`, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🍹 {c.name}
                   </span>
                 ))}
                 {spirits.map((sp, i) => (
-                  <span key={`s${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fff3e0", color: "#7a5020", border: "1px solid #d4a870", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span key={`s${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: BEV_TYPES.spirit.bg, color: BEV_TYPES.spirit.color, border: `1px solid ${BEV_TYPES.spirit.border}`, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🥃 {sp.name}
                   </span>
                 ))}
                 {beers.map((b, i) => (
-                  <span key={`b${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#edf8e8", color: "#3a6a2a", border: "1px solid #88bb70", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span key={`b${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: BEV_TYPES.beer.bg, color: BEV_TYPES.beer.color, border: `1px solid ${BEV_TYPES.beer.border}`, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🍺 {b.name}
                   </span>
                 ))}
 
                 {/* Edit button — opens per-seat ephemeral course editor */}
                 <button onClick={() => { setExpandedSeatId(isExpanded ? null : s.id); setExpandedDrinksId(null); setPreviewSeatId(null); }} style={{
-                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
-                  border: `1px solid ${seatHasEdits ? "#f0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                  background: seatHasEdits ? "#fff8e0" : "#fafafa",
-                  color: seatHasEdits ? "#a07020" : "#aaa",
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px", borderRadius: 2, cursor: "pointer",
+                  ...(seatHasEdits ? { background: "#fff8e6", color: "#8a6020", border: "1px solid #e8c878" } : { background: UI.surface2, color: "#aaa", border: `1px solid ${UI.border}` }),
                 }}>{isExpanded ? "▲" : (seatHasEdits ? "✎ EDITED" : "✎")}</button>
 
                 {/* Drinks edit button */}
                 {upd && (
                   <button onClick={() => { setExpandedDrinksId(expandedDrinksId === s.id ? null : s.id); setExpandedSeatId(null); setPreviewSeatId(null); }} style={{
-                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
-                    border: `1px solid ${expandedDrinksId === s.id ? "#6a9abf" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                    background: expandedDrinksId === s.id ? "#eef4fa" : "#fafafa",
-                    color: expandedDrinksId === s.id ? "#2a5a80" : "#aaa",
+                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px", borderRadius: 2, cursor: "pointer",
+                    ...(expandedDrinksId === s.id
+                      ? { background: UI.infoSoft, color: UI.infoText, border: `1px solid ${UI.infoBorder}` }
+                      : toggleOff),
                   }}>🍷</button>
                 )}
 
                 {/* Preview button */}
                 <button onClick={() => previewSeatId === s.id ? setPreviewSeatId(null) : openPreview(s)} style={{
-                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
-                  border: `1px solid ${previewSeatId === s.id ? "#4a7a9a" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                  background: previewSeatId === s.id ? "#e8f0f8" : "#fafafa",
-                  color: previewSeatId === s.id ? "#2a5a80" : "#aaa",
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px", borderRadius: 2, cursor: "pointer",
+                  ...(previewSeatId === s.id
+                    ? { background: UI.infoSoft, color: UI.infoText, border: `1px solid ${UI.infoBorder}` }
+                    : toggleOff),
                 }}>👁</button>
 
                 <button onClick={() => openPrint(s)} style={{
                   marginLeft: "auto", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
-                  padding: "8px 16px", border: "1px solid #c8a96e",
-                  borderRadius: 2, cursor: "pointer",
-                  background: "#c8a96e", color: "#fff",
+                  padding: "8px 16px", borderRadius: 2, cursor: "pointer", fontWeight: 600,
+                  ...primaryAction,
                 }}>PDF</button>
               </div>
 
@@ -427,7 +427,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                           borderRadius: 2, padding: "2px 4px",
                           background: hasEdit ? "#fffdf0" : "transparent",
                         }}>
-                          <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: hasEdit ? "#a07020" : "#bbb",
+                          <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: hasEdit ? "#1a1a1a" : "#bbb",
                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {baseDish?.name || "—"}
                           </span>
@@ -476,8 +476,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
               {/* Drinks editor */}
               {expandedDrinksId === s.id && (
-                <div style={{ borderTop: "1px solid #e8f0f8", padding: "12px 16px 14px", background: "#f7fafd" }}>
-                  <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#6a9abf", textTransform: "uppercase", marginBottom: 12 }}>Drinks & Pairing — P{s.id}</div>
+                <div style={{ borderTop: `1px solid ${UI.infoBorder}`, padding: "12px 16px 14px", background: UI.infoSoft }}>
+                  <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: UI.infoText, textTransform: "uppercase", marginBottom: 12 }}>Drinks & Pairing — P{s.id}</div>
                   {/* Pairing selector */}
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Pairing</div>
@@ -486,10 +486,14 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                         const active = (s.pairing || "—") === p;
                         return (
                           <button key={p} onClick={() => updSeat(s.id, "pairing", p === "—" ? "—" : p)} style={{
-                            fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-                            border: `1px solid ${active ? "#2a5a80" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                            background: active ? "#2a5a80" : "#fff",
-                            color: active ? "#fff" : "#888",
+                            fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px", borderRadius: 2, cursor: "pointer",
+                            ...(active
+                              ? {
+                                background: pairingStyle[p]?.bg || UI.okSoft,
+                                color: pairingStyle[p]?.color || UI.okText,
+                                border: `1px solid ${pairingStyle[p]?.border || UI.okBorder}`,
+                              }
+                              : toggleOff),
                           }}>{p}</button>
                         );
                       })}
@@ -497,7 +501,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                   </div>
                   {/* ── Aperitif — generates above Sour Soup ── */}
                   <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#a07040", textTransform: "uppercase", marginBottom: 6 }}>Aperitif</div>
+                    <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Aperitif</div>
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                       {aperitifOptions.map(ap => {
                         const label = ap.label ?? ap;
@@ -513,8 +517,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                             updSeat(s.id, "aperitifs", [...(s.aperitifs || []), item]);
                           }} style={{
                             fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
-                            border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
-                            background: "#fff", color: "#7a5020",
+                            borderRadius: 3, cursor: "pointer",
+                            ...outlineBtn,
                           }}>{label}</button>
                         );
                       })}
@@ -532,7 +536,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                           const label = x?.name || x?.producer || "?";
                           const sub = x?.producer && x?.name ? x.producer : (x?.notes || "");
                           return (
-                            <div key={`ap${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: 999, background: ts.bg, border: `1px solid ${ts.border}` }}>
+                            <div key={`ap${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: tokens.radius, background: ts.bg, border: `1px solid ${ts.border}` }}>
                               <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>{label}{sub ? ` · ${sub}` : ""}</span>
                               <button onClick={() => updSeat(s.id, "aperitifs", (s.aperitifs||[]).filter((_,idx)=>idx!==i))} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
                             </div>
@@ -566,7 +570,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                           {allBevs.map(bev => {
                             const ts = BEV_TYPES[bev.type];
                             return (
-                              <div key={bev.key} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: 999, background: ts.bg, border: `1px solid ${ts.border}` }}>
+                              <div key={bev.key} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: tokens.radius, background: ts.bg, border: `1px solid ${ts.border}` }}>
                                 <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>{bev.label}{bev.sub ? ` · ${bev.sub}` : ""}</span>
                                 <button onClick={bev.onRemove} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
                               </div>
@@ -614,9 +618,9 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                             }};
                           });
                           const btnStyleMap = {
-                            off:    { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" },
-                            alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
-                            nonalc: { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" },
+                            off:    { border: cycleIdle.border, bg: cycleIdle.background, color: cycleIdle.color },
+                            alco:   { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
+                            nonalc: { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
                           };
                           const btnLabelMap = { off: "off", alco: "alco", nonalc: "n/a" };
                           const st = btnStyleMap[cur];
@@ -688,10 +692,10 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                               });
                               const labels = { off: `${dish.name} off`, on: `${dish.name} ✓`, alco: `${dish.name.slice(0,4)} · ALCO`, nonalc: `${dish.name.slice(0,4)} · N/A` };
                               const colors = {
-                                off:    { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" },
-                                on:     { border: "#a0c060", bg: "#f4f8e8", color: "#5a7820" },
-                                alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
-                                nonalc: { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" },
+                                off:    { border: cycleIdle.border, bg: cycleIdle.background, color: cycleIdle.color },
+                                on:     { border: toggleOnSoft.border, bg: toggleOnSoft.background, color: toggleOnSoft.color },
+                                alco:   { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
+                                nonalc: { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
                               }[cur];
                               return (
                                 <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
@@ -723,10 +727,10 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                               ? `${dish.name} ✓`
                               : `${dish.name.slice(0, 4)} · ${curP}`;
                             const pColors = curP === "off"
-                              ? { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" }
+                              ? { border: cycleIdle.border, bg: cycleIdle.background, color: cycleIdle.color }
                               : curP === "—"
-                              ? { border: "#a0c060", bg: "#f4f8e8", color: "#5a7820" }
-                              : { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" };
+                              ? { border: toggleOnSoft.border, bg: toggleOnSoft.background, color: toggleOnSoft.color }
+                              : { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color };
                             return (
                               <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
                                 {di > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}
@@ -789,8 +793,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => printSelected(seats.map(s => s.id))} style={{
                 flex: 1, fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "12px",
-                border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
-                background: "#1a1a1a", color: "#fff",
+                borderRadius: tokens.radius, cursor: "pointer",
+                fontWeight: 600, ...outlineBtn,
               }}>PRINT ALL SEATS</button>
             </div>
           </div>

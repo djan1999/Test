@@ -38,6 +38,10 @@ import { BEV_TYPES } from "./constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "./constants/countries.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES } from "./lib/supabaseClient.js";
 import { tokens } from "./styles/tokens.js";
+import {
+  UI, toggleOn, toggleOff, toggleOnSoft, primaryAction, outlineBtn,
+  panelHeaderBg, panelBorder, cycleSelected, cycleIdle, neutralPanel,
+} from "./styles/uiChrome.js";
 import { baseInput, fieldLabel as mixinFieldLabel, chip as mixinChip, circleButton as mixinCircleButton } from "./styles/mixins.js";
 import WaterPicker from "./components/service/WaterPicker.jsx";
 import SwapPicker from "./components/service/SwapPicker.jsx";
@@ -335,7 +339,7 @@ const statusPill = (isLive, label) => ({
   letterSpacing: 2,
   padding: "6px 10px",
   border: `1px solid ${isLive ? "#8fc39f" : "#d8d8d8"}`,
-  borderRadius: 999,
+  borderRadius: tokens.radius,
   background: isLive ? "#eef8f1" : "#f6f6f6",
   color: isLive ? "#2f7a45" : "#555",
   fontWeight: 600,
@@ -372,6 +376,7 @@ function optionalExtrasFromCourses(menuCourses = []) {
       key,
       name: label,
       pairings: pairings.length > 0 ? pairings : ["—"],
+      courseCategory: category,
     });
   });
   return [...byKey.values()];
@@ -389,7 +394,7 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
       background: "#fff",
       border: "1px solid",
       borderColor: table.active ? "#d0d0d0" : hasRes ? "#e4e4e4" : "#f0f0f0",
-      borderRadius: 4,
+      borderRadius: tokens.radius,
       padding: "20px 18px 16px",
       cursor: table.active ? "pointer" : "default",
       display: "flex", flexDirection: "column", gap: 10,
@@ -410,21 +415,21 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
           {table.birthday && <span style={{ fontSize: 13 }}>🎂</span>}
           {table.restrictions?.length > 0 && <span style={{ fontSize: 13 }}>⚠️</span>}
           {table.guestType === "hotel" && (
-            <span style={{ fontFamily: FONT, fontSize: 9, color: "#1a1a1a", letterSpacing: 1, border: "1px solid #e0e0e0", borderRadius: 2, padding: "2px 6px", background: "#fafafa" }}>
+            <span style={{ fontFamily: FONT, fontSize: 9, color: UI.ink, letterSpacing: 1, border: "1px solid #e0e0e0", borderRadius: tokens.radius, padding: "2px 6px", background: "#fafafa" }}>
               {table.room ? `Hotel #${table.room}` : "Hotel"}
             </span>
           )}
           {table.menuType && (
-            <span style={{ fontFamily: FONT, fontSize: 9, color: "#1a1a1a", letterSpacing: 1, border: "1px solid #e0e0e0", borderRadius: 2, padding: "2px 6px", background: "#fafafa" }}>
+            <span style={{ fontFamily: FONT, fontSize: 9, color: UI.ink, letterSpacing: 1, border: "1px solid #e0e0e0", borderRadius: tokens.radius, padding: "2px 6px", background: "#fafafa" }}>
               {table.menuType} menu
             </span>
           )}
           {table.pace && (() => {
-            const pc = { Slow: { color: "#7a5020", bg: "#fdf4e8", border: "#c8a060" }, Fast: { color: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" } }[table.pace] || {};
-            return <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, border: `1px solid ${pc.border}`, borderRadius: 2, padding: "2px 6px", background: pc.bg, color: pc.color }}>{table.pace}</span>;
+            const pc = { Slow: { color: UI.ink, bg: UI.surface2, border: UI.line }, Fast: { color: "#6a2a2a", bg: "#fff5f5", border: "#c04040" } }[table.pace] || {};
+            return <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, border: `1px solid ${pc.border}`, borderRadius: tokens.radius, padding: "2px 6px", background: pc.bg, color: pc.color }}>{table.pace}</span>;
           })()}
           {table.active && (
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4a9a6a", display: "inline-block" }} />
+            <span style={{ width: 8, height: 8, borderRadius: tokens.radius, background: "#4a9a6a", display: "inline-block" }} />
           )}
         </div>
       </div>
@@ -457,7 +462,7 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
             {table.seats.map(s => (
               <div key={s.id} style={{
-                width: 9, height: 9, borderRadius: "50%",
+                width: 9, height: 9, borderRadius: tokens.radius,
                 background: s.pairing ? (pairingStyle[s.pairing]?.color || "#d8d8d8") : "#d8d8d8",
               }} />
             ))}
@@ -611,18 +616,15 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
       )}
 
       {/* Quick set water for all seats */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "10px 12px", background: "#fafafa", borderRadius: 4, border: "1px solid #f0f0f0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "10px 12px", background: "#fafafa", borderRadius: mode === "service" ? 0 : 4, border: "1px solid #f0f0f0" }}>
         <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", flexShrink: 0 }}>All water</span>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           {WATER_OPTS.map(opt => (
-            <button key={opt} onClick={() => table.seats.forEach(s => updSeat(s.id, "water", opt))} style={{
+            <button key={opt} onClick={() => table.seats.forEach(s => updSeat(s.id, "water", () => opt))} style={{
               fontFamily: FONT, fontSize: 11, letterSpacing: 0.5,
-              padding: "5px 10px", border: "1px solid",
-              borderColor: table.seats.every(s => s.water === opt) ? "#1a1a1a" : "#e0e0e0",
-              borderRadius: 2, cursor: "pointer",
-              background: table.seats.every(s => s.water === opt) ? "#1a1a1a" : "#fff",
-              color: table.seats.every(s => s.water === opt) ? "#fff" : "#555",
+              padding: "5px 10px", borderRadius: mode === "service" ? 0 : 2, cursor: "pointer",
               transition: "all 0.1s",
+              ...(table.seats.every(s => s.water === opt) ? toggleOnSoft : toggleOff),
             }}>{opt}</button>
           ))}
         </div>
@@ -651,27 +653,40 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
             <div style={{ display: "grid", gridTemplateColumns: row1, gap: 10, alignItems: "start", marginBottom: 8 }}>
               {/* P bubble */}
               <div style={{
-                width: 30, height: 30, borderRadius: "50%", border: "1px solid #ebebeb",
+                width: 30, height: 30, borderRadius: tokens.radius, border: "1px solid #ebebeb",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontFamily: FONT, fontSize: 9, color: "#444", letterSpacing: 0.5, flexShrink: 0,
                 marginTop: 2,
               }}>P{seat.id}</div>
 
               {/* Water */}
-              <WaterPicker value={seat.water} onChange={v => updSeat(seat.id, "water", v)} />
+              <WaterPicker value={seat.water} onChange={v => updSeat(seat.id, "water", () => v)} variant={mode === "service" ? "service" : "default"} />
 
-              {/* Pairing */}
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                {PAIRINGS.map(p => {
+              {/* Pairing — full row in admin; single cycle control in service */}
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                {mode === "service" ? (() => {
+                  const p = seat.pairing || "—";
+                  const ps = pairingStyle[p] || pairingStyle["—"];
+                  const lab = p === "—" ? "None" : p === "Non-Alc" ? "N/A" : p === "Our Story" ? "Story" : p;
+                  return (
+                    <button type="button" onClick={() => updSeat(seat.id, "pairing", (cur, s) => {
+                      const p0 = s.pairing || "—";
+                      return PAIRINGS[(PAIRINGS.indexOf(p0) + 1) % PAIRINGS.length];
+                    })} style={{
+                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
+                      padding: "5px 10px", border: `1px solid ${ps.border}`, borderRadius: 0, cursor: "pointer",
+                      background: ps.bg, color: ps.color, minWidth: 0, textAlign: "left",
+                    }}>Pair · {lab} →</button>
+                  );
+                })() : PAIRINGS.map(p => {
                   const ps = pairingStyle[p];
                   const on = seat.pairing === p;
                   return (
-                    <button key={p} onClick={() => updSeat(seat.id, "pairing", p)} style={{
+                    <button key={p} onClick={() => updSeat(seat.id, "pairing", () => p)} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
                       padding: "5px 8px", border: "1px solid",
                       borderColor: on ? ps.border : "#ebebeb", borderRadius: 2, cursor: "pointer",
                       background: on ? ps.bg : "#fff", color: on ? ps.color : "#555",
-                      transition: "all 0.1s",
                     }}>{p}</button>
                   );
                 })}
@@ -694,8 +709,8 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
             {/* ── Beverages + Extras ── */}
             <div style={{ paddingLeft: isMobile ? 0 : 48, display: "flex", flexDirection: "column", gap: 12 }}>
               {/* ── Aperitif ── generates above Sour Soup */}
-              <div style={{ background: "#fdf8f0", border: "1px solid #e8dcc8", borderRadius: 8, padding: isMobile ? "10px" : "12px" }}>
-                <div style={{ ...fieldLabel, marginBottom: 8, color: "#a07040" }}>Aperitif</div>
+              <div style={{ ...neutralPanel, borderRadius: 8, padding: isMobile ? "10px" : "12px" }}>
+                <div style={{ ...fieldLabel, marginBottom: 8, color: "#444" }}>Aperitif</div>
                 {/* Quick-add buttons */}
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                   {aperitifOptions.map(ap => (
@@ -704,18 +719,18 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                       const wineHit = (w) => { const wn=(w.name||"").toLowerCase(),wp=(w.producer||"").toLowerCase(); return wn.includes(lk)||wp.includes(lk)||(wn.length>=4&&lk.includes(wn))||(wp.length>=4&&lk.includes(wp)); };
                       const found = wines.find(w => w.byGlass && wineHit(w)) || wines.find(wineHit);
                       const item = found || { name: ap.searchKey || ap.label, notes: "", __cocktail: true };
-                      updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
+                      updSeat(seat.id, "aperitifs", prev => [...(prev || []), item]);
                     }} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
-                      border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
-                      background: "#fff", color: "#7a5020", transition: "all 0.1s",
+                      borderRadius: 3, cursor: "pointer",
+                      ...outlineBtn, transition: "all 0.1s",
                     }}>{ap.label}</button>
                   ))}
                 </div>
                 <BeverageSearch
                   wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
                   onAdd={({ type, item }) => {
-                    updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
+                    updSeat(seat.id, "aperitifs", prev => [...(prev || []), item]);
                   }}
                 />
                 {/* Aperitif chips */}
@@ -728,13 +743,13 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                       return (
                         <div key={`ap${i}`} style={{
                           display: "inline-flex", alignItems: "center", gap: 5,
-                          padding: "4px 8px 4px 10px", borderRadius: 999,
+                          padding: "4px 8px 4px 10px", borderRadius: tokens.radius,
                           background: ts.bg, border: `1px solid ${ts.border}`,
                         }}>
                           <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>
                             {label}{sub ? ` · ${sub}` : ""}
                           </span>
-                          <button onClick={() => updSeat(seat.id, "aperitifs", (seat.aperitifs||[]).filter((_,idx)=>idx!==i))} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
+                          <button onClick={() => updSeat(seat.id, "aperitifs", prev => (prev || []).filter((_,idx)=>idx!==i))} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
                         </div>
                       );
                     })}
@@ -748,19 +763,19 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                 <BeverageSearch
                   wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
                   onAdd={({ type, item }) => {
-                    if (type === "wine")     updSeat(seat.id, "glasses",   [...(seat.glasses   || []), item]);
-                    if (type === "cocktail") updSeat(seat.id, "cocktails", [...(seat.cocktails || []), item]);
-                    if (type === "spirit")   updSeat(seat.id, "spirits",   [...(seat.spirits   || []), item]);
-                    if (type === "beer")     updSeat(seat.id, "beers",     [...(seat.beers     || []), item]);
+                    if (type === "wine")     updSeat(seat.id, "glasses",   prev => [...(prev || []), item]);
+                    if (type === "cocktail") updSeat(seat.id, "cocktails", prev => [...(prev || []), item]);
+                    if (type === "spirit")   updSeat(seat.id, "spirits",   prev => [...(prev || []), item]);
+                    if (type === "beer")     updSeat(seat.id, "beers",     prev => [...(prev || []), item]);
                   }}
                 />
                 {/* By the Glass chips */}
                 {(() => {
                   const allBevs = [
-                    ...(seat.glasses   || []).map((x, i) => ({ key: `g${i}`,  type: "wine",     label: x?.name, sub: x?.producer, onRemove: () => updSeat(seat.id, "glasses",   (seat.glasses||[]).filter((_,idx)=>idx!==i)) })),
-                    ...(seat.cocktails || []).map((x, i) => ({ key: `c${i}`,  type: "cocktail", label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "cocktails", (seat.cocktails||[]).filter((_,idx)=>idx!==i)) })),
-                    ...(seat.spirits   || []).map((x, i) => ({ key: `s${i}`,  type: "spirit",   label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "spirits",   (seat.spirits||[]).filter((_,idx)=>idx!==i)) })),
-                    ...(seat.beers     || []).map((x, i) => ({ key: `b${i}`,  type: "beer",     label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "beers",     (seat.beers||[]).filter((_,idx)=>idx!==i)) })),
+                    ...(seat.glasses   || []).map((x, i) => ({ key: `g${i}`,  type: "wine",     label: x?.name, sub: x?.producer, onRemove: () => updSeat(seat.id, "glasses",   prev => (prev || []).filter((_,idx)=>idx!==i)) })),
+                    ...(seat.cocktails || []).map((x, i) => ({ key: `c${i}`,  type: "cocktail", label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "cocktails", prev => (prev || []).filter((_,idx)=>idx!==i)) })),
+                    ...(seat.spirits   || []).map((x, i) => ({ key: `s${i}`,  type: "spirit",   label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "spirits",   prev => (prev || []).filter((_,idx)=>idx!==i)) })),
+                    ...(seat.beers     || []).map((x, i) => ({ key: `b${i}`,  type: "beer",     label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "beers",     prev => (prev || []).filter((_,idx)=>idx!==i)) })),
                   ];
                   if (allBevs.length === 0) return null;
                   return (
@@ -770,7 +785,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                         return (
                           <div key={bev.key} style={{
                             display: "inline-flex", alignItems: "center", gap: 5,
-                            padding: "4px 8px 4px 10px", borderRadius: 999,
+                            padding: "4px 8px 4px 10px", borderRadius: tokens.radius,
                             background: ts.bg, border: `1px solid ${ts.border}`,
                           }}>
                             <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>
@@ -787,22 +802,57 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
 
               {/* Optional extras (derived from optional_flag) */}
               {optionalExtras.length > 0 && (
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: mode === "service" ? 6 : 10, flexWrap: "wrap", alignItems: "stretch" }}>
                   {optionalExtras.map(dish => {
                     const extra = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                    const opts = (dish.pairings && dish.pairings.length) ? dish.pairings : ["—"];
+                    if (mode === "service") {
+                      const curPair = extra.pairing || opts[0];
+                      const cycleExtra = () => {
+                        updSeat(seat.id, "extras", (_, s) => {
+                          const base = { ...(s.extras || {}) };
+                          const ex = base[dish.key] || base[dish.id] || { ordered: false, pairing: opts[0] };
+                          if (!ex.ordered) {
+                            base[dish.key] = { ...ex, ordered: true, pairing: opts[0] };
+                            return base;
+                          }
+                          const pair = ex.pairing || opts[0];
+                          const pi = opts.indexOf(pair);
+                          const hasNext = pi >= 0 && pi < opts.length - 1;
+                          if (hasNext) {
+                            base[dish.key] = { ...ex, pairing: opts[pi + 1] };
+                          } else {
+                            base[dish.key] = { ...ex, ordered: false, pairing: opts[0] };
+                          }
+                          return base;
+                        });
+                      };
+                      const short = String(dish.name || "").replace(/\s+/g, " ").trim().slice(0, 14) || dish.key;
+                      const pairBit = extra.ordered && curPair && curPair !== "—" ? ` · ${curPair}` : "";
+                      return (
+                        <button key={dish.key} type="button" onClick={cycleExtra} style={{
+                          fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "6px 10px", borderRadius: 0, cursor: "pointer",
+                          textAlign: "left", maxWidth: "100%",
+                          ...(extra.ordered ? toggleOnSoft : toggleOff),
+                        }}>{short}{extra.ordered ? ` · on${pairBit}` : " · off"}</button>
+                      );
+                    }
                     return (
                       <div key={dish.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
                         <div style={{ ...fieldLabel, marginBottom: 4 }}>{dish.name}</div>
-                        <button onClick={() => updSeat(seat.id, "extras", {
-                          ...seat.extras, [dish.key]: { ...extra, ordered: !extra.ordered }
+                        <button onClick={() => updSeat(seat.id, "extras", (_, s) => {
+                          const ex = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                          return { ...s.extras, [dish.key]: { ...ex, ordered: !ex.ordered } };
                         })} style={{
-                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 8px", border: "1px solid",
-                          borderColor: extra.ordered ? "#aaddaa" : "#ebebeb", borderRadius: 2, cursor: "pointer",
-                          background: extra.ordered ? "#f0faf0" : "#fff", color: extra.ordered ? "#4a8a4a" : "#555",
+                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 8px", borderRadius: 2, cursor: "pointer",
                           transition: "all 0.1s",
+                          ...(extra.ordered ? toggleOnSoft : toggleOff),
                         }}>{extra.ordered ? "YES" : "NO"}</button>
                         <select value={extra.pairing || dish.pairings[0]} disabled={!extra.ordered}
-                          onChange={e => updSeat(seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, pairing: e.target.value } })}
+                          onChange={e => updSeat(seat.id, "extras", (_, s) => {
+                            const ex = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                            return { ...s.extras, [dish.key]: { ...ex, pairing: e.target.value } };
+                          })}
                           style={{
                             fontFamily: FONT, fontSize: 10, padding: "4px 5px",
                             border: "1px solid #ebebeb", borderRadius: 2,
@@ -824,41 +874,99 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                 });
                 if (!visPairings.length) return null;
                 return (
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+                  <div style={{ display: "flex", gap: mode === "service" ? 6 : 10, flexWrap: "wrap", marginTop: 8 }}>
                     {visPairings.map(opt => {
                       const cur = seat.optionalPairings?.[opt.key] || { ordered: opt.defaultOn !== false };
                       const active = !!cur.ordered;
-                      const mode = cur.mode || null;
+                      const pmode = cur.mode || null;
                       const seatPairing = String(seat.pairing || "").trim();
                       const seatIsNonAlc = seatPairing === "Non-Alc";
                       const seatSet = seatPairing && seatPairing !== "—";
-                      const alcoOn = active && (mode === "alco" || (mode === null && seatSet && !seatIsNonAlc));
-                      const naOn = active && (mode === "nonalc" || (mode === null && seatIsNonAlc));
-                      const updOpt = (patch) => updSeat(seat.id, "optionalPairings", {
-                        ...(seat.optionalPairings || {}),
-                        [opt.key]: { ...cur, ...patch },
+                      const alcoOn = active && (pmode === "alco" || (pmode === null && seatSet && !seatIsNonAlc));
+                      const naOn = active && (pmode === "nonalc" || (pmode === null && seatIsNonAlc));
+                      const updOpt = (patch) => updSeat(seat.id, "optionalPairings", (_, s) => {
+                        const cur0 = s.optionalPairings?.[opt.key] || { ordered: opt.defaultOn !== false };
+                        return {
+                          ...(s.optionalPairings || {}),
+                          [opt.key]: { ...cur0, ...patch },
+                        };
                       });
+                      if (mode === "service") {
+                        const extraKey = opt.extraKey;
+                        const dishOn = extraKey ? !!(seat.extras?.[extraKey]?.ordered) : true;
+                        const pairingOrdered = cur?.ordered !== undefined ? !!cur.ordered : false;
+                        const states = ["off", "on"];
+                        if (opt.hasAlco) states.push("alco");
+                        if (opt.hasNonAlco) states.push("nonalc");
+                        let st;
+                        if (extraKey && !dishOn) st = "off";
+                        else if (!pairingOrdered) st = "on";
+                        else if (pmode === "alco") st = "alco";
+                        else if (pmode === "nonalc") st = "nonalc";
+                        else st = "on";
+                        const labelMap = { off: "off", on: "on", alco: "wine", nonalc: "n/a" };
+                        const styleMap = {
+                          off:    { border: cycleIdle.border, bg: cycleIdle.background, color: cycleIdle.color },
+                          on:     { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
+                          alco:   { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
+                          nonalc: { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
+                        }[st];
+                        const short = String(opt.label || opt.key || "").replace(/\s+/g, " ").trim().slice(0, 14) || opt.key;
+                        return (
+                          <button key={opt.key} type="button" onClick={() => {
+                            upd("seats", prevSeats => (prevSeats || []).map(s => {
+                              if (s.id !== seat.id) return s;
+                              const r = s.optionalPairings?.[opt.key];
+                              const xOrdered = extraKey ? !!(s.extras?.[extraKey]?.ordered) : true;
+                              const po = r?.ordered !== undefined ? !!r.ordered : false;
+                              const pm = r?.mode || null;
+                              let c;
+                              if (extraKey && !xOrdered) c = "off";
+                              else if (!po) c = "on";
+                              else if (pm === "alco") c = "alco";
+                              else if (pm === "nonalc") c = "nonalc";
+                              else c = "on";
+                              const nx = states[(states.indexOf(c) + 1) % states.length];
+                              const baseExtras = { ...(s.extras || {}) };
+                              if (extraKey) {
+                                const xtra = s.extras?.[extraKey] || { ordered: false, pairing: "—" };
+                                baseExtras[extraKey] = { ...xtra, ordered: nx !== "off", pairing: xtra.pairing || "—" };
+                              }
+                              const nextOptP = {
+                                ...(s.optionalPairings || {}),
+                                [opt.key]: {
+                                  ...(r || {}),
+                                  ordered: nx === "alco" || nx === "nonalc",
+                                  ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }),
+                                },
+                              };
+                              return { ...s, extras: extraKey ? baseExtras : s.extras, optionalPairings: nextOptP };
+                            }));
+                          }} style={{
+                            fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "6px 10px",
+                            border: `1px solid ${styleMap.border}`, borderRadius: 0, cursor: "pointer",
+                            background: styleMap.bg, color: styleMap.color, textAlign: "left",
+                          }}>{short} · {labelMap[st]}</button>
+                        );
+                      }
                       return (
                         <div key={opt.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
                           <div style={{ ...fieldLabel, marginBottom: 4 }}>{opt.label}</div>
                           <div style={{ display: "flex", gap: 3 }}>
                             <button onClick={() => updOpt({ ordered: false })} style={{
-                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
-                              borderColor: !active ? "#a0c060" : "#ebebeb", borderRadius: 2, cursor: "pointer",
-                              background: !active ? "#f4f8e8" : "#fff", color: !active ? "#5a7820" : "#aaa", flex: 1,
+                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", borderRadius: 2, cursor: "pointer", flex: 1,
+                              ...(!active ? cycleSelected : cycleIdle),
                             }}>OFF</button>
                             {opt.hasAlco && (
                               <button onClick={() => updOpt({ ordered: true, mode: "alco" })} style={{
-                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
-                                borderColor: alcoOn ? "#c8a060" : "#ebebeb", borderRadius: 2, cursor: "pointer",
-                                background: alcoOn ? "#fdf4e8" : "#fff", color: alcoOn ? "#7a5020" : "#aaa", flex: 1,
+                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", borderRadius: 2, cursor: "pointer", flex: 1,
+                                ...(alcoOn ? cycleSelected : cycleIdle),
                               }}>ALCO</button>
                             )}
                             {opt.hasNonAlco && (
                               <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} style={{
-                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
-                                borderColor: naOn ? "#60a0c8" : "#ebebeb", borderRadius: 2, cursor: "pointer",
-                                background: naOn ? "#e8f4fd" : "#fff", color: naOn ? "#205a7a" : "#aaa", flex: 1,
+                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", borderRadius: 2, cursor: "pointer", flex: 1,
+                                ...(naOn ? cycleSelected : cycleIdle),
                               }}>N/A</button>
                             )}
                           </div>
@@ -901,12 +1009,9 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
             {["Long", "Short"].map(opt => (
               <button key={opt} onClick={() => upd("menuType", table.menuType === opt ? "" : opt)} style={{
                 fontFamily: FONT, fontSize: 10, letterSpacing: 2,
-                padding: "9px 22px", border: "1px solid",
-                borderColor: table.menuType === opt ? "#1a1a1a" : "#e8e8e8",
-                borderRadius: 2, cursor: "pointer",
-                background: table.menuType === opt ? "#1a1a1a" : "#fff",
-                color: table.menuType === opt ? "#fff" : "#888",
+                padding: "9px 22px", borderRadius: tokens.radius, cursor: "pointer",
                 textTransform: "uppercase",
+                ...(table.menuType === opt ? toggleOnSoft : toggleOff),
               }}>{opt}</button>
             ))}
           </div>
@@ -1020,39 +1125,40 @@ function TableSeatDetail({ table, isMobile, optionalExtras = [] }) {
           const pc = PC[seat.pairing] || PC["Non-Alc"];
           const hasInfo = seatRestrictions.length > 0 || seatExtras.length > 0;
           return (
-            <div key={seat.id} style={{ border: "1px solid #ececec", borderRadius: 10, padding: "12px", background: "#fff" }}>
+            <div key={seat.id} style={{ border: "1px solid #e6e6e6", borderRadius: 0, padding: "12px", background: "#fff" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{
-                    width: 30, height: 30, borderRadius: "50%",
-                    border: `1px solid ${seatRestrictions.length ? "#e08080" : "#d0d0d0"}`,
+                    width: 28, height: 28, borderRadius: 0,
+                    border: `1px solid ${seatRestrictions.length ? "#d08080" : "#e0e0e0"}`,
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontFamily: FONT, fontSize: 10, fontWeight: 600,
-                    color: seatRestrictions.length ? "#b04040" : "#444",
+                    color: seatRestrictions.length ? "#b04040" : "#666",
                   }}>P{seat.id}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
                   <span style={{
-                    fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.5,
-                    padding: "4px 10px", borderRadius: 999,
-                    background: seat.water === "—" ? "#f5f5f5" : (ws.bg || "#f0f0f0"),
-                    color: seat.water === "—" ? "#666" : "#1a1a1a", border: "1px solid #e0e0e0",
+                    fontFamily: FONT, fontSize: 11, fontWeight: 500, letterSpacing: 0.4,
+                    padding: "3px 8px", borderRadius: 0,
+                    background: "transparent",
+                    color: seat.water === "—" ? "#999" : (ws.color || "#444"),
+                    border: `1px solid ${seat.water === "—" ? "#e4e4e4" : "#d8d8d8"}`,
                   }}>{seat.water}</span>
                   {seat.pairing && <span style={{
-                    fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.4,
-                    padding: "4px 10px", borderRadius: 999,
-                    background: pc.bg, border: `1px solid ${pc.border}`, color: pc.color,
+                    fontFamily: FONT, fontSize: 11, fontWeight: 500, letterSpacing: 0.3,
+                    padding: "3px 8px", borderRadius: 0,
+                    background: "transparent", border: `1px solid ${pc.border}`, color: pc.color,
                   }}>{seat.pairing}</span>}
                 </div>
               </div>
               {hasInfo ? (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {seatRestrictions.map((r, i) => (
-                    <span key={i} style={{ fontFamily: FONT, fontSize: 11, fontWeight: 500, letterSpacing: 0.3, padding: "4px 9px", borderRadius: 999, background: "#fef0f0", border: "1px solid #e09090", color: "#b04040" }}>⚠ {restrLabel(r.note)}</span>
+                    <span key={i} style={{ fontFamily: FONT, fontSize: 11, fontWeight: 500, letterSpacing: 0.3, padding: "4px 9px", borderRadius: tokens.radius, background: "#fef0f0", border: "1px solid #e09090", color: "#b04040" }}>⚠ {restrLabel(r.note)}</span>
                   ))}
                   {seatExtras.map(d => {
                     const ex = seat.extras[d.key];
-                    return <span key={d.key} style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.3, padding: "4px 9px", borderRadius: 999, background: "#e8f5e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>{d.name}{ex.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}</span>;
+                    return <span key={d.key} style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.3, padding: "4px 9px", borderRadius: tokens.radius, ...toggleOn }}>{d.name}{ex.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}</span>;
                   })}
                 </div>
               ) : <div style={{ fontFamily: FONT, fontSize: 11, color: "#777" }}>No extra notes</div>}
@@ -1065,16 +1171,11 @@ function TableSeatDetail({ table, isMobile, optionalExtras = [] }) {
 }
 
 // ── Display Board ─────────────────────────────────────────────────────────────
-const PC = {
-  "—":         { color: "#666",    bg: "#f5f5f5", border: "#d8d8d8" },
-  "Wine":      { color: "#7a5020", bg: "#f5ead8", border: "#c8a060" },
-  "Non-Alc":   { color: "#1f5f73", bg: "#e8f7fb", border: "#7fc6db" },
-  "Premium":   { color: "#3a3a7a", bg: "#eaeaf5", border: "#8888bb" },
-  "Our Story": { color: "#2a6a4a", bg: "#e0f5ea", border: "#5aaa7a" },
-};
-// Flat color/bg maps used by Summary, Archive, and other read-only views
-const PAIRING_COLOR = { Wine: "#8a6030", "Non-Alc": "#1f5f73", Premium: "#3a3a7a", "Our Story": "#2a6a4a" };
-const PAIRING_BG    = { Wine: "#fdf4e8", "Non-Alc": "#e8f7fb", Premium: "#eaeaf5", "Our Story": "#e0f5ea" };
+const PC = Object.fromEntries(
+  PAIRINGS.map((k) => [k, { color: pairingStyle[k].color, bg: pairingStyle[k].bg, border: pairingStyle[k].border }])
+);
+const PAIRING_COLOR = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].color]));
+const PAIRING_BG    = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].bg]));
 const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
@@ -1083,7 +1184,14 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
     const isSeated = t.active;
     const allRestr = (t.restrictions || []).filter(r => r.note);
     const [assigningIdx, setAssigningIdx] = useState(null);
+    const [sendAck, setSendAck] = useState(false);
+    const sendAckTimer = useRef(null);
     const seats = t.seats || [];
+    const serviceExtrasList = (optionalExtras || []).filter(d => d.courseCategory !== "celebration").slice(0, 6);
+
+    useEffect(() => () => {
+      if (sendAckTimer.current) clearTimeout(sendAckTimer.current);
+    }, []);
 
     const unassigned = allRestr.map((r, i) => ({ ...r, _i: i })).filter(r => !r.pos);
 
@@ -1095,30 +1203,41 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 
     const allWaterMatch = opt => seats.length > 0 && seats.every(s => s.water === opt);
 
+    /** Single-seat patch without stale closure bugs (used by quick-mode linked extras). */
+    const applySeatPatch = (seatId, patchFn) => {
+      if (!upd) return;
+      upd(t.id, "seats", prev => (prev || []).map(seat => (seat.id !== seatId ? seat : patchFn(seat))));
+    };
+
     const wBtn = (opt, active, onClick) => (
       <button key={opt} onClick={onClick} style={{
         fontFamily: FONT, fontSize: 10, letterSpacing: 0.3, padding: "4px 8px",
-        border: `1px solid ${active ? (opt === "OC" || opt === "OW" ? "#c8a060" : "#555") : "#e8e8e8"}`,
-        borderRadius: 3, cursor: "pointer", lineHeight: 1,
-        background: active ? (opt === "OC" || opt === "OW" ? "#fdf4e8" : "#1a1a1a") : "#fff",
-        color: active ? (opt === "OC" || opt === "OW" ? "#7a5020" : "#fff") : "#aaa",
-        transition: "all 0.1s",
+        borderRadius: quickMode ? 0 : 3, cursor: "pointer", lineHeight: 1,
+        ...(active ? cycleSelected : cycleIdle),
+        ...(quickMode ? {} : { transition: "all 0.1s" }),
       }}>{opt}</button>
     );
 
     const accentColor = isSeated ? "#5aaa70" : "#88a8c8";
+    const qm = quickMode ? {
+      cardBorder: "#dcdcdc",
+      hairline: "#eaeaea",
+      label: "#9a9a9a",
+      text: "#2a2a2a",
+      muted: "#b0b0b0",
+    } : null;
 
     return (
       <div style={{
         background: "#fff",
-        border: "1px solid #e8e8e8",
-        borderRadius: 8,
+        border: quickMode ? `1px solid ${qm.cardBorder}` : "1px solid #e8e8e8",
+        borderRadius: quickMode ? 0 : 8,
         overflow: "hidden",
-        boxShadow: isSeated ? "0 2px 12px rgba(74,154,106,0.10)" : "0 1px 4px rgba(0,0,0,0.04)",
+        boxShadow: quickMode ? "none" : (isSeated ? "0 2px 12px rgba(74,154,106,0.10)" : "0 1px 4px rgba(0,0,0,0.04)"),
         transition: "box-shadow 0.15s",
       }}>
-        {/* Accent bar */}
-        <div style={{ height: 3, background: accentColor }} />
+        {/* Accent bar — hidden in quick mode (left border carries status) */}
+        {!quickMode && <div style={{ height: 3, background: accentColor }} />}
 
         {/* Header */}
         <div
@@ -1148,18 +1267,18 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
           </div>
           <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <span style={{
-              fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "3px 8px", borderRadius: 3,
+              fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "3px 8px", borderRadius: quickMode ? 0 : 3,
               background: isSeated ? "#e8f7ee" : "#eef4fb",
               border: `1px solid ${isSeated ? "#9bd0aa" : "#c0d4ea"}`,
               color: isSeated ? "#2f7a45" : "#2f5f8a", fontWeight: 700,
             }}>{isSeated ? "SEATED" : "RESERVED"}</span>
-            {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 3, border: "1px solid #e8e8e8", color: "#666" }}>{t.menuType}</span>}
-            {t.lang === "si" && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 3, border: "1px solid #c0ccee", color: "#3050a0", background: "#f0f4ff", fontWeight: 700 }}>SI</span>}
+            {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: "1px solid #e8e8e8", color: "#666" }}>{t.menuType}</span>}
+            {t.lang === "si" && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: "1px solid #c0ccee", color: "#3050a0", background: "#f0f4ff", fontWeight: 700 }}>SI</span>}
             {t.pace && (() => {
-              const pc = { Slow: { color: "#7a5020", bg: "#fdf4e8", border: "#c8a060" }, Fast: { color: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" } }[t.pace] || {};
-              return <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 3, border: `1px solid ${pc.border}`, background: pc.bg, color: pc.color, fontWeight: 700 }}>{t.pace}</span>;
+              const pc = { Slow: { color: UI.ink, bg: UI.surface2, border: UI.line }, Fast: { color: "#6a2a2a", bg: "#fff5f5", border: "#c04040" } }[t.pace] || {};
+              return <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: `1px solid ${pc.border}`, background: pc.bg, color: pc.color, fontWeight: 700 }}>{t.pace}</span>;
             })()}
-            {t.guestType === "hotel" && t.room && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 3, border: "1px solid #d4b888", color: "#a07040", background: "#fffaf2", fontWeight: 600 }}>#{t.room}</span>}
+            {t.guestType === "hotel" && t.room && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: quickMode ? 0 : 3, border: `1px solid ${UI.line}`, color: UI.ink, background: UI.surface2, fontWeight: 600 }}>#{t.room}</span>}
             {t.birthday && <span style={{ fontSize: 12 }}>🎂</span>}
           </div>
         </div>
@@ -1207,10 +1326,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 
         {/* Quick mode — ALL water row */}
         {quickMode && isSeated && seats.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderBottom: "1px solid #f0f0f0", background: "#fafafa" }}>
-            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#ccc", textTransform: "uppercase", minWidth: 30 }}>ALL</span>
-            <div style={{ display: "flex", gap: 4 }}>
-              {WATER_QUICK.map(opt => wBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat && updSeat(t.id, s.id, "water", opt))))}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: `1px solid ${qm.hairline}`, background: "#fafafa" }}>
+            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.6, color: qm.label, textTransform: "uppercase", minWidth: 28 }}>All</span>
+            <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+              {WATER_QUICK.map(opt => wBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat && updSeat(t.id, s.id, "water", () => opt))))}
             </div>
           </div>
         )}
@@ -1226,163 +1345,171 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
               const hasContent = (s.water && s.water !== "—") || s.pairing || restr.length > 0 || extras.length > 0;
 
               if (quickMode) {
+                const pairingByExtraKey = new Map();
+                (optionalPairings || []).forEach(opt => { if (opt.extraKey) pairingByExtraKey.set(opt.extraKey, opt); });
+                const pCur = s.pairing || "—";
+                const pLab = pCur === "—" ? "—" : pCur === "Non-Alc" ? "N/A" : pCur === "Our Story" ? "Story" : pCur === "Premium" ? "Prem" : pCur === "Wine" ? "Wine" : pCur;
                 return (
                   <div key={s.id} style={{
-                    border: `1px solid ${restr.length ? "#f0d0d0" : "#ececec"}`,
-                    borderRadius: 6, overflow: "hidden",
-                    background: restr.length ? "#fffaf9" : "#fafafa",
+                    border: `1px solid ${restr.length ? "#e8c8c8" : qm.hairline}`,
+                    borderRadius: 0, overflow: "hidden",
+                    background: restr.length ? "#fffafa" : "#fff",
                   }}>
-                    {/* Seat label + restrictions */}
                     <div style={{
-                      display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
-                      padding: "4px 10px", background: restr.length ? "#fff0f0" : "#f2f2f2",
-                      borderBottom: "1px solid #e8e8e8",
+                      display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+                      padding: "6px 12px", background: restr.length ? "#fff6f6" : "#fafafa",
+                      borderBottom: `1px solid ${qm.hairline}`,
                     }}>
-                      <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: restr.length ? "#b04040" : "#777" }}>P{s.id}</span>
-                      {restr.map((r, i) => (
-                        <span key={i} style={{ fontFamily: FONT, fontSize: 9, color: "#b04040", fontWeight: 500 }}>
-                          ⚠ {restrLabel(r.note)}
-                        </span>
-                      ))}
+                      <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: restr.length ? "#b04040" : qm.text, minWidth: 26 }}>P{s.id}</span>
+                      {restr.length === 0
+                        ? null
+                        : restr.map((r, i) => (
+                          <span key={i} style={{ fontFamily: FONT, fontSize: 9, color: "#b04040", fontWeight: 500 }}>
+                            {restrLabel(r.note)}
+                          </span>
+                        ))}
                     </div>
-                    {/* Water */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", padding: "6px 10px 4px" }}>
-                      <div style={{ display: "flex", gap: 3 }}>
-                        {WATER_QUICK.map(opt => wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt)))}
+                    <div style={{ padding: "10px 12px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 10 }}>
+                        <div style={{ flex: "1 1 140px", minWidth: 0 }}>
+                          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.4, color: qm.label, marginBottom: 5, textTransform: "uppercase" }}>Water</div>
+                          <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                            {WATER_QUICK.map(opt => wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", () => opt)))}
+                          </div>
+                        </div>
+                        <div style={{ flex: "1 1 120px", minWidth: 0 }}>
+                          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.4, color: qm.label, marginBottom: 5, textTransform: "uppercase" }}>Pairing</div>
+                          <button type="button" onClick={() => updSeat && updSeat(t.id, s.id, "pairing", (cur, seat) => {
+                            const p0 = seat.pairing || "—";
+                            return PAIRINGS[(PAIRINGS.indexOf(p0) + 1) % PAIRINGS.length];
+                          })} style={{
+                            fontFamily: FONT, fontSize: 10, letterSpacing: 0.3, padding: "6px 12px", width: "100%",
+                            border: `1px solid ${(pairingStyle[pCur] || pairingStyle["—"]).border}`,
+                            borderRadius: 0, cursor: "pointer", textAlign: "left",
+                            background: (pairingStyle[pCur] || pairingStyle["—"]).bg,
+                            color: (pairingStyle[pCur] || pairingStyle["—"]).color,
+                          }}>{pLab} <span style={{ color: qm.muted, fontWeight: 400 }}>→ next</span></button>
+                        </div>
                       </div>
-                      <div style={{ width: 1, height: 16, background: "#e0e0e0", margin: "0 2px" }} />
-                      {/* Optional extras — cycling for linked pairings (Beetroot), simple toggle for plain */}
-                      {(() => {
-                        const pairingByExtraKey = new Map();
-                        (optionalPairings || []).forEach(opt => { if (opt.extraKey) pairingByExtraKey.set(opt.extraKey, opt); });
-                        return (optionalExtras || []).slice(0, 4).map(dish => {
-                          const extra = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
-                          const dishOn = !!extra.ordered;
-                          const linked = pairingByExtraKey.get(dish.key);
+                      {serviceExtrasList.length > 0 && (
+                        <div>
+                          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.4, color: qm.label, marginBottom: 5, textTransform: "uppercase" }}>Extras</div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "stretch" }}>
+                            {serviceExtrasList.map(dish => {
+                              const extra = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
+                              const dishOn = !!extra.ordered;
+                              const linked = pairingByExtraKey.get(dish.key);
+                              const short = String(dish.name || dish.key || "").replace(/\s+/g, " ").trim().slice(0, 12) || dish.key;
 
-                          if (linked) {
-                            const raw = s.optionalPairings?.[linked.key];
-                            const pairingOrdered = raw?.ordered !== undefined ? !!raw.ordered : false;
-                            const pmode = raw?.mode || null;
-                            const states = ["off", "on"];
-                            if (linked.hasAlco) states.push("alco");
-                            if (linked.hasNonAlco) states.push("nonalc");
-                            let cur;
-                            if (!dishOn) cur = "off";
-                            else if (!pairingOrdered) cur = "on";
-                            else if (pmode === "alco") cur = "alco";
-                            else if (pmode === "nonalc") cur = "nonalc";
-                            else cur = "on";
-                            const labelMap = {
-                              off:    `${dish.name} off`,
-                              on:     `${dish.name} ✓`,
-                              alco:   `${String(dish.name).slice(0,4)} · alco`,
-                              nonalc: `${String(dish.name).slice(0,4)} · n/a`,
-                            };
-                            const styleMap = {
-                              off:    { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" },
-                              on:     { border: "#a0c060", bg: "#f4f8e8", color: "#5a7820" },
-                              alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
-                              nonalc: { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" },
-                            }[cur];
-                            return (
-                              <button key={dish.key || dish.id} onClick={() => upd && upd(t.id, "seats", prev => (prev || []).map(seat => {
-                                if (seat.id !== s.id) return seat;
-                                const r = seat.optionalPairings?.[linked.key];
-                                const xtra = seat.extras?.[dish.key] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
-                                const po = r?.ordered !== undefined ? !!r.ordered : false;
-                                const pm = r?.mode || null;
-                                let c;
-                                if (!xtra.ordered) c = "off";
-                                else if (!po) c = "on";
-                                else if (pm === "alco") c = "alco";
-                                else if (pm === "nonalc") c = "nonalc";
-                                else c = "on";
-                                const nx = states[(states.indexOf(c) + 1) % states.length];
-                                return {
-                                  ...seat,
-                                  extras: { ...seat.extras, [dish.key]: { ordered: nx !== "off", pairing: dish.pairings?.[0] || "—" } },
-                                  optionalPairings: { ...(seat.optionalPairings || {}), [linked.key]: {
-                                    ...(r || {}),
-                                    ordered: nx === "alco" || nx === "nonalc",
-                                    ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }),
-                                  }},
-                                };
-                              }))} style={{
-                                fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "3px 9px",
-                                border: `1px solid ${styleMap.border}`, borderRadius: 20, cursor: "pointer",
-                                background: styleMap.bg, color: styleMap.color,
-                              }}>{labelMap[cur]}</button>
-                            );
-                          }
-
-                          // Plain extra — simple toggle
-                          return (
-                            <button key={dish.key || dish.id}
-                              onClick={() => updSeat && updSeat(t.id, s.id, "extras", { ...s.extras, [dish.key]: { ...extra, ordered: !dishOn } })}
-                              style={{
-                                fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "3px 9px",
-                                border: `1px solid ${dishOn ? "#b0b0b0" : "#e8e8e8"}`, borderRadius: 20, cursor: "pointer",
-                                background: dishOn ? "#f3f3f3" : "#fff", color: dishOn ? "#444" : "#aaa",
-                              }}>{String(dish.name || dish.key || "").slice(0, 8)}</button>
-                          );
-                        });
-                      })()}
-                    </div>
-                    {/* Pairing */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", padding: "2px 10px 7px" }}>
-                      {PAIRING_OPTS.map(([val, label]) => {
-                        const active = s.pairing === val || (val === "—" && !s.pairing);
-                        const col = PC[val];
-                        return (
-                          <button key={val} onClick={() => updSeat && updSeat(t.id, s.id, "pairing", val)} style={{
-                            fontFamily: FONT, fontSize: 8, letterSpacing: 0.3, padding: "3px 7px",
-                            border: `1px solid ${active && val !== "—" ? col?.border : active ? "#333" : "#e8e8e8"}`,
-                            borderRadius: 3, cursor: "pointer",
-                            background: active && val !== "—" ? col?.bg : active ? "#1a1a1a" : "#fff",
-                            color: active && val !== "—" ? col?.color : active ? "#fff" : "#ccc",
-                          }}>{label}</button>
-                        );
-                      })}
-                    </div>
-                    {/* Aperitif quick-add — same behaviour as Beverages section buttons */}
-                    {aperitifOptions && aperitifOptions.length > 0 && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", padding: "2px 10px 8px" }}>
-                        <span style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", marginRight: 2 }}>APR</span>
-                        {aperitifOptions.map(opt => {
-                          const label = opt.label ?? opt;
-                          const sk = (opt.searchKey ?? opt).toLowerCase();
-                          const apMatch = (x) => {
-                            const xn = (x?.name || "").toLowerCase();
-                            const xp = (x?.producer || "").toLowerCase();
-                            return xn.includes(sk) || xp.includes(sk) || (xn.length >= 4 && sk.includes(xn)) || (xp.length >= 4 && sk.includes(xp));
-                          };
-                          const active = (s.aperitifs || []).some(apMatch);
-                          return (
-                            <button key={label} onClick={() => {
-                              if (!updSeat) return;
-                              if (active) {
-                                updSeat(t.id, s.id, "aperitifs", (s.aperitifs || []).filter(x => !apMatch(x)));
-                              } else {
-                                const type = opt.type || "wine";
-                                const wHit = (w) => { const wn=(w.name||"").toLowerCase(),wp=(w.producer||"").toLowerCase(); return wn.includes(sk)||wp.includes(sk)||(wn.length>=4&&sk.includes(wn))||(wp.length>=4&&sk.includes(wp)); };
-                                const found = type === "wine"
-                                  ? (wines.find(w => w.byGlass && wHit(w)) || wines.find(wHit))
-                                  : cocktails?.find(c => { const cn=(c.name||"").toLowerCase(); return cn.includes(sk)||(cn.length>=4&&sk.includes(cn)); });
-                                const item = found || { name: label, notes: "", __cocktail: true };
-                                updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item]);
+                              if (linked) {
+                                const raw = s.optionalPairings?.[linked.key];
+                                const pairingOrdered = raw?.ordered !== undefined ? !!raw.ordered : false;
+                                const pmode = raw?.mode || null;
+                                const states = ["off", "on"];
+                                if (linked.hasAlco) states.push("alco");
+                                if (linked.hasNonAlco) states.push("nonalc");
+                                let cur;
+                                if (!dishOn) cur = "off";
+                                else if (!pairingOrdered) cur = "on";
+                                else if (pmode === "alco") cur = "alco";
+                                else if (pmode === "nonalc") cur = "nonalc";
+                                else cur = "on";
+                                const sub = { off: "off", on: "on", alco: "wine", nonalc: "n/a" }[cur];
+                                const styleMap = {
+                                  off:    { border: cycleIdle.border, bg: cycleIdle.background, color: qm.muted },
+                                  on:     { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
+                                  alco:   { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
+                                  nonalc: { border: cycleSelected.border, bg: cycleSelected.background, color: cycleSelected.color },
+                                }[cur];
+                                return (
+                                  <button key={dish.key || dish.id} type="button" onClick={() => applySeatPatch(s.id, seat => {
+                                    const r0 = seat.optionalPairings?.[linked.key];
+                                    const xtra = seat.extras?.[dish.key] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
+                                    const po = r0?.ordered !== undefined ? !!r0.ordered : false;
+                                    const pm = r0?.mode || null;
+                                    let c;
+                                    if (!xtra.ordered) c = "off";
+                                    else if (!po) c = "on";
+                                    else if (pm === "alco") c = "alco";
+                                    else if (pm === "nonalc") c = "nonalc";
+                                    else c = "on";
+                                    const nx = states[(states.indexOf(c) + 1) % states.length];
+                                    return {
+                                      ...seat,
+                                      extras: { ...seat.extras, [dish.key]: { ordered: nx !== "off", pairing: dish.pairings?.[0] || "—" } },
+                                      optionalPairings: { ...(seat.optionalPairings || {}), [linked.key]: {
+                                        ...(r0 || {}),
+                                        ordered: nx === "alco" || nx === "nonalc",
+                                        ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }),
+                                      }},
+                                    };
+                                  })} style={{
+                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "6px 12px",
+                                    border: `1px solid ${styleMap.border}`, borderRadius: 0, cursor: "pointer",
+                                    background: styleMap.bg, color: styleMap.color, minWidth: 88, textAlign: "left",
+                                  }}>
+                                    <span style={{ fontWeight: 600 }}>{short}</span>
+                                    <span style={{ color: qm.muted, fontWeight: 400, marginLeft: 6 }}>{sub}</span>
+                                  </button>
+                                );
                               }
-                            }} style={{
-                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.3, padding: "3px 7px",
-                              border: `1px solid ${active ? "#7a5020" : "#e8e8e8"}`,
-                              borderRadius: 3, cursor: "pointer",
-                              background: active ? "#fdf4e8" : "#fff",
-                              color: active ? "#7a5020" : "#bbb",
-                            }}>{label}</button>
-                          );
-                        })}
-                      </div>
-                    )}
+
+                              return (
+                                <button key={dish.key || dish.id} type="button"
+                                  onClick={() => updSeat && updSeat(t.id, s.id, "extras", (_, seat) => {
+                                    const ex = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
+                                    return { ...seat.extras, [dish.key]: { ...ex, ordered: !ex.ordered } };
+                                  })}
+                                  style={{
+                                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "6px 12px", borderRadius: 0, cursor: "pointer",
+                                    ...(dishOn ? toggleOnSoft : cycleIdle), minWidth: 72, textAlign: "left",
+                                  }}>
+                                  <span style={{ fontWeight: 600 }}>{short}</span>
+                                  <span style={{ marginLeft: 6, fontWeight: 400 }}>{dishOn ? "on" : "off"}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {aperitifOptions && aperitifOptions.length > 0 && (
+                        <div>
+                          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.4, color: qm.label, marginBottom: 5, textTransform: "uppercase" }}>Aperitif</div>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {aperitifOptions.map(opt => {
+                              const label = opt.label ?? opt;
+                              const sk = (opt.searchKey ?? opt).toLowerCase();
+                              const apMatch = (x) => {
+                                const xn = (x?.name || "").toLowerCase();
+                                const xp = (x?.producer || "").toLowerCase();
+                                return xn.includes(sk) || xp.includes(sk) || (xn.length >= 4 && sk.includes(xn)) || (xp.length >= 4 && sk.includes(xp));
+                              };
+                              const active = (s.aperitifs || []).some(apMatch);
+                              return (
+                                <button key={label} type="button" onClick={() => {
+                                  if (!updSeat) return;
+                                  if (active) {
+                                    updSeat(t.id, s.id, "aperitifs", prev => (prev || []).filter(x => !apMatch(x)));
+                                  } else {
+                                    const type = opt.type || "wine";
+                                    const wHit = (w) => { const wn=(w.name||"").toLowerCase(),wp=(w.producer||"").toLowerCase(); return wn.includes(sk)||wp.includes(sk)||(wn.length>=4&&sk.includes(wn))||(wp.length>=4&&sk.includes(wp)); };
+                                    const found = type === "wine"
+                                      ? (wines.find(w => w.byGlass && wHit(w)) || wines.find(wHit))
+                                      : cocktails?.find(c => { const cn=(c.name||"").toLowerCase(); return cn.includes(sk)||(cn.length>=4&&sk.includes(cn)); });
+                                    const item = found || { name: label, notes: "", __cocktail: true };
+                                    updSeat(t.id, s.id, "aperitifs", prev => [...(prev || []), item]);
+                                  }
+                                }} style={{
+                                  fontFamily: FONT, fontSize: 9, letterSpacing: 0.2, padding: "5px 10px",
+                                  borderRadius: 0, cursor: "pointer",
+                                  ...(active ? toggleOnSoft : cycleIdle),
+                                }}>{label}</button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               }
@@ -1395,17 +1522,17 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                   background: restr.length ? "#fffaf9" : "transparent",
                 }}>
                   <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, minWidth: 22, color: restr.length ? "#b04040" : "#aaa", letterSpacing: 0.5 }}>P{s.id}</span>
-                  {!hasContent && <span style={{ fontFamily: FONT, fontSize: 10, color: "#e8e8e8" }}>—</span>}
+                  {!hasContent && <span style={{ fontFamily: FONT, fontSize: 10, color: "#e0e0e0" }}>—</span>}
                   {s.water && s.water !== "—" && (
-                    <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, background: ws.bg || "#f5f5f5", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>
+                    <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 0, background: "transparent", color: ws.color || "#555", border: "1px solid #d8d8d8" }}>{s.water}</span>
                   )}
                   {s.pairing && pc && (
-                    <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, background: pc.bg, border: `1px solid ${pc.border}`, color: pc.color, fontWeight: 500 }}>{s.pairing}</span>
+                    <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 0, background: "transparent", border: `1px solid ${pc.border}`, color: pc.color, fontWeight: 500 }}>{s.pairing}</span>
                   )}
                   {extras.map(d => {
                     const ex = s.extras[d.key] || s.extras[d.id];
                     return (
-                      <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 3, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>
+                      <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: tokens.radius, ...toggleOn }}>
                         {d.name}{ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}
                       </span>
                     );
@@ -1438,8 +1565,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
           <div style={{ padding: "6px 14px", borderTop: "1px solid #f5f5f5", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             {quickMode && upd ? (
               <button onClick={() => {
-                const seats = t.seats || [];
-                const alertSeats = seats.map(s => ({
+                const seatList = t.seats || [];
+                const alertSeats = seatList.map(s => ({
                   id: s.id,
                   pairing: s.pairing || null,
                   extras: (optionalExtras || [])
@@ -1455,16 +1582,23 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                   seats: alertSeats,
                   confirmed: false,
                 });
+                setSendAck(true);
+                if (sendAckTimer.current) clearTimeout(sendAckTimer.current);
+                sendAckTimer.current = setTimeout(() => { setSendAck(false); sendAckTimer.current = null; }, 2200);
               }} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 16px",
-                border: "1px solid #1a1a1a", borderRadius: 3, cursor: "pointer",
-                background: "#1a1a1a", color: "#fff", fontWeight: 700, textTransform: "uppercase",
-              }}>Send</button>
+                borderRadius: quickMode ? 0 : 3, cursor: "pointer",
+                fontWeight: 700, textTransform: "uppercase",
+                transition: "background 0.15s, border-color 0.15s, color 0.15s",
+                ...(sendAck
+                  ? { ...primaryAction, border: `1px solid ${UI.ok}` }
+                  : { background: UI.infoSoft, color: UI.infoText, border: `1px solid ${UI.infoBorder}` }),
+              }}>{sendAck ? "Sent ✓" : "Send"}</button>
             ) : <span />}
             {onUnseat && (
               <button onClick={() => onUnseat(t.id)} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 12px",
-                border: "1px solid #d8d8d8", borderRadius: 3, cursor: "pointer",
+                border: "1px solid #d8d8d8", borderRadius: quickMode ? 0 : 3, cursor: "pointer",
                 background: "#fff", color: "#999", textTransform: "uppercase",
               }}>Unseat</button>
             )}
@@ -1474,7 +1608,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
     );
 }
 
-function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [] }) {
+function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd, quickMode = false, suppressRowStats = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [] }) {
   const isMobile = useIsMobile(700);
 
   // Auto-detect tables that share the same resName + resTime and have no explicit
@@ -1532,9 +1666,11 @@ function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd,
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
               <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: "#aaa", textTransform: "uppercase" }}>{time}</span>
               <div style={{ flex: 1, height: 1, background: "#efefef" }} />
-              <span style={{ fontFamily: FONT, fontSize: 9, color: "#ccc" }}>
-                {seatedCount}/{rowTables.length} seated · {rowTables.reduce((a, t) => a + (t.guests || 0), 0)} guests
-              </span>
+              {!suppressRowStats && (
+                <span style={{ fontFamily: FONT, fontSize: 9, color: "#ccc" }}>
+                  {seatedCount}/{rowTables.length} seated · {rowTables.reduce((a, t) => a + (t.guests || 0), 0)} guests
+                </span>
+              )}
             </div>
             <div style={{
               display: "grid",
@@ -1572,30 +1708,26 @@ const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 
 function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
   const seats = table.seats || [];
-  const toggleExtra = (seat, dishId) => {
-    const cur = seat.extras?.[dishId] || { ordered: false, pairing: "—" };
-    updSeat(table.id, seat.id, "extras", { ...seat.extras, [dishId]: { ...cur, ordered: !cur.ordered } });
+  const toggleExtra = (seatId, dishId) => {
+    updSeat(table.id, seatId, "extras", (_, s) => {
+      const cur = s.extras?.[dishId] || { ordered: false, pairing: "—" };
+      return { ...s.extras, [dishId]: { ...cur, ordered: !cur.ordered } };
+    });
   };
 
   const waterBtn = (opt, active, onClick) => (
     <button key={opt} onClick={onClick} style={{
       fontFamily: FONT, fontSize: 10, letterSpacing: 0.5,
-      padding: "5px 9px", border: "1px solid",
-      borderColor: active ? "#1a1a1a" : "#e0e0e0",
-      borderRadius: 2, cursor: "pointer", lineHeight: 1,
-      background: active ? "#1a1a1a" : "#fff",
-      color: active ? "#fff" : "#666",
+      padding: "5px 9px", borderRadius: tokens.radius, cursor: "pointer", lineHeight: 1,
+      ...(active ? cycleSelected : cycleIdle),
     }}>{opt}</button>
   );
 
-  const extraBtn = (label, active, color, onClick) => (
+  const extraBtn = (label, active, _color, onClick) => (
     <button onClick={onClick} style={{
       fontFamily: FONT, fontSize: 9, letterSpacing: 1,
-      padding: "5px 9px", border: "1px solid",
-      borderColor: active ? color : "#e0e0e0",
-      borderRadius: 2, cursor: "pointer", lineHeight: 1,
-      background: active ? color : "#fff",
-      color: active ? "#fff" : "#aaa",
+      padding: "5px 9px", borderRadius: tokens.radius, cursor: "pointer", lineHeight: 1,
+      ...(active ? toggleOnSoft : cycleIdle),
       textTransform: "uppercase",
     }}>{label}</button>
   );
@@ -1603,7 +1735,7 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
   const allWaterMatch = opt => seats.length > 0 && seats.every(s => s.water === opt);
 
   return (
-    <div style={{ border: "1px solid #e8e8e8", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
+    <div style={{ border: "1px solid #e8e8e8", borderRadius: tokens.radius, overflow: "hidden", background: "#fff" }}>
       {/* Table header */}
       <div onClick={onDetails} style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -1616,26 +1748,26 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
           {table.resTime && <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", letterSpacing: 1 }}>{table.resTime}</span>}
           <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb" }}>{seats.length}p</span>
         </div>
-        <span style={{ fontFamily: FONT, fontSize: 11, color: "#c8a96e" }}>→</span>
+        <span style={{ fontFamily: FONT, fontSize: 11, color: "#888" }}>→</span>
       </div>
 
       {/* All water quick row */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderBottom: "1px solid #f8f8f8", background: "#fdfdfd" }}>
         <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", minWidth: 28 }}>ALL</span>
         <div style={{ display: "flex", gap: 4 }}>
-          {WATER_QUICK.map(opt => waterBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat(table.id, s.id, "water", opt))))}
+          {WATER_QUICK.map(opt => waterBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat(table.id, s.id, "water", () => opt))))}
         </div>
       </div>
 
       {/* Per-seat rows */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px" }}>
         {seats.map(seat => {
-          const pairingColor = { Wine: "#7a5020", "Non-Alc": "#3a6a2a", Premium: "#4a3a7a", "Our Story": "#2a5a6a" };
-          const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#edf8e8", Premium: "#f0eeff", "Our Story": "#e8f5f8" };
+          const pairingColor = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].color]));
+          const pairingBg   = Object.fromEntries(PAIRINGS.map((k) => [k, pairingStyle[k].bg]));
           const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
           return (
             <div key={seat.id} style={{
-              border: "1px solid #ececec", borderRadius: 5, overflow: "hidden",
+              border: "1px solid #ececec", borderRadius: tokens.radius, overflow: "hidden",
               background: "#fafafa",
             }}>
               {/* Seat label strip */}
@@ -1655,7 +1787,7 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
               {/* Water + extras */}
               <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap", padding: "7px 10px 5px" }}>
                 <div style={{ display: "flex", gap: 3 }}>
-                  {WATER_QUICK.map(opt => waterBtn(opt, seat.water === opt, () => updSeat(table.id, seat.id, "water", opt)))}
+                  {WATER_QUICK.map(opt => waterBtn(opt, seat.water === opt, () => updSeat(table.id, seat.id, "water", () => opt)))}
                 </div>
                 <div style={{ width: 1, height: 18, background: "#e8e8e8", margin: "0 2px" }} />
                 <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
@@ -1664,11 +1796,14 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
                     const active = !!extra.ordered;
                     return (
                       <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
-                        {extraBtn(dish.name.slice(0, 4), active, "#7a7a7a", () => toggleExtra(seat, dish.key))}
+                        {extraBtn(dish.name.slice(0, 4), active, "#7a7a7a", () => toggleExtra(seat.id, dish.key))}
                         {active && (dish.pairings || ["—"]).slice(0, 3).map((p) => {
                           const sel = (extra.pairing || "—") === p;
                           return (
-                            <button key={p} onClick={() => updSeat(table.id, seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, pairing: p } })} style={{
+                            <button key={p} onClick={() => updSeat(table.id, seat.id, "extras", (_, s) => {
+                              const ex = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
+                              return { ...s.extras, [dish.key]: { ...ex, pairing: p } };
+                            })} style={{
                               fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
                               padding: "4px 6px", border: "1px solid",
                               borderColor: sel ? "#7a7a7a" : "#e0e0e0",
@@ -1691,13 +1826,13 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
                   const col = pairingColor[val];
                   const bg = pairingBg[val];
                   return (
-                    <button key={val} onClick={() => updSeat(table.id, seat.id, "pairing", val)} style={{
+                    <button key={val} onClick={() => updSeat(table.id, seat.id, "pairing", () => val)} style={{
                       fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
                       padding: "4px 7px", border: "1px solid",
-                      borderColor: active && val !== "—" ? col : active ? "#1a1a1a" : "#e0e0e0",
-                      borderRadius: 2, cursor: "pointer", lineHeight: 1,
-                      background: active && val !== "—" ? bg : active ? "#1a1a1a" : "#fff",
-                      color: active && val !== "—" ? col : active ? "#fff" : "#bbb",
+                      borderColor: active && val !== "—" ? col : active ? UI.lineStrong : UI.border,
+                      borderRadius: tokens.radius, cursor: "pointer", lineHeight: 1,
+                      background: active && val !== "—" ? bg : active ? UI.surface3 : UI.surface2,
+                      color: active && val !== "—" ? col : active ? UI.ink : "#bbb",
                     }}>{label}</button>
                   );
                 })}
@@ -1866,6 +2001,20 @@ export default function App() {
   const saveTimerRef       = useRef(null);
   const prevTablesJsonRef  = useRef((initialState.tables || initTables).map(t => JSON.stringify(sanitizeTable(t))));
   const tablesRef          = useRef(tables);
+  /** Client monotonic clock (ms) of last local mutation per table — stale remote rows are ignored to stop realtime/poll flicker. */
+  const tableLocalFreshRef = useRef(new Map());
+
+  const parseRemoteUpdatedAt = (raw) => {
+    if (raw == null || raw === "") return 0;
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw > 1e12 ? raw : raw * 1000;
+    const ms = Date.parse(String(raw));
+    return Number.isFinite(ms) ? ms : 0;
+  };
+
+  const bumpLocalTableFresh = useCallback((tableId) => {
+    if (tableId == null || Number.isNaN(Number(tableId))) return;
+    tableLocalFreshRef.current.set(Number(tableId), Date.now());
+  }, []);
 
   const offlineQueue = useOfflineQueue({ supabase });
   const enqueueServiceTableUpsert = useCallback(async (rows) => {
@@ -1933,8 +2082,19 @@ export default function App() {
   const pairings = useMemo(() => optionalPairingsFromCourses(menuCourses), [menuCourses]);
 
   const mergeRemoteTables = rows => {
-    const byId = new Map((Array.isArray(rows) ? rows : []).map(row => [Number(row.table_id), sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) })]));
-    const nextTables = initTables.map(base => byId.get(base.id) || base);
+    const arr = Array.isArray(rows) ? rows : [];
+    const rawById = new Map(arr.map(row => [Number(row.table_id), row]));
+    const nextTables = initTables.map(base => {
+      const row = rawById.get(base.id);
+      if (!row) return base;
+      const remoteTs = parseRemoteUpdatedAt(row.updated_at);
+      const localTs = tableLocalFreshRef.current.get(base.id) || 0;
+      if (remoteTs > 0 && localTs > 0 && remoteTs < localTs) {
+        const cur = tablesRef.current.find(t => t.id === base.id);
+        return cur ? { ...cur } : base;
+      }
+      return sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) });
+    });
     // Snapshot prevTablesJsonRef BEFORE setTables so the save-useEffect sees no diff
     // after a full poll and doesn't re-save the entire remote state.
     prevTablesJsonRef.current = nextTables.map(t => JSON.stringify(sanitizeTable(t)));
@@ -1946,6 +2106,9 @@ export default function App() {
   const applyRemoteTableRow = row => {
     const tableId = Number(row?.table_id);
     if (!tableId) return;
+    const remoteTs = parseRemoteUpdatedAt(row.updated_at);
+    const localTs = tableLocalFreshRef.current.get(tableId) || 0;
+    if (remoteTs > 0 && localTs > 0 && remoteTs < localTs) return;
     const nextTable = sanitizeTable({ id: tableId, ...(row.data || {}) });
     applyingRemoteRef.current = true;
     setTables(prev => prev.map(t => t.id === tableId ? nextTable : t));
@@ -1955,19 +2118,43 @@ export default function App() {
   const selTable   = tables.find(t => t.id === sel);
   const modalTable = tables.find(t => t.id === resModal);
 
-  const upd = (id, f, v) => setTables(p => p.map(t => t.id === id ? { ...t, [f]: typeof v === "function" ? v(t[f]) : v } : t));
+  const upd = (id, f, v) => {
+    bumpLocalTableFresh(id);
+    setTables(p => p.map(t => t.id === id ? { ...t, [f]: typeof v === "function" ? v(t[f]) : v } : t));
+  };
   // Batch multiple field updates in one setTables call (one render, one Supabase save)
-  const updMany = (id, changes) => setTables(p => p.map(t => t.id === id ? { ...t, ...changes } : t));
+  const updMany = (id, changes) => {
+    bumpLocalTableFresh(id);
+    setTables(p => p.map(t => t.id === id ? { ...t, ...changes } : t));
+  };
 
-  const updSeat = (tid, sid, f, v) => setTables(p => p.map(t =>
-    t.id !== tid ? t : { ...t, seats: t.seats.map(s => s.id === sid ? { ...s, [f]: v } : s) }
-  ));
+  /** Seat field update. Pass a function `v(prevField, seat)` to derive from latest state (fixes rapid-click flicker). */
+  const updSeat = (tid, sid, f, v) => {
+    bumpLocalTableFresh(tid);
+    setTables(p => p.map(t => {
+    if (t.id !== tid) return t;
+    const seats = t.seats || [];
+    return {
+      ...t,
+      seats: seats.map(s => {
+        if (s.id !== sid) return s;
+        const next = typeof v === "function" ? v(s[f], s) : v;
+        return { ...s, [f]: next };
+      }),
+    };
+  }));
+  };
 
-  const setGuests = (tid, n) => setTables(p => p.map(t =>
+  const setGuests = (tid, n) => {
+    bumpLocalTableFresh(tid);
+    setTables(p => p.map(t =>
     t.id !== tid ? t : { ...t, guests: n, seats: makeSeats(n, t.seats) }
   ));
+  };
 
-  const applySeatTemplateToAll = (tableId, sourceSeatId = 1) => setTables(prev => prev.map(t => {
+  const applySeatTemplateToAll = (tableId, sourceSeatId = 1) => {
+    bumpLocalTableFresh(tableId);
+    setTables(prev => prev.map(t => {
     if (t.id !== tableId) return t;
     const seats = t.seats || [];
     if (seats.length <= 1) return t;
@@ -1995,8 +2182,11 @@ export default function App() {
     ));
     return { ...t, seats: nextSeats };
   }));
+  };
 
-  const clearSeatBeverages = (tableId) => setTables(prev => prev.map(t => {
+  const clearSeatBeverages = (tableId) => {
+    bumpLocalTableFresh(tableId);
+    setTables(prev => prev.map(t => {
     if (t.id !== tableId) return t;
     const nextSeats = (t.seats || []).map(s => ({
       ...s,
@@ -2009,11 +2199,13 @@ export default function App() {
     }));
     return { ...t, seats: nextSeats };
   }));
+  };
 
   const seatTable = id => {
     const now = fmt(new Date());
     const group = tables.find(t => t.id === id)?.tableGroup;
     const ids = group?.length > 1 ? group : [id];
+    ids.forEach(tid => bumpLocalTableFresh(tid));
     setTables(p => p.map(t =>
       !ids.includes(t.id) ? t : { ...t, active: true, arrivedAt: now, seats: makeSeats(t.guests, t.seats) }
     ));
@@ -2022,6 +2214,7 @@ export default function App() {
   const unseatTable = id => {
     const group = tables.find(t => t.id === id)?.tableGroup;
     const ids = group?.length > 1 ? group : [id];
+    ids.forEach(tid => bumpLocalTableFresh(tid));
     setTables(p => p.map(t =>
       !ids.includes(t.id) ? t : { ...t, active: false, arrivedAt: null }
     ));
@@ -2029,6 +2222,7 @@ export default function App() {
 
   const clear = id => {
     if (typeof window !== "undefined" && !window.confirm("Clear this table and reset its details?")) return;
+    bumpLocalTableFresh(id);
     setTables(p => p.map(t => t.id !== id ? t : blankTable(id)));
     setSel(null);
   };
@@ -2121,6 +2315,7 @@ export default function App() {
 
   const clearAll = () => {
     if (typeof window !== "undefined" && !window.confirm("Clear ALL tables?")) return;
+    tableLocalFreshRef.current = new Map();
     setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     setSel(null);
     setArchiveOpen(false);
@@ -2135,6 +2330,7 @@ export default function App() {
     const restrPool = ["vegetarian","vegan","gluten free","lactose free","nut allergy","shellfish allergy","no pork"];
     const rng = (arr) => arr[Math.floor(Math.random() * arr.length)];
     const now = fmt(new Date());
+    for (let i = 1; i <= 10; i++) bumpLocalTableFresh(i);
     setTables(Array.from({ length: 10 }, (_, i) => {
       const id = i + 1;
       const n = pax[i];
@@ -2178,6 +2374,7 @@ export default function App() {
         return;
       }
     }
+    tableLocalFreshRef.current = new Map();
     setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     setSel(null);
     setArchiveOpen(false);
@@ -2191,16 +2388,22 @@ export default function App() {
     await archiveAndClearAll();
   };
 
-  const swapSeats = (tid, aId, bId) => setTables(p => p.map(t => {
-    if (t.id !== tid) return t;
-    const sA = t.seats.find(s => s.id === aId);
-    const sB = t.seats.find(s => s.id === bId);
-    return { ...t, seats: t.seats.map(s => {
-      if (s.id === aId) return { ...sB, id: aId };
-      if (s.id === bId) return { ...sA, id: bId };
-      return s;
-    })};
-  }));
+  const swapSeats = (tid, aId, bId) => {
+    bumpLocalTableFresh(tid);
+    setTables(p => p.map(t => {
+      if (t.id !== tid) return t;
+      const sA = t.seats.find(s => s.id === aId);
+      const sB = t.seats.find(s => s.id === bId);
+      return {
+        ...t,
+        seats: t.seats.map(s => {
+          if (s.id === aId) return { ...sB, id: aId };
+          if (s.id === bId) return { ...sA, id: bId };
+          return s;
+        }),
+      };
+    }));
+  };
 
   const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, birthday, cakeNote, restrictions, notes, lang }) => {
     const group = tableIds ?? (tableId ? [tableId] : [id]);
@@ -2212,6 +2415,7 @@ export default function App() {
       .filter(c => normalizeCourseCategory(c?.course_category, c?.optional_flag) === "celebration")
       .map(c => normalizeOptionalKey(c?.optional_flag))
       .filter(Boolean);
+    [...new Set([...oldGroup, ...sortedGroup])].forEach(tid => bumpLocalTableFresh(tid));
     setTables(p => p.map(t => {
       // Clear tables that were in the old group but aren't in the new group
       if (oldGroup.includes(t.id) && !sortedGroup.includes(t.id)) {
@@ -2371,6 +2575,76 @@ export default function App() {
   };
 
   const switchMode = () => { changeMode(null); setSel(null); };
+
+  /** Escape = one step back: overlays/modals, then in-service drill-up only (no mode exit — use EXIT). */
+  useEffect(() => {
+    const typing = (t) => t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (!authed || !hydrated) return;
+      if (typing(e.target)) return;
+      if (mode === "reservation") return;
+
+      if (!mode) {
+        if (showServiceDatePicker) {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowServiceDatePicker(false);
+          setPendingModeAfterDate(null);
+        }
+        return;
+      }
+
+      if (showServiceDatePicker) {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowServiceDatePicker(false);
+        setPendingModeAfterDate(null);
+        return;
+      }
+      if (inventoryOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setInventoryOpen(false);
+        return;
+      }
+      if (archiveOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setArchiveOpen(false);
+        return;
+      }
+      if (summaryOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setSummaryOpen(false);
+        return;
+      }
+
+      if (mode === "service") {
+        if (sel != null) {
+          e.preventDefault();
+          e.stopPropagation();
+          setSel(null);
+          return;
+        }
+        if (quickView === "service") {
+          e.preventDefault();
+          e.stopPropagation();
+          setQuickView("board");
+          return;
+        }
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [
+    authed, hydrated, mode, showServiceDatePicker, inventoryOpen, archiveOpen, summaryOpen,
+    sel, quickView,
+  ]);
 
   // ── Persist locally + sync changed tables to Supabase ─────────────────────
   useEffect(() => {
@@ -2705,6 +2979,7 @@ export default function App() {
       if (payload.eventType === "DELETE") {
         const tableId = Number(payload.old?.table_id);
         if (!tableId) return;
+        bumpLocalTableFresh(tableId);
         applyingRemoteRef.current = true;
         setTables(prev => prev.map(t => t.id === tableId ? blankTable(tableId) : t));
         setTimeout(() => { applyingRemoteRef.current = false; }, 0);
@@ -3125,12 +3400,10 @@ export default function App() {
               onClick={() => setQuickView(v => v === "service" ? "board" : "service")}
               style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "7px 16px",
-                border: `1.5px solid ${quickView === "service" ? "#1a1a1a" : "#d8d8d8"}`,
-                background: quickView === "service" ? "#1a1a1a" : "#fff",
-                color: quickView === "service" ? "#fff" : "#999",
-                borderRadius: 20, cursor: "pointer",
+                borderRadius: 0, cursor: "pointer",
                 transition: "all 0.15s",
                 display: "flex", alignItems: "center", gap: 6,
+                ...(quickView === "service" ? toggleOnSoft : toggleOff),
               }}
             >
               <span style={{ fontSize: 10 }}>◈</span> QUICK ACCESS
@@ -3150,6 +3423,7 @@ export default function App() {
                 optionalPairings={pairings}
                 upd={upd}
                 quickMode={quickView === "service"}
+                suppressRowStats={quickView === "service"}
                 updSeat={updSeat}
                 onCardClick={id => setSel(id)}
                 onSeat={seatTable}

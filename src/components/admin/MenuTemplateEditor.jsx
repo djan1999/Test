@@ -25,6 +25,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { FONT, baseInp } from "./adminStyles.js";
+import { UI, outlineBtn } from "../../styles/uiChrome.js";
 import {
   BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
 } from "../../utils/menuTemplateSchema.js";
@@ -36,8 +37,7 @@ import { PreviewDataPanel } from "./MenuTemplatePreviewParts.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const GOLD = "#c8a96e";
-const SELECTED_RING = "#4b4b88";
+const SELECTED_RING = UI.line;
 const CELL_EMPTY_BG = "#f7f6f2";
 const CELL_EMPTY_BORDER = "#e4e2dc";
 
@@ -89,7 +89,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
           display: "flex", alignItems: "center", justifyContent: "center",
           cursor: "pointer",
         }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = UI.line; }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = CELL_EMPTY_BORDER; }}
       >
         <span style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", fontWeight: 700 }}>+</span>
@@ -105,7 +105,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
       style={{
         flex: 1, minWidth: 0, height: 28, borderRadius: 3, cursor: "pointer",
         border: `1.5px solid ${isSelected ? SELECTED_RING : "#e8e6e0"}`,
-        background: isSelected ? "#f4f3fb" : (meta?.bg || "#fafafa"),
+        background: isSelected ? UI.selectedBg : (meta?.bg || "#fafafa"),
         display: "flex", alignItems: "center", gap: 0,
         overflow: "hidden", position: "relative",
         transition: "border-color 0.1s",
@@ -127,7 +127,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
           flexShrink: 0, border: "none", background: "transparent",
           cursor: "pointer", color: "#ccc", fontSize: 9, padding: "0 3px", height: "100%",
         }}
-        onMouseEnter={e => { e.currentTarget.style.color = "#4b4b88"; }}
+        onMouseEnter={e => { e.currentTarget.style.color = UI.ink; }}
         onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
       >{side === "left" ? "→" : "←"}</button>
       <button
@@ -270,8 +270,8 @@ function RowActionBtn({ children, onClick, title, danger = false, active = false
       style={{
         width: 20, height: 22, border: "none", borderRadius: 2, cursor: "pointer",
         fontFamily: FONT, fontSize: 10, padding: 0, lineHeight: 1,
-        background: active ? "#f0f0f8" : hov ? (danger ? "#fff0f0" : "#f4f3fb") : "transparent",
-        color: active ? SELECTED_RING : hov ? (danger ? "#e05050" : SELECTED_RING) : "#bbb",
+        background: active ? UI.selectedBg : hov ? (danger ? "#fff5f5" : UI.surface2) : "transparent",
+        color: active ? UI.ink : hov ? (danger ? "#e05050" : UI.ink) : "#bbb",
         transition: "all 0.1s",
       }}
     >{children}</button>
@@ -284,7 +284,7 @@ function OverlayRow({ row }) {
   return (
     <div style={{
       background: "#fff", border: `1.5px solid ${SELECTED_RING}`, borderRadius: 3,
-      padding: "5px 10px", opacity: 0.9, boxShadow: "0 4px 16px rgba(75,75,136,0.18)",
+      padding: "5px 10px", opacity: 0.9, boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
       fontFamily: FONT, fontSize: 8.5, color: SELECTED_RING, letterSpacing: 1,
     }}>
       {row.left ? (BLOCK_META[row.left.type]?.label || row.left.type) : "—"}
@@ -409,8 +409,8 @@ function AlignButtons({ value, onChange }) {
           style={{
             width: 32, height: 26, border: `1px solid ${value === o.v ? SELECTED_RING : "#ddd"}`,
             borderRadius: 2, cursor: "pointer", fontFamily: FONT, fontSize: 11,
-            background: value === o.v ? "#f0f0f8" : "#fff",
-            color: value === o.v ? SELECTED_RING : "#666",
+            background: value === o.v ? UI.selectedBg : "#fff",
+            color: value === o.v ? UI.ink : "#666",
           }}
         >{o.icon}</button>
       ))}
@@ -1095,7 +1095,7 @@ export default function MenuTemplateEditor({
                   color: "#ccc", fontSize: 12, padding: "2px 4px", lineHeight: 1,
                   fontFamily: FONT,
                 }}
-                onMouseEnter={e => { e.currentTarget.style.color = GOLD; }}
+                onMouseEnter={e => { e.currentTarget.style.color = UI.ink; }}
                 onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
               >{leftOpen ? "◂" : "▸"}</button>
             </div>
@@ -1108,8 +1108,8 @@ export default function MenuTemplateEditor({
             style={{
               width: "100%", fontFamily: FONT, fontSize: 8, letterSpacing: 2,
               padding: "7px 0", border: "none", borderRadius: 3, cursor: saving ? "wait" : "pointer",
-              background: saved ? "#4a9a6a" : GOLD, color: "#fff",
-              textTransform: "uppercase", marginBottom: 6,
+              textTransform: "uppercase", marginBottom: 6, fontWeight: 600,
+              ...(saved ? { background: UI.okSoft, color: UI.okText, border: `1px solid ${UI.okBorder}` } : outlineBtn),
             }}
           >{saving ? "SAVING…" : saved ? "✓ SAVED" : "SAVE TEMPLATE"}</button>}
 
@@ -1144,8 +1144,8 @@ export default function MenuTemplateEditor({
                 onClick={rebuild}
                 style={{
                   marginTop: 10, fontFamily: FONT, fontSize: 8, letterSpacing: 1,
-                  padding: "8px 16px", border: `1.5px solid ${GOLD}`, borderRadius: 3,
-                  cursor: "pointer", background: "transparent", color: GOLD,
+                  padding: "8px 16px", border: `1.5px solid ${UI.line}`, borderRadius: 3,
+                  cursor: "pointer", background: "transparent", color: UI.ink,
                   textTransform: "uppercase",
                 }}
               >↺ Generate Default Template</button>
@@ -1159,7 +1159,7 @@ export default function MenuTemplateEditor({
             onDragEnd={handleDragEnd}
           >
             {isShortFilter && (
-              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#7a5020", background: "#fff8ee", border: "1px solid #f0d080", borderRadius: 3, padding: "5px 8px", margin: "0 0 6px", textTransform: "uppercase" }}>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: UI.ink, background: "#fff", border: `1px solid ${UI.line}`, borderRadius: 3, padding: "5px 8px", margin: "0 0 6px", textTransform: "uppercase" }}>
                 Short menu — {displayRows.length} blocks · Switch to FULL to see all
               </div>
             )}
@@ -1198,7 +1198,7 @@ export default function MenuTemplateEditor({
               background: "transparent", color: "#bbb", textTransform: "uppercase",
               transition: "all 0.12s",
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.color = GOLD; }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = UI.line; e.currentTarget.style.color = UI.ink; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = "#d0cec8"; e.currentTarget.style.color = "#bbb"; }}
           >+ ADD ROW</button>
           <button
@@ -1210,7 +1210,7 @@ export default function MenuTemplateEditor({
               background: "transparent", color: "#c8b87a", textTransform: "uppercase",
               transition: "all 0.12s",
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "#c8a96e"; e.currentTarget.style.color = "#c8a96e"; }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = UI.line; e.currentTarget.style.color = UI.ink; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = "#d4cfa0"; e.currentTarget.style.color = "#c8b87a"; }}
           >+ ADD GAP</button>
         </div>}
@@ -1230,7 +1230,7 @@ export default function MenuTemplateEditor({
               onClick={() => setPreviewOpen(true)}
               title="Show preview"
               style={{ border: "none", background: "transparent", cursor: "pointer", color: "#ccc", fontSize: 12, padding: "2px 4px", lineHeight: 1, fontFamily: FONT }}
-              onMouseEnter={e => { e.currentTarget.style.color = GOLD; }}
+              onMouseEnter={e => { e.currentTarget.style.color = UI.ink; }}
               onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
             >◂▸</button>
             <span style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", writingMode: "vertical-lr", marginTop: 8 }}>PREVIEW</span>
@@ -1242,7 +1242,7 @@ export default function MenuTemplateEditor({
               onClick={(e) => { e.stopPropagation(); setPreviewOpen(false); }}
               title="Collapse preview"
               style={{ position: "absolute", top: 6, right: 6, zIndex: 2, border: "none", background: "transparent", cursor: "pointer", color: "#ccc", fontSize: 10, padding: "2px 4px", lineHeight: 1, fontFamily: FONT }}
-              onMouseEnter={e => { e.currentTarget.style.color = GOLD; }}
+              onMouseEnter={e => { e.currentTarget.style.color = UI.ink; }}
               onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
             >✕</button>
             <LivePreview
@@ -1276,7 +1276,7 @@ export default function MenuTemplateEditor({
               color: "#ccc", fontSize: 12, padding: "2px 4px", lineHeight: 1,
               fontFamily: FONT,
             }}
-            onMouseEnter={e => { e.currentTarget.style.color = GOLD; }}
+            onMouseEnter={e => { e.currentTarget.style.color = UI.ink; }}
             onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
           >{rightOpen ? "▸" : "◂"}</button>
         </div>

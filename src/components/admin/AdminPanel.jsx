@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 import { tokens } from "../../styles/tokens.js";
+import { UI, outlineBtn, toggleOnSoft, toggleOff, primaryAction } from "../../styles/uiChrome.js";
 import { baseInput, fieldLabel as mixinFieldLabel } from "../../styles/mixins.js";
 import MenuCoursesTab from "./MenuCoursesTab.jsx";
 import DrinkListEditor from "./DrinkListEditor.jsx";
@@ -74,9 +75,9 @@ export default function AdminPanel({
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "9px 18px",
     border: "none", cursor: "pointer", textTransform: "uppercase", transition: "all 0.1s",
-    background: tab === t ? "#1a1a1a" : "#fff",
-    color: tab === t ? "#fff" : "#444",
-    borderBottom: tab === t ? "none" : "1px solid #e8e8e8",
+    background: tab === t ? UI.selectedBg : "#fff",
+    color: tab === t ? UI.ink : "#444",
+    borderBottom: tab === t ? `2px solid ${UI.line}` : "1px solid #e8e8e8",
     whiteSpace: "nowrap",
   });
 
@@ -124,18 +125,18 @@ export default function AdminPanel({
                 {["wines", "cocktails", "spirits", "beers"].map(t => (
                   <button key={t} style={{
                     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-                    border: `1px solid ${drinkTab === t ? "#1a1a1a" : "#e8e8e8"}`,
-                    borderRadius: 2, cursor: "pointer",
-                    background: drinkTab === t ? "#1a1a1a" : "#fff",
-                    color: drinkTab === t ? "#fff" : "#888",
+                    border: `1px solid ${drinkTab === t ? UI.line : "#e8e8e8"}`,
+                    borderRadius: tokens.radius, cursor: "pointer",
+                    background: drinkTab === t ? UI.selectedBg : "#fff",
+                    color: drinkTab === t ? UI.ink : "#888",
                     marginRight: 6, marginBottom: 12,
                   }} onClick={() => setDrinkTab(t)}>{t.toUpperCase()}</button>
                 ))}
                 <button onClick={handleSaveDrinks} style={{
-                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-                  border: `1px solid ${drinksSaved ? "#888" : "#4a9a6a"}`, borderRadius: 2, cursor: "pointer",
-                  background: drinksSaved ? "#888" : "#4a9a6a", color: "#fff", marginLeft: "auto",
-                  transition: "background 0.2s, border-color 0.2s",
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", borderRadius: tokens.radius, cursor: "pointer",
+                  fontWeight: 600,
+                  marginLeft: "auto",
+                  ...(drinksSaved ? primaryAction : outlineBtn),
                 }}>{drinksSaved ? "SAVED" : "SAVE DRINKS"}</button>
               </div>
 
@@ -154,9 +155,8 @@ export default function AdminPanel({
                         <input value={w.producer} onChange={e => updWine(w.id, "producer", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Producer" />
                         {!isMobile && <input value={w.vintage} onChange={e => updWine(w.id, "vintage", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="2020" />}
                         <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
-                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                          borderColor: w.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                          background: w.byGlass ? "#f0faf0" : "#fff", color: w.byGlass ? "#4a8a4a" : "#555",
+                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", borderRadius: 2, cursor: "pointer",
+                          ...(w.byGlass ? toggleOnSoft : toggleOff),
                         }}>{w.byGlass ? "YES" : "NO"}</button>
                         <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
                       </div>
@@ -169,14 +169,13 @@ export default function AdminPanel({
                       <input value={newWine.producer} onChange={e => setNewWine(w => ({ ...w, producer: e.target.value }))} placeholder="Producer" style={{ ...baseInp, padding: "5px 8px" }} />
                       {!isMobile && <input value={newWine.vintage} onChange={e => setNewWine(w => ({ ...w, vintage: e.target.value }))} placeholder="2020" style={{ ...baseInp, padding: "5px 8px" }} />}
                       <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
-                        fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                        borderColor: newWine.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                        background: newWine.byGlass ? "#f0faf0" : "#fff", color: newWine.byGlass ? "#4a8a4a" : "#555",
+                        fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", borderRadius: 2, cursor: "pointer",
+                        ...(newWine.byGlass ? toggleOnSoft : toggleOff),
                       }}>{newWine.byGlass ? "YES" : "NO"}</button>
                     </div>
                     <button onClick={addWine} style={{
                       fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 20px",
-                      border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff",
+                      border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: "pointer", background: UI.surface2, color: UI.ink, fontWeight: 600,
                     }}>+ ADD WINE</button>
                   </div>
                 </>
@@ -235,13 +234,13 @@ export default function AdminPanel({
                 <div style={fieldLabel}>Add dish</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input value={newDishName} onChange={e => setNewDishName(e.target.value)} onKeyDown={e => e.key === "Enter" && addDish()} placeholder="Dish name…" style={{ ...baseInp, flex: 1 }} />
-                  <button onClick={addDish} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 16px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff", whiteSpace: "nowrap" }}>+ ADD</button>
+                  <button onClick={addDish} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 16px", border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: "pointer", background: UI.surface2, color: UI.ink, fontWeight: 600, whiteSpace: "nowrap" }}>+ ADD</button>
                 </div>
               </div>
               <div style={{ borderTop: "1px solid #f0f0f0", marginTop: 24, paddingTop: 14 }}>
                 <button onClick={() => { onUpdateDishes(localDishes); }} style={{
                   fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
-                  border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff",
+                  border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: "pointer", background: UI.surface2, color: UI.ink, fontWeight: 600,
                 }}>SAVE EXTRAS</button>
               </div>
             </>
@@ -269,7 +268,7 @@ export default function AdminPanel({
                     <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginBottom: 8 }}>
                       Upload PNG, JPG, or SVG. Will be embedded in all printed menus.
                     </div>
-                    <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff", display: "inline-block" }}>
+                    <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: "pointer", background: UI.surface2, color: UI.ink, display: "inline-block", fontWeight: 600 }}>
                       UPLOAD LOGO
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
                         const file = e.target.files[0];
