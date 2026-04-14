@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FONT } from "./adminStyles.js";
+import { outlineBtn } from "../../styles/uiChrome.js";
 
 // ── InventoryPanel — Wine & beverage sync from hotel website ──
 export default function InventoryPanel({ onSyncWines, wines = [] }) {
@@ -38,9 +39,11 @@ export default function InventoryPanel({ onSyncWines, wines = [] }) {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
         <button onClick={handleSync} disabled={status === "syncing"} style={{
           fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "10px 20px",
-          border: "1px solid #c8a06e", borderRadius: 2,
+          borderRadius: 2,
           cursor: status === "syncing" ? "not-allowed" : "pointer",
-          background: "#c8a06e", color: "#fff",
+          opacity: status === "syncing" ? 0.65 : 1,
+          fontWeight: 600,
+          ...outlineBtn,
         }}>
           {status === "syncing" ? "SYNCING..." : "SYNC WINES & BEVERAGES"}
         </button>

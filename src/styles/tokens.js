@@ -19,6 +19,7 @@ export const tokens = {
   },
   font: "'Roboto Mono', monospace",
   fontSize: { xs: 8, sm: 9, base: 11, md: 12, lg: 14, xl: 18, xxl: 24 },
+  /** Global corner radius — 0 = sharp everywhere */
   radius: 0,
   spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 },
   border: "1px solid #e0e0e0",

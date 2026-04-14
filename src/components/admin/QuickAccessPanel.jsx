@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { FONT, baseInp } from "./adminStyles.js";
+import { tokens } from "../../styles/tokens.js";
+import { UI } from "../../styles/uiChrome.js";
 import { fuzzy, fuzzyDrink } from "../../utils/search.js";
 
 // ── WinePickerInput — mirrors the WineSearch in App.jsx ──────────────────────
@@ -173,15 +175,15 @@ export default function QuickAccessPanel({
                 <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{item.label}</div>
                 <div style={{ fontFamily: FONT, fontSize: 9, color: "#999" }}>
                   search: <span style={{ color: "#4b4b88" }}>{item.searchKey}</span> · {item.type}
-                  {item.menuOnly && <span style={{ marginLeft: 6, color: "#c8a060", fontWeight: 600 }}>menu only</span>}
+                  {item.menuOnly && <span style={{ marginLeft: 6, color: UI.ink, fontWeight: 600 }}>menu only</span>}
                 </div>
               </div>
 
               <button onClick={() => onUpdateQuickAccess(quickAccessItems.map(i => i.id === item.id ? { ...i, menuOnly: !i.menuOnly } : i))} style={{
                 fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "4px 8px", border: "1px solid",
-                borderColor: item.menuOnly ? "#c8a060" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                background: item.menuOnly ? "#fdf4e8" : "#fff",
-                color: item.menuOnly ? "#7a5020" : "#bbb", flexShrink: 0,
+                borderColor: item.menuOnly ? UI.line : "#e8e8e8", borderRadius: 2, cursor: "pointer",
+                background: item.menuOnly ? UI.selectedBg : "#fff",
+                color: item.menuOnly ? UI.ink : "#bbb", flexShrink: 0,
                 whiteSpace: "nowrap",
               }}>MENU ONLY</button>
 
@@ -257,8 +259,8 @@ export default function QuickAccessPanel({
         </div>
         <button onClick={addItem} style={{
           fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
-          border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
-          background: "#1a1a1a", color: "#fff",
+          border: `1px solid ${UI.line}`, borderRadius: tokens.radius, cursor: "pointer",
+          background: UI.surface2, color: UI.ink, fontWeight: 600,
         }}>+ ADD ITEM</button>
       </div>
     </div>

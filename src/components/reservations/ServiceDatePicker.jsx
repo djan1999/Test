@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
+import { UI } from "../../styles/uiChrome.js";
 
 const FONT = tokens.font;
+const R = tokens.radius;
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
@@ -11,6 +13,18 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
   const todayStr = toLocalDateISO();
   const [selected, setSelected] = useState(defaultDate || todayStr);
   const [weekOffset, setWeekOffset] = useState(0);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      e.preventDefault();
+      onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
 
   const weekDays = useMemo(() => {
     const today = new Date();
@@ -54,15 +68,16 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
         style={{
           width: "100%",
           maxWidth: 420,
-          background: "#fff",
-          borderRadius: 12,
+          background: UI.surface,
+          borderRadius: R,
+          border: `1px solid ${UI.border}`,
           overflow: "hidden",
-          boxShadow: "0 12px 60px rgba(0,0,0,0.18)",
+          boxShadow: "0 12px 40px rgba(0,0,0,0.08)",
         }}
       >
-        <div style={{ background: "#1a1a1a", padding: "20px 20px 16px", textAlign: "center" }}>
-          <div style={{ fontSize: 9, letterSpacing: 4, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>{appName}</div>
-          <div style={{ fontSize: 13, letterSpacing: 3, color: "#fff", fontWeight: 700 }}>SELECT SERVICE DATE</div>
+        <div style={{ background: UI.surface2, borderBottom: `1px solid ${UI.border}`, padding: "18px 20px 14px", textAlign: "center" }}>
+          <div style={{ fontSize: 9, letterSpacing: 4, color: UI.textMuted, marginBottom: 4 }}>{appName}</div>
+          <div style={{ fontSize: 13, letterSpacing: 3, color: UI.ink, fontWeight: 700 }}>SELECT SERVICE DATE</div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 10px" }}>
@@ -95,8 +110,8 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
                 onClick={() => setSelected(dateStr)}
                 style={{
                   fontFamily: FONT,
-                  border: "none",
-                  borderRadius: 8,
+                  border: isSel ? `2px solid ${UI.line}` : "1px solid #eaeaea",
+                  borderRadius: R,
                   cursor: "pointer",
                   padding: "10px 0",
                   display: "flex",
@@ -104,15 +119,15 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
                   alignItems: "center",
                   gap: 4,
                   transition: "all 0.12s",
-                  background: isSel ? "#1a1a1a" : isToday ? "#f0f8f4" : "#f6f6f6",
-                  outline: isToday && !isSel ? "1.5px solid #3a8a5a" : "none",
+                  background: isSel ? UI.selectedBg : isToday ? "#f0f8f4" : UI.surface3,
+                  outline: "none",
                   opacity: isPast && !isSel ? 0.45 : 1,
                 }}
               >
-                <span style={{ fontSize: 8, letterSpacing: 1, color: isSel ? "rgba(255,255,255,0.6)" : "#aaa", fontWeight: 600 }}>{DAY_LABELS[i]}</span>
-                <span style={{ fontSize: 16, fontWeight: 700, color: isSel ? "#fff" : isToday ? "#2f7a45" : "#1a1a1a", lineHeight: 1 }}>{dayNum}</span>
-                {isToday && <span style={{ width: 4, height: 4, borderRadius: "50%", background: isSel ? "#fff" : "#3a8a5a" }} />}
-                {dayResv.length > 0 && <span style={{ width: 4, height: 4, borderRadius: "50%", background: isSel ? "rgba(255,255,255,0.4)" : "#bbb", marginTop: 2 }} />}
+                <span style={{ fontSize: 8, letterSpacing: 1, color: isSel ? UI.textMuted : "#aaa", fontWeight: 600 }}>{DAY_LABELS[i]}</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: isSel ? UI.ink : isToday ? "#2f7a45" : UI.ink, lineHeight: 1 }}>{dayNum}</span>
+                {isToday && <span style={{ width: 4, height: 4, borderRadius: R, background: isSel ? "#3a8a5a" : "#3a8a5a" }} />}
+                {dayResv.length > 0 && <span style={{ width: 4, height: 4, borderRadius: R, background: isSel ? "#888" : "#bbb", marginTop: 2 }} />}
               </button>
             );
           })}
@@ -146,7 +161,7 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
           <button
             onClick={() => selected && onConfirm(selected)}
             disabled={!selected}
-            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 2, border: "none", cursor: selected ? "pointer" : "not-allowed", background: selected ? "#1a1a1a" : "#f0f0f0", color: selected ? "#fff" : "#aaa", fontWeight: 700, opacity: 1 }}
+            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 2, border: "none", borderLeft: `1px solid ${UI.borderLight}`, cursor: selected ? "pointer" : "not-allowed", background: selected ? UI.surface2 : UI.surface3, color: selected ? UI.ink : "#aaa", fontWeight: 700, opacity: 1 }}
           >
             START SERVICE ›
           </button>

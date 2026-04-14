@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FONT } from "./adminStyles.js";
+import { tokens } from "../../styles/tokens.js";
 import MenuLayoutPanel from "./MenuLayoutPanel.jsx";
 import CourseEditorPanel from "./CourseEditorPanel.jsx";
 import DrinksPanel from "./DrinksPanel.jsx";
@@ -101,14 +102,14 @@ export default function AdminLayout({
           <span style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px",
             border: `1px solid ${syncStatus === "live" ? "#8fc39f" : "#d8d8d8"}`,
-            borderRadius: 999,
+            borderRadius: tokens.radius,
             background: syncStatus === "live" ? "#eef8f1" : "#f6f6f6",
             color: syncStatus === "live" ? "#2f7a45" : "#555",
             fontWeight: 600, whiteSpace: "nowrap",
           }}>{syncStatus === "live" ? "SYNC" : syncStatus === "local-only" ? "LOCAL" : syncStatus === "connecting" ? "LINK" : "ERROR"}</span>
           <button onClick={onExit} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px",
-            border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer",
+            border: "1px solid #e8e8e8", borderRadius: tokens.radius, cursor: "pointer",
             background: "#fff", color: "#1a1a1a", flexShrink: 0,
           }}>EXIT</button>
         </div>

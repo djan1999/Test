@@ -6,8 +6,8 @@ import { tokens } from "../../styles/tokens.js";
 import { restrLabel } from "../../constants/dietary.js";
 
 const FONT = tokens.font;
-const PAIRING_COLOR = { Wine: "#8a6030", "Non-Alc": "#1f5f73", Premium: "#3a3a7a", "Our Story": "#2a6a4a" };
-const PAIRING_BG = { Wine: "#fdf4e8", "Non-Alc": "#e8f7fb", Premium: "#eaeaf5", "Our Story": "#e0f5ea" };
+const PAIRING_COLOR = { Wine: "#1a1a1a", "Non-Alc": "#1a1a1a", Premium: "#1a1a1a", "Our Story": "#1a1a1a" };
+const PAIRING_BG = { Wine: "#ffffff", "Non-Alc": "#ffffff", Premium: "#ffffff", "Our Story": "#ffffff" };
 
 export default function SummaryModal({ tables, optionalExtras = [], onClose }) {
   const active = tables.filter((t) => t.active || t.arrivedAt);

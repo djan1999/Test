@@ -25,6 +25,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { FONT, baseInp } from "./adminStyles.js";
+import { UI } from "../../styles/uiChrome.js";
 import {
   BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
 } from "../../utils/menuTemplateSchema.js";
@@ -1159,7 +1160,7 @@ export default function MenuTemplateEditor({
             onDragEnd={handleDragEnd}
           >
             {isShortFilter && (
-              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#7a5020", background: "#fff8ee", border: "1px solid #f0d080", borderRadius: 3, padding: "5px 8px", margin: "0 0 6px", textTransform: "uppercase" }}>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: UI.ink, background: "#fff", border: `1px solid ${UI.line}`, borderRadius: 3, padding: "5px 8px", margin: "0 0 6px", textTransform: "uppercase" }}>
                 Short menu — {displayRows.length} blocks · Switch to FULL to see all
               </div>
             )}
