@@ -39,6 +39,13 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
     restrictions[rKey] = { ...current, [field]: value };
     onUpdate({ ...course, restrictions });
   };
+  const updRestrictionSi = (rKey, field, value) => {
+    const restrictions = { ...course.restrictions };
+    const siKey = `${rKey}_si`;
+    const current = restrictions[siKey] || { name: "", sub: "" };
+    restrictions[siKey] = { ...current, [field]: value };
+    onUpdate({ ...course, restrictions });
+  };
 
   const removeRestriction = (rKey) => {
     const restrictions = { ...course.restrictions };
@@ -237,15 +244,28 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
           {/* Dietary Restrictions */}
           {activeRestrictions.length > 0 && (
             <>
-              <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: "#888" }}>DIETARY RESTRICTIONS</div>
+              <div style={{ ...labelSm, marginBottom: 4, fontSize: 9, letterSpacing: 2, color: "#888" }}>DIETARY RESTRICTIONS</div>
+              {/* Column headers */}
+              <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 1fr 1fr 1fr 20px", gap: 6, marginBottom: 3, alignItems: "center" }}>
+                <span />
+                <span style={{ fontFamily: FONT, fontSize: 8, color: "#bbb", letterSpacing: 1 }}>NAME (EN)</span>
+                <span style={{ fontFamily: FONT, fontSize: 8, color: "#bbb", letterSpacing: 1 }}>DESC (EN)</span>
+                <span style={{ fontFamily: FONT, fontSize: 8, color: "#4a7ab0", letterSpacing: 1 }}>NAME (SI)</span>
+                <span style={{ fontFamily: FONT, fontSize: 8, color: "#4a7ab0", letterSpacing: 1 }}>DESC (SI)</span>
+                <span style={{ fontFamily: FONT, fontSize: 8, color: "#bbb", letterSpacing: 1 }}>KITCHEN NOTE</span>
+                <span />
+              </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 14 }}>
                 {activeRestrictions.map(rKey => {
                   const val = course.restrictions?.[rKey];
+                  const valSi = course.restrictions?.[`${rKey}_si`];
                   return (
-                    <div key={rKey} style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 1fr 20px", gap: 6, alignItems: "center" }}>
+                    <div key={rKey} style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 1fr 1fr 1fr 20px", gap: 6, alignItems: "center" }}>
                       <span style={{ fontFamily: FONT, fontSize: 9, color: "#b04040" }}>{rKey.replace(/_/g, " ")}</span>
                       <input value={val?.name || ""} onChange={e => updRestriction(rKey, "name", e.target.value)} style={inpSm} placeholder={course.menu?.name || "Alt name"} />
                       <input value={val?.sub || ""} onChange={e => updRestriction(rKey, "sub", e.target.value)} style={inpSm} placeholder={course.menu?.sub || "Alt desc"} />
+                      <input value={valSi?.name || ""} onChange={e => updRestrictionSi(rKey, "name", e.target.value)} style={{ ...inpSm, borderColor: "#c0d4e8" }} placeholder={course.menu_si?.name || "Slov. ime"} />
+                      <input value={valSi?.sub || ""} onChange={e => updRestrictionSi(rKey, "sub", e.target.value)} style={{ ...inpSm, borderColor: "#c0d4e8" }} placeholder={course.menu_si?.sub || "Slov. opis"} />
                       <input value={val?.kitchen_note || ""} onChange={e => updRestriction(rKey, "kitchen_note", e.target.value)} style={inpSm} placeholder="Kitchen note" />
                       <button onClick={() => removeRestriction(rKey)} title="Remove restriction" style={{ background: "none", border: "none", cursor: "pointer", color: "#ddd", fontSize: 14, padding: 0, lineHeight: 1 }}
                         onMouseEnter={e => e.currentTarget.style.color = "#e07070"}
