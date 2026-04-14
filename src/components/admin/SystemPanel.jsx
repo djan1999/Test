@@ -25,15 +25,21 @@ export default function SystemPanel({
   const safeWineSyncConfig = wineSyncConfig || { wineCountries: [], beveragePages: [] };
   const [debugOpen, setDebugOpen] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
+  const [syncErrorDetail, setSyncErrorDetail] = useState(null);
   const [syncConfigSaving, setSyncConfigSaving] = useState(false);
 
   const handleManualSync = async () => {
     setSyncResult("syncing");
+    setSyncErrorDetail(null);
     try {
       const r = await onSyncWines();
       setSyncResult(r?.ok ? "ok" : "err");
-    } catch { setSyncResult("err"); }
-    setTimeout(() => setSyncResult(null), 3000);
+      if (!r?.ok && r?.error) setSyncErrorDetail(String(r.error));
+    } catch (e) {
+      setSyncResult("err");
+      setSyncErrorDetail(e?.message || "Request failed");
+    }
+    setTimeout(() => { setSyncResult(null); setSyncErrorDetail(null); }, 8000);
   };
 
   const statusColor = syncStatus === "live" ? "#2a7a2a" : syncStatus === "local-only" ? "#888" : syncStatus === "connecting" ? "#c8a06e" : "#c04040";
@@ -71,6 +77,7 @@ export default function SystemPanel({
       {/* Manual Actions */}
       <div>
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Manual Actions</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button onClick={handleManualSync} disabled={syncResult === "syncing"} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
@@ -81,6 +88,12 @@ export default function SystemPanel({
           }}>
             {syncResult === "syncing" ? "SYNCING..." : syncResult === "ok" ? "SYNCED" : syncResult === "err" ? "FAILED" : "RESYNC WINES"}
           </button>
+        </div>
+        {syncErrorDetail ? (
+          <div style={{ fontFamily: FONT, fontSize: 10, color: "#a03030", maxWidth: 420, lineHeight: 1.4 }}>
+            {syncErrorDetail}
+          </div>
+        ) : null}
         </div>
       </div>
 

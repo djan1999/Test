@@ -4,6 +4,8 @@ import {
   parseWinesFromHtml,
   parseBeveragesFromHtml,
   withRetry,
+  normalizeSyncConfig,
+  comparableBeverageUrl,
 } from "../sync-wines.js";
 import handler from "../sync-wines.js";
 
@@ -253,6 +255,28 @@ describe("withRetry", () => {
 });
 
 // ── handler auth ────────────────────────────────────────────────────────────────
+
+describe("normalizeSyncConfig", () => {
+  it("falls back to default wine countries when array is empty", () => {
+    const cfg = normalizeSyncConfig({ wineCountries: [], beveragePages: [] });
+    expect(cfg.wineCountries.length).toBeGreaterThan(0);
+    expect(cfg.beveragePages.length).toBeGreaterThan(0);
+  });
+});
+
+describe("comparableBeverageUrl", () => {
+  it("treats trailing slashes as equivalent", () => {
+    expect(comparableBeverageUrl("https://example.com/foo")).toBe(
+      comparableBeverageUrl("https://example.com/foo/")
+    );
+  });
+
+  it("is case-insensitive for hostname", () => {
+    expect(comparableBeverageUrl("HTTPS://Example.COM/path")).toBe(
+      comparableBeverageUrl("https://example.com/path")
+    );
+  });
+});
 
 describe("sync-wines handler auth", () => {
   it("requires CRON secret even when sec-fetch-site is same-origin", async () => {

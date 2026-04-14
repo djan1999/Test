@@ -54,7 +54,7 @@ const DEFAULT_SYNC_CONFIG = {
   ],
 };
 
-function normalizeSyncConfig(raw) {
+export function normalizeSyncConfig(raw) {
   const cfg = raw && typeof raw === "object" ? raw : {};
   const normalizeCountries = () => {
     const source = Array.isArray(cfg.wineCountries) ? cfg.wineCountries : DEFAULT_SYNC_CONFIG.wineCountries;
@@ -70,12 +70,29 @@ function normalizeSyncConfig(raw) {
       }))
       .filter((p) => p.category && p.label && p.url);
   };
+  let wineCountries = normalizeCountries();
+  if (wineCountries.length === 0) wineCountries = [...DEFAULT_SYNC_CONFIG.wineCountries];
+  let beveragePages = normalizePages();
+  if (beveragePages.length === 0) beveragePages = [...DEFAULT_SYNC_CONFIG.beveragePages];
   return {
     winesEnabled: cfg.winesEnabled !== false,
     beveragesEnabled: cfg.beveragesEnabled !== false,
-    wineCountries: normalizeCountries(),
-    beveragePages: normalizePages(),
+    wineCountries,
+    beveragePages,
   };
+}
+
+/** Stable comparison for beverage URLs (trailing slash, scheme/host case). */
+export function comparableBeverageUrl(url) {
+  const s = String(url || "").trim();
+  if (!s) return "";
+  try {
+    const u = new URL(s);
+    const path = (u.pathname || "/").replace(/\/+$/, "") || "/";
+    return `${u.protocol}//${u.hostname.toLowerCase()}${path}${u.search}`.toLowerCase();
+  } catch {
+    return s.replace(/\/+$/, "").toLowerCase();
+  }
 }
 
 async function fetchHtml(url) {
@@ -208,13 +225,28 @@ export default async function handler(req, res) {
       .select("state")
       .eq("id", "wine_sync_config")
       .maybeSingle();
-    const syncConfig = normalizeSyncConfig(syncSettingsRow?.state || DEFAULT_SYNC_CONFIG);
+
+    let clientSyncOverride = null;
+    try {
+      const cfgEncoded = new URL(req.url, "http://localhost").searchParams.get("config");
+      if (cfgEncoded) {
+        clientSyncOverride = normalizeSyncConfig(JSON.parse(decodeURIComponent(cfgEncoded)));
+      }
+    } catch (e) {
+      console.warn("[sync] ignoring invalid config query param:", e?.message || e);
+    }
+
+    const dbState = syncSettingsRow?.state;
+    const syncConfig = clientSyncOverride
+      ? normalizeSyncConfig({ ...DEFAULT_SYNC_CONFIG, ...(dbState && typeof dbState === "object" ? dbState : {}), ...clientSyncOverride })
+      : normalizeSyncConfig(dbState || DEFAULT_SYNC_CONFIG);
+
     const enabledWineCountries = WINE_COUNTRIES.filter((c) => syncConfig.wineCountries.includes(String(c.label || "").toUpperCase()));
     const enabledBeveragePages = BEVERAGE_PAGES.filter((page) => {
-      const normalizedUrl = String(page.url || "").replace(/\/+$/, "");
+      const pageKey = comparableBeverageUrl(page.url);
       return syncConfig.beveragePages.some((cfgPage) =>
         cfgPage.category === page.category &&
-        String(cfgPage.url || "").replace(/\/+$/, "") === normalizedUrl
+        comparableBeverageUrl(cfgPage.url) === pageKey
       );
     });
 
