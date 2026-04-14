@@ -1,0 +1,604 @@
+import { useState } from "react";
+import { tokens } from "../styles/tokens.js";
+import { RESTRICTIONS } from "../constants/dietary.js";
+
+const FONT = tokens.font;
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function formatDateHeader(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr + "T00:00:00");
+  const weekday = d.toLocaleDateString("en-GB", { weekday: "long" });
+  const day = d.getDate();
+  const ord = (n) => {
+    const s = ["TH", "ST", "ND", "RD"];
+    const v = n % 100;
+    return s[(v - 20) % 10] || s[v] || s[0];
+  };
+  const month = d.toLocaleDateString("en-GB", { month: "long" });
+  const year = d.getFullYear();
+  return `${weekday}, THE ${day}${ord(day)} OF ${month} ${year}`.toUpperCase();
+}
+
+function tableLabel(r) {
+  const d = r.data || {};
+  const group = d.tableGroup?.length > 1 ? d.tableGroup.map(Number) : [r.table_id];
+  if (group.length > 1) {
+    return `T${[...group].sort((a, b) => a - b).join(",")}`;
+  }
+  return `T${String(r.table_id).padStart(2, "0")}`;
+}
+
+// Group identical restrictions by count. Returns an array of display strings
+// like ["2x Vegetarian", "Gluten Free"]. Grouped items (count > 1) sort first,
+// then singletons, alphabetical within each group.
+function groupRestrictions(restrictions) {
+  const counts = new Map();
+  for (const r of restrictions || []) {
+    const key = (r && (r.note || r.key)) || "";
+    if (!key) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const entries = [...counts.entries()].map(([key, count]) => {
+    const def = RESTRICTIONS.find((x) => x.key === key);
+    const label = def ? def.label : key;
+    return { key, label, count };
+  });
+  entries.sort((a, b) => {
+    const aGrouped = a.count > 1;
+    const bGrouped = b.count > 1;
+    if (aGrouped !== bGrouped) return aGrouped ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
+  return entries.map((e) => (e.count > 1 ? `${e.count}x ${e.label}` : e.label));
+}
+
+// Build the auto-seeded bullet lines for a reservation.
+function bulletsForReservation(r) {
+  const d = r.data || {};
+  const out = [];
+
+  // Menu
+  if (d.menuType) {
+    const menuLabel = String(d.menuType).trim();
+    const pretty = menuLabel.charAt(0).toUpperCase() + menuLabel.slice(1).toLowerCase();
+    out.push(`${pretty} menu`);
+  }
+
+  // Dietaries / allergies / cake summary — grouped with counts
+  const grouped = groupRestrictions(d.restrictions);
+  const cakeChunks = [];
+  if (d.birthday) {
+    const note = d.cakeNote ? `CAKE(${d.cakeNote})` : "CAKE";
+    cakeChunks.push(`1x ${note}`);
+  }
+
+  if (grouped.length === 0 && cakeChunks.length === 0) {
+    out.push("No dietaries or SO");
+  } else {
+    const parts = [];
+    if (grouped.length > 0) parts.push(grouped.join(", "));
+    else parts.push("No dietaries");
+    if (cakeChunks.length > 0) parts.push(cakeChunks.join(", "));
+    out.push(parts.join(", "));
+  }
+
+  // Origin
+  if (d.lang === "si") out.push("From Slovenia");
+
+  // Hotel
+  if (d.guestType === "hotel") {
+    const roomPart = d.room ? ` #${d.room}` : "";
+    out.push(`Hotel${roomPart}`);
+  }
+
+  // Free-form notes — each line becomes its own bullet
+  if (d.notes) {
+    String(d.notes)
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .forEach((line) => out.push(line));
+  }
+
+  return out;
+}
+
+// Group reservations by time slot, sorted ascending, stable order within.
+function groupByTimeSlot(reservations) {
+  const map = new Map();
+  for (const r of reservations) {
+    const t = (r.data?.resTime || "").trim() || "—";
+    if (!map.has(t)) map.set(t, []);
+    map.get(t).push(r);
+  }
+  const slots = [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [, list] of slots) {
+    list.sort((a, b) => (a.table_id || 0) - (b.table_id || 0));
+  }
+  return slots;
+}
+
+// Build the initial editable document state by pre-filling from reservations.
+function buildInitialState(dateStr, reservations) {
+  const total = (reservations || []).length;
+  const totalGuests = (reservations || []).reduce(
+    (a, r) => a + (r.data?.guests || 2),
+    0
+  );
+  const slots = groupByTimeSlot(reservations || []);
+
+  return {
+    headerText: formatDateHeader(dateStr),
+    summaryText: `${total} table${total !== 1 ? "s" : ""}, ${totalGuests} guest${totalGuests !== 1 ? "s" : ""}`,
+    slots: slots.map(([time, list]) => ({
+      key: time,
+      label: `${time} - ${list.length} table${list.length !== 1 ? "s" : ""}`,
+      reservations: list.map((r) => {
+        const d = r.data || {};
+        const name = (d.resName || "—").trim();
+        const pax = d.guests || 2;
+        return {
+          id: r.id,
+          headerText: `${tableLabel(r)}: ${name} [${pax} pax]`,
+          bullets: bulletsForReservation(r),
+          intel: "",
+        };
+      }),
+    })),
+    bread: "",
+    announcements: ["", "", "", ""],
+  };
+}
+
+// ── Editable building blocks ────────────────────────────────────────────────
+const plainInputStyle = {
+  border: "none",
+  background: "transparent",
+  fontFamily: "inherit",
+  fontSize: "inherit",
+  color: "#000",
+  width: "100%",
+  padding: 0,
+  margin: 0,
+  outline: "none",
+  borderRadius: 0,
+};
+
+function PlainInput({ value, onChange, bold, center, style }) {
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        ...plainInputStyle,
+        fontWeight: bold ? 700 : "inherit",
+        textAlign: center ? "center" : "left",
+        ...style,
+      }}
+    />
+  );
+}
+
+// Auto-growing single-row textarea. Grows vertically when content wraps so
+// nothing is clipped, and collapses to a single line when empty so short
+// content stays compact in print.
+function AutoTextarea({ value, onChange, style, minRows = 1, placeholder }) {
+  const resize = (el) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  return (
+    <textarea
+      ref={(el) => resize(el)}
+      value={value}
+      onChange={(e) => {
+        onChange(e.target.value);
+        resize(e.target);
+      }}
+      rows={minRows}
+      placeholder={placeholder}
+      style={{
+        ...plainInputStyle,
+        resize: "none",
+        overflow: "hidden",
+        lineHeight: 1.35,
+        ...style,
+      }}
+    />
+  );
+}
+
+// ── Component ───────────────────────────────────────────────────────────────
+export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
+  const [doc, setDoc] = useState(() => buildInitialState(dateStr, reservations));
+
+  const updateHeader = (v) => setDoc((p) => ({ ...p, headerText: v }));
+  const updateSummary = (v) => setDoc((p) => ({ ...p, summaryText: v }));
+  const updateSlotLabel = (si, v) =>
+    setDoc((p) => ({
+      ...p,
+      slots: p.slots.map((s, i) => (i === si ? { ...s, label: v } : s)),
+    }));
+  const updateResvHeader = (si, ri, v) =>
+    setDoc((p) => ({
+      ...p,
+      slots: p.slots.map((s, i) =>
+        i !== si
+          ? s
+          : {
+              ...s,
+              reservations: s.reservations.map((r, j) =>
+                j === ri ? { ...r, headerText: v } : r
+              ),
+            }
+      ),
+    }));
+  const updateBullet = (si, ri, bi, v) =>
+    setDoc((p) => ({
+      ...p,
+      slots: p.slots.map((s, i) =>
+        i !== si
+          ? s
+          : {
+              ...s,
+              reservations: s.reservations.map((r, j) =>
+                j !== ri
+                  ? r
+                  : {
+                      ...r,
+                      bullets: r.bullets.map((b, k) => (k === bi ? v : b)),
+                    }
+              ),
+            }
+      ),
+    }));
+  const updateIntel = (si, ri, v) =>
+    setDoc((p) => ({
+      ...p,
+      slots: p.slots.map((s, i) =>
+        i !== si
+          ? s
+          : {
+              ...s,
+              reservations: s.reservations.map((r, j) =>
+                j === ri ? { ...r, intel: v } : r
+              ),
+            }
+      ),
+    }));
+  const updateBread = (v) => setDoc((p) => ({ ...p, bread: v }));
+  const updateAnnouncement = (i, v) =>
+    setDoc((p) => ({
+      ...p,
+      announcements: p.announcements.map((a, idx) => (idx === i ? v : a)),
+    }));
+
+  const onPrint = () => window.print();
+
+  return (
+    <div
+      className="service-breakdown-overlay"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.7)",
+        zIndex: 1000,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "auto",
+        padding: "24px 16px",
+      }}
+    >
+      <PrintStyles />
+
+      {/* Top bar — not printed */}
+      <div
+        className="sb-topbar no-print"
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 8,
+          maxWidth: 1100,
+          width: "100%",
+          margin: "0 auto 12px",
+        }}
+      >
+        <button
+          onClick={onPrint}
+          style={{
+            fontFamily: FONT,
+            fontSize: 10,
+            letterSpacing: 2,
+            padding: "8px 16px",
+            border: "1px solid #fff",
+            borderRadius: 0,
+            background: "#fff",
+            color: "#000",
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
+        >
+          PRINT
+        </button>
+        <button
+          onClick={onClose}
+          style={{
+            fontFamily: FONT,
+            fontSize: 10,
+            letterSpacing: 2,
+            padding: "8px 16px",
+            border: "1px solid #fff",
+            borderRadius: 0,
+            background: "transparent",
+            color: "#fff",
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
+        >
+          CLOSE
+        </button>
+      </div>
+
+      {/* Print sheet */}
+      <div
+        className="sb-sheet"
+        style={{
+          background: "#ffffff",
+          color: "#000",
+          fontFamily: FONT,
+          fontSize: 11,
+          lineHeight: 1.35,
+          maxWidth: 1100,
+          width: "100%",
+          margin: "0 auto",
+          padding: "20px 28px",
+          boxShadow: "0 0 0 1px #ddd",
+          borderRadius: 0,
+        }}
+      >
+        {/* Header */}
+        <div style={{ textAlign: "center", marginBottom: 2 }}>
+          <PlainInput
+            value={doc.headerText}
+            onChange={updateHeader}
+            bold
+            center
+            style={{ fontSize: 12 }}
+          />
+          <PlainInput
+            value={doc.summaryText}
+            onChange={updateSummary}
+            center
+            style={{ fontSize: 11, marginTop: 2 }}
+          />
+        </div>
+
+        {/* Reservation column flow — CSS multi-column so print overflow moves
+            from column 1 -> column 2 -> page 2, rather than a fixed grid.
+            `balance` lets the browser distribute content evenly across the
+            two columns so small docs use the width instead of stacking in
+            a tall column 1. */}
+        <div
+          className="service-breakdown-print-area sb-columns"
+          style={{
+            marginTop: 10,
+            columnCount: 2,
+            columnGap: 24,
+            columnFill: "balance",
+          }}
+        >
+          {doc.slots.map((slot, si) => (
+            <div key={slot.key} className="slot-block" style={{ marginBottom: 10 }}>
+              <div
+                style={{
+                  borderBottom: "1px solid #000",
+                  paddingBottom: 1,
+                  marginBottom: 4,
+                }}
+              >
+                <PlainInput
+                  value={slot.label}
+                  onChange={(v) => updateSlotLabel(si, v)}
+                  bold
+                  style={{ fontSize: 11 }}
+                />
+              </div>
+              {slot.reservations.map((r, ri) => (
+                <div
+                  key={r.id}
+                  className="reservation-block"
+                  style={{ marginBottom: 8 }}
+                >
+                  <PlainInput
+                    value={r.headerText}
+                    onChange={(v) => updateResvHeader(si, ri, v)}
+                    bold
+                  />
+                  <div style={{ padding: "0 0 0 8px", marginTop: 1 }}>
+                    {r.bullets.map((b, bi) => (
+                      <div
+                        key={bi}
+                        style={{ display: "flex", alignItems: "flex-start", gap: 4 }}
+                      >
+                        <span style={{ flexShrink: 0 }}>-</span>
+                        <AutoTextarea
+                          value={b}
+                          onChange={(v) => updateBullet(si, ri, bi, v)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <AutoTextarea
+                    value={r.intel}
+                    onChange={(v) => updateIntel(si, ri, v)}
+                    placeholder="Guest intel / notes"
+                    style={{
+                      marginTop: 2,
+                      fontSize: "0.8rem",
+                      border: "1px dashed #aaa",
+                      background: "#f5f5f5",
+                      padding: "1px 4px",
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Bottom section — always rendered after the column flow */}
+        <div
+          className="bottom-section"
+          style={{
+            marginTop: 12,
+            paddingTop: 6,
+            borderTop: "1px solid #000",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 4,
+            }}
+          >
+            <span style={{ fontWeight: 700, flexShrink: 0 }}>
+              Extra bread count:
+            </span>
+            <input
+              type="text"
+              value={doc.bread}
+              onChange={(e) => updateBread(e.target.value)}
+              className="sb-inline"
+              style={{
+                flex: 1,
+                fontFamily: "inherit",
+                fontSize: "inherit",
+                color: "#000",
+                border: "none",
+                borderBottom: "1px solid #000",
+                background: "transparent",
+                outline: "none",
+                padding: "2px 4px",
+              }}
+            />
+          </div>
+
+          <div style={{ fontWeight: 700, marginBottom: 2 }}>
+            Service Announcements:
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {doc.announcements.map((v, i) => (
+              <div
+                key={i}
+                style={{ display: "flex", alignItems: "flex-start", gap: 6 }}
+              >
+                <span>-</span>
+                <div style={{ flex: 1 }}>
+                  <AutoTextarea
+                    value={v}
+                    onChange={(nv) => updateAnnouncement(i, nv)}
+                    style={{
+                      border: "1px dashed #aaa",
+                      background: "#f5f5f5",
+                      padding: "1px 4px",
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrintStyles() {
+  return (
+    <style>{`
+      .service-breakdown-overlay textarea,
+      .service-breakdown-overlay input {
+        font-family: inherit;
+      }
+      @media print {
+        @page {
+          size: A4 landscape;
+          margin: 12mm 15mm;
+        }
+        html, body { background: #ffffff !important; }
+        body * { visibility: hidden !important; }
+        .service-breakdown-overlay,
+        .service-breakdown-overlay * { visibility: visible !important; }
+        .service-breakdown-overlay {
+          position: absolute !important;
+          inset: 0 !important;
+          background: #ffffff !important;
+          padding: 0 !important;
+          display: block !important;
+          overflow: visible !important;
+        }
+        .sb-sheet {
+          box-shadow: none !important;
+          padding: 0 !important;
+          max-width: 100% !important;
+          width: 100% !important;
+          margin: 0 !important;
+        }
+        .no-print,
+        .sb-topbar {
+          display: none !important;
+        }
+        input, textarea {
+          border: none !important;
+          background: transparent !important;
+          box-shadow: none !important;
+          outline: none !important;
+          resize: none !important;
+          padding: 0 !important;
+          color: #000 !important;
+          -webkit-print-color-adjust: exact;
+        }
+        /* Placeholders are a UI hint only — never print them. */
+        input::placeholder,
+        textarea::placeholder {
+          color: transparent !important;
+          opacity: 0 !important;
+        }
+        /* Collapse empty textareas entirely in print so a blank
+           "Guest intel / notes" field doesn't reserve a line. */
+        textarea:placeholder-shown {
+          height: 0 !important;
+          min-height: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          line-height: 0 !important;
+          visibility: hidden !important;
+        }
+        .sb-inline {
+          border-bottom: 1px solid #000 !important;
+        }
+        .service-breakdown-print-area {
+          column-count: 2;
+          column-gap: 16mm;
+          column-fill: balance;
+        }
+        .reservation-block {
+          break-inside: avoid;
+          page-break-inside: avoid;
+        }
+        .slot-block {
+          break-inside: avoid-column;
+        }
+        .bottom-section {
+          break-before: avoid;
+          page-break-before: avoid;
+        }
+      }
+    `}</style>
+  );
+}

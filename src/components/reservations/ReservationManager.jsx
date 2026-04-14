@@ -7,6 +7,7 @@ import { baseInput, fieldLabel as fieldLabelMixin, circleButton } from "../../st
 import ServiceDatePicker from "./ServiceDatePicker.jsx";
 import ResvForm from "./ResvForm.jsx";
 import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
+import ServiceBreakdown from "../ServiceBreakdown.jsx";
 
 const FONT = tokens.font;
 const baseInp = { ...baseInput };
@@ -37,6 +38,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
   const [ticketId,    setTicketId]    = useState(null);    // reservation id showing kitchen preview
   const [weeklyPreview, setWeeklyPreview] = useState(null); // "reservations" | "allergies" | null
   const [draftFromReservation, setDraftFromReservation] = useState(null);
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   const todayStr = toLocalDateISO();
 
@@ -103,6 +105,9 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            <button onClick={() => setShowBreakdown(true)}
+              disabled={dayResv.length === 0}
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: "#fff", color: "#1a1a1a", fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1 }}>SERVICE BREAKDOWN</button>
             <button onClick={() => {
               const next = editingId === "new" ? null : "new";
               setEditingId(next);
@@ -111,6 +116,14 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
               style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: "pointer", background: editingId === "new" ? "#1a1a1a" : "#fff", color: editingId === "new" ? "#fff" : "#1a1a1a", fontWeight: 600 }}>+ ADD</button>
           </div>
         </div>
+
+        {showBreakdown && (
+          <ServiceBreakdown
+            dateStr={selectedDay}
+            reservations={dayResv}
+            onClose={() => setShowBreakdown(false)}
+          />
+        )}
 
         <div style={{ padding: "16px 16px 60px", maxWidth: 700, margin: "0 auto" }}>
 

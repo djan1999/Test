@@ -6,9 +6,10 @@
  *   → wines table      : all wines by country
  *   → beverages table  : cocktails, beers, and all spirits subcategories
  *
- * Manual trigger:
- *   GET /api/sync-wines?secret=YOUR_CRON_SECRET        → full sync
+ * Manual trigger (secret must match CRON_SECRET or SYNC_SECRET):
+ *   GET /api/sync-wines?secret=...                     → full sync
  *   GET /api/sync-wines?secret=...&dry=true            → parse only, no DB write
+ * Optional `config=` (URL-encoded JSON) overrides wine_sync_config for that request.
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -53,6 +54,28 @@ const DEFAULT_SYNC_CONFIG = {
     { category: "spirit", label: "Liqueur", url: `${BASE}/category/likerji` },
   ],
 };
+
+export function parseSyncConfigFromRequestUrl(reqUrl) {
+  try {
+    const raw = new URL(reqUrl, "http://localhost").searchParams.get("config");
+    if (!raw) return null;
+    const parsed = JSON.parse(decodeURIComponent(raw));
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True when `provided` matches CRON_SECRET and/or SYNC_SECRET (trimmed). */
+export function isAuthorizedSyncSecret(provided) {
+  const cronSecret = String(process.env.CRON_SECRET || "").trim();
+  const syncSecret = String(process.env.SYNC_SECRET || "").trim();
+  if (!cronSecret && !syncSecret) return false;
+  return Boolean(
+    (cronSecret.length > 0 && provided === cronSecret) ||
+      (syncSecret.length > 0 && provided === syncSecret)
+  );
+}
 
 function normalizeSyncConfig(raw) {
   const cfg = raw && typeof raw === "object" ? raw : {};
@@ -186,14 +209,17 @@ async function fetchBeveragePage({ url, category, label }) {
 }
 
 export default async function handler(req, res) {
-  const secret = process.env.CRON_SECRET;
+  const cronSecret = String(process.env.CRON_SECRET || "").trim();
+  const syncSecret = String(process.env.SYNC_SECRET || "").trim();
   const authHeader = req.headers.authorization;
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const provided = bearerToken ||
     req.headers["x-cron-secret"] ||
     new URL(req.url, "http://localhost").searchParams.get("secret");
-  if (!secret) return res.status(500).json({ error: "CRON_SECRET not configured" });
-  if (provided !== secret) return res.status(401).json({ error: "Unauthorized" });
+  if (!cronSecret && !syncSecret) {
+    return res.status(500).json({ error: "CRON_SECRET or SYNC_SECRET not configured" });
+  }
+  if (!isAuthorizedSyncSecret(provided)) return res.status(401).json({ error: "Unauthorized" });
 
   const dry = new URL(req.url, "http://localhost").searchParams.get("dry") === "true";
 
@@ -208,7 +234,10 @@ export default async function handler(req, res) {
       .select("state")
       .eq("id", "wine_sync_config")
       .maybeSingle();
-    const syncConfig = normalizeSyncConfig(syncSettingsRow?.state || DEFAULT_SYNC_CONFIG);
+    const configFromQuery = parseSyncConfigFromRequestUrl(req.url);
+    const syncConfig = normalizeSyncConfig(
+      configFromQuery !== null ? configFromQuery : (syncSettingsRow?.state || DEFAULT_SYNC_CONFIG)
+    );
     const enabledWineCountries = WINE_COUNTRIES.filter((c) => syncConfig.wineCountries.includes(String(c.label || "").toUpperCase()));
     const enabledBeveragePages = BEVERAGE_PAGES.filter((page) => {
       const normalizedUrl = String(page.url || "").replace(/\/+$/, "");
