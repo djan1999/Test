@@ -181,9 +181,10 @@ function PlainInput({ value, onChange, bold, center, style }) {
   );
 }
 
-// Auto-growing single-row textarea used for bullet lines. Grows vertically
-// when a line wraps so nothing is clipped in print.
-function AutoTextarea({ value, onChange, style }) {
+// Auto-growing single-row textarea. Grows vertically when content wraps so
+// nothing is clipped, and collapses to a single line when empty so short
+// content stays compact in print.
+function AutoTextarea({ value, onChange, style, minRows = 1, placeholder }) {
   const resize = (el) => {
     if (!el) return;
     el.style.height = "auto";
@@ -197,12 +198,13 @@ function AutoTextarea({ value, onChange, style }) {
         onChange(e.target.value);
         resize(e.target);
       }}
-      rows={1}
+      rows={minRows}
+      placeholder={placeholder}
       style={{
         ...plainInputStyle,
         resize: "none",
         overflow: "hidden",
-        lineHeight: 1.45,
+        lineHeight: 1.35,
         ...style,
       }}
     />
@@ -348,17 +350,17 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
           color: "#000",
           fontFamily: FONT,
           fontSize: 11,
-          lineHeight: 1.45,
+          lineHeight: 1.35,
           maxWidth: 1100,
           width: "100%",
           margin: "0 auto",
-          padding: "36px 42px",
+          padding: "20px 28px",
           boxShadow: "0 0 0 1px #ddd",
           borderRadius: 0,
         }}
       >
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 4 }}>
+        <div style={{ textAlign: "center", marginBottom: 2 }}>
           <PlainInput
             value={doc.headerText}
             onChange={updateHeader}
@@ -375,23 +377,26 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
         </div>
 
         {/* Reservation column flow — CSS multi-column so print overflow moves
-            from column 1 -> column 2 -> page 2, rather than a fixed grid. */}
+            from column 1 -> column 2 -> page 2, rather than a fixed grid.
+            `balance` lets the browser distribute content evenly across the
+            two columns so small docs use the width instead of stacking in
+            a tall column 1. */}
         <div
           className="service-breakdown-print-area sb-columns"
           style={{
-            marginTop: 24,
+            marginTop: 10,
             columnCount: 2,
-            columnGap: 32,
-            columnFill: "auto",
+            columnGap: 24,
+            columnFill: "balance",
           }}
         >
           {doc.slots.map((slot, si) => (
-            <div key={slot.key} className="slot-block" style={{ marginBottom: 20 }}>
+            <div key={slot.key} className="slot-block" style={{ marginBottom: 10 }}>
               <div
                 style={{
                   borderBottom: "1px solid #000",
-                  paddingBottom: 2,
-                  marginBottom: 8,
+                  paddingBottom: 1,
+                  marginBottom: 4,
                 }}
               >
                 <PlainInput
@@ -405,14 +410,14 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                 <div
                   key={r.id}
                   className="reservation-block"
-                  style={{ marginBottom: 14 }}
+                  style={{ marginBottom: 8 }}
                 >
                   <PlainInput
                     value={r.headerText}
                     onChange={(v) => updateResvHeader(si, ri, v)}
                     bold
                   />
-                  <div style={{ padding: "0 0 0 8px", marginTop: 2 }}>
+                  <div style={{ padding: "0 0 0 8px", marginTop: 1 }}>
                     {r.bullets.map((b, bi) => (
                       <div
                         key={bi}
@@ -426,24 +431,16 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                       </div>
                     ))}
                   </div>
-                  <textarea
+                  <AutoTextarea
                     value={r.intel}
-                    onChange={(e) => updateIntel(si, ri, e.target.value)}
+                    onChange={(v) => updateIntel(si, ri, v)}
                     placeholder="Guest intel / notes"
-                    rows={2}
-                    className="sb-intel"
                     style={{
-                      width: "100%",
-                      marginTop: 4,
-                      fontFamily: "inherit",
+                      marginTop: 2,
                       fontSize: "0.8rem",
-                      color: "#000",
                       border: "1px dashed #aaa",
                       background: "#f5f5f5",
-                      padding: "3px 6px",
-                      resize: "none",
-                      outline: "none",
-                      borderRadius: 0,
+                      padding: "1px 4px",
                     }}
                   />
                 </div>
@@ -456,8 +453,8 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
         <div
           className="bottom-section"
           style={{
-            marginTop: 32,
-            paddingTop: 12,
+            marginTop: 12,
+            paddingTop: 6,
             borderTop: "1px solid #000",
           }}
         >
@@ -466,7 +463,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
               display: "flex",
               alignItems: "center",
               gap: 8,
-              marginBottom: 10,
+              marginBottom: 4,
             }}
           >
             <span style={{ fontWeight: 700, flexShrink: 0 }}>
@@ -491,35 +488,27 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
             />
           </div>
 
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>
+          <div style={{ fontWeight: 700, marginBottom: 2 }}>
             Service Announcements:
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {doc.announcements.map((v, i) => (
               <div
                 key={i}
                 style={{ display: "flex", alignItems: "flex-start", gap: 6 }}
               >
                 <span>-</span>
-                <textarea
-                  value={v}
-                  onChange={(e) => updateAnnouncement(i, e.target.value)}
-                  rows={1}
-                  className="sb-announcement"
-                  style={{
-                    flex: 1,
-                    fontFamily: "inherit",
-                    fontSize: "inherit",
-                    color: "#000",
-                    border: "1px dashed #aaa",
-                    background: "#f5f5f5",
-                    outline: "none",
-                    padding: "2px 6px",
-                    borderRadius: 0,
-                    resize: "vertical",
-                    minHeight: 20,
-                  }}
-                />
+                <div style={{ flex: 1 }}>
+                  <AutoTextarea
+                    value={v}
+                    onChange={(nv) => updateAnnouncement(i, nv)}
+                    style={{
+                      border: "1px dashed #aaa",
+                      background: "#f5f5f5",
+                      padding: "1px 4px",
+                    }}
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -579,8 +568,8 @@ function PrintStyles() {
         }
         .service-breakdown-print-area {
           column-count: 2;
-          column-gap: 20mm;
-          column-fill: auto;
+          column-gap: 16mm;
+          column-fill: balance;
         }
         .reservation-block {
           break-inside: avoid;
