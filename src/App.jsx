@@ -329,6 +329,19 @@ const esc = (v) => String(v ?? "")
 const baseInp = { ...baseInput };
 const fieldLabel = { ...mixinFieldLabel };
 const topStatChip = { ...mixinChip };
+const statusPill = (isLive) => ({
+  fontFamily: FONT,
+  fontSize: 9,
+  letterSpacing: 2,
+  padding: "6px 10px",
+  border: `1px solid ${isLive ? tokens.colors.gray350 : tokens.colors.gray250}`,
+  borderRadius: tokens.radius.pill,
+  background: isLive ? tokens.colors.gray100 : tokens.colors.gray75,
+  color: tokens.colors.gray750,
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+});
+
 const defaultBoardState = () => ({
   tables: initTables,
   dishes: [],
