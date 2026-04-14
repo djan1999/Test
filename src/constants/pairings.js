@@ -10,8 +10,8 @@ export const PAIRINGS = ["—", "Wine", "Non-Alc", "Premium", "Our Story"];
 
 export const pairingStyle = {
   "—": { color: "#666", border: "#d8d8d8", bg: "#f5f5f5" },
-  "Non-Alc": { color: "#1f5f73", border: "#7fc6db88", bg: "#7fc6db12" },
-  Wine: { color: "#8a6030", border: "#c8a06088", bg: "#c8a06008" },
-  Premium: { color: "#5a5a8a", border: "#8888bb88", bg: "#8888bb08" },
-  "Our Story": { color: "#3a7a5a", border: "#5aaa7a88", bg: "#5aaa7a08" },
+  "Non-Alc": { color: "#555", border: "#c8c8c8aa", bg: "#ebebeb33" },
+  Wine: { color: "#666", border: "#c8c8c8aa", bg: "#ebebeb22" },
+  Premium: { color: "#555", border: "#b0b0b0aa", bg: "#e8e8e822" },
+  "Our Story": { color: "#555", border: "#a8a8a8aa", bg: "#e0e0e022" },
 };

@@ -196,10 +196,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                       <button key={r} onClick={() => setRoom(x => x === r ? "" : r)} style={{
                         fontFamily: FONT, fontSize: 13, fontWeight: 500, letterSpacing: 1,
                         padding: "12px 16px", border: "1px solid",
-                        borderColor: room === r ? "#c8a06e" : "#e8e8e8",
+                        borderColor: room === r ? "#9a9a9a" : "#e8e8e8",
                         borderRadius: 2, cursor: "pointer",
                         background: room === r ? "#fdf6ec" : "#fff",
-                        color: room === r ? "#a07040" : "#444",
+                        color: room === r ? "#666" : "#444",
                         transition: "all 0.12s",
                       }}>{r}</button>
                     ))}
@@ -220,8 +220,8 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   padding: "14px 0", flex: 1, border: "1px solid",
                   borderColor: birthday === val ? (val ? "#d4b888" : "#e8e8e8") : "#e8e8e8",
                   borderRadius: 2, cursor: "pointer",
-                  background: birthday === val ? (val ? "#fdf8f0" : "#fafafa") : "#fff",
-                  color: birthday === val ? (val ? "#a07040" : "#1a1a1a") : "#555",
+                  background: birthday === val ? (val ? "#fafafa" : "#fafafa") : "#fff",
+                  color: birthday === val ? (val ? "#666" : "#1a1a1a") : "#555",
                   transition: "all 0.12s",
                 }}>{val ? "YES" : "NO"}</button>
               ))}
@@ -247,9 +247,9 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                           style={{
                             fontFamily: FONT, fontSize: 10, letterSpacing: 0.5,
                             padding: "6px 11px", borderRadius: 2, cursor: "pointer",
-                            border: `1px solid ${active ? "#e09090" : "#e8e8e8"}`,
-                            background: active ? "#fef0f0" : "#fafafa",
-                            color: active ? "#b04040" : "#888",
+                            border: `1px solid ${active ? "#c8c8c8" : "#e8e8e8"}`,
+                            background: active ? "#f5f5f5" : "#fafafa",
+                            color: active ? "#333" : "#888",
                             fontWeight: active ? 600 : 400,
                             transition: "all 0.1s",
                             position: "relative",
@@ -258,7 +258,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                           {count > 0 && (
                             <span style={{
                               marginLeft: 5,
-                              background: "#e09090", color: "#fff",
+                              background: "#c8c8c8", color: "#fff",
                               borderRadius: 99, fontSize: 9, fontWeight: 700,
                               padding: "1px 5px", verticalAlign: "middle",
                             }}>{count}</span>
@@ -280,12 +280,12 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   return (
                     <div key={i} style={{
                       display: "flex", alignItems: "center", gap: 6,
-                      padding: "5px 10px", background: "#fef0f0",
-                      border: "1px solid #e09090", borderRadius: 2,
+                      padding: "5px 10px", background: "#f5f5f5",
+                      border: "1px solid #c8c8c8", borderRadius: 2,
                     }}>
-                      <span style={{ fontFamily: FONT, fontSize: 11, color: "#b04040", fontWeight: 500 }}>{label}</span>
+                      <span style={{ fontFamily: FONT, fontSize: 11, color: "#333", fontWeight: 500 }}>{label}</span>
                       <button onClick={() => setRestrictions(rs => rs.filter((_, idx) => idx !== i))}
-                        style={{ background: "none", border: "none", color: "#e09090", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+                        style={{ background: "none", border: "none", color: "#c8c8c8", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
                     </div>
                   );
                 })}

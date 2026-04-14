@@ -38,7 +38,7 @@ export function parseWidthPreset(preset) {
 export const BLOCK_META = {
   // ── Content blocks — resolve live data per seat ───────────────────────────
   course: {
-    label: "Course",        group: "content", color: "#4b4b88", bg: "#f0f0f8", icon: "◈",
+    label: "Course",        group: "content", color: "#1a1a1a", bg: "#f0f0f0", icon: "◈",
     desc: "Dish text for a specific course — respects seat restrictions",
     fields: [
       { key: "courseKey",   label: "Course",              type: "course_select" },
@@ -47,7 +47,7 @@ export const BLOCK_META = {
     defaults: { courseKey: "", showPairing: true },
   },
   drinks: {
-    label: "Drinks",        group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "◎",
+    label: "Drinks",        group: "content", color: "#9a9a9a", bg: "#f5f5f5", icon: "◎",
     desc: "Configurable drink column — select source: pairing, optional pairing, by-the-glass, or bottle. Data comes from course editor.",
     fields: [],
     defaults: {
@@ -57,7 +57,7 @@ export const BLOCK_META = {
     },
   },
   pairing_label: {
-    label: "Pairing Label", group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "T",
+    label: "Pairing Label", group: "content", color: "#9a9a9a", bg: "#f5f5f5", icon: "T",
     desc: "Auto-resolves label from pairing type (Wine/Non-Alc/etc). Text field overrides only. Section spacing is preserved even when seat has no pairing.",
     fields: [
       { key: "text",      label: "Label override",    type: "text",   placeholder: "Leave empty for auto" },
@@ -69,7 +69,7 @@ export const BLOCK_META = {
     defaults: { text: "", align: "right", reserveWhenNoPairing: null, reserveHeightPt: null, spacing: 6 },
   },
   aperitif: {
-    label: "Aperitif",      group: "content", color: "#7a6e9e", bg: "#f4f0fa", icon: "◇",
+    label: "Aperitif",      group: "content", color: "#666", bg: "#f0f0f0", icon: "◇",
     desc: "Consumes next aperitif from the seat's aperitif queue",
     fields: [],
     defaults: {},

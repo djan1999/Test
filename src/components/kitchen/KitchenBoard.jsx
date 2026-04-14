@@ -83,8 +83,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       .filter(r => r.pos === seat.id)
       .map(r => r.note);
 
-  const pairingColor = { Wine: "#7a5020", "Non-Alc": "#1f5f73", Premium: "#5a5a8a", "Our Story": "#3a7a5a" };
-  const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#e8f5fa", Premium: "#f0eeff", "Our Story": "#eaf5ee" };
+  const pairingColor = { Wine: "#555", "Non-Alc": "#555", Premium: "#555", "Our Story": "#555" };
+  const pairingBg   = { Wine: "#f5f5f5", "Non-Alc": "#ebebeb", Premium: "#f0f0f0", "Our Story": "#e8e8e8" };
 
   const normFlag = s => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   const normCategory = (course) => {
@@ -184,19 +184,19 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
             {table.resName && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
             {table.menuType && <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 3, background: isShort ? "#fff4e0" : "#e8f0ff", color: isShort ? "#a06000" : "#2a50a0" }}>{isShort ? "SHORT" : "LONG"}</span>}
-            <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 3, background: table.lang === "si" ? "#fff0f0" : "#f0fff4", color: table.lang === "si" ? "#a03030" : "#207040", border: "1px solid", borderColor: table.lang === "si" ? "#f0c0c0" : "#b0dcc0" }}>{table.lang === "si" ? "SI" : "EN"}</span>
+            <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 3, background: table.lang === "si" ? "#f5f5f5" : "#f0fff4", color: table.lang === "si" ? "#a03030" : "#207040", border: "1px solid", borderColor: table.lang === "si" ? "#e0e0e0" : "#b0dcc0" }}>{table.lang === "si" ? "SI" : "EN"}</span>
             {table.birthday && <span style={{ fontSize: 10 }}>🎂</span>}
             {table.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 8, color: "#9a6a20", letterSpacing: 0.5 }}>{table.room ? `#${table.room}` : "Hotel"}</span>}
           </div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 1, flexWrap: "wrap" }}>
             <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#111" }}>{seats.length} <span style={{ fontWeight: 600, fontSize: 10, letterSpacing: 0.5 }}>PAX</span></span>
             {table.resTime && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: "#333" }}>{table.resTime}</span>}
-            {table.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: "#4a9a6a" }}>arr. {table.arrivedAt}</span>}
+            {table.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: "#555" }}>arr. {table.arrivedAt}</span>}
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-          <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: allDone ? "#4a9a6a" : "#111", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 10, color: "#666", fontWeight: 400 }}>/{totalCourses}</span></div>
-          {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a" }}>{durationMins} min</div>}
+          <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: allDone ? "#555" : "#111", lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 10, color: "#666", fontWeight: 400 }}>/{totalCourses}</span></div>
+          {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 9, color: "#555" }}>{durationMins} min</div>}
           <button
             onPointerDown={e => e.stopPropagation()}
             onClick={e => { e.stopPropagation(); setShowEdit(v => !v); setPickingRestr(null); setCustomNote(""); setEditingCourse(null); }}
@@ -225,13 +225,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           {/* Existing kitchen-added restrictions */}
           {restrictions.map((r, i) => r.kitchenAdded ? (
             <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, color: "#b04040", fontWeight: 600 }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, color: "#333", fontWeight: 600 }}>
                 {restrLabel(r.note)}{r.pos ? ` → P${r.pos}` : " → All"}
               </span>
               <button
                 onPointerDown={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); removeKitchenRestr(i); }}
-                style={{ fontFamily: FONT, fontSize: 10, padding: "1px 6px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", touchAction: "manipulation" }}>✕</button>
+                style={{ fontFamily: FONT, fontSize: 10, padding: "1px 6px", border: "1px solid #c8c8c8", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#333", touchAction: "manipulation" }}>✕</button>
             </div>
           ) : null)}
           {/* Step 1: pick restriction */}
@@ -264,10 +264,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8a060", borderRadius: 3, cursor: "pointer", background: "#fdf4e8", color: "#7a5020", fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8c8c8", borderRadius: 3, cursor: "pointer", background: "#f5f5f5", color: "#555", fontWeight: 700, touchAction: "manipulation" }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, s.id); }}
-                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
+                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8c8c8", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#333", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
                 ))}
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPickingRestr(null); }}
                   style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #eee", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#bbb", touchAction: "manipulation" }}>cancel</button>
@@ -286,10 +286,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8a060", borderRadius: 3, cursor: "pointer", background: "#fdf4e8", color: "#7a5020", fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8c8c8", borderRadius: 3, cursor: "pointer", background: "#f5f5f5", color: "#555", fontWeight: 700, touchAction: "manipulation" }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, s.id); }}
-                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
+                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8c8c8", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#333", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
                 ))}
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPickingRestr(null); setCustomNote(""); }}
                   style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #eee", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#bbb", touchAction: "manipulation" }}>cancel</button>
@@ -303,7 +303,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       <div style={{ borderBottom: "1px solid #e8e8e8", padding: "5px 10px", display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", flexShrink: 0 }}>Pace</span>
         {["Slow", "Fast"].map(p => {
-          const colors = { Slow: { on: "#7a5020", bg: "#fdf4e8", border: "#c8a060" }, Fast: { on: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" } };
+          const colors = { Slow: { on: "#555", bg: "#f5f5f5", border: "#c8c8c8" }, Fast: { on: "#555", bg: "#f5f5f5", border: "#c8c8c8" } };
           const active = table.pace === p;
           const col = colors[p];
           return (
@@ -347,16 +347,16 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           return (
             <div style={{ marginTop: 7, paddingTop: 7, borderTop: "1px solid #e8e8e8" }}>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#b04040", textTransform: "uppercase", flexShrink: 0 }}>⚠ Unassigned</span>
+                <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#333", textTransform: "uppercase", flexShrink: 0 }}>⚠ Unassigned</span>
                 {unassigned.map(r => (
                   <span
                     key={r._i}
                     onClick={() => setAssigningRestrIdx(assigningRestrIdx === r._i ? null : r._i)}
                     style={{
                       fontFamily: FONT, fontSize: 9, padding: "2px 8px", borderRadius: 3,
-                      border: "1px solid #e09090",
-                      background: assigningRestrIdx === r._i ? "#b04040" : "#fef0f0",
-                      color: assigningRestrIdx === r._i ? "#fff" : "#b04040",
+                      border: "1px solid #c8c8c8",
+                      background: assigningRestrIdx === r._i ? "#333" : "#f5f5f5",
+                      color: assigningRestrIdx === r._i ? "#fff" : "#333",
                       fontWeight: 500, cursor: "pointer", userSelect: "none",
                     }}
                   >{restrLabel(r.note)} {assigningRestrIdx === r._i ? "→ pick seat" : "→"}</span>
@@ -364,12 +364,12 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               </div>
               {assigningRestrIdx !== null && (
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", marginTop: 5 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, color: "#b04040", flexShrink: 0 }}>Assign to:</span>
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: "#333", flexShrink: 0 }}>Assign to:</span>
                   {seats.map(s => (
                     <button key={s.id} onClick={() => assignRestrToSeat(s.id)} style={{
                       fontFamily: FONT, fontSize: 10, fontWeight: 700, padding: "3px 10px",
-                      border: "1px solid #e09090", borderRadius: 3, cursor: "pointer",
-                      background: "#fff", color: "#b04040",
+                      border: "1px solid #c8c8c8", borderRadius: 3, cursor: "pointer",
+                      background: "#fff", color: "#333",
                     }}>P{s.id}</button>
                   ))}
                   <button onClick={() => setAssigningRestrIdx(null)} style={{
@@ -464,16 +464,16 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             <div key={key} style={{
               borderBottom: "1px solid #f2f2f2",
               background: fired ? "#f3fcf5" : "#fff",
-              borderLeft: fired ? "4px solid #4a9a6a" : kcNote.name || kcNote.note ? "4px solid #c04040" : "4px solid transparent",
+              borderLeft: fired ? "4px solid #555" : kcNote.name || kcNote.note ? "4px solid #333" : "4px solid transparent",
             }}>
               <div
                 onClick={() => !isEditingThis && (fired ? unfire(key) : fire(key))}
                 style={{ display: "flex", alignItems: "center", padding: "7px 10px 7px 8px", gap: 7, cursor: isEditingThis ? "default" : "pointer" }}>
-                <span style={{ fontFamily: FONT, fontSize: 13, color: fired ? "#4a9a6a" : "#ddd", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
+                <span style={{ fontFamily: FONT, fontSize: 13, color: fired ? "#555" : "#ddd", flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
                     fontFamily: FONT, fontSize: 11, fontWeight: 700, lineHeight: 1.25,
-                    color: fired ? "#bbb" : kcNote.name ? "#c04040" : "#111",
+                    color: fired ? "#bbb" : kcNote.name ? "#333" : "#111",
                     textDecoration: fired ? "line-through" : "none",
                     letterSpacing: 0.2,
                   }}>
@@ -485,10 +485,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
                       {pairingAlert && <span style={{ fontFamily: FONT, fontSize: 10, color: "#888", fontWeight: 600 }}>{pairingAlert}</span>}
                       {modGroups && Object.entries(modGroups).sort(([a], [b]) => (a === baseName ? -1 : 1) - (b === baseName ? -1 : 1)).map(([name, count]) => (
-                        <span key={name} style={{ fontFamily: FONT, fontSize: 10, color: name === baseName ? "#444" : "#c04040", fontWeight: 600 }}>{count}× {name}</span>
+                        <span key={name} style={{ fontFamily: FONT, fontSize: 10, color: name === baseName ? "#444" : "#333", fontWeight: 600 }}>{count}× {name}</span>
                       ))}
-                      {kitchenNote && <span style={{ fontFamily: FONT, fontSize: 10, color: "#c04040", fontWeight: 600 }}>{kitchenNote}</span>}
-                      {kcNote.note && <span style={{ fontFamily: FONT, fontSize: 10, color: "#c04040", fontWeight: 600 }}>⚑ {kcNote.note}</span>}
+                      {kitchenNote && <span style={{ fontFamily: FONT, fontSize: 10, color: "#333", fontWeight: 600 }}>{kitchenNote}</span>}
+                      {kcNote.note && <span style={{ fontFamily: FONT, fontSize: 10, color: "#333", fontWeight: 600 }}>⚑ {kcNote.note}</span>}
                     </div>
                   )}
                 </div>
@@ -505,7 +505,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                       touchAction: "manipulation",
                     }}>✏</button>
                 )}
-                {firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a", fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
+                {firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#555", fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
               </div>
               {/* Inline course editor */}
               {isEditingThis && (
@@ -515,7 +515,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     onChange={e => setEditName(e.target.value)}
                     onBlur={() => saveCourseDraft(key, editName, editNote)}
                     placeholder={`Rename "${line1}"…`}
-                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 7px", border: "1px solid #c04040", borderRadius: 3, width: "100%", boxSizing: "border-box" }}
+                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 7px", border: "1px solid #333", borderRadius: 3, width: "100%", boxSizing: "border-box" }}
                   />
                   <input
                     value={editNote}
@@ -528,7 +528,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     <button
                       onPointerDown={e => e.stopPropagation()}
                       onClick={e => { e.stopPropagation(); clearCourseNote(key); }}
-                      style={{ fontFamily: FONT, fontSize: 8, padding: "3px 8px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", alignSelf: "flex-start", touchAction: "manipulation" }}>Clear override</button>
+                      style={{ fontFamily: FONT, fontSize: 8, padding: "3px 8px", border: "1px solid #c8c8c8", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#333", alignSelf: "flex-start", touchAction: "manipulation" }}>Clear override</button>
                   )}
                 </div>
               )}
@@ -549,11 +549,11 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         return (
           <div style={{ background: "#eaf7ee", borderTop: "2px solid #b8e8c4", padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontFamily: FONT, fontSize: 13, color: "#4a9a6a" }}>✓</span>
+              <span style={{ fontFamily: FONT, fontSize: 13, color: "#555" }}>✓</span>
               <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                {durLabel && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 700, letterSpacing: 0.5 }}>{durLabel}</span>}
+                {durLabel && <span style={{ fontFamily: FONT, fontSize: 10, color: "#555", fontWeight: 700, letterSpacing: 0.5 }}>{durLabel}</span>}
                 {timeRange && <span style={{ fontFamily: FONT, fontSize: 9, color: "#6ab88a", letterSpacing: 0.3 }}>{timeRange}</span>}
-                {!durLabel && !timeRange && <span style={{ fontFamily: FONT, fontSize: 10, color: "#4a9a6a", fontWeight: 700, letterSpacing: 1 }}>COMPLETE</span>}
+                {!durLabel && !timeRange && <span style={{ fontFamily: FONT, fontSize: 10, color: "#555", fontWeight: 700, letterSpacing: 1 }}>COMPLETE</span>}
               </div>
             </div>
             <button
@@ -561,7 +561,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               style={{
                 fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "4px 10px",
                 border: "1px solid #a8d8b8", borderRadius: 3, cursor: "pointer",
-                background: "#fff", color: "#4a9a6a", textTransform: "uppercase",
+                background: "#fff", color: "#555", textTransform: "uppercase",
               }}
             >Archive</button>
           </div>
@@ -606,10 +606,10 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
 export function KitchenAlertOverlay({ alerts, onConfirm }) {
   if (alerts.length === 0) return null;
   const PAIR_COLORS = {
-    Wine:      { color: "#7a5020", bg: "#fdf4e8", border: "#c8a060" },
-    "Non-Alc": { color: "#1f5f73", bg: "#e8f7fb", border: "#7fc6db" },
-    Premium:   { color: "#5a5a8a", bg: "#f0eeff", border: "#aaaacc" },
-    "Our Story":{ color: "#3a7a5a", bg: "#eaf5ee", border: "#7abf9a" },
+    Wine:      { color: "#555", bg: "#f5f5f5", border: "#c8c8c8" },
+    "Non-Alc": { color: "#555", bg: "#f5f5f5", border: "#c8c8c8" },
+    Premium:   { color: "#555", bg: "#f0f0f0", border: "#c8c8c8" },
+    "Our Story":{ color: "#555", bg: "#f0f0f0", border: "#c8c8c8" },
   };
   return (
     <div style={{
@@ -681,7 +681,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                 <div key={group.name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                   <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#666", minWidth: 60 }}>{group.name.toUpperCase()}</span>
                   {group.seats.map(s => (
-                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "#edf8e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>
+                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "#f5f5f5", border: "1px solid #c8c8c8", color: "#555" }}>
                       P{s.id}{s.pairing && s.pairing !== "—" ? ` · ${s.pairing}` : ""}
                     </span>
                   ))}

@@ -111,9 +111,9 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
             <button onClick={handleSync} disabled={syncSt === "syncing"} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 2,
               padding: "6px 16px", borderRadius: 999, cursor: syncSt === "syncing" ? "not-allowed" : "pointer",
-              border: `1px solid ${syncSt === "ok" ? "#8fc39f" : syncSt === "err" ? "#e89898" : "#ddd"}`,
-              background: syncSt === "ok" ? "#eef8f1" : syncSt === "err" ? "#fff0f0" : "#fafafa",
-              color: syncSt === "ok" ? "#2f7a45" : syncSt === "err" ? "#c04040" : "#aaa",
+              border: `1px solid ${syncSt === "ok" ? "#c8c8c8" : syncSt === "err" ? "#c8c8c8" : "#ddd"}`,
+              background: syncSt === "ok" ? "#f0f0f0" : syncSt === "err" ? "#f5f5f5" : "#fafafa",
+              color: syncSt === "ok" ? "#555" : syncSt === "err" ? "#333" : "#aaa",
             }}>
               {syncSt === "syncing" ? "SYNCING…" : syncSt === "ok" ? "✓ SYNCED" : syncSt === "err" ? "✗ FAILED" : "↻ SYNC WINES"}
             </button>

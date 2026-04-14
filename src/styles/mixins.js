@@ -1,14 +1,17 @@
 import { tokens } from "./tokens.js";
 
+const c = tokens.colors;
+const r = tokens.radius;
+
 export const baseInput = {
   fontFamily: tokens.font,
   fontSize: tokens.mobileInputSize,
   padding: "10px 12px",
-  border: "1px solid #e8e8e8",
-  borderRadius: 2,
+  border: `1px solid ${c.line}`,
+  borderRadius: r.sm,
   outline: "none",
-  color: tokens.colors.black,
-  background: tokens.colors.white,
+  color: c.black,
+  background: c.white,
   boxSizing: "border-box",
   width: "100%",
   minWidth: 0,
@@ -19,7 +22,7 @@ export const fieldLabel = {
   fontFamily: tokens.font,
   fontSize: tokens.fontSize.sm,
   letterSpacing: 3,
-  color: "#444",
+  color: c.gray800,
   textTransform: "uppercase",
   marginBottom: 8,
 };
@@ -27,12 +30,12 @@ export const fieldLabel = {
 export const chip = {
   fontFamily: tokens.font,
   fontSize: 10,
-  color: tokens.colors.black,
+  color: c.black,
   letterSpacing: 1,
   padding: "6px 10px",
-  border: "1px solid #e8e8e8",
-  borderRadius: 999,
-  background: tokens.colors.white,
+  border: `1px solid ${c.line}`,
+  borderRadius: r.pill,
+  background: c.white,
   whiteSpace: "nowrap",
 };
 
@@ -40,9 +43,9 @@ export const circleButton = {
   width: 36,
   height: 36,
   borderRadius: "50%",
-  border: "1px solid #e8e8e8",
-  background: tokens.colors.white,
-  color: "#444",
+  border: `1px solid ${c.line}`,
+  background: c.white,
+  color: c.gray800,
   fontSize: 18,
   cursor: "pointer",
   display: "flex",
@@ -56,7 +59,7 @@ export const circleButton = {
 export const modalOverlay = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.45)",
+  background: c.overlayScrim,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -67,18 +70,18 @@ export const modalContent = {
   width: "min(960px, 96vw)",
   maxHeight: "90vh",
   overflow: "auto",
-  background: tokens.colors.white,
-  border: "1px solid #e8e8e8",
-  boxShadow: "0 14px 40px rgba(0,0,0,0.22)",
+  background: c.white,
+  border: `1px solid ${c.line}`,
+  boxShadow: tokens.shadow.modal,
 };
 
 export const headerBar = {
-  borderBottom: "1px solid #f0f0f0",
+  borderBottom: `1px solid ${c.lineSubtle}`,
   padding: "10px 14px",
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  background: tokens.colors.white,
+  background: c.white,
   position: "sticky",
   top: 0,
   zIndex: 1,

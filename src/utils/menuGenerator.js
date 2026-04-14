@@ -751,7 +751,7 @@ export function generateMenuHTML({
     font-size:9px;line-height:1;
     background:rgba(255,255,255,0.92);
     border:1px solid rgba(210,70,70,0.55);
-    color:#b04040;
+    color:#333;
     padding:2px 4px;border-radius:3px;
     white-space:nowrap;
     pointer-events:none;

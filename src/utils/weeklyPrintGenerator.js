@@ -43,11 +43,11 @@ body{font-family:'Roboto Mono',monospace;font-size:${baseFontPt}pt;color:#000;-w
 table{width:100%;border-collapse:collapse;table-layout:fixed;}
 th,td{border:1px solid #aaa;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;color:#000;font-weight:700;overflow:hidden;word-wrap:break-word;line-height:1.15;}
 th{text-align:center;}
-.green-header{background:#3d6b4f;color:#fff;}
-.green-header th,.green-header td{border-color:#2e5a3e;color:#fff;}
-.red{color:#c04040;}
+.green-header{background:#1a1a1a;color:#fff;}
+.green-header th,.green-header td{border-color:#333;color:#fff;}
+.red{color:#333;}
 .center{text-align:center;}
-.highlight{background:#edf7ef;}
+.highlight{background:#f0f0f0;}
 .course-name{text-transform:uppercase;font-size:${baseFontPt}pt;}
 .course-sub{font-size:${courseSubPt}pt;color:#555;font-weight:400;}
 .resv-cell{font-size:${baseFontPt}pt;line-height:1.15;}

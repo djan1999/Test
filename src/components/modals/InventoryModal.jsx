@@ -176,10 +176,10 @@ export default function InventoryModal({ wines, onClose }) {
 
   const syncChip = (() => {
     if (syncSt === "loading") return { label: "LOADING...", color: "#aaa", bg: "#f8f8f8", border: "#e8e8e8" };
-    if (syncSt === "saving") return { label: "SAVING...", color: "#a07020", bg: "#fffbe8", border: "#e8d888" };
+    if (syncSt === "saving") return { label: "SAVING...", color: "#666", bg: "#fffbe8", border: "#e8d888" };
     if (syncSt === "offline") return { label: "OFFLINE · SAVED", color: "#c06020", bg: "#fff4ee", border: "#e8c8a8" };
-    if (syncSt === "error") return { label: "SYNC ERROR", color: "#c02020", bg: "#fff0f0", border: "#e8a8a8" };
-    return { label: "SYNCED", color: "#2f7a45", bg: "#eef8f1", border: "#8fc39f" };
+    if (syncSt === "error") return { label: "SYNC ERROR", color: "#c02020", bg: "#f5f5f5", border: "#e8a8a8" };
+    return { label: "SYNCED", color: "#555", bg: "#f0f0f0", border: "#c8c8c8" };
   })();
 
   const handlePrint = () => {
@@ -239,7 +239,7 @@ export default function InventoryModal({ wines, onClose }) {
       }}>CLEAR ALL</button>
       <button onClick={handlePrint} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
-        border: "1px solid #3060a0", borderRadius: 2, cursor: "pointer", background: "#f0f6ff", color: "#3060a0",
+        border: "1px solid #555", borderRadius: 2, cursor: "pointer", background: "#fafafa", color: "#555",
       }}>PRINT</button>
     </div>
   );
@@ -309,8 +309,8 @@ export default function InventoryModal({ wines, onClose }) {
                 />
                 <button onClick={() => inc(w.id)} style={{
                   fontFamily: FONT, fontSize: 18, width: 38, height: 38,
-                  border: "1px solid #3060a0", borderRight: "none",
-                  cursor: "pointer", background: "#f0f6ff", color: "#3060a0",
+                  border: "1px solid #555", borderRight: "none",
+                  cursor: "pointer", background: "#fafafa", color: "#555",
                   display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
                 }}>+</button>
                 <button onClick={() => togglePartial(w.id)} style={{
@@ -332,9 +332,9 @@ export default function InventoryModal({ wines, onClose }) {
               {deviceTotals.map((d) => (
                 <span key={d.id} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 10px",
-                  borderRadius: 999, border: d.isMe ? "1px solid #3060a0" : "1px solid #e0e0e0",
-                  background: d.isMe ? "#f0f6ff" : "#f8f8f8",
-                  color: d.isMe ? "#3060a0" : "#888",
+                  borderRadius: 999, border: d.isMe ? "1px solid #555" : "1px solid #e0e0e0",
+                  background: d.isMe ? "#fafafa" : "#f8f8f8",
+                  color: d.isMe ? "#555" : "#888",
                 }}>
                   {d.label}{d.isMe ? " (you)" : ""}: {fmtCount(d.total)}
                 </span>

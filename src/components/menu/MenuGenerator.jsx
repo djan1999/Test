@@ -249,8 +249,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
     setExpandedDrinksId(null);
   };
 
-  const pairingColor = { Wine: "#7a5020", "Non-Alc": "#3a6a2a", Premium: "#4a3a7a", "Our Story": "#2a5a6a" };
-  const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#edf8e8", Premium: "#f0eeff", "Our Story": "#e8f5f8" };
+  const pairingColor = { Wine: "#555", "Non-Alc": "#555", Premium: "#555", "Our Story": "#555" };
+  const pairingBg   = { Wine: "#f5f5f5", "Non-Alc": "#f5f5f5", Premium: "#f0f0f0", "Our Story": "#ebebeb" };
 
 
   return (
@@ -312,8 +312,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
           return (
             <div key={s.id} style={{
-              border: `1px solid ${seatHasEdits ? "#f0c060" : "#f0f0f0"}`, borderRadius: 4, marginBottom: 8,
-              background: seatHasEdits ? "#fffdf4" : "#fff",
+              border: `1px solid ${seatHasEdits ? "#d0d0d0" : "#f0f0f0"}`, borderRadius: 4, marginBottom: 8,
+              background: seatHasEdits ? "#fafafa" : "#fff",
             }}>
               {/* Main row */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", flexWrap: "wrap" }}>
@@ -330,35 +330,35 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                   const isDietary = ["veg","vegan","pescetarian"].includes(r.note);
                   return (
                     <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2,
-                      background: isDietary ? "#edf8e8" : "#fef0f0",
-                      color: isDietary ? "#2a6a2a" : "#b04040",
-                      border: `1px solid ${isDietary ? "#88cc88" : "#e09090"}` }}>
+                      background: isDietary ? "#f5f5f5" : "#f5f5f5",
+                      color: isDietary ? "#555" : "#333",
+                      border: `1px solid ${isDietary ? "#c8c8c8" : "#c8c8c8"}` }}>
                       {isDietary ? restrLabel(r.note) : `⚠ ${restrLabel(r.note)}`}
                     </span>
                   );
                 })}
                 {orderedExtras.map(d => (
-                  <span key={d.key} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #e0c898" }}>+{String(d.name).toUpperCase()}</span>
+                  <span key={d.key} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#f5f5f5", color: "#555", border: "1px solid #d0d0d0" }}>+{String(d.name).toUpperCase()}</span>
                 ))}
 
                 {/* Manually added beverages */}
                 {glasses.map((w, i) => (
-                  <span key={`g${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fdf4e8", color: "#7a5020", border: "1px solid #c8a060", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span key={`g${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#f5f5f5", color: "#555", border: "1px solid #c8c8c8", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🍷 {w.name}
                   </span>
                 ))}
                 {cocktails.map((c, i) => (
-                  <span key={`c${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#f5eeff", color: "#5a3878", border: "1px solid #b898d8", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span key={`c${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#f5eeff", color: "#555", border: "1px solid #c8c8c8", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🍹 {c.name}
                   </span>
                 ))}
                 {spirits.map((sp, i) => (
-                  <span key={`s${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fff3e0", color: "#7a5020", border: "1px solid #d4a870", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span key={`s${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#fafafa", color: "#555", border: "1px solid #c8c8c8", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🥃 {sp.name}
                   </span>
                 ))}
                 {beers.map((b, i) => (
-                  <span key={`b${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#edf8e8", color: "#3a6a2a", border: "1px solid #88bb70", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span key={`b${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 2, background: "#f5f5f5", color: "#555", border: "1px solid #c8c8c8", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🍺 {b.name}
                   </span>
                 ))}
@@ -366,9 +366,9 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                 {/* Edit button — opens per-seat ephemeral course editor */}
                 <button onClick={() => { setExpandedSeatId(isExpanded ? null : s.id); setExpandedDrinksId(null); setPreviewSeatId(null); }} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
-                  border: `1px solid ${seatHasEdits ? "#f0c060" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
-                  background: seatHasEdits ? "#fff8e0" : "#fafafa",
-                  color: seatHasEdits ? "#a07020" : "#aaa",
+                  border: `1px solid ${seatHasEdits ? "#d0d0d0" : "#e0e0e0"}`, borderRadius: 2, cursor: "pointer",
+                  background: seatHasEdits ? "#f5f5f5" : "#fafafa",
+                  color: seatHasEdits ? "#666" : "#aaa",
                 }}>{isExpanded ? "▲" : (seatHasEdits ? "✎ EDITED" : "✎")}</button>
 
                 {/* Drinks edit button */}
@@ -391,9 +391,9 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
                 <button onClick={() => openPrint(s)} style={{
                   marginLeft: "auto", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
-                  padding: "8px 16px", border: "1px solid #c8a96e",
+                  padding: "8px 16px", border: "1px solid #9a9a9a",
                   borderRadius: 2, cursor: "pointer",
-                  background: "#c8a96e", color: "#fff",
+                  background: "#9a9a9a", color: "#fff",
                 }}>PDF</button>
               </div>
 
@@ -407,8 +407,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                     {seatHasEdits && (
                       <button onClick={() => clearSeatAllEdits(s.id)} style={{
                         fontFamily: FONT, fontSize: 9, padding: "2px 8px",
-                        border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
-                        background: "#fff9f9", color: "#c04040",
+                        border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer",
+                        background: "#fafafa", color: "#333",
                       }}>clear all</button>
                     )}
                   </div>
@@ -427,7 +427,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                           borderRadius: 2, padding: "2px 4px",
                           background: hasEdit ? "#fffdf0" : "transparent",
                         }}>
-                          <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: hasEdit ? "#a07020" : "#bbb",
+                          <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: hasEdit ? "#666" : "#bbb",
                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {baseDish?.name || "—"}
                           </span>
@@ -497,7 +497,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                   </div>
                   {/* ── Aperitif — generates above Sour Soup ── */}
                   <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#a07040", textTransform: "uppercase", marginBottom: 6 }}>Aperitif</div>
+                    <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: "#666", textTransform: "uppercase", marginBottom: 6 }}>Aperitif</div>
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                       {aperitifOptions.map(ap => {
                         const label = ap.label ?? ap;
@@ -513,8 +513,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                             updSeat(s.id, "aperitifs", [...(s.aperitifs || []), item]);
                           }} style={{
                             fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
-                            border: "1px solid #d0c0a8", borderRadius: 3, cursor: "pointer",
-                            background: "#fff", color: "#7a5020",
+                            border: "1px solid #d0d0d0", borderRadius: 3, cursor: "pointer",
+                            background: "#fff", color: "#555",
                           }}>{label}</button>
                         );
                       })}
@@ -615,8 +615,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                           });
                           const btnStyleMap = {
                             off:    { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" },
-                            alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
-                            nonalc: { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" },
+                            alco:   { border: "#c8c8c8", bg: "#f5f5f5", color: "#555" },
+                            nonalc: { border: "#60a8c8", bg: "#f5f5f5", color: "#555" },
                           };
                           const btnLabelMap = { off: "off", alco: "alco", nonalc: "n/a" };
                           const st = btnStyleMap[cur];
@@ -689,9 +689,9 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                               const labels = { off: `${dish.name} off`, on: `${dish.name} ✓`, alco: `${dish.name.slice(0,4)} · ALCO`, nonalc: `${dish.name.slice(0,4)} · N/A` };
                               const colors = {
                                 off:    { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" },
-                                on:     { border: "#a0c060", bg: "#f4f8e8", color: "#5a7820" },
-                                alco:   { border: "#c8a060", bg: "#fdf4e8", color: "#7a5020" },
-                                nonalc: { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" },
+                                on:     { border: "#b0b0b0", bg: "#f5f5f5", color: "#555" },
+                                alco:   { border: "#c8c8c8", bg: "#f5f5f5", color: "#555" },
+                                nonalc: { border: "#60a8c8", bg: "#f5f5f5", color: "#555" },
                               }[cur];
                               return (
                                 <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
@@ -725,8 +725,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                             const pColors = curP === "off"
                               ? { border: "#d0d0d0", bg: "#f5f5f5", color: "#aaa" }
                               : curP === "—"
-                              ? { border: "#a0c060", bg: "#f4f8e8", color: "#5a7820" }
-                              : { border: "#60a8c8", bg: "#e8f4fd", color: "#205a7a" };
+                              ? { border: "#b0b0b0", bg: "#f5f5f5", color: "#555" }
+                              : { border: "#60a8c8", bg: "#f5f5f5", color: "#555" };
                             return (
                               <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
                                 {di > 0 && <div style={{ width: 1, height: 18, background: "#e0e0e0", marginRight: 2 }} />}

@@ -80,7 +80,7 @@ export default function GateScreen({ onPass }) {
                 letterSpacing: show ? 2 : 6,
                 fontSize: tokens.mobileInputSize,
                 paddingRight: 44,
-                borderColor: shake ? "#f0c0c0" : "#e8e8e8",
+                borderColor: shake ? "#e0e0e0" : "#e8e8e8",
                 transition: "border-color 0.2s",
               }}
               placeholder="••••••••"

@@ -186,10 +186,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               {ROOM_OPTIONS.map((r) => (
                 <button key={r} onClick={() => setRoom((x) => x === r ? "" : r)} style={{
                   fontFamily: FONT, fontSize: 11, padding: "7px 10px",
-                  border: "1px solid", borderColor: room === r ? "#c8a06e" : "#e8e8e8",
+                  border: "1px solid", borderColor: room === r ? "#9a9a9a" : "#e8e8e8",
                   borderRadius: 2, cursor: "pointer",
                   background: room === r ? "#fdf6ec" : "#fff",
-                  color: room === r ? "#a07040" : "#555",
+                  color: room === r ? "#666" : "#555",
                 }}>{r}</button>
               ))}
             </div>
@@ -224,13 +224,13 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                     <button key={opt.key} onClick={() => setRestrictions((rs) => [...rs, { pos: null, note: opt.key }])} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "5px 9px",
                       borderRadius: 2, cursor: "pointer",
-                      border: `1px solid ${cnt > 0 ? "#e09090" : "#e8e8e8"}`,
-                      background: cnt > 0 ? "#fef0f0" : "#fafafa",
-                      color: cnt > 0 ? "#b04040" : "#888",
+                      border: `1px solid ${cnt > 0 ? "#c8c8c8" : "#e8e8e8"}`,
+                      background: cnt > 0 ? "#f5f5f5" : "#fafafa",
+                      color: cnt > 0 ? "#333" : "#888",
                       fontWeight: cnt > 0 ? 600 : 400,
                     }}>
                       {opt.emoji} {opt.label}
-                      {cnt > 0 && <span style={{ marginLeft: 4, background: "#e09090", color: "#fff", borderRadius: 99, fontSize: 8, padding: "1px 4px" }}>{cnt}</span>}
+                      {cnt > 0 && <span style={{ marginLeft: 4, background: "#c8c8c8", color: "#fff", borderRadius: 99, fontSize: 8, padding: "1px 4px" }}>{cnt}</span>}
                     </button>
                   );
                 })}
@@ -244,9 +244,9 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               const def = RESTRICTIONS.find((x) => x.key === r.note);
               const label = def ? `${def.emoji} ${def.label}` : r.note;
               return (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", background: "#fef0f0", border: "1px solid #e09090", borderRadius: 2 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 10, color: "#b04040" }}>{label}</span>
-                  <button onClick={() => setRestrictions((rs) => rs.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: "#e09090", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", background: "#f5f5f5", border: "1px solid #c8c8c8", borderRadius: 2 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 10, color: "#333" }}>{label}</span>
+                  <button onClick={() => setRestrictions((rs) => rs.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: "#c8c8c8", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
                 </div>
               );
             })}

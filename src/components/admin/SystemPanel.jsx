@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { FONT } from "./adminStyles.js";
+import { syncControlStyle } from "../../styles/ui.js";
+import { tokens } from "../../styles/tokens.js";
 
 // ── SystemPanel — Supabase connection status, realtime, environment, debug ──
 export default function SystemPanel({
@@ -36,7 +38,8 @@ export default function SystemPanel({
     setTimeout(() => setSyncResult(null), 3000);
   };
 
-  const statusColor = syncStatus === "live" ? "#2a7a2a" : syncStatus === "local-only" ? "#888" : syncStatus === "connecting" ? "#c8a06e" : "#c04040";
+  const c = tokens.colors;
+  const statusColor = syncStatus === "live" ? c.gray750 : syncStatus === "local-only" ? c.gray600 : syncStatus === "connecting" ? c.gray500 : c.gray850;
   const statusLabel = syncStatus === "live" ? "Connected" : syncStatus === "local-only" ? "Local Only" : syncStatus === "connecting" ? "Connecting..." : "Error";
   const activeProfile = safeProfiles.find(p => p.id === activeLayoutProfileId) || safeProfiles[0] || null;
 
@@ -55,7 +58,7 @@ export default function SystemPanel({
           </div>
           <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, padding: "12px 16px", minWidth: 160 }}>
             <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Realtime</div>
-            <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: syncStatus === "live" ? "#2a7a2a" : "#888" }}>
+            <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: syncStatus === "live" ? c.gray750 : c.gray600 }}>
               {syncStatus === "live" ? "Active" : "Inactive"}
             </span>
           </div>
@@ -73,11 +76,10 @@ export default function SystemPanel({
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Manual Actions</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button onClick={handleManualSync} disabled={syncResult === "syncing"} style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
-            border: `1px solid ${syncResult === "ok" ? "#8fc39f" : syncResult === "err" ? "#e89898" : "#c8a06e"}`,
-            borderRadius: 2, cursor: syncResult === "syncing" ? "not-allowed" : "pointer",
-            background: syncResult === "ok" ? "#eef8f1" : syncResult === "err" ? "#fff0f0" : "#fffaf4",
-            color: syncResult === "ok" ? "#2f7a45" : syncResult === "err" ? "#c04040" : "#8a6020",
+            ...syncControlStyle(syncResult),
+            fontFamily: FONT,
+            padding: "8px 16px",
+            borderRadius: tokens.radius.sm,
           }}>
             {syncResult === "syncing" ? "SYNCING..." : syncResult === "ok" ? "SYNCED" : syncResult === "err" ? "FAILED" : "RESYNC WINES"}
           </button>
@@ -109,7 +111,7 @@ export default function SystemPanel({
               }} />
             </label>
             {logoDataUri && (
-              <button onClick={() => onSaveLogo("")} style={{ marginLeft: 8, fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #e08080", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#c04040" }}>
+              <button onClick={() => onSaveLogo("")} style={{ marginLeft: 8, fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #c8c8c8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#333" }}>
                 REMOVE
               </button>
             )}
@@ -139,7 +141,7 @@ export default function SystemPanel({
             <button
               onClick={() => activeProfile && onDeleteLayoutProfile?.(activeProfile.id)}
               disabled={safeProfiles.length <= 1}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #e08080", borderRadius: 2, cursor: safeProfiles.length <= 1 ? "not-allowed" : "pointer", background: "#fff", color: "#c04040", opacity: safeProfiles.length <= 1 ? 0.6 : 1 }}
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #c8c8c8", borderRadius: 2, cursor: safeProfiles.length <= 1 ? "not-allowed" : "pointer", background: "#fff", color: "#333", opacity: safeProfiles.length <= 1 ? 0.6 : 1 }}
             >
               DELETE LAYOUT
             </button>

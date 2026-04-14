@@ -44,7 +44,7 @@ export default function MenuPage({ tables, menuCourses, upd, logoDataUri = "", w
                 {t.resName && <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: "#333", marginTop: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.resName}</div>}
                 {t.resTime && <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginTop: 2 }}>{t.resTime}</div>}
                 {t.seats?.length > 0 && <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginTop: 4 }}>{t.seats.length} pax</div>}
-                {t.active && <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#4a9a6a", marginTop: 4, fontWeight: 700 }}>SEATED</div>}
+                {t.active && <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#555", marginTop: 4, fontWeight: 700 }}>SEATED</div>}
               </div>
             );
           })}

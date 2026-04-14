@@ -6,8 +6,8 @@ import { tokens } from "../../styles/tokens.js";
 import { restrLabel } from "../../constants/dietary.js";
 
 const FONT = tokens.font;
-const PAIRING_COLOR = { Wine: "#8a6030", "Non-Alc": "#1f5f73", Premium: "#3a3a7a", "Our Story": "#2a6a4a" };
-const PAIRING_BG = { Wine: "#fdf4e8", "Non-Alc": "#e8f7fb", Premium: "#eaeaf5", "Our Story": "#e0f5ea" };
+const PAIRING_COLOR = { Wine: "#666", "Non-Alc": "#555", Premium: "#555", "Our Story": "#555" };
+const PAIRING_BG = { Wine: "#f5f5f5", "Non-Alc": "#f5f5f5", Premium: "#f5f5f5", "Our Story": "#f0f0f0" };
 
 export default function SummaryModal({ tables, optionalExtras = [], onClose }) {
   const active = tables.filter((t) => t.active || t.arrivedAt);
@@ -59,7 +59,7 @@ export default function SummaryModal({ tables, optionalExtras = [], onClose }) {
             <div style={{ padding: "12px 16px", background: "#fafafa", borderBottom: "1px solid #f0f0f0", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ fontFamily: FONT, fontSize: 22, fontWeight: 300, color: "#1a1a1a", letterSpacing: 1, lineHeight: 1 }}>{String(t.id).padStart(2, "0")}</span>
               {t.resName && <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 500, color: "#1a1a1a" }}>{t.resName}</span>}
-              {t.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", fontWeight: 500 }}>arr. {t.arrivedAt}</span>}
+              {t.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 11, color: "#555", fontWeight: 500 }}>arr. {t.arrivedAt}</span>}
               {t.menuType && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 8px", border: "1px solid #e0e0e0", borderRadius: 2, color: "#555", background: "#fff" }}>{t.menuType}</span>}
               {t.birthday && <span style={{ fontSize: 14 }}>🎂</span>}
               {t.notes && <span style={{ fontFamily: FONT, fontSize: 10, color: "#999", fontStyle: "italic", marginLeft: "auto" }}>{t.notes}</span>}
@@ -78,13 +78,13 @@ export default function SummaryModal({ tables, optionalExtras = [], onClose }) {
                 ];
                 return (
                   <div key={s.id} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", padding: "8px 4px", borderBottom: "1px solid #f5f5f5" }}>
-                    <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: restr.length ? "#b04040" : "#999", minWidth: 28, letterSpacing: 0.5 }}>P{s.id}</span>
+                    <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: restr.length ? "#333" : "#999", minWidth: 28, letterSpacing: 0.5 }}>P{s.id}</span>
                     {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, background: ws.bg || "#f5f5f5", color: "#333", border: "1px solid #e0e0e0" }}>{s.water}</span>}
                     {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 2, border: "1px solid #e0e0e0", color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa" }}>{s.pairing}</span>}
                     {extras.map((d) => {
                       const ex = s.extras[d.key] || s.extras[d.id];
                       return (
-                        <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>
+                        <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #c8c8c8", color: "#555", background: "#f5f5f5" }}>
                           {d.name}
                           {ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}
                         </span>
@@ -96,7 +96,7 @@ export default function SummaryModal({ tables, optionalExtras = [], onClose }) {
                       </span>
                     ))}
                     {restr.map((r, i) => (
-                      <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>
+                      <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 2, border: "1px solid #c8c8c8", color: "#333", background: "#f5f5f5" }}>
                         ⚠ {restrLabel(r.note)}
                       </span>
                     ))}

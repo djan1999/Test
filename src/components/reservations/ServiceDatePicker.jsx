@@ -104,14 +104,14 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
                   alignItems: "center",
                   gap: 4,
                   transition: "all 0.12s",
-                  background: isSel ? "#1a1a1a" : isToday ? "#f0f8f4" : "#f6f6f6",
-                  outline: isToday && !isSel ? "1.5px solid #3a8a5a" : "none",
+                  background: isSel ? "#1a1a1a" : isToday ? "#ebebeb" : "#f6f6f6",
+                  outline: isToday && !isSel ? "1.5px solid #555" : "none",
                   opacity: isPast && !isSel ? 0.45 : 1,
                 }}
               >
                 <span style={{ fontSize: 8, letterSpacing: 1, color: isSel ? "rgba(255,255,255,0.6)" : "#aaa", fontWeight: 600 }}>{DAY_LABELS[i]}</span>
-                <span style={{ fontSize: 16, fontWeight: 700, color: isSel ? "#fff" : isToday ? "#2f7a45" : "#1a1a1a", lineHeight: 1 }}>{dayNum}</span>
-                {isToday && <span style={{ width: 4, height: 4, borderRadius: "50%", background: isSel ? "#fff" : "#3a8a5a" }} />}
+                <span style={{ fontSize: 16, fontWeight: 700, color: isSel ? "#fff" : isToday ? "#555" : "#1a1a1a", lineHeight: 1 }}>{dayNum}</span>
+                {isToday && <span style={{ width: 4, height: 4, borderRadius: "50%", background: isSel ? "#fff" : "#555" }} />}
                 {dayResv.length > 0 && <span style={{ width: 4, height: 4, borderRadius: "50%", background: isSel ? "rgba(255,255,255,0.4)" : "#bbb", marginTop: 2 }} />}
               </button>
             );
@@ -124,11 +124,11 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
             const selGuests = selResv.reduce((a, r) => a + (r.data?.guests || 2), 0);
             return (
               <div style={{ textAlign: "center", paddingBottom: 6 }}>
-                <span style={{ fontSize: 10, letterSpacing: 2, color: "#3a8a5a", fontWeight: 600 }}>
+                <span style={{ fontSize: 10, letterSpacing: 2, color: "#555", fontWeight: 600 }}>
                   {new Date(selected + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }).toUpperCase()}
                 </span>
                 {selResv.length > 0 && (
-                  <div style={{ fontSize: 9, letterSpacing: 1, color: "#3a8a5a", fontWeight: 600, marginTop: 4 }}>
+                  <div style={{ fontSize: 9, letterSpacing: 1, color: "#555", fontWeight: 600, marginTop: 4 }}>
                     {selGuests} PAX · {selResv.length} {selResv.length === 1 ? "TABLE" : "TABLES"}
                   </div>
                 )}
