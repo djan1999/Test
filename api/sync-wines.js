@@ -78,6 +78,20 @@ function normalizeSyncConfig(raw) {
   };
 }
 
+/** Manual admin sync sends the in-app config as `?config=…` so it matches the UI even before "Save sync config". */
+export function resolveSyncConfig(reqUrl, serviceState) {
+  const fromDb = normalizeSyncConfig(serviceState || DEFAULT_SYNC_CONFIG);
+  try {
+    const raw = new URL(reqUrl, "http://localhost").searchParams.get("config");
+    if (!raw) return fromDb;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return fromDb;
+    return normalizeSyncConfig(parsed);
+  } catch {
+    return fromDb;
+  }
+}
+
 async function fetchHtml(url) {
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; MilkaSyncBot/1.0)", Accept: "text/html" },
@@ -208,7 +222,7 @@ export default async function handler(req, res) {
       .select("state")
       .eq("id", "wine_sync_config")
       .maybeSingle();
-    const syncConfig = normalizeSyncConfig(syncSettingsRow?.state || DEFAULT_SYNC_CONFIG);
+    const syncConfig = resolveSyncConfig(req.url, syncSettingsRow?.state);
     const enabledWineCountries = WINE_COUNTRIES.filter((c) => syncConfig.wineCountries.includes(String(c.label || "").toUpperCase()));
     const enabledBeveragePages = BEVERAGE_PAGES.filter((page) => {
       const normalizedUrl = String(page.url || "").replace(/\/+$/, "");

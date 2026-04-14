@@ -25,15 +25,28 @@ export default function SystemPanel({
   const safeWineSyncConfig = wineSyncConfig || { wineCountries: [], beveragePages: [] };
   const [debugOpen, setDebugOpen] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
+  const [syncErrorDetail, setSyncErrorDetail] = useState(null);
   const [syncConfigSaving, setSyncConfigSaving] = useState(false);
 
   const handleManualSync = async () => {
     setSyncResult("syncing");
+    setSyncErrorDetail(null);
     try {
       const r = await onSyncWines();
-      setSyncResult(r?.ok ? "ok" : "err");
-    } catch { setSyncResult("err"); }
-    setTimeout(() => setSyncResult(null), 3000);
+      if (r?.ok) {
+        setSyncResult("ok");
+      } else {
+        setSyncResult("err");
+        setSyncErrorDetail(typeof r?.error === "string" ? r.error : "Sync failed");
+      }
+    } catch (e) {
+      setSyncResult("err");
+      setSyncErrorDetail(e?.message || "Request failed");
+    }
+    setTimeout(() => {
+      setSyncResult(null);
+      setSyncErrorDetail(null);
+    }, 6000);
   };
 
   const statusColor = syncStatus === "live" ? "#2a7a2a" : syncStatus === "local-only" ? "#888" : syncStatus === "connecting" ? "#c8a06e" : "#c04040";
@@ -81,6 +94,11 @@ export default function SystemPanel({
           }}>
             {syncResult === "syncing" ? "SYNCING..." : syncResult === "ok" ? "SYNCED" : syncResult === "err" ? "FAILED" : "RESYNC WINES"}
           </button>
+          {syncResult === "err" && syncErrorDetail && (
+            <div style={{ fontFamily: FONT, fontSize: 10, color: "#a03030", maxWidth: 420, lineHeight: 1.45 }}>
+              {syncErrorDetail}
+            </div>
+          )}
         </div>
       </div>
 

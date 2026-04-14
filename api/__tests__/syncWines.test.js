@@ -4,6 +4,7 @@ import {
   parseWinesFromHtml,
   parseBeveragesFromHtml,
   withRetry,
+  resolveSyncConfig,
 } from "../sync-wines.js";
 import handler from "../sync-wines.js";
 
@@ -253,6 +254,42 @@ describe("withRetry", () => {
 });
 
 // ── handler auth ────────────────────────────────────────────────────────────────
+
+describe("resolveSyncConfig", () => {
+  it("uses DB state when no config query param", () => {
+    const cfg = resolveSyncConfig("http://localhost/api/sync-wines?dry=true", {
+      wineCountries: ["SI"],
+      beveragePages: [],
+    });
+    expect(cfg.wineCountries).toEqual(["SI"]);
+    expect(cfg.beveragePages).toEqual([]);
+  });
+
+  it("prefers URL config over DB when config param is valid JSON", () => {
+    const urlCfg = {
+      wineCountries: ["SI", "AT"],
+      beveragePages: [
+        { category: "cocktail", label: "Cocktail", url: "https://example.com/cocktails/" },
+      ],
+    };
+    const encoded = encodeURIComponent(JSON.stringify(urlCfg));
+    const cfg = resolveSyncConfig(
+      `http://localhost/api/sync-wines?config=${encoded}`,
+      { wineCountries: ["HR"], beveragePages: [] },
+    );
+    expect(cfg.wineCountries).toEqual(["SI", "AT"]);
+    expect(cfg.beveragePages).toHaveLength(1);
+    expect(cfg.beveragePages[0].url).toBe("https://example.com/cocktails/");
+  });
+
+  it("falls back to DB when config param is invalid JSON", () => {
+    const cfg = resolveSyncConfig(
+      "http://localhost/api/sync-wines?config=not-json",
+      { wineCountries: ["FR"], winesEnabled: true },
+    );
+    expect(cfg.wineCountries).toEqual(["FR"]);
+  });
+});
 
 describe("sync-wines handler auth", () => {
   it("requires CRON secret even when sec-fetch-site is same-origin", async () => {
