@@ -29,7 +29,7 @@ export default function BevEditRow({ emoji, label, items, onUpdate }) {
           style={{ fontFamily: tokens.font, fontSize: 10, padding: "3px 8px", border: "1px solid #e8e8e8", borderRadius: 2, outline: "none", width: 120 }}
         />
         {draft.trim() && (
-          <button onClick={add} style={{ fontFamily: tokens.font, fontSize: 9, padding: "3px 8px", border: "1px solid #9a9a9a", borderRadius: 2, cursor: "pointer", background: "#f5f5f5", color: "#555" }}>add</button>
+          <button onClick={add} style={{ fontFamily: tokens.font, fontSize: 9, padding: "3px 8px", border: "1px solid #c8a96e", borderRadius: 2, cursor: "pointer", background: "#fdf4e8", color: "#7a5020" }}>add</button>
         )}
       </div>
     </div>

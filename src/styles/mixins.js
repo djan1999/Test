@@ -1,17 +1,14 @@
 import { tokens } from "./tokens.js";
 
-const c = tokens.colors;
-const r = tokens.radius;
-
 export const baseInput = {
   fontFamily: tokens.font,
   fontSize: tokens.mobileInputSize,
   padding: "10px 12px",
-  border: `1px solid ${c.line}`,
-  borderRadius: r.sm,
+  border: "1px solid #e8e8e8",
+  borderRadius: 2,
   outline: "none",
-  color: c.black,
-  background: c.white,
+  color: tokens.colors.black,
+  background: tokens.colors.white,
   boxSizing: "border-box",
   width: "100%",
   minWidth: 0,
@@ -22,7 +19,7 @@ export const fieldLabel = {
   fontFamily: tokens.font,
   fontSize: tokens.fontSize.sm,
   letterSpacing: 3,
-  color: c.gray800,
+  color: "#444",
   textTransform: "uppercase",
   marginBottom: 8,
 };
@@ -30,12 +27,12 @@ export const fieldLabel = {
 export const chip = {
   fontFamily: tokens.font,
   fontSize: 10,
-  color: c.black,
+  color: tokens.colors.black,
   letterSpacing: 1,
   padding: "6px 10px",
-  border: `1px solid ${c.line}`,
-  borderRadius: r.pill,
-  background: c.white,
+  border: "1px solid #e8e8e8",
+  borderRadius: 999,
+  background: tokens.colors.white,
   whiteSpace: "nowrap",
 };
 
@@ -43,9 +40,9 @@ export const circleButton = {
   width: 36,
   height: 36,
   borderRadius: "50%",
-  border: `1px solid ${c.line}`,
-  background: c.white,
-  color: c.gray800,
+  border: "1px solid #e8e8e8",
+  background: tokens.colors.white,
+  color: "#444",
   fontSize: 18,
   cursor: "pointer",
   display: "flex",
@@ -59,7 +56,7 @@ export const circleButton = {
 export const modalOverlay = {
   position: "fixed",
   inset: 0,
-  background: c.overlayScrim,
+  background: "rgba(0,0,0,0.45)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -70,18 +67,18 @@ export const modalContent = {
   width: "min(960px, 96vw)",
   maxHeight: "90vh",
   overflow: "auto",
-  background: c.white,
-  border: `1px solid ${c.line}`,
-  boxShadow: tokens.shadow.modal,
+  background: tokens.colors.white,
+  border: "1px solid #e8e8e8",
+  boxShadow: "0 14px 40px rgba(0,0,0,0.22)",
 };
 
 export const headerBar = {
-  borderBottom: `1px solid ${c.lineSubtle}`,
+  borderBottom: "1px solid #f0f0f0",
   padding: "10px 14px",
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  background: c.white,
+  background: tokens.colors.white,
   position: "sticky",
   top: 0,
   zIndex: 1,

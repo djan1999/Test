@@ -57,7 +57,7 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
           <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a1a1a" }}>{course.menu?.name || "(unnamed)"}</span>
           {course.menu?.sub && <span style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginLeft: 8 }}>{course.menu.sub}</span>}
         </div>
-        {course.is_snack && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#9a9a9a", border: "1px solid #e0e0e0", borderRadius: 2, padding: "2px 6px" }}>SNACK</span>}
+        {course.is_snack && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 2, padding: "2px 6px" }}>SNACK</span>}
         <div style={{ display: "flex", gap: 4 }}>
           <button onClick={e => { e.stopPropagation(); onMoveUp(); }} disabled={isFirst} style={{ background: "none", border: "none", cursor: isFirst ? "default" : "pointer", color: isFirst ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▲</button>
           <button onClick={e => { e.stopPropagation(); onMoveDown(); }} disabled={isLast} style={{ background: "none", border: "none", cursor: isLast ? "default" : "pointer", color: isLast ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▼</button>
@@ -151,7 +151,7 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
             { key: "premium", label: "Premium" },
           ].map(({ key, label }) => (
             <div key={key} style={{ display: "grid", gridTemplateColumns: "70px 1fr 1fr 1fr 1fr", gap: 6, marginBottom: 4, alignItems: "center" }}>
-              <span style={{ fontFamily: FONT, fontSize: 9, color: "#9a9a9a", fontWeight: 600 }}>{label}</span>
+              <span style={{ fontFamily: FONT, fontSize: 9, color: "#c8a06e", fontWeight: 600 }}>{label}</span>
               <input value={course[key]?.name || ""} onChange={e => updPairing(key, "en", "name", e.target.value)} style={inpSm} placeholder="Name (EN)" />
               <input value={course[key]?.sub || ""} onChange={e => updPairing(key, "en", "sub", e.target.value)} style={inpSm} placeholder="Sub (EN)" />
               <input value={course[`${key}_si`]?.name || ""} onChange={e => updPairing(key, "si", "name", e.target.value)} style={inpSm} placeholder="Name (SI)" />
@@ -167,7 +167,7 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
               const hasVal = val && (val.name || val.sub);
               return (
                 <div key={rKey} style={{ display: "grid", gridTemplateColumns: "110px 1fr 1fr", gap: 6, alignItems: "center" }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, color: hasVal ? "#333" : "#ccc" }}>{rKey.replace(/_/g, " ")}</span>
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: hasVal ? "#b04040" : "#ccc" }}>{rKey.replace(/_/g, " ")}</span>
                   <input value={val?.name || ""} onChange={e => updRestriction(rKey, "name", e.target.value)} style={inpSm} placeholder="Alt name" />
                   <input value={val?.sub || ""} onChange={e => updRestriction(rKey, "sub", e.target.value)} style={inpSm} placeholder="Alt desc" />
                 </div>
@@ -179,8 +179,8 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
           <div style={{ display: "flex", gap: 8, borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
             <button onClick={onDelete} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-              border: "1px solid #e0e0e0", borderRadius: 2, cursor: "pointer",
-              background: "#fafafa", color: "#333",
+              border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
+              background: "#fff9f9", color: "#c04040",
             }}>DELETE COURSE</button>
           </div>
         </div>

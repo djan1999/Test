@@ -96,10 +96,10 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
           <button onClick={() => { setSelectedDay(null); setEditingId(null); setTicketId(null); setDraftFromReservation(null); }}
             style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#1a1a1a", flexShrink: 0 }}>← WEEK</button>
           <div style={{ flex: 1, textAlign: "center" }}>
-            <div style={{ fontSize: 10, letterSpacing: 3, color: isService ? "#555" : "#1a1a1a", fontWeight: 600 }}>{dayLabel}</div>
+            <div style={{ fontSize: 10, letterSpacing: 3, color: isService ? "#2f7a45" : "#1a1a1a", fontWeight: 600 }}>{dayLabel}</div>
             <div style={{ fontSize: 8, letterSpacing: 2, color: "#aaa", marginTop: 2 }}>
               {dayResv.length} reservation{dayResv.length !== 1 ? "s" : ""} · {totalGuests} guests
-              {isService && <span style={{ color: "#555", marginLeft: 6 }}>● ACTIVE SERVICE</span>}
+              {isService && <span style={{ color: "#2f7a45", marginLeft: 6 }}>● ACTIVE SERVICE</span>}
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
@@ -167,16 +167,16 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                     <div style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       {d.resTime && <span>{d.resTime}</span>}
                       <span>{d.guests || 2} guests</span>
-                      {d.menuType && <span style={{ color: "#9a9a9a", textTransform: "uppercase", letterSpacing: 1 }}>{d.menuType}</span>}
+                      {d.menuType && <span style={{ color: "#c8a06e", textTransform: "uppercase", letterSpacing: 1 }}>{d.menuType}</span>}
                       {d.lang === "si" && <span style={{ color: "#6080c0" }}>SLO</span>}
                       {d.birthday && <span>🎂{d.cakeNote ? ` ${d.cakeNote}` : ""}</span>}
-                      {d.guestType === "hotel" && d.room && <span style={{ color: "#666" }}>Room {d.room}</span>}
+                      {d.guestType === "hotel" && d.room && <span style={{ color: "#a07040" }}>Room {d.room}</span>}
                     </div>
                     {d.restrictions?.length > 0 && (
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
                         {d.restrictions.map((rs, i) => {
                           const def = RESTRICTIONS.find(x => x.key === rs.note);
-                          return <span key={i} style={{ fontFamily: FONT, fontSize: 9, color: "#333", background: "#f5f5f5", border: "1px solid #f0d0d0", borderRadius: 2, padding: "2px 6px" }}>{def ? `${def.emoji} ${def.label}` : rs.note}</span>;
+                          return <span key={i} style={{ fontFamily: FONT, fontSize: 9, color: "#b04040", background: "#fef0f0", border: "1px solid #f0d0d0", borderRadius: 2, padding: "2px 6px" }}>{def ? `${def.emoji} ${def.label}` : rs.note}</span>;
                         })}
                       </div>
                     )}
@@ -199,7 +199,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                     }}
                       style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid #d0d0d0", borderRadius: 4, cursor: "pointer", background: "#fff", color: "#666" }}>COPY</button>
                     <button onClick={async () => { if (window.confirm(`Delete reservation for ${d.resName || tLabel}?`)) { await onDelete(r.id); setEditingId(null); setTicketId(null); } }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid #e0e0e0", borderRadius: 4, cursor: "pointer", background: "#fafafa", color: "#333" }}>DEL</button>
+                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid #f0c0c0", borderRadius: 4, cursor: "pointer", background: "#fff8f8", color: "#c04040" }}>DEL</button>
                   </div>
                 </div>
 
@@ -260,7 +260,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
       <div style={{ padding: "8px 16px", borderBottom: "1px solid #f0f0f0", display: "flex", alignItems: "center", gap: 10 }}>
         {serviceDate ? (
           <>
-            <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#555", fontWeight: 600 }}>
+            <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#2f7a45", fontWeight: 600 }}>
               ● SERVICE: {new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}
             </span>
             <button onClick={() => { const nd = window.prompt("Change service date (YYYY-MM-DD):", serviceDate); if (nd && /^\d{4}-\d{2}-\d{2}$/.test(nd)) onSetServiceDate(nd); }}
@@ -327,23 +327,23 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                   fontFamily: FONT, textAlign: "left", cursor: "pointer",
                   border: `1.5px solid ${isServiceDay ? "#b0d8b0" : isToday ? "#d0d0d0" : "#efefef"}`,
                   borderRadius: 6, padding: "14px 16px",
-                  background: isServiceDay ? "#fafafa" : "#fff",
+                  background: isServiceDay ? "#f4fbf4" : "#fff",
                   display: "flex", alignItems: "center", gap: 14,
                   transition: "all 0.1s",
                 }}>
                 {/* Day label */}
                 <div style={{ minWidth: 100 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: 1, color: isServiceDay ? "#555" : isToday ? "#1a1a1a" : "#888" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: 1, color: isServiceDay ? "#2f7a45" : isToday ? "#1a1a1a" : "#888" }}>
                     {day.toLocaleDateString("en-GB", { weekday: "short" }).toUpperCase()}
                   </div>
-                  <div style={{ fontSize: 10, letterSpacing: 1, color: isServiceDay ? "#888" : isToday ? "#666" : "#bbb", marginTop: 2 }}>
+                  <div style={{ fontSize: 10, letterSpacing: 1, color: isServiceDay ? "#5aaa6a" : isToday ? "#666" : "#bbb", marginTop: 2 }}>
                     {day.toLocaleDateString("en-GB", { day: "numeric", month: "short" }).toUpperCase()}
                   </div>
                 </div>
 
                 {/* Badges */}
                 <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
-                  {isServiceDay && <span style={{ fontSize: 8, letterSpacing: 1, color: "#555", fontWeight: 600 }}>● SERVICE</span>}
+                  {isServiceDay && <span style={{ fontSize: 8, letterSpacing: 1, color: "#2f7a45", fontWeight: 600 }}>● SERVICE</span>}
                   {isToday && !isServiceDay && <span style={{ fontSize: 8, letterSpacing: 1, color: "#bbb" }}>TODAY</span>}
                 </div>
 

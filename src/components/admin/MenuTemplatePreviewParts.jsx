@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FONT, baseInp } from "./adminStyles.js";
 import { optionalExtrasFromCourses, optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 
-const SELECTED_RING = "#1a1a1a";
+const SELECTED_RING = "#4b4b88";
 
 const PREVIEW_PAIRINGS = [
   { value: "—",         label: "None"      },
@@ -197,7 +197,7 @@ export function PreviewDataPanel({
       }}>
         <button
           onClick={onToggle}
-          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#9a9a9a", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#c8a96e", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
         >{open ? "▾ PREVIEW DATA" : "▸ PREVIEW DATA"}</button>
 
         <div style={{ width: 1, height: 14, background: "#e8e4dc", flexShrink: 0 }} />

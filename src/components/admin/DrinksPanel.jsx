@@ -93,8 +93,8 @@ export default function DrinksPanel({
         ))}
         <button onClick={handleSaveDrinks} style={{
           fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-          border: `1px solid ${saved ? "#888" : "#555"}`, borderRadius: 2, cursor: "pointer",
-          background: saved ? "#888" : "#555", color: "#fff", marginLeft: "auto",
+          border: `1px solid ${saved ? "#888" : "#4a9a6a"}`, borderRadius: 2, cursor: "pointer",
+          background: saved ? "#888" : "#4a9a6a", color: "#fff", marginLeft: "auto",
           transition: "background 0.2s, border-color 0.2s",
         }}>{saved ? "SAVED" : "SAVE DRINKS"}</button>
       </div>
@@ -116,8 +116,8 @@ export default function DrinksPanel({
                 {!isMobile && <input value={w.region || ""} onChange={e => updWine(w.id, "region", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="e.g. Dolenjska, Slovenia" />}
                 <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                  borderColor: w.byGlass ? "#d0d0d0" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                  background: w.byGlass ? "#f5f5f5" : "#fff", color: w.byGlass ? "#555" : "#555",
+                  borderColor: w.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
+                  background: w.byGlass ? "#f0faf0" : "#fff", color: w.byGlass ? "#4a8a4a" : "#555",
                 }}>{w.byGlass ? "YES" : "NO"}</button>
                 <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
               </div>
@@ -132,8 +132,8 @@ export default function DrinksPanel({
               {!isMobile && <input value={newWine.region} onChange={e => setNewWine(w => ({ ...w, region: e.target.value }))} placeholder="e.g. Dolenjska, Slovenia" style={{ ...baseInp, padding: "5px 8px" }} />}
               <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                borderColor: newWine.byGlass ? "#d0d0d0" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                background: newWine.byGlass ? "#f5f5f5" : "#fff", color: newWine.byGlass ? "#555" : "#555",
+                borderColor: newWine.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
+                background: newWine.byGlass ? "#f0faf0" : "#fff", color: newWine.byGlass ? "#4a8a4a" : "#555",
               }}>{newWine.byGlass ? "YES" : "NO"}</button>
             </div>
             <button onClick={addWine} style={primaryBtn}>+ ADD WINE</button>

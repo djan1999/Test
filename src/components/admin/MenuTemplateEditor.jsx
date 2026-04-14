@@ -36,8 +36,8 @@ import { PreviewDataPanel } from "./MenuTemplatePreviewParts.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const GOLD = "#9a9a9a";
-const SELECTED_RING = "#1a1a1a";
+const GOLD = "#c8a96e";
+const SELECTED_RING = "#4b4b88";
 const CELL_EMPTY_BG = "#f7f6f2";
 const CELL_EMPTY_BORDER = "#e4e2dc";
 
@@ -127,7 +127,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
           flexShrink: 0, border: "none", background: "transparent",
           cursor: "pointer", color: "#ccc", fontSize: 9, padding: "0 3px", height: "100%",
         }}
-        onMouseEnter={e => { e.currentTarget.style.color = "#1a1a1a"; }}
+        onMouseEnter={e => { e.currentTarget.style.color = "#4b4b88"; }}
         onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
       >{side === "left" ? "→" : "←"}</button>
       <button
@@ -270,7 +270,7 @@ function RowActionBtn({ children, onClick, title, danger = false, active = false
       style={{
         width: 20, height: 22, border: "none", borderRadius: 2, cursor: "pointer",
         fontFamily: FONT, fontSize: 10, padding: 0, lineHeight: 1,
-        background: active ? "#f0f0f8" : hov ? (danger ? "#f5f5f5" : "#f4f3fb") : "transparent",
+        background: active ? "#f0f0f8" : hov ? (danger ? "#fff0f0" : "#f4f3fb") : "transparent",
         color: active ? SELECTED_RING : hov ? (danger ? "#e05050" : SELECTED_RING) : "#bbb",
         transition: "all 0.1s",
       }}
@@ -1108,7 +1108,7 @@ export default function MenuTemplateEditor({
             style={{
               width: "100%", fontFamily: FONT, fontSize: 8, letterSpacing: 2,
               padding: "7px 0", border: "none", borderRadius: 3, cursor: saving ? "wait" : "pointer",
-              background: saved ? "#555" : GOLD, color: "#fff",
+              background: saved ? "#4a9a6a" : GOLD, color: "#fff",
               textTransform: "uppercase", marginBottom: 6,
             }}
           >{saving ? "SAVING…" : saved ? "✓ SAVED" : "SAVE TEMPLATE"}</button>}
@@ -1159,7 +1159,7 @@ export default function MenuTemplateEditor({
             onDragEnd={handleDragEnd}
           >
             {isShortFilter && (
-              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#555", background: "#fff8ee", border: "1px solid #f0d080", borderRadius: 3, padding: "5px 8px", margin: "0 0 6px", textTransform: "uppercase" }}>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#7a5020", background: "#fff8ee", border: "1px solid #f0d080", borderRadius: 3, padding: "5px 8px", margin: "0 0 6px", textTransform: "uppercase" }}>
                 Short menu — {displayRows.length} blocks · Switch to FULL to see all
               </div>
             )}
@@ -1210,7 +1210,7 @@ export default function MenuTemplateEditor({
               background: "transparent", color: "#c8b87a", textTransform: "uppercase",
               transition: "all 0.12s",
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "#9a9a9a"; e.currentTarget.style.color = "#9a9a9a"; }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "#c8a96e"; e.currentTarget.style.color = "#c8a96e"; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = "#d4cfa0"; e.currentTarget.style.color = "#c8b87a"; }}
           >+ ADD GAP</button>
         </div>}

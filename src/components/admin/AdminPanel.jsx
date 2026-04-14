@@ -133,8 +133,8 @@ export default function AdminPanel({
                 ))}
                 <button onClick={handleSaveDrinks} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-                  border: `1px solid ${drinksSaved ? "#888" : "#555"}`, borderRadius: 2, cursor: "pointer",
-                  background: drinksSaved ? "#888" : "#555", color: "#fff", marginLeft: "auto",
+                  border: `1px solid ${drinksSaved ? "#888" : "#4a9a6a"}`, borderRadius: 2, cursor: "pointer",
+                  background: drinksSaved ? "#888" : "#4a9a6a", color: "#fff", marginLeft: "auto",
                   transition: "background 0.2s, border-color 0.2s",
                 }}>{drinksSaved ? "SAVED" : "SAVE DRINKS"}</button>
               </div>
@@ -155,8 +155,8 @@ export default function AdminPanel({
                         {!isMobile && <input value={w.vintage} onChange={e => updWine(w.id, "vintage", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="2020" />}
                         <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
                           fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                          borderColor: w.byGlass ? "#d0d0d0" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                          background: w.byGlass ? "#f5f5f5" : "#fff", color: w.byGlass ? "#555" : "#555",
+                          borderColor: w.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
+                          background: w.byGlass ? "#f0faf0" : "#fff", color: w.byGlass ? "#4a8a4a" : "#555",
                         }}>{w.byGlass ? "YES" : "NO"}</button>
                         <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
                       </div>
@@ -170,8 +170,8 @@ export default function AdminPanel({
                       {!isMobile && <input value={newWine.vintage} onChange={e => setNewWine(w => ({ ...w, vintage: e.target.value }))} placeholder="2020" style={{ ...baseInp, padding: "5px 8px" }} />}
                       <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
                         fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                        borderColor: newWine.byGlass ? "#d0d0d0" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
-                        background: newWine.byGlass ? "#f5f5f5" : "#fff", color: newWine.byGlass ? "#555" : "#555",
+                        borderColor: newWine.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 2, cursor: "pointer",
+                        background: newWine.byGlass ? "#f0faf0" : "#fff", color: newWine.byGlass ? "#4a8a4a" : "#555",
                       }}>{newWine.byGlass ? "YES" : "NO"}</button>
                     </div>
                     <button onClick={addWine} style={{
@@ -213,7 +213,7 @@ export default function AdminPanel({
                   <div key={dish.id} style={{ border: "1px solid #f0f0f0", borderRadius: 2, padding: "14px 16px" }}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
                       <input value={dish.name} onChange={e => updDishName(dish.id, e.target.value)} style={{ ...baseInp, fontWeight: 500, flex: 1 }} />
-                      <button onClick={() => removeDish(dish.id)} style={{ background: "none", border: "1px solid #e0e0e0", borderRadius: 2, color: "#e07070", cursor: "pointer", fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px" }}>REMOVE</button>
+                      <button onClick={() => removeDish(dish.id)} style={{ background: "none", border: "1px solid #ffcccc", borderRadius: 2, color: "#e07070", cursor: "pointer", fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px" }}>REMOVE</button>
                     </div>
                     <div style={{ ...fieldLabel, marginBottom: 8 }}>Pairing options</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -280,7 +280,7 @@ export default function AdminPanel({
                       }} />
                     </label>
                     {logoDataUri && (
-                      <button onClick={() => onSaveLogo("")} style={{ marginLeft: 8, fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #c8c8c8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#333" }}>
+                      <button onClick={() => onSaveLogo("")} style={{ marginLeft: 8, fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #e08080", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#c04040" }}>
                         REMOVE
                       </button>
                     )}
@@ -298,7 +298,7 @@ export default function AdminPanel({
                   </div>
                   <button
                     onClick={() => { if (window.confirm("Reset print layout to factory defaults?")) onResetMenuLayout(); }}
-                    style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #c8c8c8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#333" }}
+                    style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #e08080", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#c04040" }}
                   >RESET LAYOUT TO DEFAULTS</button>
                 </div>
               </div>

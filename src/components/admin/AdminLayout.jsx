@@ -1,7 +1,5 @@
 import { useState } from "react";
 import { FONT } from "./adminStyles.js";
-import { appBarStyle, ghostPillStyle, livePillStyle } from "../../styles/ui.js";
-import { tokens } from "../../styles/tokens.js";
 import MenuLayoutPanel from "./MenuLayoutPanel.jsx";
 import CourseEditorPanel from "./CourseEditorPanel.jsx";
 import DrinksPanel from "./DrinksPanel.jsx";
@@ -90,24 +88,29 @@ export default function AdminLayout({
     }}>
       {/* Top header bar */}
       <div style={{
-        ...appBarStyle(),
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "12px 20px",
-        gap: 12,
+        borderBottom: "1px solid #f0f0f0", padding: "12px 20px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        background: "#fff", position: "sticky", top: 0, zIndex: 50,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 4, color: tokens.colors.text }}>{APP_NAME}</span>
-          <span style={{ width: 1, height: 14, background: tokens.colors.line }} />
-          <span style={{ fontSize: 10, letterSpacing: 3, color: tokens.colors.gray750, textTransform: "uppercase", fontWeight: 700 }}>ADMIN</span>
+          <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 4, color: "#1a1a1a" }}>{APP_NAME}</span>
+          <span style={{ width: 1, height: 14, background: "#e8e8e8" }} />
+          <span style={{ fontSize: 10, letterSpacing: 3, color: "#4b4b88", textTransform: "uppercase", fontWeight: 700 }}>ADMIN</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{
-            ...livePillStyle(syncStatus === "live"),
-            fontFamily: FONT,
+            fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px",
+            border: `1px solid ${syncStatus === "live" ? "#8fc39f" : "#d8d8d8"}`,
+            borderRadius: 999,
+            background: syncStatus === "live" ? "#eef8f1" : "#f6f6f6",
+            color: syncStatus === "live" ? "#2f7a45" : "#555",
+            fontWeight: 600, whiteSpace: "nowrap",
           }}>{syncStatus === "live" ? "SYNC" : syncStatus === "local-only" ? "LOCAL" : syncStatus === "connecting" ? "LINK" : "ERROR"}</span>
-          <button onClick={onExit} style={{ ...ghostPillStyle(), fontFamily: FONT, flexShrink: 0 }}>EXIT</button>
+          <button onClick={onExit} style={{
+            fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px",
+            border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer",
+            background: "#fff", color: "#1a1a1a", flexShrink: 0,
+          }}>EXIT</button>
         </div>
       </div>
 
@@ -137,7 +140,7 @@ export default function AdminLayout({
                 borderRadius: 8,
                 background: "#fff",
                 cursor: "pointer",
-                color: navPinned ? "#1a1a1a" : "#999",
+                color: navPinned ? "#4b4b88" : "#999",
                 fontFamily: FONT,
                 fontSize: 9,
                 letterSpacing: 1.5,
@@ -157,7 +160,7 @@ export default function AdminLayout({
                 display: "flex", alignItems: "center", gap: 10,
                 width: "100%", padding: navOpen ? "12px 20px" : "12px 0", border: "none",
                 background: activeSection === s.id ? "#fff" : "transparent",
-                borderLeft: activeSection === s.id ? "3px solid #1a1a1a" : "3px solid transparent",
+                borderLeft: activeSection === s.id ? "3px solid #4b4b88" : "3px solid transparent",
                 cursor: "pointer", transition: "all 0.1s",
                 fontFamily: FONT, fontSize: 10, letterSpacing: 1,
                 color: activeSection === s.id ? "#1a1a1a" : "#888",
@@ -166,7 +169,7 @@ export default function AdminLayout({
                 justifyContent: navOpen ? "flex-start" : "center",
               }}
             >
-              <span style={{ fontSize: 14, color: activeSection === s.id ? "#1a1a1a" : "#ccc", width: 20, textAlign: "center" }}>{s.icon}</span>
+              <span style={{ fontSize: 14, color: activeSection === s.id ? "#4b4b88" : "#ccc", width: 20, textAlign: "center" }}>{s.icon}</span>
               {navOpen && s.label}
             </button>
           ))}
@@ -223,7 +226,7 @@ export default function AdminLayout({
                     }}
                     title={dishesCoursesOpen ? "Collapse" : "Expand"}
                   >
-                    <span style={{ fontSize: 9, letterSpacing: 2, color: "#1a1a1a", textTransform: "uppercase", fontWeight: 700 }}>
+                    <span style={{ fontSize: 9, letterSpacing: 2, color: "#4b4b88", textTransform: "uppercase", fontWeight: 700 }}>
                       ◈ Courses
                     </span>
                     <span style={{ fontSize: 12, color: "#bbb" }}>{dishesCoursesOpen ? "▾" : "▸"}</span>

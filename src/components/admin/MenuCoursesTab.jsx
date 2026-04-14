@@ -73,9 +73,9 @@ export default function MenuCoursesTab({ menuCourses = [], onUpdateCourses, onSa
           }}>+ ADD COURSE</button>
           <button onClick={handleSave} disabled={saving} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-            border: `1px solid ${saved ? "#555" : "#9a9a9a"}`, borderRadius: 2,
+            border: `1px solid ${saved ? "#4a9a6a" : "#c8a06e"}`, borderRadius: 2,
             cursor: saving ? "default" : "pointer",
-            background: saved ? "#555" : "#9a9a9a", color: "#fff",
+            background: saved ? "#4a9a6a" : "#c8a06e", color: "#fff",
           }}>{saving ? "SAVING…" : saved ? "SAVED ✓" : "SAVE ALL COURSES"}</button>
         </div>
       </div>

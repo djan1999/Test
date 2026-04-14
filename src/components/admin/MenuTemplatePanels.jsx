@@ -21,7 +21,7 @@ export function MenuRulesPanel({
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? "1px solid #ede9e0" : "none" }}>
         <button
           onClick={onToggle}
-          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#1a1a1a", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#4b4b88", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
         >{open ? "▾ MENU RULES" : "▸ MENU RULES"}</button>
         <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa" }}>Global behavior controls used by preview + print</span>
         {onSaveMenuRules && (
@@ -31,7 +31,7 @@ export function MenuRulesPanel({
             style={{
               marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
               padding: "4px 10px", border: "none", borderRadius: 3, cursor: menuRulesSaving ? "wait" : "pointer",
-              background: menuRulesSaved ? "#555" : "#1a1a1a", color: "#fff", textTransform: "uppercase",
+              background: menuRulesSaved ? "#4a9a6a" : "#4b4b88", color: "#fff", textTransform: "uppercase",
             }}
           >
             {menuRulesSaving ? "Saving..." : menuRulesSaved ? "Saved" : "Save Rules"}
@@ -112,7 +112,7 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? "1px solid #ede9e0" : "none" }}>
         <button
           onClick={onToggle}
-          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#1a1a1a", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#4b4b88", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
         >{open ? "▾ SPACING SETTINGS" : "▸ SPACING SETTINGS"}</button>
         <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa" }}>
           Page margins · columns · row gaps · footer — all configurable
@@ -123,7 +123,7 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
             style={{
               marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
               padding: "4px 10px", border: "none", borderRadius: 3, cursor: "pointer",
-              background: "#1a1a1a", color: "#fff", textTransform: "uppercase",
+              background: "#4b4b88", color: "#fff", textTransform: "uppercase",
             }}
           >Save Styles</button>
         )}

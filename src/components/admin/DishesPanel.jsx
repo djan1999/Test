@@ -34,7 +34,7 @@ export default function DishesPanel({ dishes, onUpdateDishes }) {
         background: "#fafafa", border: "1px solid #f0f0f0", borderRadius: 4, marginBottom: 28,
         lineHeight: 1.6,
       }}>
-        Main dish names, descriptions, dietary flags, restriction variants, course keys, and kitchen notes are managed in <strong style={{ color: "#1a1a1a" }}>Menu Layout</strong>.
+        Main dish names, descriptions, dietary flags, restriction variants, course keys, and kitchen notes are managed in <strong style={{ color: "#4b4b88" }}>Menu Layout</strong>.
         <br />
         Use the + button on each course to add restrictions and pairings.
       </div>
@@ -52,7 +52,7 @@ export default function DishesPanel({ dishes, onUpdateDishes }) {
           <div key={dish.id} style={{ border: "1px solid #f0f0f0", borderRadius: 2, padding: "14px 16px" }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
               <input value={dish.name} onChange={e => updDishName(dish.id, e.target.value)} style={{ ...baseInp, fontWeight: 500, flex: 1 }} />
-              <button onClick={() => removeDish(dish.id)} style={{ background: "none", border: "1px solid #e0e0e0", borderRadius: 2, color: "#e07070", cursor: "pointer", fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px" }}>REMOVE</button>
+              <button onClick={() => removeDish(dish.id)} style={{ background: "none", border: "1px solid #ffcccc", borderRadius: 2, color: "#e07070", cursor: "pointer", fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px" }}>REMOVE</button>
             </div>
             <div style={{ ...fieldLabel, marginBottom: 8 }}>Pairing options</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
