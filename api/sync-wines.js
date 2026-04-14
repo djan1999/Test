@@ -6,8 +6,7 @@
  *   → wines table      : all wines by country
  *   → beverages table  : cocktails, beers, and all spirits subcategories
  *
- * Manual trigger:
- *   GET /api/sync-wines?secret=YOUR_CRON_SECRET        → full sync
+ * Manual trigger (any configured secret — see env):
  *   GET /api/sync-wines?secret=...&dry=true            → parse only, no DB write
  */
 
@@ -185,15 +184,25 @@ async function fetchBeveragePage({ url, category, label }) {
   return items;
 }
 
+/** @internal exported for tests — Vercel cron uses Bearer CRON_SECRET; admin UI uses ?secret= */
+export function getAcceptedSyncSecrets() {
+  return [process.env.CRON_SECRET, process.env.SYNC_SECRET, process.env.VITE_SYNC_SECRET]
+    .filter((s) => typeof s === "string" && s.length > 0);
+}
+
 export default async function handler(req, res) {
-  const secret = process.env.CRON_SECRET;
+  const acceptedSecrets = getAcceptedSyncSecrets();
   const authHeader = req.headers.authorization;
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const provided = bearerToken ||
     req.headers["x-cron-secret"] ||
     new URL(req.url, "http://localhost").searchParams.get("secret");
-  if (!secret) return res.status(500).json({ error: "CRON_SECRET not configured" });
-  if (provided !== secret) return res.status(401).json({ error: "Unauthorized" });
+  if (acceptedSecrets.length === 0) {
+    return res.status(500).json({ error: "No sync secret configured (set CRON_SECRET and/or SYNC_SECRET)" });
+  }
+  if (!provided || !acceptedSecrets.includes(provided)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
   const dry = new URL(req.url, "http://localhost").searchParams.get("dry") === "true";
 

@@ -5,7 +5,7 @@ import {
   parseBeveragesFromHtml,
   withRetry,
 } from "../sync-wines.js";
-import handler from "../sync-wines.js";
+import handler, { getAcceptedSyncSecrets } from "../sync-wines.js";
 
 // ── extractCells ───────────────────────────────────────────────────────────────
 
@@ -252,6 +252,39 @@ describe("withRetry", () => {
   });
 });
 
+// ── getAcceptedSyncSecrets ─────────────────────────────────────────────────────
+
+describe("getAcceptedSyncSecrets", () => {
+  const prev = {
+    CRON_SECRET: process.env.CRON_SECRET,
+    SYNC_SECRET: process.env.SYNC_SECRET,
+    VITE_SYNC_SECRET: process.env.VITE_SYNC_SECRET,
+  };
+  afterEach(() => {
+    for (const k of Object.keys(prev)) {
+      if (prev[k] === undefined) delete process.env[k];
+      else process.env[k] = prev[k];
+    }
+  });
+
+  it("includes non-empty CRON_SECRET, SYNC_SECRET, and VITE_SYNC_SECRET", () => {
+    delete process.env.CRON_SECRET;
+    delete process.env.SYNC_SECRET;
+    delete process.env.VITE_SYNC_SECRET;
+    process.env.SYNC_SECRET = "sync-only";
+    process.env.VITE_SYNC_SECRET = "vite-copy";
+    expect(getAcceptedSyncSecrets()).toEqual(["sync-only", "vite-copy"]);
+  });
+
+  it("omits empty strings", () => {
+    delete process.env.CRON_SECRET;
+    delete process.env.SYNC_SECRET;
+    process.env.VITE_SYNC_SECRET = "";
+    process.env.CRON_SECRET = "cron";
+    expect(getAcceptedSyncSecrets()).toEqual(["cron"]);
+  });
+});
+
 // ── handler auth ────────────────────────────────────────────────────────────────
 
 describe("sync-wines handler auth", () => {
@@ -284,6 +317,81 @@ describe("sync-wines handler auth", () => {
     } finally {
       if (prevSecret === undefined) delete process.env.CRON_SECRET;
       else process.env.CRON_SECRET = prevSecret;
+    }
+  });
+
+  it("returns 500 when no sync secret env vars are set", async () => {
+    const prev = {
+      CRON_SECRET: process.env.CRON_SECRET,
+      SYNC_SECRET: process.env.SYNC_SECRET,
+      VITE_SYNC_SECRET: process.env.VITE_SYNC_SECRET,
+    };
+    delete process.env.CRON_SECRET;
+    delete process.env.SYNC_SECRET;
+    delete process.env.VITE_SYNC_SECRET;
+
+    const req = { url: "http://localhost/api/sync-wines?secret=x&dry=true", headers: {} };
+    const res = {
+      statusCode: 200,
+      payload: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(body) {
+        this.payload = body;
+        return this;
+      },
+    };
+
+    try {
+      await handler(req, res);
+      expect(res.statusCode).toBe(500);
+      expect(res.payload?.error).toMatch(/No sync secret configured/i);
+    } finally {
+      for (const k of Object.keys(prev)) {
+        if (prev[k] === undefined) delete process.env[k];
+        else process.env[k] = prev[k];
+      }
+    }
+  });
+
+  it("authorizes with SYNC_SECRET when query secret matches", async () => {
+    const prev = {
+      CRON_SECRET: process.env.CRON_SECRET,
+      SYNC_SECRET: process.env.SYNC_SECRET,
+      VITE_SYNC_SECRET: process.env.VITE_SYNC_SECRET,
+    };
+    delete process.env.CRON_SECRET;
+    delete process.env.VITE_SYNC_SECRET;
+    process.env.SYNC_SECRET = "manual-sync-key";
+
+    const req = {
+      url: "http://localhost/api/sync-wines?secret=manual-sync-key&dry=true",
+      headers: {},
+    };
+    const res = {
+      statusCode: 200,
+      payload: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(body) {
+        this.payload = body;
+        return this;
+      },
+    };
+
+    try {
+      await handler(req, res);
+      expect(res.statusCode).not.toBe(401);
+      expect(res.payload?.error).not.toBe("Unauthorized");
+    } finally {
+      for (const k of Object.keys(prev)) {
+        if (prev[k] === undefined) delete process.env[k];
+        else process.env[k] = prev[k];
+      }
     }
   });
 });
