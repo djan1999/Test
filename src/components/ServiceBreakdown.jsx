@@ -563,6 +563,22 @@ function PrintStyles() {
           color: #000 !important;
           -webkit-print-color-adjust: exact;
         }
+        /* Placeholders are a UI hint only — never print them. */
+        input::placeholder,
+        textarea::placeholder {
+          color: transparent !important;
+          opacity: 0 !important;
+        }
+        /* Collapse empty textareas entirely in print so a blank
+           "Guest intel / notes" field doesn't reserve a line. */
+        textarea:placeholder-shown {
+          height: 0 !important;
+          min-height: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          line-height: 0 !important;
+          visibility: hidden !important;
+        }
         .sb-inline {
           border-bottom: 1px solid #000 !important;
         }
