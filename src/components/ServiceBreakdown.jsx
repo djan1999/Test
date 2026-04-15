@@ -528,7 +528,7 @@ function PrintStyles() {
       @media print {
         @page {
           size: A4 landscape;
-          margin: 12mm 15mm;
+          margin: 10mm 12mm;
         }
         html, body { background: #ffffff !important; }
         body * { visibility: hidden !important; }
@@ -584,7 +584,7 @@ function PrintStyles() {
         }
         .service-breakdown-print-area {
           column-count: 2;
-          column-gap: 16mm;
+          column-gap: 12mm;
           column-fill: balance;
         }
         .reservation-block {
@@ -597,6 +597,34 @@ function PrintStyles() {
         .bottom-section {
           break-before: avoid;
           page-break-before: avoid;
+        }
+
+        /* Aggressive compaction so a typical daily briefing fits
+           within at most two A4-landscape pages. */
+        .sb-sheet {
+          font-size: 9pt !important;
+          line-height: 1.2 !important;
+        }
+        .sb-sheet input,
+        .sb-sheet textarea {
+          line-height: 1.2 !important;
+        }
+        .slot-block {
+          margin-bottom: 4pt !important;
+        }
+        .reservation-block {
+          margin-bottom: 4pt !important;
+        }
+        .reservation-block + .reservation-block {
+          margin-top: 0 !important;
+        }
+        .bottom-section {
+          margin-top: 6pt !important;
+          padding-top: 3pt !important;
+        }
+        /* Shrink the header block */
+        .sb-sheet > div:first-child {
+          margin-bottom: 2pt !important;
         }
       }
     `}</style>
