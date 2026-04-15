@@ -97,7 +97,7 @@ export default function ArchivePanel() {
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
           <button onClick={deleteAll} disabled={deleting === "all"} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
-            border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#e07070",
+            border: "1px solid #ffcccc", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#e07070",
             opacity: deleting === "all" ? 0.5 : 1,
           }}>{deleting === "all" ? "MOVING TO TRASH..." : "DELETE ALL"}</button>
         </div>
@@ -108,7 +108,7 @@ export default function ArchivePanel() {
         const entryTables = entry.state?.tables || [];
         const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
         return (
-          <div key={entry.id} style={{ border: "1px solid #f0f0f0", borderRadius: 4, marginBottom: 8, overflow: "hidden" }}>
+          <div key={entry.id} style={{ border: "1px solid #f0f0f0", borderRadius: 0, marginBottom: 8, overflow: "hidden" }}>
             <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: isExp ? "#fafafa" : "#fff" }}>
               <div onClick={() => setExpanded(isExp ? null : entry.id)} style={{ cursor: "pointer", flex: 1 }}>
                 <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500, color: "#1a1a1a", marginBottom: 3 }}>{entry.label}</div>
@@ -117,7 +117,7 @@ export default function ArchivePanel() {
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <button onClick={() => deleteEntry(entry.id)} disabled={deleting === entry.id} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px",
-                  border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#e07070",
+                  border: "1px solid #ffcccc", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#e07070",
                   opacity: deleting === entry.id ? 0.5 : 1,
                 }}>{deleting === entry.id ? "..." : "delete"}</button>
                 <span onClick={() => setExpanded(isExp ? null : entry.id)} style={{ fontFamily: FONT, fontSize: 16, color: "#ccc", transform: isExp ? "rotate(180deg)" : "none", transition: "transform 0.18s", display: "inline-block", cursor: "pointer" }}>⌄</span>
@@ -131,7 +131,7 @@ export default function ArchivePanel() {
                       <span style={{ fontFamily: FONT, fontSize: 16, fontWeight: 300, color: "#999" }}>{String(t.id).padStart(2, "0")}</span>
                       {t.resName && <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{t.resName}</span>}
                       <span style={{ fontFamily: FONT, fontSize: 10, color: "#888" }}>{t.guests || 0} guests</span>
-                      {t.menuType && <span style={{ fontFamily: FONT, fontSize: 9, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 2, padding: "1px 6px" }}>{t.menuType}</span>}
+                      {t.menuType && <span style={{ fontFamily: FONT, fontSize: 9, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 0, padding: "1px 6px" }}>{t.menuType}</span>}
                       {t.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a" }}>{t.arrivedAt}</span>}
                     </div>
                   </div>
@@ -155,7 +155,7 @@ export default function ArchivePanel() {
             {showTrash && (
               <button onClick={emptyTrash} disabled={deleting === "trash"} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "4px 12px",
-                border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#e07070",
+                border: "1px solid #ffcccc", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#e07070",
                 opacity: deleting === "trash" ? 0.5 : 1,
               }}>{deleting === "trash" ? "DELETING..." : "EMPTY TRASH"}</button>
             )}
@@ -167,14 +167,14 @@ export default function ArchivePanel() {
                 const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
                 const deletedDate = entry.deleted_at ? new Date(entry.deleted_at).toLocaleDateString() : "";
                 return (
-                  <div key={entry.id} style={{ border: "1px solid #f5f0f0", borderRadius: 4, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fdf8f8", opacity: 0.8 }}>
+                  <div key={entry.id} style={{ border: "1px solid #f5f0f0", borderRadius: 0, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fdf8f8", opacity: 0.8 }}>
                     <div>
                       <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 500, color: "#888" }}>{entry.label}</div>
                       <div style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", marginTop: 2 }}>{entryTables.length} tables · {totalGuests} guests · deleted {deletedDate}</div>
                     </div>
                     <button onClick={() => restoreEntry(entry.id)} disabled={deleting === entry.id} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "4px 12px",
-                      border: "1px solid #b8d8c8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#4a9a6a",
+                      border: "1px solid #b8d8c8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#4a9a6a",
                       opacity: deleting === entry.id ? 0.5 : 1,
                     }}>{deleting === entry.id ? "..." : "RESTORE"}</button>
                   </div>

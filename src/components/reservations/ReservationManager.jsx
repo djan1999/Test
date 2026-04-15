@@ -62,7 +62,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
     return `${weekDays[0].toLocaleDateString("en-GB", o)} – ${weekDays[6].toLocaleDateString("en-GB", o)}`.toUpperCase();
   };
 
-  const navBtn = { fontFamily: FONT, fontSize: 12, padding: "6px 10px", border: "1px solid #e8e8e8", borderRadius: 4, cursor: "pointer", background: "#fff", color: "#555" };
+  const navBtn = { fontFamily: FONT, fontSize: 12, padding: "6px 10px", border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#555" };
 
   const resvForDate = (ds) => reservations
     .filter(r => r.date === ds)
@@ -96,7 +96,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
         {/* Sticky header */}
         <div style={{ borderBottom: "1px solid #f0f0f0", padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 50, gap: 12 }}>
           <button onClick={() => { setSelectedDay(null); setEditingId(null); setTicketId(null); setDraftFromReservation(null); }}
-            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#1a1a1a", flexShrink: 0 }}>← WEEK</button>
+            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#1a1a1a", flexShrink: 0 }}>← WEEK</button>
           <div style={{ flex: 1, textAlign: "center" }}>
             <div style={{ fontSize: 10, letterSpacing: 3, color: isService ? "#2f7a45" : "#1a1a1a", fontWeight: 600 }}>{dayLabel}</div>
             <div style={{ fontSize: 8, letterSpacing: 2, color: "#aaa", marginTop: 2 }}>
@@ -107,13 +107,13 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <button onClick={() => setShowBreakdown(true)}
               disabled={dayResv.length === 0}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: "#fff", color: "#1a1a1a", fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1 }}>SERVICE BREAKDOWN</button>
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: "#fff", color: "#1a1a1a", fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1 }}>SERVICE BREAKDOWN</button>
             <button onClick={() => {
               const next = editingId === "new" ? null : "new";
               setEditingId(next);
               setDraftFromReservation(null);
             }}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: "pointer", background: editingId === "new" ? "#1a1a1a" : "#fff", color: editingId === "new" ? "#fff" : "#1a1a1a", fontWeight: 600 }}>+ ADD</button>
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: editingId === "new" ? "#f0efed" : "#fff", color: editingId === "new" ? "#1a1a1a" : "#1a1a1a", fontWeight: 600 }}>+ ADD</button>
           </div>
         </div>
 
@@ -165,13 +165,13 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
 
             return (
               <div key={r.id} style={{
-                border: "1px solid #e8e8e8", borderRadius: 6, marginBottom: 10,
+                border: "1px solid #e8e8e8", borderRadius: 0, marginBottom: 10,
                 background: "#fff", overflow: "hidden",
               }}>
                 {/* Card header — always visible */}
                 <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
                   {/* Table badge */}
-                  <div style={{ background: "#1a1a1a", color: "#fff", fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 1, padding: "8px 12px", borderRadius: 4, minWidth: 48, textAlign: "center" }}>{tLabel}</div>
+                  <div style={{ background: "#f0efed", color: "#1a1a1a", border: "1px solid #1a1a1a", fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 1, padding: "8px 12px", borderRadius: 0, minWidth: 48, textAlign: "center" }}>{tLabel}</div>
                   {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: FONT, fontSize: 13, color: "#1a1a1a", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -189,7 +189,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
                         {d.restrictions.map((rs, i) => {
                           const def = RESTRICTIONS.find(x => x.key === rs.note);
-                          return <span key={i} style={{ fontFamily: FONT, fontSize: 9, color: "#b04040", background: "#fef0f0", border: "1px solid #f0d0d0", borderRadius: 2, padding: "2px 6px" }}>{def ? `${def.emoji} ${def.label}` : rs.note}</span>;
+                          return <span key={i} style={{ fontFamily: FONT, fontSize: 9, color: "#b04040", background: "#fef0f0", border: "1px solid #f0d0d0", borderRadius: 0, padding: "2px 6px" }}>{def ? `${def.emoji} ${def.label}` : rs.note}</span>;
                         })}
                       </div>
                     )}
@@ -198,9 +198,9 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                   {/* Action buttons */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
                     <button onClick={() => { setEditingId(isEditing ? null : r.id); if (!isEditing) setTicketId(null); }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid " + (isEditing ? "#1a1a1a" : "#d0d0d0"), borderRadius: 4, cursor: "pointer", background: isEditing ? "#1a1a1a" : "#fff", color: isEditing ? "#fff" : "#555" }}>EDIT</button>
+                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid " + (isEditing ? "#1a1a1a" : "#d0d0d0"), borderRadius: 0, cursor: "pointer", background: isEditing ? "#f0efed" : "#fff", color: isEditing ? "#1a1a1a" : "#555" }}>EDIT</button>
                     <button onClick={() => { setTicketId(showTicket ? null : r.id); if (!showTicket) setEditingId(null); }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid " + (showTicket ? "#1a1a1a" : "#d0d0d0"), borderRadius: 4, cursor: "pointer", background: showTicket ? "#1a1a1a" : "#fff", color: showTicket ? "#fff" : "#555" }}>TICKET</button>
+                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid " + (showTicket ? "#1a1a1a" : "#d0d0d0"), borderRadius: 0, cursor: "pointer", background: showTicket ? "#f0efed" : "#fff", color: showTicket ? "#1a1a1a" : "#555" }}>TICKET</button>
                     <button onClick={() => {
                       setEditingId("new");
                       setTicketId(null);
@@ -210,9 +210,9 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                         date: selectedDay,
                       });
                     }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid #d0d0d0", borderRadius: 4, cursor: "pointer", background: "#fff", color: "#666" }}>COPY</button>
+                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid #d0d0d0", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#666" }}>COPY</button>
                     <button onClick={async () => { if (window.confirm(`Delete reservation for ${d.resName || tLabel}?`)) { await onDelete(r.id); setEditingId(null); setTicketId(null); } }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid #f0c0c0", borderRadius: 4, cursor: "pointer", background: "#fff8f8", color: "#c04040" }}>DEL</button>
+                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid #f0c0c0", borderRadius: 0, cursor: "pointer", background: "#fff8f8", color: "#c04040" }}>DEL</button>
                   </div>
                 </div>
 
@@ -235,7 +235,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 {showTicket && ticketVirtualTable && (
                   <div style={{ borderTop: "1px solid #f0f0f0", padding: "12px 16px" }}>
                     <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 3, color: "#bbb", marginBottom: 8, textTransform: "uppercase" }}>Kitchen Ticket Preview</div>
-                    <div style={{ border: "1px solid #f0f0f0", borderRadius: 4, overflow: "hidden", background: "#fff" }}>
+                    <div style={{ border: "1px solid #f0f0f0", borderRadius: 0, overflow: "hidden", background: "#fff" }}>
                       <KitchenTicket table={ticketVirtualTable} menuCourses={menuCourses} upd={updForTicket} />
                     </div>
                   </div>
@@ -255,16 +255,16 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
 
       {/* Sticky header */}
       <div style={{ borderBottom: "1px solid #f0f0f0", padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 50, gap: 12 }}>
-        <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#1a1a1a", flexShrink: 0 }}>← EXIT</button>
+        <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#1a1a1a", flexShrink: 0 }}>← EXIT</button>
         <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#999", flex: 1, textAlign: "center" }}>RESERVATIONS</span>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           <button onClick={() => setWeeklyPreview(weeklyPreview === "reservations" ? null : "reservations")}
-            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "reservations" ? "#1a1a1a" : "#d0d0d0"}`, borderRadius: 999, cursor: "pointer", background: weeklyPreview === "reservations" ? "#1a1a1a" : "#fff", color: weeklyPreview === "reservations" ? "#fff" : "#555", fontWeight: 600, flexShrink: 0 }}>OVERVIEW</button>
+            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "reservations" ? "#1a1a1a" : "#d0d0d0"}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "reservations" ? "#f0efed" : "#fff", color: weeklyPreview === "reservations" ? "#1a1a1a" : "#555", fontWeight: 600, flexShrink: 0 }}>OVERVIEW</button>
           <button onClick={() => setWeeklyPreview(weeklyPreview === "allergies" ? null : "allergies")}
-            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "allergies" ? "#1a1a1a" : "#d0d0d0"}`, borderRadius: 999, cursor: "pointer", background: weeklyPreview === "allergies" ? "#1a1a1a" : "#fff", color: weeklyPreview === "allergies" ? "#fff" : "#555", fontWeight: 600, flexShrink: 0 }}>ALLERGIES</button>
+            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "allergies" ? "#1a1a1a" : "#d0d0d0"}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "allergies" ? "#f0efed" : "#fff", color: weeklyPreview === "allergies" ? "#1a1a1a" : "#555", fontWeight: 600, flexShrink: 0 }}>ALLERGIES</button>
           <button onClick={() => setWeekOffset(w => w - 1)} style={navBtn}>◀</button>
           <button onClick={() => setWeekOffset(0)}
-            style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#888", minWidth: 110, textAlign: "center", background: "none", border: "1px solid #f0f0f0", borderRadius: 4, padding: "5px 0", cursor: "pointer" }}>{fmtRange()}</button>
+            style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#888", minWidth: 110, textAlign: "center", background: "none", border: "1px solid #f0f0f0", borderRadius: 0, padding: "5px 0", cursor: "pointer" }}>{fmtRange()}</button>
           <button onClick={() => setWeekOffset(w => w + 1)} style={navBtn}>▶</button>
         </div>
       </div>
@@ -283,7 +283,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
           <>
             <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#ccc" }}>NO ACTIVE SERVICE DATE</span>
             <button onClick={() => { const nd = window.prompt("Set service date (YYYY-MM-DD):", todayStr); if (nd && /^\d{4}-\d{2}-\d{2}$/.test(nd)) onSetServiceDate(nd); }}
-              style={{ fontFamily: FONT, fontSize: 8, color: "#888", background: "none", border: "1px solid #e0e0e0", cursor: "pointer", borderRadius: 2, padding: "2px 8px" }}>SET DATE</button>
+              style={{ fontFamily: FONT, fontSize: 8, color: "#888", background: "none", border: "1px solid #e0e0e0", cursor: "pointer", borderRadius: 0, padding: "2px 8px" }}>SET DATE</button>
           </>
         )}
       </div>
@@ -311,12 +311,12 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                   w.document.write(html); w.document.close(); w.focus();
                   setTimeout(() => w.print(), 800);
                 }}
-                  style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: "pointer", background: "#1a1a1a", color: "#fff", fontWeight: 600 }}>PRINT</button>
+                  style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: "#ffffff", color: "#1a1a1a", fontWeight: 600 }}>PRINT</button>
                 <button onClick={() => setWeeklyPreview(null)}
                   style={{ fontFamily: FONT, fontSize: 10, background: "none", border: "none", cursor: "pointer", color: "#aaa", padding: "0 4px" }}>×</button>
               </div>
             </div>
-            <div style={{ width: containerW, height: Math.round(a4H * scale), overflow: "hidden", border: "1px solid #e0e0e0", borderRadius: 4, background: "#fff" }}>
+            <div style={{ width: containerW, height: Math.round(a4H * scale), overflow: "hidden", border: "1px solid #e0e0e0", borderRadius: 0, background: "#fff" }}>
               <iframe srcDoc={html} title="weekly preview"
                 style={{ width: a4W, height: a4H, border: "none", transform: `scale(${scale})`, transformOrigin: "top left", pointerEvents: "none" }} />
             </div>
@@ -339,7 +339,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 style={{
                   fontFamily: FONT, textAlign: "left", cursor: "pointer",
                   border: `1.5px solid ${isServiceDay ? "#b0d8b0" : isToday ? "#d0d0d0" : "#efefef"}`,
-                  borderRadius: 6, padding: "14px 16px",
+                  borderRadius: 0, padding: "14px 16px",
                   background: isServiceDay ? "#f4fbf4" : "#fff",
                   display: "flex", alignItems: "center", gap: 14,
                   transition: "all 0.1s",

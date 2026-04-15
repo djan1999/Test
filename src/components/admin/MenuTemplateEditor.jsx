@@ -83,7 +83,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
       <div
         onClick={() => onAdd(rowId, side)}
         style={{
-          flex: 1, minWidth: 0, height: 28, borderRadius: 3,
+          flex: 1, minWidth: 0, height: 28, borderRadius: 0,
           border: `1.5px dashed ${CELL_EMPTY_BORDER}`,
           background: CELL_EMPTY_BG,
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -103,7 +103,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
     <div
       onClick={() => onSelect(rowId, side)}
       style={{
-        flex: 1, minWidth: 0, height: 28, borderRadius: 3, cursor: "pointer",
+        flex: 1, minWidth: 0, height: 28, borderRadius: 0, cursor: "pointer",
         border: `1.5px solid ${isSelected ? SELECTED_RING : "#e8e6e0"}`,
         background: isSelected ? "#f4f3fb" : (meta?.bg || "#fafafa"),
         display: "flex", alignItems: "center", gap: 0,
@@ -176,7 +176,7 @@ function SortableRow({
           padding: "3px 4px",
           background: "#f7f6f0",
           border: "1.5px dashed #d8d4c8",
-          borderRadius: 3,
+          borderRadius: 0,
         }}>
           <div
             {...attributes} {...listeners}
@@ -195,7 +195,7 @@ function SortableRow({
             onChange={e => onUpdateRow({ ...row, gap: parseFloat(e.target.value) || 0 })}
             style={{
               fontFamily: FONT, fontSize: 9, padding: "2px 4px",
-              border: "1px solid #e0ddd6", borderRadius: 2,
+              border: "1px solid #e0ddd6", borderRadius: 0,
               width: 46, textAlign: "center", background: "#fff",
             }}
           />
@@ -216,7 +216,7 @@ function SortableRow({
             padding: "3px 4px",
             background: (leftSelected || rightSelected) ? "#f4f3fb" : "#fff",
             border: `1px solid ${(leftSelected || rightSelected) ? "#c8c6e8" : "#ede9e0"}`,
-            borderRadius: 3,
+            borderRadius: 0,
           }}>
             {/* Drag handle */}
             <div
@@ -268,7 +268,7 @@ function RowActionBtn({ children, onClick, title, danger = false, active = false
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        width: 20, height: 22, border: "none", borderRadius: 2, cursor: "pointer",
+        width: 20, height: 22, border: "none", borderRadius: 0, cursor: "pointer",
         fontFamily: FONT, fontSize: 10, padding: 0, lineHeight: 1,
         background: active ? "#f0f0f8" : hov ? (danger ? "#fff0f0" : "#f4f3fb") : "transparent",
         color: active ? SELECTED_RING : hov ? (danger ? "#e05050" : SELECTED_RING) : "#bbb",
@@ -283,7 +283,7 @@ function RowActionBtn({ children, onClick, title, danger = false, active = false
 function OverlayRow({ row }) {
   return (
     <div style={{
-      background: "#fff", border: `1.5px solid ${SELECTED_RING}`, borderRadius: 3,
+      background: "#fff", border: `1.5px solid ${SELECTED_RING}`, borderRadius: 0,
       padding: "5px 10px", opacity: 0.9, boxShadow: "0 4px 16px rgba(75,75,136,0.18)",
       fontFamily: FONT, fontSize: 8.5, color: SELECTED_RING, letterSpacing: 1,
     }}>
@@ -318,7 +318,7 @@ function BlockPickerModal({ onPick, onClose, menuCourses }) {
     >
       <div
         style={{
-          background: "#fff", borderRadius: 6, padding: "20px 24px",
+          background: "#fff", borderRadius: 0, padding: "20px 24px",
           width: 500, maxHeight: "75vh", overflowY: "auto",
           boxShadow: "0 8px 40px rgba(0,0,0,0.2)", fontFamily: FONT,
         }}
@@ -364,7 +364,7 @@ function BlockPickerModal({ onPick, onClose, menuCourses }) {
                       display: "flex", alignItems: "center", gap: 9,
                       padding: "9px 11px", border: "1.5px solid",
                       borderColor: hov === type ? meta.color : "#eeeceb",
-                      borderRadius: 4, cursor: "pointer",
+                      borderRadius: 0, cursor: "pointer",
                       background: hov === type ? (meta.bg || "#f8f8f8") : "#fafafa",
                       textAlign: "left", transition: "all 0.1s",
                     }}
@@ -408,7 +408,7 @@ function AlignButtons({ value, onChange }) {
           title={o.v}
           style={{
             width: 32, height: 26, border: `1px solid ${value === o.v ? SELECTED_RING : "#ddd"}`,
-            borderRadius: 2, cursor: "pointer", fontFamily: FONT, fontSize: 11,
+            borderRadius: 0, cursor: "pointer", fontFamily: FONT, fontSize: 11,
             background: value === o.v ? "#f0f0f8" : "#fff",
             color: value === o.v ? SELECTED_RING : "#666",
           }}
@@ -625,7 +625,7 @@ function LivePreview({ previewHtml, loading, label = "A5" }) {
         overflow: "hidden",
         flexShrink: 0,
         boxShadow: "0 4px 24px rgba(0,0,0,0.22)",
-        borderRadius: 1,
+        borderRadius: 0,
         position: "relative",
         background: "#fff",
       }}>
@@ -1033,7 +1033,7 @@ export default function MenuTemplateEditor({
           <input
             value={menuTitle}
             onChange={e => { setMenuTitle(e.target.value); writeMenuTitle(previewLang, e.target.value); syncTitleToSupabase(); }}
-            style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", flex: 1, minWidth: 80 }}
+            style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 0, outline: "none", flex: 1, minWidth: 80 }}
           />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 2 }}>
@@ -1041,7 +1041,7 @@ export default function MenuTemplateEditor({
           <input
             value={thankYouNote}
             onChange={e => { setThankYouNote(e.target.value); writeThankYouNote(previewLang, e.target.value); syncThankYouToSupabase(); }}
-            style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 2, outline: "none", flex: 1, minWidth: 140 }}
+            style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 0, outline: "none", flex: 1, minWidth: 140 }}
           />
         </div>
       </div>
@@ -1107,7 +1107,7 @@ export default function MenuTemplateEditor({
             disabled={saving}
             style={{
               width: "100%", fontFamily: FONT, fontSize: 8, letterSpacing: 2,
-              padding: "7px 0", border: "none", borderRadius: 3, cursor: saving ? "wait" : "pointer",
+              padding: "7px 0", border: "none", borderRadius: 0, cursor: saving ? "wait" : "pointer",
               background: saved ? "#4a9a6a" : GOLD, color: "#fff",
               textTransform: "uppercase", marginBottom: 6,
             }}
@@ -1119,7 +1119,7 @@ export default function MenuTemplateEditor({
             onClick={rebuild}
             style={{
               width: "100%", fontFamily: FONT, fontSize: 7.5, letterSpacing: 1,
-              padding: "5px 0", border: "1px solid #e0ddd6", borderRadius: 3,
+              padding: "5px 0", border: "1px solid #e0ddd6", borderRadius: 0,
               cursor: "pointer", background: "#fff", color: "#888",
               textTransform: "uppercase",
             }}
@@ -1144,7 +1144,7 @@ export default function MenuTemplateEditor({
                 onClick={rebuild}
                 style={{
                   marginTop: 10, fontFamily: FONT, fontSize: 8, letterSpacing: 1,
-                  padding: "8px 16px", border: `1.5px solid ${GOLD}`, borderRadius: 3,
+                  padding: "8px 16px", border: `1.5px solid ${GOLD}`, borderRadius: 0,
                   cursor: "pointer", background: "transparent", color: GOLD,
                   textTransform: "uppercase",
                 }}
@@ -1159,7 +1159,7 @@ export default function MenuTemplateEditor({
             onDragEnd={handleDragEnd}
           >
             {isShortFilter && (
-              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#7a5020", background: "#fff8ee", border: "1px solid #f0d080", borderRadius: 3, padding: "5px 8px", margin: "0 0 6px", textTransform: "uppercase" }}>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#7a5020", background: "#fff8ee", border: "1px solid #f0d080", borderRadius: 0, padding: "5px 8px", margin: "0 0 6px", textTransform: "uppercase" }}>
                 Short menu — {displayRows.length} blocks · Switch to FULL to see all
               </div>
             )}
@@ -1194,7 +1194,7 @@ export default function MenuTemplateEditor({
             onClick={addRow}
             style={{
               flex: 1, fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "8px 0",
-              border: "1.5px dashed #d0cec8", borderRadius: 3, cursor: "pointer",
+              border: "1.5px dashed #d0cec8", borderRadius: 0, cursor: "pointer",
               background: "transparent", color: "#bbb", textTransform: "uppercase",
               transition: "all 0.12s",
             }}
@@ -1206,7 +1206,7 @@ export default function MenuTemplateEditor({
             title="Add a gap-only row for section spacing"
             style={{
               flex: 1, fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "8px 0",
-              border: "1.5px dashed #d4cfa0", borderRadius: 3, cursor: "pointer",
+              border: "1.5px dashed #d4cfa0", borderRadius: 0, cursor: "pointer",
               background: "transparent", color: "#c8b87a", textTransform: "uppercase",
               transition: "all 0.12s",
             }}

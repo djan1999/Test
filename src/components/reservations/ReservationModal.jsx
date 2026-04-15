@@ -46,7 +46,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
     }} onClick={onClose}>
       <div style={{
         background: "#fff", borderTop: "1px solid #e8e8e8",
-        borderRadius: "12px 12px 0 0",
+        borderRadius: 0,
         padding: "24px 20px 32px",
         width: "100%", maxWidth: 520,
         maxHeight: "92vh", overflowY: "auto",
@@ -54,7 +54,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
       }} onClick={e => e.stopPropagation()}>
 
         {/* Drag handle */}
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "#e0e0e0", margin: "0 auto 20px" }} />
+        <div style={{ width: 36, height: 4, borderRadius: 0, background: "#e0e0e0", margin: "0 auto 20px" }} />
 
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#666", marginBottom: 16 }}>
           TABLE · RESERVATION
@@ -91,9 +91,9 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                     fontFamily: FONT, fontSize: 13, fontWeight: 500, letterSpacing: 1,
                     padding: "12px 0", border: "1px solid",
                     borderColor: isSel ? "#1a1a1a" : isActive ? "#f0f0f0" : isBooked ? "#f0c8a8" : "#e8e8e8",
-                    borderRadius: 2, cursor: isActive ? "not-allowed" : "pointer",
-                    background: isSel ? "#1a1a1a" : isActive ? "#f8f8f8" : isBooked ? "#fff8f2" : "#fff",
-                    color: isSel ? "#fff" : isActive ? "#ccc" : isBooked ? "#c07840" : "#444",
+                    borderRadius: 0, cursor: isActive ? "not-allowed" : "pointer",
+                    background: isSel ? "#f0efed" : isActive ? "#f8f8f8" : isBooked ? "#fff8f2" : "#fff",
+                    color: isSel ? "#1a1a1a" : isActive ? "#ccc" : isBooked ? "#c07840" : "#444",
                     transition: "all 0.1s",
                   }}>
                   T{String(tid).padStart(2, "0")}
@@ -122,9 +122,9 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   fontFamily: FONT, fontSize: 13, letterSpacing: 1,
                   padding: "14px 0", flex: 1, border: "1px solid",
                   borderColor: time === t ? "#1a1a1a" : "#e8e8e8",
-                  borderRadius: 2, cursor: "pointer",
-                  background: time === t ? "#1a1a1a" : "#fff",
-                  color: time === t ? "#fff" : "#888",
+                  borderRadius: 0, cursor: "pointer",
+                  background: time === t ? "#f0efed" : "#fff",
+                  color: time === t ? "#1a1a1a" : "#888",
                   transition: "all 0.12s",
                 }}>{t}</button>
               ))}
@@ -138,9 +138,9 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                     fontFamily: FONT, fontSize: 10, letterSpacing: 2,
                     padding: "10px 24px", border: "1px solid",
                     borderColor: menuType === opt ? "#1a1a1a" : "#e8e8e8",
-                    borderRadius: 2, cursor: "pointer",
-                    background: menuType === opt ? "#1a1a1a" : "#fff",
-                    color: menuType === opt ? "#fff" : "#888",
+                    borderRadius: 0, cursor: "pointer",
+                    background: menuType === opt ? "#f0efed" : "#fff",
+                    color: menuType === opt ? "#1a1a1a" : "#888",
                     textTransform: "uppercase",
                   }}>{opt}</button>
                 ))}
@@ -155,9 +155,9 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   fontFamily: FONT, fontSize: 10, letterSpacing: 2,
                   padding: "10px 24px", border: "1px solid",
                   borderColor: lang === opt.v ? "#1a1a1a" : "#e8e8e8",
-                  borderRadius: 2, cursor: "pointer",
-                  background: lang === opt.v ? "#1a1a1a" : "#fff",
-                  color: lang === opt.v ? "#fff" : "#888",
+                  borderRadius: 0, cursor: "pointer",
+                  background: lang === opt.v ? "#f0efed" : "#fff",
+                  color: lang === opt.v ? "#1a1a1a" : "#888",
                   textTransform: "uppercase",
                 }}>{opt.l}</button>
               ))}
@@ -181,9 +181,9 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                     fontFamily: FONT, fontSize: 11, letterSpacing: 1,
                     padding: "12px 0", flex: 1, border: "1px solid",
                     borderColor: guestType === type ? "#1a1a1a" : "#e8e8e8",
-                    borderRadius: 2, cursor: "pointer",
-                    background: guestType === type ? "#1a1a1a" : "#fff",
-                    color: guestType === type ? "#fff" : "#444",
+                    borderRadius: 0, cursor: "pointer",
+                    background: guestType === type ? "#f0efed" : "#fff",
+                    color: guestType === type ? "#1a1a1a" : "#444",
                     transition: "all 0.12s", textTransform: "uppercase",
                   }}>{type}</button>
                 ))}
@@ -197,7 +197,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                         fontFamily: FONT, fontSize: 13, fontWeight: 500, letterSpacing: 1,
                         padding: "12px 16px", border: "1px solid",
                         borderColor: room === r ? "#c8a06e" : "#e8e8e8",
-                        borderRadius: 2, cursor: "pointer",
+                        borderRadius: 0, cursor: "pointer",
                         background: room === r ? "#fdf6ec" : "#fff",
                         color: room === r ? "#a07040" : "#444",
                         transition: "all 0.12s",
@@ -219,7 +219,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   fontFamily: FONT, fontSize: 12, letterSpacing: 1,
                   padding: "14px 0", flex: 1, border: "1px solid",
                   borderColor: birthday === val ? (val ? "#d4b888" : "#e8e8e8") : "#e8e8e8",
-                  borderRadius: 2, cursor: "pointer",
+                  borderRadius: 0, cursor: "pointer",
                   background: birthday === val ? (val ? "#fdf8f0" : "#fafafa") : "#fff",
                   color: birthday === val ? (val ? "#a07040" : "#1a1a1a") : "#555",
                   transition: "all 0.12s",
@@ -246,7 +246,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                           onClick={() => setRestrictions(rs => [...rs, { pos: null, note: opt.key }])}
                           style={{
                             fontFamily: FONT, fontSize: 10, letterSpacing: 0.5,
-                            padding: "6px 11px", borderRadius: 2, cursor: "pointer",
+                            padding: "6px 11px", borderRadius: 0, cursor: "pointer",
                             border: `1px solid ${active ? "#e09090" : "#e8e8e8"}`,
                             background: active ? "#fef0f0" : "#fafafa",
                             color: active ? "#b04040" : "#888",
@@ -259,7 +259,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                             <span style={{
                               marginLeft: 5,
                               background: "#e09090", color: "#fff",
-                              borderRadius: 99, fontSize: 9, fontWeight: 700,
+                              borderRadius: 0, fontSize: 9, fontWeight: 700,
                               padding: "1px 5px", verticalAlign: "middle",
                             }}>{count}</span>
                           )}
@@ -281,7 +281,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                     <div key={i} style={{
                       display: "flex", alignItems: "center", gap: 6,
                       padding: "5px 10px", background: "#fef0f0",
-                      border: "1px solid #e09090", borderRadius: 2,
+                      border: "1px solid #e09090", borderRadius: 0,
                     }}>
                       <span style={{ fontFamily: FONT, fontSize: 11, color: "#b04040", fontWeight: 500 }}>{label}</span>
                       <button onClick={() => setRestrictions(rs => rs.filter((_, idx) => idx !== i))}
@@ -309,11 +309,11 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
         <div style={{ display: "flex", gap: 10, marginTop: 28 }}>
           <button onClick={onClose} style={{
             flex: 1, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
-            padding: "14px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#444",
+            padding: "14px", border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#444",
           }}>CANCEL</button>
           <button onClick={() => onSave({ tableIds, name, time, menuType, guests, guestType, room, birthday, restrictions, notes, lang })} style={{
             flex: 2, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
-            padding: "14px", border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer", background: "#1a1a1a", color: "#fff",
+            padding: "14px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: "#ffffff", color: "#1a1a1a",
           }}>SAVE</button>
         </div>
       </div>

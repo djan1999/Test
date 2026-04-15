@@ -30,7 +30,7 @@ export function MenuRulesPanel({
             disabled={menuRulesSaving}
             style={{
               marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
-              padding: "4px 10px", border: "none", borderRadius: 3, cursor: menuRulesSaving ? "wait" : "pointer",
+              padding: "4px 10px", border: "none", borderRadius: 0, cursor: menuRulesSaving ? "wait" : "pointer",
               background: menuRulesSaved ? "#4a9a6a" : "#4b4b88", color: "#fff", textTransform: "uppercase",
             }}
           >
@@ -87,7 +87,7 @@ function StyleInput({ label, lkey, def, step, unit, min, layoutStyles, onUpdateL
           style={{
             fontFamily: FONT, fontSize: 9, padding: "2px 5px",
             border: `1px solid ${isOverridden ? "#9090c0" : "#ddd"}`,
-            borderRadius: 2, width: 52, textAlign: "center",
+            borderRadius: 0, width: 52, textAlign: "center",
             background: isOverridden ? "#f4f3fb" : "#fff",
           }}
         />
@@ -122,7 +122,7 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
             onClick={onSaveLayoutStyles}
             style={{
               marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
-              padding: "4px 10px", border: "none", borderRadius: 3, cursor: "pointer",
+              padding: "4px 10px", border: "none", borderRadius: 0, cursor: "pointer",
               background: "#4b4b88", color: "#fff", textTransform: "uppercase",
             }}
           >Save Styles</button>
@@ -170,7 +170,7 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
                     style={{
                       fontFamily: FONT, fontSize: 9, padding: "2px 5px",
                       border: `1px solid ${"courseColSplit" in layoutStyles ? "#9090c0" : "#ddd"}`,
-                      borderRadius: 2, width: 52, textAlign: "center",
+                      borderRadius: 0, width: 52, textAlign: "center",
                       background: "courseColSplit" in layoutStyles ? "#f4f3fb" : "#fff",
                     }}
                   />

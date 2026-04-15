@@ -55,14 +55,14 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
           width: "100%",
           maxWidth: 420,
           background: "#fff",
-          borderRadius: 12,
+          borderRadius: 0,
           overflow: "hidden",
           boxShadow: "0 12px 60px rgba(0,0,0,0.18)",
         }}
       >
-        <div style={{ background: "#1a1a1a", padding: "20px 20px 16px", textAlign: "center" }}>
-          <div style={{ fontSize: 9, letterSpacing: 4, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>{appName}</div>
-          <div style={{ fontSize: 13, letterSpacing: 3, color: "#fff", fontWeight: 700 }}>SELECT SERVICE DATE</div>
+        <div style={{ background: "#ffffff", padding: "20px 20px 16px", textAlign: "center", borderBottom: "1px solid #e8e8e8" }}>
+          <div style={{ fontSize: 9, letterSpacing: 4, color: "rgba(26,26,26,0.5)", marginBottom: 4 }}>{appName}</div>
+          <div style={{ fontSize: 13, letterSpacing: 3, color: "#1a1a1a", fontWeight: 700 }}>SELECT SERVICE DATE</div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 10px" }}>
@@ -96,7 +96,7 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
                 style={{
                   fontFamily: FONT,
                   border: "none",
-                  borderRadius: 8,
+                  borderRadius: 0,
                   cursor: "pointer",
                   padding: "10px 0",
                   display: "flex",
@@ -104,15 +104,15 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
                   alignItems: "center",
                   gap: 4,
                   transition: "all 0.12s",
-                  background: isSel ? "#1a1a1a" : isToday ? "#f0f8f4" : "#f6f6f6",
+                  background: isSel ? "#f0efed" : isToday ? "#f0f8f4" : "#f6f6f6",
                   outline: isToday && !isSel ? "1.5px solid #3a8a5a" : "none",
                   opacity: isPast && !isSel ? 0.45 : 1,
                 }}
               >
                 <span style={{ fontSize: 8, letterSpacing: 1, color: isSel ? "rgba(255,255,255,0.6)" : "#aaa", fontWeight: 600 }}>{DAY_LABELS[i]}</span>
-                <span style={{ fontSize: 16, fontWeight: 700, color: isSel ? "#fff" : isToday ? "#2f7a45" : "#1a1a1a", lineHeight: 1 }}>{dayNum}</span>
-                {isToday && <span style={{ width: 4, height: 4, borderRadius: "50%", background: isSel ? "#fff" : "#3a8a5a" }} />}
-                {dayResv.length > 0 && <span style={{ width: 4, height: 4, borderRadius: "50%", background: isSel ? "rgba(255,255,255,0.4)" : "#bbb", marginTop: 2 }} />}
+                <span style={{ fontSize: 16, fontWeight: 700, color: isSel ? "#1a1a1a" : isToday ? "#2f7a45" : "#1a1a1a", lineHeight: 1 }}>{dayNum}</span>
+                {isToday && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? "#fff" : "#3a8a5a" }} />}
+                {dayResv.length > 0 && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? "rgba(255,255,255,0.4)" : "#bbb", marginTop: 2 }} />}
               </button>
             );
           })}
@@ -146,7 +146,7 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
           <button
             onClick={() => selected && onConfirm(selected)}
             disabled={!selected}
-            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 2, border: "none", cursor: selected ? "pointer" : "not-allowed", background: selected ? "#1a1a1a" : "#f0f0f0", color: selected ? "#fff" : "#aaa", fontWeight: 700, opacity: 1 }}
+            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 2, border: "none", cursor: selected ? "pointer" : "not-allowed", background: selected ? "#f0efed" : "#f0f0f0", color: selected ? "#1a1a1a" : "#aaa", fontWeight: 700, opacity: 1 }}
           >
             START SERVICE ›
           </button>

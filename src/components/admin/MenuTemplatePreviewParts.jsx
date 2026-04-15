@@ -37,7 +37,7 @@ export function DrinkPill({ label, sub, onRemove }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 4,
-      background: "#f0f0f8", border: "1px solid #d8d8e8", borderRadius: 2,
+      background: "#f0f0f8", border: "1px solid #d8d8e8", borderRadius: 0,
       padding: "2px 6px", fontFamily: FONT, fontSize: 8,
     }}>
       <span style={{ color: "#444", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -105,7 +105,7 @@ export function MiniSearch({ wines = [], cocktails = [], spirits = [], beers = [
       {open && results.length > 0 && (
         <div style={{
           position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, zIndex: 500,
-          background: "#fff", border: "1px solid #e0e0e0", borderRadius: 3,
+          background: "#fff", border: "1px solid #e0e0e0", borderRadius: 0,
           boxShadow: "0 4px 16px rgba(0,0,0,0.12)", maxHeight: 180, overflowY: "auto",
         }}>
           {results.map((r, i) => (
@@ -173,7 +173,7 @@ export function PreviewDataPanel({
   const btnStyle = (active) => ({
     fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
     padding: "3px 8px", border: `1px solid ${active ? SELECTED_RING : "#ddd"}`,
-    borderRadius: 2, cursor: "pointer",
+    borderRadius: 0, cursor: "pointer",
     background: active ? "#f0f0f8" : "#fff",
     color: active ? SELECTED_RING : "#666",
   });

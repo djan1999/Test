@@ -69,7 +69,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
   };
 
   return (
-    <div style={{ background: "#fafafa", border: "1px solid #e8e8e8", borderRadius: 6, padding: "14px 14px 18px", margin: "4px 0 8px", fontFamily: FONT }}>
+    <div style={{ background: "#fafafa", border: "1px solid #e8e8e8", borderRadius: 0, padding: "14px 14px 18px", margin: "4px 0 8px", fontFamily: FONT }}>
       <div style={{ marginBottom: 14 }}>
         <div style={fieldLabel}>
           Table
@@ -90,9 +90,9 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                   fontFamily: FONT, fontSize: 11, padding: "9px 0",
                   border: "1px solid",
                   borderColor: isSel ? "#1a1a1a" : conflict ? "#f0d0b0" : "#e0e0e0",
-                  borderRadius: 2,
-                  background: isSel ? "#1a1a1a" : conflict ? "#fff8f2" : "#fff",
-                  color: isSel ? "#fff" : conflict ? "#c07840" : "#555",
+                  borderRadius: 0,
+                  background: isSel ? "#f0efed" : conflict ? "#fff8f2" : "#fff",
+                  color: isSel ? "#1a1a1a" : conflict ? "#c07840" : "#555",
                   cursor: conflict ? "not-allowed" : "pointer",
                 }}
               >
@@ -116,9 +116,9 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               <button key={t} onClick={() => setTime(t === time ? "" : t)} style={{
                 fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "8px 0",
                 border: "1px solid", borderColor: time === t ? "#1a1a1a" : "#e8e8e8",
-                borderRadius: 2, cursor: "pointer",
-                background: time === t ? "#1a1a1a" : "#fff",
-                color: time === t ? "#fff" : "#666",
+                borderRadius: 0, cursor: "pointer",
+                background: time === t ? "#f0efed" : "#fff",
+                color: time === t ? "#1a1a1a" : "#666",
               }}>{t}</button>
             ))}
           </div>
@@ -133,9 +133,9 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               <button key={v} onClick={() => setMenuType(menuType === v ? "" : v)} style={{
                 fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "8px 0", flex: 1,
                 border: "1px solid", borderColor: menuType === v ? "#1a1a1a" : "#e8e8e8",
-                borderRadius: 2, cursor: "pointer",
-                background: menuType === v ? "#1a1a1a" : "#fff",
-                color: menuType === v ? "#fff" : "#666",
+                borderRadius: 0, cursor: "pointer",
+                background: menuType === v ? "#f0efed" : "#fff",
+                color: menuType === v ? "#1a1a1a" : "#666",
               }}>{l}</button>
             ))}
           </div>
@@ -147,9 +147,9 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               <button key={v} onClick={() => setLang(v)} style={{
                 fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "8px 0", flex: 1,
                 border: "1px solid", borderColor: lang === v ? "#1a1a1a" : "#e8e8e8",
-                borderRadius: 2, cursor: "pointer",
-                background: lang === v ? "#1a1a1a" : "#fff",
-                color: lang === v ? "#fff" : "#666",
+                borderRadius: 0, cursor: "pointer",
+                background: lang === v ? "#f0efed" : "#fff",
+                color: lang === v ? "#1a1a1a" : "#666",
               }}>{l}</button>
             ))}
           </div>
@@ -172,9 +172,9 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               <button key={v || "r"} onClick={() => { setGuestType(v); if (v !== "hotel") setRoom(""); }} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "8px 0", flex: 1,
                 border: "1px solid", borderColor: guestType === v ? "#1a1a1a" : "#e8e8e8",
-                borderRadius: 2, cursor: "pointer",
-                background: guestType === v ? "#1a1a1a" : "#fff",
-                color: guestType === v ? "#fff" : "#666",
+                borderRadius: 0, cursor: "pointer",
+                background: guestType === v ? "#f0efed" : "#fff",
+                color: guestType === v ? "#1a1a1a" : "#666",
               }}>{l}</button>
             ))}
           </div>
@@ -187,7 +187,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                 <button key={r} onClick={() => setRoom((x) => x === r ? "" : r)} style={{
                   fontFamily: FONT, fontSize: 11, padding: "7px 10px",
                   border: "1px solid", borderColor: room === r ? "#c8a06e" : "#e8e8e8",
-                  borderRadius: 2, cursor: "pointer",
+                  borderRadius: 0, cursor: "pointer",
                   background: room === r ? "#fdf6ec" : "#fff",
                   color: room === r ? "#a07040" : "#555",
                 }}>{r}</button>
@@ -223,14 +223,14 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                   return (
                     <button key={opt.key} onClick={() => setRestrictions((rs) => [...rs, { pos: null, note: opt.key }])} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "5px 9px",
-                      borderRadius: 2, cursor: "pointer",
+                      borderRadius: 0, cursor: "pointer",
                       border: `1px solid ${cnt > 0 ? "#e09090" : "#e8e8e8"}`,
                       background: cnt > 0 ? "#fef0f0" : "#fafafa",
                       color: cnt > 0 ? "#b04040" : "#888",
                       fontWeight: cnt > 0 ? 600 : 400,
                     }}>
                       {opt.emoji} {opt.label}
-                      {cnt > 0 && <span style={{ marginLeft: 4, background: "#e09090", color: "#fff", borderRadius: 99, fontSize: 8, padding: "1px 4px" }}>{cnt}</span>}
+                      {cnt > 0 && <span style={{ marginLeft: 4, background: "#e09090", color: "#fff", borderRadius: 0, fontSize: 8, padding: "1px 4px" }}>{cnt}</span>}
                     </button>
                   );
                 })}
@@ -244,7 +244,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               const def = RESTRICTIONS.find((x) => x.key === r.note);
               const label = def ? `${def.emoji} ${def.label}` : r.note;
               return (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", background: "#fef0f0", border: "1px solid #e09090", borderRadius: 2 }}>
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", background: "#fef0f0", border: "1px solid #e09090", borderRadius: 0 }}>
                   <span style={{ fontFamily: FONT, fontSize: 10, color: "#b04040" }}>{label}</span>
                   <button onClick={() => setRestrictions((rs) => rs.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: "#e09090", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
                 </div>
@@ -260,8 +260,8 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
       </div>
 
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <button onClick={onCancel} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px", border: "1px solid #e0e0e0", borderRadius: 4, cursor: "pointer", background: "#fff", color: "#666" }}>CANCEL</button>
-        <button onClick={handleSave} disabled={!primaryId || saving} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 20px", border: "1px solid #1a1a1a", borderRadius: 4, cursor: "pointer", background: "#1a1a1a", color: "#fff", fontWeight: 600, opacity: (!primaryId || saving) ? 0.5 : 1 }}>
+        <button onClick={onCancel} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px", border: "1px solid #e0e0e0", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#666" }}>CANCEL</button>
+        <button onClick={handleSave} disabled={!primaryId || saving} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 20px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: "#ffffff", color: "#1a1a1a", fontWeight: 600, opacity: (!primaryId || saving) ? 0.5 : 1 }}>
           {saving ? "SAVING…" : "SAVE"}
         </button>
       </div>

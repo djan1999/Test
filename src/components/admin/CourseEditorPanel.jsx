@@ -81,7 +81,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
 
   return (
     <div style={{
-      border: `1px solid ${isOptional ? "#e0d4b8" : "#e8e8e8"}`, borderRadius: 4,
+      border: `1px solid ${isOptional ? "#e0d4b8" : "#e8e8e8"}`, borderRadius: 0,
       background: isOptional ? "#fffdf8" : "#fff",
       marginBottom: 8, overflow: "hidden",
     }}>
@@ -98,9 +98,9 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
           <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a1a1a" }}>{course.menu?.name || "(unnamed)"}</span>
           {course.menu?.sub && <span style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginLeft: 8 }}>{course.menu.sub}</span>}
         </div>
-        {isOptional && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#9a6020", background: "#fff3d8", border: "1px solid #e8d090", borderRadius: 2, padding: "2px 6px" }}>OPTIONAL · {course.optional_flag}</span>}
-        {activeRestrictions.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#b04040", border: "1px solid #f0cccc", borderRadius: 2, padding: "2px 6px" }}>{activeRestrictions.length}R</span>}
-        {activePairings.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 2, padding: "2px 6px" }}>{activePairings.length}P</span>}
+        {isOptional && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#9a6020", background: "#fff3d8", border: "1px solid #e8d090", borderRadius: 0, padding: "2px 6px" }}>OPTIONAL · {course.optional_flag}</span>}
+        {activeRestrictions.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#b04040", border: "1px solid #f0cccc", borderRadius: 0, padding: "2px 6px" }}>{activeRestrictions.length}R</span>}
+        {activePairings.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 0, padding: "2px 6px" }}>{activePairings.length}P</span>}
         <div style={{ display: "flex", gap: 4 }}>
           <button onClick={e => { e.stopPropagation(); onMoveUp(); }} disabled={isFirst} style={{ background: "none", border: "none", cursor: isFirst ? "default" : "pointer", color: isFirst ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▲</button>
           <button onClick={e => { e.stopPropagation(); onMoveDown(); }} disabled={isLast} style={{ background: "none", border: "none", cursor: isLast ? "default" : "pointer", color: isLast ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▼</button>
@@ -200,7 +200,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
             </div>
           </div>
           {optionalPairingEnabled && (
-            <div style={{ marginBottom: 12, padding: "8px 10px", border: "1px solid #f0d8d8", borderRadius: 4, background: "#fff8f8" }}>
+            <div style={{ marginBottom: 12, padding: "8px 10px", border: "1px solid #f0d8d8", borderRadius: 0, background: "#fff8f8" }}>
               <div style={{ ...labelSm, marginBottom: 6, color: "#a04a4a" }}>Optional Pairing Text (course-owned)</div>
               <div style={{ display: "grid", gridTemplateColumns: "66px 1fr 1fr 1fr 1fr", gap: 6, marginBottom: 5, alignItems: "center" }}>
                 <span style={{ fontFamily: FONT, fontSize: 9, color: "#a04a4a", fontWeight: 600 }}>ALCO</span>
@@ -306,7 +306,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
             <div style={{ flex: 1 }} />
             <button onClick={onDelete} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-              border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
+              border: "1px solid #ffcccc", borderRadius: 0, cursor: "pointer",
               background: "#fff9f9", color: "#c04040",
             }}>DELETE COURSE</button>
           </div>
@@ -387,12 +387,12 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={addCourse} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-            border: "1px solid #1a1a1a", borderRadius: 2, cursor: "pointer",
-            background: "#1a1a1a", color: "#fff",
+            border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer",
+            background: "#ffffff", color: "#1a1a1a",
           }}>+ ADD COURSE</button>
           <button onClick={handleSave} disabled={saving} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-            border: `1px solid ${saved ? "#4a9a6a" : "#c8a06e"}`, borderRadius: 2,
+            border: `1px solid ${saved ? "#4a9a6a" : "#c8a06e"}`, borderRadius: 0,
             cursor: saving ? "default" : "pointer",
             background: saved ? "#4a9a6a" : "#c8a06e", color: "#fff",
           }}>{saving ? "SAVING..." : saved ? "SAVED" : "SAVE ALL COURSES"}</button>

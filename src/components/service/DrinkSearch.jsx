@@ -23,7 +23,7 @@ export default function DrinkSearch({ drinkObj, list = [], onChange, placeholder
     fontSize: tokens.mobileInputSize,
     padding: "10px 12px",
     border: "1px solid #e8e8e8",
-    borderRadius: 2,
+    borderRadius: 0,
     outline: "none",
     color: tokens.colors.black,
     background: tokens.colors.white,
@@ -35,7 +35,7 @@ export default function DrinkSearch({ drinkObj, list = [], onChange, placeholder
   return (
     <div ref={ref} style={{ position: "relative", width: "100%" }}>
       {drinkObj ? (
-        <div style={{ display: "flex", alignItems: "center", border: `1px solid ${accentColor}44`, borderRadius: 2, padding: "5px 28px 5px 10px", background: `${accentColor}08`, position: "relative", fontSize: 11, fontFamily: tokens.font, color: "#4a4a4a" }}>
+        <div style={{ display: "flex", alignItems: "center", border: `1px solid ${accentColor}44`, borderRadius: 0, padding: "5px 28px 5px 10px", background: `${accentColor}08`, position: "relative", fontSize: 11, fontFamily: tokens.font, color: "#4a4a4a" }}>
           <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {drinkObj.name}
             {drinkObj.notes ? ` · ${drinkObj.notes}` : ""}
@@ -58,7 +58,7 @@ export default function DrinkSearch({ drinkObj, list = [], onChange, placeholder
         />
       )}
       {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: "#fff", border: "1px solid #e8e8e8", borderRadius: 2, zIndex: 200, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: "#fff", border: "1px solid #e8e8e8", borderRadius: 0, zIndex: 200, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", overflow: "hidden" }}>
           {results.map((d) => (
             <div key={d.id} onMouseDown={() => { setQ(""); setOpen(false); onChange(d); }} style={{ padding: "9px 14px", cursor: "pointer", borderBottom: "1px solid #f5f5f5", fontFamily: tokens.font, fontSize: 12, color: "#1a1a1a" }}>
               {d.name}
