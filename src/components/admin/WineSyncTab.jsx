@@ -47,7 +47,7 @@ export default function WineSyncTab({ onSyncWines }) {
             letterSpacing: 2,
             padding: "10px 20px",
             border: "1px solid #c8a06e",
-            borderRadius: 2,
+            borderRadius: 0,
             cursor: status === "syncing" ? "not-allowed" : "pointer",
             background: "#c8a06e",
             color: "#fff",

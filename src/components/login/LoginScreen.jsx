@@ -95,7 +95,7 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
             {MODES.map(m => (
               <button key={m.id} onClick={() => handleTile(m)} style={{
                 fontFamily: FONT, cursor: "pointer",
-                background: "#fff", border: "1px solid #e8e8e8", borderRadius: 2,
+                background: "#fff", border: "1px solid #e8e8e8", borderRadius: 0,
                 padding: "28px 32px", width: 140, textAlign: "center",
                 transition: "all 0.12s", display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
               }}>
@@ -110,7 +110,7 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
           {onSyncAll && (
             <button onClick={handleSync} disabled={syncSt === "syncing"} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 2,
-              padding: "6px 16px", borderRadius: 999, cursor: syncSt === "syncing" ? "not-allowed" : "pointer",
+              padding: "6px 16px", borderRadius: 0, cursor: syncSt === "syncing" ? "not-allowed" : "pointer",
               border: `1px solid ${syncSt === "ok" ? "#8fc39f" : syncSt === "err" ? "#e89898" : "#ddd"}`,
               background: syncSt === "ok" ? "#eef8f1" : syncSt === "err" ? "#fff0f0" : "#fafafa",
               color: syncSt === "ok" ? "#2f7a45" : syncSt === "err" ? "#c04040" : "#aaa",
@@ -127,8 +127,8 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
           }}>
             {[0,1,2,3].map(i => (
               <div key={i} style={{
-                width: 14, height: 14, borderRadius: "50%",
-                background: i < pin.length ? "#1a1a1a" : "#e8e8e8",
+                width: 14, height: 14, borderRadius: 0,
+                background: i < pin.length ? "#555" : "#e8e8e8",
                 transition: "background 0.1s",
               }} />
             ))}
@@ -140,7 +140,7 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
                 else if (d !== "") handleDigit(d);
               }} disabled={d === ""} style={{
                 fontFamily: FONT, fontSize: 22, fontWeight: 300,
-                padding: "18px 0", border: "1px solid #e8e8e8", borderRadius: 2,
+                padding: "18px 0", border: "1px solid #e8e8e8", borderRadius: 0,
                 background: d === "" ? "transparent" : "#fff", cursor: d === "" ? "default" : "pointer",
                 color: "#1a1a1a", letterSpacing: 1,
                 opacity: d === "" ? 0 : 1,

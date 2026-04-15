@@ -38,7 +38,7 @@ export default function InventoryPanel({ onSyncWines, wines = [] }) {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
         <button onClick={handleSync} disabled={status === "syncing"} style={{
           fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "10px 20px",
-          border: "1px solid #c8a06e", borderRadius: 2,
+          border: "1px solid #c8a06e", borderRadius: 0,
           cursor: status === "syncing" ? "not-allowed" : "pointer",
           background: "#c8a06e", color: "#fff",
         }}>
@@ -49,21 +49,21 @@ export default function InventoryPanel({ onSyncWines, wines = [] }) {
 
       {/* Sync status */}
       <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
-        <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, padding: "12px 16px", minWidth: 140 }}>
+        <div style={{ border: "1px solid #e8e8e8", borderRadius: 0, padding: "12px 16px", minWidth: 140 }}>
           <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Status</div>
           <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: status === "ok" ? "#2a7a2a" : status === "err" ? "#c04040" : "#888" }}>
             {status === "ok" ? "Success" : status === "err" ? "Failed" : status === "syncing" ? "Syncing..." : "Idle"}
           </div>
         </div>
-        <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, padding: "12px 16px", minWidth: 140 }}>
+        <div style={{ border: "1px solid #e8e8e8", borderRadius: 0, padding: "12px 16px", minWidth: 140 }}>
           <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Last Sync</div>
           <div style={{ fontFamily: FONT, fontSize: 12, color: "#444" }}>{lastSync || "—"}</div>
         </div>
-        <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, padding: "12px 16px", minWidth: 140 }}>
+        <div style={{ border: "1px solid #e8e8e8", borderRadius: 0, padding: "12px 16px", minWidth: 140 }}>
           <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Wines in DB</div>
           <div style={{ fontFamily: FONT, fontSize: 12, color: "#444" }}>{wines.length}</div>
         </div>
-        <div style={{ border: "1px solid #e8e8e8", borderRadius: 4, padding: "12px 16px", minWidth: 140 }}>
+        <div style={{ border: "1px solid #e8e8e8", borderRadius: 0, padding: "12px 16px", minWidth: 140 }}>
           <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>By Glass</div>
           <div style={{ fontFamily: FONT, fontSize: 12, color: "#444" }}>{byGlassWines.length}</div>
         </div>
@@ -75,7 +75,7 @@ export default function InventoryPanel({ onSyncWines, wines = [] }) {
           <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 10 }}>
             Imported wines ({wines.length})
           </div>
-          <div style={{ maxHeight: 300, overflowY: "auto", border: "1px solid #f0f0f0", borderRadius: 4 }}>
+          <div style={{ maxHeight: 300, overflowY: "auto", border: "1px solid #f0f0f0", borderRadius: 0 }}>
             {wines.slice(0, 100).map((w, i) => (
               <div key={w.id || i} style={{
                 display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -89,7 +89,7 @@ export default function InventoryPanel({ onSyncWines, wines = [] }) {
                   {w.vintage && <span style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginLeft: 6 }}>{w.vintage}</span>}
                 </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  {w.byGlass && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#4a8a4a", border: "1px solid #c8e8c8", borderRadius: 2, padding: "2px 6px" }}>GLASS</span>}
+                  {w.byGlass && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#4a8a4a", border: "1px solid #c8e8c8", borderRadius: 0, padding: "2px 6px" }}>GLASS</span>}
                   {(w.country || w.region) && <span style={{ fontFamily: FONT, fontSize: 9, color: "#aaa" }}>{w.region || w.country}</span>}
                 </div>
               </div>

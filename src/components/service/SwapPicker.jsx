@@ -24,7 +24,7 @@ export default function SwapPicker({ seatId, totalSeats, onSwap }) {
         style={{
           width: 28,
           height: 28,
-          borderRadius: 2,
+          borderRadius: 0,
           border: "1px solid #e8e8e8",
           background: open ? "#f5f5f5" : "#fff",
           color: "#555",
@@ -45,7 +45,7 @@ export default function SwapPicker({ seatId, totalSeats, onSwap }) {
             right: 0,
             background: "#fff",
             border: "1px solid #e8e8e8",
-            borderRadius: 2,
+            borderRadius: 0,
             zIndex: 300,
             overflow: "hidden",
             minWidth: 80,

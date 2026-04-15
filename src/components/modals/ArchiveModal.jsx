@@ -111,15 +111,15 @@ export default function ArchiveModal({
     <div style={{ display: "flex", gap: 8 }}>
       <button onClick={onSeedTest} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 14px",
-        border: "1px solid #b0d8b0", borderRadius: 2, cursor: "pointer", background: "#f0fbf0", color: "#307030",
+        border: "1px solid #b0d8b0", borderRadius: 0, cursor: "pointer", background: "#f0fbf0", color: "#307030",
       }}>SEED TEST</button>
       <button onClick={onClearAll} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 14px",
-        border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888",
+        border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#888",
       }}>CLEAR ALL</button>
       <button onClick={async () => { await onArchiveAndClear(); loadEntries(); }} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
-        border: "1px solid #c8a06e", borderRadius: 2, cursor: "pointer", background: "#fdf8f0", color: "#8a6030",
+        border: "1px solid #c8a06e", borderRadius: 0, cursor: "pointer", background: "#fdf8f0", color: "#8a6030",
       }}>ARCHIVE & CLEAR ({activeTables.length})</button>
     </div>
   );
@@ -149,7 +149,7 @@ export default function ArchiveModal({
                 const timeRange = t.arrivedAt && lastFiredAt ? `${t.arrivedAt}–${lastFiredAt}` : null;
                 const isOpen = expandedTicket === t.id;
                 return (
-                  <div key={t.id} style={{ border: "1px solid #d8edd8", borderRadius: 6, overflow: "hidden", background: "#f6fbf6" }}>
+                  <div key={t.id} style={{ border: "1px solid #d8edd8", borderRadius: 0, overflow: "hidden", background: "#f6fbf6" }}>
                     <div
                       onClick={() => setExpandedTicket(isOpen ? null : t.id)}
                       style={{ padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", cursor: "pointer" }}
@@ -166,7 +166,7 @@ export default function ArchiveModal({
                           onClick={(e) => { e.stopPropagation(); onRestoreTicket && onRestoreTicket(t.id); }}
                           style={{
                             fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "4px 12px",
-                            border: "1px solid #a8d8b8", borderRadius: 3, cursor: "pointer",
+                            border: "1px solid #a8d8b8", borderRadius: 0, cursor: "pointer",
                             background: "#fff", color: "#4a9a6a", textTransform: "uppercase",
                           }}
                         >Restore</button>
@@ -215,11 +215,11 @@ export default function ArchiveModal({
                               return (
                                 <div key={s.id} style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", padding: "5px 4px", borderBottom: "1px solid #f5f5f5" }}>
                                   <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#999", minWidth: 26 }}>P{s.id}</span>
-                                  {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
-                                  {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
-                                  {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
-                                  {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
-                                  {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
+                                  {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
+                                  {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
+                                  {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
+                                  {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
+                                  {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
                                 </div>
                               );
                             })}
@@ -241,7 +241,7 @@ export default function ArchiveModal({
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
             <button onClick={deleteAll} disabled={deleting === "all"} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
-              border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#e07070",
+              border: "1px solid #ffcccc", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#e07070",
               opacity: deleting === "all" ? 0.5 : 1,
             }}>{deleting === "all" ? "MOVING TO TRASH…" : "DELETE ALL"}</button>
           </div>
@@ -251,7 +251,7 @@ export default function ArchiveModal({
           const entryTables = entry.state?.tables || [];
           const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
           return (
-            <div key={entry.id} style={{ border: "1px solid #f0f0f0", borderRadius: 4, marginBottom: 8, overflow: "hidden" }}>
+            <div key={entry.id} style={{ border: "1px solid #f0f0f0", borderRadius: 0, marginBottom: 8, overflow: "hidden" }}>
               <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: isExp ? "#fafafa" : "#fff" }}>
                 <div onClick={() => setExpanded(isExp ? null : entry.id)} style={{ cursor: "pointer", flex: 1 }}>
                   <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500, color: "#1a1a1a", marginBottom: 3 }}>{entry.label}</div>
@@ -260,7 +260,7 @@ export default function ArchiveModal({
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <button onClick={() => deleteEntry(entry.id)} disabled={deleting === entry.id} style={{
                     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px",
-                    border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#e07070",
+                    border: "1px solid #ffcccc", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#e07070",
                     opacity: deleting === entry.id ? 0.5 : 1,
                   }}>{deleting === entry.id ? "…" : "delete"}</button>
                   <span onClick={() => setExpanded(isExp ? null : entry.id)} style={{ fontFamily: FONT, fontSize: 16, color: "#ccc", transform: isExp ? "rotate(180deg)" : "none", transition: "transform 0.18s", display: "inline-block", cursor: "pointer" }}>⌄</span>
@@ -310,11 +310,11 @@ export default function ArchiveModal({
                             return (
                               <div key={s.id} style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", padding: "5px 4px", borderBottom: "1px solid #fafafa" }}>
                                 <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: "#999", minWidth: 26 }}>P{s.id}</span>
-                                {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
-                                {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
-                                {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
-                                {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
-                                {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 2, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
+                                {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, background: ws.bg || "#f0f0f0", color: "#444", border: "1px solid #e0e0e0" }}>{s.water}</span>}
+                                {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, color: PAIRING_COLOR[s.pairing] || "#555", background: PAIRING_BG[s.pairing] || "#fafafa", border: "1px solid #e0e0e0" }}>{s.pairing}</span>}
+                                {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
+                                {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, border: "1px solid #88cc88", color: "#2a6a2a", background: "#e8f5e8" }}>{d.name}</span>)}
+                                {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, border: "1px solid #e09090", color: "#b04040", background: "#fef0f0" }}>⚠ {restrLabel(r.note)}</span>)}
                               </div>
                             );
                           })}
@@ -340,7 +340,7 @@ export default function ArchiveModal({
               {showTrash && (
                 <button onClick={emptyTrash} disabled={deleting === "trash"} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "4px 12px",
-                  border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#e07070",
+                  border: "1px solid #ffcccc", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#e07070",
                   opacity: deleting === "trash" ? 0.5 : 1,
                 }}>{deleting === "trash" ? "DELETING…" : "EMPTY TRASH"}</button>
               )}
@@ -352,14 +352,14 @@ export default function ArchiveModal({
                   const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
                   const deletedDate = entry.deleted_at ? new Date(entry.deleted_at).toLocaleDateString() : "";
                   return (
-                    <div key={entry.id} style={{ border: "1px solid #f5f0f0", borderRadius: 4, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fdf8f8", opacity: 0.8 }}>
+                    <div key={entry.id} style={{ border: "1px solid #f5f0f0", borderRadius: 0, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fdf8f8", opacity: 0.8 }}>
                       <div>
                         <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 500, color: "#888" }}>{entry.label}</div>
                         <div style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", marginTop: 2 }}>{entryTables.length} tables · {totalGuests} guests · deleted {deletedDate}</div>
                       </div>
                       <button onClick={() => restoreEntry(entry.id)} disabled={deleting === entry.id} style={{
                         fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "4px 12px",
-                        border: "1px solid #b8d8c8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#4a9a6a",
+                        border: "1px solid #b8d8c8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#4a9a6a",
                         opacity: deleting === entry.id ? 0.5 : 1,
                       }}>{deleting === entry.id ? "…" : "RESTORE"}</button>
                     </div>

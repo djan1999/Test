@@ -752,7 +752,7 @@ export function generateMenuHTML({
     background:rgba(255,255,255,0.92);
     border:1px solid rgba(210,70,70,0.55);
     color:#b04040;
-    padding:2px 4px;border-radius:3px;
+    padding:2px 4px;border-radius:0;
     white-space:nowrap;
     pointer-events:none;
   }

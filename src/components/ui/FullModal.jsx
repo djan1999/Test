@@ -34,7 +34,7 @@ export default function FullModal({ title, onClose, actions, children }) {
               letterSpacing: 2,
               padding: "8px 16px",
               border: "1px solid #e0e0e0",
-              borderRadius: 2,
+              borderRadius: 0,
               cursor: "pointer",
               background: "#fff",
               color: "#555",

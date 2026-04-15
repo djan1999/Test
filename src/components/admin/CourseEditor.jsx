@@ -41,7 +41,7 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
 
   return (
     <div style={{
-      border: "1px solid #e8e8e8", borderRadius: 4, background: "#fff",
+      border: "1px solid #e8e8e8", borderRadius: 0, background: "#fff",
       marginBottom: 8, overflow: "hidden",
     }}>
       {/* Collapsed header */}
@@ -57,7 +57,7 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
           <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#1a1a1a" }}>{course.menu?.name || "(unnamed)"}</span>
           {course.menu?.sub && <span style={{ fontFamily: FONT, fontSize: 10, color: "#999", marginLeft: 8 }}>{course.menu.sub}</span>}
         </div>
-        {course.is_snack && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 2, padding: "2px 6px" }}>SNACK</span>}
+        {course.is_snack && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 0, padding: "2px 6px" }}>SNACK</span>}
         <div style={{ display: "flex", gap: 4 }}>
           <button onClick={e => { e.stopPropagation(); onMoveUp(); }} disabled={isFirst} style={{ background: "none", border: "none", cursor: isFirst ? "default" : "pointer", color: isFirst ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▲</button>
           <button onClick={e => { e.stopPropagation(); onMoveDown(); }} disabled={isLast} style={{ background: "none", border: "none", cursor: isLast ? "default" : "pointer", color: isLast ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▼</button>
@@ -179,7 +179,7 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
           <div style={{ display: "flex", gap: 8, borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
             <button onClick={onDelete} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-              border: "1px solid #ffcccc", borderRadius: 2, cursor: "pointer",
+              border: "1px solid #ffcccc", borderRadius: 0, cursor: "pointer",
               background: "#fff9f9", color: "#c04040",
             }}>DELETE COURSE</button>
           </div>

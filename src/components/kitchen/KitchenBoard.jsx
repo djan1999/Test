@@ -173,7 +173,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const pLabel = p => p === "Non-Alc" ? "N/A" : p === "Our Story" ? "O.S." : p === "Premium" ? "Prem" : p === "Wine" ? "Wine" : p;
 
   return (
-    <div style={{ border: "2px solid #e8e8e8", borderRadius: 6, overflow: "hidden", background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}>
+    <div style={{ border: "2px solid #e8e8e8", borderRadius: 0, overflow: "hidden", background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}>
 
       {/* ── Header (drag handle) ── */}
       <div ref={dragHandleRef} {...dragListeners} style={{ background: "#fff", borderBottom: "1px solid #e8e8e8", padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8, cursor: dragListeners ? "grab" : undefined, touchAction: "none" }}>
@@ -183,8 +183,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
             {table.resName && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
-            {table.menuType && <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 3, background: isShort ? "#fff4e0" : "#e8f0ff", color: isShort ? "#a06000" : "#2a50a0" }}>{isShort ? "SHORT" : "LONG"}</span>}
-            <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 3, background: table.lang === "si" ? "#fff0f0" : "#f0fff4", color: table.lang === "si" ? "#a03030" : "#207040", border: "1px solid", borderColor: table.lang === "si" ? "#f0c0c0" : "#b0dcc0" }}>{table.lang === "si" ? "SI" : "EN"}</span>
+            {table.menuType && <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 0, background: isShort ? "#fff4e0" : "#e8f0ff", color: isShort ? "#a06000" : "#2a50a0" }}>{isShort ? "SHORT" : "LONG"}</span>}
+            <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 0, background: table.lang === "si" ? "#fff0f0" : "#f0fff4", color: table.lang === "si" ? "#a03030" : "#207040", border: "1px solid", borderColor: table.lang === "si" ? "#f0c0c0" : "#b0dcc0" }}>{table.lang === "si" ? "SI" : "EN"}</span>
             {table.birthday && <span style={{ fontSize: 10 }}>🎂</span>}
             {table.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 8, color: "#9a6a20", letterSpacing: 0.5 }}>{table.room ? `#${table.room}` : "Hotel"}</span>}
           </div>
@@ -203,9 +203,9 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 7px",
               border: `1px solid ${showEdit ? "#1a1a1a" : "#ddd"}`,
-              borderRadius: 3, cursor: "pointer",
-              background: showEdit ? "#1a1a1a" : "#fff",
-              color: showEdit ? "#fff" : "#888",
+              borderRadius: 0, cursor: "pointer",
+              background: showEdit ? "#f0efed" : "#fff",
+              color: showEdit ? "#1a1a1a" : "#888",
               touchAction: "manipulation",
             }}>✏ EDIT</button>
         </div>
@@ -231,7 +231,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               <button
                 onPointerDown={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); removeKitchenRestr(i); }}
-                style={{ fontFamily: FONT, fontSize: 10, padding: "1px 6px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", touchAction: "manipulation" }}>✕</button>
+                style={{ fontFamily: FONT, fontSize: 10, padding: "1px 6px", border: "1px solid #e09090", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#b04040", touchAction: "manipulation" }}>✕</button>
             </div>
           ) : null)}
           {/* Step 1: pick restriction */}
@@ -243,14 +243,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                   <button key={r.key}
                     onPointerDown={e => e.stopPropagation()}
                     onClick={e => { e.stopPropagation(); setPickingRestr(r.key); }}
-                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#444", touchAction: "manipulation" }}>
+                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#444", touchAction: "manipulation" }}>
                     {r.emoji} {r.label}
                   </button>
                 ))}
                 <button
                   onPointerDown={e => e.stopPropagation()}
                   onClick={e => { e.stopPropagation(); setPickingRestr("custom"); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#888", touchAction: "manipulation" }}>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#888", touchAction: "manipulation" }}>
                   + Custom
                 </button>
               </div>
@@ -264,13 +264,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8a060", borderRadius: 3, cursor: "pointer", background: "#fdf4e8", color: "#7a5020", fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8a060", borderRadius: 0, cursor: "pointer", background: "#fdf4e8", color: "#7a5020", fontWeight: 700, touchAction: "manipulation" }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, s.id); }}
-                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
+                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #e09090", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#b04040", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
                 ))}
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPickingRestr(null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #eee", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#bbb", touchAction: "manipulation" }}>cancel</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #eee", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#bbb", touchAction: "manipulation" }}>cancel</button>
               </div>
             </div>
           )}
@@ -282,17 +282,17 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                 onChange={e => setCustomNote(e.target.value)}
                 placeholder="e.g. No Ricotta"
                 onPointerDown={e => e.stopPropagation()}
-                style={{ fontFamily: FONT, fontSize: 10, padding: "5px 8px", border: "1px solid #ddd", borderRadius: 3, width: "100%", marginBottom: 6, boxSizing: "border-box" }}
+                style={{ fontFamily: FONT, fontSize: 10, padding: "5px 8px", border: "1px solid #ddd", borderRadius: 0, width: "100%", marginBottom: 6, boxSizing: "border-box" }}
               />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8a060", borderRadius: 3, cursor: "pointer", background: "#fdf4e8", color: "#7a5020", fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #c8a060", borderRadius: 0, cursor: "pointer", background: "#fdf4e8", color: "#7a5020", fontWeight: 700, touchAction: "manipulation" }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, s.id); }}
-                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
+                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: "1px solid #e09090", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#b04040", fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
                 ))}
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPickingRestr(null); setCustomNote(""); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #eee", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#bbb", touchAction: "manipulation" }}>cancel</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: "1px solid #eee", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#bbb", touchAction: "manipulation" }}>cancel</button>
               </div>
             </div>
           )}
@@ -310,7 +310,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             <button key={p} onClick={() => upd && upd(table.id, "pace", active ? "" : p)} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "3px 10px",
               border: `1px solid ${active ? col.border : "#ececec"}`,
-              borderRadius: 3, cursor: upd ? "pointer" : "default",
+              borderRadius: 0, cursor: upd ? "pointer" : "default",
               background: active ? col.bg : "#fff", color: active ? col.on : "#ccc",
               transition: "all 0.1s",
             }}>{p}</button>
@@ -328,7 +328,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             return (
               <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 3 }}>
                 <span style={{
-                  fontFamily: FONT, fontSize: 9, fontWeight: 700, padding: "2px 5px", borderRadius: 2,
+                  fontFamily: FONT, fontSize: 9, fontWeight: 700, padding: "2px 5px", borderRadius: 0,
                   background: p ? (pairingBg[p] || "#f0f0f0") : "#e8e8e8",
                   color: p ? (pairingColor[p] || "#444") : "#444",
                 }}>P{s.id}{p ? ` · ${pLabel(p)}` : ""}</span>
@@ -353,10 +353,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     key={r._i}
                     onClick={() => setAssigningRestrIdx(assigningRestrIdx === r._i ? null : r._i)}
                     style={{
-                      fontFamily: FONT, fontSize: 9, padding: "2px 8px", borderRadius: 3,
+                      fontFamily: FONT, fontSize: 9, padding: "2px 8px", borderRadius: 0,
                       border: "1px solid #e09090",
                       background: assigningRestrIdx === r._i ? "#b04040" : "#fef0f0",
-                      color: assigningRestrIdx === r._i ? "#fff" : "#b04040",
+                      color: assigningRestrIdx === r._i ? "#1a1a1a" : "#b04040",
                       fontWeight: 500, cursor: "pointer", userSelect: "none",
                     }}
                   >{restrLabel(r.note)} {assigningRestrIdx === r._i ? "→ pick seat" : "→"}</span>
@@ -368,13 +368,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                   {seats.map(s => (
                     <button key={s.id} onClick={() => assignRestrToSeat(s.id)} style={{
                       fontFamily: FONT, fontSize: 10, fontWeight: 700, padding: "3px 10px",
-                      border: "1px solid #e09090", borderRadius: 3, cursor: "pointer",
+                      border: "1px solid #e09090", borderRadius: 0, cursor: "pointer",
                       background: "#fff", color: "#b04040",
                     }}>P{s.id}</button>
                   ))}
                   <button onClick={() => setAssigningRestrIdx(null)} style={{
                     fontFamily: FONT, fontSize: 9, padding: "3px 8px",
-                    border: "1px solid #eee", borderRadius: 3, cursor: "pointer",
+                    border: "1px solid #eee", borderRadius: 0, cursor: "pointer",
                     background: "#fff", color: "#bbb",
                   }}>cancel</button>
                 </div>
@@ -499,9 +499,9 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     style={{
                       fontFamily: FONT, fontSize: 9, padding: "2px 6px", flexShrink: 0,
                       border: `1px solid ${isEditingThis ? "#1a1a1a" : "#ddd"}`,
-                      borderRadius: 3, cursor: "pointer",
-                      background: isEditingThis ? "#1a1a1a" : "#fff",
-                      color: isEditingThis ? "#fff" : "#aaa",
+                      borderRadius: 0, cursor: "pointer",
+                      background: isEditingThis ? "#f0efed" : "#fff",
+                      color: isEditingThis ? "#1a1a1a" : "#aaa",
                       touchAction: "manipulation",
                     }}>✏</button>
                 )}
@@ -515,20 +515,20 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     onChange={e => setEditName(e.target.value)}
                     onBlur={() => saveCourseDraft(key, editName, editNote)}
                     placeholder={`Rename "${line1}"…`}
-                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 7px", border: "1px solid #c04040", borderRadius: 3, width: "100%", boxSizing: "border-box" }}
+                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 7px", border: "1px solid #c04040", borderRadius: 0, width: "100%", boxSizing: "border-box" }}
                   />
                   <input
                     value={editNote}
                     onChange={e => setEditNote(e.target.value)}
                     onBlur={() => saveCourseDraft(key, editName, editNote)}
                     placeholder="Add note (e.g. No Ricotta)…"
-                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 7px", border: "1px solid #ddd", borderRadius: 3, width: "100%", boxSizing: "border-box" }}
+                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 7px", border: "1px solid #ddd", borderRadius: 0, width: "100%", boxSizing: "border-box" }}
                   />
                   {(kcNote.name || kcNote.note) && (
                     <button
                       onPointerDown={e => e.stopPropagation()}
                       onClick={e => { e.stopPropagation(); clearCourseNote(key); }}
-                      style={{ fontFamily: FONT, fontSize: 8, padding: "3px 8px", border: "1px solid #e09090", borderRadius: 3, cursor: "pointer", background: "#fff", color: "#b04040", alignSelf: "flex-start", touchAction: "manipulation" }}>Clear override</button>
+                      style={{ fontFamily: FONT, fontSize: 8, padding: "3px 8px", border: "1px solid #e09090", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#b04040", alignSelf: "flex-start", touchAction: "manipulation" }}>Clear override</button>
                   )}
                 </div>
               )}
@@ -560,7 +560,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               onClick={e => { e.stopPropagation(); upd && upd(table.id, "kitchenArchived", true); }}
               style={{
                 fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "4px 10px",
-                border: "1px solid #a8d8b8", borderRadius: 3, cursor: "pointer",
+                border: "1px solid #a8d8b8", borderRadius: 0, cursor: "pointer",
                 background: "#fff", color: "#4a9a6a", textTransform: "uppercase",
               }}
             >Archive</button>
@@ -593,7 +593,7 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
         // Ghost placeholder — dashed outline so the layout slot stays visible
         <div style={{
           width: 248, height: "100%", minHeight: 120,
-          border: "2px dashed #d0e8d8", borderRadius: 6,
+          border: "2px dashed #d0e8d8", borderRadius: 0,
           background: "#f4fbf6",
         }} />
       ) : (
@@ -646,17 +646,18 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
         const timeStr = `${String(ts.getHours()).padStart(2,"0")}:${String(ts.getMinutes()).padStart(2,"0")}`;
         return (
           <div key={tableId} style={{
-            background: "#fff", borderRadius: 10, maxWidth: 480, width: "100%",
+            background: "#fff", borderRadius: 0, maxWidth: 480, width: "100%",
             boxShadow: "0 16px 48px rgba(0,0,0,0.4)",
             overflow: "hidden",
           }}>
             {/* Header */}
             <div style={{
-              background: "#1a1a1a", padding: "14px 20px",
+              background: "#ffffff", padding: "14px 20px",
+              borderBottom: "1px solid #e8e8e8",
               display: "flex", alignItems: "center", justifyContent: "space-between",
             }}>
               <div>
-                <span style={{ fontFamily: FONT, fontSize: 16, fontWeight: 700, letterSpacing: 2, color: "#fff" }}>
+                <span style={{ fontFamily: FONT, fontSize: 16, fontWeight: 700, letterSpacing: 2, color: "#1a1a1a" }}>
                   TABLE {tableId}{alert.tableName ? ` — ${alert.tableName}` : ""}
                 </span>
               </div>
@@ -670,7 +671,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   {pairSeats.map(s => {
                     const c = PAIR_COLORS[s.pairing] || {};
                     return (
-                      <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: c.bg || "#f5f5f5", border: `1px solid ${c.border || "#ddd"}`, color: c.color || "#444" }}>
+                      <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 0, background: c.bg || "#f5f5f5", border: `1px solid ${c.border || "#ddd"}`, color: c.color || "#444" }}>
                         P{s.id} {s.pairing}
                       </span>
                     );
@@ -681,7 +682,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                 <div key={group.name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                   <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#666", minWidth: 60 }}>{group.name.toUpperCase()}</span>
                   {group.seats.map(s => (
-                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "#edf8e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>
+                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 0, background: "#edf8e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>
                       P{s.id}{s.pairing && s.pairing !== "—" ? ` · ${s.pairing}` : ""}
                     </span>
                   ))}
@@ -695,8 +696,8 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
             <div style={{ padding: "12px 20px", borderTop: "1px solid #f0f0f0", display: "flex", justifyContent: "flex-end" }}>
               <button onClick={() => onConfirm(tableId)} style={{
                 fontFamily: FONT, fontSize: 11, letterSpacing: 1.5, padding: "10px 28px",
-                border: "none", borderRadius: 4, cursor: "pointer",
-                background: "#1a1a1a", color: "#fff", fontWeight: 700, textTransform: "uppercase",
+                border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer",
+                background: "#ffffff", color: "#1a1a1a", fontWeight: 700, textTransform: "uppercase",
               }}>Confirm</button>
             </div>
           </div>
@@ -788,7 +789,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany }) {
       <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>
         {activeTable && (
           <div style={{
-            width: 248, borderRadius: 6,
+            width: 248, borderRadius: 0,
             boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
             opacity: 0.97,
           }}>

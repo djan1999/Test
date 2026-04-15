@@ -101,14 +101,14 @@ export default function AdminLayout({
           <span style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px",
             border: `1px solid ${syncStatus === "live" ? "#8fc39f" : "#d8d8d8"}`,
-            borderRadius: 999,
+            borderRadius: 0,
             background: syncStatus === "live" ? "#eef8f1" : "#f6f6f6",
             color: syncStatus === "live" ? "#2f7a45" : "#555",
             fontWeight: 600, whiteSpace: "nowrap",
           }}>{syncStatus === "live" ? "SYNC" : syncStatus === "local-only" ? "LOCAL" : syncStatus === "connecting" ? "LINK" : "ERROR"}</span>
           <button onClick={onExit} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px",
-            border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer",
+            border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer",
             background: "#fff", color: "#1a1a1a", flexShrink: 0,
           }}>EXIT</button>
         </div>
@@ -137,7 +137,7 @@ export default function AdminLayout({
                 gap: 8,
                 padding: navOpen ? "8px 10px" : "8px 0",
                 border: "1px solid #e8e8e8",
-                borderRadius: 8,
+                borderRadius: 0,
                 background: "#fff",
                 cursor: "pointer",
                 color: navPinned ? "#4b4b88" : "#999",
@@ -210,7 +210,7 @@ export default function AdminLayout({
             <div>
               {/* Combined view: Courses + Dishes/Restrictions */}
               <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-                <div style={{ border: "1px solid #f0f0f0", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
+                <div style={{ border: "1px solid #f0f0f0", borderRadius: 0, overflow: "hidden", background: "#fff" }}>
                   <button
                     onClick={() => setDishesCoursesOpen(v => !v)}
                     style={{
@@ -244,7 +244,7 @@ export default function AdminLayout({
 
                 <div style={{
                   fontFamily: FONT, fontSize: 10, color: "#999",
-                  border: "1px solid #f0f0f0", borderRadius: 6,
+                  border: "1px solid #f0f0f0", borderRadius: 0,
                   background: "#fafafa", padding: "12px 14px", lineHeight: 1.5,
                 }}>
                   Optional extras are now driven directly from each course’s `optional_flag` in Courses.

@@ -16,7 +16,7 @@ export default function MenuPage({ tables, menuCourses, upd, logoDataUri = "", w
         <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 3, color: "#1a1a1a" }}>MENU</span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#aaa" }}>PREVIEW + PRINT</span>
-          <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888" }}>EXIT</button>
+          <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#888" }}>EXIT</button>
         </div>
       </div>
 
@@ -34,7 +34,7 @@ export default function MenuPage({ tables, menuCourses, upd, logoDataUri = "", w
                 onClick={() => setMenuGenTable(t)}
                 style={{
                   border: `1px solid ${hasData ? "#e0e0e0" : "#f0f0f0"}`,
-                  borderRadius: 6, padding: "14px 16px",
+                  borderRadius: 0, padding: "14px 16px",
                   background: hasData ? "#fff" : "#fafafa",
                   cursor: "pointer", boxShadow: hasData ? "0 1px 4px rgba(0,0,0,0.06)" : "none",
                   opacity: hasData ? 1 : 0.5, transition: "box-shadow 0.15s",

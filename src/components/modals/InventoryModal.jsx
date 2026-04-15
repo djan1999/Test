@@ -230,16 +230,16 @@ export default function InventoryModal({ wines, onClose }) {
     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
       <span style={{
         fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "4px 10px",
-        border: `1px solid ${syncChip.border}`, borderRadius: 999,
+        border: `1px solid ${syncChip.border}`, borderRadius: 0,
         background: syncChip.bg, color: syncChip.color, whiteSpace: "nowrap",
       }}>{syncChip.label}</span>
       <button onClick={clearAll} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px",
-        border: "1px solid #e8e8e8", borderRadius: 2, cursor: "pointer", background: "#fff", color: "#888",
+        border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#888",
       }}>CLEAR ALL</button>
       <button onClick={handlePrint} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
-        border: "1px solid #3060a0", borderRadius: 2, cursor: "pointer", background: "#f0f6ff", color: "#3060a0",
+        border: "1px solid #3060a0", borderRadius: 0, cursor: "pointer", background: "#f0f6ff", color: "#3060a0",
       }}>PRINT</button>
     </div>
   );
@@ -284,13 +284,13 @@ export default function InventoryModal({ wines, onClose }) {
               {othersLabel && (
                 <span style={{
                   fontFamily: FONT, fontSize: 9, color: "#4a80c0", background: "#eaf0fc",
-                  border: "1px solid #c8d8f0", borderRadius: 3, padding: "2px 7px", flexShrink: 0,
+                  border: "1px solid #c8d8f0", borderRadius: 0, padding: "2px 7px", flexShrink: 0,
                 }}>{othersLabel}</span>
               )}
               <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
                 <button onClick={() => dec(w.id)} style={{
                   fontFamily: FONT, fontSize: 18, width: 38, height: 38,
-                  border: "1px solid #e8e8e8", borderRadius: "2px 0 0 2px", borderRight: "none",
+                  border: "1px solid #e8e8e8", borderRadius: 0, borderRight: "none",
                   cursor: "pointer", background: "#fff", color: "#888",
                   display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
                 }}>-</button>
@@ -316,7 +316,7 @@ export default function InventoryModal({ wines, onClose }) {
                 <button onClick={() => togglePartial(w.id)} style={{
                   fontFamily: FONT, fontSize: 10, width: 32, height: 38,
                   border: isPartial ? "1px solid #e07840" : "1px solid #e8e8e8",
-                  borderRadius: "0 2px 2px 0", borderLeft: "none",
+                  borderRadius: 0, borderLeft: "none",
                   cursor: "pointer", background: isPartial ? "#fff4ee" : "#fafafa",
                   color: isPartial ? "#e07840" : "#ccc",
                   display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
@@ -332,7 +332,7 @@ export default function InventoryModal({ wines, onClose }) {
               {deviceTotals.map((d) => (
                 <span key={d.id} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 10px",
-                  borderRadius: 999, border: d.isMe ? "1px solid #3060a0" : "1px solid #e0e0e0",
+                  borderRadius: 0, border: d.isMe ? "1px solid #3060a0" : "1px solid #e0e0e0",
                   background: d.isMe ? "#f0f6ff" : "#f8f8f8",
                   color: d.isMe ? "#3060a0" : "#888",
                 }}>
@@ -341,7 +341,7 @@ export default function InventoryModal({ wines, onClose }) {
               ))}
               <span style={{
                 fontFamily: FONT, fontSize: 10, fontWeight: 700, color: "#1a1a1a",
-                padding: "3px 10px", borderRadius: 999, border: "1px solid #1a1a1a", background: "#fff",
+                padding: "3px 10px", borderRadius: 0, border: "1px solid #1a1a1a", background: "#fff",
               }}>TOTAL: {fmtCount(grandTotal)}</span>
             </div>
           </div>

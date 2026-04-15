@@ -51,7 +51,7 @@ export default function Header({
     letterSpacing: 1,
     padding: "6px 10px",
     border: "1px solid #e8e8e8",
-    borderRadius: 999,
+    borderRadius: 0,
     background: "#fff",
     whiteSpace: "nowrap",
   };
@@ -64,20 +64,20 @@ export default function Header({
           <span style={{ fontSize: 10, letterSpacing: 3, color: modeColor, textTransform: "uppercase", fontWeight: 700 }}>{modeLabel}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          {showAddRes && <button onClick={onAddRes} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: "1px solid #1a1a1a", borderRadius: 999, cursor: "pointer", background: "#1a1a1a", color: "#fff", fontWeight: 600 }}>+ RES</button>}
-          {showSummary && <button onClick={onSummary} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#1a1a1a" }}>SUMMARY</button>}
-          {showMenu && <button onClick={onMenu} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#1a1a1a" }}>MENU</button>}
-          {showInventory && <button onClick={onInventory} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #c8d8e8", borderRadius: 999, cursor: "pointer", background: "#f0f6ff", color: "#3060a0" }}>INVENTORY</button>}
-          {showSeed && <button onClick={onSeed} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #b0d8b0", borderRadius: 999, cursor: "pointer", background: "#f0fbf0", color: "#307030" }}>SEED TEST</button>}
-          {showArchive && <button onClick={onArchive} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #e8d8b8", borderRadius: 999, cursor: "pointer", background: "#fff8f0", color: "#8a6030" }}>ARCHIVE</button>}
+          {showAddRes && <button onClick={onAddRes} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: "#ffffff", color: "#1a1a1a", fontWeight: 600 }}>+ RES</button>}
+          {showSummary && <button onClick={onSummary} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#1a1a1a" }}>SUMMARY</button>}
+          {showMenu && <button onClick={onMenu} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#1a1a1a" }}>MENU</button>}
+          {showInventory && <button onClick={onInventory} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #c8d8e8", borderRadius: 0, cursor: "pointer", background: "#f0f6ff", color: "#3060a0" }}>INVENTORY</button>}
+          {showSeed && <button onClick={onSeed} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #b0d8b0", borderRadius: 0, cursor: "pointer", background: "#f0fbf0", color: "#307030" }}>SEED TEST</button>}
+          {showArchive && <button onClick={onArchive} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #e8d8b8", borderRadius: 0, cursor: "pointer", background: "#fff8f0", color: "#8a6030" }}>ARCHIVE</button>}
           {showSync && (
-            <button onClick={handleSyncAll} disabled={sSt === "syncing"} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: `1px solid ${sSt === "ok" ? "#8fc39f" : sSt === "err" ? "#e89898" : "#c8a96e"}`, borderRadius: 999, cursor: sSt === "syncing" ? "not-allowed" : "pointer", background: sSt === "ok" ? "#eef8f1" : sSt === "err" ? "#fff0f0" : "#fffaf4", color: sSt === "ok" ? "#2f7a45" : sSt === "err" ? "#c04040" : "#8a6020", fontWeight: 600, whiteSpace: "nowrap" }}>
+            <button onClick={handleSyncAll} disabled={sSt === "syncing"} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: `1px solid ${sSt === "ok" ? "#8fc39f" : sSt === "err" ? "#e89898" : "#c8a96e"}`, borderRadius: 0, cursor: sSt === "syncing" ? "not-allowed" : "pointer", background: sSt === "ok" ? "#eef8f1" : sSt === "err" ? "#fff0f0" : "#fffaf4", color: sSt === "ok" ? "#2f7a45" : sSt === "err" ? "#c04040" : "#8a6020", fontWeight: 600, whiteSpace: "nowrap" }}>
               {sSt === "syncing" ? "SYNCING…" : sSt === "ok" ? "✓ SYNCED" : sSt === "err" ? "✗ FAILED" : "↻ SYNC"}
             </button>
           )}
-          <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: `1px solid ${syncLive ? "#8fc39f" : "#d8d8d8"}`, borderRadius: 999, background: syncLive ? "#eef8f1" : "#f6f6f6", color: syncLive ? "#2f7a45" : "#555", fontWeight: 600, whiteSpace: "nowrap" }}>{syncLabel}</span>
-          {showEndService && <button onClick={onEndService} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: "1px solid #c04040", borderRadius: 999, cursor: "pointer", background: "#fff0f0", color: "#c04040", fontWeight: 600, flexShrink: 0 }}>END SERVICE</button>}
-          <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #e8e8e8", borderRadius: 999, cursor: "pointer", background: "#fff", color: "#1a1a1a", flexShrink: 0 }}>EXIT</button>
+          <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: `1px solid ${syncLive ? "#8fc39f" : "#d8d8d8"}`, borderRadius: 0, background: syncLive ? "#eef8f1" : "#f6f6f6", color: syncLive ? "#2f7a45" : "#555", fontWeight: 600, whiteSpace: "nowrap" }}>{syncLabel}</span>
+          {showEndService && <button onClick={onEndService} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: "1px solid #c04040", borderRadius: 0, cursor: "pointer", background: "#fff0f0", color: "#c04040", fontWeight: 600, flexShrink: 0 }}>END SERVICE</button>}
+          <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#1a1a1a", flexShrink: 0 }}>EXIT</button>
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
