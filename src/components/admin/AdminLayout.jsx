@@ -117,14 +117,22 @@ export default function AdminLayout({
       {/* Main content: sidebar + panel */}
       <div style={{ display: "flex", flex: 1 }}>
         {/* Sidebar */}
-        <nav style={{
+        <nav
+          onMouseEnter={() => setNavHover(true)}
+          onMouseLeave={() => setNavHover(false)}
+          onFocus={() => setNavHover(true)}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) setNavHover(false);
+          }}
+          style={{
           width: navOpen ? NAV_W_OPEN : NAV_W_CLOSED, flexShrink: 0, borderRight: "1px solid #f0f0f0",
           padding: "20px 0", background: "#fafafa",
           position: "sticky", top: 52, height: "calc(100vh - 52px)",
           overflowY: "auto",
           transition: "width 0.16s ease",
           overflowX: "hidden",
-        }}>
+        }}
+        >
           <div style={{ padding: navOpen ? "0 12px 10px" : "0 8px 10px" }}>
             <button
               onClick={() => setNavPinned(v => !v)}
@@ -155,6 +163,8 @@ export default function AdminLayout({
           {SECTIONS.map(s => (
             <button
               key={s.id}
+              type="button"
+              title={s.label}
               onClick={() => setActiveSection(s.id)}
               style={{
                 display: "flex", alignItems: "center", gap: 10,
