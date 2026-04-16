@@ -2680,10 +2680,15 @@ export default function App() {
     return DEFAULT_QUICK_ACCESS_ITEMS.filter(i => i.enabled).map(i => ({ label: i.label, searchKey: i.searchKey || i.label, type: i.type || "wine" }));
   }, [quickAccessItems, menuCourses]);
 
-  const serviceAperitifOptions = useMemo(() =>
-    quickAccessItems.filter(i => i.enabled && !i.menuOnly)
-      .map(i => ({ label: i.label, searchKey: i.searchKey || i.label, type: i.type || "wine" })),
-  [quickAccessItems]);
+  const serviceAperitifOptions = useMemo(() => {
+    const fromQuickAccess = quickAccessItems.filter(i => i.enabled && !i.menuOnly)
+      .map(i => ({ label: i.label, searchKey: i.searchKey || i.label, type: i.type || "wine" }));
+    if (fromQuickAccess.length > 0) return fromQuickAccess;
+    const fromSheet = [...new Set(menuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
+    if (fromSheet.length > 0) return fromSheet.map(l => ({ label: l, searchKey: l, type: "wine" }));
+    return DEFAULT_QUICK_ACCESS_ITEMS.filter(i => i.enabled && !i.menuOnly)
+      .map(i => ({ label: i.label, searchKey: i.searchKey || i.label, type: i.type || "wine" }));
+  }, [quickAccessItems, menuCourses]);
 
   // ── Load service tables from Supabase + subscribe realtime ────────────────
   useEffect(() => {
