@@ -202,10 +202,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             onClick={e => { e.stopPropagation(); setShowEdit(v => !v); setPickingRestr(null); setCustomNote(""); setEditingCourse(null); }}
             style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 7px",
-              border: `1px solid ${showEdit ? "#1a1a1a" : "#ddd"}`,
+              border: `1px solid ${showEdit ? "#c8a96e" : "#ddd"}`,
               borderRadius: 0, cursor: "pointer",
-              background: showEdit ? "#f0efed" : "#fff",
-              color: showEdit ? "#1a1a1a" : "#888",
+              background: showEdit ? "#e8dcc8" : "#fff",
+              color: showEdit ? "#6a5030" : "#888",
               touchAction: "manipulation",
             }}>✏ EDIT</button>
         </div>
@@ -498,10 +498,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     onClick={e => { e.stopPropagation(); if (isEditingThis) { saveCourseDraft(key, editName, editNote); setEditingCourse(null); } else { startEditCourse(key); } }}
                     style={{
                       fontFamily: FONT, fontSize: 9, padding: "2px 6px", flexShrink: 0,
-                      border: `1px solid ${isEditingThis ? "#1a1a1a" : "#ddd"}`,
+                      border: `1px solid ${isEditingThis ? "#c8a96e" : "#ddd"}`,
                       borderRadius: 0, cursor: "pointer",
-                      background: isEditingThis ? "#f0efed" : "#fff",
-                      color: isEditingThis ? "#1a1a1a" : "#aaa",
+                      background: isEditingThis ? "#e8dcc8" : "#fff",
+                      color: isEditingThis ? "#6a5030" : "#aaa",
                       touchAction: "manipulation",
                     }}>✏</button>
                 )}
@@ -696,8 +696,8 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
             <div style={{ padding: "12px 20px", borderTop: "1px solid #f0f0f0", display: "flex", justifyContent: "flex-end" }}>
               <button onClick={() => onConfirm(tableId)} style={{
                 fontFamily: FONT, fontSize: 11, letterSpacing: 1.5, padding: "10px 28px",
-                border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer",
-                background: "#ffffff", color: "#1a1a1a", fontWeight: 700, textTransform: "uppercase",
+                border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer",
+                background: "#c8a96e", color: "#fff", fontWeight: 700, textTransform: "uppercase",
               }}>Confirm</button>
             </div>
           </div>

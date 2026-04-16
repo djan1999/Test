@@ -98,7 +98,7 @@ export default function SystemPanel({
             <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginBottom: 8 }}>
               Upload PNG, JPG, or SVG. Will be embedded in all printed menus.
             </div>
-            <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: "#ffffff", color: "#1a1a1a", display: "inline-block" }}>
+            <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer", background: "#c8a96e", color: "#fff", display: "inline-block" }}>
               UPLOAD LOGO
               <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
                 const file = e.target.files[0];
@@ -135,7 +135,7 @@ export default function SystemPanel({
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
-            <button onClick={() => onCreateLayoutProfile?.()} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#1a1a1a" }}>NEW BLANK LAYOUT</button>
+            <button onClick={() => onCreateLayoutProfile?.()} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer", background: "#c8a96e", color: "#fff" }}>NEW BLANK LAYOUT</button>
             <button
               onClick={() => activeProfile && onDeleteLayoutProfile?.(activeProfile.id)}
               disabled={safeProfiles.length <= 1}
@@ -186,7 +186,7 @@ export default function SystemPanel({
             <button
               onClick={async () => { setSyncConfigSaving(true); try { await onSaveWineSyncConfig?.(); } finally { setSyncConfigSaving(false); } }}
               disabled={syncConfigSaving}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: syncConfigSaving ? "not-allowed" : "pointer", background: "#ffffff", color: "#1a1a1a" }}
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #b8975e", borderRadius: 0, cursor: syncConfigSaving ? "not-allowed" : "pointer", background: "#c8a96e", color: "#fff" }}
             >
               {syncConfigSaving ? "SAVING..." : "SAVE SYNC CONFIG"}
             </button>

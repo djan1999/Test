@@ -199,7 +199,7 @@ export default function QuickAccessPanel({
                   border: `1px solid ${editingId === item.id ? "#4b4b88" : "#ddd"}`,
                   borderRadius: 0, cursor: "pointer",
                   background: editingId === item.id ? "#4b4b88" : "#fff",
-                  color: editingId === item.id ? "#1a1a1a" : "#888", flexShrink: 0,
+                  color: editingId === item.id ? "#fff" : "#888", flexShrink: 0,
                 }}>{editingId === item.id ? "SAVE" : "EDIT"}</button>
 
               <button onClick={() => removeItem(item.id)} style={{
@@ -257,8 +257,8 @@ export default function QuickAccessPanel({
         </div>
         <button onClick={addItem} style={{
           fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
-          border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer",
-          background: "#ffffff", color: "#1a1a1a",
+          border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer",
+          background: "#c8a96e", color: "#fff",
         }}>+ ADD ITEM</button>
       </div>
     </div>

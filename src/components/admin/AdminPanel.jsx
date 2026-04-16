@@ -74,9 +74,9 @@ export default function AdminPanel({
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "9px 18px",
     border: "none", cursor: "pointer", textTransform: "uppercase", transition: "all 0.1s",
-    background: tab === t ? "#f0efed" : "#fff",
-    color: tab === t ? "#1a1a1a" : "#444",
-    borderBottom: tab === t ? "none" : "1px solid #e8e8e8",
+    background: tab === t ? "#e8dcc8" : "#fff",
+    color: tab === t ? "#6a5030" : "#444",
+    borderBottom: tab === t ? "2px solid #c8a96e" : "1px solid #e8e8e8",
     whiteSpace: "nowrap",
   });
 
@@ -124,10 +124,10 @@ export default function AdminPanel({
                 {["wines", "cocktails", "spirits", "beers"].map(t => (
                   <button key={t} style={{
                     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-                    border: `1px solid ${drinkTab === t ? "#1a1a1a" : "#e8e8e8"}`,
+                    border: `1px solid ${drinkTab === t ? "#c8a96e" : "#e8e8e8"}`,
                     borderRadius: 0, cursor: "pointer",
-                    background: drinkTab === t ? "#f0efed" : "#fff",
-                    color: drinkTab === t ? "#1a1a1a" : "#888",
+                    background: drinkTab === t ? "#e8dcc8" : "#fff",
+                    color: drinkTab === t ? "#6a5030" : "#888",
                     marginRight: 6, marginBottom: 12,
                   }} onClick={() => setDrinkTab(t)}>{t.toUpperCase()}</button>
                 ))}
@@ -176,7 +176,7 @@ export default function AdminPanel({
                     </div>
                     <button onClick={addWine} style={{
                       fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 20px",
-                      border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: "#ffffff", color: "#1a1a1a",
+                      border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer", background: "#c8a96e", color: "#fff",
                     }}>+ ADD WINE</button>
                   </div>
                 </>
@@ -235,13 +235,13 @@ export default function AdminPanel({
                 <div style={fieldLabel}>Add dish</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input value={newDishName} onChange={e => setNewDishName(e.target.value)} onKeyDown={e => e.key === "Enter" && addDish()} placeholder="Dish name…" style={{ ...baseInp, flex: 1 }} />
-                  <button onClick={addDish} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 16px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: "#ffffff", color: "#1a1a1a", whiteSpace: "nowrap" }}>+ ADD</button>
+                  <button onClick={addDish} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 16px", border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer", background: "#c8a96e", color: "#fff", whiteSpace: "nowrap" }}>+ ADD</button>
                 </div>
               </div>
               <div style={{ borderTop: "1px solid #f0f0f0", marginTop: 24, paddingTop: 14 }}>
                 <button onClick={() => { onUpdateDishes(localDishes); }} style={{
                   fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
-                  border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: "#ffffff", color: "#1a1a1a",
+                  border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer", background: "#c8a96e", color: "#fff",
                 }}>SAVE EXTRAS</button>
               </div>
             </>
@@ -269,7 +269,7 @@ export default function AdminPanel({
                     <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginBottom: 8 }}>
                       Upload PNG, JPG, or SVG. Will be embedded in all printed menus.
                     </div>
-                    <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: "#ffffff", color: "#1a1a1a", display: "inline-block" }}>
+                    <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer", background: "#c8a96e", color: "#fff", display: "inline-block" }}>
                       UPLOAD LOGO
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
                         const file = e.target.files[0];
