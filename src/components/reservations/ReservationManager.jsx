@@ -107,13 +107,13 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <button onClick={() => setShowBreakdown(true)}
               disabled={dayResv.length === 0}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: "#fff", color: "#1a1a1a", fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1 }}>SERVICE BREAKDOWN</button>
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #b8975e", borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: "#c8a96e", color: "#fff", fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1 }}>SERVICE BREAKDOWN</button>
             <button onClick={() => {
               const next = editingId === "new" ? null : "new";
               setEditingId(next);
               setDraftFromReservation(null);
             }}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: editingId === "new" ? "#f0efed" : "#fff", color: editingId === "new" ? "#1a1a1a" : "#1a1a1a", fontWeight: 600 }}>+ ADD</button>
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: `1px solid ${editingId === "new" ? "#c8a96e" : "#b8975e"}`, borderRadius: 0, cursor: "pointer", background: editingId === "new" ? "#e8dcc8" : "#c8a96e", color: editingId === "new" ? "#6a5030" : "#fff", fontWeight: 600 }}>+ ADD</button>
           </div>
         </div>
 
@@ -171,7 +171,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 {/* Card header — always visible */}
                 <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
                   {/* Table badge */}
-                  <div style={{ background: "#f0efed", color: "#1a1a1a", border: "1px solid #1a1a1a", fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 1, padding: "8px 12px", borderRadius: 0, minWidth: 48, textAlign: "center" }}>{tLabel}</div>
+                  <div style={{ background: "#c8a96e", color: "#fff", border: "1px solid #b8975e", fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 1, padding: "8px 12px", borderRadius: 0, minWidth: 48, textAlign: "center" }}>{tLabel}</div>
                   {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: FONT, fontSize: 13, color: "#1a1a1a", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -198,9 +198,9 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                   {/* Action buttons */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
                     <button onClick={() => { setEditingId(isEditing ? null : r.id); if (!isEditing) setTicketId(null); }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid " + (isEditing ? "#1a1a1a" : "#d0d0d0"), borderRadius: 0, cursor: "pointer", background: isEditing ? "#f0efed" : "#fff", color: isEditing ? "#1a1a1a" : "#555" }}>EDIT</button>
+                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid " + (isEditing ? "#c8a96e" : "#d0d0d0"), borderRadius: 0, cursor: "pointer", background: isEditing ? "#e8dcc8" : "#fff", color: isEditing ? "#6a5030" : "#555" }}>EDIT</button>
                     <button onClick={() => { setTicketId(showTicket ? null : r.id); if (!showTicket) setEditingId(null); }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid " + (showTicket ? "#1a1a1a" : "#d0d0d0"), borderRadius: 0, cursor: "pointer", background: showTicket ? "#f0efed" : "#fff", color: showTicket ? "#1a1a1a" : "#555" }}>TICKET</button>
+                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid " + (showTicket ? "#c8a96e" : "#d0d0d0"), borderRadius: 0, cursor: "pointer", background: showTicket ? "#e8dcc8" : "#fff", color: showTicket ? "#6a5030" : "#555" }}>TICKET</button>
                     <button onClick={() => {
                       setEditingId("new");
                       setTicketId(null);
@@ -259,9 +259,9 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
         <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#999", flex: 1, textAlign: "center" }}>RESERVATIONS</span>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           <button onClick={() => setWeeklyPreview(weeklyPreview === "reservations" ? null : "reservations")}
-            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "reservations" ? "#1a1a1a" : "#d0d0d0"}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "reservations" ? "#f0efed" : "#fff", color: weeklyPreview === "reservations" ? "#1a1a1a" : "#555", fontWeight: 600, flexShrink: 0 }}>OVERVIEW</button>
+            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "reservations" ? "#c8a96e" : "#d0d0d0"}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "reservations" ? "#e8dcc8" : "#fff", color: weeklyPreview === "reservations" ? "#6a5030" : "#555", fontWeight: 600, flexShrink: 0 }}>OVERVIEW</button>
           <button onClick={() => setWeeklyPreview(weeklyPreview === "allergies" ? null : "allergies")}
-            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "allergies" ? "#1a1a1a" : "#d0d0d0"}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "allergies" ? "#f0efed" : "#fff", color: weeklyPreview === "allergies" ? "#1a1a1a" : "#555", fontWeight: 600, flexShrink: 0 }}>ALLERGIES</button>
+            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${weeklyPreview === "allergies" ? "#c8a96e" : "#d0d0d0"}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "allergies" ? "#e8dcc8" : "#fff", color: weeklyPreview === "allergies" ? "#6a5030" : "#555", fontWeight: 600, flexShrink: 0 }}>ALLERGIES</button>
           <button onClick={() => setWeekOffset(w => w - 1)} style={navBtn}>◀</button>
           <button onClick={() => setWeekOffset(0)}
             style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#888", minWidth: 110, textAlign: "center", background: "none", border: "1px solid #f0f0f0", borderRadius: 0, padding: "5px 0", cursor: "pointer" }}>{fmtRange()}</button>
@@ -311,7 +311,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                   w.document.write(html); w.document.close(); w.focus();
                   setTimeout(() => w.print(), 800);
                 }}
-                  style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: "#ffffff", color: "#1a1a1a", fontWeight: 600 }}>PRINT</button>
+                  style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px", border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer", background: "#c8a96e", color: "#fff", fontWeight: 600 }}>PRINT</button>
                 <button onClick={() => setWeeklyPreview(null)}
                   style={{ fontFamily: FONT, fontSize: 10, background: "none", border: "none", cursor: "pointer", color: "#aaa", padding: "0 4px" }}>×</button>
               </div>

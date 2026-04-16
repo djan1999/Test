@@ -90,10 +90,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   style={{
                     fontFamily: FONT, fontSize: 13, fontWeight: 500, letterSpacing: 1,
                     padding: "12px 0", border: "1px solid",
-                    borderColor: isSel ? "#1a1a1a" : isActive ? "#f0f0f0" : isBooked ? "#f0c8a8" : "#e8e8e8",
+                    borderColor: isSel ? "#c8a96e" : isActive ? "#f0f0f0" : isBooked ? "#f0c8a8" : "#e8e8e8",
                     borderRadius: 0, cursor: isActive ? "not-allowed" : "pointer",
-                    background: isSel ? "#f0efed" : isActive ? "#f8f8f8" : isBooked ? "#fff8f2" : "#fff",
-                    color: isSel ? "#1a1a1a" : isActive ? "#ccc" : isBooked ? "#c07840" : "#444",
+                    background: isSel ? "#e8dcc8" : isActive ? "#f8f8f8" : isBooked ? "#fff8f2" : "#fff",
+                    color: isSel ? "#6a5030" : isActive ? "#ccc" : isBooked ? "#c07840" : "#444",
                     transition: "all 0.1s",
                   }}>
                   T{String(tid).padStart(2, "0")}
@@ -121,10 +121,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                 <button key={t} onClick={() => setTime(t)} style={{
                   fontFamily: FONT, fontSize: 13, letterSpacing: 1,
                   padding: "14px 0", flex: 1, border: "1px solid",
-                  borderColor: time === t ? "#1a1a1a" : "#e8e8e8",
+                  borderColor: time === t ? "#c8a96e" : "#e8e8e8",
                   borderRadius: 0, cursor: "pointer",
-                  background: time === t ? "#f0efed" : "#fff",
-                  color: time === t ? "#1a1a1a" : "#888",
+                  background: time === t ? "#e8dcc8" : "#fff",
+                  color: time === t ? "#6a5030" : "#888",
                   transition: "all 0.12s",
                 }}>{t}</button>
               ))}
@@ -137,10 +137,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   <button key={opt} onClick={() => setMenuType(m => m === opt ? "" : opt)} style={{
                     fontFamily: FONT, fontSize: 10, letterSpacing: 2,
                     padding: "10px 24px", border: "1px solid",
-                    borderColor: menuType === opt ? "#1a1a1a" : "#e8e8e8",
+                    borderColor: menuType === opt ? "#c8a96e" : "#e8e8e8",
                     borderRadius: 0, cursor: "pointer",
-                    background: menuType === opt ? "#f0efed" : "#fff",
-                    color: menuType === opt ? "#1a1a1a" : "#888",
+                    background: menuType === opt ? "#e8dcc8" : "#fff",
+                    color: menuType === opt ? "#6a5030" : "#888",
                     textTransform: "uppercase",
                   }}>{opt}</button>
                 ))}
@@ -154,10 +154,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                 <button key={opt.v} onClick={() => setLang(opt.v)} style={{
                   fontFamily: FONT, fontSize: 10, letterSpacing: 2,
                   padding: "10px 24px", border: "1px solid",
-                  borderColor: lang === opt.v ? "#1a1a1a" : "#e8e8e8",
+                  borderColor: lang === opt.v ? "#c8a96e" : "#e8e8e8",
                   borderRadius: 0, cursor: "pointer",
-                  background: lang === opt.v ? "#f0efed" : "#fff",
-                  color: lang === opt.v ? "#1a1a1a" : "#888",
+                  background: lang === opt.v ? "#e8dcc8" : "#fff",
+                  color: lang === opt.v ? "#6a5030" : "#888",
                   textTransform: "uppercase",
                 }}>{opt.l}</button>
               ))}
@@ -180,10 +180,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   <button key={type} onClick={() => { setGuestType(t => t === type ? "" : type); setRoom(""); }} style={{
                     fontFamily: FONT, fontSize: 11, letterSpacing: 1,
                     padding: "12px 0", flex: 1, border: "1px solid",
-                    borderColor: guestType === type ? "#1a1a1a" : "#e8e8e8",
+                    borderColor: guestType === type ? "#c8a96e" : "#e8e8e8",
                     borderRadius: 0, cursor: "pointer",
-                    background: guestType === type ? "#f0efed" : "#fff",
-                    color: guestType === type ? "#1a1a1a" : "#444",
+                    background: guestType === type ? "#e8dcc8" : "#fff",
+                    color: guestType === type ? "#6a5030" : "#444",
                     transition: "all 0.12s", textTransform: "uppercase",
                   }}>{type}</button>
                 ))}
@@ -313,7 +313,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
           }}>CANCEL</button>
           <button onClick={() => onSave({ tableIds, name, time, menuType, guests, guestType, room, birthday, restrictions, notes, lang })} style={{
             flex: 2, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
-            padding: "14px", border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: "#ffffff", color: "#1a1a1a",
+            padding: "14px", border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer", background: "#c8a96e", color: "#fff",
           }}>SAVE</button>
         </div>
       </div>

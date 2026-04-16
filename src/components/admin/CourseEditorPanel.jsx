@@ -387,8 +387,8 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={addCourse} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-            border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer",
-            background: "#ffffff", color: "#1a1a1a",
+            border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer",
+            background: "#c8a96e", color: "#fff",
           }}>+ ADD COURSE</button>
           <button onClick={handleSave} disabled={saving} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",

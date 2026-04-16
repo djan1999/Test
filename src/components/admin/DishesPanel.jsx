@@ -80,7 +80,7 @@ export default function DishesPanel({ dishes, onUpdateDishes }) {
       <div style={{ borderTop: "1px solid #f0f0f0", marginTop: 24, paddingTop: 14 }}>
         <button onClick={() => onUpdateDishes(localDishes)} style={{
           fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
-          border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer", background: "#ffffff", color: "#1a1a1a",
+          border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer", background: "#c8a96e", color: "#fff",
         }}>SAVE EXTRAS</button>
       </div>
     </>

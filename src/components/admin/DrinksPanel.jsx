@@ -78,10 +78,10 @@ export default function DrinksPanel({
 
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-    border: `1px solid ${drinkTab === t ? "#1a1a1a" : "#e8e8e8"}`,
+    border: `1px solid ${drinkTab === t ? "#c8a96e" : "#e8e8e8"}`,
     borderRadius: 0, cursor: "pointer",
-    background: drinkTab === t ? "#f0efed" : "#fff",
-    color: drinkTab === t ? "#1a1a1a" : "#888",
+    background: drinkTab === t ? "#e8dcc8" : "#fff",
+    color: drinkTab === t ? "#6a5030" : "#888",
     marginRight: 6, marginBottom: 12,
   });
 

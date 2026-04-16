@@ -265,10 +265,10 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
               setLanguageWithDefaults(opt.val);
             }} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-              border: `1px solid ${lang === opt.val ? "#1a1a1a" : "#e0e0e0"}`,
+              border: `1px solid ${lang === opt.val ? "#c8a96e" : "#e0e0e0"}`,
               borderRadius: 0, cursor: "pointer",
-              background: lang === opt.val ? "#f0efed" : "#fff",
-              color: lang === opt.val ? "#1a1a1a" : "#aaa",
+              background: lang === opt.val ? "#e8dcc8" : "#fff",
+              color: lang === opt.val ? "#6a5030" : "#aaa",
             }}>{opt.label}</button>
           ))}
         </div>
@@ -789,8 +789,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => printSelected(seats.map(s => s.id))} style={{
                 flex: 1, fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "12px",
-                border: "1px solid #1a1a1a", borderRadius: 0, cursor: "pointer",
-                background: "#ffffff", color: "#1a1a1a",
+                border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer",
+                background: "#c8a96e", color: "#fff",
               }}>PRINT ALL SEATS</button>
             </div>
           </div>

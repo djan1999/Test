@@ -618,10 +618,10 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
             <button key={opt} onClick={() => table.seats.forEach(s => updSeat(s.id, "water", opt))} style={{
               fontFamily: FONT, fontSize: 11, letterSpacing: 0.5,
               padding: "5px 10px", border: "1px solid",
-              borderColor: table.seats.every(s => s.water === opt) ? "#1a1a1a" : "#e0e0e0",
+              borderColor: table.seats.every(s => s.water === opt) ? "#c8a96e" : "#e0e0e0",
               borderRadius: 0, cursor: "pointer",
-              background: table.seats.every(s => s.water === opt) ? "#f0efed" : "#fff",
-              color: table.seats.every(s => s.water === opt) ? "#1a1a1a" : "#555",
+              background: table.seats.every(s => s.water === opt) ? "#e8dcc8" : "#fff",
+              color: table.seats.every(s => s.water === opt) ? "#6a5030" : "#555",
               transition: "all 0.1s",
             }}>{opt}</button>
           ))}
@@ -902,10 +902,10 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
               <button key={opt} onClick={() => upd("menuType", table.menuType === opt ? "" : opt)} style={{
                 fontFamily: FONT, fontSize: 10, letterSpacing: 2,
                 padding: "9px 22px", border: "1px solid",
-                borderColor: table.menuType === opt ? "#1a1a1a" : "#e8e8e8",
+                borderColor: table.menuType === opt ? "#c8a96e" : "#e8e8e8",
                 borderRadius: 0, cursor: "pointer",
-                background: table.menuType === opt ? "#f0efed" : "#fff",
-                color: table.menuType === opt ? "#1a1a1a" : "#888",
+                background: table.menuType === opt ? "#e8dcc8" : "#fff",
+                color: table.menuType === opt ? "#6a5030" : "#888",
                 textTransform: "uppercase",
               }}>{opt}</button>
             ))}
@@ -1099,10 +1099,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
     const wBtn = (opt, active, onClick) => (
       <button key={opt} onClick={onClick} style={{
         fontFamily: FONT, fontSize: 10, letterSpacing: 0.3, padding: "4px 8px",
-        border: `1px solid ${active ? (opt === "OC" || opt === "OW" ? "#c8a060" : "#555") : "#e8e8e8"}`,
+        border: `1px solid ${active ? (opt === "OC" || opt === "OW" ? "#c8a060" : "#6a9ab0") : "#e8e8e8"}`,
         borderRadius: 0, cursor: "pointer", lineHeight: 1,
-        background: active ? (opt === "OC" || opt === "OW" ? "#fdf4e8" : "#f0efed") : "#fff",
-        color: active ? (opt === "OC" || opt === "OW" ? "#7a5020" : "#fff") : "#aaa",
+        background: active ? (opt === "OC" || opt === "OW" ? "#fdf4e8" : "#e8f0f5") : "#fff",
+        color: active ? (opt === "OC" || opt === "OW" ? "#7a5020" : "#2a5a7a") : "#aaa",
         transition: "all 0.1s",
       }}>{opt}</button>
     );
@@ -1364,7 +1364,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                             style={{
                               fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
                               border: `1px solid ${dishOn ? "#888" : "#e0e0e0"}`, borderRadius: 0, cursor: "pointer",
-                              background: dishOn ? "#f0efed" : "#fff", color: dishOn ? "#1a1a1a" : "#aaa", lineHeight: 1,
+                              background: dishOn ? "#e8dcc8" : "#fff", color: dishOn ? "#6a5030" : "#aaa", lineHeight: 1,
                               display: "inline-flex", alignItems: "center", gap: 5, textTransform: "uppercase",
                             }}>
                             <span style={{ fontWeight: 700 }}>{String(dish.name || dish.key || "").slice(0, 8)}</span>
@@ -1400,10 +1400,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                           }
                         }} style={{
                           fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
-                          border: `1px solid ${active ? "#1a1a1a" : "#e0e0e0"}`,
+                          border: `1px solid ${active ? "#c8a96e" : "#e0e0e0"}`,
                           borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                          background: active ? "#f0efed" : "#fff",
-                          color: active ? "#1a1a1a" : "#aaa",
+                          background: active ? "#e8dcc8" : "#fff",
+                          color: active ? "#6a5030" : "#aaa",
                           fontWeight: active ? 700 : 500,
                         }}>{label}</button>
                       );
@@ -1489,10 +1489,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                 }}
                 style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 16px",
-                  border: `1px solid ${justSent ? "#4a8a4a" : "#1a1a1a"}`, borderRadius: 0,
+                  border: `1px solid ${justSent ? "#4a8a4a" : "#b8975e"}`, borderRadius: 0,
                   cursor: justSent ? "default" : "pointer",
-                  background: justSent ? "#f0faf0" : "#ffffff",
-                  color: justSent ? "#2f7a45" : "#1a1a1a",
+                  background: justSent ? "#f0faf0" : "#c8a96e",
+                  color: justSent ? "#2f7a45" : "#fff",
                   fontWeight: 700, textTransform: "uppercase",
                   transition: "all 0.15s ease",
                 }}>{justSent ? "✓ Sent" : "Send"}</button>
@@ -1617,10 +1617,10 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
     <button key={opt} onClick={onClick} style={{
       fontFamily: FONT, fontSize: 10, letterSpacing: 0.5,
       padding: "5px 9px", border: "1px solid",
-      borderColor: active ? "#1a1a1a" : "#e0e0e0",
+      borderColor: active ? "#c8a96e" : "#e0e0e0",
       borderRadius: 0, cursor: "pointer", lineHeight: 1,
-      background: active ? "#f0efed" : "#fff",
-      color: active ? "#1a1a1a" : "#666",
+      background: active ? "#e8dcc8" : "#fff",
+      color: active ? "#6a5030" : "#666",
     }}>{opt}</button>
   );
 
@@ -1730,10 +1730,10 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
                     <button key={val} onClick={() => updSeat(table.id, seat.id, "pairing", val)} style={{
                       fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
                       padding: "4px 7px", border: "1px solid",
-                      borderColor: active && val !== "—" ? col : active ? "#1a1a1a" : "#e0e0e0",
+                      borderColor: active && val !== "—" ? col : active ? "#c8a96e" : "#e0e0e0",
                       borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                      background: active && val !== "—" ? bg : active ? "#f0efed" : "#fff",
-                      color: active && val !== "—" ? col : active ? "#1a1a1a" : "#bbb",
+                      background: active && val !== "—" ? bg : active ? "#e8dcc8" : "#fff",
+                      color: active && val !== "—" ? col : active ? "#6a5030" : "#bbb",
                     }}>{label}</button>
                   );
                 })}
@@ -3238,9 +3238,9 @@ export default function App() {
               onClick={() => setQuickView(v => v === "service" ? "board" : "service")}
               style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "7px 16px",
-                border: `1.5px solid ${quickView === "service" ? "#1a1a1a" : "#d8d8d8"}`,
-                background: quickView === "service" ? "#f0efed" : "#fff",
-                color: quickView === "service" ? "#1a1a1a" : "#999",
+                border: `1.5px solid ${quickView === "service" ? "#c8a96e" : "#d8d8d8"}`,
+                background: quickView === "service" ? "#e8dcc8" : "#fff",
+                color: quickView === "service" ? "#6a5030" : "#999",
                 borderRadius: 0, cursor: "pointer",
                 transition: "all 0.15s",
                 display: "flex", alignItems: "center", gap: 6,

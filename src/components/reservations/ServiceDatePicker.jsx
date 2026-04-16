@@ -104,15 +104,15 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
                   alignItems: "center",
                   gap: 4,
                   transition: "all 0.12s",
-                  background: isSel ? "#f0efed" : isToday ? "#f0f8f4" : "#f6f6f6",
+                  background: isSel ? "#e8dcc8" : isToday ? "#f0f8f4" : "#f6f6f6",
                   outline: isToday && !isSel ? "1.5px solid #3a8a5a" : "none",
                   opacity: isPast && !isSel ? 0.45 : 1,
                 }}
               >
-                <span style={{ fontSize: 8, letterSpacing: 1, color: isSel ? "rgba(255,255,255,0.6)" : "#aaa", fontWeight: 600 }}>{DAY_LABELS[i]}</span>
-                <span style={{ fontSize: 16, fontWeight: 700, color: isSel ? "#1a1a1a" : isToday ? "#2f7a45" : "#1a1a1a", lineHeight: 1 }}>{dayNum}</span>
-                {isToday && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? "#fff" : "#3a8a5a" }} />}
-                {dayResv.length > 0 && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? "rgba(255,255,255,0.4)" : "#bbb", marginTop: 2 }} />}
+                <span style={{ fontSize: 8, letterSpacing: 1, color: isSel ? "#8a7050" : "#aaa", fontWeight: 600 }}>{DAY_LABELS[i]}</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: isSel ? "#6a5030" : isToday ? "#2f7a45" : "#1a1a1a", lineHeight: 1 }}>{dayNum}</span>
+                {isToday && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? "#c8a96e" : "#3a8a5a" }} />}
+                {dayResv.length > 0 && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? "#c8a96e" : "#bbb", marginTop: 2 }} />}
               </button>
             );
           })}
@@ -146,7 +146,7 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
           <button
             onClick={() => selected && onConfirm(selected)}
             disabled={!selected}
-            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 2, border: "none", cursor: selected ? "pointer" : "not-allowed", background: selected ? "#f0efed" : "#f0f0f0", color: selected ? "#1a1a1a" : "#aaa", fontWeight: 700, opacity: 1 }}
+            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 2, border: "none", cursor: selected ? "pointer" : "not-allowed", background: selected ? "#c8a96e" : "#f0f0f0", color: selected ? "#fff" : "#aaa", fontWeight: 700, opacity: 1 }}
           >
             START SERVICE ›
           </button>
