@@ -300,17 +300,7 @@ async function fetchMenuCourses() {
 
 
 const FONT = tokens.font;
-/** Guest name in Quick Access — reference uses serif vs monospace body */
-const FONT_SERIF = "'Lora', Georgia, 'Times New Roman', serif";
 const MOBILE_SAFE_INPUT_SIZE = tokens.mobileInputSize;
-
-const titleCaseWords = (s) =>
-  String(s || "")
-    .trim()
-    .split(/[\s_]+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
 
 // ── Wine DB ───────────────────────────────────────────────────────────────────
 const initWines = [];
@@ -1125,7 +1115,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 
     /** Quick Access board: monospace slab layout, strong black border on active controls */
     const qmBorderOn = "2px solid #1a1a1a";
-    const qmBorderOff = "1px solid #e0e0e0";
+    const qmBorderOff = "1px solid #c8c8c8";
     const wBtnQuick = (opt, active, onClick) => (
       <button type="button" key={opt} onClick={onClick} style={{
         fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "5px 10px",
@@ -1157,56 +1147,56 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
           <div
             onClick={() => onCardClick && onCardClick(t.id)}
             style={{
-              padding: "16px 14px 12px",
-              borderBottom: "1px solid #e0e0e0",
+              padding: "14px 14px 12px",
+              borderBottom: "1px solid #e8e8e8",
               cursor: onCardClick ? "pointer" : "default",
             }}
           >
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 6, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: FONT, fontSize: 24, fontWeight: 500, color: "#1a1a1a", letterSpacing: 0, lineHeight: 1 }}>
+                <span style={{ fontFamily: FONT, fontSize: 22, fontWeight: 400, color: "#1a1a1a", letterSpacing: 0.5, lineHeight: 1 }}>
                   {String(t.id).padStart(2, "0")}
                 </span>
                 {t.resName && (
-                  <span style={{ fontFamily: FONT_SERIF, fontSize: 17, fontWeight: 700, color: "#1a1a1a", letterSpacing: 0.02, lineHeight: 1.15 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 700, color: "#1a1a1a", letterSpacing: 0.3 }}>
                     {t.resName}
                   </span>
                 )}
               </div>
-              <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <div style={{ display: "flex", gap: 5, alignItems: "center", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
                 <span style={{
-                  fontFamily: FONT, fontSize: 8, letterSpacing: 1.4, padding: "4px 9px", borderRadius: 0,
+                  fontFamily: FONT, fontSize: 8, letterSpacing: 1.2, padding: "4px 9px", borderRadius: 0,
                   background: "#fff",
-                  border: `1px solid ${isSeated ? "#6bc47f" : "#9eb8e0"}`,
-                  color: isSeated ? "#1f6a38" : "#2a5080", fontWeight: 700,
+                  border: `1px solid ${isSeated ? "#7abe8a" : "#a8c0e0"}`,
+                  color: isSeated ? "#2a7a45" : "#2f5f8a", fontWeight: 700,
                 }}>{isSeated ? "SEATED" : "RESERVED"}</span>
-                {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, padding: "4px 8px", borderRadius: 0, border: "1px solid #d8d8d8", color: "#444", background: "#fff", fontWeight: 600 }}>{t.menuType}</span>}
-                {t.lang === "si" && <span style={{ fontFamily: FONT, fontSize: 8, padding: "4px 8px", borderRadius: 0, border: "1px solid #b8c4e8", color: "#2a4580", background: "#f5f7ff", fontWeight: 700 }}>SI</span>}
+                {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, padding: "4px 8px", borderRadius: 0, border: "1px solid #d0d0d0", color: "#555", background: "#fff", fontWeight: 600 }}>{t.menuType}</span>}
+                {t.lang === "si" && <span style={{ fontFamily: FONT, fontSize: 8, padding: "4px 8px", borderRadius: 0, border: "1px solid #b8c8f0", color: "#3050a0", background: "#f4f7ff", fontWeight: 700 }}>SI</span>}
                 {t.pace && (() => {
-                  const pc = { Slow: { color: "#5a4018", bg: "#fff", border: "#c4a060" }, Fast: { color: "#6a2a2a", bg: "#fff", border: "#d08888" } }[t.pace] || { color: "#333", bg: "#fff", border: "#ccc" };
+                  const pc = { Slow: { color: "#7a5020", bg: "#fff", border: "#c8a060" }, Fast: { color: "#6a2a2a", bg: "#fff", border: "#d08888" } }[t.pace] || { color: "#555", bg: "#fff", border: "#d0d0d0" };
                   return <span style={{ fontFamily: FONT, fontSize: 8, padding: "4px 8px", borderRadius: 0, border: `1px solid ${pc.border}`, background: pc.bg, color: pc.color, fontWeight: 700 }}>{t.pace}</span>;
                 })()}
-                {t.guestType === "hotel" && t.room && <span style={{ fontFamily: FONT, fontSize: 8, padding: "4px 8px", borderRadius: 0, border: "1px solid #d4b888", color: "#8a6020", background: "#fffaf2", fontWeight: 600 }}>#{t.room}</span>}
+                {t.guestType === "hotel" && t.room && <span style={{ fontFamily: FONT, fontSize: 8, padding: "4px 8px", borderRadius: 0, border: "1px solid #d4b888", color: "#a07040", background: "#fffaf2", fontWeight: 600 }}>#{t.room}</span>}
                 {t.birthday && <span style={{ fontSize: 12 }}>🎂</span>}
               </div>
             </div>
             {t.arrivedAt && (
-              <div style={{ fontFamily: FONT, fontSize: 10, color: "#2a8a48", fontWeight: 600, letterSpacing: 0.2, marginBottom: 6 }}>
+              <div style={{ fontFamily: FONT, fontSize: 10, color: "#2d8a4a", fontWeight: 600, letterSpacing: 0.3, marginBottom: 4 }}>
                 arr. {t.arrivedAt}
               </div>
             )}
             {!t.arrivedAt && t.resTime && (
-              <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", fontWeight: 500, marginBottom: 6 }}>
+              <div style={{ fontFamily: FONT, fontSize: 10, color: "#999", fontWeight: 500, marginBottom: 4 }}>
                 res. {t.resTime}
               </div>
             )}
             {t.guestType && t.guestType !== "hotel" && (
-              <div style={{ fontFamily: FONT, fontSize: 10, color: "#a8a8a8", fontWeight: 400, letterSpacing: 0.2, marginBottom: t.notes ? 4 : 0 }}>
-                {titleCaseWords(String(t.guestType).replace(/_/g, " "))}
+              <div style={{ fontFamily: FONT, fontSize: 10, color: "#b0b0b0", letterSpacing: 1, textTransform: "uppercase", marginBottom: 2 }}>
+                {String(t.guestType).replace(/_/g, " ")}
               </div>
             )}
             {t.notes && (
-              <div style={{ fontFamily: FONT, fontSize: 10, color: "#b8b8b8", fontWeight: 400, lineHeight: 1.45 }}>
+              <div style={{ fontFamily: FONT, fontSize: 10, color: "#b8b8b8", fontStyle: "italic", lineHeight: 1.4 }}>
                 {t.notes}
               </div>
             )}
@@ -1330,14 +1320,14 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 
                 const sectionLabel = (txt) => (
                   <span style={{
-                    fontFamily: FONT, fontSize: 8, letterSpacing: 2.2, color: "#9a9a9a",
+                    fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#9a9a9a",
                     textTransform: "uppercase", fontWeight: 600,
                   }}>{txt}</span>
                 );
                 const sectionBlock = (label, content) => (
-                  <div style={{ padding: "10px 12px", borderBottom: "1px solid #e8d4d4" }}>
-                    <div style={{ marginBottom: 7 }}>{sectionLabel(label)}</div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>{content}</div>
+                  <div style={{ padding: "8px 12px", borderBottom: "1px solid #edd8d8" }}>
+                    <div style={{ marginBottom: 6 }}>{sectionLabel(label)}</div>
+                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>{content}</div>
                   </div>
                 );
 
@@ -1361,32 +1351,26 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                       ))}
                     </div>
 
-                    {/* WATER + PAIRING — one row like reference mock */}
-                    <div style={{ padding: "10px 12px", borderBottom: "1px solid #e8d4d4", display: "flex", gap: 14, alignItems: "stretch", flexWrap: "wrap" }}>
-                      <div style={{ flex: "1 1 160px", minWidth: 140 }}>
-                        <div style={{ marginBottom: 7 }}>{sectionLabel("Water")}</div>
-                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                          {WATER_QUICK.map(opt =>
-                            wBtnQuick(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt))
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ flex: "1.2 1 200px", minWidth: 160, display: "flex", flexDirection: "column" }}>
-                        <div style={{ marginBottom: 7 }}>{sectionLabel("Pairing")}</div>
-                        <button type="button" onClick={cyclePairing} style={{
-                          fontFamily: FONT, fontSize: 11, letterSpacing: 0.3, padding: "8px 12px",
-                          border: curPairing === "—" ? qmBorderOff : qmBorderOn,
-                          borderRadius: 0, cursor: "pointer", lineHeight: 1.2,
-                          background: "#fff",
-                          color: curPairing === "—" ? "#555" : pcStyle.color,
-                          display: "inline-flex", alignItems: "center", justifyContent: "space-between", gap: 10, fontWeight: 600,
-                          width: "100%", flex: 1, minHeight: 38, textAlign: "left",
-                        }}>
-                          <span>{curPairing}</span>
-                          <span style={{ fontSize: 9, color: "#b0b0b0", fontWeight: 500 }}>→ next</span>
-                        </button>
-                      </div>
-                    </div>
+                    {/* WATER */}
+                    {sectionBlock("Water", WATER_QUICK.map(opt =>
+                      wBtnQuick(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt))
+                    ))}
+
+                    {/* PAIRING — single cycle button */}
+                    {sectionBlock("Pairing", (
+                      <button type="button" onClick={cyclePairing} style={{
+                        fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "8px 12px",
+                        border: curPairing === "—" ? qmBorderOff : qmBorderOn,
+                        borderRadius: 0, cursor: "pointer", lineHeight: 1,
+                        background: "#fff",
+                        color: curPairing === "—" ? "#666" : pcStyle.color,
+                        display: "inline-flex", alignItems: "center", justifyContent: "space-between", gap: 12, fontWeight: 600,
+                        width: "100%", maxWidth: 420, textAlign: "left",
+                      }}>
+                        <span>{curPairing}</span>
+                        <span style={{ fontSize: 9, opacity: 0.5, fontWeight: 500 }}>→ next</span>
+                      </button>
+                    ))}
 
                     {/* EXTRAS — toggleable; linked extras cycle through alco/non-alc */}
                     {(() => {
@@ -1443,8 +1427,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                               display: "inline-flex", alignItems: "center", gap: 6, textTransform: "uppercase",
                               flex: "1 1 140px", minWidth: 120, justifyContent: "center",
                             }}>
-                              <span style={{ fontWeight: 700, color: "#1a1a1a" }}>{String(dish.name).slice(0, 8)}</span>
-                              <span style={{ fontSize: 9, color: "#b0b0b0", fontWeight: 500, textTransform: "lowercase" }}>{subLabel}</span>
+                              <span style={{ fontWeight: 700 }}>{String(dish.name).slice(0, 8)}</span>
+                              <span style={{ fontSize: 8, opacity: 0.7, textTransform: "lowercase" }}>{subLabel}</span>
                             </button>
                           );
                         }
@@ -1460,8 +1444,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                               display: "inline-flex", alignItems: "center", gap: 6, textTransform: "uppercase",
                               flex: "1 1 140px", minWidth: 120, justifyContent: "center",
                             }}>
-                            <span style={{ fontWeight: 700, color: "#1a1a1a" }}>{String(dish.name || dish.key || "").slice(0, 8)}</span>
-                            <span style={{ fontSize: 9, color: "#b0b0b0", fontWeight: 500, textTransform: "lowercase" }}>{dishOn ? "on" : "off"}</span>
+                            <span style={{ fontWeight: 700 }}>{String(dish.name || dish.key || "").slice(0, 8)}</span>
+                            <span style={{ fontSize: 8, opacity: 0.7, textTransform: "lowercase" }}>{dishOn ? "on" : "off"}</span>
                           </button>
                         );
                       }));
