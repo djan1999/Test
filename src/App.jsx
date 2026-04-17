@@ -1206,8 +1206,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
           </div>
         )}
 
-        {/* Quick mode — ALL water row */}
-        {quickMode && isSeated && seats.length > 0 && (
+        {/* Quick mode — ALL water row (reserved tables too, so Quick Access is visible before seating) */}
+        {quickMode && seats.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderBottom: "1px solid #f0f0f0", background: "#fafafa" }}>
             <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#ccc", textTransform: "uppercase", minWidth: 30 }}>ALL</span>
             <div style={{ display: "flex", gap: 4 }}>
@@ -1216,8 +1216,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
           </div>
         )}
 
-        {/* Seat rows */}
-        {isSeated && seats.length > 0 ? (
+        {/* Seat rows — in quick mode, show controls for reserved tables as well (pre-seat prep) */}
+        {seats.length > 0 && (isSeated || quickMode) ? (
           <div style={{ display: "flex", flexDirection: "column", gap: quickMode ? 6 : 0, padding: quickMode ? "8px 10px" : "6px 0" }}>
             {seats.map(s => {
               const ws      = waterStyle(s.water);
@@ -1461,9 +1461,9 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
             )}
           </div>
         ) : null}
-        {isSeated && (quickMode || onUnseat) && (
+        {seats.length > 0 && ((isSeated && (quickMode || onUnseat)) || (quickMode && !isSeated && onSeat)) && (
           <div style={{ padding: "6px 14px", borderTop: "1px solid #f5f5f5", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            {quickMode && upd ? (
+            {quickMode && upd && isSeated ? (
               <button
                 disabled={justSent}
                 onClick={() => {
@@ -1497,13 +1497,20 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                   transition: "all 0.15s ease",
                 }}>{justSent ? "✓ Sent" : "Send"}</button>
             ) : <span />}
-            {onUnseat && (
+            {quickMode && !isSeated && onSeat ? (
+              <button onClick={() => onSeat(t.id)} style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 14px",
+                border: "1px solid #b8ddb8", borderRadius: 0, cursor: "pointer",
+                background: "#f4fbf4", color: "#4a8a4a", fontWeight: 600, textTransform: "uppercase",
+                marginLeft: "auto",
+              }}>Seat</button>
+            ) : onUnseat && isSeated ? (
               <button onClick={() => onUnseat(t.id)} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 12px",
                 border: "1px solid #d8d8d8", borderRadius: 0, cursor: "pointer",
                 background: "#fff", color: "#999", textTransform: "uppercase",
               }}>Unseat</button>
-            )}
+            ) : null}
           </div>
         )}
       </div>
@@ -3240,6 +3247,7 @@ export default function App() {
               })()}
             </div>
             <button
+              type="button"
               onClick={() => setQuickView(v => v === "service" ? "board" : "service")}
               style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "7px 16px",
