@@ -34,6 +34,13 @@ export const normalizeCourseCategory = (value, optionalFlag = "") => {
 export const normalizeOptionalKey = (value) =>
   String(value ?? "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || null;
 
+/** Optional extra keys we never surface in service UI or menus (product decision). */
+const isPearOptionalKey = (key) => {
+  if (!key) return false;
+  const k = String(key).toLowerCase();
+  return k === "pear" || k.startsWith("pear_") || k.endsWith("_pear") || k.includes("_pear_");
+};
+
 export const optionalPairingsFromCourses = (menuCourses = []) => {
   const byKey = new Map();
   (menuCourses || []).forEach((c) => {
@@ -54,6 +61,7 @@ export const optionalPairingsFromCourses = (menuCourses = []) => {
     const alcoName = (c?.optional_pairing_alco?.name || c?.optional_pairing_alco?.sub || "").trim();
     const nonAlcoName = (c?.optional_pairing_na?.name || c?.optional_pairing_na?.sub || "").trim();
     const extraKey = normalizeOptionalKey(c?.optional_flag) || null;
+    if (isPearOptionalKey(extraKey)) return;
     byKey.set(key, {
       key,
       label,
@@ -72,7 +80,7 @@ export const optionalExtrasFromCourses = (menuCourses = []) => {
   const byKey = new Map();
   (menuCourses || []).forEach((c) => {
     const key = normalizeOptionalKey(c?.optional_flag);
-    if (!key) return;
+    if (!key || isPearOptionalKey(key)) return;
     const existing = byKey.get(key) || null;
     const label = String(c?.menu?.name || existing?.name || key).trim() || key;
     const pairings = [

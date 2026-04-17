@@ -351,13 +351,19 @@ const defaultBoardState = () => ({
   beers: initBeers,
 });
 
+const isPearOptionalKey = (key) => {
+  if (!key) return false;
+  const k = String(key).toLowerCase();
+  return k === "pear" || k.startsWith("pear_") || k.endsWith("_pear") || k.includes("_pear_");
+};
+
 function optionalExtrasFromCourses(menuCourses = []) {
   const byKey = new Map();
   (menuCourses || []).forEach((c) => {
     const category = normalizeCourseCategory(c?.course_category, c?.optional_flag);
     if (category !== "optional" && category !== "celebration") return;
     const key = normalizeOptionalKey(c?.optional_flag);
-    if (!key) return;
+    if (!key || isPearOptionalKey(key)) return;
     const existing = byKey.get(key) || null;
     const label = String(c?.menu?.name || existing?.name || key).trim() || key;
     const pairings = [
@@ -2057,14 +2063,7 @@ export default function App() {
   boardStateRef.current = boardState;
   tablesRef.current = tables;
 
-  const dishes   = useMemo(() => {
-    const all = optionalExtrasFromCourses(menuCourses);
-    // Hide pear from quick access / extras — not needed.
-    return all.filter(d => {
-      const k = String(d.key || d.name || "").toLowerCase();
-      return k !== "pear" && !k.includes("pear");
-    });
-  }, [menuCourses]);
+  const dishes = useMemo(() => optionalExtrasFromCourses(menuCourses), [menuCourses]);
   const pairings = useMemo(() => optionalPairingsFromCourses(menuCourses), [menuCourses]);
 
   const mergeRemoteTables = rows => {
