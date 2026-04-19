@@ -27,17 +27,17 @@ export default function StatusButton({
 
   let state;
   if (disabled) {
-    state = { border: `1px solid ${tokens.neutral[300]}`, color: tokens.text.disabled };
+    state = { border: `1px solid ${tokens.neutral[300]}`, background: tokens.surface.card, color: tokens.text.disabled };
   } else if (status === "loading") {
-    state = { border: `1px solid ${tokens.neutral[300]}`, color: tokens.text.muted };
+    state = { border: `1px solid ${tokens.neutral[300]}`, background: tokens.surface.card, color: tokens.text.muted };
   } else if (status === "success") {
-    state = { border: `1px solid ${tokens.green.border}`, color: tokens.green.text };
+    state = { border: `1px solid ${tokens.green.border}`, background: tokens.green.bg, color: tokens.green.text };
   } else if (status === "error") {
-    state = { border: `1px solid ${tokens.red.border}`, color: tokens.red.text };
+    state = { border: `1px solid ${tokens.red.border}`, background: tokens.red.bg, color: tokens.red.text };
   } else if (variant === "danger") {
-    state = { border: `1px solid ${tokens.red.border}`, color: tokens.red.text };
+    state = { border: `1px solid ${tokens.red.border}`, background: tokens.red.bg, color: tokens.red.text };
   } else {
-    state = { border: `1px solid ${tokens.charcoal.default}`, color: tokens.text.primary };
+    state = { border: `1px solid ${tokens.charcoal.default}`, background: tokens.surface.card, color: tokens.text.primary };
   }
 
   return (

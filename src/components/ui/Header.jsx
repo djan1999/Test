@@ -94,7 +94,7 @@ export default function Header({
                 border: `1px solid ${sSt === "ok" ? tokens.green.border : sSt === "partial" ? tokens.neutral[400] : sSt === "err" ? tokens.red.border : tokens.neutral[300]}`,
                 borderRadius: 0,
                 cursor: sSt === "syncing" ? "not-allowed" : "pointer",
-                background: tokens.surface.card,
+                background: sSt === "ok" ? tokens.green.bg : sSt === "err" ? tokens.red.bg : tokens.surface.card,
                 color: sSt === "ok" ? tokens.green.text : sSt === "partial" ? tokens.text.body : sSt === "err" ? tokens.red.text : tokens.text.body,
                 fontWeight: 600, whiteSpace: "nowrap",
               }}
@@ -108,7 +108,7 @@ export default function Header({
             </span>
           )}
           <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: `1px solid ${syncLive ? tokens.green.border : tokens.neutral[300]}`, borderRadius: 0, background: syncLive ? tokens.green.bg : tokens.neutral[50], color: syncLive ? tokens.green.text : tokens.text.muted, fontWeight: 600, whiteSpace: "nowrap" }}>{syncLabel}</span>
-          {showEndService && <button onClick={onEndService} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.red.text, fontWeight: 600, flexShrink: 0 }}>END SERVICE</button>}
+          {showEndService && <button onClick={onEndService} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.red.bg, color: tokens.red.text, fontWeight: 600, flexShrink: 0 }}>END SERVICE</button>}
           <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: tokens.border.default, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, flexShrink: 0 }}>EXIT</button>
         </div>
       </div>

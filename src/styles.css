@@ -29,3 +29,12 @@ button, [role="button"], a {
 }
 
 body { color: #1a1a1a; background: #fff; }
+
+/* Subtle hover/press feedback on all buttons */
+button:not(:disabled):hover {
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.10);
+  transition: box-shadow 0.1s;
+}
+button:not(:disabled):active {
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,0.14);
+}
