@@ -14,7 +14,13 @@
 
 import { createClient } from "@supabase/supabase-js";
 
+// Vercel function timeout — the scrape can take 30-45 s for 15 pages.
+// Default is 10 s on Hobby/Pro, which is why the sync was timing out.
+export const config = { maxDuration: 60 };
+
 const BASE = "https://vinska-karta.hotelmilka.si";
+const FETCH_TIMEOUT_MS = 8000;
+const RETRY_ATTEMPTS = 2;
 
 const WINE_COUNTRIES = [
   { param: "Slovenija",     label: "SI" },
@@ -104,13 +110,13 @@ function normalizeSyncConfig(raw) {
 async function fetchHtml(url) {
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; MilkaSyncBot/1.0)", Accept: "text/html" },
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.text();
 }
 
-export async function withRetry(fn, label, maxAttempts = 4) {
+export async function withRetry(fn, label, maxAttempts = RETRY_ATTEMPTS) {
   let lastErr;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -118,7 +124,7 @@ export async function withRetry(fn, label, maxAttempts = 4) {
     } catch (e) {
       lastErr = e;
       if (attempt < maxAttempts) {
-        const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+        const delay = 1000; // short fixed backoff — stay inside the 60 s function budget
         console.warn(`[sync] ${label} attempt ${attempt} failed (${e.message}), retrying in ${delay}ms…`);
         await new Promise(r => setTimeout(r, delay));
       }
@@ -313,34 +319,54 @@ export default async function handler(req, res) {
       }
     }
 
-    // Sync beverages — replace all 3 categories fresh every run
+    // Sync beverages — replace each category independently so partial failures
+    // don't wipe good data. A category is only deleted and re-written if every
+    // page feeding it succeeded; failed categories keep their existing rows.
     let beveragesUpserted = 0;
-    const allBeveragePagesSucceeded = successfulBeveragePages.length === enabledBeveragePages.length;
-    if (syncConfig.beveragesEnabled && allBeveragePagesSucceeded) {
-      const catCounters = {};
-      const rows = allBeverages.map(b => {
-        catCounters[b.category] = (catCounters[b.category] || 0);
-        return { category: b.category, name: b.name, notes: b.notes || "", position: catCounters[b.category]++ };
-      });
-      await supabase.from("beverages").delete().in("category", ["cocktail", "spirit", "beer"]);
-      if (rows.length > 0) {
-        const BATCH = 200;
-        for (let i = 0; i < rows.length; i += BATCH) {
-          const { error } = await supabase.from("beverages").insert(rows.slice(i, i + BATCH));
-          if (error) throw error;
-          beveragesUpserted += rows.slice(i, i + BATCH).length;
+    const skippedCategories = [];
+    if (syncConfig.beveragesEnabled && enabledBeveragePages.length > 0) {
+      const failedPagesByCategory = new Set(
+        bevResults
+          .map((r, i) => ({ r, page: enabledBeveragePages[i] }))
+          .filter(x => x.r.status !== "fulfilled")
+          .map(x => x.page.category)
+      );
+      const categoriesToWrite = [...new Set(enabledBeveragePages.map(p => p.category))]
+        .filter(cat => !failedPagesByCategory.has(cat));
+      skippedCategories.push(...failedPagesByCategory);
+
+      if (categoriesToWrite.length > 0) {
+        const rowsToWrite = [];
+        for (const cat of categoriesToWrite) {
+          let position = 0;
+          for (const b of allBeverages.filter(x => x.category === cat)) {
+            rowsToWrite.push({ category: cat, name: b.name, notes: b.notes || "", position: position++ });
+          }
+        }
+        await supabase.from("beverages").delete().in("category", categoriesToWrite);
+        if (rowsToWrite.length > 0) {
+          const BATCH = 200;
+          for (let i = 0; i < rowsToWrite.length; i += BATCH) {
+            const { error } = await supabase.from("beverages").insert(rowsToWrite.slice(i, i + BATCH));
+            if (error) throw error;
+            beveragesUpserted += rowsToWrite.slice(i, i + BATCH).length;
+          }
         }
       }
-    } else {
-      console.warn("[sync] skipping beverages DB write due to failed source pages");
+      if (skippedCategories.length > 0) {
+        console.warn(`[sync] preserved existing rows for failed categories: ${skippedCategories.join(", ")}`);
+      }
     }
 
+    const partial = failedCountries.length > 0 || failedBeveragePages.length > 0;
     return res.status(200).json({
       ok: true,
+      partial,
       wines: winesUpserted, byGlass: byGlassCount,
       cocktails: cocktailCount, beers: beerCount, spirits: spiritCount,
       failedCountries: failedCountries.map(c => c.label),
       failedBeveragePages,
+      skippedCategories,
       timestamp: new Date().toISOString(),
     });
 

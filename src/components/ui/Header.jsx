@@ -31,18 +31,32 @@ export default function Header({
 }) {
   const modeColor = modeLabel === "ADMIN" ? "#4b4b88" : modeLabel === "SERVICE" ? "#2f7a45" : "#555";
   const [sSt, setSSt] = useState(null);
+  const [sMsg, setSMsg] = useState("");
   const handleSyncAll = async () => {
     if (!onSyncAll || sSt === "syncing") return;
     setSSt("syncing");
+    setSMsg("");
     try {
       const r = await onSyncAll();
       console.log("[Sync]", r);
-      setSSt(r?.ok ? "ok" : "err");
+      if (r?.ok && r.partial) {
+        const parts = [];
+        if (r.failedCountries?.length) parts.push(`wines: ${r.failedCountries.join(", ")}`);
+        if (r.failedBeveragePages?.length) parts.push(`pages: ${r.failedBeveragePages.join(", ")}`);
+        setSMsg(parts.join(" • "));
+        setSSt("partial");
+      } else if (r?.ok) {
+        setSSt("ok");
+      } else {
+        setSMsg(r?.error || "Unknown error");
+        setSSt("err");
+      }
     } catch (e) {
       console.error("[Sync] threw:", e);
+      setSMsg(e?.message || "Request failed");
       setSSt("err");
     }
-    setTimeout(() => setSSt(null), 3000);
+    setTimeout(() => { setSSt(null); setSMsg(""); }, 6000);
   };
   const topStatChip = {
     fontFamily: FONT,
@@ -71,9 +85,27 @@ export default function Header({
           {showSeed && <button onClick={onSeed} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #b0d8b0", borderRadius: 0, cursor: "pointer", background: "#f0fbf0", color: "#307030" }}>SEED TEST</button>}
           {showArchive && <button onClick={onArchive} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: "1px solid #e8d8b8", borderRadius: 0, cursor: "pointer", background: "#fff8f0", color: "#8a6030" }}>ARCHIVE</button>}
           {showSync && (
-            <button onClick={handleSyncAll} disabled={sSt === "syncing"} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: `1px solid ${sSt === "ok" ? "#8fc39f" : sSt === "err" ? "#e89898" : "#c8a96e"}`, borderRadius: 0, cursor: sSt === "syncing" ? "not-allowed" : "pointer", background: sSt === "ok" ? "#eef8f1" : sSt === "err" ? "#fff0f0" : "#fffaf4", color: sSt === "ok" ? "#2f7a45" : sSt === "err" ? "#c04040" : "#8a6020", fontWeight: 600, whiteSpace: "nowrap" }}>
-              {sSt === "syncing" ? "SYNCING…" : sSt === "ok" ? "✓ SYNCED" : sSt === "err" ? "✗ FAILED" : "↻ SYNC"}
+            <button
+              onClick={handleSyncAll}
+              disabled={sSt === "syncing"}
+              title={sMsg || undefined}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px",
+                border: `1px solid ${sSt === "ok" ? "#8fc39f" : sSt === "partial" ? "#d8b870" : sSt === "err" ? "#e89898" : "#c8a96e"}`,
+                borderRadius: 0,
+                cursor: sSt === "syncing" ? "not-allowed" : "pointer",
+                background: sSt === "ok" ? "#eef8f1" : sSt === "partial" ? "#fff8e8" : sSt === "err" ? "#fff0f0" : "#fffaf4",
+                color: sSt === "ok" ? "#2f7a45" : sSt === "partial" ? "#8a6020" : sSt === "err" ? "#c04040" : "#8a6020",
+                fontWeight: 600, whiteSpace: "nowrap",
+              }}
+            >
+              {sSt === "syncing" ? "SYNCING…" : sSt === "ok" ? "✓ SYNCED" : sSt === "partial" ? "⚠ PARTIAL" : sSt === "err" ? "✗ FAILED" : "↻ SYNC"}
             </button>
+          )}
+          {showSync && (sSt === "err" || sSt === "partial") && sMsg && (
+            <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: sSt === "err" ? "#c04040" : "#8a6020", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sMsg}>
+              {sMsg}
+            </span>
           )}
           <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: `1px solid ${syncLive ? "#8fc39f" : "#d8d8d8"}`, borderRadius: 0, background: syncLive ? "#eef8f1" : "#f6f6f6", color: syncLive ? "#2f7a45" : "#555", fontWeight: 600, whiteSpace: "nowrap" }}>{syncLabel}</span>
           {showEndService && <button onClick={onEndService} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: "1px solid #c04040", borderRadius: 0, cursor: "pointer", background: "#fff0f0", color: "#c04040", fontWeight: 600, flexShrink: 0 }}>END SERVICE</button>}
