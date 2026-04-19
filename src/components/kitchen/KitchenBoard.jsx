@@ -671,7 +671,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   {pairSeats.map(s => {
                     const c = PAIR_COLORS[s.pairing] || {};
                     return (
-                      <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 0, background: c.bg || "#f5f5f5", border: `1px solid ${c.border || "#ddd"}`, color: c.color || "#444" }}>
+                      <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${c.border || tokens.neutral[300]}`, color: c.color || tokens.text.body }}>
                         P{s.id} {s.pairing}
                       </span>
                     );
@@ -680,24 +680,24 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
               )}
               {extrasGroups.map(group => (
                 <div key={group.name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: "#666", minWidth: 60 }}>{group.name.toUpperCase()}</span>
+                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: tokens.text.muted, minWidth: 60 }}>{group.name.toUpperCase()}</span>
                   {group.seats.map(s => (
-                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 0, background: "#edf8e8", border: "1px solid #88cc88", color: "#2a6a2a" }}>
+                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text }}>
                       P{s.id}{s.pairing && s.pairing !== "—" ? ` · ${s.pairing}` : ""}
                     </span>
                   ))}
                 </div>
               ))}
               {pairSeats.length === 0 && extrasGroups.length === 0 && (
-                <span style={{ fontFamily: FONT, fontSize: 11, color: "#bbb" }}>No extras noted</span>
+                <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.disabled }}>No extras noted</span>
               )}
             </div>
             {/* Confirm */}
-            <div style={{ padding: "12px 20px", borderTop: "1px solid #f0f0f0", display: "flex", justifyContent: "flex-end" }}>
+            <div style={{ padding: "12px 20px", borderTop: `1px solid ${tokens.neutral[200]}`, display: "flex", justifyContent: "flex-end" }}>
               <button onClick={() => onConfirm(tableId)} style={{
                 fontFamily: FONT, fontSize: 11, letterSpacing: 1.5, padding: "10px 28px",
-                border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer",
-                background: "#c8a96e", color: "#fff", fontWeight: 700, textTransform: "uppercase",
+                border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer",
+                background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 700, textTransform: "uppercase",
               }}>Confirm</button>
             </div>
           </div>
@@ -741,7 +741,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany }) {
 
   if (activeTables.length === 0) return (
     <>
-      <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
+      <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.disabled, textAlign: "center", paddingTop: 80 }}>
         No active tables
       </div>
       <KitchenAlertOverlay alerts={pendingAlerts} onConfirm={confirmAlert} />

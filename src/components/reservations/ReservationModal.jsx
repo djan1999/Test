@@ -45,7 +45,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
       justifyContent: "center",
     }} onClick={onClose}>
       <div style={{
-        background: "#fff", borderTop: "1px solid #e8e8e8",
+        background: tokens.neutral[0], borderTop: `1px solid ${tokens.neutral[200]}`,
         borderRadius: 0,
         padding: "24px 20px 32px",
         width: "100%", maxWidth: 520,
@@ -54,9 +54,9 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
       }} onClick={e => e.stopPropagation()}>
 
         {/* Drag handle */}
-        <div style={{ width: 36, height: 4, borderRadius: 0, background: "#e0e0e0", margin: "0 auto 20px" }} />
+        <div style={{ width: 36, height: 4, borderRadius: 0, background: tokens.neutral[200], margin: "0 auto 20px" }} />
 
-        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#666", marginBottom: 16 }}>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: tokens.text.muted, marginBottom: 16 }}>
           TABLE · RESERVATION
         </div>
 
@@ -65,7 +65,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
             <div style={fieldLabel}>Table</div>
             {tableIds.length > 1 && (
-              <span style={{ fontFamily: FONT, fontSize: 10, color: "#555", letterSpacing: 1 }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.secondary, letterSpacing: 1 }}>
                 T{[...tableIds].sort((a,b)=>a-b).join("-")} · combined
               </span>
             )}
@@ -90,10 +90,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   style={{
                     fontFamily: FONT, fontSize: 13, fontWeight: 500, letterSpacing: 1,
                     padding: "12px 0", border: "1px solid",
-                    borderColor: isSel ? "#c8a96e" : isActive ? "#f0f0f0" : isBooked ? "#f0c8a8" : "#e8e8e8",
+                    borderColor: isSel ? tokens.charcoal.default : isActive ? tokens.neutral[200] : isBooked ? tokens.neutral[300] : tokens.neutral[200],
                     borderRadius: 0, cursor: isActive ? "not-allowed" : "pointer",
-                    background: isSel ? "#e8dcc8" : isActive ? "#f8f8f8" : isBooked ? "#fff8f2" : "#fff",
-                    color: isSel ? "#6a5030" : isActive ? "#ccc" : isBooked ? "#c07840" : "#444",
+                    background: isSel ? tokens.tint.parchment : isActive ? tokens.neutral[50] : isBooked ? tokens.neutral[50] : tokens.neutral[0],
+                    color: isSel ? tokens.text.secondary : isActive ? tokens.text.disabled : isBooked ? tokens.text.muted : tokens.text.body,
                     transition: "all 0.1s",
                   }}>
                   T{String(tid).padStart(2, "0")}
@@ -102,7 +102,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
             })}
           </div>
           {tableIds.length === 1 && (
-            <div style={{ fontFamily: FONT, fontSize: 9, color: "#aaa", marginTop: 5, letterSpacing: 0.5 }}>
+            <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.muted, marginTop: 5, letterSpacing: 0.5 }}>
               Tap multiple tables to combine (e.g. T2-3)
             </div>
           )}
@@ -121,10 +121,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                 <button key={t} onClick={() => setTime(t)} style={{
                   fontFamily: FONT, fontSize: 13, letterSpacing: 1,
                   padding: "14px 0", flex: 1, border: "1px solid",
-                  borderColor: time === t ? "#c8a96e" : "#e8e8e8",
+                  borderColor: time === t ? tokens.charcoal.default : tokens.neutral[200],
                   borderRadius: 0, cursor: "pointer",
-                  background: time === t ? "#e8dcc8" : "#fff",
-                  color: time === t ? "#6a5030" : "#888",
+                  background: time === t ? tokens.tint.parchment : tokens.neutral[0],
+                  color: time === t ? tokens.text.secondary : tokens.text.muted,
                   transition: "all 0.12s",
                 }}>{t}</button>
               ))}
@@ -137,10 +137,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   <button key={opt} onClick={() => setMenuType(m => m === opt ? "" : opt)} style={{
                     fontFamily: FONT, fontSize: 10, letterSpacing: 2,
                     padding: "10px 24px", border: "1px solid",
-                    borderColor: menuType === opt ? "#c8a96e" : "#e8e8e8",
+                    borderColor: menuType === opt ? tokens.charcoal.default : tokens.neutral[200],
                     borderRadius: 0, cursor: "pointer",
-                    background: menuType === opt ? "#e8dcc8" : "#fff",
-                    color: menuType === opt ? "#6a5030" : "#888",
+                    background: menuType === opt ? tokens.tint.parchment : tokens.neutral[0],
+                    color: menuType === opt ? tokens.text.secondary : tokens.text.muted,
                     textTransform: "uppercase",
                   }}>{opt}</button>
                 ))}
@@ -154,10 +154,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                 <button key={opt.v} onClick={() => setLang(opt.v)} style={{
                   fontFamily: FONT, fontSize: 10, letterSpacing: 2,
                   padding: "10px 24px", border: "1px solid",
-                  borderColor: lang === opt.v ? "#c8a96e" : "#e8e8e8",
+                  borderColor: lang === opt.v ? tokens.charcoal.default : tokens.neutral[200],
                   borderRadius: 0, cursor: "pointer",
-                  background: lang === opt.v ? "#e8dcc8" : "#fff",
-                  color: lang === opt.v ? "#6a5030" : "#888",
+                  background: lang === opt.v ? tokens.tint.parchment : tokens.neutral[0],
+                  color: lang === opt.v ? tokens.text.secondary : tokens.text.muted,
                   textTransform: "uppercase",
                 }}>{opt.l}</button>
               ))}
@@ -169,7 +169,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
               <div style={fieldLabel}>Guests</div>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 <button onClick={() => setGuests(g => Math.max(1, g-1))} style={circBtnSm}>−</button>
-                <span style={{ fontFamily: FONT, fontSize: 18, color: "#1a1a1a", minWidth: 20, textAlign: "center" }}>{guests}</span>
+                <span style={{ fontFamily: FONT, fontSize: 18, color: tokens.text.primary, minWidth: 20, textAlign: "center" }}>{guests}</span>
                 <button onClick={() => setGuests(g => Math.min(14, g+1))} style={circBtnSm}>+</button>
               </div>
             </div>
@@ -180,10 +180,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   <button key={type} onClick={() => { setGuestType(t => t === type ? "" : type); setRoom(""); }} style={{
                     fontFamily: FONT, fontSize: 11, letterSpacing: 1,
                     padding: "12px 0", flex: 1, border: "1px solid",
-                    borderColor: guestType === type ? "#c8a96e" : "#e8e8e8",
+                    borderColor: guestType === type ? tokens.charcoal.default : tokens.neutral[200],
                     borderRadius: 0, cursor: "pointer",
-                    background: guestType === type ? "#e8dcc8" : "#fff",
-                    color: guestType === type ? "#6a5030" : "#444",
+                    background: guestType === type ? tokens.tint.parchment : tokens.neutral[0],
+                    color: guestType === type ? tokens.text.secondary : tokens.text.body,
                     transition: "all 0.12s", textTransform: "uppercase",
                   }}>{type}</button>
                 ))}
@@ -196,10 +196,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                       <button key={r} onClick={() => setRoom(x => x === r ? "" : r)} style={{
                         fontFamily: FONT, fontSize: 13, fontWeight: 500, letterSpacing: 1,
                         padding: "12px 16px", border: "1px solid",
-                        borderColor: room === r ? "#c8a06e" : "#e8e8e8",
+                        borderColor: room === r ? tokens.charcoal.default : tokens.neutral[200],
                         borderRadius: 0, cursor: "pointer",
-                        background: room === r ? "#fdf6ec" : "#fff",
-                        color: room === r ? "#a07040" : "#444",
+                        background: room === r ? tokens.tint.parchment : tokens.neutral[0],
+                        color: room === r ? tokens.text.secondary : tokens.text.body,
                         transition: "all 0.12s",
                       }}>{r}</button>
                     ))}
@@ -209,7 +209,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
             </div>
           </div>
 
-          <div style={{ borderTop: "1px solid #f0f0f0" }} />
+          <div style={{ borderTop: `1px solid ${tokens.neutral[200]}` }} />
 
           <div>
             <div style={fieldLabel}>🎂 Birthday Cake</div>
@@ -218,10 +218,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                 <button key={String(val)} onClick={() => setBirthday(val)} style={{
                   fontFamily: FONT, fontSize: 12, letterSpacing: 1,
                   padding: "14px 0", flex: 1, border: "1px solid",
-                  borderColor: birthday === val ? (val ? "#d4b888" : "#e8e8e8") : "#e8e8e8",
+                  borderColor: birthday === val ? (val ? tokens.charcoal.default : tokens.neutral[200]) : tokens.neutral[200],
                   borderRadius: 0, cursor: "pointer",
-                  background: birthday === val ? (val ? "#fdf8f0" : "#fafafa") : "#fff",
-                  color: birthday === val ? (val ? "#a07040" : "#1a1a1a") : "#555",
+                  background: birthday === val ? (val ? tokens.tint.parchment : tokens.neutral[50]) : tokens.neutral[0],
+                  color: birthday === val ? (val ? tokens.text.secondary : tokens.text.primary) : tokens.text.secondary,
                   transition: "all 0.12s",
                 }}>{val ? "YES" : "NO"}</button>
               ))}
@@ -236,7 +236,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
               const groupItems = RESTRICTIONS.filter(r => r.group === group);
               return (
                 <div key={group} style={{ marginBottom: 14 }}>
-                  <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 7 }}>{groupLabel}</div>
+                  <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 7 }}>{groupLabel}</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {groupItems.map(opt => {
                       const count = restrictions.filter(r => r.note === opt.key).length;
@@ -247,9 +247,9 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                           style={{
                             fontFamily: FONT, fontSize: 10, letterSpacing: 0.5,
                             padding: "6px 11px", borderRadius: 0, cursor: "pointer",
-                            border: `1px solid ${active ? "#e09090" : "#e8e8e8"}`,
-                            background: active ? "#fef0f0" : "#fafafa",
-                            color: active ? "#b04040" : "#888",
+                            border: `1px solid ${active ? tokens.red.border : tokens.neutral[200]}`,
+                            background: active ? tokens.red.bg : tokens.neutral[50],
+                            color: active ? tokens.red.text : tokens.text.muted,
                             fontWeight: active ? 600 : 400,
                             transition: "all 0.1s",
                             position: "relative",
@@ -258,7 +258,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                           {count > 0 && (
                             <span style={{
                               marginLeft: 5,
-                              background: "#e09090", color: "#fff",
+                              background: tokens.red.border, color: tokens.neutral[0],
                               borderRadius: 0, fontSize: 9, fontWeight: 700,
                               padding: "1px 5px", verticalAlign: "middle",
                             }}>{count}</span>
@@ -280,19 +280,19 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                   return (
                     <div key={i} style={{
                       display: "flex", alignItems: "center", gap: 6,
-                      padding: "5px 10px", background: "#fef0f0",
-                      border: "1px solid #e09090", borderRadius: 0,
+                      padding: "5px 10px", background: tokens.red.bg,
+                      border: `1px solid ${tokens.red.border}`, borderRadius: 0,
                     }}>
-                      <span style={{ fontFamily: FONT, fontSize: 11, color: "#b04040", fontWeight: 500 }}>{label}</span>
+                      <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.red.text, fontWeight: 500 }}>{label}</span>
                       <button onClick={() => setRestrictions(rs => rs.filter((_, idx) => idx !== i))}
-                        style={{ background: "none", border: "none", color: "#e09090", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+                        style={{ background: "none", border: "none", color: tokens.red.border, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
                     </div>
                   );
                 })}
               </div>
             )}
             {restrictions.length > 0 && (
-              <div style={{ fontFamily: FONT, fontSize: 9, color: "#ccc", marginTop: 8, letterSpacing: 0.5 }}>
+              <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.disabled, marginTop: 8, letterSpacing: 0.5 }}>
                 Assign to seats when guests are seated
               </div>
             )}
@@ -309,11 +309,11 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
         <div style={{ display: "flex", gap: 10, marginTop: 28 }}>
           <button onClick={onClose} style={{
             flex: 1, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
-            padding: "14px", border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#444",
+            padding: "14px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.body,
           }}>CANCEL</button>
           <button onClick={() => onSave({ tableIds, name, time, menuType, guests, guestType, room, birthday, restrictions, notes, lang })} style={{
             flex: 2, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
-            padding: "14px", border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer", background: "#c8a96e", color: "#fff",
+            padding: "14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.neutral[0],
           }}>SAVE</button>
         </div>
       </div>
