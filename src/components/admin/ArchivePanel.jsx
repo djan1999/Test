@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
 
@@ -85,19 +86,19 @@ export default function ArchivePanel() {
 
   return (
     <div>
-      <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 16 }}>
+      <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 16 }}>
         Service Archives
       </div>
 
-      {!supabase && <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", padding: "60px 0", textAlign: "center" }}>Supabase not connected</div>}
-      {supabase && loading && <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", padding: "60px 0", textAlign: "center" }}>Loading...</div>}
-      {supabase && !loading && entries.length === 0 && <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", padding: "60px 0", textAlign: "center" }}>No archived services yet</div>}
+      {!supabase && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.disabled, padding: "60px 0", textAlign: "center" }}>Supabase not connected</div>}
+      {supabase && loading && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.disabled, padding: "60px 0", textAlign: "center" }}>Loading...</div>}
+      {supabase && !loading && entries.length === 0 && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.disabled, padding: "60px 0", textAlign: "center" }}>No archived services yet</div>}
 
       {supabase && !loading && entries.length > 0 && (
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
           <button onClick={deleteAll} disabled={deleting === "all"} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
-            border: "1px solid #ffcccc", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#e07070",
+            border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.red.text,
             opacity: deleting === "all" ? 0.5 : 1,
           }}>{deleting === "all" ? "MOVING TO TRASH..." : "DELETE ALL"}</button>
         </div>
@@ -108,31 +109,31 @@ export default function ArchivePanel() {
         const entryTables = entry.state?.tables || [];
         const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
         return (
-          <div key={entry.id} style={{ border: "1px solid #f0f0f0", borderRadius: 0, marginBottom: 8, overflow: "hidden" }}>
-            <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: isExp ? "#fafafa" : "#fff" }}>
+          <div key={entry.id} style={{ border: tokens.border.subtle, borderRadius: 0, marginBottom: 8, overflow: "hidden" }}>
+            <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: isExp ? tokens.neutral[50] : tokens.surface.card }}>
               <div onClick={() => setExpanded(isExp ? null : entry.id)} style={{ cursor: "pointer", flex: 1 }}>
-                <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500, color: "#1a1a1a", marginBottom: 3 }}>{entry.label}</div>
-                <div style={{ fontFamily: FONT, fontSize: 10, color: "#999" }}>{entryTables.length} tables · {totalGuests} guests</div>
+                <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500, color: tokens.text.primary, marginBottom: 3 }}>{entry.label}</div>
+                <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.muted }}>{entryTables.length} tables · {totalGuests} guests</div>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <button onClick={() => deleteEntry(entry.id)} disabled={deleting === entry.id} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px",
-                  border: "1px solid #ffcccc", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#e07070",
+                  border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.red.text,
                   opacity: deleting === entry.id ? 0.5 : 1,
                 }}>{deleting === entry.id ? "..." : "delete"}</button>
-                <span onClick={() => setExpanded(isExp ? null : entry.id)} style={{ fontFamily: FONT, fontSize: 16, color: "#ccc", transform: isExp ? "rotate(180deg)" : "none", transition: "transform 0.18s", display: "inline-block", cursor: "pointer" }}>⌄</span>
+                <span onClick={() => setExpanded(isExp ? null : entry.id)} style={{ fontFamily: FONT, fontSize: 16, color: tokens.neutral[300], transform: isExp ? "rotate(180deg)" : "none", transition: "transform 0.18s", display: "inline-block", cursor: "pointer" }}>⌄</span>
               </div>
             </div>
             {isExp && (
-              <div style={{ borderTop: "1px solid #f0f0f0", padding: "12px 16px" }}>
+              <div style={{ borderTop: tokens.border.subtle, padding: "12px 16px" }}>
                 {entryTables.map(t => (
-                  <div key={t.id} style={{ padding: "8px 0", borderBottom: "1px solid #f8f8f8" }}>
+                  <div key={t.id} style={{ padding: "8px 0", borderBottom: tokens.border.subtle }}>
                     <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                      <span style={{ fontFamily: FONT, fontSize: 16, fontWeight: 300, color: "#999" }}>{String(t.id).padStart(2, "0")}</span>
-                      {t.resName && <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{t.resName}</span>}
-                      <span style={{ fontFamily: FONT, fontSize: 10, color: "#888" }}>{t.guests || 0} guests</span>
-                      {t.menuType && <span style={{ fontFamily: FONT, fontSize: 9, color: "#c8a06e", border: "1px solid #e8d8b8", borderRadius: 0, padding: "1px 6px" }}>{t.menuType}</span>}
-                      {t.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: "#4a9a6a" }}>{t.arrivedAt}</span>}
+                      <span style={{ fontFamily: FONT, fontSize: 16, fontWeight: 300, color: tokens.text.muted }}>{String(t.id).padStart(2, "0")}</span>
+                      {t.resName && <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: tokens.text.primary }}>{t.resName}</span>}
+                      <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.muted }}>{t.guests || 0} guests</span>
+                      {t.menuType && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.body, border: tokens.border.default, borderRadius: 0, padding: "1px 6px" }}>{t.menuType}</span>}
+                      {t.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.text }}>{t.arrivedAt}</span>}
                     </div>
                   </div>
                 ))}
@@ -148,14 +149,14 @@ export default function ArchivePanel() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <button
               onClick={() => setShowTrash(v => !v)}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 3, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 3, color: tokens.text.disabled, background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
             >
               Recently Deleted ({deleted.length}) {showTrash ? "▲" : "▼"}
             </button>
             {showTrash && (
               <button onClick={emptyTrash} disabled={deleting === "trash"} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "4px 12px",
-                border: "1px solid #ffcccc", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#e07070",
+                border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.red.text,
                 opacity: deleting === "trash" ? 0.5 : 1,
               }}>{deleting === "trash" ? "DELETING..." : "EMPTY TRASH"}</button>
             )}
@@ -167,14 +168,14 @@ export default function ArchivePanel() {
                 const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
                 const deletedDate = entry.deleted_at ? new Date(entry.deleted_at).toLocaleDateString() : "";
                 return (
-                  <div key={entry.id} style={{ border: "1px solid #f5f0f0", borderRadius: 0, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fdf8f8", opacity: 0.8 }}>
+                  <div key={entry.id} style={{ border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", background: tokens.tint.parchment, opacity: 0.8 }}>
                     <div>
-                      <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 500, color: "#888" }}>{entry.label}</div>
-                      <div style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", marginTop: 2 }}>{entryTables.length} tables · {totalGuests} guests · deleted {deletedDate}</div>
+                      <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 500, color: tokens.text.muted }}>{entry.label}</div>
+                      <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.disabled, marginTop: 2 }}>{entryTables.length} tables · {totalGuests} guests · deleted {deletedDate}</div>
                     </div>
                     <button onClick={() => restoreEntry(entry.id)} disabled={deleting === entry.id} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "4px 12px",
-                      border: "1px solid #b8d8c8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#4a9a6a",
+                      border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.green.text,
                       opacity: deleting === entry.id ? 0.5 : 1,
                     }}>{deleting === entry.id ? "..." : "RESTORE"}</button>
                   </div>

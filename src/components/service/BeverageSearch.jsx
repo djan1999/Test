@@ -25,7 +25,7 @@ export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd
     fontFamily: tokens.font,
     fontSize: tokens.mobileInputSize,
     padding: "10px 12px",
-    border: "1px solid #e8e8e8",
+    border: `1px solid ${tokens.neutral[200]}`,
     borderRadius: 0,
     outline: "none",
     color: tokens.colors.black,
@@ -91,14 +91,14 @@ export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd
         style={{ ...baseInp, fontSize: tokens.mobileInputSize, padding: "9px 12px", letterSpacing: 0.3 }}
       />
       {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: "#fff", border: "1px solid #e8e8e8", borderRadius: 0, zIndex: 300, boxShadow: "0 6px 24px rgba(0,0,0,0.10)", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: tokens.neutral[0], border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, zIndex: 300, boxShadow: "0 6px 24px rgba(0,0,0,0.10)", overflow: "hidden" }}>
           {results.map((r, i) => {
             const ts = BEV_TYPES[r.type];
             return (
-              <div key={i} onMouseDown={() => handleAdd(r)} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #f8f8f8", display: "flex", alignItems: "center", gap: 10, background: "#fff" }}>
+              <div key={i} onMouseDown={() => handleAdd(r)} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${tokens.neutral[50]}`, display: "flex", alignItems: "center", gap: 10, background: tokens.neutral[0] }}>
                 <span style={{ fontFamily: tokens.font, fontSize: 8, letterSpacing: 1, fontWeight: 600, padding: "2px 6px", borderRadius: 0, color: ts.color, background: ts.bg, border: `1px solid ${ts.border}`, flexShrink: 0, textTransform: "uppercase" }}>{ts.label}</span>
-                <span style={{ fontFamily: tokens.font, fontSize: 12, color: "#1a1a1a", flex: 1 }}>{r.label}</span>
-                {r.sub && <span style={{ fontFamily: tokens.font, fontSize: 11, color: "#999" }}>{r.sub}</span>}
+                <span style={{ fontFamily: tokens.font, fontSize: 12, color: tokens.neutral[900], flex: 1 }}>{r.label}</span>
+                {r.sub && <span style={{ fontFamily: tokens.font, fontSize: 11, color: tokens.neutral[500] }}>{r.sub}</span>}
               </div>
             );
           })}

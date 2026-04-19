@@ -157,7 +157,7 @@ const plainInputStyle = {
   background: "transparent",
   fontFamily: "inherit",
   fontSize: "inherit",
-  color: "#000",
+  color: tokens.neutral[900],
   width: "100%",
   padding: 0,
   margin: 0,
@@ -284,7 +284,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.7)",
+        background: tokens.surface.overlay,
         zIndex: 1000,
         display: "flex",
         flexDirection: "column",
@@ -313,10 +313,10 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
             fontSize: 10,
             letterSpacing: 2,
             padding: "8px 16px",
-            border: "1px solid #fff",
+            border: `1px solid ${tokens.neutral[0]}`,
             borderRadius: 0,
-            background: "#fff",
-            color: "#000",
+            background: tokens.neutral[0],
+            color: tokens.neutral[900],
             cursor: "pointer",
             fontWeight: 600,
           }}
@@ -330,10 +330,10 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
             fontSize: 10,
             letterSpacing: 2,
             padding: "8px 16px",
-            border: "1px solid #fff",
+            border: `1px solid ${tokens.neutral[0]}`,
             borderRadius: 0,
             background: "transparent",
-            color: "#fff",
+            color: tokens.neutral[0],
             cursor: "pointer",
             fontWeight: 600,
           }}
@@ -346,8 +346,8 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
       <div
         className="sb-sheet"
         style={{
-          background: "#ffffff",
-          color: "#000",
+          background: tokens.neutral[0],
+          color: tokens.neutral[900],
           fontFamily: FONT,
           fontSize: 11,
           lineHeight: 1.35,
@@ -355,7 +355,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
           width: "100%",
           margin: "0 auto",
           padding: "20px 28px",
-          boxShadow: "0 0 0 1px #ddd",
+          boxShadow: `0 0 0 1px ${tokens.neutral[300]}`,
           borderRadius: 0,
         }}
       >
@@ -394,7 +394,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
             <div key={slot.key} className="slot-block" style={{ marginBottom: 10 }}>
               <div
                 style={{
-                  borderBottom: "1px solid #000",
+                  borderBottom: `1px solid ${tokens.neutral[900]}`,
                   paddingBottom: 1,
                   marginBottom: 4,
                 }}
@@ -438,8 +438,8 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                     style={{
                       marginTop: 2,
                       fontSize: "0.8rem",
-                      border: "1px dashed #aaa",
-                      background: "#f5f5f5",
+                      border: `1px dashed ${tokens.neutral[400]}`,
+                      background: tokens.neutral[100],
                       padding: "1px 4px",
                     }}
                   />
@@ -455,7 +455,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
           style={{
             marginTop: 12,
             paddingTop: 6,
-            borderTop: "1px solid #000",
+            borderTop: `1px solid ${tokens.neutral[900]}`,
           }}
         >
           <div
@@ -478,9 +478,9 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                 flex: 1,
                 fontFamily: "inherit",
                 fontSize: "inherit",
-                color: "#000",
+                color: tokens.neutral[900],
                 border: "none",
-                borderBottom: "1px solid #000",
+                borderBottom: `1px solid ${tokens.neutral[900]}`,
                 background: "transparent",
                 outline: "none",
                 padding: "2px 4px",
@@ -503,8 +503,8 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                     value={v}
                     onChange={(nv) => updateAnnouncement(i, nv)}
                     style={{
-                      border: "1px dashed #aaa",
-                      background: "#f5f5f5",
+                      border: `1px dashed ${tokens.neutral[400]}`,
+                      background: tokens.neutral[100],
                       padding: "1px 4px",
                     }}
                   />
@@ -530,14 +530,14 @@ function PrintStyles() {
           size: A4 landscape;
           margin: 10mm 12mm;
         }
-        html, body { background: #ffffff !important; }
+        html, body { background: ${tokens.neutral[0]} !important; }
         body * { visibility: hidden !important; }
         .service-breakdown-overlay,
         .service-breakdown-overlay * { visibility: visible !important; }
         .service-breakdown-overlay {
           position: absolute !important;
           inset: 0 !important;
-          background: #ffffff !important;
+          background: ${tokens.neutral[0]} !important;
           padding: 0 !important;
           display: block !important;
           overflow: visible !important;
@@ -560,7 +560,7 @@ function PrintStyles() {
           outline: none !important;
           resize: none !important;
           padding: 0 !important;
-          color: #000 !important;
+          color: ${tokens.neutral[900]} !important;
           -webkit-print-color-adjust: exact;
         }
         /* Placeholders are a UI hint only — never print them. */
@@ -580,7 +580,7 @@ function PrintStyles() {
           visibility: hidden !important;
         }
         .sb-inline {
-          border-bottom: 1px solid #000 !important;
+          border-bottom: 1px solid ${tokens.neutral[900]} !important;
         }
         .service-breakdown-print-area {
           column-count: 2;

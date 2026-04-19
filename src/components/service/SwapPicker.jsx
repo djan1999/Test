@@ -25,9 +25,9 @@ export default function SwapPicker({ seatId, totalSeats, onSwap }) {
           width: 28,
           height: 28,
           borderRadius: 0,
-          border: "1px solid #e8e8e8",
-          background: open ? "#f5f5f5" : "#fff",
-          color: "#555",
+          border: `1px solid ${tokens.neutral[200]}`,
+          background: open ? tokens.neutral[100] : tokens.neutral[0],
+          color: tokens.neutral[600],
           cursor: "pointer",
           fontSize: 13,
           display: "flex",
@@ -43,8 +43,8 @@ export default function SwapPicker({ seatId, totalSeats, onSwap }) {
             position: "absolute",
             top: "calc(100% + 3px)",
             right: 0,
-            background: "#fff",
-            border: "1px solid #e8e8e8",
+            background: tokens.neutral[0],
+            border: `1px solid ${tokens.neutral[200]}`,
             borderRadius: 0,
             zIndex: 300,
             overflow: "hidden",
@@ -57,7 +57,7 @@ export default function SwapPicker({ seatId, totalSeats, onSwap }) {
               fontFamily: tokens.font,
               fontSize: 9,
               letterSpacing: 2,
-              color: "#555",
+              color: tokens.neutral[600],
               padding: "7px 12px 4px",
               textTransform: "uppercase",
             }}
@@ -76,8 +76,8 @@ export default function SwapPicker({ seatId, totalSeats, onSwap }) {
                 cursor: "pointer",
                 fontFamily: tokens.font,
                 fontSize: 12,
-                color: "#1a1a1a",
-                borderTop: "1px solid #f5f5f5",
+                color: tokens.neutral[900],
+                borderTop: `1px solid ${tokens.neutral[100]}`,
               }}
             >
               P{n}

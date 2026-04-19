@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { tokens } from "../../styles/tokens.js";
 import { FONT, baseInp } from "./adminStyles.js";
 import { fuzzy, fuzzyDrink } from "../../utils/search.js";
 import { buildBeverageLinkedKey, resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
@@ -38,10 +39,10 @@ function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails,
     <div ref={ref} style={{ position: "relative" }}>
       {(searchKey || linkedKey) && (
         <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
-          <span style={{ fontFamily: FONT, fontSize: 9, color: "#4b4b88", background: "#f4f4fc", border: "1px solid #c8c6e8", borderRadius: 0, padding: "2px 6px", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.secondary, background: tokens.neutral[100], border: tokens.border.default, borderRadius: 0, padding: "2px 6px", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {chipText}
           </span>
-          <button type="button" onClick={() => onPick({ searchKey: "", linkedKey: undefined })} style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>
+          <button type="button" onClick={() => onPick({ searchKey: "", linkedKey: undefined })} style={{ background: "none", border: "none", cursor: "pointer", color: tokens.text.disabled, fontSize: 13, padding: 0, lineHeight: 1 }}>×</button>
         </div>
       )}
       <input
@@ -54,21 +55,21 @@ function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails,
       {open && results.length > 0 && (
         <div style={{
           position: "absolute", top: "100%", left: 0, right: 0, zIndex: 300,
-          background: "#fff", border: "1px solid #e0e0e0", borderRadius: 0,
+          background: tokens.surface.card, border: tokens.border.subtle, borderRadius: 0,
           boxShadow: "0 4px 16px rgba(0,0,0,0.10)", maxHeight: 260, overflowY: "auto",
         }}>
           {results.map((item, i) => (
             <div
               key={item.id ?? i}
               onMouseDown={e => { e.preventDefault(); selectItem(item); }}
-              style={{ fontFamily: FONT, fontSize: 10, padding: "8px 10px", cursor: "pointer", borderBottom: "1px solid #f4f4f4" }}
-              onMouseEnter={e => e.currentTarget.style.background = "#f7f7ff"}
+              style={{ fontFamily: FONT, fontSize: 10, padding: "8px 10px", cursor: "pointer", borderBottom: tokens.border.subtle }}
+              onMouseEnter={e => e.currentTarget.style.background = tokens.neutral[50]}
               onMouseLeave={e => e.currentTarget.style.background = "transparent"}
             >
-              <span style={{ fontWeight: 600, color: "#1a1a1a" }}>{item.name}</span>
-              {item.producer && <span style={{ color: "#888" }}> · {item.producer}</span>}
-              {item.vintage  && <span style={{ color: "#aaa" }}> · {item.vintage}</span>}
-              {item.byGlass  && <span style={{ color: "#4a9a6a", marginLeft: 4, fontSize: 8 }}>BTG</span>}
+              <span style={{ fontWeight: 600, color: tokens.text.primary }}>{item.name}</span>
+              {item.producer && <span style={{ color: tokens.text.muted }}> · {item.producer}</span>}
+              {item.vintage  && <span style={{ color: tokens.text.disabled }}> · {item.vintage}</span>}
+              {item.byGlass  && <span style={{ color: tokens.green.text, marginLeft: 4, fontSize: 8 }}>BTG</span>}
             </div>
           ))}
         </div>
@@ -181,7 +182,7 @@ export default function QuickAccessPanel({
 
   return (
     <div>
-      <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: "#888", marginBottom: 16 }}>
+      <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: tokens.text.muted, marginBottom: 16 }}>
         QUICK ACCESS — configure aperitif/drink buttons shown during service
       </div>
 
@@ -191,33 +192,33 @@ export default function QuickAccessPanel({
           const broken = Boolean(item.linkedKey) && !preview;
           return (
             <div key={item.id} style={{
-              border: `1px solid ${editingId === item.id ? "#c8c6e8" : item.enabled ? "#e8e8e8" : "#f0f0f0"}`,
-              borderRadius: 0, background: item.enabled ? "#fff" : "#fafafa",
+              border: `1px solid ${editingId === item.id ? tokens.charcoal.default : item.enabled ? tokens.neutral[200] : tokens.neutral[200]}`,
+              borderRadius: 0, background: item.enabled ? tokens.surface.card : tokens.neutral[50],
               opacity: item.enabled ? 1 : 0.6,
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px" }}>
                 <button type="button" onClick={() => toggleItem(item.id)} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px", border: "1px solid",
-                  borderColor: item.enabled ? "#4a9a6a" : "#ddd", borderRadius: 0, cursor: "pointer",
-                  background: item.enabled ? "#f0faf0" : "#fff",
-                  color: item.enabled ? "#4a9a6a" : "#aaa", flexShrink: 0,
+                  borderColor: item.enabled ? tokens.green.border : tokens.neutral[300], borderRadius: 0, cursor: "pointer",
+                  background: item.enabled ? tokens.green.bg : tokens.surface.card,
+                  color: item.enabled ? tokens.green.text : tokens.text.disabled, flexShrink: 0,
                 }}>{item.enabled ? "ON" : "OFF"}</button>
 
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{item.label}</div>
-                  <div style={{ fontFamily: FONT, fontSize: 9, color: "#999" }}>
-                    search: <span style={{ color: "#4b4b88" }}>{item.searchKey}</span>
-                    {item.linkedKey && <span style={{ color: "#666" }}> · id: {String(item.linkedKey).slice(0, 36)}{String(item.linkedKey).length > 36 ? "…" : ""}</span>}
+                  <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: tokens.text.primary }}>{item.label}</div>
+                  <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.muted }}>
+                    search: <span style={{ color: tokens.text.secondary }}>{item.searchKey}</span>
+                    {item.linkedKey && <span style={{ color: tokens.text.secondary }}> · id: {String(item.linkedKey).slice(0, 36)}{String(item.linkedKey).length > 36 ? "…" : ""}</span>}
                     {" · "}{item.type || "wine"}
-                    {item.menuOnly && <span style={{ marginLeft: 6, color: "#c8a060", fontWeight: 600 }}>menu only</span>}
+                    {item.menuOnly && <span style={{ marginLeft: 6, color: tokens.neutral[700], fontWeight: 600 }}>menu only</span>}
                   </div>
                   {preview && (
-                    <div style={{ fontFamily: FONT, fontSize: 9, color: "#2a6a2a", marginTop: 4 }}>
+                    <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.text, marginTop: 4 }}>
                       → {preview}
                     </div>
                   )}
                   {broken && (
-                    <div style={{ fontFamily: FONT, fontSize: 9, color: "#c04040", marginTop: 4, fontWeight: 600 }}>
+                    <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 4, fontWeight: 600 }}>
                       Linked product missing — re-pick in EDIT or button falls back to label only.
                     </div>
                   )}
@@ -225,17 +226,17 @@ export default function QuickAccessPanel({
 
                 <button type="button" onClick={() => onUpdateQuickAccess(quickAccessItems.map(i => i.id === item.id ? { ...i, menuOnly: !i.menuOnly } : i))} style={{
                   fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "4px 8px", border: "1px solid",
-                  borderColor: item.menuOnly ? "#c8a060" : "#e8e8e8", borderRadius: 0, cursor: "pointer",
-                  background: item.menuOnly ? "#fdf4e8" : "#fff",
-                  color: item.menuOnly ? "#7a5020" : "#bbb", flexShrink: 0,
+                  borderColor: item.menuOnly ? tokens.neutral[400] : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
+                  background: item.menuOnly ? tokens.neutral[100] : tokens.surface.card,
+                  color: item.menuOnly ? tokens.text.body : tokens.text.disabled, flexShrink: 0,
                   whiteSpace: "nowrap",
                 }}>MENU ONLY</button>
 
                 <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                   <button type="button" onClick={() => moveItem(item.id, -1)} disabled={idx === 0}
-                    style={{ background: "none", border: "none", cursor: idx === 0 ? "default" : "pointer", color: idx === 0 ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▲</button>
+                    style={{ background: "none", border: "none", cursor: idx === 0 ? "default" : "pointer", color: idx === 0 ? tokens.neutral[300] : tokens.text.muted, fontSize: 12, padding: "2px 4px" }}>▲</button>
                   <button type="button" onClick={() => moveItem(item.id, 1)} disabled={idx === quickAccessItems.length - 1}
-                    style={{ background: "none", border: "none", cursor: idx === quickAccessItems.length - 1 ? "default" : "pointer", color: idx === quickAccessItems.length - 1 ? "#ddd" : "#888", fontSize: 12, padding: "2px 4px" }}>▼</button>
+                    style={{ background: "none", border: "none", cursor: idx === quickAccessItems.length - 1 ? "default" : "pointer", color: idx === quickAccessItems.length - 1 ? tokens.neutral[300] : tokens.text.muted, fontSize: 12, padding: "2px 4px" }}>▼</button>
                 </div>
 
                 <button
@@ -243,15 +244,15 @@ export default function QuickAccessPanel({
                   onClick={() => editingId === item.id ? saveEdit() : startEdit(item)}
                   style={{
                     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px",
-                    border: `1px solid ${editingId === item.id ? "#4b4b88" : "#ddd"}`,
+                    border: `1px solid ${editingId === item.id ? tokens.charcoal.default : tokens.neutral[300]}`,
                     borderRadius: 0, cursor: "pointer",
-                    background: editingId === item.id ? "#4b4b88" : "#fff",
-                    color: editingId === item.id ? "#fff" : "#888", flexShrink: 0,
+                    background: editingId === item.id ? tokens.charcoal.default : tokens.surface.card,
+                    color: editingId === item.id ? tokens.text.inverse : tokens.text.muted, flexShrink: 0,
                   }}>{editingId === item.id ? "SAVE" : "EDIT"}</button>
 
                 <button type="button" onClick={() => removeItem(item.id)} style={{
-                  background: "none", border: "1px solid #ffcccc", borderRadius: 0,
-                  color: "#e07070", cursor: "pointer", fontFamily: FONT, fontSize: 9,
+                  background: "none", border: `1px solid ${tokens.red.border}`, borderRadius: 0,
+                  color: tokens.red.text, cursor: "pointer", fontFamily: FONT, fontSize: 9,
                   letterSpacing: 1, padding: "4px 8px", flexShrink: 0,
                 }}>REMOVE</button>
               </div>
@@ -259,11 +260,11 @@ export default function QuickAccessPanel({
               {editingId === item.id && (
                 <div style={{ padding: "0 14px 12px", display: "grid", gridTemplateColumns: "1fr 1fr 100px", gap: 8 }}>
                   <div>
-                    <div style={{ fontFamily: FONT, fontSize: 8, color: "#999", letterSpacing: 1, marginBottom: 3 }}>BUTTON LABEL</div>
+                    <div style={{ fontFamily: FONT, fontSize: 8, color: tokens.text.muted, letterSpacing: 1, marginBottom: 3 }}>BUTTON LABEL</div>
                     <input value={editLabel} onChange={e => setEditLabel(e.target.value)} style={inpSm} />
                   </div>
                   <div>
-                    <div style={{ fontFamily: FONT, fontSize: 8, color: "#999", letterSpacing: 1, marginBottom: 3 }}>LINKED PRODUCT</div>
+                    <div style={{ fontFamily: FONT, fontSize: 8, color: tokens.text.muted, letterSpacing: 1, marginBottom: 3 }}>LINKED PRODUCT</div>
                     <WinePickerInput
                       {...pickerProps(editType, editKey, editLinkedKey, ({ searchKey, linkedKey }) => {
                         setEditKey(searchKey);
@@ -272,7 +273,7 @@ export default function QuickAccessPanel({
                     />
                   </div>
                   <div>
-                    <div style={{ fontFamily: FONT, fontSize: 8, color: "#999", letterSpacing: 1, marginBottom: 3 }}>TYPE</div>
+                    <div style={{ fontFamily: FONT, fontSize: 8, color: tokens.text.muted, letterSpacing: 1, marginBottom: 3 }}>TYPE</div>
                     <TypeSelect value={editType} onChange={(t) => {
                       setEditType(t);
                       setEditLinkedKey(undefined);
@@ -285,23 +286,23 @@ export default function QuickAccessPanel({
         })}
 
         {quickAccessItems.length === 0 && (
-          <div style={{ fontFamily: FONT, fontSize: 11, color: "#ccc", textAlign: "center", padding: "30px 0" }}>
+          <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.disabled, textAlign: "center", padding: "30px 0" }}>
             No quick access items configured
           </div>
         )}
       </div>
 
-      <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 18 }}>
-        <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#999", textTransform: "uppercase", marginBottom: 8 }}>Add item</div>
+      <div style={{ borderTop: tokens.border.subtle, paddingTop: 18 }}>
+        <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 8 }}>Add item</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px", gap: 8, marginBottom: 10 }}>
           <div>
-            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#999", marginBottom: 2 }}>BUTTON LABEL</div>
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.text.muted, marginBottom: 2 }}>BUTTON LABEL</div>
             <input value={newLabel} onChange={e => setNewLabel(e.target.value)}
               onKeyDown={e => e.key === "Enter" && addItem()}
               placeholder="e.g. Slapšak" style={inpSm} />
           </div>
           <div>
-            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#999", marginBottom: 2 }}>LINKED PRODUCT</div>
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.text.muted, marginBottom: 2 }}>LINKED PRODUCT</div>
             <WinePickerInput
               {...pickerProps(newType, newSearchKey, newLinkedKey, ({ searchKey, linkedKey }) => {
                 setNewSearchKey(searchKey);
@@ -310,14 +311,14 @@ export default function QuickAccessPanel({
             />
           </div>
           <div>
-            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#999", marginBottom: 2 }}>TYPE</div>
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.text.muted, marginBottom: 2 }}>TYPE</div>
             <TypeSelect value={newType} onChange={(t) => { setNewType(t); setNewLinkedKey(undefined); }} />
           </div>
         </div>
         <button type="button" onClick={addItem} style={{
           fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
-          border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer",
-          background: "#c8a96e", color: "#fff",
+          border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer",
+          background: tokens.charcoal.default, color: tokens.text.inverse,
         }}>+ ADD ITEM</button>
       </div>
     </div>

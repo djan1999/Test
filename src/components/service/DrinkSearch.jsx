@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { fuzzyDrink } from "../../utils/search.js";
 import { tokens } from "../../styles/tokens.js";
 
-export default function DrinkSearch({ drinkObj, list = [], onChange, placeholder, accentColor = "#7a507a" }) {
+export default function DrinkSearch({ drinkObj, list = [], onChange, placeholder }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
@@ -22,7 +22,7 @@ export default function DrinkSearch({ drinkObj, list = [], onChange, placeholder
     fontFamily: tokens.font,
     fontSize: tokens.mobileInputSize,
     padding: "10px 12px",
-    border: "1px solid #e8e8e8",
+    border: `1px solid ${tokens.neutral[200]}`,
     borderRadius: 0,
     outline: "none",
     color: tokens.colors.black,
@@ -35,12 +35,12 @@ export default function DrinkSearch({ drinkObj, list = [], onChange, placeholder
   return (
     <div ref={ref} style={{ position: "relative", width: "100%" }}>
       {drinkObj ? (
-        <div style={{ display: "flex", alignItems: "center", border: `1px solid ${accentColor}44`, borderRadius: 0, padding: "5px 28px 5px 10px", background: `${accentColor}08`, position: "relative", fontSize: 11, fontFamily: tokens.font, color: "#4a4a4a" }}>
+        <div style={{ display: "flex", alignItems: "center", border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, padding: "5px 28px 5px 10px", background: tokens.neutral[50], position: "relative", fontSize: 11, fontFamily: tokens.font, color: tokens.neutral[700] }}>
           <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {drinkObj.name}
             {drinkObj.notes ? ` · ${drinkObj.notes}` : ""}
           </span>
-          <button onClick={(e) => { e.stopPropagation(); onChange(null); }} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+          <button onClick={(e) => { e.stopPropagation(); onChange(null); }} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: tokens.neutral[600], cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
         </div>
       ) : (
         <input
@@ -58,11 +58,11 @@ export default function DrinkSearch({ drinkObj, list = [], onChange, placeholder
         />
       )}
       {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: "#fff", border: "1px solid #e8e8e8", borderRadius: 0, zIndex: 200, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: tokens.neutral[0], border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, zIndex: 200, boxShadow: "0 4px 20px rgba(0,0,0,0.08)", overflow: "hidden" }}>
           {results.map((d) => (
-            <div key={d.id} onMouseDown={() => { setQ(""); setOpen(false); onChange(d); }} style={{ padding: "9px 14px", cursor: "pointer", borderBottom: "1px solid #f5f5f5", fontFamily: tokens.font, fontSize: 12, color: "#1a1a1a" }}>
+            <div key={d.id} onMouseDown={() => { setQ(""); setOpen(false); onChange(d); }} style={{ padding: "9px 14px", cursor: "pointer", borderBottom: `1px solid ${tokens.neutral[100]}`, fontFamily: tokens.font, fontSize: 12, color: tokens.neutral[900] }}>
               {d.name}
-              {d.notes ? <span style={{ color: "#444" }}> · {d.notes}</span> : ""}
+              {d.notes ? <span style={{ color: tokens.neutral[700] }}> · {d.notes}</span> : ""}
             </div>
           ))}
         </div>

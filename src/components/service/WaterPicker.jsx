@@ -26,7 +26,7 @@ export default function WaterPicker({ value, onChange }) {
           fontSize: 12,
           fontWeight: 500,
           padding: "6px 10px",
-          border: "1px solid #e8e8e8",
+          border: `1px solid ${tokens.neutral[200]}`,
           borderRadius: 0,
           cursor: "pointer",
           width: "100%",
@@ -43,8 +43,8 @@ export default function WaterPicker({ value, onChange }) {
             position: "absolute",
             top: "calc(100% + 3px)",
             left: 0,
-            background: "#fff",
-            border: "1px solid #e8e8e8",
+            background: tokens.neutral[0],
+            border: `1px solid ${tokens.neutral[200]}`,
             borderRadius: 0,
             zIndex: 200,
             overflow: "hidden",
@@ -65,10 +65,10 @@ export default function WaterPicker({ value, onChange }) {
                 fontFamily: tokens.font,
                 fontSize: 12,
                 letterSpacing: 1,
-                color: value === opt ? "#1a1a1a" : "#999",
-                background: value === opt ? "#f8f8f8" : "#fff",
+                color: value === opt ? tokens.neutral[900] : tokens.neutral[500],
+                background: value === opt ? tokens.neutral[50] : tokens.neutral[0],
                 fontWeight: value === opt ? 500 : 400,
-                borderBottom: "1px solid #f5f5f5",
+                borderBottom: `1px solid ${tokens.neutral[100]}`,
               }}
             >
               {opt}

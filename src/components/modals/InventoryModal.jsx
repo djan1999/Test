@@ -175,11 +175,11 @@ export default function InventoryModal({ wines, onClose }) {
     : wines;
 
   const syncChip = (() => {
-    if (syncSt === "loading") return { label: "LOADING...", color: "#aaa", bg: "#f8f8f8", border: "#e8e8e8" };
-    if (syncSt === "saving") return { label: "SAVING...", color: "#a07020", bg: "#fffbe8", border: "#e8d888" };
-    if (syncSt === "offline") return { label: "OFFLINE · SAVED", color: "#c06020", bg: "#fff4ee", border: "#e8c8a8" };
-    if (syncSt === "error") return { label: "SYNC ERROR", color: "#c02020", bg: "#fff0f0", border: "#e8a8a8" };
-    return { label: "SYNCED", color: "#2f7a45", bg: "#eef8f1", border: "#8fc39f" };
+    if (syncSt === "loading") return { label: "LOADING...", color: tokens.neutral[400], bg: tokens.neutral[50], border: tokens.neutral[200] };
+    if (syncSt === "saving") return { label: "SAVING...", color: tokens.text.body, bg: tokens.tint.parchment, border: tokens.neutral[300] };
+    if (syncSt === "offline") return { label: "OFFLINE · SAVED", color: tokens.text.body, bg: tokens.tint.parchment, border: tokens.neutral[300] };
+    if (syncSt === "error") return { label: "SYNC ERROR", color: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border };
+    return { label: "SYNCED", color: tokens.green.text, bg: tokens.green.bg, border: tokens.green.border };
   })();
 
   const handlePrint = () => {
@@ -197,26 +197,26 @@ export default function InventoryModal({ wines, onClose }) {
       const vin = rawVin.match(/^\d{4}$/) ? `'${rawVin.slice(2)}` : rawVin;
       const sub = [w.region, COUNTRY_NAMES[w.country] || w.country].filter(Boolean).join(", ");
       return `<tr>
-        <td style="padding:5px 4px;border-bottom:1px solid #f0f0f0;vertical-align:top;">
-          <div style="font-weight:600;">${w.producer} ${w.name} <span style="font-weight:400;color:#888;">${vin}</span></div>
-          ${sub ? `<div style="font-size:9px;color:#aaa;margin-top:1px;">${sub}</div>` : ""}
+        <td style="padding:5px 4px;border-bottom:1px solid ${tokens.neutral[200]};vertical-align:top;">
+          <div style="font-weight:600;">${w.producer} ${w.name} <span style="font-weight:400;color:${tokens.neutral[500]};">${vin}</span></div>
+          ${sub ? `<div style="font-size:9px;color:${tokens.neutral[400]};margin-top:1px;">${sub}</div>` : ""}
         </td>
-        <td style="padding:5px 4px;border-bottom:1px solid #f0f0f0;text-align:right;font-size:15px;font-weight:700;color:${n > 0 ? "#1a1a1a" : "#ddd"};white-space:nowrap;width:48px;">${fmtCount(n)}</td>
+        <td style="padding:5px 4px;border-bottom:1px solid ${tokens.neutral[200]};text-align:right;font-size:15px;font-weight:700;color:${n > 0 ? tokens.neutral[900] : tokens.neutral[300]};white-space:nowrap;width:48px;">${fmtCount(n)}</td>
       </tr>`;
     }).join("");
     const sections = Object.entries(byCountry).sort(([a], [b]) => a.localeCompare(b)).map(([country, ws]) => `
       <div style="margin-bottom:20px;">
-        <div style="font-size:9px;letter-spacing:3px;color:#888;text-transform:uppercase;border-bottom:1px solid #e0e0e0;padding-bottom:4px;margin-bottom:6px;">${country}</div>
+        <div style="font-size:9px;letter-spacing:3px;color:${tokens.neutral[500]};text-transform:uppercase;border-bottom:1px solid ${tokens.neutral[200]};padding-bottom:4px;margin-bottom:6px;">${country}</div>
         <table style="width:100%;border-collapse:collapse;">${rows(ws)}</table>
       </div>`).join("");
     const html = `<html><head><title>Wine Inventory · ${dateStr}</title>
-      <style>body{font-family:'Roboto Mono',monospace;font-size:11px;padding:24px;color:#1a1a1a;}@media print{body{padding:12px;}}</style>
+      <style>body{font-family:'Roboto Mono',monospace;font-size:11px;padding:24px;color:${tokens.neutral[900]};}@media print{body{padding:12px;}}</style>
       </head><body>
         <div style="font-size:14px;font-weight:600;letter-spacing:4px;margin-bottom:4px;">WINE INVENTORY</div>
-        <div style="font-size:9px;letter-spacing:2px;color:#888;margin-bottom:4px;">${dateStr}</div>
-        ${deviceTotals.length > 1 ? `<div style="font-size:9px;color:#888;margin-bottom:20px;">${deviceSummary} · TOTAL: ${fmtCount(grandTotal)}</div>` : `<div style="font-size:9px;color:#888;margin-bottom:20px;">Total: ${fmtCount(grandTotal)} bottles</div>`}
+        <div style="font-size:9px;letter-spacing:2px;color:${tokens.neutral[500]};margin-bottom:4px;">${dateStr}</div>
+        ${deviceTotals.length > 1 ? `<div style="font-size:9px;color:${tokens.neutral[500]};margin-bottom:20px;">${deviceSummary} · TOTAL: ${fmtCount(grandTotal)}</div>` : `<div style="font-size:9px;color:${tokens.neutral[500]};margin-bottom:20px;">Total: ${fmtCount(grandTotal)} bottles</div>`}
         ${sections}
-        <div style="font-size:11px;font-weight:700;text-align:right;padding-top:12px;border-top:1px solid #e0e0e0;">TOTAL: ${fmtCount(grandTotal)} bottles</div>
+        <div style="font-size:11px;font-weight:700;text-align:right;padding-top:12px;border-top:1px solid ${tokens.neutral[200]};">TOTAL: ${fmtCount(grandTotal)} bottles</div>
       </body></html>`;
     const w = window.open("", "_blank");
     if (!w) return;
@@ -235,11 +235,11 @@ export default function InventoryModal({ wines, onClose }) {
       }}>{syncChip.label}</span>
       <button onClick={clearAll} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px",
-        border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#888",
+        border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[500],
       }}>CLEAR ALL</button>
       <button onClick={handlePrint} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
-        border: "1px solid #3060a0", borderRadius: 0, cursor: "pointer", background: "#f0f6ff", color: "#3060a0",
+        border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[50], color: tokens.neutral[500],
       }}>PRINT</button>
     </div>
   );
@@ -258,7 +258,7 @@ export default function InventoryModal({ wines, onClose }) {
         </div>
 
         {filtered.length === 0 && (
-          <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", padding: "40px 0", textAlign: "center" }}>No wines found</div>
+          <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[400], padding: "40px 0", textAlign: "center" }}>No wines found</div>
         )}
         {filtered.map((w) => {
           const myCount = myCounts[w.id] || 0;
@@ -272,26 +272,26 @@ export default function InventoryModal({ wines, onClose }) {
           return (
             <div key={w.id} style={{
               display: "flex", alignItems: "center", gap: 12,
-              padding: "10px 4px", borderBottom: "1px solid #f5f5f5",
+              padding: "10px 4px", borderBottom: `1px solid ${tokens.neutral[100]}`,
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>
+                <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: tokens.neutral[900] }}>
                   {w.producer} <span style={{ fontWeight: 400 }}>{w.name}</span>
-                  <span style={{ color: "#aaa", marginLeft: 6, fontSize: 11 }}>{vin}</span>
+                  <span style={{ color: tokens.neutral[400], marginLeft: 6, fontSize: 11 }}>{vin}</span>
                 </div>
-                {sub && <div style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", marginTop: 2 }}>{sub}</div>}
+                {sub && <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.neutral[400], marginTop: 2 }}>{sub}</div>}
               </div>
               {othersLabel && (
                 <span style={{
-                  fontFamily: FONT, fontSize: 9, color: "#4a80c0", background: "#eaf0fc",
-                  border: "1px solid #c8d8f0", borderRadius: 0, padding: "2px 7px", flexShrink: 0,
+                  fontFamily: FONT, fontSize: 9, color: tokens.neutral[500], background: tokens.neutral[100],
+                  border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, padding: "2px 7px", flexShrink: 0,
                 }}>{othersLabel}</span>
               )}
               <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
                 <button onClick={() => dec(w.id)} style={{
                   fontFamily: FONT, fontSize: 18, width: 38, height: 38,
-                  border: "1px solid #e8e8e8", borderRadius: 0, borderRight: "none",
-                  cursor: "pointer", background: "#fff", color: "#888",
+                  border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, borderRight: "none",
+                  cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[500],
                   display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
                 }}>-</button>
                 <input
@@ -302,23 +302,23 @@ export default function InventoryModal({ wines, onClose }) {
                   placeholder="0"
                   style={{
                     fontFamily: FONT, fontSize: 14, width: 46, height: 38,
-                    border: "1px solid #e8e8e8", outline: "none", textAlign: "center",
-                    color: myCount > 0 ? "#1a1a1a" : "#ccc", fontWeight: myCount > 0 ? 700 : 400,
+                    border: `1px solid ${tokens.neutral[200]}`, outline: "none", textAlign: "center",
+                    color: myCount > 0 ? tokens.neutral[900] : tokens.neutral[300], fontWeight: myCount > 0 ? 700 : 400,
                     boxSizing: "border-box", WebkitAppearance: "none", MozAppearance: "textfield",
                   }}
                 />
                 <button onClick={() => inc(w.id)} style={{
                   fontFamily: FONT, fontSize: 18, width: 38, height: 38,
-                  border: "1px solid #3060a0", borderRight: "none",
-                  cursor: "pointer", background: "#f0f6ff", color: "#3060a0",
+                  border: `1px solid ${tokens.neutral[300]}`, borderRight: "none",
+                  cursor: "pointer", background: tokens.neutral[50], color: tokens.neutral[500],
                   display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
                 }}>+</button>
                 <button onClick={() => togglePartial(w.id)} style={{
                   fontFamily: FONT, fontSize: 10, width: 32, height: 38,
-                  border: isPartial ? "1px solid #e07840" : "1px solid #e8e8e8",
+                  border: isPartial ? `1px solid ${tokens.neutral[400]}` : `1px solid ${tokens.neutral[200]}`,
                   borderRadius: 0, borderLeft: "none",
-                  cursor: "pointer", background: isPartial ? "#fff4ee" : "#fafafa",
-                  color: isPartial ? "#e07840" : "#ccc",
+                  cursor: "pointer", background: isPartial ? tokens.neutral[100] : tokens.neutral[50],
+                  color: isPartial ? tokens.neutral[700] : tokens.neutral[300],
                   display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
                 }}>½</button>
               </div>
@@ -327,21 +327,21 @@ export default function InventoryModal({ wines, onClose }) {
         })}
 
         {wines.length > 0 && (
-          <div style={{ padding: "16px 4px 0", borderTop: "1px solid #f0f0f0", marginTop: 8 }}>
+          <div style={{ padding: "16px 4px 0", borderTop: `1px solid ${tokens.neutral[200]}`, marginTop: 8 }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
               {deviceTotals.map((d) => (
                 <span key={d.id} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 10px",
-                  borderRadius: 0, border: d.isMe ? "1px solid #3060a0" : "1px solid #e0e0e0",
-                  background: d.isMe ? "#f0f6ff" : "#f8f8f8",
-                  color: d.isMe ? "#3060a0" : "#888",
+                  borderRadius: 0, border: d.isMe ? `1px solid ${tokens.neutral[300]}` : `1px solid ${tokens.neutral[200]}`,
+                  background: d.isMe ? tokens.neutral[50] : tokens.neutral[50],
+                  color: d.isMe ? tokens.neutral[700] : tokens.neutral[500],
                 }}>
                   {d.label}{d.isMe ? " (you)" : ""}: {fmtCount(d.total)}
                 </span>
               ))}
               <span style={{
-                fontFamily: FONT, fontSize: 10, fontWeight: 700, color: "#1a1a1a",
-                padding: "3px 10px", borderRadius: 0, border: "1px solid #1a1a1a", background: "#fff",
+                fontFamily: FONT, fontSize: 10, fontWeight: 700, color: tokens.neutral[900],
+                padding: "3px 10px", borderRadius: 0, border: `1px solid ${tokens.neutral[900]}`, background: tokens.neutral[0],
               }}>TOTAL: {fmtCount(grandTotal)}</span>
             </div>
           </div>

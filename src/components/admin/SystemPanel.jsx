@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
 
 // ── SystemPanel — Supabase connection status, realtime, environment, debug ──
@@ -54,7 +55,7 @@ export default function SystemPanel({
     setTimeout(() => { setSyncResult(null); setSyncMsg(""); }, 8000);
   };
 
-  const statusColor = syncStatus === "live" ? "#2a7a2a" : syncStatus === "local-only" ? "#888" : syncStatus === "connecting" ? "#c8a06e" : "#c04040";
+  const statusColor = syncStatus === "live" ? tokens.green.text : syncStatus === "local-only" ? tokens.text.muted : syncStatus === "connecting" ? tokens.neutral[700] : tokens.red.text;
   const statusLabel = syncStatus === "live" ? "Connected" : syncStatus === "local-only" ? "Local Only" : syncStatus === "connecting" ? "Connecting..." : "Error";
   const activeProfile = safeProfiles.find(p => p.id === activeLayoutProfileId) || safeProfiles[0] || null;
 
@@ -62,24 +63,24 @@ export default function SystemPanel({
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* Connection Status */}
       <div>
-        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Supabase Connection</div>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 14 }}>Supabase Connection</div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <div style={{ border: "1px solid #e8e8e8", borderRadius: 0, padding: "12px 16px", minWidth: 160 }}>
-            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Status</div>
+          <div style={{ border: tokens.border.default, borderRadius: 0, padding: "12px 16px", minWidth: 160 }}>
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 6 }}>Status</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ width: 8, height: 8, borderRadius: 0, background: statusColor }} />
               <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: statusColor }}>{statusLabel}</span>
             </div>
           </div>
-          <div style={{ border: "1px solid #e8e8e8", borderRadius: 0, padding: "12px 16px", minWidth: 160 }}>
-            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Realtime</div>
-            <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: syncStatus === "live" ? "#2a7a2a" : "#888" }}>
+          <div style={{ border: tokens.border.default, borderRadius: 0, padding: "12px 16px", minWidth: 160 }}>
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 6 }}>Realtime</div>
+            <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: syncStatus === "live" ? tokens.green.text : tokens.text.muted }}>
               {syncStatus === "live" ? "Active" : "Inactive"}
             </span>
           </div>
-          <div style={{ border: "1px solid #e8e8e8", borderRadius: 0, padding: "12px 16px", minWidth: 160 }}>
-            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>Environment</div>
-            <span style={{ fontFamily: FONT, fontSize: 12, color: "#444" }}>
+          <div style={{ border: tokens.border.default, borderRadius: 0, padding: "12px 16px", minWidth: 160 }}>
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 6 }}>Environment</div>
+            <span style={{ fontFamily: FONT, fontSize: 12, color: tokens.text.body }}>
               {hasSupabase ? "Production" : "Local"}
             </span>
           </div>
@@ -88,14 +89,14 @@ export default function SystemPanel({
 
       {/* Manual Actions */}
       <div>
-        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Manual Actions</div>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 14 }}>Manual Actions</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <button onClick={handleManualSync} disabled={syncResult === "syncing"} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
-            border: `1px solid ${syncResult === "ok" ? "#8fc39f" : syncResult === "err" ? "#e89898" : "#c8a06e"}`,
+            border: `1px solid ${syncResult === "ok" ? tokens.green.border : syncResult === "err" ? tokens.red.border : tokens.charcoal.default}`,
             borderRadius: 0, cursor: syncResult === "syncing" ? "not-allowed" : "pointer",
-            background: syncResult === "ok" ? "#eef8f1" : syncResult === "err" ? "#fff0f0" : "#fffaf4",
-            color: syncResult === "ok" ? "#2f7a45" : syncResult === "err" ? "#c04040" : "#8a6020",
+            background: syncResult === "ok" ? tokens.green.bg : syncResult === "err" ? tokens.red.bg : tokens.charcoal.default,
+            color: syncResult === "ok" ? tokens.green.text : syncResult === "err" ? tokens.red.text : tokens.text.inverse,
           }}>
             {syncResult === "syncing" ? "SYNCING..." : syncResult === "ok" ? "SYNCED" : syncResult === "err" ? "FAILED" : "RESYNC WINES"}
           </button>
@@ -104,7 +105,7 @@ export default function SystemPanel({
               title={syncMsg}
               style={{
                 fontFamily: FONT, fontSize: 10,
-                color: syncResult === "ok" ? "#2a7a2a" : "#c04040",
+                color: syncResult === "ok" ? tokens.green.text : tokens.red.text,
                 maxWidth: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
               }}
             >
@@ -116,19 +117,19 @@ export default function SystemPanel({
 
       {/* Logo */}
       <div>
-        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Menu Logo</div>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 14 }}>Menu Logo</div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ width: 64, height: 64, border: "1px solid #e8e8e8", borderRadius: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#fafafa", flexShrink: 0 }}>
+          <div style={{ width: 64, height: 64, border: tokens.border.default, borderRadius: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tokens.neutral[50], flexShrink: 0 }}>
             {logoDataUri
               ? <img src={logoDataUri} alt="logo" style={{ width: 52, height: 52, objectFit: "contain" }} />
-              : <span style={{ fontFamily: FONT, fontSize: 8, color: "#ccc", letterSpacing: 1 }}>NO LOGO</span>
+              : <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.neutral[300], letterSpacing: 1 }}>NO LOGO</span>
             }
           </div>
           <div>
-            <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginBottom: 8 }}>
+            <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.muted, marginBottom: 8 }}>
               Upload PNG, JPG, or SVG. Will be embedded in all printed menus.
             </div>
-            <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer", background: "#c8a96e", color: "#fff", display: "inline-block" }}>
+            <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.text.inverse, display: "inline-block" }}>
               UPLOAD LOGO
               <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
                 const file = e.target.files[0];
@@ -139,7 +140,7 @@ export default function SystemPanel({
               }} />
             </label>
             {logoDataUri && (
-              <button onClick={() => onSaveLogo("")} style={{ marginLeft: 8, fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: "1px solid #e08080", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#c04040" }}>
+              <button onClick={() => onSaveLogo("")} style={{ marginLeft: 8, fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.red.text }}>
                 REMOVE
               </button>
             )}
@@ -149,27 +150,27 @@ export default function SystemPanel({
 
       {/* Layout profiles */}
       <div>
-        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Print Layout</div>
-        <div style={{ border: "1px solid #e8e8e8", borderRadius: 0, padding: "16px 18px", background: "#fafafa" }}>
-          <div style={{ fontFamily: FONT, fontSize: 10, color: "#444", marginBottom: 6 }}>Layout versions</div>
-          <div style={{ fontFamily: FONT, fontSize: 9, color: "#888", marginBottom: 12 }}>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 14 }}>Print Layout</div>
+        <div style={{ border: tokens.border.default, borderRadius: 0, padding: "16px 18px", background: tokens.neutral[50] }}>
+          <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.body, marginBottom: 6 }}>Layout versions</div>
+          <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.muted, marginBottom: 12 }}>
             No factory defaults. Each layout is an editable version with its own template + spacing.
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <select
               value={activeLayoutProfileId}
               onChange={(e) => onSelectLayoutProfile?.(e.target.value)}
-              style={{ fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: "1px solid #ddd", borderRadius: 0, minWidth: 220 }}
+              style={{ fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: tokens.border.default, borderRadius: 0, minWidth: 220 }}
             >
               {safeProfiles.map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
-            <button onClick={() => onCreateLayoutProfile?.()} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #b8975e", borderRadius: 0, cursor: "pointer", background: "#c8a96e", color: "#fff" }}>NEW BLANK LAYOUT</button>
+            <button onClick={() => onCreateLayoutProfile?.()} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.text.inverse }}>NEW BLANK LAYOUT</button>
             <button
               onClick={() => activeProfile && onDeleteLayoutProfile?.(activeProfile.id)}
               disabled={safeProfiles.length <= 1}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #e08080", borderRadius: 0, cursor: safeProfiles.length <= 1 ? "not-allowed" : "pointer", background: "#fff", color: "#c04040", opacity: safeProfiles.length <= 1 ? 0.6 : 1 }}
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: safeProfiles.length <= 1 ? "not-allowed" : "pointer", background: tokens.surface.card, color: tokens.red.text, opacity: safeProfiles.length <= 1 ? 0.6 : 1 }}
             >
               DELETE LAYOUT
             </button>
@@ -179,9 +180,9 @@ export default function SystemPanel({
 
       {/* Wine sync configuration */}
       <div>
-        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Wine Sync Configuration</div>
-        <div style={{ border: "1px solid #e8e8e8", borderRadius: 0, padding: "16px 18px", background: "#fafafa", display: "flex", flexDirection: "column", gap: 10 }}>
-          <label style={{ fontFamily: FONT, fontSize: 9, color: "#666" }}>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 14 }}>Wine Sync Configuration</div>
+        <div style={{ border: tokens.border.default, borderRadius: 0, padding: "16px 18px", background: tokens.neutral[50], display: "flex", flexDirection: "column", gap: 10 }}>
+          <label style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.secondary }}>
             Countries (CSV: SI,AT,IT,FR,HR)
             <input
               value={(safeWineSyncConfig.wineCountries || []).join(",")}
@@ -189,10 +190,10 @@ export default function SystemPanel({
                 ...safeWineSyncConfig,
                 wineCountries: e.target.value.split(",").map(v => v.trim().toUpperCase()).filter(Boolean),
               })}
-              style={{ marginTop: 4, width: "100%", fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: "1px solid #ddd", borderRadius: 0 }}
+              style={{ marginTop: 4, width: "100%", fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: tokens.border.default, borderRadius: 0 }}
             />
           </label>
-          <label style={{ fontFamily: FONT, fontSize: 9, color: "#666" }}>
+          <label style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.secondary }}>
             Beverage categories (one per line: label|url|category)
             <textarea
               value={(safeWineSyncConfig.beveragePages || []).map(p => `${p.label}|${p.url}|${p.category}`).join("\n")}
@@ -209,14 +210,14 @@ export default function SystemPanel({
                   .filter(p => p.label && p.url && p.category),
               })}
               rows={6}
-              style={{ marginTop: 4, width: "100%", fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: "1px solid #ddd", borderRadius: 0, resize: "vertical" }}
+              style={{ marginTop: 4, width: "100%", fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: tokens.border.default, borderRadius: 0, resize: "vertical" }}
             />
           </label>
           <div>
             <button
               onClick={async () => { setSyncConfigSaving(true); try { await onSaveWineSyncConfig?.(); } finally { setSyncConfigSaving(false); } }}
               disabled={syncConfigSaving}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: "1px solid #b8975e", borderRadius: 0, cursor: syncConfigSaving ? "not-allowed" : "pointer", background: "#c8a96e", color: "#fff" }}
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: syncConfigSaving ? "not-allowed" : "pointer", background: tokens.charcoal.default, color: tokens.text.inverse }}
             >
               {syncConfigSaving ? "SAVING..." : "SAVE SYNC CONFIG"}
             </button>
@@ -228,13 +229,13 @@ export default function SystemPanel({
       <div>
         <button
           onClick={() => setDebugOpen(o => !o)}
-          style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+          style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.disabled, background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
         >
           Debug Info {debugOpen ? "▲" : "▼"}
         </button>
         {debugOpen && (
-          <div style={{ marginTop: 10, border: "1px solid #f0f0f0", borderRadius: 0, padding: "14px 16px", background: "#fafafa" }}>
-            <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", lineHeight: 1.8 }}>
+          <div style={{ marginTop: 10, border: tokens.border.subtle, borderRadius: 0, padding: "14px 16px", background: tokens.neutral[50] }}>
+            <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.muted, lineHeight: 1.8 }}>
               <div>Supabase URL: {supabaseUrl ? supabaseUrl.replace(/https?:\/\//, "").slice(0, 30) + "..." : "not configured"}</div>
               <div>Supabase Connected: {hasSupabase ? "yes" : "no"}</div>
               <div>Sync Status: {syncStatus}</div>

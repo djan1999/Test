@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { tokens } from "../../styles/tokens.js";
 import { FONT, baseInp, fieldLabel, primaryBtn } from "./adminStyles.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 
@@ -8,10 +9,10 @@ function DrinkListEditor({ list, setList, newItem, setNewItem, nextId, label }) 
     <>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 28px", gap: 8, marginBottom: 8 }}>
         {["Name", "Notes / Label", ""].map((h, i) => (
-          <div key={i} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#666", textTransform: "uppercase" }}>{h}</div>
+          <div key={i} style={{ fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 2, color: tokens.text.secondary, textTransform: "uppercase" }}>{h}</div>
         ))}
       </div>
-      <div style={{ borderTop: "1px solid #f0f0f0", marginBottom: 12 }} />
+      <div style={{ borderTop: tokens.border.subtle, marginBottom: 12 }} />
       <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 24 }}>
         {list.map(item => (
           <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 28px", gap: 8, alignItems: "center" }}>
@@ -20,12 +21,12 @@ function DrinkListEditor({ list, setList, newItem, setNewItem, nextId, label }) 
             <input value={item.notes} onChange={e => setList(l => l.map(x => x.id === item.id ? { ...x, notes: e.target.value } : x))}
               style={{ ...baseInp, padding: "5px 8px" }} placeholder="e.g. classic / on the rocks" />
             <button onClick={() => setList(l => l.filter(x => x.id !== item.id))} style={{
-              background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0,
+              background: "none", border: "none", color: tokens.text.secondary, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0,
             }}>×</button>
           </div>
         ))}
       </div>
-      <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 16 }}>
+      <div style={{ borderTop: tokens.border.subtle, paddingTop: 16 }}>
         <div style={fieldLabel}>Add {label}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
           <input value={newItem.name} onChange={e => setNewItem(x => ({ ...x, name: e.target.value }))}
@@ -91,11 +92,11 @@ export default function DrinksPanel({
   }, [localWines, localCocktails, localSpirits, localBeers, onUpdateWines, onSaveBeverages]);
 
   const tabBtn = t => ({
-    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-    border: `1px solid ${drinkTab === t ? "#c8a96e" : "#e8e8e8"}`,
-    borderRadius: 0, cursor: "pointer",
-    background: drinkTab === t ? "#e8dcc8" : "#fff",
-    color: drinkTab === t ? "#6a5030" : "#888",
+    fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
+    border: `1px solid ${drinkTab === t ? tokens.charcoal.default : tokens.neutral[200]}`,
+    borderRadius: tokens.radius, cursor: "pointer",
+    background: drinkTab === t ? tokens.tint.parchment : tokens.surface.card,
+    color: drinkTab === t ? tokens.neutral[700] : tokens.text.muted,
     marginRight: 6, marginBottom: 12,
   });
 
@@ -106,14 +107,14 @@ export default function DrinksPanel({
           <button key={t} style={tabBtn(t)} onClick={() => setDrinkTab(t)}>{t.toUpperCase()}</button>
         ))}
         <button type="button" onClick={handleSaveDrinks} style={{
-          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-          border: `1px solid ${saved ? "#888" : saveError ? "#c04040" : "#4a9a6a"}`, borderRadius: 0, cursor: "pointer",
-          background: saved ? "#888" : saveError ? "#c04040" : "#4a9a6a", color: "#fff", marginLeft: "auto",
+          fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
+          border: `1px solid ${saved ? tokens.neutral[400] : saveError ? tokens.red.border : tokens.green.border}`, borderRadius: tokens.radius, cursor: "pointer",
+          background: saved ? tokens.neutral[400] : saveError ? tokens.red.border : tokens.green.border, color: tokens.text.inverse, marginLeft: "auto",
           transition: "background 0.2s, border-color 0.2s",
         }}>{saved ? "SAVED" : "SAVE DRINKS"}</button>
       </div>
       {saveError && (
-        <div style={{ fontFamily: FONT, fontSize: 10, color: "#c04040", marginBottom: 10, maxWidth: 560 }}>
+        <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text, marginBottom: 10, maxWidth: 560 }}>
           {saveError}
         </div>
       )}
@@ -122,10 +123,10 @@ export default function DrinksPanel({
         <>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 1fr 52px 28px", gap: 8, marginBottom: 8 }}>
             {(isMobile ? ["Name", "Producer"] : ["Name", "Producer", "Vintage", "Region", "Glass", ""]).map((h, i) => (
-              <div key={i} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#666", textTransform: "uppercase" }}>{h}</div>
+              <div key={i} style={{ fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 2, color: tokens.text.secondary, textTransform: "uppercase" }}>{h}</div>
             ))}
           </div>
-          <div style={{ borderTop: "1px solid #f0f0f0", marginBottom: 10 }} />
+          <div style={{ borderTop: tokens.border.subtle, marginBottom: 10 }} />
           <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 20 }}>
             {localWines.map(w => (
               <div key={w.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr auto" : "1fr 1fr 70px 1fr 52px 28px", gap: 8, alignItems: "center" }}>
@@ -134,15 +135,15 @@ export default function DrinksPanel({
                 {!isMobile && <input value={w.vintage} onChange={e => updWine(w.id, "vintage", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="2020" />}
                 {!isMobile && <input value={w.region || ""} onChange={e => updWine(w.id, "region", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="e.g. Dolenjska, Slovenia" />}
                 <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
-                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                  borderColor: w.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 0, cursor: "pointer",
-                  background: w.byGlass ? "#f0faf0" : "#fff", color: w.byGlass ? "#4a8a4a" : "#555",
+                  fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
+                  borderColor: w.byGlass ? tokens.green.border : tokens.neutral[200], borderRadius: tokens.radius, cursor: "pointer",
+                  background: w.byGlass ? tokens.green.bg : tokens.surface.card, color: w.byGlass ? tokens.green.text : tokens.text.secondary,
                 }}>{w.byGlass ? "YES" : "NO"}</button>
-                <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+                <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: tokens.text.secondary, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
               </div>
             ))}
           </div>
-          <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 16 }}>
+          <div style={{ borderTop: tokens.border.subtle, paddingTop: 16 }}>
             <div style={fieldLabel}>Add wine</div>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 1fr 52px", gap: 8, marginBottom: 10 }}>
               <input value={newWine.name} onChange={e => setNewWine(w => ({ ...w, name: e.target.value }))} placeholder="Name" style={{ ...baseInp, padding: "5px 8px" }} />
@@ -150,9 +151,9 @@ export default function DrinksPanel({
               {!isMobile && <input value={newWine.vintage} onChange={e => setNewWine(w => ({ ...w, vintage: e.target.value }))} placeholder="2020" style={{ ...baseInp, padding: "5px 8px" }} />}
               {!isMobile && <input value={newWine.region} onChange={e => setNewWine(w => ({ ...w, region: e.target.value }))} placeholder="e.g. Dolenjska, Slovenia" style={{ ...baseInp, padding: "5px 8px" }} />}
               <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                borderColor: newWine.byGlass ? "#aaddaa" : "#e8e8e8", borderRadius: 0, cursor: "pointer",
-                background: newWine.byGlass ? "#f0faf0" : "#fff", color: newWine.byGlass ? "#4a8a4a" : "#555",
+                fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
+                borderColor: newWine.byGlass ? tokens.green.border : tokens.neutral[200], borderRadius: tokens.radius, cursor: "pointer",
+                background: newWine.byGlass ? tokens.green.bg : tokens.surface.card, color: newWine.byGlass ? tokens.green.text : tokens.text.secondary,
               }}>{newWine.byGlass ? "YES" : "NO"}</button>
             </div>
             <button onClick={addWine} style={primaryBtn}>+ ADD WINE</button>

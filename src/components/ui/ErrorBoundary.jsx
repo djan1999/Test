@@ -33,7 +33,7 @@ export class ErrorBoundary extends Component {
           alignItems: "center",
           justifyContent: "center",
           fontFamily: tokens.font,
-          background: tokens.colors.offWhite,
+          background: tokens.surface.canvas,
           gap: 16,
         }}
       >
@@ -43,7 +43,7 @@ export class ErrorBoundary extends Component {
         <div
           style={{
             fontSize: tokens.fontSize.sm,
-            color: tokens.colors.gray500,
+            color: tokens.text.muted,
             maxWidth: 400,
             textAlign: "center",
           }}
@@ -60,9 +60,9 @@ export class ErrorBoundary extends Component {
             fontSize: tokens.fontSize.sm,
             letterSpacing: 2,
             padding: "8px 24px",
-            border: tokens.borderBold,
-            background: tokens.colors.black,
-            color: tokens.colors.white,
+            border: tokens.border.strong,
+            background: tokens.charcoal.default,
+            color: tokens.text.inverse,
             cursor: "pointer",
           }}
         >
@@ -84,9 +84,9 @@ export class ErrorBoundary extends Component {
             fontSize: tokens.fontSize.xs,
             letterSpacing: 1.5,
             padding: "6px 16px",
-            border: tokens.borderLight,
-            background: tokens.colors.white,
-            color: tokens.colors.gray700,
+            border: tokens.border.subtle,
+            background: tokens.surface.card,
+            color: tokens.text.body,
             cursor: "pointer",
           }}
         >

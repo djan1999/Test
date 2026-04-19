@@ -18,11 +18,11 @@ const baseInp = {
   fontFamily: FONT,
   fontSize: tokens.mobileInputSize,
   padding: "10px 12px",
-  border: "1px solid #e8e8e8",
+  border: `1px solid ${tokens.neutral[200]}`,
   borderRadius: 0,
   outline: "none",
-  color: "#1a1a1a",
-  background: "#fff",
+  color: tokens.text.primary,
+  background: tokens.neutral[0],
   boxSizing: "border-box",
   width: "100%",
   minWidth: 0,
@@ -260,22 +260,22 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
         {/* Language + Title + Team */}
         <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
-          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>Language</div>
+          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase" }}>Language</div>
           {[{val:"en",label:"EN"},{val:"si",label:"SLO"}].map(opt => (
             <button key={opt.val} onClick={() => {
               setLanguageWithDefaults(opt.val);
             }} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-              border: `1px solid ${lang === opt.val ? "#c8a96e" : "#e0e0e0"}`,
+              border: `1px solid ${lang === opt.val ? tokens.charcoal.default : tokens.neutral[200]}`,
               borderRadius: 0, cursor: "pointer",
-              background: lang === opt.val ? "#e8dcc8" : "#fff",
-              color: lang === opt.val ? "#6a5030" : "#aaa",
+              background: lang === opt.val ? tokens.tint.parchment : tokens.neutral[0],
+              color: lang === opt.val ? tokens.text.secondary : tokens.text.muted,
             }}>{opt.label}</button>
           ))}
         </div>
         <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 160 }}>
-            <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Menu Title</div>
+            <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 6 }}>Menu Title</div>
             <input value={menuTitle} onChange={e => { setMenuTitle(e.target.value); writeMenuTitle(lang, e.target.value); }}
               style={{ fontFamily: FONT, fontSize: 11, padding: "8px 10px", border: "1px solid #e0e0e0", borderRadius: 0, outline: "none", width: "100%" }} />
           </div>

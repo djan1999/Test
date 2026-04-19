@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FONT, baseInp } from "./adminStyles.js";
 import { optionalExtrasFromCourses, optionalPairingsFromCourses } from "../../utils/menuUtils.js";
+import { tokens } from "../../styles/tokens.js";
 
-const SELECTED_RING = "#4b4b88";
+const SELECTED_RING = tokens.charcoal.default;
 
 const PREVIEW_PAIRINGS = [
   { value: "—",         label: "None"      },
@@ -37,17 +38,17 @@ export function DrinkPill({ label, sub, onRemove }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 4,
-      background: "#f0f0f8", border: "1px solid #d8d8e8", borderRadius: 0,
+      background: tokens.neutral[100], border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0,
       padding: "2px 6px", fontFamily: FONT, fontSize: 8,
     }}>
-      <span style={{ color: "#444", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <span style={{ color: tokens.text.body, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {label}{sub ? ` · ${sub}` : ""}
       </span>
       <button
         onClick={onRemove}
-        style={{ border: "none", background: "transparent", cursor: "pointer", color: "#bbb", fontSize: 10, padding: 0, lineHeight: 1 }}
-        onMouseEnter={e => { e.currentTarget.style.color = "#e05050"; }}
-        onMouseLeave={e => { e.currentTarget.style.color = "#bbb"; }}
+        style={{ border: "none", background: "transparent", cursor: "pointer", color: tokens.text.disabled, fontSize: 10, padding: 0, lineHeight: 1 }}
+        onMouseEnter={e => { e.currentTarget.style.color = tokens.red.text; }}
+        onMouseLeave={e => { e.currentTarget.style.color = tokens.text.disabled; }}
       >×</button>
     </div>
   );
@@ -105,19 +106,19 @@ export function MiniSearch({ wines = [], cocktails = [], spirits = [], beers = [
       {open && results.length > 0 && (
         <div style={{
           position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, zIndex: 500,
-          background: "#fff", border: "1px solid #e0e0e0", borderRadius: 0,
+          background: tokens.neutral[0], border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0,
           boxShadow: "0 4px 16px rgba(0,0,0,0.12)", maxHeight: 180, overflowY: "auto",
         }}>
           {results.map((r, i) => (
             <div key={i} onMouseDown={() => pick(r)} style={{
               padding: "6px 10px", cursor: "pointer", fontFamily: FONT,
-              borderBottom: "1px solid #f4f4f4",
+              borderBottom: `1px solid ${tokens.neutral[100]}`,
             }}
-              onMouseEnter={e => { e.currentTarget.style.background = "#f4f3fb"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "#fff"; }}
+              onMouseEnter={e => { e.currentTarget.style.background = tokens.neutral[100]; }}
+              onMouseLeave={e => { e.currentTarget.style.background = tokens.neutral[0]; }}
             >
-              <div style={{ fontSize: 9, fontWeight: 700, color: "#222" }}>{r.name}</div>
-              <div style={{ fontSize: 8, color: "#999" }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: tokens.text.primary }}>{r.name}</div>
+              <div style={{ fontSize: 8, color: tokens.text.muted }}>
                 {r.__type === "wine" ? [r.producer, r.vintage, r.country].filter(Boolean).join(" · ") : (r.notes || "")}
               </div>
             </div>
@@ -172,35 +173,35 @@ export function PreviewDataPanel({
 
   const btnStyle = (active) => ({
     fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
-    padding: "3px 8px", border: `1px solid ${active ? SELECTED_RING : "#ddd"}`,
+    padding: "3px 8px", border: `1px solid ${active ? SELECTED_RING : tokens.neutral[300]}`,
     borderRadius: 0, cursor: "pointer",
-    background: active ? "#f0f0f8" : "#fff",
-    color: active ? SELECTED_RING : "#666",
+    background: active ? tokens.neutral[100] : tokens.neutral[0],
+    color: active ? SELECTED_RING : tokens.text.muted,
   });
 
   const seatTabStyle = (i) => ({
     fontFamily: FONT, fontSize: 8.5, letterSpacing: 1, padding: "3px 10px",
     border: "none", borderBottom: `2px solid ${seatIdx === i ? SELECTED_RING : "transparent"}`,
     background: "transparent", cursor: "pointer",
-    color: seatIdx === i ? SELECTED_RING : "#aaa", fontWeight: seatIdx === i ? 700 : 400,
+    color: seatIdx === i ? SELECTED_RING : tokens.text.muted, fontWeight: seatIdx === i ? 700 : 400,
   });
 
   return (
     <div style={{
-      borderBottom: "1px solid #ede9e0", background: "#fdf9f4",
+      borderBottom: `1px solid ${tokens.neutral[200]}`, background: tokens.neutral[50],
       flexShrink: 0, overflow: "hidden",
     }}>
       {/* Header strip — always visible */}
       <div style={{
         display: "flex", alignItems: "center", gap: 10,
-        padding: "5px 12px", borderBottom: open ? "1px solid #ede9e0" : "none",
+        padding: "5px 12px", borderBottom: open ? `1px solid ${tokens.neutral[200]}` : "none",
       }}>
         <button
           onClick={onToggle}
-          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#c8a96e", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.charcoal.default, background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
         >{open ? "▾ PREVIEW DATA" : "▸ PREVIEW DATA"}</button>
 
-        <div style={{ width: 1, height: 14, background: "#e8e4dc", flexShrink: 0 }} />
+        <div style={{ width: 1, height: 14, background: tokens.neutral[200], flexShrink: 0 }} />
 
         {/* Seat tabs */}
         {Array.from({ length: guests }, (_, i) => (
@@ -211,20 +212,20 @@ export function PreviewDataPanel({
 
         {/* Guests stepper */}
         <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 2 }}>
-          <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa", letterSpacing: 1 }}>GUESTS</span>
+          <span style={{ fontFamily: FONT, fontSize: 7.5, color: tokens.text.muted, letterSpacing: 1 }}>GUESTS</span>
           <button onClick={() => onGuestsChange(guests - 1)} disabled={guests <= 1} style={{ ...btnStyle(false), padding: "2px 6px", fontSize: 10 }}>-</button>
-          <span style={{ fontFamily: FONT, fontSize: 9, color: "#444", minWidth: 14, textAlign: "center" }}>{guests}</span>
+          <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.body, minWidth: 14, textAlign: "center" }}>{guests}</span>
           <button onClick={() => onGuestsChange(guests + 1)} disabled={guests >= 8} style={{ ...btnStyle(false), padding: "2px 6px", fontSize: 10 }}>+</button>
         </div>
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
           {/* Lang toggle */}
-          <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa" }}>LANG</span>
+          <span style={{ fontFamily: FONT, fontSize: 7.5, color: tokens.text.muted }}>LANG</span>
           {["en","si"].map(l => (
             <button key={l} onClick={() => onLangChange(l)} style={btnStyle(lang === l)}>{l.toUpperCase()}</button>
           ))}
           {/* Menu type toggle */}
-          <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa", marginLeft: 4 }}>MENU</span>
+          <span style={{ fontFamily: FONT, fontSize: 7.5, color: tokens.text.muted, marginLeft: 4 }}>MENU</span>
           <button onClick={() => onMenuTypeChange("")}      style={btnStyle(menuType === "")}>FULL</button>
           <button onClick={() => onMenuTypeChange("short")} style={btnStyle(menuType === "short")}>SHORT</button>
         </div>
@@ -236,7 +237,7 @@ export function PreviewDataPanel({
 
           {/* Column 1: Pairing + Restrictions */}
           <div style={{ minWidth: 190, marginRight: 16 }}>
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>
+            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 6 }}>
               P{seatIdx + 1} PAIRING
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 12 }}>
@@ -246,7 +247,7 @@ export function PreviewDataPanel({
                 </button>
               ))}
             </div>
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>
+            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 6 }}>
               P{seatIdx + 1} RESTRICTIONS
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 12 }}>
@@ -257,7 +258,7 @@ export function PreviewDataPanel({
               ))}
             </div>
             {optionalPairings.length > 0 && (<>
-              <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6, marginTop: 8 }}>
+              <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 6, marginTop: 8 }}>
                 P{seatIdx + 1} OPT. PAIRINGS
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 6 }}>
@@ -275,7 +276,7 @@ export function PreviewDataPanel({
               </div>
             </>)}
             {optionalExtras.length > 0 && (<>
-              <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 6 }}>
+              <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 6 }}>
                 P{seatIdx + 1} EXTRAS
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
@@ -294,11 +295,11 @@ export function PreviewDataPanel({
           </div>
 
           {/* Divider */}
-          <div style={{ width: 1, background: "#ede9e0", flexShrink: 0, marginRight: 16 }} />
+          <div style={{ width: 1, background: tokens.neutral[200], flexShrink: 0, marginRight: 16 }} />
 
           {/* Column 2: By-glass + Aperitifs */}
           <div style={{ minWidth: 200, marginRight: 16 }}>
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 5 }}>
+            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 5 }}>
               P{seatIdx + 1} BY-THE-GLASS
             </div>
             <div style={{ display: "flex", gap: 4, marginBottom: 5 }}>
@@ -310,7 +311,7 @@ export function PreviewDataPanel({
               ))}
             </div>
 
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 5 }}>
+            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 5 }}>
               P{seatIdx + 1} APERITIFS
             </div>
             <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginBottom: 4 }}>
@@ -329,11 +330,11 @@ export function PreviewDataPanel({
           </div>
 
           {/* Divider */}
-          <div style={{ width: 1, background: "#ede9e0", flexShrink: 0, marginRight: 16 }} />
+          <div style={{ width: 1, background: tokens.neutral[200], flexShrink: 0, marginRight: 16 }} />
 
           {/* Column 3: Cocktails + Bottle wines */}
           <div style={{ minWidth: 200 }}>
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 5 }}>
+            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 5 }}>
               P{seatIdx + 1} COCKTAILS
             </div>
             <div style={{ display: "flex", gap: 4, marginBottom: 5 }}>
@@ -345,7 +346,7 @@ export function PreviewDataPanel({
               ))}
             </div>
 
-            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 5 }}>
+            <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 5 }}>
               TABLE BOTTLE WINES
             </div>
             <div style={{ display: "flex", gap: 4, marginBottom: 5 }}>

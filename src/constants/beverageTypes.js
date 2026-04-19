@@ -1,7 +1,20 @@
+import { tokens } from "../styles/tokens.js";
+
+// All beverage types share the same neutral appearance.
+// Differentiation is communicated by the `glyph` character + the
+// `label`, not by color. This removes the decorative per-type coloring
+// that was fighting the semantic contract (green = saved, red = delete).
+const base = {
+  color:  tokens.text.body,
+  bg:     tokens.surface.card,
+  border: tokens.neutral[300],
+  dot:    tokens.neutral[500],
+};
+
 export const BEV_TYPES = {
-  wine:     { label: "Glass",    color: "#7a5020", bg: "#fdf4e8", border: "#c8a060", dot: "#c8a060" },
-  cocktail: { label: "Cocktail", color: "#5a3878", bg: "#f5eeff", border: "#b898d8", dot: "#b898d8" },
-  spirit:   { label: "Spirit",   color: "#7a5020", bg: "#fff3e0", border: "#d4a870", dot: "#d4a870" },
-  beer:     { label: "Beer",     color: "#3a6a2a", bg: "#edf8e8", border: "#88bb70", dot: "#88bb70" },
-  aperitif: { label: "Aperitif", color: "#a07040", bg: "#fdf8f0", border: "#d0c0a8", dot: "#d0c0a8" },
+  wine:     { ...base, label: "Glass",    glyph: tokens.bevGlyph.wine },
+  cocktail: { ...base, label: "Cocktail", glyph: tokens.bevGlyph.cocktail },
+  spirit:   { ...base, label: "Spirit",   glyph: tokens.bevGlyph.spirit },
+  beer:     { ...base, label: "Beer",     glyph: tokens.bevGlyph.beer },
+  aperitif: { ...base, label: "Aperitif", glyph: tokens.bevGlyph.aperitif },
 };

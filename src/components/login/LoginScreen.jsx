@@ -13,7 +13,7 @@ function GlobalStyle() {
   return (
     <style>{`
       * { box-sizing: border-box; }
-      body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; color: #1a1a1a; }
+      body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; color: ${tokens.text.primary}; }
       input, textarea, select { font-size: ${tokens.mobileInputSize}px; }
       button, a, label { touch-action: manipulation; }
     `}</style>
@@ -82,11 +82,11 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
   }, [picking, pin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div style={{ minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+    <div style={{ minHeight: "100vh", background: tokens.surface.card, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <GlobalStyle />
       <div style={{ marginBottom: 48, textAlign: "center" }}>
-        <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, letterSpacing: 6, color: "#1a1a1a", marginBottom: 8 }}>{APP_NAME}</div>
-        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#999" }}>{APP_SUBTITLE}</div>
+        <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, letterSpacing: 6, color: tokens.text.primary, marginBottom: 8 }}>{APP_NAME}</div>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: tokens.text.muted }}>{APP_SUBTITLE}</div>
       </div>
 
       {!picking ? (
@@ -95,14 +95,14 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
             {MODES.map(m => (
               <button key={m.id} onClick={() => handleTile(m)} style={{
                 fontFamily: FONT, cursor: "pointer",
-                background: "#fff", border: "1px solid #e8e8e8", borderRadius: 0,
+                background: tokens.surface.card, border: tokens.border.default, borderRadius: 0,
                 padding: "28px 32px", width: 140, textAlign: "center",
                 transition: "all 0.12s", display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
               }}>
-                <span style={{ fontSize: 24, color: "#444" }}>{m.icon}</span>
+                <span style={{ fontSize: 24, color: tokens.text.body }}>{m.icon}</span>
                 <div>
-                  <div style={{ fontSize: 11, letterSpacing: 2, color: "#1a1a1a", fontWeight: 500 }}>{m.label.toUpperCase()}</div>
-                  <div style={{ fontSize: 9, letterSpacing: 1, color: "#999", marginTop: 4 }}>{m.sub}</div>
+                  <div style={{ fontSize: 11, letterSpacing: 2, color: tokens.text.primary, fontWeight: 500 }}>{m.label.toUpperCase()}</div>
+                  <div style={{ fontSize: 9, letterSpacing: 1, color: tokens.text.muted, marginTop: 4 }}>{m.sub}</div>
                 </div>
               </button>
             ))}
@@ -111,9 +111,9 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
             <button onClick={handleSync} disabled={syncSt === "syncing"} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 2,
               padding: "6px 16px", borderRadius: 0, cursor: syncSt === "syncing" ? "not-allowed" : "pointer",
-              border: `1px solid ${syncSt === "ok" ? "#8fc39f" : syncSt === "err" ? "#e89898" : "#ddd"}`,
-              background: syncSt === "ok" ? "#eef8f1" : syncSt === "err" ? "#fff0f0" : "#fafafa",
-              color: syncSt === "ok" ? "#2f7a45" : syncSt === "err" ? "#c04040" : "#aaa",
+              border: `1px solid ${syncSt === "ok" ? tokens.green.border : syncSt === "err" ? tokens.red.border : tokens.neutral[300]}`,
+              background: syncSt === "ok" ? tokens.green.bg : syncSt === "err" ? tokens.red.bg : tokens.neutral[50],
+              color: syncSt === "ok" ? tokens.green.text : syncSt === "err" ? tokens.red.text : tokens.text.disabled,
             }}>
               {syncSt === "syncing" ? "SYNCING…" : syncSt === "ok" ? "✓ SYNCED" : syncSt === "err" ? "✗ FAILED" : "↻ SYNC WINES"}
             </button>
@@ -121,14 +121,14 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 28, width: "100%", maxWidth: 320 }}>
-          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#666" }}>ENTER PIN</div>
+          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: tokens.text.secondary }}>ENTER PIN</div>
           <div style={{
             display: "flex", gap: 14, animation: shake ? "shake 0.4s" : "none",
           }}>
             {[0,1,2,3].map(i => (
               <div key={i} style={{
                 width: 14, height: 14, borderRadius: 0,
-                background: i < pin.length ? "#555" : "#e8e8e8",
+                background: i < pin.length ? tokens.neutral[600] : tokens.neutral[200],
                 transition: "background 0.1s",
               }} />
             ))}
@@ -140,16 +140,16 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
                 else if (d !== "") handleDigit(d);
               }} disabled={d === ""} style={{
                 fontFamily: FONT, fontSize: 22, fontWeight: 300,
-                padding: "18px 0", border: "1px solid #e8e8e8", borderRadius: 0,
-                background: d === "" ? "transparent" : "#fff", cursor: d === "" ? "default" : "pointer",
-                color: "#1a1a1a", letterSpacing: 1,
+                padding: "18px 0", border: tokens.border.default, borderRadius: 0,
+                background: d === "" ? "transparent" : tokens.surface.card, cursor: d === "" ? "default" : "pointer",
+                color: tokens.text.primary, letterSpacing: 1,
                 opacity: d === "" ? 0 : 1,
                 transition: "all 0.08s",
               }}>{d}</button>
             ))}
           </div>
           <button onClick={() => { setPicking(null); setPin(""); }} style={{
-            fontFamily: FONT, fontSize: 10, letterSpacing: 2, color: "#999",
+            fontFamily: FONT, fontSize: 10, letterSpacing: 2, color: tokens.text.muted,
             background: "none", border: "none", cursor: "pointer", padding: 8,
           }}>CANCEL</button>
           <style>{`@keyframes shake {

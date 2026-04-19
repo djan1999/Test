@@ -340,10 +340,10 @@ const statusPill = (isLive, label) => ({
   fontSize: 9,
   letterSpacing: 2,
   padding: "6px 10px",
-  border: `1px solid ${isLive ? "#8fc39f" : "#d8d8d8"}`,
+  border: `1px solid ${isLive ? tokens.green.border : tokens.neutral[300]}`,
   borderRadius: 0,
-  background: isLive ? "#eef8f1" : "#f6f6f6",
-  color: isLive ? "#2f7a45" : "#555",
+  background: isLive ? tokens.green.bg : tokens.neutral[50],
+  color: isLive ? tokens.green.text : tokens.text.secondary,
   fontWeight: 600,
   whiteSpace: "nowrap",
 });
@@ -398,9 +398,9 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
   const hasRes = table.resName || table.resTime;
   return (
     <div style={{
-      background: "#fff",
+      background: tokens.neutral[0],
       border: "1px solid",
-      borderColor: table.active ? "#d0d0d0" : hasRes ? "#e4e4e4" : "#f0f0f0",
+      borderColor: table.active ? tokens.neutral[300] : hasRes ? tokens.neutral[200] : tokens.neutral[100],
       borderRadius: 0,
       padding: "20px 18px 16px",
       cursor: table.active ? "pointer" : "default",
@@ -414,7 +414,7 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <span style={{
           fontFamily: FONT, fontSize: table.tableGroup?.length > 1 ? 20 : 28, fontWeight: 300, letterSpacing: 1,
-          color: table.active ? "#1a1a1a" : "#888", lineHeight: 1,
+          color: table.active ? tokens.text.primary : tokens.text.muted, lineHeight: 1,
         }}>
           {table.tableGroup?.length > 1 ? `T${table.tableGroup.join("-")}` : String(table.id).padStart(2, "0")}
         </span>
@@ -422,39 +422,39 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
           {table.birthday && <span style={{ fontSize: 13 }}>🎂</span>}
           {table.restrictions?.length > 0 && <span style={{ fontSize: 13 }}>⚠️</span>}
           {table.guestType === "hotel" && (
-            <span style={{ fontFamily: FONT, fontSize: 9, color: "#1a1a1a", letterSpacing: 1, border: "1px solid #e0e0e0", borderRadius: 0, padding: "2px 6px", background: "#fafafa" }}>
+            <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.primary, letterSpacing: 1, border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, padding: "2px 6px", background: tokens.neutral[50] }}>
               {table.room ? `Hotel #${table.room}` : "Hotel"}
             </span>
           )}
           {table.menuType && (
-            <span style={{ fontFamily: FONT, fontSize: 9, color: "#1a1a1a", letterSpacing: 1, border: "1px solid #e0e0e0", borderRadius: 0, padding: "2px 6px", background: "#fafafa" }}>
+            <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.primary, letterSpacing: 1, border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, padding: "2px 6px", background: tokens.neutral[50] }}>
               {table.menuType} menu
             </span>
           )}
           {table.pace && (() => {
-            const pc = { Slow: { color: "#7a5020", bg: "#fdf4e8", border: "#c8a060" }, Fast: { color: "#6a2a2a", bg: "#fdf0f0", border: "#d08888" } }[table.pace] || {};
+            const pc = { Slow: { color: tokens.neutral[700], bg: tokens.tint.parchment, border: tokens.neutral[300] }, Fast: { color: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } }[table.pace] || {};
             return <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, border: `1px solid ${pc.border}`, borderRadius: 0, padding: "2px 6px", background: pc.bg, color: pc.color }}>{table.pace}</span>;
           })()}
           {table.active && (
-            <span style={{ width: 8, height: 8, borderRadius: 0, background: "#4a9a6a", display: "inline-block" }} />
+            <span style={{ width: 8, height: 8, borderRadius: 0, background: tokens.green.text, display: "inline-block" }} />
           )}
         </div>
       </div>
 
       {/* ── Reservation info ── */}
       {hasRes && (
-        <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ borderTop: `1px solid ${tokens.neutral[100]}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
           {table.resName && (
-            <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 500, color: "#1a1a1a", letterSpacing: 0.3 }}>
+            <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 500, color: tokens.text.primary, letterSpacing: 0.3 }}>
               {table.resName}
             </div>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             {table.resTime && (
-              <span style={{ fontFamily: FONT, fontSize: 11, color: "#555" }}>res. {table.resTime}</span>
+              <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.secondary }}>res. {table.resTime}</span>
             )}
             {table.arrivedAt && (
-              <span style={{ fontFamily: FONT, fontSize: 11, color: "#4a9a6a", fontWeight: 500 }}>arr. {table.arrivedAt}</span>
+              <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.green.text, fontWeight: 500 }}>arr. {table.arrivedAt}</span>
             )}
           </div>
         </div>
@@ -463,19 +463,19 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
       {/* ── Active table info ── */}
       {table.active && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ fontFamily: FONT, fontSize: 11, color: "#777", letterSpacing: 0.5 }}>
+          <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.muted, letterSpacing: 0.5 }}>
             {table.guests} {table.guests === 1 ? "guest" : "guests"}
           </div>
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
             {table.seats.map(s => (
               <div key={s.id} style={{
                 width: 9, height: 9, borderRadius: 0,
-                background: s.pairing ? (pairingStyle[s.pairing]?.color || "#d8d8d8") : "#d8d8d8",
+                background: s.pairing ? (pairingStyle[s.pairing]?.color || tokens.neutral[300]) : tokens.neutral[300],
               }} />
             ))}
           </div>
           {table.notes && (
-            <div style={{ fontFamily: FONT, fontSize: 10, color: "#888", fontStyle: "italic", lineHeight: 1.4 }}>{table.notes}</div>
+            <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.muted, fontStyle: "italic", lineHeight: 1.4 }}>{table.notes}</div>
           )}
         </div>
       )}
@@ -485,25 +485,25 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
         {!table.active && mode === "admin" && (
           <button onClick={onEditRes} style={{
             fontFamily: FONT, fontSize: 10, letterSpacing: 1, padding: "5px 10px",
-            border: "1px solid #e0e0e0", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#555",
+            border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.secondary,
           }}>{hasRes ? "edit" : "reserve"}</button>
         )}
         {!table.active && hasRes && (
           <button onClick={onSeat} style={{
             fontFamily: FONT, fontSize: 10, letterSpacing: 1, padding: "5px 10px",
-            border: "1px solid #b8ddb8", borderRadius: 0, cursor: "pointer", background: "#f4fbf4", color: "#4a8a4a",
+            border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer", background: tokens.green.bg, color: tokens.green.text,
           }}>seat</button>
         )}
         {table.active && mode === "admin" && (
           <button onClick={onUnseat} style={{
             fontFamily: FONT, fontSize: 10, letterSpacing: 1, padding: "5px 10px",
-            border: "1px solid #d8d8d8", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#666",
+            border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.secondary,
           }}>unseat</button>
         )}
         {table.active && mode === "admin" && (
           <button onClick={onClear} style={{
             fontFamily: FONT, fontSize: 10, letterSpacing: 1, padding: "5px 10px",
-            border: "1px solid #f0c0c0", borderRadius: 0, cursor: "pointer", background: "#fff", color: "#c06060",
+            border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text,
           }}>clear</button>
         )}
       </div>
@@ -530,29 +530,29 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
         <button onClick={onBack} style={{
           background: "none", border: "none", cursor: "pointer",
-          fontFamily: FONT, fontSize: 11, color: "#666", letterSpacing: 1, padding: 0,
+          fontFamily: FONT, fontSize: 11, color: tokens.text.secondary, letterSpacing: 1, padding: 0,
         }}>← all tables</button>
       </div>
 
       {/* Table number + guest count */}
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 12, gap: 16, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: "#555", marginBottom: 6 }}>TABLE</div>
-          <div style={{ fontFamily: FONT, fontSize: 48, fontWeight: 300, color: "#1a1a1a", lineHeight: 1 }}>
+          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: tokens.text.secondary, marginBottom: 6 }}>TABLE</div>
+          <div style={{ fontFamily: FONT, fontSize: 48, fontWeight: 300, color: tokens.text.primary, lineHeight: 1 }}>
             {String(table.id).padStart(2, "0")}
           </div>
         </div>
         {mode === "admin" && (
           <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 6 }}>
             <button onClick={() => setGuests(Math.max(1, table.guests - 1))} style={circBtnSm}>−</button>
-            <span style={{ fontFamily: FONT, fontSize: 11, color: "#444", letterSpacing: 1, minWidth: 70, textAlign: "center" }}>
+            <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.body, letterSpacing: 1, minWidth: 70, textAlign: "center" }}>
               {table.guests} guests
             </span>
             <button onClick={() => setGuests(Math.min(14, table.guests + 1))} style={circBtnSm}>+</button>
           </div>
         )}
         {mode === "service" && (
-          <span style={{ fontFamily: FONT, fontSize: 11, color: "#444", letterSpacing: 1, marginBottom: 6 }}>
+          <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.body, letterSpacing: 1, marginBottom: 6 }}>
             {table.guests} guests
           </span>
         )}
@@ -564,8 +564,8 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
           disabled={!canApplySeatToAll}
           style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 1.2, padding: "6px 12px",
-            border: "1px solid #d8d8d8", borderRadius: 0, cursor: canApplySeatToAll ? "pointer" : "not-allowed",
-            background: "#fff", color: "#666", opacity: canApplySeatToAll ? 1 : 0.5,
+            border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: canApplySeatToAll ? "pointer" : "not-allowed",
+            background: tokens.neutral[0], color: tokens.text.secondary, opacity: canApplySeatToAll ? 1 : 0.5,
           }}
         >
           COPY P1 TO ALL
@@ -575,8 +575,8 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
           disabled={!onClearBeverages || !hasAnyBeverageData}
           style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 1.2, padding: "6px 12px",
-            border: "1px solid #f0c8c8", borderRadius: 0, cursor: (onClearBeverages && hasAnyBeverageData) ? "pointer" : "not-allowed",
-            background: "#fff", color: "#c06060", opacity: (onClearBeverages && hasAnyBeverageData) ? 1 : 0.5,
+            border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: (onClearBeverages && hasAnyBeverageData) ? "pointer" : "not-allowed",
+            background: tokens.neutral[0], color: tokens.red.text, opacity: (onClearBeverages && hasAnyBeverageData) ? 1 : 0.5,
           }}
         >
           CLEAR ALL DRINKS
@@ -588,52 +588,52 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
         <div style={{
           display: "grid", gap: 14, alignItems: "start",
           gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(160px, max-content))",
-          padding: isMobile ? "12px" : "10px 14px", background: "#fafafa", border: "1px solid #f0f0f0",
+          padding: isMobile ? "12px" : "10px 14px", background: tokens.neutral[50], border: `1px solid ${tokens.neutral[100]}`,
           borderRadius: 0, marginBottom: 28,
         }}>
           {table.resName && (
             <div>
               <div style={{ ...fieldLabel, marginBottom: 2 }}>Name</div>
-              <div style={{ fontFamily: FONT, fontSize: 13, color: "#1a1a1a" }}>
+              <div style={{ fontFamily: FONT, fontSize: 13, color: tokens.text.primary }}>
                 {table.resName}
-                {table.guestType && <span style={{ fontFamily: FONT, fontSize: 9, color: "#444", marginLeft: 8, letterSpacing: 1, textTransform: "uppercase" }}>{table.guestType}</span>}
-                {table.guestType === "hotel" && table.room && <span style={{ fontFamily: FONT, fontSize: 11, color: "#a07040", marginLeft: 6, letterSpacing: 1 }}>· Hotel #{table.room}</span>}
+                {table.guestType && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.body, marginLeft: 8, letterSpacing: 1, textTransform: "uppercase" }}>{table.guestType}</span>}
+                {table.guestType === "hotel" && table.room && <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[600], marginLeft: 6, letterSpacing: 1 }}>· Hotel #{table.room}</span>}
               </div>
             </div>
           )}
           {table.resTime && (
             <div>
               <div style={{ ...fieldLabel, marginBottom: 2 }}>Reserved</div>
-              <div style={{ fontFamily: FONT, fontSize: 13, color: "#1a1a1a" }}>{table.resTime}</div>
+              <div style={{ fontFamily: FONT, fontSize: 13, color: tokens.text.primary }}>{table.resTime}</div>
             </div>
           )}
           {table.menuType && (
             <div>
               <div style={{ ...fieldLabel, marginBottom: 2 }}>Menu</div>
-              <div style={{ fontFamily: FONT, fontSize: 13, color: "#1a1a1a" }}>{table.menuType}</div>
+              <div style={{ fontFamily: FONT, fontSize: 13, color: tokens.text.primary }}>{table.menuType}</div>
             </div>
           )}
           {table.arrivedAt && (
             <div>
               <div style={{ ...fieldLabel, marginBottom: 2 }}>Arrived</div>
-              <div style={{ fontFamily: FONT, fontSize: 13, color: "#4a9a6a" }}>{table.arrivedAt}</div>
+              <div style={{ fontFamily: FONT, fontSize: 13, color: tokens.green.text }}>{table.arrivedAt}</div>
             </div>
           )}
         </div>
       )}
 
       {/* Quick set water for all seats */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "10px 12px", background: "#fafafa", borderRadius: 0, border: "1px solid #f0f0f0" }}>
-        <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", flexShrink: 0 }}>All water</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "10px 12px", background: tokens.neutral[50], borderRadius: 0, border: `1px solid ${tokens.neutral[100]}` }}>
+        <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase", flexShrink: 0 }}>All water</span>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           {WATER_OPTS.map(opt => (
             <button key={opt} onClick={() => table.seats.forEach(s => updSeat(s.id, "water", opt))} style={{
               fontFamily: FONT, fontSize: 11, letterSpacing: 0.5,
               padding: "5px 10px", border: "1px solid",
-              borderColor: table.seats.every(s => s.water === opt) ? "#c8a96e" : "#e0e0e0",
+              borderColor: table.seats.every(s => s.water === opt) ? tokens.charcoal.default : tokens.neutral[200],
               borderRadius: 0, cursor: "pointer",
-              background: table.seats.every(s => s.water === opt) ? "#e8dcc8" : "#fff",
-              color: table.seats.every(s => s.water === opt) ? "#6a5030" : "#555",
+              background: table.seats.every(s => s.water === opt) ? tokens.tint.parchment : tokens.neutral[0],
+              color: table.seats.every(s => s.water === opt) ? tokens.neutral[700] : tokens.text.secondary,
               transition: "all 0.1s",
             }}>{opt}</button>
           ))}
@@ -643,10 +643,10 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
       {/* Column header row 1 */}
       <div style={{ display: "grid", gridTemplateColumns: row1, gap: 10, alignItems: "center", marginBottom: 4 }}>
         {["", "Water", "Pairing", ""].map((h, i) => (
-          <div key={i} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#555", textTransform: "uppercase" }}>{h}</div>
+          <div key={i} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.secondary, textTransform: "uppercase" }}>{h}</div>
         ))}
       </div>
-      <div style={{ borderTop: "1px solid #f0f0f0", marginBottom: 2 }} />
+      <div style={{ borderTop: `1px solid ${tokens.neutral[100]}`, marginBottom: 2 }} />
 
       {/* Seat rows */}
       {table.seats.map((seat, si) => {

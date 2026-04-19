@@ -54,28 +54,28 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
         style={{
           width: "100%",
           maxWidth: 420,
-          background: "#fff",
+          background: tokens.neutral[0],
           borderRadius: 0,
           overflow: "hidden",
           boxShadow: "0 12px 60px rgba(0,0,0,0.18)",
         }}
       >
-        <div style={{ background: "#ffffff", padding: "20px 20px 16px", textAlign: "center", borderBottom: "1px solid #e8e8e8" }}>
-          <div style={{ fontSize: 9, letterSpacing: 4, color: "rgba(26,26,26,0.5)", marginBottom: 4 }}>{appName}</div>
-          <div style={{ fontSize: 13, letterSpacing: 3, color: "#1a1a1a", fontWeight: 700 }}>SELECT SERVICE DATE</div>
+        <div style={{ background: tokens.neutral[0], padding: "20px 20px 16px", textAlign: "center", borderBottom: `1px solid ${tokens.neutral[200]}` }}>
+          <div style={{ fontSize: 9, letterSpacing: 4, color: tokens.neutral[500], marginBottom: 4 }}>{appName}</div>
+          <div style={{ fontSize: 13, letterSpacing: 3, color: tokens.neutral[900], fontWeight: 700 }}>SELECT SERVICE DATE</div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 10px" }}>
           <button
             onClick={() => setWeekOffset((o) => o - 1)}
-            style={{ fontFamily: FONT, fontSize: 16, border: "none", background: "none", cursor: "pointer", color: "#555", padding: "4px 10px", lineHeight: 1 }}
+            style={{ fontFamily: FONT, fontSize: 16, border: "none", background: "none", cursor: "pointer", color: tokens.neutral[600], padding: "4px 10px", lineHeight: 1 }}
           >
             ‹
           </button>
-          <span style={{ fontSize: 9, letterSpacing: 3, color: "#888", fontWeight: 600 }}>{monthLabel}</span>
+          <span style={{ fontSize: 9, letterSpacing: 3, color: tokens.neutral[500], fontWeight: 600 }}>{monthLabel}</span>
           <button
             onClick={() => setWeekOffset((o) => o + 1)}
-            style={{ fontFamily: FONT, fontSize: 16, border: "none", background: "none", cursor: "pointer", color: "#555", padding: "4px 10px", lineHeight: 1 }}
+            style={{ fontFamily: FONT, fontSize: 16, border: "none", background: "none", cursor: "pointer", color: tokens.neutral[600], padding: "4px 10px", lineHeight: 1 }}
           >
             ›
           </button>
@@ -104,15 +104,15 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
                   alignItems: "center",
                   gap: 4,
                   transition: "all 0.12s",
-                  background: isSel ? "#e8dcc8" : isToday ? "#f0f8f4" : "#f6f6f6",
-                  outline: isToday && !isSel ? "1.5px solid #3a8a5a" : "none",
+                  background: isSel ? tokens.tint.parchment : isToday ? tokens.green.bg : tokens.neutral[100],
+                  outline: isToday && !isSel ? `1.5px solid ${tokens.green.text}` : "none",
                   opacity: isPast && !isSel ? 0.45 : 1,
                 }}
               >
-                <span style={{ fontSize: 8, letterSpacing: 1, color: isSel ? "#8a7050" : "#aaa", fontWeight: 600 }}>{DAY_LABELS[i]}</span>
-                <span style={{ fontSize: 16, fontWeight: 700, color: isSel ? "#6a5030" : isToday ? "#2f7a45" : "#1a1a1a", lineHeight: 1 }}>{dayNum}</span>
-                {isToday && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? "#c8a96e" : "#3a8a5a" }} />}
-                {dayResv.length > 0 && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? "#c8a96e" : "#bbb", marginTop: 2 }} />}
+                <span style={{ fontSize: 8, letterSpacing: 1, color: isSel ? tokens.text.body : tokens.neutral[400], fontWeight: 600 }}>{DAY_LABELS[i]}</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: isSel ? tokens.text.body : isToday ? tokens.green.text : tokens.neutral[900], lineHeight: 1 }}>{dayNum}</span>
+                {isToday && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? tokens.charcoal.default : tokens.green.text }} />}
+                {dayResv.length > 0 && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? tokens.charcoal.default : tokens.neutral[400], marginTop: 2 }} />}
               </button>
             );
           })}
@@ -124,11 +124,11 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
             const selGuests = selResv.reduce((a, r) => a + (r.data?.guests || 2), 0);
             return (
               <div style={{ textAlign: "center", paddingBottom: 6 }}>
-                <span style={{ fontSize: 10, letterSpacing: 2, color: "#3a8a5a", fontWeight: 600 }}>
+                <span style={{ fontSize: 10, letterSpacing: 2, color: tokens.green.text, fontWeight: 600 }}>
                   {new Date(selected + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }).toUpperCase()}
                 </span>
                 {selResv.length > 0 && (
-                  <div style={{ fontSize: 9, letterSpacing: 1, color: "#3a8a5a", fontWeight: 600, marginTop: 4 }}>
+                  <div style={{ fontSize: 9, letterSpacing: 1, color: tokens.green.text, fontWeight: 600, marginTop: 4 }}>
                     {selGuests} PAX · {selResv.length} {selResv.length === 1 ? "TABLE" : "TABLES"}
                   </div>
                 )}
@@ -136,17 +136,17 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
             );
           })()}
 
-        <div style={{ display: "flex", gap: 0, borderTop: "1px solid #f0f0f0", marginTop: 14 }}>
+        <div style={{ display: "flex", gap: 0, borderTop: `1px solid ${tokens.neutral[200]}`, marginTop: 14 }}>
           <button
             onClick={onCancel}
-            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 1, border: "none", borderRight: "1px solid #f0f0f0", cursor: "pointer", background: "#fff", color: "#888", fontWeight: 500 }}
+            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 1, border: "none", borderRight: `1px solid ${tokens.neutral[200]}`, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[500], fontWeight: 500 }}
           >
             CANCEL
           </button>
           <button
             onClick={() => selected && onConfirm(selected)}
             disabled={!selected}
-            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 2, border: "none", cursor: selected ? "pointer" : "not-allowed", background: selected ? "#c8a96e" : "#f0f0f0", color: selected ? "#fff" : "#aaa", fontWeight: 700, opacity: 1 }}
+            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 2, border: "none", cursor: selected ? "pointer" : "not-allowed", background: selected ? tokens.charcoal.default : tokens.neutral[200], color: selected ? tokens.neutral[0] : tokens.neutral[400], fontWeight: 700, opacity: 1 }}
           >
             START SERVICE ›
           </button>

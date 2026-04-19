@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
 import MenuLayoutPanel from "./MenuLayoutPanel.jsx";
 import CourseEditorPanel from "./CourseEditorPanel.jsx";
@@ -83,33 +84,33 @@ export default function AdminLayout({
 
   return (
     <div style={{
-      minHeight: "100vh", background: "#fff", fontFamily: FONT,
+      minHeight: "100vh", background: tokens.surface.card, fontFamily: FONT,
       display: "flex", flexDirection: "column",
     }}>
       {/* Top header bar */}
       <div style={{
-        borderBottom: "1px solid #f0f0f0", padding: "12px 20px",
+        borderBottom: tokens.border.subtle, padding: "12px 20px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        background: "#fff", position: "sticky", top: 0, zIndex: 50,
+        background: tokens.surface.card, position: "sticky", top: 0, zIndex: 50,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 4, color: "#1a1a1a" }}>{APP_NAME}</span>
-          <span style={{ width: 1, height: 14, background: "#e8e8e8" }} />
-          <span style={{ fontSize: 10, letterSpacing: 3, color: "#4b4b88", textTransform: "uppercase", fontWeight: 700 }}>ADMIN</span>
+          <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 4, color: tokens.text.primary }}>{APP_NAME}</span>
+          <span style={{ width: 1, height: 14, background: tokens.neutral[300] }} />
+          <span style={{ fontSize: 10, letterSpacing: 3, color: tokens.text.secondary, textTransform: "uppercase", fontWeight: 700 }}>ADMIN</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px",
-            border: `1px solid ${syncStatus === "live" ? "#8fc39f" : "#d8d8d8"}`,
+            border: `1px solid ${syncStatus === "live" ? tokens.green.border : tokens.neutral[300]}`,
             borderRadius: 0,
-            background: syncStatus === "live" ? "#eef8f1" : "#f6f6f6",
-            color: syncStatus === "live" ? "#2f7a45" : "#555",
+            background: syncStatus === "live" ? tokens.green.bg : tokens.neutral[50],
+            color: syncStatus === "live" ? tokens.green.text : tokens.text.muted,
             fontWeight: 600, whiteSpace: "nowrap",
           }}>{syncStatus === "live" ? "SYNC" : syncStatus === "local-only" ? "LOCAL" : syncStatus === "connecting" ? "LINK" : "ERROR"}</span>
           <button onClick={onExit} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px",
-            border: "1px solid #e8e8e8", borderRadius: 0, cursor: "pointer",
-            background: "#fff", color: "#1a1a1a", flexShrink: 0,
+            border: tokens.border.default, borderRadius: 0, cursor: "pointer",
+            background: tokens.surface.card, color: tokens.text.primary, flexShrink: 0,
           }}>EXIT</button>
         </div>
       </div>
@@ -125,8 +126,8 @@ export default function AdminLayout({
             if (!e.currentTarget.contains(e.relatedTarget)) setNavHover(false);
           }}
           style={{
-          width: navOpen ? NAV_W_OPEN : NAV_W_CLOSED, flexShrink: 0, borderRight: "1px solid #f0f0f0",
-          padding: "20px 0", background: "#fafafa",
+          width: navOpen ? NAV_W_OPEN : NAV_W_CLOSED, flexShrink: 0, borderRight: tokens.border.subtle,
+          padding: "20px 0", background: tokens.neutral[50],
           position: "sticky", top: 52, height: "calc(100vh - 52px)",
           overflowY: "auto",
           transition: "width 0.16s ease",
@@ -144,11 +145,11 @@ export default function AdminLayout({
                 justifyContent: navOpen ? "space-between" : "center",
                 gap: 8,
                 padding: navOpen ? "8px 10px" : "8px 0",
-                border: "1px solid #e8e8e8",
+                border: tokens.border.default,
                 borderRadius: 0,
-                background: "#fff",
+                background: tokens.surface.card,
                 cursor: "pointer",
-                color: navPinned ? "#4b4b88" : "#999",
+                color: navPinned ? tokens.text.secondary : tokens.text.muted,
                 fontFamily: FONT,
                 fontSize: 9,
                 letterSpacing: 1.5,
@@ -157,7 +158,7 @@ export default function AdminLayout({
             >
               <span style={{ fontSize: 14, width: 20, textAlign: "center" }}>{navPinned ? "📌" : "☰"}</span>
               {navOpen && <span style={{ flex: 1, textAlign: "left" }}>{navPinned ? "Pinned" : "Hover to open"}</span>}
-              {navOpen && <span style={{ color: "#ccc" }}>{navPinned ? "ON" : "OFF"}</span>}
+              {navOpen && <span style={{ color: tokens.neutral[300] }}>{navPinned ? "ON" : "OFF"}</span>}
             </button>
           </div>
           {SECTIONS.map(s => (
@@ -169,17 +170,17 @@ export default function AdminLayout({
               style={{
                 display: "flex", alignItems: "center", gap: 10,
                 width: "100%", padding: navOpen ? "12px 20px" : "12px 0", border: "none",
-                background: activeSection === s.id ? "#fff" : "transparent",
-                borderLeft: activeSection === s.id ? "3px solid #4b4b88" : "3px solid transparent",
+                background: activeSection === s.id ? tokens.surface.card : "transparent",
+                borderLeft: activeSection === s.id ? `3px solid ${tokens.charcoal.default}` : "3px solid transparent",
                 cursor: "pointer", transition: "all 0.1s",
                 fontFamily: FONT, fontSize: 10, letterSpacing: 1,
-                color: activeSection === s.id ? "#1a1a1a" : "#888",
+                color: activeSection === s.id ? tokens.text.primary : tokens.text.muted,
                 fontWeight: activeSection === s.id ? 600 : 400,
                 textAlign: "left",
                 justifyContent: navOpen ? "flex-start" : "center",
               }}
             >
-              <span style={{ fontSize: 14, color: activeSection === s.id ? "#4b4b88" : "#ccc", width: 20, textAlign: "center" }}>{s.icon}</span>
+              <span style={{ fontSize: 14, color: activeSection === s.id ? tokens.charcoal.default : tokens.neutral[300], width: 20, textAlign: "center" }}>{s.icon}</span>
               {navOpen && s.label}
             </button>
           ))}
@@ -189,7 +190,7 @@ export default function AdminLayout({
         <main style={{ flex: 1, padding: "24px 24px", maxWidth: activeSection === "menu" ? "none" : 900, overflowY: "auto" }}>
           {activeSection === "menu" && (
             <div>
-              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 20 }}>
+              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 20 }}>
                 MENU LAYOUT — template editor · single source of truth
               </div>
               <MenuLayoutPanel
@@ -220,7 +221,7 @@ export default function AdminLayout({
             <div>
               {/* Combined view: Courses + Dishes/Restrictions */}
               <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-                <div style={{ border: "1px solid #f0f0f0", borderRadius: 0, overflow: "hidden", background: "#fff" }}>
+                <div style={{ border: tokens.border.subtle, borderRadius: 0, overflow: "hidden", background: tokens.surface.card }}>
                   <button
                     onClick={() => setDishesCoursesOpen(v => !v)}
                     style={{
@@ -230,16 +231,16 @@ export default function AdminLayout({
                       justifyContent: "space-between",
                       padding: "10px 14px",
                       border: "none",
-                      background: "#fafafa",
+                      background: tokens.neutral[50],
                       cursor: "pointer",
                       fontFamily: FONT,
                     }}
                     title={dishesCoursesOpen ? "Collapse" : "Expand"}
                   >
-                    <span style={{ fontSize: 9, letterSpacing: 2, color: "#4b4b88", textTransform: "uppercase", fontWeight: 700 }}>
+                    <span style={{ fontSize: 9, letterSpacing: 2, color: tokens.charcoal.default, textTransform: "uppercase", fontWeight: 700 }}>
                       ◈ Courses
                     </span>
-                    <span style={{ fontSize: 12, color: "#bbb" }}>{dishesCoursesOpen ? "▾" : "▸"}</span>
+                    <span style={{ fontSize: 12, color: tokens.neutral[400] }}>{dishesCoursesOpen ? "▾" : "▸"}</span>
                   </button>
                   {dishesCoursesOpen && (
                     <div style={{ padding: "14px 14px 16px" }}>
@@ -253,11 +254,11 @@ export default function AdminLayout({
                 </div>
 
                 <div style={{
-                  fontFamily: FONT, fontSize: 10, color: "#999",
-                  border: "1px solid #f0f0f0", borderRadius: 0,
-                  background: "#fafafa", padding: "12px 14px", lineHeight: 1.5,
+                  fontFamily: FONT, fontSize: 10, color: tokens.text.muted,
+                  border: tokens.border.subtle, borderRadius: 0,
+                  background: tokens.neutral[50], padding: "12px 14px", lineHeight: 1.5,
                 }}>
-                  Optional extras are now driven directly from each course’s `optional_flag` in Courses.
+                  Optional extras are now driven directly from each course's `optional_flag` in Courses.
                   There is no separate Extra Dishes editor anymore.
                 </div>
               </div>

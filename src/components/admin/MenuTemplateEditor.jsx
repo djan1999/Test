@@ -25,6 +25,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { FONT, baseInp } from "./adminStyles.js";
+import { tokens } from "../../styles/tokens.js";
 import {
   BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
 } from "../../utils/menuTemplateSchema.js";
@@ -36,10 +37,10 @@ import { PreviewDataPanel } from "./MenuTemplatePreviewParts.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const GOLD = "#c8a96e";
-const SELECTED_RING = "#4b4b88";
-const CELL_EMPTY_BG = "#f7f6f2";
-const CELL_EMPTY_BORDER = "#e4e2dc";
+const GOLD = tokens.charcoal.default;
+const SELECTED_RING = tokens.charcoal.default;
+const CELL_EMPTY_BG = tokens.neutral[100];
+const CELL_EMPTY_BORDER = tokens.neutral[200];
 
 // ── Preview data constants ─────────────────────────────────────────────────────
 
@@ -92,20 +93,20 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
         onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = CELL_EMPTY_BORDER; }}
       >
-        <span style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", fontWeight: 700 }}>+</span>
+        <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.disabled, fontWeight: 700 }}>+</span>
       </div>
     );
   }
 
-  const accentCol = meta?.color || "#888";
+  const accentCol = meta?.color || tokens.text.muted;
 
   return (
     <div
       onClick={() => onSelect(rowId, side)}
       style={{
         flex: 1, minWidth: 0, height: 28, borderRadius: 0, cursor: "pointer",
-        border: `1.5px solid ${isSelected ? SELECTED_RING : "#e8e6e0"}`,
-        background: isSelected ? "#f4f3fb" : (meta?.bg || "#fafafa"),
+        border: `1.5px solid ${isSelected ? SELECTED_RING : tokens.neutral[200]}`,
+        background: isSelected ? tokens.neutral[100] : (meta?.bg || tokens.neutral[50]),
         display: "flex", alignItems: "center", gap: 0,
         overflow: "hidden", position: "relative",
         transition: "border-color 0.1s",
@@ -113,7 +114,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
     >
       <div style={{ width: 3, alignSelf: "stretch", background: accentCol, flexShrink: 0 }} />
       <span style={{
-        fontFamily: FONT, fontSize: 8, color: isSelected ? SELECTED_RING : "#444",
+        fontFamily: FONT, fontSize: 8, color: isSelected ? SELECTED_RING : tokens.text.body,
         padding: "0 6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         flex: 1, letterSpacing: 0.3,
       }}>
@@ -125,19 +126,19 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
         title={side === "left" ? "Move to right cell" : "Move to left cell"}
         style={{
           flexShrink: 0, border: "none", background: "transparent",
-          cursor: "pointer", color: "#ccc", fontSize: 9, padding: "0 3px", height: "100%",
+          cursor: "pointer", color: tokens.text.disabled, fontSize: 9, padding: "0 3px", height: "100%",
         }}
-        onMouseEnter={e => { e.currentTarget.style.color = "#4b4b88"; }}
-        onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
+        onMouseEnter={e => { e.currentTarget.style.color = tokens.charcoal.default; }}
+        onMouseLeave={e => { e.currentTarget.style.color = tokens.text.disabled; }}
       >{side === "left" ? "→" : "←"}</button>
       <button
         onClick={e => { e.stopPropagation(); onRemove(rowId, side); }}
         style={{
           flexShrink: 0, border: "none", background: "transparent",
-          cursor: "pointer", color: "#ccc", fontSize: 9, padding: "0 4px", height: "100%",
+          cursor: "pointer", color: tokens.text.disabled, fontSize: 9, padding: "0 4px", height: "100%",
         }}
-        onMouseEnter={e => { e.currentTarget.style.color = "#e05050"; }}
-        onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
+        onMouseEnter={e => { e.currentTarget.style.color = tokens.red.text; }}
+        onMouseLeave={e => { e.currentTarget.style.color = tokens.text.disabled; }}
       >×</button>
     </div>
   );
@@ -174,16 +175,16 @@ function SortableRow({
         <div style={{
           display: "flex", alignItems: "center", gap: 4,
           padding: "3px 4px",
-          background: "#f7f6f0",
-          border: "1.5px dashed #d8d4c8",
+          background: tokens.neutral[50],
+          border: `1.5px dashed ${tokens.neutral[300]}`,
           borderRadius: 0,
         }}>
           <div
             {...attributes} {...listeners}
-            style={{ width: 14, cursor: "grab", color: "#ccc", fontSize: 10, userSelect: "none", textAlign: "center", flexShrink: 0 }}
+            style={{ width: 14, cursor: "grab", color: tokens.text.disabled, fontSize: 10, userSelect: "none", textAlign: "center", flexShrink: 0 }}
             title="Drag to reorder"
           >⋮⋮</div>
-          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#c8b87a", textTransform: "uppercase", flexShrink: 0 }}>
+          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.neutral[600], textTransform: "uppercase", flexShrink: 0 }}>
             GAP
           </span>
           <input
@@ -195,11 +196,11 @@ function SortableRow({
             onChange={e => onUpdateRow({ ...row, gap: parseFloat(e.target.value) || 0 })}
             style={{
               fontFamily: FONT, fontSize: 9, padding: "2px 4px",
-              border: "1px solid #e0ddd6", borderRadius: 0,
-              width: 46, textAlign: "center", background: "#fff",
+              border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0,
+              width: 46, textAlign: "center", background: tokens.neutral[0],
             }}
           />
-          <span style={{ fontFamily: FONT, fontSize: 8, color: "#bbb", flexShrink: 0 }}>pt</span>
+          <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.text.disabled, flexShrink: 0 }}>pt</span>
           <div style={{ flex: 1 }} />
           <div style={{ display: "flex", gap: 1, flexShrink: 0 }}>
             <RowActionBtn title="Insert row above" onClick={() => onInsertAbove(row.id)}>↑</RowActionBtn>
@@ -214,14 +215,14 @@ function SortableRow({
           <div style={{
             display: "flex", alignItems: "center", gap: 4,
             padding: "3px 4px",
-            background: (leftSelected || rightSelected) ? "#f4f3fb" : "#fff",
-            border: `1px solid ${(leftSelected || rightSelected) ? "#c8c6e8" : "#ede9e0"}`,
+            background: (leftSelected || rightSelected) ? tokens.neutral[100] : tokens.neutral[0],
+            border: `1px solid ${(leftSelected || rightSelected) ? tokens.neutral[300] : tokens.neutral[200]}`,
             borderRadius: 0,
           }}>
             {/* Drag handle */}
             <div
               {...attributes} {...listeners}
-              style={{ width: 14, cursor: "grab", color: "#ccc", fontSize: 10, userSelect: "none", textAlign: "center", flexShrink: 0 }}
+              style={{ width: 14, cursor: "grab", color: tokens.text.disabled, fontSize: 10, userSelect: "none", textAlign: "center", flexShrink: 0 }}
               title="Drag to reorder"
             >⋮⋮</div>
 
@@ -270,8 +271,8 @@ function RowActionBtn({ children, onClick, title, danger = false, active = false
       style={{
         width: 20, height: 22, border: "none", borderRadius: 0, cursor: "pointer",
         fontFamily: FONT, fontSize: 10, padding: 0, lineHeight: 1,
-        background: active ? "#f0f0f8" : hov ? (danger ? "#fff0f0" : "#f4f3fb") : "transparent",
-        color: active ? SELECTED_RING : hov ? (danger ? "#e05050" : SELECTED_RING) : "#bbb",
+        background: active ? tokens.neutral[100] : hov ? (danger ? tokens.red.bg : tokens.neutral[100]) : "transparent",
+        color: active ? SELECTED_RING : hov ? (danger ? tokens.red.text : SELECTED_RING) : tokens.text.disabled,
         transition: "all 0.1s",
       }}
     >{children}</button>
@@ -283,8 +284,8 @@ function RowActionBtn({ children, onClick, title, danger = false, active = false
 function OverlayRow({ row }) {
   return (
     <div style={{
-      background: "#fff", border: `1.5px solid ${SELECTED_RING}`, borderRadius: 0,
-      padding: "5px 10px", opacity: 0.9, boxShadow: "0 4px 16px rgba(75,75,136,0.18)",
+      background: tokens.neutral[0], border: `1.5px solid ${SELECTED_RING}`, borderRadius: 0,
+      padding: "5px 10px", opacity: 0.9, boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
       fontFamily: FONT, fontSize: 8.5, color: SELECTED_RING, letterSpacing: 1,
     }}>
       {row.left ? (BLOCK_META[row.left.type]?.label || row.left.type) : "—"}
@@ -318,17 +319,17 @@ function BlockPickerModal({ onPick, onClose, menuCourses }) {
     >
       <div
         style={{
-          background: "#fff", borderRadius: 0, padding: "20px 24px",
+          background: tokens.neutral[0], borderRadius: 0, padding: "20px 24px",
           width: 500, maxHeight: "75vh", overflowY: "auto",
           boxShadow: "0 8px 40px rgba(0,0,0,0.2)", fontFamily: FONT,
         }}
         onClick={e => e.stopPropagation()}
       >
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
-          <span style={{ fontSize: 9, letterSpacing: 3, textTransform: "uppercase", color: "#1a1a1a", fontWeight: 700 }}>
+          <span style={{ fontSize: 9, letterSpacing: 3, textTransform: "uppercase", color: tokens.text.primary, fontWeight: 700 }}>
             ADD BLOCK
           </span>
-          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 16, color: "#bbb" }}>×</button>
+          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 16, color: tokens.text.disabled }}>×</button>
         </div>
 
         <input
@@ -348,9 +349,9 @@ function BlockPickerModal({ onPick, onClose, menuCourses }) {
           return (
             <div key={group.id} style={{ marginBottom: 16 }}>
               {!filtered && (
-                <div style={{ fontSize: 7.5, letterSpacing: 3, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>
+                <div style={{ fontSize: 7.5, letterSpacing: 3, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 8 }}>
                   {group.label}
-                  <span style={{ marginLeft: 8, fontSize: 7, color: "#ddd", letterSpacing: 1 }}>{group.desc}</span>
+                  <span style={{ marginLeft: 8, fontSize: 7, color: tokens.neutral[300], letterSpacing: 1 }}>{group.desc}</span>
                 </div>
               )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
@@ -363,9 +364,9 @@ function BlockPickerModal({ onPick, onClose, menuCourses }) {
                     style={{
                       display: "flex", alignItems: "center", gap: 9,
                       padding: "9px 11px", border: "1.5px solid",
-                      borderColor: hov === type ? meta.color : "#eeeceb",
+                      borderColor: hov === type ? meta.color : tokens.neutral[200],
                       borderRadius: 0, cursor: "pointer",
-                      background: hov === type ? (meta.bg || "#f8f8f8") : "#fafafa",
+                      background: hov === type ? (meta.bg || tokens.neutral[50]) : tokens.neutral[50],
                       textAlign: "left", transition: "all 0.1s",
                     }}
                   >
@@ -373,10 +374,10 @@ function BlockPickerModal({ onPick, onClose, menuCourses }) {
                       {meta.icon}
                     </span>
                     <div>
-                      <div style={{ fontSize: 8.5, letterSpacing: 0.5, fontWeight: 700, color: "#1a1a1a", marginBottom: 2 }}>
+                      <div style={{ fontSize: 8.5, letterSpacing: 0.5, fontWeight: 700, color: tokens.text.primary, marginBottom: 2 }}>
                         {meta.label}
                       </div>
-                      <div style={{ fontSize: 7, color: "#999", lineHeight: 1.4 }}>
+                      <div style={{ fontSize: 7, color: tokens.text.muted, lineHeight: 1.4 }}>
                         {meta.desc}
                       </div>
                     </div>
@@ -407,10 +408,10 @@ function AlignButtons({ value, onChange }) {
           onClick={() => onChange(o.v)}
           title={o.v}
           style={{
-            width: 32, height: 26, border: `1px solid ${value === o.v ? SELECTED_RING : "#ddd"}`,
+            width: 32, height: 26, border: `1px solid ${value === o.v ? SELECTED_RING : tokens.neutral[300]}`,
             borderRadius: 0, cursor: "pointer", fontFamily: FONT, fontSize: 11,
-            background: value === o.v ? "#f0f0f8" : "#fff",
-            color: value === o.v ? SELECTED_RING : "#666",
+            background: value === o.v ? tokens.neutral[100] : tokens.neutral[0],
+            color: value === o.v ? SELECTED_RING : tokens.text.muted,
           }}
         >{o.icon}</button>
       ))}
@@ -420,7 +421,7 @@ function AlignButtons({ value, onChange }) {
 
 function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = [], spirits = [], beers = [] }) {
   if (!block) return (
-    <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#ccc", letterSpacing: 1, padding: "24px 0", textAlign: "center", lineHeight: 2 }}>
+    <div style={{ fontFamily: FONT, fontSize: 8.5, color: tokens.text.disabled, letterSpacing: 1, padding: "24px 0", textAlign: "center", lineHeight: 2 }}>
       SELECT A CELL<br />TO CONFIGURE
     </div>
   );
@@ -435,11 +436,11 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
 
   if (fields.length === 0 && !isDrinks) return (
     <div>
-      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: meta.color || "#888", textTransform: "uppercase", marginBottom: 8 }}>
+      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: meta.color || tokens.text.muted, textTransform: "uppercase", marginBottom: 8 }}>
         {meta.icon} {meta.label}
       </div>
-      <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.6 }}>{meta.desc}</div>
-      <div style={{ marginTop: 10, fontFamily: FONT, fontSize: 7.5, color: "#ccc", letterSpacing: 1 }}>
+      <div style={{ fontFamily: FONT, fontSize: 8.5, color: tokens.text.muted, lineHeight: 1.6 }}>{meta.desc}</div>
+      <div style={{ marginTop: 10, fontFamily: FONT, fontSize: 7.5, color: tokens.text.disabled, letterSpacing: 1 }}>
         NO CONFIGURABLE FIELDS
       </div>
     </div>
@@ -447,13 +448,13 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
 
   return (
     <div>
-      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: meta.color || "#888", textTransform: "uppercase", marginBottom: 14 }}>
+      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: meta.color || tokens.text.muted, textTransform: "uppercase", marginBottom: 14 }}>
         {meta.icon} {meta.label}
       </div>
 
       {isDrinks && (
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>Source</div>
+          <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 5 }}>Source</div>
           <select
             value={drinkSource}
             onChange={e => setField("drinkSource", e.target.value)}
@@ -466,24 +467,24 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
           </select>
 
           {drinkSource === "pairing" && (<>
-            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <label style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.secondary, display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <input type="checkbox" checked={block.showByGlass !== false} onChange={e => setField("showByGlass", e.target.checked)} />
               By-the-glass fallback
             </label>
-            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <label style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.secondary, display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <input type="checkbox" checked={block.showBottle !== false} onChange={e => setField("showBottle", e.target.checked)} />
               Bottle wine fallback
             </label>
           </>)}
 
           {drinkSource === "optional_pairing" && (
-            <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.5 }}>
+            <div style={{ fontFamily: FONT, fontSize: 8.5, color: tokens.text.muted, lineHeight: 1.5 }}>
               Uses optional pairing data from the course editor (ALCO / N/A, EN / SI). Auto-selects based on seat pairing type.
             </div>
           )}
 
           {(drinkSource === "by_the_glass" || drinkSource === "bottle") && (
-            <div style={{ fontFamily: FONT, fontSize: 8.5, color: "#aaa", lineHeight: 1.5 }}>
+            <div style={{ fontFamily: FONT, fontSize: 8.5, color: tokens.text.muted, lineHeight: 1.5 }}>
               Consumes next {drinkSource === "by_the_glass" ? "by-the-glass wine" : "bottle wine"} from the seat/table queue.
             </div>
           )}
@@ -492,7 +493,7 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
 
       {fields.map(field => (
         <div key={field.key} style={{ marginBottom: 14 }}>
-          <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: "#999", textTransform: "uppercase", marginBottom: 5 }}>
+          <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 5 }}>
             {field.label}
           </div>
 
@@ -543,7 +544,7 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
                 style={{ ...baseInp, fontSize: 12, flex: 1 }}
               />
               {field.min !== undefined && (
-                <span style={{ fontFamily: FONT, fontSize: 7, color: "#ccc", letterSpacing: 0 }}>
+                <span style={{ fontFamily: FONT, fontSize: 7, color: tokens.text.disabled, letterSpacing: 0 }}>
                   {field.min}–{field.max}
                 </span>
               )}
@@ -555,7 +556,7 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
                 checked={!!block[field.key]}
                 onChange={e => setField(field.key, e.target.checked)}
               />
-              <span style={{ fontFamily: FONT, fontSize: 9, color: "#555" }}>{field.label}</span>
+              <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.secondary }}>{field.label}</span>
             </label>
           ) : (
             <input
@@ -600,17 +601,17 @@ function LivePreview({ previewHtml, loading, label = "A5" }) {
 
   return (
     <div ref={containerRef} style={{
-      flex: 1, overflow: "hidden", background: "#e8e6e0",
+      flex: 1, overflow: "hidden", background: tokens.neutral[200],
       display: "flex", flexDirection: "column", alignItems: "center",
       padding: "20px 16px",
     }}>
       <div style={{
-        fontFamily: FONT, fontSize: 7.5, letterSpacing: 3, color: "#aaa",
+        fontFamily: FONT, fontSize: 7.5, letterSpacing: 3, color: tokens.text.muted,
         textTransform: "uppercase", marginBottom: 14, flexShrink: 0,
         width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
       }}>
         <span>LIVE PREVIEW {loading ? "· updating…" : `· ${label}`}</span>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, letterSpacing: 1.2, color: "#9a96b5" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, letterSpacing: 1.2, color: tokens.text.secondary }}>
           <input type="checkbox" checked={!!window.__menuSpacingDebug} onChange={(e) => {
             window.__menuSpacingDebug = e.target.checked;
           }} />
@@ -627,10 +628,10 @@ function LivePreview({ previewHtml, loading, label = "A5" }) {
         boxShadow: "0 4px 24px rgba(0,0,0,0.22)",
         borderRadius: 0,
         position: "relative",
-        background: "#fff",
+        background: tokens.neutral[0],
       }}>
         <iframe
-          srcDoc={previewHtml || "<html><body style='background:#fff'></body></html>"}
+          srcDoc={previewHtml || `<html><body style='background:${tokens.neutral[0]}'></body></html>`}
           style={{
             width: A5_PX_W,
             height: A5_PX_H,
@@ -1027,21 +1028,21 @@ export default function MenuTemplateEditor({
       />
 
       {/* ── Menu Title + Thank You Note (shared with MenuGenerator via localStorage) ── */}
-      <div style={{ display: "flex", gap: 12, padding: "8px 14px", borderBottom: "1px solid #ede9e0", background: "#faf9f7", alignItems: "center", flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 12, padding: "8px 14px", borderBottom: `1px solid ${tokens.neutral[200]}`, background: tokens.neutral[50], alignItems: "center", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", whiteSpace: "nowrap" }}>Menu Title</span>
+          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", whiteSpace: "nowrap" }}>Menu Title</span>
           <input
             value={menuTitle}
             onChange={e => { setMenuTitle(e.target.value); writeMenuTitle(previewLang, e.target.value); syncTitleToSupabase(); }}
-            style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 0, outline: "none", flex: 1, minWidth: 80 }}
+            style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, outline: "none", flex: 1, minWidth: 80 }}
           />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 2 }}>
-          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", whiteSpace: "nowrap" }}>Thank You Note</span>
+          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", whiteSpace: "nowrap" }}>Thank You Note</span>
           <input
             value={thankYouNote}
             onChange={e => { setThankYouNote(e.target.value); writeThankYouNote(previewLang, e.target.value); syncThankYouToSupabase(); }}
-            style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: "1px solid #e0e0e0", borderRadius: 0, outline: "none", flex: 1, minWidth: 140 }}
+            style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, outline: "none", flex: 1, minWidth: 140 }}
           />
         </div>
       </div>
@@ -1069,21 +1070,21 @@ export default function MenuTemplateEditor({
 
       {/* ── Left: Row editor ── */}
       <aside style={{
-        width: leftOpen ? 288 : 28, flexShrink: 0, borderRight: "1px solid #ede9e0",
-        background: "#faf9f7", display: "flex", flexDirection: "column",
+        width: leftOpen ? 288 : 28, flexShrink: 0, borderRight: `1px solid ${tokens.neutral[200]}`,
+        background: tokens.neutral[50], display: "flex", flexDirection: "column",
         overflow: "hidden", transition: "width 0.18s ease",
       }}>
         {/* Header */}
-        <div style={{ padding: leftOpen ? "12px 12px 8px" : "8px 4px", borderBottom: "1px solid #ede9e0", flexShrink: 0 }}>
+        <div style={{ padding: leftOpen ? "12px 12px 8px" : "8px 4px", borderBottom: `1px solid ${tokens.neutral[200]}`, flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: leftOpen ? 8 : 0 }}>
             {leftOpen && (
-              <span style={{ fontSize: 7.5, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+              <span style={{ fontSize: 7.5, letterSpacing: 3, color: tokens.text.disabled, textTransform: "uppercase" }}>
                 LAYOUT EDITOR
               </span>
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: leftOpen ? 0 : "auto", marginRight: leftOpen ? 0 : "auto" }}>
               {leftOpen && (
-                <span style={{ fontSize: 7.5, color: "#ccc", fontFamily: FONT }}>
+                <span style={{ fontSize: 7.5, color: tokens.text.disabled, fontFamily: FONT }}>
                   {rows.length} row{rows.length !== 1 ? "s" : ""}
                 </span>
               )}
@@ -1092,11 +1093,11 @@ export default function MenuTemplateEditor({
                 title={leftOpen ? "Collapse panel" : "Expand panel"}
                 style={{
                   border: "none", background: "transparent", cursor: "pointer",
-                  color: "#ccc", fontSize: 12, padding: "2px 4px", lineHeight: 1,
+                  color: tokens.text.disabled, fontSize: 12, padding: "2px 4px", lineHeight: 1,
                   fontFamily: FONT,
                 }}
                 onMouseEnter={e => { e.currentTarget.style.color = GOLD; }}
-                onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
+                onMouseLeave={e => { e.currentTarget.style.color = tokens.text.disabled; }}
               >{leftOpen ? "◂" : "▸"}</button>
             </div>
           </div>
@@ -1108,7 +1109,7 @@ export default function MenuTemplateEditor({
             style={{
               width: "100%", fontFamily: FONT, fontSize: 8, letterSpacing: 2,
               padding: "7px 0", border: "none", borderRadius: 0, cursor: saving ? "wait" : "pointer",
-              background: saved ? "#4a9a6a" : GOLD, color: "#fff",
+              background: saved ? tokens.green.border : GOLD, color: tokens.neutral[0],
               textTransform: "uppercase", marginBottom: 6,
             }}
           >{saving ? "SAVING…" : saved ? "✓ SAVED" : "SAVE TEMPLATE"}</button>}
@@ -1119,8 +1120,8 @@ export default function MenuTemplateEditor({
             onClick={rebuild}
             style={{
               width: "100%", fontFamily: FONT, fontSize: 7.5, letterSpacing: 1,
-              padding: "5px 0", border: "1px solid #e0ddd6", borderRadius: 0,
-              cursor: "pointer", background: "#fff", color: "#888",
+              padding: "5px 0", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0,
+              cursor: "pointer", background: tokens.neutral[0], color: tokens.text.muted,
               textTransform: "uppercase",
             }}
             title="Rebuild template from current courses"
@@ -1135,7 +1136,7 @@ export default function MenuTemplateEditor({
           {rows.length === 0 && (
             <div style={{
               textAlign: "center", padding: "32px 16px",
-              fontSize: 8.5, color: "#ccc", letterSpacing: 1.5, lineHeight: 2.2,
+              fontSize: 8.5, color: tokens.text.disabled, letterSpacing: 1.5, lineHeight: 2.2,
               textTransform: "uppercase",
             }}>
               NO ROWS YET
@@ -1159,7 +1160,7 @@ export default function MenuTemplateEditor({
             onDragEnd={handleDragEnd}
           >
             {isShortFilter && (
-              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: "#7a5020", background: "#fff8ee", border: "1px solid #f0d080", borderRadius: 0, padding: "5px 8px", margin: "0 0 6px", textTransform: "uppercase" }}>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.text.muted, background: tokens.tint.parchment, border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, padding: "5px 8px", margin: "0 0 6px", textTransform: "uppercase" }}>
                 Short menu — {displayRows.length} blocks · Switch to FULL to see all
               </div>
             )}
@@ -1189,29 +1190,29 @@ export default function MenuTemplateEditor({
         </div>}
 
         {/* Add row / add gap */}
-        {leftOpen && <div style={{ padding: "8px", flexShrink: 0, borderTop: "1px solid #ede9e0", display: "flex", gap: 4 }}>
+        {leftOpen && <div style={{ padding: "8px", flexShrink: 0, borderTop: `1px solid ${tokens.neutral[200]}`, display: "flex", gap: 4 }}>
           <button
             onClick={addRow}
             style={{
               flex: 1, fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "8px 0",
-              border: "1.5px dashed #d0cec8", borderRadius: 0, cursor: "pointer",
-              background: "transparent", color: "#bbb", textTransform: "uppercase",
+              border: `1.5px dashed ${tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer",
+              background: "transparent", color: tokens.text.disabled, textTransform: "uppercase",
               transition: "all 0.12s",
             }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.color = GOLD; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "#d0cec8"; e.currentTarget.style.color = "#bbb"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = tokens.neutral[300]; e.currentTarget.style.color = tokens.text.disabled; }}
           >+ ADD ROW</button>
           <button
             onClick={addGapRow}
             title="Add a gap-only row for section spacing"
             style={{
               flex: 1, fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "8px 0",
-              border: "1.5px dashed #d4cfa0", borderRadius: 0, cursor: "pointer",
-              background: "transparent", color: "#c8b87a", textTransform: "uppercase",
+              border: `1.5px dashed ${tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer",
+              background: "transparent", color: tokens.neutral[600], textTransform: "uppercase",
               transition: "all 0.12s",
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "#c8a96e"; e.currentTarget.style.color = "#c8a96e"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "#d4cfa0"; e.currentTarget.style.color = "#c8b87a"; }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.color = GOLD; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = tokens.neutral[300]; e.currentTarget.style.color = tokens.neutral[600]; }}
           >+ ADD GAP</button>
         </div>}
       </aside>
@@ -1222,18 +1223,18 @@ export default function MenuTemplateEditor({
         display: "flex", flexDirection: "column",
         transition: "flex 0.18s ease",
         minWidth: previewOpen ? 200 : 28,
-        borderLeft: "1px solid #ede9e0", borderRight: "1px solid #ede9e0",
+        borderLeft: `1px solid ${tokens.neutral[200]}`, borderRight: `1px solid ${tokens.neutral[200]}`,
       }}>
         {!previewOpen && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 8 }}>
             <button
               onClick={() => setPreviewOpen(true)}
               title="Show preview"
-              style={{ border: "none", background: "transparent", cursor: "pointer", color: "#ccc", fontSize: 12, padding: "2px 4px", lineHeight: 1, fontFamily: FONT }}
+              style={{ border: "none", background: "transparent", cursor: "pointer", color: tokens.text.disabled, fontSize: 12, padding: "2px 4px", lineHeight: 1, fontFamily: FONT }}
               onMouseEnter={e => { e.currentTarget.style.color = GOLD; }}
-              onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
+              onMouseLeave={e => { e.currentTarget.style.color = tokens.text.disabled; }}
             >◂▸</button>
-            <span style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: "#ccc", writingMode: "vertical-lr", marginTop: 8 }}>PREVIEW</span>
+            <span style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, color: tokens.text.disabled, writingMode: "vertical-lr", marginTop: 8 }}>PREVIEW</span>
           </div>
         )}
         {previewOpen && (
@@ -1241,9 +1242,9 @@ export default function MenuTemplateEditor({
             <button
               onClick={(e) => { e.stopPropagation(); setPreviewOpen(false); }}
               title="Collapse preview"
-              style={{ position: "absolute", top: 6, right: 6, zIndex: 2, border: "none", background: "transparent", cursor: "pointer", color: "#ccc", fontSize: 10, padding: "2px 4px", lineHeight: 1, fontFamily: FONT }}
+              style={{ position: "absolute", top: 6, right: 6, zIndex: 2, border: "none", background: "transparent", cursor: "pointer", color: tokens.text.disabled, fontSize: 10, padding: "2px 4px", lineHeight: 1, fontFamily: FONT }}
               onMouseEnter={e => { e.currentTarget.style.color = GOLD; }}
-              onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
+              onMouseLeave={e => { e.currentTarget.style.color = tokens.text.disabled; }}
             >✕</button>
             <LivePreview
               previewHtml={previewHtml}
@@ -1256,15 +1257,15 @@ export default function MenuTemplateEditor({
 
       {/* ── Right: Block inspector ── */}
       <aside style={{
-        width: rightOpen ? 240 : 28, flexShrink: 0, borderLeft: "1px solid #ede9e0",
-        overflowY: rightOpen ? "auto" : "hidden", background: "#fff",
+        width: rightOpen ? 240 : 28, flexShrink: 0, borderLeft: `1px solid ${tokens.neutral[200]}`,
+        overflowY: rightOpen ? "auto" : "hidden", background: tokens.neutral[0],
         display: "flex", flexDirection: "column",
         transition: "width 0.18s ease",
       }}>
         {/* Collapse toggle */}
         <div style={{ padding: rightOpen ? "10px 14px 6px" : "8px 4px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: rightOpen ? "space-between" : "center" }}>
           {rightOpen && (
-            <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 3, color: "#bbb", textTransform: "uppercase" }}>
+            <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 3, color: tokens.text.disabled, textTransform: "uppercase" }}>
               BLOCK INSPECTOR
             </span>
           )}
@@ -1273,11 +1274,11 @@ export default function MenuTemplateEditor({
             title={rightOpen ? "Collapse panel" : "Expand panel"}
             style={{
               border: "none", background: "transparent", cursor: "pointer",
-              color: "#ccc", fontSize: 12, padding: "2px 4px", lineHeight: 1,
+              color: tokens.text.disabled, fontSize: 12, padding: "2px 4px", lineHeight: 1,
               fontFamily: FONT,
             }}
             onMouseEnter={e => { e.currentTarget.style.color = GOLD; }}
-            onMouseLeave={e => { e.currentTarget.style.color = "#ccc"; }}
+            onMouseLeave={e => { e.currentTarget.style.color = tokens.text.disabled; }}
           >{rightOpen ? "▸" : "◂"}</button>
         </div>
         {rightOpen && (

@@ -1,5 +1,6 @@
 import { FONT, baseInp } from "./adminStyles.js";
 import { DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
+import { tokens } from "../../styles/tokens.js";
 
 export function MenuRulesPanel({
   menuRules = DEFAULT_MENU_RULES,
@@ -17,13 +18,13 @@ export function MenuRulesPanel({
   };
 
   return (
-    <div style={{ borderBottom: "1px solid #ede9e0", background: "#f7f8fb", flexShrink: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? "1px solid #ede9e0" : "none" }}>
+    <div style={{ borderBottom: `1px solid ${tokens.neutral[200]}`, background: tokens.neutral[50], flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? `1px solid ${tokens.neutral[200]}` : "none" }}>
         <button
           onClick={onToggle}
-          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#4b4b88", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.charcoal.default, background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
         >{open ? "▾ MENU RULES" : "▸ MENU RULES"}</button>
-        <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa" }}>Global behavior controls used by preview + print</span>
+        <span style={{ fontFamily: FONT, fontSize: 7.5, color: tokens.text.muted }}>Global behavior controls used by preview + print</span>
         {onSaveMenuRules && (
           <button
             onClick={onSaveMenuRules}
@@ -31,7 +32,7 @@ export function MenuRulesPanel({
             style={{
               marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
               padding: "4px 10px", border: "none", borderRadius: 0, cursor: menuRulesSaving ? "wait" : "pointer",
-              background: menuRulesSaved ? "#4a9a6a" : "#4b4b88", color: "#fff", textTransform: "uppercase",
+              background: menuRulesSaved ? tokens.green.border : tokens.charcoal.default, color: tokens.neutral[0], textTransform: "uppercase",
             }}
           >
             {menuRulesSaving ? "Saving..." : menuRulesSaved ? "Saved" : "Save Rules"}
@@ -41,7 +42,7 @@ export function MenuRulesPanel({
       {open && (
         <div style={{ padding: "10px 12px 12px", display: "grid", gap: 8 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 8 }}>
-            <label style={{ fontFamily: FONT, fontSize: 9, color: "#555", display: "flex", alignItems: "center", gap: 6 }}>
+            <label style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.secondary, display: "flex", alignItems: "center", gap: 6 }}>
               <input
                 type="checkbox"
                 checked={rules.overwriteTitleAndThankYouOnLanguageSwitch !== false}
@@ -67,9 +68,9 @@ function StyleInput({ label, lkey, def, step, unit, min, layoutStyles, onUpdateL
   const isOverridden = lkey in layoutStyles;
   return (
     <div>
-      <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: "#aaa", textTransform: "uppercase", marginBottom: 3 }}>
+      <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 3 }}>
         {label}
-        {!isOverridden && <span style={{ color: "#ddd", marginLeft: 4 }}>· default {def}{unit}</span>}
+        {!isOverridden && <span style={{ color: tokens.neutral[300], marginLeft: 4 }}>· default {def}{unit}</span>}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <input
@@ -86,17 +87,17 @@ function StyleInput({ label, lkey, def, step, unit, min, layoutStyles, onUpdateL
           }}
           style={{
             fontFamily: FONT, fontSize: 9, padding: "2px 5px",
-            border: `1px solid ${isOverridden ? "#9090c0" : "#ddd"}`,
+            border: `1px solid ${isOverridden ? tokens.neutral[300] : tokens.neutral[300]}`,
             borderRadius: 0, width: 52, textAlign: "center",
-            background: isOverridden ? "#f4f3fb" : "#fff",
+            background: isOverridden ? tokens.neutral[100] : tokens.neutral[0],
           }}
         />
-        <span style={{ fontFamily: FONT, fontSize: 8, color: "#aaa" }}>{unit}</span>
+        <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.text.muted }}>{unit}</span>
         {isOverridden && (
           <button
             onClick={() => { const next = { ...layoutStyles }; delete next[lkey]; onUpdateLayoutStyles(next); }}
             title="Reset to default"
-            style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: "0 2px" }}
+            style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.disabled, background: "none", border: "none", cursor: "pointer", padding: "0 2px" }}
           >↺</button>
         )}
       </div>
@@ -107,14 +108,14 @@ function StyleInput({ label, lkey, def, step, unit, min, layoutStyles, onUpdateL
 export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLayoutStyles, open, onToggle }) {
   const si = (props) => <StyleInput layoutStyles={layoutStyles} onUpdateLayoutStyles={onUpdateLayoutStyles} {...props} />;
   return (
-    <div style={{ borderBottom: "1px solid #ede9e0", background: "#f7f6fb", flexShrink: 0 }}>
+    <div style={{ borderBottom: `1px solid ${tokens.neutral[200]}`, background: tokens.neutral[50], flexShrink: 0 }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? "1px solid #ede9e0" : "none" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? `1px solid ${tokens.neutral[200]}` : "none" }}>
         <button
           onClick={onToggle}
-          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#4b4b88", background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.charcoal.default, background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
         >{open ? "▾ SPACING SETTINGS" : "▸ SPACING SETTINGS"}</button>
-        <span style={{ fontFamily: FONT, fontSize: 7.5, color: "#aaa" }}>
+        <span style={{ fontFamily: FONT, fontSize: 7.5, color: tokens.text.muted }}>
           Page margins · columns · row gaps · footer — all configurable
         </span>
         {onSaveLayoutStyles && (
@@ -123,7 +124,7 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
             style={{
               marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
               padding: "4px 10px", border: "none", borderRadius: 0, cursor: "pointer",
-              background: "#4b4b88", color: "#fff", textTransform: "uppercase",
+              background: tokens.charcoal.default, color: tokens.neutral[0], textTransform: "uppercase",
             }}
           >Save Styles</button>
         )}
@@ -134,7 +135,7 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
 
           {/* Page margins */}
           <div>
-            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Page Margins</div>
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 8 }}>Page Margins</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
               {si({ label: "Top",    lkey: "padTop",    def: 8.4, step: 0.1, unit: "mm" })}
               {si({ label: "Right",  lkey: "padRight",  def: 12,  step: 0.5, unit: "mm" })}
@@ -145,12 +146,12 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
 
           {/* Columns */}
           <div>
-            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Columns</div>
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 8 }}>Columns</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
               {si({ label: "Column gap",           lkey: "colGap",       def: 9,   step: 0.5, unit: "mm" })}
               {si({ label: "Header gap (title↔logo)", lkey: "headerColGap", def: 8.6, step: 0.1, unit: "mm" })}
               <div>
-                <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: "#aaa", textTransform: "uppercase", marginBottom: 3 }}>
+                <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 3 }}>
                   Course split (dish / wine)
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -169,19 +170,19 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
                     }}
                     style={{
                       fontFamily: FONT, fontSize: 9, padding: "2px 5px",
-                      border: `1px solid ${"courseColSplit" in layoutStyles ? "#9090c0" : "#ddd"}`,
+                      border: `1px solid ${"courseColSplit" in layoutStyles ? tokens.neutral[300] : tokens.neutral[300]}`,
                       borderRadius: 0, width: 52, textAlign: "center",
-                      background: "courseColSplit" in layoutStyles ? "#f4f3fb" : "#fff",
+                      background: "courseColSplit" in layoutStyles ? tokens.neutral[100] : tokens.neutral[0],
                     }}
                   />
-                  <span style={{ fontFamily: FONT, fontSize: 8, color: "#aaa" }}>
+                  <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.text.muted }}>
                     / {100 - (layoutStyles.courseColSplit ?? 55)} %
                   </span>
                   {"courseColSplit" in layoutStyles && (
                     <button
                       onClick={() => { const next = { ...layoutStyles }; delete next.courseColSplit; onUpdateLayoutStyles(next); }}
                       title="Reset to default (55)"
-                      style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", background: "none", border: "none", cursor: "pointer", padding: "0 2px" }}
+                      style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.disabled, background: "none", border: "none", cursor: "pointer", padding: "0 2px" }}
                     >↺</button>
                   )}
                 </div>
@@ -191,7 +192,7 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
 
           {/* Row spacing */}
           <div>
-            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Row Spacing</div>
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 8 }}>Row Spacing</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
               {si({ label: "Between rows",      lkey: "rowSpacing",     def: 3.15, step: 0.05, unit: "pt" })}
               {si({ label: "Between wine rows", lkey: "wineRowSpacing", def: 4.5,  step: 0.05, unit: "pt" })}
@@ -200,7 +201,7 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
 
           {/* Header / footer */}
           <div>
-            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Header &amp; Footer</div>
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 8 }}>Header &amp; Footer</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
               {si({ label: "Header → content gap", lkey: "headerSpacing",   def: 7, step: 0.5, unit: "mm" })}
               {si({ label: "Thank-you top gap",     lkey: "thankYouSpacing", def: 7, step: 0.5, unit: "pt" })}
@@ -209,7 +210,7 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
 
           {/* Micro spacing */}
           <div>
-            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 8 }}>Micro Spacing</div>
+            <div style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 8 }}>Micro Spacing</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
               {si({ label: "Title → date gap",          lkey: "menuDateMarginTop",     def: 0.8,  step: 0.05, unit: "mm" })}
               {si({ label: "Main → sub gap",            lkey: "menuSubMarginTop",      def: 0.75, step: 0.05, unit: "pt" })}
