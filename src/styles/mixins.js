@@ -69,7 +69,7 @@ export const modalContent = {
   overflow: "auto",
   background: tokens.surface.raised,
   border: tokens.border.default,
-  boxShadow: "0 24px 80px rgba(0,0,0,0.7)",
+  boxShadow: "0 14px 40px rgba(26,25,23,0.22)",
 };
 
 export const headerBar = {

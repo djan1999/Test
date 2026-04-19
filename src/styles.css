@@ -1,5 +1,5 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -13,8 +13,7 @@ html, body, #root {
 }
 
 body {
-  background: #0e0e0c;
-  color: #f0efe9;
+  background: #fff;
   overflow-x: hidden;
 }
 
@@ -22,28 +21,11 @@ button, input, select, textarea {
   font: inherit;
 }
 
-/* Eliminate the 300ms tap delay on all interactive elements. */
+/* Eliminate the 300ms tap delay on all interactive elements.
+   touch-action: manipulation disables double-tap-to-zoom so the browser
+   fires click immediately on touch — critical for service-speed UI. */
 button, [role="button"], a {
   touch-action: manipulation;
 }
 
-/* Scrollbar — subtle dark style matching the rawlab aesthetic */
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-::-webkit-scrollbar-track {
-  background: #0e0e0c;
-}
-::-webkit-scrollbar-thumb {
-  background: #2c2c28;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #4e4e4a;
-}
-
-/* Selection highlight */
-::selection {
-  background: #f0efe9;
-  color: #0e0e0c;
-}
+body { color: #1a1a1a; background: #fff; }
