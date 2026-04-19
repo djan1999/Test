@@ -128,6 +128,56 @@ const bevBorder = {
   aperitif: "#9b6040",   // orange-terracotta
 };
 
+// ── Ink scale — monochrome operational foundation ─────────────
+// Rawlab grammar: documentation-grade mono, hairline rules, negative space.
+const ink = {
+  0:  '#0a0a0a',   // near-black, highest emphasis
+  1:  '#1a1a1a',   // primary text
+  2:  '#4a4a4a',   // secondary text
+  3:  '#8a8a8a',   // tertiary / metadata labels
+  4:  '#c4c4c4',   // hairline rules, dividers
+  5:  '#e8e6e2',   // subtle fills
+  bg: '#f8f7f5',   // canvas (matches neutral[100])
+};
+
+// ── Signal colors — functional state ONLY, never decoration ───
+const signal = {
+  active: '#c8a96e',   // gold — active / in-progress state
+  alert:  '#b84a3a',   // allergen flag, critical warnings
+  warn:   '#c49a4a',   // delay warning, muted amber
+  done:   '#8a8a8a',   // completed (mirrors ink[3])
+};
+
+// ── Type scale — all Roboto Mono ──────────────────────────────
+// Use these objects as spread targets in inline styles.
+// Colors are intentionally omitted here — apply ink[n] at usage
+// so the scale stays pure and context-driven.
+const typeScale = {
+  label:    { fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 400 },
+  meta:     { fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 400 },
+  value:    { fontSize: '14px', letterSpacing: '0',      textTransform: 'none',      fontWeight: 400 },
+  prominent:{ fontSize: '18px', letterSpacing: '0',      textTransform: 'none',      fontWeight: 500 },
+  heading:  { fontSize: '24px', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 },
+};
+
+// ── Spacing — 4 px base unit ──────────────────────────────────
+const space = {
+  1: '4px',
+  2: '8px',
+  3: '12px',
+  4: '16px',
+  5: '24px',
+  6: '32px',
+  7: '48px',
+  8: '64px',
+};
+
+// ── Rule weights ──────────────────────────────────────────────
+const rule = {
+  hairline: '1px',
+  thick:    '2px',
+};
+
 // ── Public export ─────────────────────────────────────────────
 export const tokens = {
   neutral,
@@ -144,6 +194,12 @@ export const tokens = {
   font,
   fontSize,
   spacing,
+  ink,
+  signal,
+  typeScale,
+  space,
+  rule,
+
   radius: 0,
   mobileInputSize: 16,
 
