@@ -1564,7 +1564,7 @@ function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd,
   return (
     <div style={{ overflowY: "auto", overflowX: "hidden", padding: isMobile ? "16px 12px 40px" : "20px 0 48px" }}>
       {!hasAny && (
-        <div style={{ fontFamily: FONT, fontSize: 10, color: "#ccc", textAlign: "center", marginTop: 80, letterSpacing: 2 }}>
+        <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[300], textAlign: "center", marginTop: 80, letterSpacing: 2 }}>
           no reservations
         </div>
       )}
@@ -1574,9 +1574,9 @@ function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd,
         return (
           <div key={time} style={{ marginBottom: 32 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: "#aaa", textTransform: "uppercase" }}>{time}</span>
-              <div style={{ flex: 1, height: 1, background: "#efefef" }} />
-              <span style={{ fontFamily: FONT, fontSize: 9, color: "#ccc" }}>
+              <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: tokens.text.disabled, textTransform: "uppercase" }}>{time}</span>
+              <div style={{ flex: 1, height: 1, background: tokens.neutral[100] }} />
+              <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.neutral[300] }}>
                 {seatedCount}/{rowTables.length} seated · {rowTables.reduce((a, t) => a + (t.guests || 0), 0)} guests
               </span>
             </div>
@@ -1627,10 +1627,10 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
     <button key={opt} onClick={onClick} style={{
       fontFamily: FONT, fontSize: 10, letterSpacing: 0.5,
       padding: "5px 9px", border: "1px solid",
-      borderColor: active ? "#c8a96e" : "#e0e0e0",
+      borderColor: active ? tokens.charcoal.default : tokens.neutral[200],
       borderRadius: 0, cursor: "pointer", lineHeight: 1,
-      background: active ? "#e8dcc8" : "#fff",
-      color: active ? "#6a5030" : "#666",
+      background: active ? tokens.tint.parchment : tokens.neutral[0],
+      color: active ? tokens.neutral[700] : tokens.text.secondary,
     }}>{opt}</button>
   );
 
@@ -1638,10 +1638,10 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
     <button onClick={onClick} style={{
       fontFamily: FONT, fontSize: 9, letterSpacing: 1,
       padding: "5px 9px", border: "1px solid",
-      borderColor: active ? color : "#e0e0e0",
+      borderColor: active ? color : tokens.neutral[200],
       borderRadius: 0, cursor: "pointer", lineHeight: 1,
-      background: active ? color : "#fff",
-      color: active ? "#1a1a1a" : "#aaa",
+      background: active ? color : tokens.neutral[0],
+      color: active ? tokens.text.primary : tokens.text.disabled,
       textTransform: "uppercase",
     }}>{label}</button>
   );
@@ -1649,25 +1649,25 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
   const allWaterMatch = opt => seats.length > 0 && seats.every(s => s.water === opt);
 
   return (
-    <div style={{ border: "1px solid #e8e8e8", borderRadius: 0, overflow: "hidden", background: "#fff" }}>
+    <div style={{ border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
       {/* Table header */}
       <div onClick={onDetails} style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "10px 14px", background: "#fafafa", cursor: "pointer",
-        borderBottom: "1px solid #f0f0f0",
+        padding: "10px 14px", background: tokens.neutral[50], cursor: "pointer",
+        borderBottom: `1px solid ${tokens.neutral[100]}`,
       }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <span style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: "#1a1a1a" }}>T{table.id}</span>
-          {table.resName && <span style={{ fontFamily: FONT, fontSize: 10, color: "#555", letterSpacing: 1 }}>{table.resName}</span>}
-          {table.resTime && <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb", letterSpacing: 1 }}>{table.resTime}</span>}
-          <span style={{ fontFamily: FONT, fontSize: 9, color: "#bbb" }}>{seats.length}p</span>
+          <span style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: tokens.text.primary }}>T{table.id}</span>
+          {table.resName && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.secondary, letterSpacing: 1 }}>{table.resName}</span>}
+          {table.resTime && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.disabled, letterSpacing: 1 }}>{table.resTime}</span>}
+          <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.disabled }}>{seats.length}p</span>
         </div>
-        <span style={{ fontFamily: FONT, fontSize: 11, color: "#c8a96e" }}>→</span>
+        <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.charcoal.default }}>→</span>
       </div>
 
       {/* All water quick row */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderBottom: "1px solid #f8f8f8", background: "#fdfdfd" }}>
-        <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", minWidth: 28 }}>ALL</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderBottom: `1px solid ${tokens.neutral[50]}`, background: tokens.neutral[50] }}>
+        <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", minWidth: 28 }}>ALL</span>
         <div style={{ display: "flex", gap: 4 }}>
           {WATER_QUICK.map(opt => waterBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat(table.id, s.id, "water", opt))))}
         </div>
@@ -1676,23 +1676,23 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
       {/* Per-seat rows */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px" }}>
         {seats.map(seat => {
-          const pairingColor = { Wine: "#7a5020", "Non-Alc": "#3a6a2a", Premium: "#4a3a7a", "Our Story": "#2a5a6a" };
-          const pairingBg   = { Wine: "#fdf4e8", "Non-Alc": "#edf8e8", Premium: "#f0eeff", "Our Story": "#e8f5f8" };
+          const pairingColor = { Wine: tokens.neutral[700], "Non-Alc": tokens.green.text, Premium: tokens.neutral[700], "Our Story": tokens.neutral[600] };
+          const pairingBg   = { Wine: tokens.tint.parchment, "Non-Alc": tokens.green.bg, Premium: tokens.neutral[100], "Our Story": tokens.neutral[100] };
           const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
           return (
             <div key={seat.id} style={{
-              border: "1px solid #ececec", borderRadius: 0, overflow: "hidden",
-              background: "#fafafa",
+              border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, overflow: "hidden",
+              background: tokens.neutral[50],
             }}>
               {/* Seat label strip */}
               <div style={{
                 display: "flex", alignItems: "center", gap: 6,
-                padding: "3px 10px", background: "#f0f0f0",
-                borderBottom: "1px solid #e8e8e8",
+                padding: "3px 10px", background: tokens.neutral[100],
+                borderBottom: `1px solid ${tokens.neutral[200]}`,
               }}>
-                <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: 2, color: "#888" }}>P{seat.id}</span>
+                <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: 2, color: tokens.text.muted }}>P{seat.id}</span>
                 {(table.restrictions || []).filter(r => r.pos === seat.id).map((r, i) => (
-                  <span key={i} style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, color: "#b04040" }}>
+                  <span key={i} style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, color: tokens.red.text }}>
                     {restrLabel(r.note)}
                   </span>
                 ))}
@@ -1703,24 +1703,24 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
                 <div style={{ display: "flex", gap: 3 }}>
                   {WATER_QUICK.map(opt => waterBtn(opt, seat.water === opt, () => updSeat(table.id, seat.id, "water", opt)))}
                 </div>
-                <div style={{ width: 1, height: 18, background: "#e8e8e8", margin: "0 2px" }} />
+                <div style={{ width: 1, height: 18, background: tokens.neutral[200], margin: "0 2px" }} />
                 <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
                   {optionalExtras.slice(0, 3).map((dish) => {
                     const extra = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
                     const active = !!extra.ordered;
                     return (
                       <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
-                        {extraBtn(dish.name.slice(0, 4), active, "#7a7a7a", () => toggleExtra(seat, dish.key))}
+                        {extraBtn(dish.name.slice(0, 4), active, tokens.text.muted, () => toggleExtra(seat, dish.key))}
                         {active && (dish.pairings || ["—"]).slice(0, 3).map((p) => {
                           const sel = (extra.pairing || "—") === p;
                           return (
                             <button key={p} onClick={() => updSeat(table.id, seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, pairing: p } })} style={{
                               fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
                               padding: "4px 6px", border: "1px solid",
-                              borderColor: sel ? "#7a7a7a" : "#e0e0e0",
+                              borderColor: sel ? tokens.text.muted : tokens.neutral[200],
                               borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                              background: sel ? "#f3f3f3" : "#fff",
-                              color: sel ? "#444" : "#aaa",
+                              background: sel ? tokens.neutral[100] : tokens.neutral[0],
+                              color: sel ? tokens.text.body : tokens.text.disabled,
                             }}>{p === "Champagne" ? "Champ" : p}</button>
                           );
                         })}
@@ -1740,10 +1740,10 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
                     <button key={val} onClick={() => updSeat(table.id, seat.id, "pairing", val)} style={{
                       fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
                       padding: "4px 7px", border: "1px solid",
-                      borderColor: active && val !== "—" ? col : active ? "#c8a96e" : "#e0e0e0",
+                      borderColor: active && val !== "—" ? col : active ? tokens.charcoal.default : tokens.neutral[200],
                       borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                      background: active && val !== "—" ? bg : active ? "#e8dcc8" : "#fff",
-                      color: active && val !== "—" ? col : active ? "#6a5030" : "#bbb",
+                      background: active && val !== "—" ? bg : active ? tokens.tint.parchment : tokens.neutral[0],
+                      color: active && val !== "—" ? col : active ? tokens.neutral[700] : tokens.text.disabled,
                     }}>{label}</button>
                   );
                 })}
@@ -1759,7 +1759,7 @@ function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
 function ServiceQuickView({ tables, updSeat, setSel, optionalExtras = [] }) {
   const activeTables = tables.filter(t => t.active || t.resName || t.resTime);
   if (activeTables.length === 0) return (
-    <div style={{ fontFamily: FONT, fontSize: 11, color: "#bbb", textAlign: "center", paddingTop: 80 }}>
+    <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.disabled, textAlign: "center", paddingTop: 80 }}>
       No active tables
     </div>
   );
@@ -1812,7 +1812,7 @@ function GlobalStyle() {
   return (
     <style>{`
       * { box-sizing: border-box; }
-      body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; color: #1a1a1a; }
+      body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; color: ${tokens.text.primary}; }
       input, textarea, select { font-size: ${MOBILE_SAFE_INPUT_SIZE}px; }
       button, a, label { touch-action: manipulation; }
     `}</style>
@@ -3118,19 +3118,19 @@ export default function App() {
   // Gate 2: hydration — wait for Supabase state before rendering
   if (!hydrated) return (
     <div style={{
-      minHeight: "100vh", background: "#fff", display: "flex",
+      minHeight: "100vh", background: tokens.neutral[0], display: "flex",
       flexDirection: "column", alignItems: "center", justifyContent: "center",
       fontFamily: FONT, gap: 24,
     }}>
       <GlobalStyle />
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: 6, color: "#1a1a1a", marginBottom: 6 }}>{APP_NAME}</div>
-        <div style={{ fontSize: 9, letterSpacing: 4, color: "#bbb" }}>CONNECTING…</div>
+        <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: 6, color: tokens.text.primary, marginBottom: 6 }}>{APP_NAME}</div>
+        <div style={{ fontSize: 9, letterSpacing: 4, color: tokens.text.disabled }}>CONNECTING…</div>
       </div>
       <div style={{ display: "flex", gap: 6 }}>
         {[0,1,2].map(i => (
           <div key={i} style={{
-            width: 5, height: 5, borderRadius: 0, background: "#e0e0e0",
+            width: 5, height: 5, borderRadius: 0, background: tokens.neutral[200],
             animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
           }} />
         ))}
@@ -3179,7 +3179,7 @@ export default function App() {
   // Display mode — unified board+kitchen view
   if (mode === "display") return (<>
     {serviceDatePickerEl}
-    <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+    <div style={{ minHeight: "100vh", background: tokens.neutral[0], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
       <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
       <div style={{ padding: "20px 24px" }}>
@@ -3201,7 +3201,7 @@ export default function App() {
   </>);
 
   if (mode === "menu") return (
-    <div style={{ minHeight: "100vh", background: "#fafafa", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+    <div style={{ minHeight: "100vh", background: tokens.neutral[50], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
       <MenuPage
         tables={tables}
@@ -3223,7 +3223,7 @@ export default function App() {
 
   // ── Admin mode — pure control panel, no service UI ──
   if (mode === "admin") return (
-    <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+    <div style={{ minHeight: "100vh", background: tokens.neutral[0], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
       <AdminLayout
         menuCourses={menuCourses}
@@ -3273,7 +3273,7 @@ export default function App() {
   // Service mode only
   return (<>
     {serviceDatePickerEl}
-    <div style={{ minHeight: "100vh", background: "#fff", fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+    <div style={{ minHeight: "100vh", background: tokens.neutral[0], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
 
       <Header
@@ -3299,7 +3299,7 @@ export default function App() {
                 <span
                   title="Click to change service date"
                   onClick={() => { setPendingModeAfterDate(mode); setShowServiceDatePicker(true); }}
-                  style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#7aaa8a", cursor: "pointer", textTransform: "uppercase" }}
+                  style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.green.text, cursor: "pointer", textTransform: "uppercase" }}
                 >
                   {new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}
                 </span>
@@ -3310,8 +3310,8 @@ export default function App() {
                 const resvNow   = tables.filter(t => !t.active && (t.resName || t.resTime)).filter(isPrimary).length;
                 return (
                   <>
-                    {seatedNow > 0 && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#3a8a5a", textTransform: "uppercase" }}>{seatedNow} tables · {guestsNow} guests</span>}
-                    {resvNow   > 0 && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#aaa",    textTransform: "uppercase" }}>{resvNow} reserved</span>}
+                    {seatedNow > 0 && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.green.text, textTransform: "uppercase" }}>{seatedNow} tables · {guestsNow} guests</span>}
+                    {resvNow   > 0 && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase" }}>{resvNow} reserved</span>}
                   </>
                 );
               })()}
@@ -3321,9 +3321,9 @@ export default function App() {
               onClick={() => setQuickView(v => v === "service" ? "board" : "service")}
               style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "7px 16px",
-                border: `1.5px solid ${quickView === "service" ? "#c8a96e" : "#d8d8d8"}`,
-                background: quickView === "service" ? "#e8dcc8" : "#fff",
-                color: quickView === "service" ? "#6a5030" : "#999",
+                border: `1.5px solid ${quickView === "service" ? tokens.charcoal.default : tokens.neutral[300]}`,
+                background: quickView === "service" ? tokens.tint.parchment : tokens.neutral[0],
+                color: quickView === "service" ? tokens.neutral[700] : tokens.text.muted,
                 borderRadius: 0, cursor: "pointer",
                 transition: "all 0.15s",
                 display: "flex", alignItems: "center", gap: 6,
