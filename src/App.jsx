@@ -800,6 +800,15 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   {optionalExtras.map(dish => {
                     const extra = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                    const linkedPairing = optionalPairings.find(op => op.extraKey === dish.key || op.extraKey === dish.id);
+                    const lpCur = linkedPairing ? (seat.optionalPairings?.[linkedPairing.key] || {}) : null;
+                    const lpMode = lpCur?.mode || null;
+                    const lpActive = lpCur?.ordered ?? false;
+                    const alcoOn = lpActive && lpMode === "alco";
+                    const naOn = lpActive && lpMode === "nonalc";
+                    const updLp = (patch) => linkedPairing && updSeat(seat.id, "optionalPairings", {
+                      ...(seat.optionalPairings || {}), [linkedPairing.key]: { ...(lpCur || {}), ...patch },
+                    });
                     return (
                       <div key={dish.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
                         <div style={{ ...fieldLabel, marginBottom: 4 }}>{dish.name}</div>
@@ -811,27 +820,47 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                           background: extra.ordered ? tokens.green.bg : tokens.neutral[0], color: extra.ordered ? tokens.green.text : tokens.text.secondary,
                           transition: "all 0.1s",
                         }}>{extra.ordered ? "YES" : "NO"}</button>
-                        <select value={extra.pairing || dish.pairings[0]} disabled={!extra.ordered}
-                          onChange={e => updSeat(seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, pairing: e.target.value } })}
-                          style={{
-                            fontFamily: FONT, fontSize: 10, padding: "4px 5px",
-                            border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0,
-                            background: tokens.neutral[0], color: tokens.text.primary, outline: "none",
-                            opacity: extra.ordered ? 1 : 0.3, width: "100%",
-                          }}>
-                          {dish.pairings.map(p => <option key={p}>{p}</option>)}
-                        </select>
+                        {linkedPairing ? (
+                          <div style={{ display: "flex", gap: 3, opacity: extra.ordered ? 1 : 0.3, pointerEvents: extra.ordered ? "auto" : "none" }}>
+                            <button onClick={() => updLp({ ordered: false, mode: null })} style={{
+                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                              borderColor: !lpActive ? tokens.green.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
+                              background: !lpActive ? tokens.green.bg : tokens.neutral[0], color: !lpActive ? tokens.green.text : tokens.text.disabled, flex: 1,
+                            }}>OFF</button>
+                            {linkedPairing.hasAlco && (
+                              <button onClick={() => updLp({ ordered: true, mode: "alco" })} style={{
+                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                                borderColor: alcoOn ? tokens.neutral[300] : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
+                                background: alcoOn ? tokens.tint.parchment : tokens.neutral[0], color: alcoOn ? tokens.neutral[700] : tokens.text.disabled, flex: 1,
+                              }}>ALCO</button>
+                            )}
+                            {linkedPairing.hasNonAlco && (
+                              <button onClick={() => updLp({ ordered: true, mode: "nonalc" })} style={{
+                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                                borderColor: naOn ? tokens.neutral[300] : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
+                                background: naOn ? tokens.neutral[100] : tokens.neutral[0], color: naOn ? tokens.neutral[600] : tokens.text.disabled, flex: 1,
+                              }}>N/A</button>
+                            )}
+                          </div>
+                        ) : (
+                          <select value={extra.pairing || dish.pairings[0]} disabled={!extra.ordered}
+                            onChange={e => updSeat(seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, pairing: e.target.value } })}
+                            style={{
+                              fontFamily: FONT, fontSize: 10, padding: "4px 5px",
+                              border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0,
+                              background: tokens.neutral[0], color: tokens.text.primary, outline: "none",
+                              opacity: extra.ordered ? 1 : 0.3, width: "100%",
+                            }}>
+                            {dish.pairings.map(p => <option key={p}>{p}</option>)}
+                          </select>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               )}
               {(() => {
-                const visPairings = optionalPairings.filter(opt => {
-                  if (!opt.extraKey) return true;
-                  const extra = seat.extras?.[opt.extraKey];
-                  return extra?.ordered;
-                });
+                const visPairings = optionalPairings.filter(opt => !opt.extraKey);
                 if (!visPairings.length) return null;
                 return (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
