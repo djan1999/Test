@@ -103,11 +103,11 @@ describe("resolveAperitifCatalogItem", () => {
 });
 
 describe("aperitifMatchesQuickAccess", () => {
-  const wines = [{ name: "Lunar", producer: "Movia", vintage: "2016", byGlass: true }];
+  const wines = [{ id: "k1", name: "Lunar", producer: "Movia", vintage: "2016", byGlass: true }];
 
   it("returns true when stored row matches resolved catalog wine", () => {
     expect(aperitifMatchesQuickAccess(
-      { name: "Lunar", producer: "Movia" },
+      { id: "k1", name: "Lunar", producer: "Movia" },
       "Lunar",
       "wine",
       { wines }

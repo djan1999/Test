@@ -51,8 +51,12 @@ export default function DrinksPanel({
   // Local state for editing
   const [localWines, setLocalWines] = useState(wines.map(w => ({ ...w })));
   const [newWine, setNewWine] = useState({ name: "", producer: "", vintage: "", region: "", byGlass: false });
-  const nextWineId = useRef(Math.max(...wines.map(w => w.id), 0) + 1);
-  const addWine    = () => { if (!newWine.name.trim()) return; setLocalWines(l => [...l, { ...newWine, id: nextWineId.current++ }]); setNewWine({ name: "", producer: "", vintage: "", byGlass: false }); };
+  const addWine = () => {
+    if (!newWine.name.trim()) return;
+    const id = `manual|${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    setLocalWines(l => [...l, { ...newWine, id }]);
+    setNewWine({ name: "", producer: "", vintage: "", region: "", byGlass: false });
+  };
   const removeWine = id       => setLocalWines(l => l.filter(w => w.id !== id));
   const updWine    = (id,f,v) => setLocalWines(l => l.map(w => w.id === id ? { ...w, [f]: v } : w));
 
@@ -69,9 +73,19 @@ export default function DrinksPanel({
   const nextBeerId = useRef(Math.max(...beers.map(b => b.id), 0) + 1);
 
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const handleSaveDrinks = useCallback(async () => {
-    await onUpdateWines(localWines);
-    await onSaveBeverages({ cocktails: localCocktails, spirits: localSpirits, beers: localBeers });
+    setSaveError("");
+    const wRes = await onUpdateWines(localWines);
+    if (wRes && wRes.ok === false) {
+      setSaveError(wRes.error || "Wine save failed");
+      return;
+    }
+    const bRes = await onSaveBeverages({ cocktails: localCocktails, spirits: localSpirits, beers: localBeers });
+    if (bRes && bRes.ok === false) {
+      setSaveError(bRes.error || "Beverage save failed");
+      return;
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }, [localWines, localCocktails, localSpirits, localBeers, onUpdateWines, onSaveBeverages]);
@@ -91,13 +105,18 @@ export default function DrinksPanel({
         {["wines", "cocktails", "spirits", "beers"].map(t => (
           <button key={t} style={tabBtn(t)} onClick={() => setDrinkTab(t)}>{t.toUpperCase()}</button>
         ))}
-        <button onClick={handleSaveDrinks} style={{
+        <button type="button" onClick={handleSaveDrinks} style={{
           fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-          border: `1px solid ${saved ? "#888" : "#4a9a6a"}`, borderRadius: 0, cursor: "pointer",
-          background: saved ? "#888" : "#4a9a6a", color: "#fff", marginLeft: "auto",
+          border: `1px solid ${saved ? "#888" : saveError ? "#c04040" : "#4a9a6a"}`, borderRadius: 0, cursor: "pointer",
+          background: saved ? "#888" : saveError ? "#c04040" : "#4a9a6a", color: "#fff", marginLeft: "auto",
           transition: "background 0.2s, border-color 0.2s",
         }}>{saved ? "SAVED" : "SAVE DRINKS"}</button>
       </div>
+      {saveError && (
+        <div style={{ fontFamily: FONT, fontSize: 10, color: "#c04040", marginBottom: 10, maxWidth: 560 }}>
+          {saveError}
+        </div>
+      )}
 
       {drinkTab === "wines" && (
         <>

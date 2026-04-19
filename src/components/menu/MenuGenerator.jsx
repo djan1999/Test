@@ -11,7 +11,7 @@ import { tokens } from "../../styles/tokens.js";
 import FullModal from "../ui/FullModal.jsx";
 import BlurInput from "../ui/BlurInput.jsx";
 import BeverageSearch from "../service/BeverageSearch.jsx";
-import { resolveAperitifCatalogItem } from "../../utils/search.js";
+import { resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
 
 const FONT = tokens.font;
 const baseInp = {
@@ -502,17 +502,15 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                       {aperitifOptions.map(ap => {
                         const label = ap.label ?? ap;
-                        const sk = ap.searchKey ?? ap.label ?? ap;
-                        const type = ap.type || "wine";
                         return (
-                          <button key={label} onClick={() => {
-                            const found = resolveAperitifCatalogItem(sk, type, {
+                          <button key={label} type="button" onClick={() => {
+                            const found = resolveAperitifFromQuickAccessOption(ap, {
                               wines: winesCatalog,
                               cocktails: cocktailsCatalog,
                               spirits: spiritsCatalog,
                               beers: beersCatalog,
                             });
-                            const item = found || { name: label, notes: "", __cocktail: true };
+                            const item = found || { name: ap.searchKey || ap.label, notes: "", __cocktail: true };
                             updSeat(s.id, "aperitifs", [...(s.aperitifs || []), item]);
                           }} style={{
                             fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",

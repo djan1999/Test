@@ -92,10 +92,22 @@ describe("parseWinesFromHtml", () => {
     expect(w.producer).not.toMatch(/^\d+\./);
   });
 
-  it("strips 'natural' and 'eco' from wine name", () => {
+  it("strips trailing natural/eco tags from wine name only", () => {
     const wines = parseWinesFromHtml(WINE_TABLE_HTML, "SI");
     const kolos = wines.find(w => w.wine_name.toLowerCase().includes("kolos"));
-    expect(kolos.wine_name).not.toMatch(/natural/i);
+    expect(kolos.wine_name).not.toMatch(/natural$/i);
+  });
+
+  it("does not strip 'natural' from mid-word in wine name", () => {
+    const html = `<table><tr><td>Movia</td><td>Supernatural blend</td><td>2020</td><td>Brda</td></tr></table>`;
+    const [w] = parseWinesFromHtml(html, "SI");
+    expect(w.wine_name.toLowerCase()).toContain("supernatural");
+  });
+
+  it("includes source sync on parsed rows", () => {
+    const html = `<table><tr><td>Movia</td><td>Lunar</td><td>2019</td><td>Brda</td></tr></table>`;
+    const [w] = parseWinesFromHtml(html, "SI");
+    expect(w.source).toBe("sync");
   });
 
   it("generates a deterministic key", () => {

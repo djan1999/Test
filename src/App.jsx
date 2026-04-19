@@ -27,7 +27,12 @@ import {
   BEV_STORAGE_KEY, TEAM_STORAGE_KEY, STORAGE_KEY,
 } from "./utils/storage.js";
 import { makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM } from "./utils/tableHelpers.js";
-import { fuzzy, fuzzyDrink, resolveAperitifCatalogItem, aperitifMatchesQuickAccess } from "./utils/search.js";
+import { fuzzy, fuzzyDrink } from "./utils/search.js";
+import {
+  buildBeverageLinkedKey,
+  resolveAperitifFromQuickAccessOption,
+  aperitifMatchesQuickAccessOption,
+} from "./utils/quickAccessResolve.js";
 import { useIsMobile } from "./hooks/useIsMobile.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useOfflineQueue } from "./hooks/useOfflineQueue.js";
@@ -96,6 +101,7 @@ const parseDefaultQuickAccessItems = () => {
         id: Number(item?.id) || idx + 1,
         label: String(item?.label || "").trim(),
         searchKey: String(item?.searchKey || item?.label || "").trim(),
+        linkedKey: item?.linkedKey != null && String(item.linkedKey).trim() !== "" ? String(item.linkedKey).trim() : undefined,
         type: String(item?.type || "wine").trim() || "wine",
         enabled: item?.enabled !== false,
       }))
@@ -706,9 +712,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                   {aperitifOptions.map(ap => (
                     <button key={ap.label} onClick={() => {
-                      const type = ap.type || "wine";
-                      const sk = ap.searchKey || ap.label;
-                      const found = resolveAperitifCatalogItem(sk, type, { wines, cocktails, spirits, beers });
+                      const found = resolveAperitifFromQuickAccessOption(ap, { wines, cocktails, spirits, beers });
                       const item = found || { name: ap.searchKey || ap.label, notes: "", __cocktail: true };
                       updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
                     }} style={{
@@ -1383,9 +1387,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                     {/* APERITIF — same matching logic as before, now in a labeled row */}
                     {aperitifOptions && aperitifOptions.length > 0 && sectionRow("Aperitif", aperitifOptions.map(opt => {
                       const label = opt.label ?? opt;
-                      const type = opt.type || "wine";
-                      const skRaw = opt.searchKey ?? opt.label ?? opt;
-                      const apMatch = (x) => aperitifMatchesQuickAccess(x, skRaw, type, { wines, cocktails, spirits, beers });
+                      const apMatch = (x) => aperitifMatchesQuickAccessOption(x, opt, { wines, cocktails, spirits, beers });
                       const active = (s.aperitifs || []).some(apMatch);
                       return (
                         <button key={label} onClick={() => {
@@ -1393,7 +1395,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                           if (active) {
                             updSeat(t.id, s.id, "aperitifs", (s.aperitifs || []).filter(x => !apMatch(x)));
                           } else {
-                            const found = resolveAperitifCatalogItem(skRaw, type, { wines, cocktails, spirits, beers });
+                            const found = resolveAperitifFromQuickAccessOption(opt, { wines, cocktails, spirits, beers });
                             const item = found || { name: label, notes: "", __cocktail: true };
                             updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item]);
                           }
@@ -2205,29 +2207,41 @@ export default function App() {
 
   const saveWines = async (updatedWines) => {
     setWines(updatedWines);
-    if (!supabase) return;
+    if (!supabase) return { ok: true };
     const BATCH = 200;
-    const rows = updatedWines.map(w => ({
-      key: typeof w.id === "string" ? w.id : `manual|${(w.producer||"").toLowerCase().replace(/\s/g,"_")}|${(w.name||"").toLowerCase().replace(/\s/g,"_")}|${w.vintage||"NV"}`,
-      wine_name: w.name,
-      name: w.producer ? `${w.producer} – ${w.name}` : w.name,
-      producer: w.producer || "",
-      vintage: w.vintage || "NV",
-      region: w.region || "",
-      country: w.country || "",
-      by_glass: w.byGlass ?? false,
-    }));
+    const rows = updatedWines.map(w => {
+      const key = typeof w.id === "string" ? w.id : `manual|legacy_${w.id}`;
+      const source = String(key).startsWith("manual|") ? "manual" : "sync";
+      return {
+        key,
+        source,
+        wine_name: w.name,
+        name: w.producer ? `${w.producer} – ${w.name}` : w.name,
+        producer: w.producer || "",
+        vintage: w.vintage || "NV",
+        region: w.region || "",
+        country: w.country || "",
+        by_glass: w.byGlass ?? false,
+      };
+    });
     for (let i = 0; i < rows.length; i += BATCH) {
       const { error } = await supabase.from(TABLES.WINES).upsert(rows.slice(i, i + BATCH), { onConflict: "key" });
-      if (error) { console.error("Wine save error:", error); return; }
+      if (error) {
+        console.error("Wine save error:", error);
+        return { ok: false, error: error.message };
+      }
     }
-    // Remove wines that were deleted
     const savedKeys = new Set(rows.map(r => r.key));
-    const originalKeys = wines.map(w => typeof w.id === "string" ? w.id : null).filter(Boolean);
+    const originalKeys = wines.map(w => (typeof w.id === "string" ? w.id : null)).filter(Boolean);
     const deletedKeys = originalKeys.filter(k => !savedKeys.has(k));
     if (deletedKeys.length > 0) {
-      await supabase.from(TABLES.WINES).delete().in("key", deletedKeys);
+      const { error: delErr } = await supabase.from(TABLES.WINES).delete().in("key", deletedKeys);
+      if (delErr) {
+        console.error("Wine delete error:", delErr);
+        return { ok: false, error: delErr.message };
+      }
     }
+    return { ok: true };
   };
 
   const saveBeverages = async ({ cocktails: newC, spirits: newS, beers: newB }) => {
@@ -2235,14 +2249,25 @@ export default function App() {
     setSpirits(newS);
     setBeers(newB);
     writeLocalBeverages({ cocktails: newC, spirits: newS, beers: newB });
-    if (!supabase) return;
+    if (!supabase) return { ok: true };
     const rows = [
-      ...newC.map((item, i) => ({ category: "cocktail", name: item.name, notes: item.notes || "", position: i })),
-      ...newS.map((item, i) => ({ category: "spirit",   name: item.name, notes: item.notes || "", position: i })),
-      ...newB.map((item, i) => ({ category: "beer",     name: item.name, notes: item.notes || "", position: i })),
+      ...newC.map((item, i) => ({ category: "cocktail", name: item.name, notes: item.notes || "", position: i, source: "manual" })),
+      ...newS.map((item, i) => ({ category: "spirit",   name: item.name, notes: item.notes || "", position: i, source: "manual" })),
+      ...newB.map((item, i) => ({ category: "beer",     name: item.name, notes: item.notes || "", position: i, source: "manual" })),
     ];
-    await supabase.from(TABLES.BEVERAGES).delete().in("category", ["cocktail", "spirit", "beer"]);
-    if (rows.length > 0) await supabase.from(TABLES.BEVERAGES).insert(rows);
+    const { error: delErr } = await supabase.from(TABLES.BEVERAGES).delete().eq("source", "manual").in("category", ["cocktail", "spirit", "beer"]);
+    if (delErr) {
+      console.error("Beverage delete error:", delErr);
+      return { ok: false, error: delErr.message };
+    }
+    if (rows.length > 0) {
+      const { error: insErr } = await supabase.from(TABLES.BEVERAGES).insert(rows);
+      if (insErr) {
+        console.error("Beverage insert error:", insErr);
+        return { ok: false, error: insErr.message };
+      }
+    }
+    return { ok: true };
   };
 
   const clearAll = () => {
@@ -2765,22 +2790,42 @@ export default function App() {
   // serviceAperitifOptions: excludes items marked menuOnly (used in service DisplayBoard).
   const aperitifOptions = useMemo(() => {
     const fromQuickAccess = quickAccessItems.filter(i => i.enabled)
-      .map(i => ({ label: i.label, searchKey: i.searchKey || i.label, type: i.type || "wine" }));
+      .map(i => ({
+        label: i.label,
+        searchKey: i.searchKey || i.label,
+        linkedKey: i.linkedKey,
+        type: i.type || "wine",
+      }));
     if (fromQuickAccess.length > 0) return fromQuickAccess;
     // Fallback to aperitif_btn column from courses
     const fromSheet = [...new Set(menuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
     if (fromSheet.length > 0) return fromSheet.map(l => ({ label: l, searchKey: l, type: "wine" }));
-    return DEFAULT_QUICK_ACCESS_ITEMS.filter(i => i.enabled).map(i => ({ label: i.label, searchKey: i.searchKey || i.label, type: i.type || "wine" }));
+    return DEFAULT_QUICK_ACCESS_ITEMS.filter(i => i.enabled).map(i => ({
+      label: i.label,
+      searchKey: i.searchKey || i.label,
+      linkedKey: i.linkedKey,
+      type: i.type || "wine",
+    }));
   }, [quickAccessItems, menuCourses]);
 
   const serviceAperitifOptions = useMemo(() => {
     const fromQuickAccess = quickAccessItems.filter(i => i.enabled && !i.menuOnly)
-      .map(i => ({ label: i.label, searchKey: i.searchKey || i.label, type: i.type || "wine" }));
+      .map(i => ({
+        label: i.label,
+        searchKey: i.searchKey || i.label,
+        linkedKey: i.linkedKey,
+        type: i.type || "wine",
+      }));
     if (fromQuickAccess.length > 0) return fromQuickAccess;
     const fromSheet = [...new Set(menuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
     if (fromSheet.length > 0) return fromSheet.map(l => ({ label: l, searchKey: l, type: "wine" }));
     return DEFAULT_QUICK_ACCESS_ITEMS.filter(i => i.enabled && !i.menuOnly)
-      .map(i => ({ label: i.label, searchKey: i.searchKey || i.label, type: i.type || "wine" }));
+      .map(i => ({
+        label: i.label,
+        searchKey: i.searchKey || i.label,
+        linkedKey: i.linkedKey,
+        type: i.type || "wine",
+      }));
   }, [quickAccessItems, menuCourses]);
 
   // ── Load service tables from Supabase + subscribe realtime ────────────────
@@ -2871,18 +2916,22 @@ export default function App() {
     if (!supabase) return;
     let mounted = true;
 
+    const pickRowsForCategory = (data, cat) => {
+      const rows = data.filter(r => r.category === cat);
+      const manual = rows.filter(r => r.source === "manual").sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      const chosen = manual.length > 0 ? manual : rows.filter(r => r.source === "sync").sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      return chosen.map((r, i) => ({ id: r.id, name: r.name, notes: r.notes || "", position: r.position ?? i }));
+    };
+
     const loadBevs = async () => {
       const { data, error } = await supabase
         .from(TABLES.BEVERAGES)
-        .select("id, category, name, notes, position")
+        .select("id, category, name, notes, position, source")
         .order("position", { ascending: true });
       if (!mounted || error || !data) return;
-      const byCat = cat => data
-        .filter(r => r.category === cat)
-        .map((r, i) => ({ id: r.id, name: r.name, notes: r.notes || "", position: r.position ?? i }));
-      const c = byCat("cocktail");
-      const s = byCat("spirit");
-      const b = byCat("beer");
+      const c = pickRowsForCategory(data, "cocktail");
+      const s = pickRowsForCategory(data, "spirit");
+      const b = pickRowsForCategory(data, "beer");
       setCocktails(c);
       setSpirits(s);
       setBeers(b);
@@ -2902,16 +2951,19 @@ export default function App() {
       if (supabase) {
         supabase
           .from(TABLES.BEVERAGES)
-          .select("id, category, name, notes, position")
+          .select("id, category, name, notes, position, source")
           .order("position", { ascending: true })
           .then(({ data, error }) => {
             if (error || !data) return;
-            const byCat = cat => data
-              .filter(r => r.category === cat)
-              .map((r, i) => ({ id: r.id, name: r.name, notes: r.notes || "", position: r.position ?? i }));
-            const c = byCat("cocktail");
-            const s = byCat("spirit");
-            const b = byCat("beer");
+            const pickRowsForCategory = (rows, cat) => {
+              const all = rows.filter(r => r.category === cat);
+              const manual = all.filter(r => r.source === "manual").sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+              const chosen = manual.length > 0 ? manual : all.filter(r => r.source === "sync").sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+              return chosen.map((r, i) => ({ id: r.id, name: r.name, notes: r.notes || "", position: r.position ?? i }));
+            };
+            const c = pickRowsForCategory(data, "cocktail");
+            const s = pickRowsForCategory(data, "spirit");
+            const b = pickRowsForCategory(data, "beer");
             setCocktails(c);
             setSpirits(s);
             setBeers(b);
@@ -2927,7 +2979,7 @@ export default function App() {
     if (!supabase) return;
     const { data, error } = await supabase
       .from(TABLES.WINES)
-      .select("key, name, wine_name, producer, vintage, region, country, by_glass")
+      .select("key, name, wine_name, producer, vintage, region, country, by_glass, source")
       .order("name", { ascending: true });
     if (error || !data) return;
     setWines(data.map(r => ({
@@ -2935,6 +2987,7 @@ export default function App() {
       producer: r.producer || "", vintage: r.vintage || "",
       region: r.region || "", country: r.country || "",
       byGlass: r.by_glass ?? false,
+      source: r.source || "sync",
     })));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

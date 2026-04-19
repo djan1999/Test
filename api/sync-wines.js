@@ -182,11 +182,24 @@ export function parseWinesFromHtml(html, countryLabel) {
       if (rawProducer.toLowerCase().includes("producer") || rawProducer.toLowerCase().includes("proizvajalec")) continue;
       const byGlass = /^\d+\.\s*/.test(rawProducer);
       const producer = rawProducer.replace(/^\d+\.\s*/, "").trim();
-      const name = rawName.replace(/natural/gi, "").replace(/eco/gi, "").replace(/\s{2,}/g, " ").trim();
+      const name = rawName
+        .replace(/(?:natural|eco)+\s*$/gi, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
       if (!producer || !name) continue;
       const vintageClean = (vintage || "").trim() || "NV";
       const key = `${producer}|${name}|${vintageClean}|${countryLabel}`.toLowerCase().replace(/\s/g, "_");
-      wines.push({ key, producer, name: `${producer} – ${name}`, wine_name: name, vintage: vintageClean, region: `${(region || "").trim()}, ${countryLabel}`, country: countryLabel, by_glass: byGlass });
+      wines.push({
+        key,
+        source: "sync",
+        producer,
+        name: `${producer} – ${name}`,
+        wine_name: name,
+        vintage: vintageClean,
+        region: `${(region || "").trim()}, ${countryLabel}`,
+        country: countryLabel,
+        by_glass: byGlass,
+      });
     }
   }
   return wines;
@@ -329,6 +342,7 @@ export default async function handler(req, res) {
       const { error: deleteError } = await supabase
         .from("wines")
         .delete()
+        .eq("source", "sync")
         .in("country", syncedCountryLabels);
       if (deleteError) console.warn("[sync] wines delete error:", deleteError.message);
 
@@ -362,10 +376,10 @@ export default async function handler(req, res) {
         for (const cat of categoriesToWrite) {
           let position = 0;
           for (const b of allBeverages.filter(x => x.category === cat)) {
-            rowsToWrite.push({ category: cat, name: b.name, notes: b.notes || "", position: position++ });
+            rowsToWrite.push({ category: cat, name: b.name, notes: b.notes || "", position: position++, source: "sync" });
           }
         }
-        await supabase.from("beverages").delete().in("category", categoriesToWrite);
+        await supabase.from("beverages").delete().eq("source", "sync").in("category", categoriesToWrite);
         if (rowsToWrite.length > 0) {
           const BATCH = 200;
           for (let i = 0; i < rowsToWrite.length; i += BATCH) {

@@ -25,6 +25,7 @@ export const fuzzyDrink = (q, list) => {
  * Resolve a Quick Access searchKey to a row from the live catalog (wines / cocktails / spirits / beers).
  * Matches grape name, producer, and full "Grape – Producer" strings so keys saved from the picker still work.
  */
+/** @deprecated Prefer resolveAperitifFromQuickAccessOption from quickAccessResolve.js when linkedKey exists */
 export function resolveAperitifCatalogItem(searchKey, type, { wines = [], cocktails = [], spirits = [], beers = [] } = {}) {
   const sk = String(searchKey || "").trim().toLowerCase();
   if (!sk) return null;
@@ -62,7 +63,9 @@ export function aperitifMatchesQuickAccess(stored, searchKey, type, { wines = []
   const resolved = resolveAperitifCatalogItem(searchKey, type, { wines, cocktails, spirits, beers });
   if (resolved) {
     if (type === "wine") {
-      return (stored.name || "") === (resolved.name || "") && (stored.producer || "") === (resolved.producer || "");
+      return stored.id && resolved.id
+        ? stored.id === resolved.id
+        : (stored.name || "") === (resolved.name || "") && (stored.producer || "") === (resolved.producer || "");
     }
     return (stored.name || "") === (resolved.name || "");
   }
