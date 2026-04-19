@@ -1,12 +1,12 @@
 import React from 'react';
 import { tokens } from '../../styles/tokens';
 
-const { ink, signal, typeScale, space, rule, font } = tokens;
+const { ink, signal, typeScale, space, rule, font, surface } = tokens;
 
 const s = {
   card: {
     fontFamily: font,
-    backgroundColor: '#ffffff',
+    backgroundColor: surface.card,
     borderRadius: 0,
     borderTop:    `${rule.hairline} solid ${ink[4]}`,
     borderBottom: `${rule.hairline} solid ${ink[4]}`,
