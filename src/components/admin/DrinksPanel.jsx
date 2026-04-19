@@ -109,7 +109,7 @@ export default function DrinksPanel({
         <button type="button" onClick={handleSaveDrinks} style={{
           fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
           border: `1px solid ${saved ? tokens.neutral[400] : saveError ? tokens.red.border : tokens.green.border}`, borderRadius: tokens.radius, cursor: "pointer",
-          background: saved ? tokens.neutral[400] : saveError ? tokens.red.border : tokens.green.border, color: tokens.text.inverse, marginLeft: "auto",
+          background: tokens.surface.card, color: saved ? tokens.text.muted : saveError ? tokens.red.text : tokens.green.text, marginLeft: "auto",
           transition: "background 0.2s, border-color 0.2s",
         }}>{saved ? "SAVED" : "SAVE DRINKS"}</button>
       </div>

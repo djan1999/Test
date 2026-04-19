@@ -246,8 +246,8 @@ export default function QuickAccessPanel({
                     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px",
                     border: `1px solid ${editingId === item.id ? tokens.charcoal.default : tokens.neutral[300]}`,
                     borderRadius: 0, cursor: "pointer",
-                    background: editingId === item.id ? tokens.charcoal.default : tokens.surface.card,
-                    color: editingId === item.id ? tokens.text.inverse : tokens.text.muted, flexShrink: 0,
+                    background: tokens.surface.card,
+                    color: editingId === item.id ? tokens.text.primary : tokens.text.muted, flexShrink: 0,
                   }}>{editingId === item.id ? "SAVE" : "EDIT"}</button>
 
                 <button type="button" onClick={() => removeItem(item.id)} style={{
@@ -318,7 +318,7 @@ export default function QuickAccessPanel({
         <button type="button" onClick={addItem} style={{
           fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
           border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer",
-          background: tokens.charcoal.default, color: tokens.text.inverse,
+          background: tokens.surface.card, color: tokens.text.primary,
         }}>+ ADD ITEM</button>
       </div>
     </div>

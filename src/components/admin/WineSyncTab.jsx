@@ -49,8 +49,8 @@ export default function WineSyncTab({ onSyncWines }) {
             border: `1px solid ${tokens.charcoal.default}`,
             borderRadius: 0,
             cursor: status === "syncing" ? "not-allowed" : "pointer",
-            background: tokens.charcoal.default,
-            color: tokens.text.inverse,
+            background: tokens.surface.card,
+            color: tokens.text.primary,
           }}
         >
           {status === "syncing" ? "SYNCING…" : "SYNC WINES & BEVERAGES"}

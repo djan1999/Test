@@ -32,7 +32,7 @@ export function MenuRulesPanel({
             style={{
               marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
               padding: "4px 10px", border: "none", borderRadius: 0, cursor: menuRulesSaving ? "wait" : "pointer",
-              background: menuRulesSaved ? tokens.green.border : tokens.charcoal.default, color: tokens.neutral[0], textTransform: "uppercase",
+              background: tokens.surface.card, color: menuRulesSaved ? tokens.green.text : tokens.text.primary, textTransform: "uppercase",
             }}
           >
             {menuRulesSaving ? "Saving..." : menuRulesSaved ? "Saved" : "Save Rules"}
@@ -124,7 +124,7 @@ export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLa
             style={{
               marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
               padding: "4px 10px", border: "none", borderRadius: 0, cursor: "pointer",
-              background: tokens.charcoal.default, color: tokens.neutral[0], textTransform: "uppercase",
+              background: tokens.surface.card, color: tokens.text.primary, textTransform: "uppercase",
             }}
           >Save Styles</button>
         )}

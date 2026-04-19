@@ -88,8 +88,8 @@ export default function AdminPanel({
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "9px 18px",
     border: "none", cursor: "pointer", textTransform: "uppercase", transition: "all 0.1s",
-    background: tab === t ? tokens.charcoal.default : tokens.surface.card,
-    color: tab === t ? tokens.text.inverse : tokens.text.body,
+    background: tokens.surface.card,
+    color: tab === t ? tokens.text.primary : tokens.text.body,
     borderBottom: tab === t ? `2px solid ${tokens.charcoal.default}` : tokens.border.default,
     whiteSpace: "nowrap",
   });
@@ -254,13 +254,13 @@ export default function AdminPanel({
                 <div style={fieldLabel}>Add dish</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input value={newDishName} onChange={e => setNewDishName(e.target.value)} onKeyDown={e => e.key === "Enter" && addDish()} placeholder="Dish name…" style={{ ...baseInp, flex: 1 }} />
-                  <button onClick={addDish} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 16px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.text.inverse, whiteSpace: "nowrap" }}>+ ADD</button>
+                  <button onClick={addDish} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 16px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, whiteSpace: "nowrap" }}>+ ADD</button>
                 </div>
               </div>
               <div style={{ borderTop: tokens.border.subtle, marginTop: 24, paddingTop: 14 }}>
                 <button onClick={() => { onUpdateDishes(localDishes); }} style={{
                   fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
-                  border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.text.inverse,
+                  border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary,
                 }}>SAVE EXTRAS</button>
               </div>
             </>
@@ -288,7 +288,7 @@ export default function AdminPanel({
                     <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.muted, marginBottom: 8 }}>
                       Upload PNG, JPG, or SVG. Will be embedded in all printed menus.
                     </div>
-                    <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.text.inverse, display: "inline-block" }}>
+                    <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, display: "inline-block" }}>
                       UPLOAD LOGO
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
                         const file = e.target.files[0];

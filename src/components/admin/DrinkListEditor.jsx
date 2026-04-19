@@ -38,7 +38,7 @@ export default function DrinkListEditor({ list, setList, newItem, setNewItem, ne
         </div>
         <button onClick={() => { if (!newItem.name.trim()) return; setList(l => [...l, { ...newItem, id: nextId.current++ }]); setNewItem({ name: "", notes: "" }); }} style={{
           fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 20px",
-          border: `1px solid ${tokens.charcoal.default}`, borderRadius: tokens.radius, cursor: "pointer", background: tokens.charcoal.default, color: tokens.text.inverse,
+          border: `1px solid ${tokens.charcoal.default}`, borderRadius: tokens.radius, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary,
         }}>+ ADD {label.toUpperCase()}</button>
       </div>
     </>

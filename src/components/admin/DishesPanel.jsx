@@ -81,7 +81,7 @@ export default function DishesPanel({ dishes, onUpdateDishes }) {
       <div style={{ borderTop: tokens.border.subtle, marginTop: 24, paddingTop: 14 }}>
         <button onClick={() => onUpdateDishes(localDishes)} style={{
           fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
-          border: `1px solid ${tokens.charcoal.default}`, borderRadius: tokens.radius, cursor: "pointer", background: tokens.charcoal.default, color: tokens.text.inverse,
+          border: `1px solid ${tokens.charcoal.default}`, borderRadius: tokens.radius, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary,
         }}>SAVE EXTRAS</button>
       </div>
     </>

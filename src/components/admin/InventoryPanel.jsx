@@ -41,7 +41,7 @@ export default function InventoryPanel({ onSyncWines, wines = [] }) {
           fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 2, padding: "10px 20px",
           border: `1px solid ${tokens.charcoal.default}`, borderRadius: tokens.radius,
           cursor: status === "syncing" ? "not-allowed" : "pointer",
-          background: tokens.charcoal.default, color: tokens.text.inverse,
+          background: tokens.surface.card, color: tokens.text.primary,
         }}>
           {status === "syncing" ? "SYNCING..." : "SYNC WINES & BEVERAGES"}
         </button>

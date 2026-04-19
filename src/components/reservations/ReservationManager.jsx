@@ -107,13 +107,13 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <button onClick={() => setShowBreakdown(true)}
               disabled={dayResv.length === 0}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1 }}>SERVICE BREAKDOWN</button>
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1 }}>SERVICE BREAKDOWN</button>
             <button onClick={() => {
               const next = editingId === "new" ? null : "new";
               setEditingId(next);
               setDraftFromReservation(null);
             }}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: `1px solid ${editingId === "new" ? tokens.charcoal.default : tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: editingId === "new" ? tokens.tint.parchment : tokens.charcoal.default, color: editingId === "new" ? tokens.text.body : tokens.neutral[0], fontWeight: 600 }}>+ ADD</button>
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 600 }}>+ ADD</button>
           </div>
         </div>
 
@@ -171,7 +171,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 {/* Card header — always visible */}
                 <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
                   {/* Table badge */}
-                  <div style={{ background: tokens.charcoal.default, color: tokens.neutral[0], border: `1px solid ${tokens.charcoal.border}`, fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 1, padding: "8px 12px", borderRadius: 0, minWidth: 48, textAlign: "center" }}>{tLabel}</div>
+                  <div style={{ background: tokens.neutral[150], color: tokens.text.primary, border: `1px solid ${tokens.charcoal.border}`, fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 1, padding: "8px 12px", borderRadius: 0, minWidth: 48, textAlign: "center" }}>{tLabel}</div>
                   {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: FONT, fontSize: 13, color: tokens.neutral[900], fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -311,7 +311,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                   w.document.write(html); w.document.close(); w.focus();
                   setTimeout(() => w.print(), 800);
                 }}
-                  style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 600 }}>PRINT</button>
+                  style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 600 }}>PRINT</button>
                 <button onClick={() => setWeeklyPreview(null)}
                   style={{ fontFamily: FONT, fontSize: 10, background: "none", border: "none", cursor: "pointer", color: tokens.neutral[400], padding: "0 4px" }}>×</button>
               </div>

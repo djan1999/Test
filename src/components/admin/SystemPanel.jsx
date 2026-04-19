@@ -95,8 +95,8 @@ export default function SystemPanel({
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
             border: `1px solid ${syncResult === "ok" ? tokens.green.border : syncResult === "err" ? tokens.red.border : tokens.charcoal.default}`,
             borderRadius: 0, cursor: syncResult === "syncing" ? "not-allowed" : "pointer",
-            background: syncResult === "ok" ? tokens.green.bg : syncResult === "err" ? tokens.red.bg : tokens.charcoal.default,
-            color: syncResult === "ok" ? tokens.green.text : syncResult === "err" ? tokens.red.text : tokens.text.inverse,
+            background: tokens.surface.card,
+            color: syncResult === "ok" ? tokens.green.text : syncResult === "err" ? tokens.red.text : tokens.text.primary,
           }}>
             {syncResult === "syncing" ? "SYNCING..." : syncResult === "ok" ? "SYNCED" : syncResult === "err" ? "FAILED" : "RESYNC WINES"}
           </button>
@@ -129,7 +129,7 @@ export default function SystemPanel({
             <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.muted, marginBottom: 8 }}>
               Upload PNG, JPG, or SVG. Will be embedded in all printed menus.
             </div>
-            <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.text.inverse, display: "inline-block" }}>
+            <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, display: "inline-block" }}>
               UPLOAD LOGO
               <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
                 const file = e.target.files[0];
@@ -166,7 +166,7 @@ export default function SystemPanel({
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
-            <button onClick={() => onCreateLayoutProfile?.()} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.text.inverse }}>NEW BLANK LAYOUT</button>
+            <button onClick={() => onCreateLayoutProfile?.()} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary }}>NEW BLANK LAYOUT</button>
             <button
               onClick={() => activeProfile && onDeleteLayoutProfile?.(activeProfile.id)}
               disabled={safeProfiles.length <= 1}
@@ -217,7 +217,7 @@ export default function SystemPanel({
             <button
               onClick={async () => { setSyncConfigSaving(true); try { await onSaveWineSyncConfig?.(); } finally { setSyncConfigSaving(false); } }}
               disabled={syncConfigSaving}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: syncConfigSaving ? "not-allowed" : "pointer", background: tokens.charcoal.default, color: tokens.text.inverse }}
+              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: syncConfigSaving ? "not-allowed" : "pointer", background: tokens.surface.card, color: tokens.text.primary }}
             >
               {syncConfigSaving ? "SAVING..." : "SAVE SYNC CONFIG"}
             </button>
