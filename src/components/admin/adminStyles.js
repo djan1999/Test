@@ -11,32 +11,35 @@ export const fieldLabel = { ...fieldLabelMixin };
 
 export const sectionHeader = {
   fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 2,
-  color: "#bbb", textTransform: "uppercase", marginBottom: 14,
+  color: tokens.colors.gray400, textTransform: "uppercase", marginBottom: 14,
 };
 
 export const panelBtn = (active = false) => ({
   fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
-  border: `1px solid ${active ? tokens.colors.black : "#e8e8e8"}`,
-  borderRadius: 0, cursor: "pointer",
-  background: active ? tokens.colors.black : tokens.colors.white,
+  border: `1px solid ${active ? tokens.colors.ink : tokens.colors.gray200}`,
+  borderRadius: tokens.radius.sm, cursor: "pointer",
+  background: active ? tokens.colors.ink : tokens.colors.elevated,
   color: active ? tokens.colors.white : tokens.colors.gray500,
+  boxShadow: active ? tokens.shadow.sm : "none",
 });
 
 export const saveBtn = (saved = false) => ({
   fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
-  border: `1px solid ${saved ? "#4a9a6a" : "#c8a06e"}`, borderRadius: 0,
+  border: `1px solid ${saved ? tokens.colors.greenSoft : tokens.colors.gold}`, borderRadius: tokens.radius.sm,
   cursor: "pointer",
-  background: saved ? "#4a9a6a" : "#c8a06e", color: tokens.colors.white,
+  background: saved ? tokens.colors.greenSoft : tokens.colors.gold, color: tokens.colors.white,
+  boxShadow: tokens.shadow.sm,
 });
 
 export const dangerBtn = {
   fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
-  border: "1px solid #ffcccc", borderRadius: 0, cursor: "pointer",
-  background: "#fff9f9", color: "#c04040",
+  border: `1px solid ${tokens.colors.redBorder}`, borderRadius: tokens.radius.sm, cursor: "pointer",
+  background: tokens.colors.redMuted, color: tokens.colors.red,
 };
 
 export const primaryBtn = {
   fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 20px",
-  border: `1px solid ${tokens.colors.black}`, borderRadius: 0, cursor: "pointer",
-  background: tokens.colors.black, color: tokens.colors.white,
+  border: `1px solid ${tokens.colors.ink}`, borderRadius: tokens.radius.sm, cursor: "pointer",
+  background: tokens.colors.ink, color: tokens.colors.white,
+  boxShadow: tokens.shadow.sm,
 };
