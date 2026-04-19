@@ -22,6 +22,17 @@ const BASE = "https://vinska-karta.hotelmilka.si";
 const FETCH_TIMEOUT_MS = 8000;
 const RETRY_ATTEMPTS = 2;
 
+// Use a realistic browser UA so the site's WAF/CDN doesn't reject the request.
+// The hotel's wine-card site (WordPress) returns 403 to obvious bot UAs.
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9,sl;q=0.8",
+  "Cache-Control": "no-cache",
+};
+
 const WINE_COUNTRIES = [
   { param: "Slovenija",     label: "SI" },
   { param: "Avstrija",      label: "AT" },
@@ -63,9 +74,10 @@ const DEFAULT_SYNC_CONFIG = {
 
 export function parseSyncConfigFromRequestUrl(reqUrl) {
   try {
+    // searchParams.get() already URL-decodes the value — no extra decodeURIComponent needed.
     const raw = new URL(reqUrl, "http://localhost").searchParams.get("config");
     if (!raw) return null;
-    const parsed = JSON.parse(decodeURIComponent(raw));
+    const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
     return null;
@@ -109,7 +121,7 @@ function normalizeSyncConfig(raw) {
 
 async function fetchHtml(url) {
   const res = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; MilkaSyncBot/1.0)", Accept: "text/html" },
+    headers: BROWSER_HEADERS,
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -155,7 +167,7 @@ export function parseWinesFromHtml(html, countryLabel) {
   for (const table of html.match(tableRe) || []) {
     for (const row of table.match(/<tr[\s\S]*?<\/tr>/gi) || []) {
       const cells = extractCells(row);
-      if (cells.length < 5) continue;
+      if (cells.length < 4) continue;
       let [rawProducer, rawName, vintage, region] = cells;
       if (!rawProducer || rawProducer.length > 80) continue;
       if (rawProducer.toLowerCase().includes("producer")) continue;
@@ -356,6 +368,23 @@ export default async function handler(req, res) {
       if (skippedCategories.length > 0) {
         console.warn(`[sync] preserved existing rows for failed categories: ${skippedCategories.join(", ")}`);
       }
+    }
+
+    // If every enabled wine country failed (e.g. source site blocked all requests),
+    // surface that as an explicit error so the UI shows "FAILED" rather than "0 wines".
+    const allWinesFailed =
+      syncConfig.winesEnabled &&
+      enabledWineCountries.length > 0 &&
+      successfulCountries.length === 0;
+    if (allWinesFailed) {
+      const sample = wineResults.find(r => r.status === "rejected")?.reason;
+      const reason = sample?.message || "all source pages failed";
+      return res.status(502).json({
+        ok: false,
+        error: `Could not fetch wine data from source site: ${reason}`,
+        failedCountries: failedCountries.map(c => c.label),
+        failedBeveragePages,
+      });
     }
 
     const partial = failedCountries.length > 0 || failedBeveragePages.length > 0;

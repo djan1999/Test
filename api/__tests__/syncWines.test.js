@@ -120,9 +120,16 @@ describe("parseWinesFromHtml", () => {
     expect(parseWinesFromHtml("", "SI")).toEqual([]);
   });
 
-  it("skips rows with fewer than 5 cells", () => {
-    const html = `<table><tr><td>A</td><td>B</td></tr></table>`;
+  it("skips rows with fewer than 4 cells", () => {
+    const html = `<table><tr><td>A</td><td>B</td><td>C</td></tr></table>`;
     expect(parseWinesFromHtml(html, "SI")).toEqual([]);
+  });
+
+  it("parses rows with exactly 4 cells (no price column)", () => {
+    const html = `<table><tr><td>Movia</td><td>Lunar</td><td>2019</td><td>Brda</td></tr></table>`;
+    const wines = parseWinesFromHtml(html, "SI");
+    expect(wines.length).toBe(1);
+    expect(wines[0].producer).toBe("Movia");
   });
 });
 
@@ -198,6 +205,10 @@ describe("parseBeveragesFromHtml", () => {
 describe("withRetry", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("returns result immediately on first success", async () => {
@@ -350,6 +361,66 @@ describe("sync-wines handler auth", () => {
     } finally {
       if (prevSecret === undefined) delete process.env.CRON_SECRET;
       else process.env.CRON_SECRET = prevSecret;
+    }
+  });
+});
+
+describe("sync-wines handler — all-wine-pages-failed returns 502", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("returns 502 with descriptive error when all wine countries fail", async () => {
+    const req = {
+      url: `http://localhost/api/sync-wines?secret=s&dry=false`,
+      headers: { authorization: undefined },
+    };
+    const res = {
+      statusCode: 200,
+      payload: null,
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.payload = body; return this; },
+    };
+
+    const prevCron = process.env.CRON_SECRET;
+    const prevSync = process.env.SYNC_SECRET;
+    const prevUrl  = process.env.SUPABASE_URL;
+    const prevKey  = process.env.SUPABASE_SERVICE_KEY;
+    const prevVUrl = process.env.VITE_SUPABASE_URL;
+    const prevVKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+    process.env.CRON_SECRET = "s";
+    delete process.env.SYNC_SECRET;
+    process.env.SUPABASE_URL = "https://fake.supabase.co";
+    process.env.SUPABASE_SERVICE_KEY = "fake-key";
+    delete process.env.VITE_SUPABASE_URL;
+    delete process.env.VITE_SUPABASE_ANON_KEY;
+
+    // Patch global fetch so every page request fails with 403 immediately.
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: async () => "",
+    });
+
+    try {
+      const handlerPromise = handler(req, res);
+      // Advance past the withRetry back-off delay (1 s per page; all 15 pages are parallel).
+      // Don't use runAllTimersAsync() — AbortSignal.timeout() creates recurring internal
+      // timers that would trigger vitest's infinite-loop guard.
+      await vi.advanceTimersByTimeAsync(2000);
+      await handlerPromise;
+      expect(res.statusCode).toBe(502);
+      expect(res.payload.ok).toBe(false);
+      expect(res.payload.error).toMatch(/source site/i);
+    } finally {
+      globalThis.fetch = realFetch;
+      if (prevCron === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = prevCron;
+      if (prevSync === undefined) delete process.env.SYNC_SECRET; else process.env.SYNC_SECRET = prevSync;
+      if (prevUrl  === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = prevUrl;
+      if (prevKey  === undefined) delete process.env.SUPABASE_SERVICE_KEY; else process.env.SUPABASE_SERVICE_KEY = prevKey;
+      if (prevVUrl === undefined) delete process.env.VITE_SUPABASE_URL; else process.env.VITE_SUPABASE_URL = prevVUrl;
+      if (prevVKey === undefined) delete process.env.VITE_SUPABASE_ANON_KEY; else process.env.VITE_SUPABASE_ANON_KEY = prevVKey;
     }
   });
 });
