@@ -1327,10 +1327,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                           else cur = "on";
                           const subLabel = { off: "off", on: "on", alco: "wine", nonalc: "n/a" }[cur];
                           const styleMap = {
-                            off:    { border: tokens.neutral[300], bg: tokens.neutral[100], color: tokens.text.disabled },
-                            on:     { border: tokens.green.border, bg: tokens.green.bg,     color: tokens.green.text },
-                            alco:   { border: tokens.neutral[300], bg: tokens.tint.parchment, color: tokens.neutral[700] },
-                            nonalc: { border: tokens.neutral[300], bg: tokens.neutral[100],   color: tokens.neutral[600] },
+                            off:    { border: tokens.neutral[300], bg: tokens.neutral[100],   color: tokens.text.disabled },
+                            on:     { border: tokens.neutral[500], bg: tokens.tint.parchment, color: tokens.neutral[700] },
+                            alco:   { border: tokens.green.border, bg: tokens.green.bg,       color: tokens.green.text },
+                            nonalc: { border: tokens.green.border, bg: tokens.green.bg,       color: tokens.green.text },
                           }[cur];
                           return (
                             <button key={dish.key || dish.id} onClick={() => upd && upd(t.id, "seats", prev => (prev || []).map(seat => {
