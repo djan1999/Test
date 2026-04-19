@@ -25,15 +25,33 @@ export default function SystemPanel({
   const safeWineSyncConfig = wineSyncConfig || { wineCountries: [], beveragePages: [] };
   const [debugOpen, setDebugOpen] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
+  const [syncMsg, setSyncMsg] = useState("");
   const [syncConfigSaving, setSyncConfigSaving] = useState(false);
 
   const handleManualSync = async () => {
     setSyncResult("syncing");
+    setSyncMsg("");
     try {
       const r = await onSyncWines();
-      setSyncResult(r?.ok ? "ok" : "err");
-    } catch { setSyncResult("err"); }
-    setTimeout(() => setSyncResult(null), 3000);
+      if (r?.ok) {
+        setSyncResult("ok");
+        const parts = [
+          r.wines != null ? `${r.wines} wines` : null,
+          r.cocktails != null ? `${r.cocktails} cocktails` : null,
+          r.beers != null ? `${r.beers} beers` : null,
+          r.spirits != null ? `${r.spirits} spirits` : null,
+        ].filter(Boolean);
+        const warn = r.failedCountries?.length ? ` (missed: ${r.failedCountries.join(", ")})` : "";
+        setSyncMsg(`${parts.join(", ")}${warn}`);
+      } else {
+        setSyncResult("err");
+        setSyncMsg(r?.error || "Unknown error");
+      }
+    } catch (e) {
+      setSyncResult("err");
+      setSyncMsg(e?.message || "Request failed");
+    }
+    setTimeout(() => { setSyncResult(null); setSyncMsg(""); }, 8000);
   };
 
   const statusColor = syncStatus === "live" ? "#2a7a2a" : syncStatus === "local-only" ? "#888" : syncStatus === "connecting" ? "#c8a06e" : "#c04040";
@@ -71,7 +89,7 @@ export default function SystemPanel({
       {/* Manual Actions */}
       <div>
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: "#bbb", textTransform: "uppercase", marginBottom: 14 }}>Manual Actions</div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <button onClick={handleManualSync} disabled={syncResult === "syncing"} style={{
             fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
             border: `1px solid ${syncResult === "ok" ? "#8fc39f" : syncResult === "err" ? "#e89898" : "#c8a06e"}`,
@@ -81,6 +99,18 @@ export default function SystemPanel({
           }}>
             {syncResult === "syncing" ? "SYNCING..." : syncResult === "ok" ? "SYNCED" : syncResult === "err" ? "FAILED" : "RESYNC WINES"}
           </button>
+          {syncMsg && (
+            <span
+              title={syncMsg}
+              style={{
+                fontFamily: FONT, fontSize: 10,
+                color: syncResult === "ok" ? "#2a7a2a" : "#c04040",
+                maxWidth: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}
+            >
+              {syncMsg}
+            </span>
+          )}
         </div>
       </div>
 
