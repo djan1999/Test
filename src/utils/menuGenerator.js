@@ -358,8 +358,10 @@ export function generateMenuHTML({
     if (rb?.type === "spacer") { spacerGap = Math.max(spacerGap, rb.height || 8); rb = null; }
     const gap = (tRow.gap || 0) + spacerGap;
     // If both cells are empty (both were spacers, or both null), defer the gap
-    // instead of emitting a standalone spacer row. This way, if the next course
-    // is hidden (e.g. beetroot not ordered), the spacer disappears with it.
+    // instead of emitting a standalone spacer row. The gap is then applied to
+    // the next row that actually renders — including rows after hidden optional
+    // courses — so spacing between visible courses is preserved regardless of
+    // whether an optional course in between is ordered.
     if (!lb && !rb) {
       pendingGap += spacerGap + (tRow.gap || 0);
       continue;
@@ -484,8 +486,10 @@ export function generateMenuHTML({
       // Normalized lookup handles raw course_keys that differ in punctuation
       const normKey = normalizeCourseToken(courseKey);
       const vc = visibleCourses.find(vc => vc.courseKey === courseKey || vc.courseKey === normKey);
-      // Course hidden (e.g. beetroot not ordered) — discard any pending spacer gap
-      if (!vc) { pendingGap = 0; continue; }
+      // Course hidden (e.g. beetroot not ordered) — preserve pendingGap so it
+      // carries forward to the next visible course (e.g. a gap before an optional
+      // cheese course still applies to whatever follows Venison when cheese is absent).
+      if (!vc) { continue; }
       const { course, i } = vc;
 
       let dish = applyCourseRestriction(resolveCourse(course), restrictions, lang);

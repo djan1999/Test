@@ -270,6 +270,35 @@ describe("generateMenuHTML — extras filtering", () => {
     const html = render({}, {}, [mainCourse, cakeCourse]);
     expect(html).not.toContain("PEAR");
   });
+
+  it("gap before hidden optional course is applied to the next visible course", () => {
+    const venison   = makeCourse("VENISON", "truffle");
+    const sheep     = makeCourse("SHEEP_CHEESE", "juniper", { course_category: "optional", optional_flag: "cheese" });
+    const sunchoke  = makeCourse("SUNCHOKE", "rosehip");
+    const template = {
+      version: 2,
+      rows: [
+        { id: "v",   left: { type: "course", courseKey: venison.course_key  }, right: null, widthPreset: "55/45", gap: 0 },
+        { id: "gap", left: null, right: null, widthPreset: "55/45", gap: 14 },
+        { id: "sc",  left: { type: "course", courseKey: sheep.course_key    }, right: null, widthPreset: "55/45", gap: 0 },
+        { id: "su",  left: { type: "course", courseKey: sunchoke.course_key }, right: null, widthPreset: "55/45", gap: 0 },
+      ],
+    };
+
+    // When cheese is ordered the gap appears before SHEEP_CHEESE
+    const htmlWith = render(
+      { extras: { cheese: { ordered: true } } }, {}, [venison, sheep, sunchoke],
+      { menuTemplate: template }
+    );
+    const cheeseSectionIdx = htmlWith.indexOf("SHEEP_CHEESE");
+    expect(htmlWith.slice(0, cheeseSectionIdx)).toContain("margin-top:14pt");
+
+    // When cheese is NOT ordered the gap must carry forward to SUNCHOKE
+    const htmlWithout = render({}, {}, [venison, sheep, sunchoke], { menuTemplate: template });
+    expect(htmlWithout).not.toContain("SHEEP_CHEESE");
+    const sunchokeSectionIdx = htmlWithout.indexOf("SUNCHOKE");
+    expect(htmlWithout.slice(0, sunchokeSectionIdx)).toContain("margin-top:14pt");
+  });
 });
 
 // ── Short menu filtering ───────────────────────────────────────────────────────
