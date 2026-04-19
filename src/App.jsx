@@ -397,117 +397,166 @@ const circBtnSm = { ...mixinCircleButton };
 
 function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
   const hasRes = table.resName || table.resTime;
-  return (
-    <div style={{
-      background: tokens.neutral[0],
-      border: "1px solid",
-      borderColor: table.active ? tokens.neutral[300] : hasRes ? tokens.neutral[200] : tokens.neutral[100],
-      borderRadius: 0,
-      padding: "20px 18px 16px",
-      cursor: table.active ? "pointer" : "default",
-      display: "flex", flexDirection: "column", gap: 10,
-      minHeight: 190,
-      opacity: !table.active && !hasRes ? 0.35 : 1,
-      boxShadow: table.active ? "0 1px 6px rgba(0,0,0,0.06)" : "none",
-    }} onClick={onClick}>
+  const isActive = table.active;
 
-      {/* ── Top row: table number + status badges ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <span style={{
-          fontFamily: FONT, fontSize: table.tableGroup?.length > 1 ? 20 : 28, fontWeight: 300, letterSpacing: 1,
-          color: table.active ? tokens.text.primary : tokens.text.muted, lineHeight: 1,
-        }}>
-          {table.tableGroup?.length > 1 ? `T${table.tableGroup.join("-")}` : String(table.id).padStart(2, "0")}
+  // Status dot color: gold = active, amber = fast pace, grey = inactive
+  const dotColor = !isActive          ? tokens.signal.done
+                 : table.pace === "Fast" ? tokens.signal.warn
+                 : tokens.signal.active;
+
+  // Header: TABLE_03   COVERS_04   SEATED_19:42
+  const tableLabel = table.tableGroup?.length > 1
+    ? `TABLE_${table.tableGroup.map(n => String(n).padStart(2, "0")).join("-")}`
+    : `TABLE_${String(table.id).padStart(2, "0")}`;
+  const headerParts = [
+    tableLabel,
+    isActive && table.guests != null ? `COVERS_${String(table.guests).padStart(2, "0")}` : null,
+    isActive && table.arrivedAt      ? `SEATED_${table.arrivedAt}`
+      : !isActive && table.resTime   ? `RES_${table.resTime}`
+      : null,
+  ].filter(Boolean);
+
+  // Group restrictions by seat position → { P1: ["GLUTEN_FREE"], TABLE: ["VEGAN"] }
+  const restrBySeat = {};
+  (table.restrictions || []).forEach(r => {
+    const guestKey = r.pos != null ? `P${r.pos}` : "TABLE";
+    if (!restrBySeat[guestKey]) restrBySeat[guestKey] = [];
+    restrBySeat[guestKey].push(restrCompact(r.note).replace(/\s+/g, "_").toUpperCase());
+  });
+  const restrEntries = Object.entries(restrBySeat);
+
+  // Footer ghost buttons
+  const actionBtns = [
+    !isActive && mode === "admin" ? { label: hasRes ? "EDIT" : "RESERVE", fn: onEditRes } : null,
+    !isActive && hasRes           ? { label: "SEAT",   fn: onSeat   } : null,
+    isActive  && mode === "admin" ? { label: "UNSEAT", fn: onUnseat } : null,
+    isActive  && mode === "admin" ? { label: "CLEAR",  fn: onClear  } : null,
+  ].filter(Boolean);
+
+  return (
+    <div
+      style={{
+        fontFamily: FONT,
+        backgroundColor: tokens.neutral[0],
+        borderRadius: 0,
+        borderTop:    `${tokens.rule.hairline} solid ${tokens.ink[4]}`,
+        borderBottom: `${tokens.rule.hairline} solid ${tokens.ink[4]}`,
+        paddingTop:    tokens.space[5],
+        paddingBottom: tokens.space[5],
+        paddingLeft:   tokens.space[4],
+        paddingRight:  tokens.space[4],
+        cursor:  isActive ? "pointer" : "default",
+        opacity: !isActive && !hasRes ? 0.35 : 1,
+        display: "flex", flexDirection: "column", gap: tokens.space[3],
+      }}
+      onClick={onClick}
+    >
+      {/* HEADER STRIP */}
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        paddingBottom: tokens.space[3],
+        borderBottom:  `${tokens.rule.hairline} solid ${tokens.ink[4]}`,
+      }}>
+        <span style={{ ...tokens.typeScale.meta, fontFamily: FONT, color: tokens.ink[2] }}>
+          {headerParts.join("   ")}
         </span>
-        <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", maxWidth: "65%" }}>
-          {table.birthday && <span style={{ fontSize: 13 }}>🎂</span>}
-          {table.restrictions?.length > 0 && <span style={{ fontSize: 13 }}>⚠️</span>}
+        <div style={{ width: 6, height: 6, borderRadius: 0, flexShrink: 0, backgroundColor: dotColor }} />
+      </div>
+
+      {/* GUEST NAME */}
+      {table.resName && (
+        <div>
+          <div style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[3], marginBottom: tokens.space[1] }}>GUEST</div>
+          <div style={{ ...tokens.typeScale.value, fontFamily: FONT, color: tokens.ink[1] }}>{table.resName}</div>
+        </div>
+      )}
+
+      {/* METADATA: hotel, menu type, pace, birthday — all as label tokens */}
+      {(table.birthday || table.guestType === "hotel" || table.menuType || table.pace) && (
+        <div style={{ display: "flex", gap: tokens.space[3], flexWrap: "wrap" }}>
+          {table.birthday && (
+            <span style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[2] }}>BIRTHDAY</span>
+          )}
           {table.guestType === "hotel" && (
-            <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.primary, letterSpacing: 1, border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, padding: "2px 6px", background: tokens.neutral[50] }}>
-              {table.room ? `Hotel #${table.room}` : "Hotel"}
+            <span style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[2] }}>
+              {table.room ? `HOTEL_${table.room}` : "HOTEL"}
             </span>
           )}
           {table.menuType && (
-            <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.primary, letterSpacing: 1, border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, padding: "2px 6px", background: tokens.neutral[50] }}>
-              {table.menuType} menu
+            <span style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[2] }}>
+              MENU_{table.menuType.toUpperCase()}
             </span>
           )}
-          {table.pace && (() => {
-            const pc = { Slow: { color: tokens.neutral[700], bg: tokens.tint.parchment, border: tokens.neutral[300] }, Fast: { color: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } }[table.pace] || {};
-            return <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, border: `1px solid ${pc.border}`, borderRadius: 0, padding: "2px 6px", background: pc.bg, color: pc.color }}>{table.pace}</span>;
-          })()}
-          {table.active && (
-            <span style={{ width: 8, height: 8, borderRadius: 0, background: tokens.green.text, display: "inline-block" }} />
+          {table.pace && (
+            <span style={{ ...tokens.typeScale.label, fontFamily: FONT, color: table.pace === "Fast" ? tokens.signal.warn : tokens.ink[2] }}>
+              PACE_{table.pace.toUpperCase()}
+            </span>
           )}
-        </div>
-      </div>
-
-      {/* ── Reservation info ── */}
-      {hasRes && (
-        <div style={{ borderTop: `1px solid ${tokens.neutral[100]}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
-          {table.resName && (
-            <div style={{ fontFamily: FONT, fontSize: 14, fontWeight: 500, color: tokens.text.primary, letterSpacing: 0.3 }}>
-              {table.resName}
-            </div>
-          )}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            {table.resTime && (
-              <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.secondary }}>res. {table.resTime}</span>
-            )}
-            {table.arrivedAt && (
-              <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.green.text, fontWeight: 500 }}>arr. {table.arrivedAt}</span>
-            )}
-          </div>
         </div>
       )}
 
-      {/* ── Active table info ── */}
-      {table.active && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.muted, letterSpacing: 0.5 }}>
-            {table.guests} {table.guests === 1 ? "guest" : "guests"}
-          </div>
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-            {table.seats.map(s => (
-              <div key={s.id} style={{
-                width: 9, height: 9, borderRadius: 0,
-                background: s.pairing ? (pairingStyle[s.pairing]?.color || tokens.neutral[300]) : tokens.neutral[300],
-              }} />
+      {/* NOTES */}
+      {table.notes && (
+        <div style={{ ...tokens.typeScale.value, fontFamily: FONT, color: tokens.ink[2], fontSize: "12px", lineHeight: 1.5 }}>
+          {table.notes}
+        </div>
+      )}
+
+      {/* RESTRICTIONS: P1 [GLUTEN_FREE]  P2 [DAIRY_FREE] */}
+      {restrEntries.length > 0 && (
+        <div>
+          <div style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[3], marginBottom: tokens.space[2] }}>RESTRICTIONS</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: tokens.space[2] }}>
+            {restrEntries.map(([guest, flags]) => (
+              <div key={guest} style={{ display: "flex", alignItems: "center", gap: tokens.space[1] }}>
+                <span style={{ ...tokens.typeScale.meta, fontFamily: FONT, color: tokens.ink[2] }}>{guest}</span>
+                {flags.map(flag => (
+                  <span key={flag} style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.signal.alert }}>
+                    [{flag}]
+                  </span>
+                ))}
+              </div>
             ))}
           </div>
-          {table.notes && (
-            <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.muted, fontStyle: "italic", lineHeight: 1.4 }}>{table.notes}</div>
-          )}
         </div>
       )}
 
-      {/* ── Action buttons ── */}
-      <div style={{ marginTop: "auto", display: "flex", gap: 6, flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
-        {!table.active && mode === "admin" && (
-          <button onClick={onEditRes} style={{
-            fontFamily: FONT, fontSize: 10, letterSpacing: 1, padding: "5px 10px",
-            border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.secondary,
-          }}>{hasRes ? "edit" : "reserve"}</button>
-        )}
-        {!table.active && hasRes && (
-          <button onClick={onSeat} style={{
-            fontFamily: FONT, fontSize: 10, letterSpacing: 1, padding: "5px 10px",
-            border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer", background: tokens.green.bg, color: tokens.green.text,
-          }}>seat</button>
-        )}
-        {table.active && mode === "admin" && (
-          <button onClick={onUnseat} style={{
-            fontFamily: FONT, fontSize: 10, letterSpacing: 1, padding: "5px 10px",
-            border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.secondary,
-          }}>unseat</button>
-        )}
-        {table.active && mode === "admin" && (
-          <button onClick={onClear} style={{
-            fontFamily: FONT, fontSize: 10, letterSpacing: 1, padding: "5px 10px",
-            border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text,
-          }}>clear</button>
-        )}
-      </div>
+      {/* SEAT PAIRING DOTS — color still carries wine-type signal */}
+      {isActive && table.seats?.some(s => s.pairing) && (
+        <div style={{ display: "flex", gap: "3px", flexWrap: "wrap" }}>
+          {table.seats.map(s => (
+            <div key={s.id} style={{
+              width: 6, height: 6, borderRadius: 0,
+              backgroundColor: s.pairing ? (pairingStyle[s.pairing]?.color || tokens.ink[4]) : tokens.ink[5],
+            }} />
+          ))}
+        </div>
+      )}
+
+      {/* FOOTER — ghost buttons only */}
+      {actionBtns.length > 0 && (
+        <div
+          style={{
+            display: "flex", gap: tokens.space[4], flexWrap: "wrap",
+            borderTop:  `${tokens.rule.hairline} solid ${tokens.ink[4]}`,
+            paddingTop: tokens.space[3],
+            marginTop:  "auto",
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {actionBtns.map(({ label, fn }) => (
+            <button
+              key={label}
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", ...tokens.typeScale.meta, fontFamily: FONT, color: tokens.ink[2] }}
+              onClick={fn}
+              onMouseEnter={e => { e.currentTarget.style.textDecoration = "underline"; }}
+              onMouseLeave={e => { e.currentTarget.style.textDecoration = "none"; }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
