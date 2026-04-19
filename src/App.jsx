@@ -2077,19 +2077,36 @@ export default function App() {
   };
 
   const syncWines = async () => {
+    // Client-side budget. Vercel function caps at 60 s (see sync-wines.js);
+    // give it slack for headers + DB writes then hard-abort so the UI doesn't hang.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 70_000);
     try {
       const secret = import.meta.env.VITE_SYNC_SECRET || "";
       const cfg = normalizeSyncConfig(syncConfigRef.current);
       const payload = encodeURIComponent(JSON.stringify(cfg));
       const base = secret ? `/api/sync-wines?secret=${encodeURIComponent(secret)}` : "/api/sync-wines";
       const url = `${base}${base.includes("?") ? "&" : "?"}config=${payload}`;
-      const r = await fetch(url);
-      const json = await r.json();
-      if (!r.ok) return { ok: false, error: json.error || String(r.status) };
-      await loadWines(); // explicit reload after sync completes
-      return { ok: true, wines: json.wines, cocktails: json.cocktails, beers: json.beers, spirits: json.spirits, failedCountries: json.failedCountries };
+      const r = await fetch(url, { signal: controller.signal });
+      const json = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, error: json.error || `HTTP ${r.status}` };
+      await loadWines();
+      return {
+        ok: true,
+        partial: Boolean(json.partial),
+        wines: json.wines,
+        cocktails: json.cocktails,
+        beers: json.beers,
+        spirits: json.spirits,
+        failedCountries: json.failedCountries || [],
+        failedBeveragePages: json.failedBeveragePages || [],
+        skippedCategories: json.skippedCategories || [],
+      };
     } catch (e) {
+      if (e?.name === "AbortError") return { ok: false, error: "Timed out after 70 s" };
       return { ok: false, error: e.message || e.name || "Request failed" };
+    } finally {
+      clearTimeout(timeoutId);
     }
   };
 
