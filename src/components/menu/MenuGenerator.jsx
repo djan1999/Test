@@ -11,6 +11,7 @@ import { tokens } from "../../styles/tokens.js";
 import FullModal from "../ui/FullModal.jsx";
 import BlurInput from "../ui/BlurInput.jsx";
 import BeverageSearch from "../service/BeverageSearch.jsx";
+import { resolveAperitifCatalogItem } from "../../utils/search.js";
 
 const FONT = tokens.font;
 const baseInp = {
@@ -501,14 +502,16 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                       {aperitifOptions.map(ap => {
                         const label = ap.label ?? ap;
-                        const sk = (ap.searchKey ?? ap).toLowerCase();
+                        const sk = ap.searchKey ?? ap.label ?? ap;
                         const type = ap.type || "wine";
                         return (
                           <button key={label} onClick={() => {
-                            const wHit = (w) => { const wn=(w.name||"").toLowerCase(),wp=(w.producer||"").toLowerCase(); return wn.includes(sk)||wp.includes(sk)||(wn.length>=4&&sk.includes(wn))||(wp.length>=4&&sk.includes(wp)); };
-                            const found = type === "wine"
-                              ? (winesCatalog.find(w => w.byGlass && wHit(w)) || winesCatalog.find(wHit))
-                              : cocktailsCatalog?.find(c => { const cn=(c.name||"").toLowerCase(); return cn.includes(sk)||(cn.length>=4&&sk.includes(cn)); });
+                            const found = resolveAperitifCatalogItem(sk, type, {
+                              wines: winesCatalog,
+                              cocktails: cocktailsCatalog,
+                              spirits: spiritsCatalog,
+                              beers: beersCatalog,
+                            });
                             const item = found || { name: label, notes: "", __cocktail: true };
                             updSeat(s.id, "aperitifs", [...(s.aperitifs || []), item]);
                           }} style={{

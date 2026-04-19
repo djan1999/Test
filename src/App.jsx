@@ -27,7 +27,7 @@ import {
   BEV_STORAGE_KEY, TEAM_STORAGE_KEY, STORAGE_KEY,
 } from "./utils/storage.js";
 import { makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM } from "./utils/tableHelpers.js";
-import { fuzzy, fuzzyDrink } from "./utils/search.js";
+import { fuzzy, fuzzyDrink, resolveAperitifCatalogItem, aperitifMatchesQuickAccess } from "./utils/search.js";
 import { useIsMobile } from "./hooks/useIsMobile.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useOfflineQueue } from "./hooks/useOfflineQueue.js";
@@ -706,9 +706,9 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                   {aperitifOptions.map(ap => (
                     <button key={ap.label} onClick={() => {
-                      const lk = (ap.searchKey || ap.label).toLowerCase();
-                      const wineHit = (w) => { const wn=(w.name||"").toLowerCase(),wp=(w.producer||"").toLowerCase(); return wn.includes(lk)||wp.includes(lk)||(wn.length>=4&&lk.includes(wn))||(wp.length>=4&&lk.includes(wp)); };
-                      const found = wines.find(w => w.byGlass && wineHit(w)) || wines.find(wineHit);
+                      const type = ap.type || "wine";
+                      const sk = ap.searchKey || ap.label;
+                      const found = resolveAperitifCatalogItem(sk, type, { wines, cocktails, spirits, beers });
                       const item = found || { name: ap.searchKey || ap.label, notes: "", __cocktail: true };
                       updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
                     }} style={{
@@ -1085,7 +1085,7 @@ const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","P
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
 // cards on every DisplayBoard re-render (which caused the visual overlap animation glitch).
-function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onUnseat, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [] }) {
+function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onUnseat, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [] }) {
     const isSeated = t.active;
     const allRestr = (t.restrictions || []).filter(r => r.note);
     const [assigningIdx, setAssigningIdx] = useState(null);
@@ -1383,12 +1383,9 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                     {/* APERITIF — same matching logic as before, now in a labeled row */}
                     {aperitifOptions && aperitifOptions.length > 0 && sectionRow("Aperitif", aperitifOptions.map(opt => {
                       const label = opt.label ?? opt;
-                      const sk = (opt.searchKey ?? opt).toLowerCase();
-                      const apMatch = (x) => {
-                        const xn = (x?.name || "").toLowerCase();
-                        const xp = (x?.producer || "").toLowerCase();
-                        return xn.includes(sk) || xp.includes(sk) || (xn.length >= 4 && sk.includes(xn)) || (xp.length >= 4 && sk.includes(xp));
-                      };
+                      const type = opt.type || "wine";
+                      const skRaw = opt.searchKey ?? opt.label ?? opt;
+                      const apMatch = (x) => aperitifMatchesQuickAccess(x, skRaw, type, { wines, cocktails, spirits, beers });
                       const active = (s.aperitifs || []).some(apMatch);
                       return (
                         <button key={label} onClick={() => {
@@ -1396,11 +1393,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                           if (active) {
                             updSeat(t.id, s.id, "aperitifs", (s.aperitifs || []).filter(x => !apMatch(x)));
                           } else {
-                            const type = opt.type || "wine";
-                            const wHit = (w) => { const wn=(w.name||"").toLowerCase(),wp=(w.producer||"").toLowerCase(); return wn.includes(sk)||wp.includes(sk)||(wn.length>=4&&sk.includes(wn))||(wp.length>=4&&sk.includes(wp)); };
-                            const found = type === "wine"
-                              ? (wines.find(w => w.byGlass && wHit(w)) || wines.find(wHit))
-                              : cocktails?.find(c => { const cn=(c.name||"").toLowerCase(); return cn.includes(sk)||(cn.length>=4&&sk.includes(cn)); });
+                            const found = resolveAperitifCatalogItem(skRaw, type, { wines, cocktails, spirits, beers });
                             const item = found || { name: label, notes: "", __cocktail: true };
                             updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item]);
                           }
@@ -1523,7 +1516,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
     );
 }
 
-function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [] }) {
+function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [], spirits = [], beers = [] }) {
   const isMobile = useIsMobile(700);
 
   // Auto-detect tables that share the same resName + resTime and have no explicit
@@ -1606,6 +1599,8 @@ function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd,
                   aperitifOptions={aperitifOptions}
                   wines={wines}
                   cocktails={cocktails}
+                  spirits={spirits}
+                  beers={beers}
                 />
               ))}
             </div>
@@ -3305,6 +3300,8 @@ export default function App() {
                 aperitifOptions={serviceAperitifOptions}
                 wines={wines}
                 cocktails={cocktails}
+                spirits={spirits}
+                beers={beers}
               />
             );
           })()}

@@ -20,10 +20,10 @@ function WinePickerInput({ value, onChange, type, wines, cocktails, spirits, bee
     : [];
 
   const selectItem = (item) => {
-    // For wines: use the wine name as the searchKey (matches existing lookup logic)
+    // Wines: store grape/cuvée name only — aperitif matching uses name + producer separately
     const key = type === "wine"
-      ? (item.name || item.producer || "")
-      : (item.name || "");
+      ? String(item.name || item.wine_name || item.producer || "").trim()
+      : String(item.name || "").trim();
     onChange(key);
     setQ("");
     setOpen(false);

@@ -19,8 +19,8 @@ import { createClient } from "@supabase/supabase-js";
 export const config = { maxDuration: 60 };
 
 const BASE = "https://vinska-karta.hotelmilka.si";
-const FETCH_TIMEOUT_MS = 8000;
-const RETRY_ATTEMPTS = 2;
+const FETCH_TIMEOUT_MS = 12000;
+const RETRY_ATTEMPTS = 3;
 
 // Use a realistic browser UA so the site's WAF/CDN doesn't reject the request.
 // The hotel's wine-card site (WordPress) returns 403 to obvious bot UAs.
@@ -107,7 +107,7 @@ function normalizeSyncConfig(raw) {
       .map((p) => ({
         category: String(p?.category || "").trim().toLowerCase(),
         label: String(p?.label || "").trim(),
-        url: String(p?.url || "").trim(),
+        url: String(p?.url || "").trim().replace(/\/+$/, ""),
       }))
       .filter((p) => p.category && p.label && p.url);
   };
@@ -117,6 +117,11 @@ function normalizeSyncConfig(raw) {
     wineCountries: normalizeCountries(),
     beveragePages: normalizePages(),
   };
+}
+
+/** Same trailing-slash normalization as saved sync config (stable URL compare). */
+function canonicalBeverageUrl(url) {
+  return String(url || "").trim().replace(/\/+$/, "");
 }
 
 async function fetchHtml(url) {
@@ -168,9 +173,13 @@ export function parseWinesFromHtml(html, countryLabel) {
     for (const row of table.match(/<tr[\s\S]*?<\/tr>/gi) || []) {
       const cells = extractCells(row);
       if (cells.length < 4) continue;
-      let [rawProducer, rawName, vintage, region] = cells;
+      // Site tables use producer | wine name | vintage | region | [volume] | [price]
+      let rawProducer = cells[0];
+      let rawName = cells[1];
+      let vintage = cells[2];
+      let region = cells[3];
       if (!rawProducer || rawProducer.length > 80) continue;
-      if (rawProducer.toLowerCase().includes("producer")) continue;
+      if (rawProducer.toLowerCase().includes("producer") || rawProducer.toLowerCase().includes("proizvajalec")) continue;
       const byGlass = /^\d+\.\s*/.test(rawProducer);
       const producer = rawProducer.replace(/^\d+\.\s*/, "").trim();
       const name = rawName.replace(/natural/gi, "").replace(/eco/gi, "").replace(/\s{2,}/g, " ").trim();
@@ -201,6 +210,7 @@ export function parseBeveragesFromHtml(html, category, subcategoryLabel) {
         notes = [subcategoryLabel, region].filter(Boolean).join(", ");
       } else {
         displayName = name;
+        // cocktails/beers: description is col 1; extra cols (volume, price) are ignored
         notes = cells[1] || "";
       }
       beverages.push({ name: displayName, notes, category });
@@ -258,10 +268,10 @@ export default async function handler(req, res) {
     );
     const enabledWineCountries = WINE_COUNTRIES.filter((c) => syncConfig.wineCountries.includes(String(c.label || "").toUpperCase()));
     const enabledBeveragePages = BEVERAGE_PAGES.filter((page) => {
-      const normalizedUrl = String(page.url || "").replace(/\/+$/, "");
+      const normalizedUrl = canonicalBeverageUrl(page.url);
       return syncConfig.beveragePages.some((cfgPage) =>
         cfgPage.category === page.category &&
-        String(cfgPage.url || "").replace(/\/+$/, "") === normalizedUrl
+        canonicalBeverageUrl(cfgPage.url) === normalizedUrl
       );
     });
 

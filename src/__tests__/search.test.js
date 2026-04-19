@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fuzzy, fuzzyDrink } from "../utils/search.js";
+import { fuzzy, fuzzyDrink, resolveAperitifCatalogItem, aperitifMatchesQuickAccess } from "../utils/search.js";
 
 const wines = [
   { name: "Riesling Spätlese", producer: "Mosel Estate", vintage: "2021", byGlass: true },
@@ -76,5 +76,41 @@ describe("fuzzyDrink", () => {
   it("caps results at 6", () => {
     const big = Array.from({ length: 10 }, (_, i) => ({ name: `Drink ${i}`, notes: "same" }));
     expect(fuzzyDrink("Drink", big)).toHaveLength(6);
+  });
+});
+
+describe("resolveAperitifCatalogItem", () => {
+  const wines = [
+    { name: "Lunar", producer: "Movia", vintage: "2016", byGlass: false },
+    { name: "Robinia", producer: "Štemberger", vintage: "2018", byGlass: true },
+  ];
+  const cocktails = [{ name: "Negroni", notes: "Campari" }];
+
+  it("matches wine by grape name only (picker-style key)", () => {
+    const w = resolveAperitifCatalogItem("Robinia", "wine", { wines, cocktails });
+    expect(w).toEqual(wines[1]);
+  });
+
+  it("matches wine by full Producer – Name string (legacy saved keys)", () => {
+    const w = resolveAperitifCatalogItem("Štemberger – Robinia", "wine", { wines, cocktails });
+    expect(w).toEqual(wines[1]);
+  });
+
+  it("matches cocktail by name", () => {
+    const c = resolveAperitifCatalogItem("negroni", "cocktail", { wines, cocktails });
+    expect(c?.name).toBe("Negroni");
+  });
+});
+
+describe("aperitifMatchesQuickAccess", () => {
+  const wines = [{ name: "Lunar", producer: "Movia", vintage: "2016", byGlass: true }];
+
+  it("returns true when stored row matches resolved catalog wine", () => {
+    expect(aperitifMatchesQuickAccess(
+      { name: "Lunar", producer: "Movia" },
+      "Lunar",
+      "wine",
+      { wines }
+    )).toBe(true);
   });
 });

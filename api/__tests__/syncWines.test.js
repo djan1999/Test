@@ -131,6 +131,23 @@ describe("parseWinesFromHtml", () => {
     expect(wines.length).toBe(1);
     expect(wines[0].producer).toBe("Movia");
   });
+
+  it("parses rows with volume and price columns after region (live site layout)", () => {
+    const html = `<table><tr><td>05. Štemberger</td><td>Robinia</td><td>2018</td><td>Kras</td><td>0,1L / 0,75 L</td><td>12€ / 70€</td></tr></table>`;
+    const wines = parseWinesFromHtml(html, "SI");
+    expect(wines).toHaveLength(1);
+    expect(wines[0].producer).toBe("Štemberger");
+    expect(wines[0].wine_name).toBe("Robinia");
+    expect(wines[0].region).toBe("Kras, SI");
+    expect(wines[0].by_glass).toBe(true);
+  });
+
+  it("skips Slovenian header row label proizvajalec", () => {
+    const html = `<table><tr><td>Proizvajalec</td><td>Znamka</td><td>Letnik</td><td>Regija</td></tr><tr><td>Movia</td><td>Lunar</td><td>2019</td><td>Brda</td></tr></table>`;
+    const wines = parseWinesFromHtml(html, "SI");
+    expect(wines).toHaveLength(1);
+    expect(wines[0].producer).toBe("Movia");
+  });
 });
 
 // ── parseBeveragesFromHtml ─────────────────────────────────────────────────────
@@ -245,19 +262,16 @@ describe("withRetry", () => {
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
-  it("uses exponential backoff — delays grow with each retry", async () => {
+  it("uses a fixed delay between retry attempts", async () => {
     const fn = vi.fn()
       .mockRejectedValueOnce(new Error("fail 1"))
       .mockRejectedValueOnce(new Error("fail 2"))
       .mockResolvedValue("ok");
 
-    // Advance timers in steps to verify both retry delays fire
     const promise = withRetry(fn, "test", 3);
 
-    // After attempt 1 fails, a 1000ms timer is pending
     await vi.advanceTimersByTimeAsync(1000);
-    // After attempt 2 fails, a 2000ms timer is pending
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(1000);
     const result = await promise;
 
     expect(result).toBe("ok");
