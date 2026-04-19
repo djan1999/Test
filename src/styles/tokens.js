@@ -109,13 +109,23 @@ const spacing = {
 };
 
 // ── Beverage glyphs ───────────────────────────────────────────
-// Replaces old BEV_TYPES color-coding. All rendered in neutral[500].
 const bevGlyph = {
   wine:     "●",
   cocktail: "◆",
   spirit:   "■",
   beer:     "▲",
   aperitif: "◐",
+};
+
+// ── Beverage border colors ────────────────────────────────────
+// Used on buttons/chips where type identity matters.
+// White fill stays constant — border carries the type signal.
+const bevBorder = {
+  wine:     "#9b6b5a",   // earthy burgundy
+  cocktail: "#6b7a9b",   // muted slate-blue
+  spirit:   "#9b8050",   // amber / whiskey
+  beer:     "#9b8f40",   // golden
+  aperitif: "#9b6040",   // orange-terracotta
 };
 
 // ── Public export ─────────────────────────────────────────────
@@ -129,6 +139,7 @@ export const tokens = {
   text,
   border,
   bevGlyph,
+  bevBorder,
 
   font,
   fontSize,

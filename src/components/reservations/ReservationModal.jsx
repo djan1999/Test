@@ -313,7 +313,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
           }}>CANCEL</button>
           <button onClick={() => onSave({ tableIds, name, time, menuType, guests, guestType, room, birthday, restrictions, notes, lang })} style={{
             flex: 2, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
-            padding: "14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.neutral[0],
+            padding: "14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary,
           }}>SAVE</button>
         </div>
       </div>

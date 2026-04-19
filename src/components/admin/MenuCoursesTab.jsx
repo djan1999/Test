@@ -69,13 +69,13 @@ export default function MenuCoursesTab({ menuCourses = [], onUpdateCourses, onSa
           <button onClick={addCourse} style={{
             fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
             border: `1px solid ${tokens.charcoal.default}`, borderRadius: tokens.radius, cursor: "pointer",
-            background: tokens.charcoal.default, color: tokens.text.inverse,
+            background: tokens.surface.card, color: tokens.text.primary,
           }}>+ ADD COURSE</button>
           <button onClick={handleSave} disabled={saving} style={{
             fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
             border: `1px solid ${saved ? tokens.green.border : tokens.charcoal.default}`, borderRadius: tokens.radius,
             cursor: saving ? "default" : "pointer",
-            background: saved ? tokens.green.border : tokens.charcoal.default, color: tokens.text.inverse,
+            background: tokens.surface.card, color: saved ? tokens.green.text : tokens.text.primary,
           }}>{saving ? "SAVING…" : saved ? "SAVED ✓" : "SAVE ALL COURSES"}</button>
         </div>
       </div>

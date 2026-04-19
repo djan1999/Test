@@ -140,15 +140,15 @@ export default function AdminPanel({
                     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
                     border: `1px solid ${drinkTab === t ? tokens.charcoal.default : tokens.neutral[200]}`,
                     borderRadius: 0, cursor: "pointer",
-                    background: drinkTab === t ? tokens.charcoal.default : tokens.surface.card,
-                    color: drinkTab === t ? tokens.text.inverse : tokens.text.muted,
+                    background: tokens.surface.card,
+                    color: drinkTab === t ? tokens.text.primary : tokens.text.muted,
                     marginRight: 6, marginBottom: 12,
                   }} onClick={() => setDrinkTab(t)}>{t.toUpperCase()}</button>
                 ))}
                 <button type="button" onClick={handleSaveDrinks} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
                   border: `1px solid ${drinksSaved ? tokens.green.border : drinksSaveError ? tokens.red.border : tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer",
-                  background: drinksSaved ? tokens.green.border : drinksSaveError ? tokens.red.border : tokens.charcoal.default, color: tokens.text.inverse, marginLeft: "auto",
+                  background: tokens.surface.card, color: drinksSaved ? tokens.green.text : drinksSaveError ? tokens.red.text : tokens.text.primary, marginLeft: "auto",
                   transition: "background 0.2s, border-color 0.2s",
                 }}>{drinksSaved ? "SAVED" : "SAVE DRINKS"}</button>
               </div>
@@ -195,7 +195,7 @@ export default function AdminPanel({
                     </div>
                     <button onClick={addWine} style={{
                       fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 20px",
-                      border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.text.inverse,
+                      border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary,
                     }}>+ ADD WINE</button>
                   </div>
                 </>

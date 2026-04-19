@@ -394,7 +394,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                   marginLeft: "auto", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
                   padding: "8px 16px", border: `1px solid ${tokens.charcoal.default}`,
                   borderRadius: 0, cursor: "pointer",
-                  background: tokens.charcoal.default, color: tokens.neutral[0],
+                  background: tokens.surface.card, color: tokens.text.primary,
                 }}>PDF</button>
               </div>
 
@@ -791,7 +791,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
               <button onClick={() => printSelected(seats.map(s => s.id))} style={{
                 flex: 1, fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "12px",
                 border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer",
-                background: tokens.charcoal.default, color: tokens.neutral[0],
+                background: tokens.surface.card, color: tokens.text.primary,
               }}>PRINT ALL SEATS</button>
             </div>
           </div>

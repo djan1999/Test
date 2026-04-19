@@ -1,15 +1,5 @@
 import { tokens } from "../../styles/tokens.js";
 
-/**
- * Unified status button. One component for every SAVE/SYNC/SEND/CONFIRM pattern.
- *
- * Props:
- *   status:    "idle" | "loading" | "success" | "error"
- *   labels:    { idle, loading, success, error }
- *   onClick:   () => void
- *   variant:   "primary" (default) | "danger"
- *   disabled:  boolean
- */
 export default function StatusButton({
   status = "idle",
   labels,
@@ -28,25 +18,26 @@ export default function StatusButton({
     padding: "8px 18px",
     borderRadius: tokens.radius,
     cursor: status === "loading" || disabled ? "not-allowed" : "pointer",
-    color: tokens.text.inverse,
-    transition: "background 0.15s, border-color 0.15s",
+    background: tokens.surface.card,
+    color: tokens.text.primary,
+    transition: "border-color 0.15s, color 0.15s",
     minWidth: 120,
     textAlign: "center",
   };
 
   let state;
   if (disabled) {
-    state = { background: tokens.neutral[300], border: `1px solid ${tokens.neutral[300]}`, color: tokens.text.muted };
+    state = { border: `1px solid ${tokens.neutral[300]}`, color: tokens.text.disabled };
   } else if (status === "loading") {
-    state = { background: tokens.neutral[400], border: `1px solid ${tokens.neutral[400]}` };
+    state = { border: `1px solid ${tokens.neutral[300]}`, color: tokens.text.muted };
   } else if (status === "success") {
-    state = { background: tokens.green.border, border: `1px solid ${tokens.green.border}` };
+    state = { border: `1px solid ${tokens.green.border}`, color: tokens.green.text };
   } else if (status === "error") {
-    state = { background: tokens.red.border, border: `1px solid ${tokens.red.border}` };
+    state = { border: `1px solid ${tokens.red.border}`, color: tokens.red.text };
   } else if (variant === "danger") {
-    state = { background: tokens.surface.card, border: `1px solid ${tokens.red.border}`, color: tokens.red.text };
+    state = { border: `1px solid ${tokens.red.border}`, color: tokens.red.text };
   } else {
-    state = { background: tokens.charcoal.default, border: `1px solid ${tokens.charcoal.default}` };
+    state = { border: `1px solid ${tokens.charcoal.default}`, color: tokens.text.primary };
   }
 
   return (

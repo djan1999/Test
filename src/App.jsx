@@ -1521,8 +1521,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 16px",
                   border: `1px solid ${justSent ? tokens.green.border : tokens.charcoal.default}`, borderRadius: 0,
                   cursor: justSent ? "default" : "pointer",
-                  background: justSent ? tokens.green.bg : tokens.charcoal.default,
-                  color: justSent ? tokens.green.text : tokens.neutral[0],
+                  background: justSent ? tokens.green.bg : tokens.surface.card,
+                  color: justSent ? tokens.green.text : tokens.text.primary,
                   fontWeight: 700, textTransform: "uppercase",
                   transition: "all 0.15s ease",
                 }}>{justSent ? "✓ Sent" : "Send"}</button>

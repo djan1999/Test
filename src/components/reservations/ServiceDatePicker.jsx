@@ -146,7 +146,7 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
           <button
             onClick={() => selected && onConfirm(selected)}
             disabled={!selected}
-            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 2, border: "none", cursor: selected ? "pointer" : "not-allowed", background: selected ? tokens.charcoal.default : tokens.neutral[200], color: selected ? tokens.neutral[0] : tokens.neutral[400], fontWeight: 700, opacity: 1 }}
+            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 2, border: "none", cursor: selected ? "pointer" : "not-allowed", background: tokens.surface.card, color: selected ? tokens.text.primary : tokens.text.disabled, fontWeight: 700, opacity: 1 }}
           >
             START SERVICE ›
           </button>

@@ -264,7 +264,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.tint.parchment, color: tokens.charcoal.default, fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 700, touchAction: "manipulation" }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, s.id); }}
                     style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
@@ -286,7 +286,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.tint.parchment, color: tokens.charcoal.default, fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 700, touchAction: "manipulation" }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, s.id); }}
                     style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
@@ -303,7 +303,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       <div style={{ borderBottom: `1px solid ${tokens.neutral[200]}`, padding: "5px 10px", display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase", flexShrink: 0 }}>Pace</span>
         {["Slow", "Fast"].map(p => {
-          const colors = { Slow: { on: tokens.charcoal.default, bg: tokens.tint.parchment, border: tokens.charcoal.default }, Fast: { on: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } };
+          const colors = { Slow: { on: tokens.text.primary, bg: tokens.surface.card, border: tokens.charcoal.default }, Fast: { on: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } };
           const active = table.pace === p;
           const col = colors[p];
           return (
@@ -697,7 +697,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
               <button onClick={() => onConfirm(tableId)} style={{
                 fontFamily: FONT, fontSize: 11, letterSpacing: 1.5, padding: "10px 28px",
                 border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer",
-                background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 700, textTransform: "uppercase",
+                background: tokens.surface.card, color: tokens.text.primary, fontWeight: 700, textTransform: "uppercase",
               }}>Confirm</button>
             </div>
           </div>

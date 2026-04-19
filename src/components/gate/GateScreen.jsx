@@ -96,7 +96,7 @@ export default function GateScreen({ onPass }) {
         <button onClick={() => attempt(pw)} style={{
           width: "100%", fontFamily: FONT, fontSize: 11, letterSpacing: 3,
           padding: "14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0,
-          cursor: "pointer", background: tokens.charcoal.default, color: tokens.text.inverse,
+          cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary,
           textTransform: "uppercase", marginTop: 8,
         }}>Enter</button>
       </div>

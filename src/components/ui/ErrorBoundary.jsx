@@ -61,8 +61,8 @@ export class ErrorBoundary extends Component {
             letterSpacing: 2,
             padding: "8px 24px",
             border: tokens.border.strong,
-            background: tokens.charcoal.default,
-            color: tokens.text.inverse,
+            background: tokens.surface.card,
+            color: tokens.text.primary,
             cursor: "pointer",
           }}
         >
