@@ -1,18 +1,46 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 
-const FONT = tokens.font;
+const { ink, signal, typeScale, space, rule, font } = tokens;
+
+// Derive rgba from a token hex value — keeps zero hardcoded hex in this file.
+function alpha(hexToken, opacity) {
+  const h = hexToken.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${opacity})`;
+}
+
+// Shorthand: off-white (ink.bg) at a given opacity — text on near-black bg
+const canvas = (o) => alpha(ink.bg, o);
+// Shorthand: rule separator colour (ink[4]) at a given opacity
+const sep    = (o) => alpha(ink[4], o);
+
+// Ghost button for dark background — shared base, callers may override border/color
+const ghostBase = {
+  fontFamily: font,
+  ...typeScale.label,
+  padding:      `${space[1]} ${space[3]}`,
+  border:       `${rule.hairline} solid ${sep(0.22)}`,
+  borderRadius: 0,
+  cursor:       'pointer',
+  background:   'none',
+  color:        canvas(0.70),
+  whiteSpace:   'nowrap',
+  flexShrink:   0,
+};
 
 export default function Header({
-  appName = "MILKA",
+  appName       = "MILKA",
   modeLabel,
-  showAddRes = false,
-  showSummary = false,
-  showMenu = false,
-  showArchive = false,
+  showAddRes    = false,
+  showSummary   = false,
+  showMenu      = false,
+  showArchive   = false,
   showInventory = false,
-  showSync = false,
-  showSeed = false,
+  showSync      = false,
+  showSeed      = false,
   showEndService = false,
   syncLabel,
   syncLive,
@@ -28,10 +56,16 @@ export default function Header({
   onSyncAll,
   onSeed,
   onEndService,
+  // ── Cockpit zone extras ────────────────────────────────────────
+  // All optional — null/false defaults so App.jsx needs no immediate changes.
+  // Populate these once App.jsx refactor lands.
+  serviceDate    = null,   // e.g. "19.04.26"
+  serviceName    = null,   // e.g. "DINNER"
+  hasAllergyFlag = false,  // true → alert dot appears after table count
 }) {
-  const modeColor = modeLabel === "ADMIN" ? tokens.text.secondary : modeLabel === "SERVICE" ? tokens.green.text : tokens.text.muted;
-  const [sSt, setSSt] = useState(null);
+  const [sSt,  setSSt]  = useState(null);
   const [sMsg, setSMsg] = useState("");
+
   const handleSyncAll = async () => {
     if (!onSyncAll || sSt === "syncing") return;
     setSSt("syncing");
@@ -41,7 +75,7 @@ export default function Header({
       console.log("[Sync]", r);
       if (r?.ok && r.partial) {
         const parts = [];
-        if (r.failedCountries?.length) parts.push(`wines: ${r.failedCountries.join(", ")}`);
+        if (r.failedCountries?.length)     parts.push(`wines: ${r.failedCountries.join(", ")}`);
         if (r.failedBeveragePages?.length) parts.push(`pages: ${r.failedBeveragePages.join(", ")}`);
         setSMsg(parts.join(" • "));
         setSSt("partial");
@@ -58,64 +92,144 @@ export default function Header({
     }
     setTimeout(() => { setSSt(null); setSMsg(""); }, 6000);
   };
-  const topStatChip = {
-    fontFamily: FONT,
-    fontSize: 10,
-    color: tokens.text.primary,
-    letterSpacing: 1,
-    padding: "6px 10px",
-    border: tokens.border.default,
-    borderRadius: 0,
-    background: tokens.surface.card,
-    whiteSpace: "nowrap",
-  };
+
+  const hasCoverData = activeCount != null || seated != null;
+
   return (
-    <div style={{ borderBottom: tokens.border.subtle, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 10, background: tokens.surface.card, position: "sticky", top: 0, zIndex: 50 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 4, color: tokens.text.primary }}>{appName}</span>
-          <span style={{ width: 1, height: 14, background: tokens.neutral[300] }} />
-          <span style={{ fontSize: 10, letterSpacing: 3, color: modeColor, textTransform: "uppercase", fontWeight: 700 }}>{modeLabel}</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          {showAddRes && <button onClick={onAddRes} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 600 }}>+ RES</button>}
-          {showSummary && <button onClick={onSummary} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: tokens.border.default, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary }}>SUMMARY</button>}
-          {showMenu && <button onClick={onMenu} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: tokens.border.default, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary }}>MENU</button>}
-          {showInventory && <button onClick={onInventory} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: tokens.border.default, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary }}>INVENTORY</button>}
-          {showSeed && <button onClick={onSeed} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer", background: tokens.green.bg, color: tokens.green.text }}>SEED TEST</button>}
-          {showArchive && <button onClick={onArchive} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer", background: tokens.tint.parchment, color: tokens.text.body }}>ARCHIVE</button>}
-          {showSync && (
-            <button
-              onClick={handleSyncAll}
-              disabled={sSt === "syncing"}
-              title={sMsg || undefined}
-              style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px",
-                border: `1px solid ${sSt === "ok" ? tokens.green.border : sSt === "partial" ? tokens.neutral[400] : sSt === "err" ? tokens.red.border : tokens.neutral[300]}`,
-                borderRadius: 0,
-                cursor: sSt === "syncing" ? "not-allowed" : "pointer",
-                background: sSt === "ok" ? tokens.green.bg : sSt === "err" ? tokens.red.bg : tokens.surface.card,
-                color: sSt === "ok" ? tokens.green.text : sSt === "partial" ? tokens.text.body : sSt === "err" ? tokens.red.text : tokens.text.body,
-                fontWeight: 600, whiteSpace: "nowrap",
-              }}
-            >
-              {sSt === "syncing" ? "SYNCING…" : sSt === "ok" ? "✓ SYNCED" : sSt === "partial" ? "⚠ PARTIAL" : sSt === "err" ? "✗ FAILED" : "↻ SYNC"}
-            </button>
-          )}
-          {showSync && (sSt === "err" || sSt === "partial") && sMsg && (
-            <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: sSt === "err" ? tokens.red.text : tokens.text.body, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sMsg}>
-              {sMsg}
-            </span>
-          )}
-          <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: `1px solid ${syncLive ? tokens.green.border : tokens.neutral[300]}`, borderRadius: 0, background: syncLive ? tokens.green.bg : tokens.neutral[50], color: syncLive ? tokens.green.text : tokens.text.muted, fontWeight: 600, whiteSpace: "nowrap" }}>{syncLabel}</span>
-          {showEndService && <button onClick={onEndService} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.red.bg, color: tokens.red.text, fontWeight: 600, flexShrink: 0 }}>END SERVICE</button>}
-          <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px", border: tokens.border.default, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, flexShrink: 0 }}>EXIT</button>
-        </div>
+    <div style={{
+      backgroundColor: ink[0],
+      padding:         `0 ${space[4]}`,
+      minHeight:       '48px',
+      display:         'flex',
+      alignItems:      'center',
+      gap:             space[3],
+      position:        'sticky',
+      top:             0,
+      zIndex:          50,
+      fontFamily:      font,
+      flexWrap:        'nowrap',
+      overflowX:       'visible',
+    }}>
+
+      {/* ── LEFT — MILKA / SERVICE ─────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexShrink: 0 }}>
+        <span style={{ ...typeScale.label, fontFamily: font, color: canvas(0.40) }}>
+          {appName}
+        </span>
+        <span style={{ width: rule.hairline, height: '12px', background: sep(0.30), flexShrink: 0 }} />
+        <span style={{ ...typeScale.meta, fontFamily: font, color: canvas(0.90) }}>
+          {modeLabel || 'SERVICE'}
+        </span>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span style={topStatChip}>{activeCount} seated</span>
-        <span style={topStatChip}>{reserved} reserved</span>
-        <span style={topStatChip}>{seated} guests</span>
+
+      {/* ── CENTER — date / service name (grows to fill, centered) */}
+      <div style={{
+        flex:       1,
+        minWidth:   0,
+        textAlign:  'center',
+        overflow:   'hidden',
+        ...typeScale.meta,
+        fontFamily: font,
+        color:      canvas(0.70),
+        whiteSpace: 'nowrap',
+        textOverflow: 'ellipsis',
+      }}>
+        {[serviceDate, serviceName].filter(Boolean).join(' / ')}
+      </div>
+
+      {/* ── RIGHT — action buttons then live operational data ──── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: space[2], flexShrink: 0, flexWrap: 'nowrap' }}>
+
+        {showAddRes && (
+          <button onClick={onAddRes} style={{ ...ghostBase, color: canvas(0.90), border: `${rule.hairline} solid ${sep(0.40)}` }}>
+            + RES
+          </button>
+        )}
+        {showSummary  && <button onClick={onSummary}   style={ghostBase}>SUMMARY</button>}
+        {showMenu     && <button onClick={onMenu}      style={ghostBase}>MENU</button>}
+        {showInventory && <button onClick={onInventory} style={ghostBase}>INVENTORY</button>}
+        {showSeed && (
+          <button onClick={onSeed} style={{ ...ghostBase, color: tokens.green.text, border: `${rule.hairline} solid ${tokens.green.border}` }}>
+            SEED TEST
+          </button>
+        )}
+        {showArchive  && <button onClick={onArchive}   style={ghostBase}>ARCHIVE</button>}
+
+        {showSync && (
+          <button
+            onClick={handleSyncAll}
+            disabled={sSt === "syncing"}
+            title={sMsg || undefined}
+            style={{
+              ...ghostBase,
+              border: `${rule.hairline} solid ${
+                sSt === 'ok'      ? tokens.green.border :
+                sSt === 'partial' ? sep(0.40) :
+                sSt === 'err'     ? tokens.red.border  :
+                sep(0.22)
+              }`,
+              color:  sSt === 'ok'  ? tokens.green.text :
+                      sSt === 'err' ? tokens.red.text   :
+                      canvas(0.70),
+              cursor: sSt === "syncing" ? "not-allowed" : "pointer",
+            }}
+          >
+            {sSt === "syncing" ? "SYNCING…" : sSt === "ok" ? "✓ SYNCED" : sSt === "partial" ? "⚠ PARTIAL" : sSt === "err" ? "✗ FAILED" : "↻ SYNC"}
+          </button>
+        )}
+
+        {showSync && (sSt === "err" || sSt === "partial") && sMsg && (
+          <span
+            style={{ ...typeScale.label, fontFamily: font, color: sSt === "err" ? tokens.red.text : canvas(0.60), maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            title={sMsg}
+          >
+            {sMsg}
+          </span>
+        )}
+
+        {/* Realtime indicator */}
+        <span style={{
+          ...typeScale.label,
+          fontFamily: font,
+          padding:    `${space[1]} ${space[2]}`,
+          border:     `${rule.hairline} solid ${syncLive ? tokens.green.border : sep(0.22)}`,
+          background: 'none',
+          color:      syncLive ? tokens.green.text : canvas(0.40),
+          whiteSpace: 'nowrap',
+        }}>
+          {syncLabel}
+        </span>
+
+        {showEndService && (
+          <button onClick={onEndService} style={{ ...ghostBase, color: tokens.red.text, border: `${rule.hairline} solid ${tokens.red.border}` }}>
+            END SERVICE
+          </button>
+        )}
+        <button onClick={onExit} style={ghostBase}>EXIT</button>
+
+        {/* Separator before live data */}
+        {hasCoverData && (
+          <span style={{ width: rule.hairline, height: '14px', background: sep(0.22), flexShrink: 0 }} />
+        )}
+
+        {/* COVERS_XX   TABLES_XX — gold, signal.active */}
+        {hasCoverData && (
+          <span style={{ ...typeScale.label, fontFamily: font, color: signal.active, whiteSpace: 'nowrap', letterSpacing: '0.10em' }}>
+            {`COVERS_${String(seated ?? 0).padStart(2, '0')}   TABLES_${String(activeCount ?? 0).padStart(2, '0')}`}
+          </span>
+        )}
+
+        {/* Alert dot — single signal.alert square, no text */}
+        {hasAllergyFlag && (
+          <span style={{
+            display:         'inline-block',
+            width:           '5px',
+            height:          '5px',
+            borderRadius:    0,
+            backgroundColor: signal.alert,
+            flexShrink:      0,
+          }} />
+        )}
       </div>
     </div>
   );
