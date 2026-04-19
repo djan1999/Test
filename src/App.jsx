@@ -2148,13 +2148,19 @@ export default function App() {
     const timeoutId = setTimeout(() => controller.abort(), 70_000);
     try {
       const secret = import.meta.env.VITE_SYNC_SECRET || "";
+      if (!secret) {
+        return { ok: false, error: "VITE_SYNC_SECRET is not set for this build. Add it in Vercel → Settings → Environment Variables (value must match CRON_SECRET or SYNC_SECRET), then redeploy." };
+      }
       const cfg = normalizeSyncConfig(syncConfigRef.current);
       const payload = encodeURIComponent(JSON.stringify(cfg));
-      const base = secret ? `/api/sync-wines?secret=${encodeURIComponent(secret)}` : "/api/sync-wines";
-      const url = `${base}${base.includes("?") ? "&" : "?"}config=${payload}`;
+      const url = `/api/sync-wines?secret=${encodeURIComponent(secret)}&config=${payload}`;
       const r = await fetch(url, { signal: controller.signal });
       const json = await r.json().catch(() => ({}));
-      if (!r.ok) return { ok: false, error: json.error || `HTTP ${r.status}` };
+      if (!r.ok) {
+        const base = json.error || `HTTP ${r.status}`;
+        if (r.status === 401) return { ok: false, error: `${base} — VITE_SYNC_SECRET on the frontend doesn't match CRON_SECRET / SYNC_SECRET on the backend. Update the values in Vercel so they match, then redeploy.` };
+        return { ok: false, error: base };
+      }
       await loadWines();
       return {
         ok: true,
