@@ -33,7 +33,7 @@ export class ErrorBoundary extends Component {
           alignItems: "center",
           justifyContent: "center",
           fontFamily: tokens.font,
-          background: tokens.colors.offWhite,
+          background: tokens.colors.canvas,
           gap: 16,
         }}
       >
@@ -61,9 +61,11 @@ export class ErrorBoundary extends Component {
             letterSpacing: 2,
             padding: "8px 24px",
             border: tokens.borderBold,
-            background: tokens.colors.black,
+            borderRadius: tokens.radius.sm,
+            background: tokens.colors.ink,
             color: tokens.colors.white,
             cursor: "pointer",
+            boxShadow: tokens.shadow.sm,
           }}
         >
           RELOAD
@@ -84,10 +86,12 @@ export class ErrorBoundary extends Component {
             fontSize: tokens.fontSize.xs,
             letterSpacing: 1.5,
             padding: "6px 16px",
-            border: tokens.borderLight,
-            background: tokens.colors.white,
+            border: tokens.borderSubtle,
+            borderRadius: tokens.radius.sm,
+            background: tokens.colors.elevated,
             color: tokens.colors.gray700,
             cursor: "pointer",
+            boxShadow: tokens.shadow.sm,
           }}
         >
           RESET LAYOUT CACHE

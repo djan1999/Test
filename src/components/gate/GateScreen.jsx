@@ -3,6 +3,7 @@ import { tokens } from "../../styles/tokens.js";
 import { baseInput } from "../../styles/mixins.js";
 
 const FONT = tokens.font;
+const R = tokens.radius.sm;
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
 const APP_SUBTITLE = String(import.meta.env.VITE_APP_SUBTITLE || "SERVICE BOARD").trim() || "SERVICE BOARD";
 const ACCESS_PASSWORD = String(import.meta.env.VITE_ACCESS_PASSWORD || "").trim();
@@ -16,7 +17,7 @@ function GlobalStyle() {
   return (
     <style>{`
       * { box-sizing: border-box; }
-      body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; color: #1a1a1a; }
+      body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; color: ${tokens.colors.ink}; }
       input, textarea, select { font-size: ${tokens.mobileInputSize}px; }
       button, a, label { touch-action: manipulation; }
     `}</style>
@@ -46,19 +47,19 @@ export default function GateScreen({ onPass }) {
 
   return (
     <div style={{
-      minHeight: "100vh", background: "#fff",
+      minHeight: "100vh", background: "transparent",
       display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
       fontFamily: FONT, padding: "20px 16px",
     }}>
       <GlobalStyle />
       <div style={{ marginBottom: 52, textAlign: "center" }}>
-        <div style={{ fontSize: 15, fontWeight: 500, letterSpacing: 6, color: "#1a1a1a", marginBottom: 6 }}>{APP_NAME}</div>
-        <div style={{ fontSize: 9, letterSpacing: 4, color: "#555" }}>{APP_SUBTITLE}</div>
+        <div style={{ fontSize: 15, fontWeight: 500, letterSpacing: 6, color: tokens.colors.ink, marginBottom: 6 }}>{APP_NAME}</div>
+        <div style={{ fontSize: 9, letterSpacing: 4, color: tokens.colors.gray700 }}>{APP_SUBTITLE}</div>
       </div>
 
       <div style={{ width: "100%", maxWidth: 320, textAlign: "center" }}>
-        <div style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: "#888", marginBottom: 28, textTransform: "uppercase" }}>
+        <div style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: tokens.colors.gray500, marginBottom: 28, textTransform: "uppercase" }}>
           enter password
         </div>
 
@@ -80,7 +81,7 @@ export default function GateScreen({ onPass }) {
                 letterSpacing: show ? 2 : 6,
                 fontSize: tokens.mobileInputSize,
                 paddingRight: 44,
-                borderColor: shake ? "#f0c0c0" : "#e8e8e8",
+                borderColor: shake ? tokens.colors.redBorder : undefined,
                 transition: "border-color 0.2s",
               }}
               placeholder="••••••••"
@@ -88,16 +89,19 @@ export default function GateScreen({ onPass }) {
             <button onClick={() => setShow(s => !s)} style={{
               position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
               background: "none", border: "none", cursor: "pointer",
-              color: "#bbb", fontSize: 13, padding: 0, lineHeight: 1,
+              color: tokens.colors.gray400, fontSize: 13, padding: 0, lineHeight: 1,
             }}>{show ? "hide" : "show"}</button>
           </div>
         </div>
 
         <button onClick={() => attempt(pw)} style={{
           width: "100%", fontFamily: FONT, fontSize: 11, letterSpacing: 3,
-          padding: "14px", border: "1px solid #b8975e", borderRadius: 0,
-          cursor: "pointer", background: "#c8a96e", color: "#fff",
+          padding: "14px", border: `1px solid ${tokens.colors.goldHover}`, borderRadius: R,
+          cursor: "pointer",
+          background: `linear-gradient(180deg, ${tokens.colors.gold} 0%, ${tokens.colors.goldHover} 100%)`,
+          color: tokens.colors.white,
           textTransform: "uppercase", marginTop: 8,
+          boxShadow: tokens.shadow.sm,
         }}>Enter</button>
       </div>
 
