@@ -159,7 +159,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
             <div style={{ flex: 1 }}>
               <div style={fieldLabel}>Guest Type</div>
               <div style={{ display: "flex", gap: 8 }}>
-                {["hotel","outside"].map(type => (
+                {["hotel"].map(type => (
                   <button key={type} onClick={() => { setGuestType(t => t === type ? "" : type); setRoom(""); }} style={{
                     fontFamily: FONT, fontSize: 11, letterSpacing: 1,
                     padding: "12px 0", flex: 1, border: "1px solid",

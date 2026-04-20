@@ -168,7 +168,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
         <div>
           <div style={fieldLabel}>Guest type</div>
           <div style={{ display: "flex", gap: 5 }}>
-            {[["", "Regular"], ["hotel", "Hotel"], ["outside", "Outside"]].map(([v, l]) => (
+            {[["", "Regular"], ["hotel", "Hotel"]].map(([v, l]) => (
               <button key={v || "r"} onClick={() => { setGuestType(v); if (v !== "hotel") setRoom(""); }} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "8px 0", flex: 1,
                 border: "1px solid", borderColor: guestType === v ? tokens.charcoal.default : tokens.neutral[200],
