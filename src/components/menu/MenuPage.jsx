@@ -26,8 +26,13 @@ export default function MenuPage({ tables, menuCourses, upd, logoDataUri = "", w
           SELECT A TABLE TO GENERATE MENUS
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-          {tables.map(t => {
+          {tables
+            .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup))
+            .map(t => {
             const hasData = t.active || t.resName || t.resTime;
+            const groupLabel = t.tableGroup?.length > 1
+              ? `T${Math.min(...t.tableGroup)}-${Math.max(...t.tableGroup)}`
+              : `T${t.id}`;
             return (
               <div
                 key={t.id}
@@ -40,7 +45,7 @@ export default function MenuPage({ tables, menuCourses, upd, logoDataUri = "", w
                   opacity: hasData ? 1 : 0.5, transition: "box-shadow 0.15s",
                 }}
               >
-                <div style={{ fontFamily: FONT, fontSize: 20, fontWeight: 800, color: tokens.text.primary, letterSpacing: -1, lineHeight: 1 }}>T{t.id}</div>
+                <div style={{ fontFamily: FONT, fontSize: t.tableGroup?.length > 1 ? 14 : 20, fontWeight: 800, color: tokens.text.primary, letterSpacing: -1, lineHeight: 1 }}>{groupLabel}</div>
                 {t.resName && <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: tokens.text.body, marginTop: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.resName}</div>}
                 {t.resTime && <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.muted, marginTop: 2 }}>{t.resTime}</div>}
                 {t.seats?.length > 0 && <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.muted, marginTop: 4 }}>{t.seats.length} pax</div>}
