@@ -1406,7 +1406,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                           else cur = "on";
                           const subLabel = { off: "off", on: "on", alco: "wine", nonalc: "n/a" }[cur];
                           const styleMap = {
-                            off:    { border: tokens.neutral[300], bg: tokens.neutral[100],   color: tokens.text.disabled },
+                            off:    { border: tokens.neutral[200], bg: tokens.neutral[0],     color: tokens.text.disabled },
                             on:     { border: tokens.neutral[500], bg: tokens.tint.parchment, color: tokens.neutral[700] },
                             alco:   { border: tokens.green.border, bg: tokens.green.bg,       color: tokens.green.text },
                             nonalc: { border: tokens.green.border, bg: tokens.green.bg,       color: tokens.green.text },
@@ -1440,7 +1440,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                               background: styleMap.bg, color: styleMap.color, lineHeight: 1,
                               display: "inline-flex", alignItems: "center", gap: 5, textTransform: "uppercase",
                             }}>
-                              <span style={{ fontWeight: 700 }}>{String(dish.name).slice(0, 8)}</span>
+                              <span style={{ fontWeight: cur === "off" ? 400 : 700 }}>{String(dish.name).slice(0, 8)}</span>
                               <span style={{ fontSize: 8, opacity: 0.7, textTransform: "lowercase" }}>{subLabel}</span>
                             </button>
                           );
@@ -1456,7 +1456,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                               background: dishOn ? tokens.tint.parchment : tokens.neutral[0], color: dishOn ? tokens.neutral[700] : tokens.text.disabled, lineHeight: 1,
                               display: "inline-flex", alignItems: "center", gap: 5, textTransform: "uppercase",
                             }}>
-                            <span style={{ fontWeight: 700 }}>{String(dish.name || dish.key || "").slice(0, 8)}</span>
+                            <span style={{ fontWeight: dishOn ? 700 : 400 }}>{String(dish.name || dish.key || "").slice(0, 8)}</span>
                             <span style={{ fontSize: 8, opacity: 0.7, textTransform: "lowercase" }}>{dishOn ? "on" : "off"}</span>
                           </button>
                         );
