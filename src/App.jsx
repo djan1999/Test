@@ -368,7 +368,7 @@ function optionalExtrasFromCourses(menuCourses = []) {
   const byKey = new Map();
   (menuCourses || []).forEach((c) => {
     const category = normalizeCourseCategory(c?.course_category, c?.optional_flag);
-    if (category !== "optional" && category !== "celebration") return;
+    if (category !== "optional") return;
     const key = normalizeOptionalKey(c?.optional_flag);
     if (!key || isPearOptionalKey(key)) return;
     const existing = byKey.get(key) || null;
