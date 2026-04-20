@@ -577,65 +577,6 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                       );
                     })()}
                   </div>
-                  {/* Optional pairings — always-on dishes, drink is optional */}
-                  {optionalPairings.filter(opt => !opt.extraKey).length > 0 && (
-                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${tokens.neutral[100]}` }}>
-                      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 6 }}>Optional Pairings</div>
-                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-                        {optionalPairings.filter(opt => !opt.extraKey).map((opt, oi) => {
-                          const raw = s.optionalPairings?.[opt.key];
-                          const active = raw?.ordered !== undefined ? !!raw.ordered : opt.defaultOn !== false;
-                          const mode = raw?.mode || null;
-                          const seatIsNonAlc = String(s.pairing || "").trim() === "Non-Alc";
-                          const seatSet = !["", "—", "-"].includes(String(s.pairing || "").trim());
-                          const states = ["off", ...(opt.hasAlco ? ["alco"] : []), ...(opt.hasNonAlco ? ["nonalc"] : [])];
-                          let cur;
-                          if (!active) cur = "off";
-                          else if (mode === "alco") cur = "alco";
-                          else if (mode === "nonalc") cur = "nonalc";
-                          else cur = (seatSet && !seatIsNonAlc) ? "alco" : "nonalc";
-                          if (!states.includes(cur)) cur = states[1] || "off";
-                          // applyNext reads latest committed seat state inside the updater — no stale closure
-                          const applyNext = () => updSeatFull(s.id, seat => {
-                            const r = seat.optionalPairings?.[opt.key];
-                            const a = r?.ordered !== undefined ? !!r.ordered : opt.defaultOn !== false;
-                            const m = r?.mode || null;
-                            const sNonAlc = String(seat.pairing || "").trim() === "Non-Alc";
-                            const sSet = !["", "—", "-"].includes(String(seat.pairing || "").trim());
-                            let c;
-                            if (!a) c = "off";
-                            else if (m === "alco") c = "alco";
-                            else if (m === "nonalc") c = "nonalc";
-                            else c = (sSet && !sNonAlc) ? "alco" : "nonalc";
-                            if (!states.includes(c)) c = states[1] || "off";
-                            const nx = states[(states.indexOf(c) + 1) % states.length];
-                            return { ...seat, optionalPairings: {
-                              ...(seat.optionalPairings || {}),
-                              [opt.key]: { ...(r || {}), ordered: nx !== "off", ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }) },
-                            }};
-                          });
-                          const btnStyleMap = {
-                            off:    { border: tokens.neutral[300], bg: tokens.neutral[50], color: tokens.text.muted },
-                            alco:   { border: tokens.charcoal.default, bg: tokens.tint.parchment, color: tokens.text.body },
-                            nonalc: { border: tokens.neutral[400], bg: tokens.neutral[100], color: tokens.text.secondary },
-                          };
-                          const btnLabelMap = { off: "off", alco: "alco", nonalc: "n/a" };
-                          const st = btnStyleMap[cur];
-                          return (
-                            <div key={opt.key} style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                              {oi > 0 && <div style={{ width: 1, height: 18, background: tokens.neutral[200], marginRight: 2 }} />}
-                              <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.muted, letterSpacing: 0.3, whiteSpace: "nowrap" }}>{opt.label}</span>
-                              <button onClick={applyNext} style={{
-                                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "3px 8px",
-                                border: `1px solid ${st.border}`, borderRadius: 0, cursor: "pointer",
-                                background: st.bg, color: st.color,
-                              }}>{btnLabelMap[cur]}</button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
                   {/* Extras — optional dishes (some have optional drink pairings) */}
                   {optionalExtras.length > 0 && (
                     <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${tokens.neutral[100]}` }}>
