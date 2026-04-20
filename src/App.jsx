@@ -1171,7 +1171,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 
     const wBtn = (opt, active, onClick) => (
       <button key={opt} onClick={onClick} style={{
-        fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "7px 11px",
+        fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "7px 9px",
         border: `1px solid ${active ? (opt === "OC" || opt === "OW" ? tokens.neutral[300] : tokens.neutral[300]) : tokens.neutral[200]}`,
         borderRadius: 0, cursor: "pointer", lineHeight: 1,
         background: active ? (opt === "OC" || opt === "OW" ? tokens.tint.parchment : tokens.neutral[100]) : tokens.neutral[0],
@@ -1311,14 +1311,13 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                 const pcStyle = PC[curPairing] || PC["—"];
 
                 const sectionLabel = (txt) => (
-                  <span style={{
+                  <div style={{
                     fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: tokens.text.disabled,
-                    textTransform: "uppercase", fontWeight: 600,
-                    minWidth: 64, flexShrink: 0,
-                  }}>{txt}</span>
+                    textTransform: "uppercase", fontWeight: 600, marginBottom: 5,
+                  }}>{txt}</div>
                 );
-                const sectionRow = (label, content) => (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", flexWrap: "wrap" }}>
+                const sectionBlock = (label, content) => (
+                  <div style={{ padding: "6px 14px" }}>
                     {sectionLabel(label)}
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>{content}</div>
                   </div>
@@ -1344,25 +1343,29 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                       ))}
                     </div>
 
-                    {/* WATER */}
-                    {sectionRow("Water", WATER_QUICK.map(opt =>
-                      wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt))
-                    ))}
-
-                    {/* PAIRING — single cycle button */}
-                    {sectionRow("Pairing", (
-                      <button onClick={cyclePairing} style={{
-                        fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "7px 12px",
-                        border: `1px solid ${curPairing === "—" ? tokens.neutral[300] : pcStyle.border}`,
-                        borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                        background: curPairing === "—" ? tokens.neutral[0] : pcStyle.bg,
-                        color: curPairing === "—" ? tokens.text.muted : pcStyle.color,
-                        display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 600,
-                      }}>
-                        <span>{curPairing}</span>
-                        <span style={{ fontSize: 9, opacity: 0.55, fontWeight: 400 }}>→ next</span>
-                      </button>
-                    ))}
+                    {/* WATER + PAIRING — side by side, labels above */}
+                    <div style={{ display: "flex", gap: 14, padding: "10px 14px 6px", alignItems: "flex-start" }}>
+                      <div>
+                        {sectionLabel("Water")}
+                        <div style={{ display: "flex", gap: 5 }}>
+                          {WATER_QUICK.map(opt => wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt)))}
+                        </div>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        {sectionLabel("Pairing")}
+                        <button onClick={cyclePairing} style={{
+                          fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "7px 12px",
+                          border: `1px solid ${curPairing === "—" ? tokens.neutral[300] : pcStyle.border}`,
+                          borderRadius: 0, cursor: "pointer", lineHeight: 1, width: "100%",
+                          background: curPairing === "—" ? tokens.neutral[0] : pcStyle.bg,
+                          color: curPairing === "—" ? tokens.text.muted : pcStyle.color,
+                          display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 600,
+                        }}>
+                          <span>{curPairing}</span>
+                          <span style={{ fontSize: 9, opacity: 0.55, fontWeight: 400 }}>→ next</span>
+                        </button>
+                      </div>
+                    </div>
 
                     {/* EXTRAS — toggleable; linked extras cycle through alco/non-alc */}
                     {(() => {
@@ -1370,7 +1373,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                       (optionalPairings || []).forEach(opt => { if (opt.extraKey) pairingByExtraKey.set(opt.extraKey, opt); });
                       const visible = (optionalExtras || []).slice(0, 4);
                       if (visible.length === 0) return null;
-                      return sectionRow("Extras", visible.map(dish => {
+                      return sectionBlock("Extras", visible.map(dish => {
                         const extra = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
                         const dishOn = !!extra.ordered;
                         const linked = pairingByExtraKey.get(dish.key);
@@ -1448,7 +1451,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                     })()}
 
                     {/* APERITIF — same matching logic as before, now in a labeled row */}
-                    {aperitifOptions && aperitifOptions.length > 0 && sectionRow("Aperitif", aperitifOptions.map(opt => {
+                    {aperitifOptions && aperitifOptions.length > 0 && sectionBlock("Aperitif", aperitifOptions.map(opt => {
                       const label = opt.label ?? opt;
                       const apMatch = (x) => aperitifMatchesQuickAccessOption(x, opt, { wines, cocktails, spirits, beers });
                       const active = (s.aperitifs || []).some(apMatch);
