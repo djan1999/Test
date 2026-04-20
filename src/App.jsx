@@ -985,22 +985,6 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
           />
         </div>
         <div>
-          <div style={fieldLabel}>Menu</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {["Long", "Short"].map(opt => (
-              <button key={opt} onClick={() => upd("menuType", table.menuType === opt ? "" : opt)} style={{
-                fontFamily: FONT, fontSize: 10, letterSpacing: 2,
-                padding: "9px 22px", border: "1px solid",
-                borderColor: table.menuType === opt ? tokens.charcoal.default : tokens.neutral[200],
-                borderRadius: 0, cursor: "pointer",
-                background: table.menuType === opt ? tokens.tint.parchment : tokens.neutral[0],
-                color: table.menuType === opt ? tokens.neutral[700] : tokens.text.muted,
-                textTransform: "uppercase",
-              }}>{opt}</button>
-            ))}
-          </div>
-        </div>
-        <div>
           <div style={fieldLabel}>⚠️ Restrictions</div>
           {table.restrictions?.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
