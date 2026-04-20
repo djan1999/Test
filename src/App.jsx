@@ -1171,7 +1171,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 
     const wBtn = (opt, active, onClick) => (
       <button key={opt} onClick={onClick} style={{
-        fontFamily: FONT, fontSize: 10, letterSpacing: 0.3, padding: "4px 8px",
+        fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "7px 11px",
         border: `1px solid ${active ? (opt === "OC" || opt === "OW" ? tokens.neutral[300] : tokens.neutral[300]) : tokens.neutral[200]}`,
         borderRadius: 0, cursor: "pointer", lineHeight: 1,
         background: active ? (opt === "OC" || opt === "OW" ? tokens.tint.parchment : tokens.neutral[100]) : tokens.neutral[0],
@@ -1281,9 +1281,9 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 
         {/* Quick mode — ALL water row (reserved tables too, so Quick Access is visible before seating) */}
         {quickMode && seats.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderBottom: `1px solid ${tokens.neutral[100]}`, background: tokens.neutral[50] }}>
-            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.neutral[300], textTransform: "uppercase", minWidth: 30 }}>ALL</span>
-            <div style={{ display: "flex", gap: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", borderBottom: `1px solid ${tokens.neutral[100]}`, background: tokens.neutral[50] }}>
+            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.neutral[300], textTransform: "uppercase", minWidth: 64 }}>ALL</span>
+            <div style={{ display: "flex", gap: 5 }}>
               {WATER_QUICK.map(opt => wBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat && updSeat(t.id, s.id, "water", opt))))}
             </div>
           </div>
@@ -1314,13 +1314,13 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                   <span style={{
                     fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: tokens.text.disabled,
                     textTransform: "uppercase", fontWeight: 600,
-                    minWidth: 56, flexShrink: 0,
+                    minWidth: 64, flexShrink: 0,
                   }}>{txt}</span>
                 );
                 const sectionRow = (label, content) => (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 10px", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", flexWrap: "wrap" }}>
                     {sectionLabel(label)}
-                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>{content}</div>
+                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>{content}</div>
                   </div>
                 );
 
@@ -1333,7 +1333,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                     {/* Seat label + restrictions */}
                     <div style={{
                       display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
-                      padding: "5px 10px", background: restr.length ? tokens.red.bg : tokens.neutral[100],
+                      padding: "7px 14px", background: restr.length ? tokens.red.bg : tokens.neutral[100],
                       borderBottom: `1px solid ${tokens.neutral[200]}`,
                     }}>
                       <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: restr.length ? tokens.red.text : tokens.text.muted }}>P{s.id}</span>
@@ -1352,7 +1352,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                     {/* PAIRING — single cycle button */}
                     {sectionRow("Pairing", (
                       <button onClick={cyclePairing} style={{
-                        fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "4px 10px",
+                        fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "7px 12px",
                         border: `1px solid ${curPairing === "—" ? tokens.neutral[300] : pcStyle.border}`,
                         borderRadius: 0, cursor: "pointer", lineHeight: 1,
                         background: curPairing === "—" ? tokens.neutral[0] : pcStyle.bg,
@@ -1360,7 +1360,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                         display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 600,
                       }}>
                         <span>{curPairing}</span>
-                        <span style={{ fontSize: 8, opacity: 0.55, fontWeight: 400 }}>→ next</span>
+                        <span style={{ fontSize: 9, opacity: 0.55, fontWeight: 400 }}>→ next</span>
                       </button>
                     ))}
 
@@ -1419,13 +1419,13 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                                 }},
                               };
                             }))} style={{
-                              fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
+                              fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "7px 12px",
                               border: `1px solid ${styleMap.border}`, borderRadius: 0, cursor: "pointer",
                               background: styleMap.bg, color: styleMap.color, lineHeight: 1,
-                              display: "inline-flex", alignItems: "center", gap: 5, textTransform: "uppercase",
+                              display: "inline-flex", alignItems: "center", gap: 6, textTransform: "uppercase",
                             }}>
                               <span style={{ fontWeight: cur === "off" ? 400 : 700 }}>{String(dish.name).slice(0, 8)}</span>
-                              <span style={{ fontSize: 8, opacity: 0.7, textTransform: "lowercase" }}>{subLabel}</span>
+                              <span style={{ fontSize: 9, opacity: 0.7, textTransform: "lowercase" }}>{subLabel}</span>
                             </button>
                           );
                         }
@@ -1435,13 +1435,13 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                           <button key={dish.key || dish.id}
                             onClick={() => updSeat && updSeat(t.id, s.id, "extras", { ...s.extras, [dish.key]: { ...extra, ordered: !dishOn } })}
                             style={{
-                              fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
+                              fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "7px 12px",
                               border: `1px solid ${dishOn ? tokens.neutral[500] : tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer",
                               background: dishOn ? tokens.tint.parchment : tokens.neutral[0], color: dishOn ? tokens.neutral[700] : tokens.text.disabled, lineHeight: 1,
-                              display: "inline-flex", alignItems: "center", gap: 5, textTransform: "uppercase",
+                              display: "inline-flex", alignItems: "center", gap: 6, textTransform: "uppercase",
                             }}>
                             <span style={{ fontWeight: dishOn ? 700 : 400 }}>{String(dish.name || dish.key || "").slice(0, 8)}</span>
-                            <span style={{ fontSize: 8, opacity: 0.7, textTransform: "lowercase" }}>{dishOn ? "on" : "off"}</span>
+                            <span style={{ fontSize: 9, opacity: 0.7, textTransform: "lowercase" }}>{dishOn ? "on" : "off"}</span>
                           </button>
                         );
                       }));
@@ -1463,7 +1463,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                             updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item]);
                           }
                         }} style={{
-                          fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
+                          fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "7px 12px",
                           border: `1px solid ${active ? tokens.charcoal.default : tokens.neutral[200]}`,
                           borderRadius: 0, cursor: "pointer", lineHeight: 1,
                           background: active ? tokens.tint.parchment : tokens.neutral[0],
@@ -1473,7 +1473,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                       );
                     }))}
 
-                    <div style={{ height: 4 }} />
+                    <div style={{ height: 6 }} />
                   </div>
                 );
               }
