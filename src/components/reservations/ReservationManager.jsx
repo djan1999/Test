@@ -20,6 +20,79 @@ const ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "01,11,
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
+// ── Weekly overview helpers ──────────────────────────────────────────────────
+function buildWeeklyRows(reservations, weekDays, restrictionDefs = []) {
+  const toDs = d => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  const fmtS = ds => { const d = new Date(ds+"T00:00:00"); return `${d.getDate()}.${pad2(d.getMonth()+1)}.`; };
+  const fmtF = ds => { const d = new Date(ds+"T00:00:00"); return `${d.getDate()}.${pad2(d.getMonth()+1)}.${d.getFullYear()}`; };
+  const weekStart = toDs(weekDays[0]), weekEnd = toDs(weekDays[6]);
+  const weekResv = reservations
+    .filter(r => r.date >= weekStart && r.date <= weekEnd)
+    .sort((a,b) => a.date.localeCompare(b.date) || (a.data?.resTime||"99").localeCompare(b.data?.resTime||"99"));
+  const byDate = {};
+  weekResv.forEach(r => { (byDate[r.date] = byDate[r.date]||[]).push(r); });
+  const totalGuests = weekResv.reduce((a,r) => a+(r.data?.guests||2), 0);
+  const sorted = Object.keys(byDate).sort();
+  const dateRange = sorted.length ? `${fmtS(sorted[0])} - ${fmtF(sorted[sorted.length-1])}` : "";
+  const expLabel = r => r.data?.menuType === "short" ? "SM" : `L${String(new Date(r.date+"T00:00:00").getFullYear()).slice(-2)}`;
+  const infoTxt = d => [
+    d.guestType==="hotel" && d.room ? `Hotel #${d.room}` : "",
+    d.birthday ? `1xCAKE${d.cakeNote?`(${d.cakeNote})`:""}` : "",
+    d.notes || "",
+  ].filter(Boolean).join("\n");
+  const restrTxt = rs => {
+    if (!rs?.length) return "";
+    const c = {};
+    rs.forEach(r => { c[r.note] = (c[r.note]||0)+1; });
+    return Object.entries(c).map(([k,n]) => {
+      const def = restrictionDefs.find(d => d.key===k);
+      return `${n}x ${def ? def.label : k}`;
+    }).join("\n");
+  };
+  const rows = [];
+  for (const ds of sorted) {
+    const dr = byDate[ds];
+    const dg = dr.reduce((a,r) => a+(r.data?.guests||2), 0);
+    rows.push({ id:`D${ds}`, type:"date", cells:[fmtS(ds), `Total\nguest:\n${dg}`, "", "", "", "", ""] });
+    const lr = dr.filter(r => (r.data?.resTime||"") < "15:00");
+    const nr = dr.filter(r => (r.data?.resTime||"") >= "15:00");
+    const split = lr.length > 0 && nr.length > 0;
+    const addRows = (list, sub) => {
+      if (sub) rows.push({ id:`S${ds}${sub}`, type:"sub", cells:[sub,"","","","","",""] });
+      list.forEach(r => {
+        const d = r.data||{};
+        rows.push({ id:`R${r.id}`, type:"resv", cells:["", String(d.guests||2), d.resTime||"", d.resName||"—", expLabel(r), infoTxt(d), restrTxt(d.restrictions)] });
+      });
+    };
+    if (split) { addRows(lr,"LUNCH"); addRows(nr,"DINNER"); }
+    else addRows(dr, null);
+  }
+  return { rows, totalGuests, dateRange };
+}
+
+const WEEKLY_RESV_HTML_SHELL = (body) => {
+  const ROBOTO = `<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Reservations</title>${ROBOTO}<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000}@page{size:A4 portrait;margin:12mm 10mm}table{width:100%;border-collapse:collapse}tr{page-break-inside:avoid}th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:center;font-size:8.5pt;color:#000;font-weight:700}.date-row td{background:#f0f0f0}u{text-decoration:underline}h1{font-size:11pt;text-align:center;margin:0 0 2pt;font-weight:700}h2{font-size:9pt;text-align:center;margin:0 0 10pt;font-weight:700}</style></head><body>${body}</body></html>`;
+};
+
+function weeklyRowsToHTML(rows, edits, totalGuests, dateRange) {
+  const e = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const gc = (rowId, ci) => edits[`${rowId}-${ci}`]!==undefined ? edits[`${rowId}-${ci}`] : (rows.find(r=>r.id===rowId)?.cells[ci]??"");
+  let body = `<h1>Reservations : ${e(dateRange)}</h1><h2>Guest count : ${totalGuests}</h2><table>`;
+  body += `<tr><th>DATE</th><th>COVER</th><th>TIME</th><th>NAME</th><th>EXP.</th><th>INFO</th><th>ALLERGIES/<br>RESTRICTIONS</th></tr>`;
+  for (const row of rows) {
+    const c = row.cells.map((_,ci) => gc(row.id, ci));
+    if (row.type==="date")
+      body += `<tr class="date-row"><td>${e(c[0])}</td><td style="white-space:pre-line;">${e(c[1])}</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+    else if (row.type==="sub")
+      body += `<tr><td>${e(c[0])}</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
+    else
+      body += `<tr><td></td><td>${e(c[1])}</td><td>${e(c[2])}</td><td>${e(c[3])}</td><td><u>${e(c[4])}</u></td><td style="white-space:pre-line;">${e(c[5])}</td><td style="white-space:pre-line;">${e(c[6])}</td></tr>`;
+  }
+  body += `</table>`;
+  return WEEKLY_RESV_HTML_SHELL(body);
+}
+
 function GlobalStyle() {
   return (
     <style>{`
@@ -37,6 +110,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
   const [editingId,   setEditingId]   = useState(null);   // reservation id being edited, or "new"
   const [ticketId,    setTicketId]    = useState(null);    // reservation id showing kitchen preview
   const [weeklyPreview, setWeeklyPreview] = useState(null); // "reservations" | "allergies" | null
+  const [weeklyEdits,   setWeeklyEdits]   = useState({});
   const [draftFromReservation, setDraftFromReservation] = useState(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
 
@@ -290,36 +364,87 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
 
       {/* Weekly preview panel */}
       {weeklyPreview && (() => {
-        const html = weeklyPreview === "reservations"
-          ? generateWeeklyReservationsHTML(reservations, weekDays, RESTRICTIONS)
-          : generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, RESTRICTIONS);
-        const isLandscape = weeklyPreview === "allergies";
-        const a4W = isLandscape ? 1123 : 794;
-        const a4H = isLandscape ? 794 : 1123;
+        const isResv = weeklyPreview === "reservations";
+        const weeklyData = isResv ? buildWeeklyRows(reservations, weekDays, RESTRICTIONS) : null;
+        const allergyHtml = !isResv ? generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, RESTRICTIONS) : null;
         const containerW = Math.min(window.innerWidth - 32, 700);
-        const scale = containerW / a4W;
+        const allergyScale = containerW / 1123;
+
+        const COLS = ["DATE","COVER","TIME","NAME","EXP.","INFO","ALLERGIES / RESTRICTIONS"];
+        const MULTILINE = [false,false,false,false,false,true,true];
+        const TALIGN = ["left","center","center","left","center","left","left"];
+        const MINW = [50,40,50,80,40,90,110];
+
+        const cellVal = (row, ci) => weeklyEdits[`${row.id}-${ci}`] !== undefined ? weeklyEdits[`${row.id}-${ci}`] : (row.cells[ci] ?? "");
+        const setCell = (rowId, ci, val) => setWeeklyEdits(p => ({ ...p, [`${rowId}-${ci}`]: val }));
+        const cellFw = (row, ci) => (row.type === "date" || row.type === "sub" || ci === 3) ? 700 : 400;
+
+        const inputBase = (row, ci) => ({
+          fontFamily: "monospace", fontSize: 11, fontWeight: cellFw(row, ci),
+          color: tokens.neutral[900], background: "transparent",
+          border: "none", width: "100%", outline: "none",
+          resize: "none", padding: 0, margin: 0,
+          textAlign: TALIGN[ci], lineHeight: 1.4, cursor: "text",
+        });
+
         return (
           <div style={{ padding: "12px 16px", borderBottom: `1px solid ${tokens.neutral[200]}`, background: tokens.neutral[50] }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.neutral[500], textTransform: "uppercase" }}>
-                {weeklyPreview === "reservations" ? "Weekly Overview" : "Weekly Allergies"} Preview
+                {isResv ? "Weekly Overview" : "Weekly Allergies"} Preview
               </span>
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => {
+                  const printHtml = isResv
+                    ? weeklyRowsToHTML(weeklyData.rows, weeklyEdits, weeklyData.totalGuests, weeklyData.dateRange)
+                    : allergyHtml;
                   const w = window.open("", "_blank", "width=900,height=700");
                   if (!w) { alert("Pop-up blocked"); return; }
-                  w.document.write(html); w.document.close(); w.focus();
+                  w.document.write(printHtml); w.document.close(); w.focus();
                   setTimeout(() => w.print(), 800);
-                }}
-                  style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 600 }}>PRINT</button>
-                <button onClick={() => setWeeklyPreview(null)}
-                  style={{ fontFamily: FONT, fontSize: 10, background: "none", border: "none", cursor: "pointer", color: tokens.neutral[400], padding: "0 4px" }}>×</button>
+                }} style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 600 }}>PRINT</button>
+                {isResv && Object.keys(weeklyEdits).length > 0 && (
+                  <button onClick={() => setWeeklyEdits({})} style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "5px 10px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.secondary }}>RESET</button>
+                )}
+                <button onClick={() => setWeeklyPreview(null)} style={{ fontFamily: FONT, fontSize: 10, background: "none", border: "none", cursor: "pointer", color: tokens.neutral[400], padding: "0 4px" }}>×</button>
               </div>
             </div>
-            <div style={{ width: containerW, height: Math.round(a4H * scale), overflow: "hidden", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, background: tokens.neutral[0] }}>
-              <iframe srcDoc={html} title="weekly preview"
-                style={{ width: a4W, height: a4H, border: "none", transform: `scale(${scale})`, transformOrigin: "top left", pointerEvents: "none" }} />
-            </div>
+
+            {isResv ? (
+              <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 520, border: `1px solid ${tokens.neutral[200]}`, background: tokens.neutral[0] }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 560 }}>
+                  <thead>
+                    <tr style={{ background: tokens.neutral[100], position: "sticky", top: 0, zIndex: 1 }}>
+                      {COLS.map((col, i) => (
+                        <th key={i} style={{ border: `1px solid ${tokens.neutral[200]}`, padding: "5px 6px", fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: tokens.text.secondary, textAlign: TALIGN[i], whiteSpace: "nowrap", fontWeight: 600, minWidth: MINW[i] }}>{col}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weeklyData.rows.map(row => (
+                      <tr key={row.id} style={{ background: row.type === "date" ? tokens.neutral[100] : tokens.neutral[0] }}>
+                        {row.cells.map((_, ci) => (
+                          <td key={ci} style={{ border: `1px solid ${tokens.neutral[200]}`, padding: "3px 6px", verticalAlign: "top", minWidth: MINW[ci] }}>
+                            {MULTILINE[ci] ? (
+                              <textarea rows={2} value={cellVal(row, ci)} onChange={e => setCell(row.id, ci, e.target.value)}
+                                style={{ ...inputBase(row, ci), display: "block", whiteSpace: "pre-wrap" }} />
+                            ) : (
+                              <input value={cellVal(row, ci)} onChange={e => setCell(row.id, ci, e.target.value)}
+                                style={inputBase(row, ci)} />
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ width: containerW, height: Math.round(794 * allergyScale), overflow: "hidden", border: `1px solid ${tokens.neutral[200]}`, background: tokens.neutral[0] }}>
+                <iframe srcDoc={allergyHtml} title="weekly allergies preview"
+                  style={{ width: 1123, height: 794, border: "none", transform: `scale(${allergyScale})`, transformOrigin: "top left", pointerEvents: "none" }} />
+              </div>
+            )}
           </div>
         );
       })()}

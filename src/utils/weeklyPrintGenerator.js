@@ -27,10 +27,12 @@ h2{font-family:'Roboto Mono',monospace;font-size:9pt;text-align:center;margin:0 
 </style></head><body>${bodyHtml}</body></html>`;
 
 const allergyHtmlShell = (title, bodyHtml, resvCount) => {
-  // Scale font based on number of reservation columns to fit on one page
-  const baseFontPt = resvCount <= 3 ? 7 : resvCount <= 5 ? 6.5 : resvCount <= 7 ? 5.5 : 5;
+  // For few reservations use natural column widths; only compress for large counts
+  const isLarge = resvCount > 5;
+  const baseFontPt = isLarge ? (resvCount <= 7 ? 6.5 : resvCount <= 9 ? 5.5 : 5) : 8;
   const courseSubPt = Math.max(baseFontPt - 1.5, 4);
-  const cellPad = "1.5pt 3pt";
+  const cellPad = isLarge ? "1.5pt 3pt" : "2pt 4pt";
+  const tableLayout = isLarge ? "width:100%;table-layout:fixed;" : "width:auto;table-layout:auto;";
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${esc(title)}</title>
@@ -40,7 +42,7 @@ ${ROBOTO_LINK}
 body{font-family:'Roboto Mono',monospace;font-size:${baseFontPt}pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 @page{size:A4 landscape;margin:5mm 5mm;}
 @media print{body{margin:0;}}
-table{width:100%;border-collapse:collapse;table-layout:fixed;}
+table{border-collapse:collapse;${tableLayout}}
 th,td{border:1px solid #aaa;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;color:#000;font-weight:700;overflow:hidden;word-wrap:break-word;line-height:1.15;}
 th{text-align:center;}
 .green-header{background:#3d6b4f;color:#fff;}
@@ -121,7 +123,7 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
     return Object.entries(counts).map(([key, count]) => {
       const def = restrictionDefs.find(d => d.key === key);
       const label = def ? def.label.toLowerCase() : key;
-      return count > 1 ? `${count}x ${label}` : label;
+      return `${count}x ${label}`;
     }).join("\n");
   };
 
@@ -212,16 +214,23 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
   let body = "";
   body += `<table>`;
 
-  // Calculate course column width
-  const courseColPct = weekResv.length <= 3 ? "22%" : weekResv.length <= 5 ? "18%" : "15%";
+  // Column widths: natural sizing for few reservations, compressed for many
+  const isLarge = weekResv.length > 5;
+  const courseColPct = weekResv.length <= 5 ? "22%" : weekResv.length <= 7 ? "18%" : "15%";
   const resvColPct = `${Math.floor((100 - parseInt(courseColPct)) / weekResv.length)}%`;
+  const courseColStyle = isLarge
+    ? `width:${courseColPct};text-align:left;padding-left:6pt;`
+    : `min-width:110pt;text-align:left;padding-left:6pt;`;
+  const resvColStyle = isLarge
+    ? `width:${resvColPct};text-align:center;`
+    : `min-width:90pt;text-align:center;`;
 
   // Header row 1: date range + guest names
   body += `<tr class="green-header">`;
-  body += `<th style="width:${courseColPct};text-align:left;padding-left:6pt;">${esc(dateRange)}</th>`;
+  body += `<th style="${courseColStyle}">${esc(dateRange)}</th>`;
   weekResv.forEach(r => {
     const d = r.data || {};
-    body += `<th style="width:${resvColPct};text-align:center;">${esc(d.resName || "\u2014")}</th>`;
+    body += `<th style="${resvColStyle}">${esc(d.resName || "\u2014")}</th>`;
   });
   body += `</tr>`;
 
@@ -246,7 +255,7 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     const restrLines = Object.entries(restrCounts).map(([key, count]) => {
       const def = restrictionDefs.find(x => x.key === key);
       const label = def ? def.label.toLowerCase() : key;
-      return count > 1 ? `${count}x ${label}` : label;
+      return `${count}x ${label}`;
     });
     body += `<td class="center" style="line-height:1.3;">${esc(mt)}<br>${esc(restrLines.join(", "))}</td>`;
   });
