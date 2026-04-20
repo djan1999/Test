@@ -1356,7 +1356,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                         <button onClick={cyclePairing} style={{
                           fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "7px 12px",
                           border: `1px solid ${curPairing === "—" ? tokens.neutral[300] : pcStyle.border}`,
-                          borderRadius: 0, cursor: "pointer", lineHeight: 1, width: "100%",
+                          borderRadius: 0, cursor: "pointer", lineHeight: 1, width: "100%", whiteSpace: "nowrap",
                           background: curPairing === "—" ? tokens.neutral[0] : pcStyle.bg,
                           color: curPairing === "—" ? tokens.text.muted : pcStyle.color,
                           display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 600,
