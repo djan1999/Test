@@ -131,6 +131,23 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
             </div>
           </div>
           <div>
+            <div style={fieldLabel}>Menu</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {["Long", "Short"].map(opt => (
+                  <button key={opt} onClick={() => setMenuType(m => m === opt ? "" : opt)} style={{
+                    fontFamily: FONT, fontSize: 10, letterSpacing: 2,
+                    padding: "10px 24px", border: "1px solid",
+                    borderColor: menuType === opt ? tokens.charcoal.default : tokens.neutral[200],
+                    borderRadius: 0, cursor: "pointer",
+                    background: menuType === opt ? tokens.tint.parchment : tokens.neutral[0],
+                    color: menuType === opt ? tokens.text.secondary : tokens.text.muted,
+                    textTransform: "uppercase",
+                  }}>{opt}</button>
+                ))}
+              </div>
+          </div>
+
+          <div>
             <div style={fieldLabel}>Language</div>
             <div style={{ display: "flex", gap: 8 }}>
               {[{v:"en",l:"EN"},{v:"si",l:"SLO"}].map(opt => (
