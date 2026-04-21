@@ -9,6 +9,8 @@ import ServiceDatePicker from "./ServiceDatePicker.jsx";
 import ResvForm from "./ResvForm.jsx";
 import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
 import ServiceBreakdown from "../ServiceBreakdown.jsx";
+import { useFocusChain } from "../../hooks/useFocusChain.js";
+import { useModalEscape } from "../../hooks/useModalEscape.js";
 
 const FONT = tokens.font;
 const baseInp = { ...baseInput };
@@ -188,6 +190,9 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
   const [allergyEdits,  setAllergyEdits]  = useState({});
   const [draftFromReservation, setDraftFromReservation] = useState(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
+
+  const weeklyChain = useFocusChain();
+  useModalEscape(() => setWeeklyPreview(null), !!weeklyPreview);
 
   const todayStr = toLocalDateISO();
 
@@ -588,24 +593,31 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                     </tr>
                     {weeklyData.rows.map(row => (
                       <tr key={row.id} style={{ background: row.type === "date" ? "#f0f0f0" : "#fff" }}>
-                        {row.cells.map((_, ci) => (
-                          <td key={ci} style={{ border: "1px solid #aaa", padding: "4pt 5pt", verticalAlign: "top" }}>
-                            {MULTILINE[ci] ? (
-                              <textarea
-                                rows={2}
-                                value={cellVal(row, ci)}
-                                onChange={e => setCell(row.id, ci, e.target.value)}
-                                style={{ ...cellStyle(row, ci), display: "block" }}
-                              />
-                            ) : (
-                              <input
-                                value={cellVal(row, ci)}
-                                onChange={e => setCell(row.id, ci, e.target.value)}
-                                style={cellStyle(row, ci)}
-                              />
-                            )}
-                          </td>
-                        ))}
+                        {row.cells.map((_, ci) => {
+                          const cb = weeklyChain.bind(`wk-${row.id}-${ci}`);
+                          return (
+                            <td key={ci} style={{ border: "1px solid #aaa", padding: "4pt 5pt", verticalAlign: "top" }}>
+                              {MULTILINE[ci] ? (
+                                <textarea
+                                  rows={2}
+                                  value={cellVal(row, ci)}
+                                  onChange={e => setCell(row.id, ci, e.target.value)}
+                                  ref={cb.ref}
+                                  onKeyDown={cb.onKeyDown}
+                                  style={{ ...cellStyle(row, ci), display: "block" }}
+                                />
+                              ) : (
+                                <input
+                                  value={cellVal(row, ci)}
+                                  onChange={e => setCell(row.id, ci, e.target.value)}
+                                  ref={cb.ref}
+                                  onKeyDown={cb.onKeyDown}
+                                  style={cellStyle(row, ci)}
+                                />
+                              )}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>
@@ -637,11 +649,11 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                     <tbody>
                       <tr style={{ background: "#3d6b4f" }}>
                         <td style={{ ...cColSt, border: "1px solid #2e5a3e", color: "#fff", fontWeight: 700 }}>
-                          <input value={aCellVal("hdr-date", allergyDateRange)} onChange={setACell("hdr-date")} style={{ ...transp, color: "#fff" }} />
+                          <input ref={weeklyChain.bind("al-hdr-date").ref} onKeyDown={weeklyChain.bind("al-hdr-date").onKeyDown} value={aCellVal("hdr-date", allergyDateRange)} onChange={setACell("hdr-date")} style={{ ...transp, color: "#fff" }} />
                         </td>
                         {allergyWeekResv.map(r => (
                           <td key={r.id} style={{ ...rColSt, border: "1px solid #2e5a3e", color: "#fff" }}>
-                            <input value={aCellVal(`name-${r.id}`, r.data?.resName || "—")} onChange={setACell(`name-${r.id}`)} style={{ ...transp, color: "#fff", textAlign: "center" }} />
+                            <input ref={weeklyChain.bind(`al-name-${r.id}`).ref} onKeyDown={weeklyChain.bind(`al-name-${r.id}`).onKeyDown} value={aCellVal(`name-${r.id}`, r.data?.resName || "—")} onChange={setACell(`name-${r.id}`)} style={{ ...transp, color: "#fff", textAlign: "center" }} />
                           </td>
                         ))}
                       </tr>
@@ -662,7 +674,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                           const base = `${mt}\n${rLines.join(", ")}`;
                           return (
                             <td key={r.id} style={{ ...rColSt }}>
-                              <textarea rows={2} value={aCellVal(`restr-${r.id}`, base)} onChange={setACell(`restr-${r.id}`)} style={{ ...transp, display: "block", textAlign: "center", whiteSpace: "pre-wrap" }} />
+                              <textarea ref={weeklyChain.bind(`al-restr-${r.id}`).ref} onKeyDown={weeklyChain.bind(`al-restr-${r.id}`).onKeyDown} rows={2} value={aCellVal(`restr-${r.id}`, base)} onChange={setACell(`restr-${r.id}`)} style={{ ...transp, display: "block", textAlign: "center", whiteSpace: "pre-wrap" }} />
                             </td>
                           );
                         })}
@@ -683,9 +695,10 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                               const ck = `${key}-${r.id}`;
                               const base = allergyBaseCell(course, r);
                               const val = aCellVal(ck, base);
+                              const cb = weeklyChain.bind(`al-${ck}`);
                               return (
                                 <td key={r.id} style={{ ...rColSt, background: val ? "#edf7ef" : (isOpt ? "#f5f5f5" : "#fff") }}>
-                                  <textarea rows={1} value={val} onChange={setACell(ck)} style={{ ...transp, display: "block", fontWeight: val ? 700 : 400, whiteSpace: "pre-wrap" }} />
+                                  <textarea ref={cb.ref} onKeyDown={cb.onKeyDown} rows={1} value={val} onChange={setACell(ck)} style={{ ...transp, display: "block", fontWeight: val ? 700 : 400, whiteSpace: "pre-wrap" }} />
                                 </td>
                               );
                             })}

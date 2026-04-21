@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { tokens } from "../../styles/tokens.js";
+import { useModalEscape } from "../../hooks/useModalEscape.js";
 
 export default function FullModal({ title, onClose, actions, children }) {
   useEffect(() => {
@@ -9,6 +10,7 @@ export default function FullModal({ title, onClose, actions, children }) {
       document.body.style.overflow = prev;
     };
   }, []);
+  useModalEscape(onClose);
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 500, background: tokens.surface.card, display: "flex", flexDirection: "column" }}>
       <div

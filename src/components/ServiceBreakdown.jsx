@@ -1,6 +1,8 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { tokens } from "../styles/tokens.js";
 import { RESTRICTIONS } from "../constants/dietary.js";
+import { useFocusChain } from "../hooks/useFocusChain.js";
+import { useModalEscape } from "../hooks/useModalEscape.js";
 
 const FONT = tokens.font;
 
@@ -165,12 +167,14 @@ const plainInputStyle = {
   borderRadius: 0,
 };
 
-function PlainInput({ value, onChange, bold, center, style }) {
+function PlainInput({ value, onChange, bold, center, style, focusBind }) {
   return (
     <input
       type="text"
+      ref={focusBind?.ref}
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      onKeyDown={focusBind?.onKeyDown}
       style={{
         ...plainInputStyle,
         fontWeight: bold ? 700 : "inherit",
@@ -190,7 +194,7 @@ function AutoTextarea({ value, onChange, style, minRows = 1, placeholder, autoBu
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   };
-  const handleKeyDown = onKeyDown ?? (autoBullet ? (e) => {
+  const bulletHandler = autoBullet ? (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
     const el = e.target;
@@ -202,7 +206,11 @@ function AutoTextarea({ value, onChange, style, minRows = 1, placeholder, autoBu
       el.selectionStart = el.selectionEnd = start + 3;
       resize(el);
     });
-  } : undefined);
+  } : undefined;
+  const handleKeyDown = (e) => {
+    if (onKeyDown) onKeyDown(e);
+    if (!e.defaultPrevented && bulletHandler) bulletHandler(e);
+  };
   return (
     <textarea
       ref={(el) => { resize(el); textareaRef?.(el); }}
@@ -228,7 +236,8 @@ function AutoTextarea({ value, onChange, style, minRows = 1, placeholder, autoBu
 // ── Component ───────────────────────────────────────────────────────────────
 export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
   const [doc, setDoc] = useState(() => buildInitialState(dateStr, reservations));
-  const bulletRefs = useRef({});
+  const chain = useFocusChain();
+  useModalEscape(onClose);
 
   const updateHeader = (v) => setDoc((p) => ({ ...p, headerText: v }));
   const updateSummary = (v) => setDoc((p) => ({ ...p, summaryText: v }));
@@ -319,40 +328,6 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
         }
       ),
     }));
-
-  const prevBulletCoords = (si, ri, bi) => {
-    if (bi > 0) return { si, ri, bi: bi - 1 };
-    let rj = ri - 1;
-    let sj = si;
-    while (sj >= 0) {
-      const slot = doc.slots[sj];
-      while (rj >= 0) {
-        const blen = slot.reservations[rj].bullets.length;
-        if (blen > 0) return { si: sj, ri: rj, bi: blen - 1 };
-        rj--;
-      }
-      sj--;
-      if (sj >= 0) rj = doc.slots[sj].reservations.length - 1;
-    }
-    return null;
-  };
-
-  const nextBulletCoords = (si, ri, bi) => {
-    const slot = doc.slots[si];
-    if (bi < slot.reservations[ri].bullets.length - 1) return { si, ri, bi: bi + 1 };
-    let rj = ri + 1;
-    let sj = si;
-    while (sj < doc.slots.length) {
-      const s = doc.slots[sj];
-      while (rj < s.reservations.length) {
-        if (s.reservations[rj].bullets.length > 0) return { si: sj, ri: rj, bi: 0 };
-        rj++;
-      }
-      sj++;
-      rj = 0;
-    }
-    return null;
-  };
 
   const updateBread = (v) => setDoc((p) => ({ ...p, bread: v }));
   const updateAnnouncement = (i, v) =>
@@ -459,11 +434,13 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
               onChange={updateHeader}
               bold
               style={{ fontSize: 12 }}
+              focusBind={chain.bind("doc-header")}
             />
             <PlainInput
               value={doc.summaryText}
               onChange={updateSummary}
               style={{ fontSize: 11, marginTop: 2 }}
+              focusBind={chain.bind("doc-summary")}
             />
           </div>
 
@@ -481,6 +458,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                   onChange={(v) => updateSlotLabel(si, v)}
                   bold
                   style={{ fontSize: 11 }}
+                  focusBind={chain.bind(`slot-${si}`)}
                 />
               </div>
               {slot.reservations.map((r, ri) => (
@@ -493,64 +471,39 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                     value={r.headerText}
                     onChange={(v) => updateResvHeader(si, ri, v)}
                     bold
+                    focusBind={chain.bind(`header-${si}-${ri}`)}
                   />
                   <div style={{ padding: "0 0 0 8px", marginTop: 1 }}>
-                    {r.bullets.map((b, bi) => (
-                      <div
-                        key={bi}
-                        style={{ display: "flex", alignItems: "flex-start", gap: 4 }}
-                      >
-                        <span style={{ flexShrink: 0 }}>-</span>
-                        <AutoTextarea
-                          value={b}
-                          onChange={(v) => updateBullet(si, ri, bi, v)}
-                          textareaRef={(el) => { bulletRefs.current[`${si}-${ri}-${bi}`] = el; }}
-                          onKeyDown={(e) => {
-                            const el = e.target;
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              const before = b.slice(0, el.selectionStart);
-                              const after = b.slice(el.selectionEnd);
-                              splitBullet(si, ri, bi, before, after);
-                              requestAnimationFrame(() => {
-                                const next = bulletRefs.current[`${si}-${ri}-${bi + 1}`];
-                                if (next) { next.focus(); next.selectionStart = next.selectionEnd = 0; }
-                              });
-                            } else if (e.key === "Backspace" && el.selectionStart === 0 && el.selectionEnd === 0 && bi > 0) {
-                              e.preventDefault();
-                              const prevLen = doc.slots[si].reservations[ri].bullets[bi - 1].length;
-                              mergeBullet(si, ri, bi);
-                              requestAnimationFrame(() => {
-                                const prev = bulletRefs.current[`${si}-${ri}-${bi - 1}`];
-                                if (prev) { prev.focus(); prev.selectionStart = prev.selectionEnd = prevLen; }
-                              });
-                            } else if (e.key === "ArrowUp") {
-                              const firstNl = b.indexOf("\n");
-                              const onFirstLine = firstNl === -1 || el.selectionStart <= firstNl;
-                              if (onFirstLine) {
-                                const coords = prevBulletCoords(si, ri, bi);
-                                if (coords) {
-                                  e.preventDefault();
-                                  const prev = bulletRefs.current[`${coords.si}-${coords.ri}-${coords.bi}`];
-                                  if (prev) { prev.focus(); prev.selectionStart = prev.selectionEnd = prev.value.length; }
-                                }
-                              }
-                            } else if (e.key === "ArrowDown") {
-                              const lastNl = b.lastIndexOf("\n");
-                              const onLastLine = lastNl === -1 || el.selectionStart > lastNl;
-                              if (onLastLine) {
-                                const coords = nextBulletCoords(si, ri, bi);
-                                if (coords) {
-                                  e.preventDefault();
-                                  const next = bulletRefs.current[`${coords.si}-${coords.ri}-${coords.bi}`];
-                                  if (next) { next.focus(); next.selectionStart = next.selectionEnd = 0; }
-                                }
-                              }
-                            }
-                          }}
-                        />
-                      </div>
-                    ))}
+                    {r.bullets.map((b, bi) => {
+                      const bulletBind = chain.bind(`bullet-${si}-${ri}-${bi}`, (e) => {
+                        const el = e.currentTarget;
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const before = b.slice(0, el.selectionStart);
+                          const after = b.slice(el.selectionEnd);
+                          splitBullet(si, ri, bi, before, after);
+                          chain.focusField(`bullet-${si}-${ri}-${bi + 1}`, false);
+                        } else if (e.key === "Backspace" && el.selectionStart === 0 && el.selectionEnd === 0 && bi > 0) {
+                          e.preventDefault();
+                          mergeBullet(si, ri, bi);
+                          chain.focusField(`bullet-${si}-${ri}-${bi - 1}`, true);
+                        }
+                      });
+                      return (
+                        <div
+                          key={bi}
+                          style={{ display: "flex", alignItems: "flex-start", gap: 4 }}
+                        >
+                          <span style={{ flexShrink: 0 }}>-</span>
+                          <AutoTextarea
+                            value={b}
+                            onChange={(v) => updateBullet(si, ri, bi, v)}
+                            textareaRef={bulletBind.ref}
+                            onKeyDown={bulletBind.onKeyDown}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -582,6 +535,8 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                 type="text"
                 value={doc.bread}
                 onChange={(e) => updateBread(e.target.value)}
+                ref={chain.bind("bread").ref}
+                onKeyDown={chain.bind("bread").onKeyDown}
                 className="sb-inline"
                 style={{
                   flex: 1,
@@ -601,26 +556,31 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
               Service Announcements:
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {doc.announcements.map((v, i) => (
-                <div
-                  key={i}
-                  style={{ display: "flex", alignItems: "flex-start", gap: 6 }}
-                >
-                  <span>-</span>
-                  <div style={{ flex: 1 }}>
-                    <AutoTextarea
-                      value={v}
-                      onChange={(nv) => updateAnnouncement(i, nv)}
-                      autoBullet
-                      style={{
-                        border: `1px dashed ${tokens.neutral[400]}`,
-                        background: tokens.neutral[100],
-                        padding: "1px 4px",
-                      }}
-                    />
+              {doc.announcements.map((v, i) => {
+                const ab = chain.bind(`announce-${i}`);
+                return (
+                  <div
+                    key={i}
+                    style={{ display: "flex", alignItems: "flex-start", gap: 6 }}
+                  >
+                    <span>-</span>
+                    <div style={{ flex: 1 }}>
+                      <AutoTextarea
+                        value={v}
+                        onChange={(nv) => updateAnnouncement(i, nv)}
+                        autoBullet
+                        textareaRef={ab.ref}
+                        onKeyDown={ab.onKeyDown}
+                        style={{
+                          border: `1px dashed ${tokens.neutral[400]}`,
+                          background: tokens.neutral[100],
+                          padding: "1px 4px",
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

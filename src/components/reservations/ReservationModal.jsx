@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
+import { useModalEscape } from "../../hooks/useModalEscape.js";
 import { RESTRICTIONS, RESTRICTION_GROUPS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, circleButton as mixinCircleButton } from "../../styles/mixins.js";
@@ -36,6 +37,8 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
   const [restrictions, setRestrictions] = useState(table.restrictions || []);
   const [notes, setNotes]         = useState(table.notes || "");
   const [lang, setLang]           = useState(table.lang || "en");
+
+  useModalEscape(onClose);
 
   return (
     <div style={{
