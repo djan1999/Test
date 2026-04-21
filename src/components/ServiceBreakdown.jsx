@@ -184,12 +184,25 @@ function PlainInput({ value, onChange, bold, center, style }) {
 // Auto-growing single-row textarea. Grows vertically when content wraps so
 // nothing is clipped, and collapses to a single line when empty so short
 // content stays compact in print.
-function AutoTextarea({ value, onChange, style, minRows = 1, placeholder }) {
+function AutoTextarea({ value, onChange, style, minRows = 1, placeholder, autoBullet }) {
   const resize = (el) => {
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   };
+  const handleKeyDown = autoBullet ? (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const el = e.target;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const next = value.slice(0, start) + "\n- " + value.slice(end);
+    onChange(next);
+    requestAnimationFrame(() => {
+      el.selectionStart = el.selectionEnd = start + 3;
+      resize(el);
+    });
+  } : undefined;
   return (
     <textarea
       ref={(el) => resize(el)}
@@ -198,6 +211,7 @@ function AutoTextarea({ value, onChange, style, minRows = 1, placeholder }) {
         onChange(e.target.value);
         resize(e.target);
       }}
+      onKeyDown={handleKeyDown}
       rows={minRows}
       placeholder={placeholder}
       style={{
@@ -359,37 +373,29 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
           borderRadius: 0,
         }}
       >
-        {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 2 }}>
-          <PlainInput
-            value={doc.headerText}
-            onChange={updateHeader}
-            bold
-            center
-            style={{ fontSize: 12 }}
-          />
-          <PlainInput
-            value={doc.summaryText}
-            onChange={updateSummary}
-            center
-            style={{ fontSize: 11, marginTop: 2 }}
-          />
-        </div>
-
-        {/* Reservation column flow — CSS multi-column so print overflow moves
-            from column 1 -> column 2 -> page 2, rather than a fixed grid.
-            `balance` lets the browser distribute content evenly across the
-            two columns so small docs use the width instead of stacking in
-            a tall column 1. */}
         <div
           className="service-breakdown-print-area sb-columns"
           style={{
-            marginTop: 10,
             columnCount: 2,
             columnGap: 24,
             columnFill: "balance",
           }}
         >
+          {/* Header — inside column flow so it sits left in column 1 above slots */}
+          <div className="header-block" style={{ marginBottom: 8 }}>
+            <PlainInput
+              value={doc.headerText}
+              onChange={updateHeader}
+              bold
+              style={{ fontSize: 12 }}
+            />
+            <PlainInput
+              value={doc.summaryText}
+              onChange={updateSummary}
+              style={{ fontSize: 11, marginTop: 2 }}
+            />
+          </div>
+
           {doc.slots.map((slot, si) => (
             <div key={slot.key} className="slot-block" style={{ marginBottom: 10 }}>
               <div
@@ -434,6 +440,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                   <AutoTextarea
                     value={r.intel}
                     onChange={(v) => updateIntel(si, ri, v)}
+                    autoBullet
                     placeholder="Guest intel / notes"
                     style={{
                       marginTop: 2,
@@ -502,6 +509,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                     <AutoTextarea
                       value={v}
                       onChange={(nv) => updateAnnouncement(i, nv)}
+                      autoBullet
                       style={{
                         border: `1px dashed ${tokens.neutral[400]}`,
                         background: tokens.neutral[100],
@@ -586,15 +594,17 @@ function PrintStyles() {
         .service-breakdown-print-area {
           column-count: 2;
           column-gap: 12mm;
-          column-fill: auto;
+          column-fill: balance;
+        }
+        .header-block {
+          break-after: avoid;
         }
         .reservation-block {
           break-inside: avoid;
           page-break-inside: avoid;
         }
         .slot-block {
-          break-inside: avoid;
-          page-break-inside: avoid;
+          break-inside: avoid-column;
         }
         .bottom-section {
           break-inside: avoid;
@@ -624,9 +634,8 @@ function PrintStyles() {
           margin-top: 6pt !important;
           padding-top: 3pt !important;
         }
-        /* Shrink the header block */
-        .sb-sheet > div:first-child {
-          margin-bottom: 2pt !important;
+        .header-block {
+          margin-bottom: 4pt !important;
         }
       }
     `}</style>
