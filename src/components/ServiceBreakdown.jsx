@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { tokens } from "../styles/tokens.js";
 import { RESTRICTIONS } from "../constants/dietary.js";
 
@@ -184,13 +184,13 @@ function PlainInput({ value, onChange, bold, center, style }) {
 // Auto-growing single-row textarea. Grows vertically when content wraps so
 // nothing is clipped, and collapses to a single line when empty so short
 // content stays compact in print.
-function AutoTextarea({ value, onChange, style, minRows = 1, placeholder, autoBullet }) {
+function AutoTextarea({ value, onChange, style, minRows = 1, placeholder, autoBullet, onKeyDown, textareaRef }) {
   const resize = (el) => {
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   };
-  const handleKeyDown = autoBullet ? (e) => {
+  const handleKeyDown = onKeyDown ?? (autoBullet ? (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
     const el = e.target;
@@ -202,10 +202,10 @@ function AutoTextarea({ value, onChange, style, minRows = 1, placeholder, autoBu
       el.selectionStart = el.selectionEnd = start + 3;
       resize(el);
     });
-  } : undefined;
+  } : undefined);
   return (
     <textarea
-      ref={(el) => resize(el)}
+      ref={(el) => { resize(el); textareaRef?.(el); }}
       value={value}
       onChange={(e) => {
         onChange(e.target.value);
@@ -228,6 +228,7 @@ function AutoTextarea({ value, onChange, style, minRows = 1, placeholder, autoBu
 // ── Component ───────────────────────────────────────────────────────────────
 export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
   const [doc, setDoc] = useState(() => buildInitialState(dateStr, reservations));
+  const bulletRefs = useRef({});
 
   const updateHeader = (v) => setDoc((p) => ({ ...p, headerText: v }));
   const updateSummary = (v) => setDoc((p) => ({ ...p, summaryText: v }));
@@ -283,6 +284,22 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
             }
       ),
     }));
+  const splitBullet = (si, ri, bi, before, after) =>
+    setDoc((p) => ({
+      ...p,
+      slots: p.slots.map((s, i) =>
+        i !== si ? s : {
+          ...s,
+          reservations: s.reservations.map((r, j) =>
+            j !== ri ? r : {
+              ...r,
+              bullets: [...r.bullets.slice(0, bi), before, after, ...r.bullets.slice(bi + 1)],
+            }
+          ),
+        }
+      ),
+    }));
+
   const updateBread = (v) => setDoc((p) => ({ ...p, bread: v }));
   const updateAnnouncement = (i, v) =>
     setDoc((p) => ({
@@ -433,7 +450,19 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                         <AutoTextarea
                           value={b}
                           onChange={(v) => updateBullet(si, ri, bi, v)}
-                          autoBullet
+                          textareaRef={(el) => { bulletRefs.current[`${si}-${ri}-${bi}`] = el; }}
+                          onKeyDown={(e) => {
+                            if (e.key !== "Enter") return;
+                            e.preventDefault();
+                            const el = e.target;
+                            const before = b.slice(0, el.selectionStart);
+                            const after = b.slice(el.selectionEnd);
+                            splitBullet(si, ri, bi, before, after);
+                            requestAnimationFrame(() => {
+                              const next = bulletRefs.current[`${si}-${ri}-${bi + 1}`];
+                              if (next) { next.focus(); next.selectionStart = next.selectionEnd = 0; }
+                            });
+                          }}
                         />
                       </div>
                     ))}
