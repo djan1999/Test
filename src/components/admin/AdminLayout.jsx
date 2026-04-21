@@ -78,7 +78,7 @@ export default function AdminLayout({
   const [dishesCoursesOpen, setDishesCoursesOpen] = useState(true);
   const [navPinned, setNavPinned] = useState(false);
   const [navHover, setNavHover] = useState(false);
-  const isMobile = useIsMobile(768);
+  const isMobile = useIsMobile(tokens.breakpoints.md);
 
   const navOpen = navPinned || navHover;
   const NAV_W_OPEN = 220;
@@ -234,7 +234,7 @@ export default function AdminLayout({
         </nav>}
 
         {/* Panel content */}
-        <main style={{
+        <main className="safe-bottom" style={{
           flex: 1,
           padding: isMobile ? "16px 12px" : "24px 24px",
           paddingBottom: isMobile ? "calc(40px + env(safe-area-inset-bottom))" : 24,

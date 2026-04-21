@@ -30,7 +30,7 @@ export default function Header({
   onSeed,
   onEndService,
 }) {
-  const isMobile = useIsMobile(640);
+  const isMobile = useIsMobile(tokens.breakpoints.md);
   const modeColor = modeLabel === "ADMIN" ? tokens.text.secondary : modeLabel === "SERVICE" ? tokens.green.text : tokens.text.muted;
   const [sSt, setSSt] = useState(null);
   const [sMsg, setSMsg] = useState("");
@@ -63,30 +63,30 @@ export default function Header({
   // Mobile-tuned action button: larger tap surface, slightly bigger text.
   const actBtn = {
     fontFamily: FONT,
-    fontSize: isMobile ? 10 : 9,
+    fontSize: isMobile ? 12 : 11,
     letterSpacing: isMobile ? 1.5 : 2,
-    padding: isMobile ? "8px 12px" : "6px 10px",
+    padding: isMobile ? "10px 12px" : "8px 10px",
     border: tokens.border.default,
     borderRadius: 0,
     cursor: "pointer",
     background: tokens.surface.card,
     color: tokens.text.primary,
     flexShrink: 0,
-    minHeight: isMobile ? 36 : undefined,
+    minHeight: isMobile ? tokens.mobile.touchTargetMin : 38,
   };
   return (
     <div style={{
       borderBottom: tokens.border.subtle,
-      padding: isMobile ? "8px 10px" : "10px 12px",
+      padding: isMobile ? "10px 12px" : "12px 14px",
       display: "flex", flexDirection: "column", gap: isMobile ? 8 : 10,
       background: tokens.surface.card, position: "sticky", top: 0, zIndex: 50,
       paddingTop: `max(${isMobile ? 8 : 10}px, env(safe-area-inset-top))`,
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: isMobile ? 8 : 12, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 16, minWidth: 0 }}>
-          <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 600, letterSpacing: isMobile ? 3 : 4, color: tokens.text.primary }}>{appName}</span>
+          <span style={{ fontSize: isMobile ? 14 : 13, fontWeight: 600, letterSpacing: isMobile ? 2 : 4, color: tokens.text.primary }}>{appName}</span>
           <span style={{ width: 1, height: 14, background: tokens.neutral[300] }} />
-          <span style={{ fontSize: 10, letterSpacing: isMobile ? 2 : 3, color: modeColor, textTransform: "uppercase", fontWeight: 700 }}>{modeLabel}</span>
+          <span style={{ fontSize: isMobile ? 11 : 10, letterSpacing: isMobile ? 1.5 : 3, color: modeColor, textTransform: "uppercase", fontWeight: 700 }}>{modeLabel}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {showAddRes && (
@@ -101,14 +101,14 @@ export default function Header({
             </button>
           )}
           <span style={{
-            fontFamily: FONT, fontSize: isMobile ? 10 : 9, letterSpacing: isMobile ? 1.5 : 2,
-            padding: isMobile ? "8px 12px" : "6px 10px",
+            fontFamily: FONT, fontSize: isMobile ? 11 : 10, letterSpacing: isMobile ? 1.2 : 2,
+            padding: isMobile ? "10px 12px" : "8px 10px",
             border: `1px solid ${syncLive ? tokens.green.border : tokens.neutral[300]}`,
             borderRadius: 0,
             background: syncLive ? tokens.green.bg : tokens.neutral[50],
             color: syncLive ? tokens.green.text : tokens.text.muted,
             fontWeight: 600, whiteSpace: "nowrap",
-            minHeight: isMobile ? 36 : undefined,
+            minHeight: isMobile ? tokens.mobile.touchTargetMin : 38,
             display: "inline-flex", alignItems: "center",
           }}>{syncLabel}</span>
           {showEndService && (

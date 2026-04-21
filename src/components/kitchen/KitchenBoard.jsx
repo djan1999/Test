@@ -7,6 +7,7 @@ import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 
 const FONT = tokens.font;
+const KITCHEN_TICKET_WIDTH = "min(100%, 340px)";
 
 export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }) {
   const seats = table.seats || [];
@@ -580,7 +581,7 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
       ref={setNodeRef}
       {...attributes}
       style={{
-        flexShrink: 0, width: 248,
+        flexShrink: 1, width: KITCHEN_TICKET_WIDTH,
         // Only apply transform while a drag is active — prevents stale transforms
         // from persisting after drag ends and causing cards to appear displaced.
         transform: anyDragging && transform ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : undefined,
@@ -592,7 +593,7 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
       {isDragging ? (
         // Ghost placeholder — dashed outline so the layout slot stays visible
         <div style={{
-          width: 248, height: "100%", minHeight: 120,
+          width: "100%", height: "100%", minHeight: 120,
           border: `2px dashed ${tokens.green.border}`, borderRadius: 0,
           background: tokens.green.bg,
         }} />
@@ -772,7 +773,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany }) {
     >
       <SortableContext items={order} strategy={rectSortingStrategy}>
         <div style={{ paddingBottom: 8 }}>
-          <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))", alignItems: "flex-start", gap: 12 }}>
             {orderedTables.map(t => (
               <SortableTicket
                 key={t.id}
@@ -789,7 +790,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany }) {
       <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>
         {activeTable && (
           <div style={{
-            width: 248, borderRadius: 0,
+            width: "min(100vw - 24px, 340px)", borderRadius: 0,
             boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
             opacity: 0.97,
           }}>
