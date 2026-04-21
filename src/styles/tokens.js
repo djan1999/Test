@@ -88,13 +88,13 @@ const border = {
 const font = "'Roboto Mono', 'JetBrains Mono', 'IBM Plex Mono', monospace";
 
 const fontSize = {
-  xs:  8,
-  sm:  9,
-  base: 11,
-  md:  12,
-  lg:  14,
-  xl:  18,
-  xxl: 24,
+  xs:  12,
+  sm:  13,
+  base: 15,
+  md:  16,
+  lg:  18,
+  xl:  22,
+  xxl: 28,
 };
 
 // ── Spacing ───────────────────────────────────────────────────
@@ -106,6 +106,22 @@ const spacing = {
   xl:  24,
   xxl: 32,
   xxxl: 48,
+};
+
+const breakpoints = {
+  xs: 480,
+  sm: 640,
+  md: 768,
+  lg: 1024,
+  xl: 1280,
+};
+
+const mobile = {
+  touchTargetMin: 44,
+  appGutter: 12,
+  appGutterWide: 16,
+  contentMaxWidth: 1200,
+  compactContentMaxWidth: 900,
 };
 
 // ── Beverage glyphs ───────────────────────────────────────────
@@ -194,6 +210,8 @@ export const tokens = {
   font,
   fontSize,
   spacing,
+  breakpoints,
+  mobile,
   ink,
   signal,
   typeScale,

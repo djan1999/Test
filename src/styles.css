@@ -4,6 +4,10 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  --app-gutter: 12px;
+  --app-gutter-wide: 16px;
+  --mobile-max-width: 1200px;
+  --mobile-compact-max-width: 900px;
 }
 
 * { box-sizing: border-box; }
@@ -38,6 +42,28 @@ button, input, select, textarea {
   font: inherit;
 }
 
+.app-shell {
+  width: 100%;
+  max-width: var(--mobile-max-width);
+  margin: 0 auto;
+  padding-left: var(--app-gutter);
+  padding-right: var(--app-gutter);
+}
+
+.app-shell--compact {
+  max-width: var(--mobile-compact-max-width);
+}
+
+.mobile-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.safe-bottom {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
 /* 16px minimum on form controls prevents iOS Safari's focus zoom.
    Only applies when a component doesn't set fontSize inline (inline styles
    have higher specificity), matching the previous GlobalStyle behavior. */
@@ -61,4 +87,10 @@ button:not(:disabled):hover {
 }
 button:not(:disabled):active {
   box-shadow: inset 0 0 0 2px rgba(0,0,0,0.14);
+}
+
+@media (min-width: 768px) {
+  :root {
+    --app-gutter: 16px;
+  }
 }

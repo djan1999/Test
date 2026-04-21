@@ -27,7 +27,7 @@ const SITTING_TIMES = parseSittingTimes();
 const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
 
 export default function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }) {
-  const isMobile = useIsMobile(560);
+  const isMobile = useIsMobile(tokens.breakpoints.sm);
   const [tableIds, setTableIds] = useState(
     initial?.data?.tableGroup?.length > 1 ? initial.data.tableGroup.map(Number)
       : initial?.table_id ? [Number(initial.table_id)]
