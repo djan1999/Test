@@ -563,7 +563,7 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
 
 // ── Detail View ───────────────────────────────────────────────────────────────
 function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages }) {
-  const isMobile = useIsMobile(tokens.breakpoints.lg);
+  const isMobile = useIsMobile(860);
   const row1 = isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
   const seatCount = table.seats?.length || 0;
   const canApplySeatToAll = typeof onApplySeatToAll === "function" && seatCount > 1;
@@ -576,7 +576,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
     (s.pairing && s.pairing !== "—")
   );
   return (
-    <div style={{ maxWidth: tokens.mobile.compactContentMaxWidth, margin: "0 auto", padding: isMobile ? "20px 12px 28px" : "24px 16px", overflowX: "hidden" }}>
+    <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "20px 12px 28px" : "24px 16px", overflowX: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
         <button onClick={onBack} style={{
           background: "none", border: "none", cursor: "pointer",
@@ -1585,7 +1585,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 }
 
 function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [], spirits = [], beers = [] }) {
-  const isMobile = useIsMobile(tokens.breakpoints.md);
+  const isMobile = useIsMobile(700);
 
   // Auto-detect tables that share the same resName + resTime and have no explicit
   // tableGroup — treat them as a merged group for display only (no data mutation).
@@ -1628,7 +1628,7 @@ function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd,
   const hasAny = rowsData.some(r => r.tables.length > 0);
 
   return (
-    <div style={{ overflowY: "auto", overflowX: "hidden", padding: isMobile ? "16px 12px 40px" : "20px 12px 48px" }}>
+    <div style={{ overflowY: "auto", overflowX: "hidden", padding: isMobile ? "16px 12px 40px" : "20px 0 48px" }}>
       {!hasAny && (
         <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[300], textAlign: "center", marginTop: 80, letterSpacing: 2 }}>
           no reservations
@@ -1830,7 +1830,7 @@ function ServiceQuickView({ tables, updSeat, setSel, optionalExtras = [] }) {
     </div>
   );
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
       {activeTables.map(t => (
         <ServiceQuickCard key={t.id} table={t} updSeat={updSeat} optionalExtras={optionalExtras} onDetails={() => setSel(t.id)} />
       ))}
@@ -1892,7 +1892,7 @@ export default function App() {
 
   const localBev = readLocalBeverages();
   const loadMenuCoursesRef = useRef(null);
-  const appIsMobile = useIsMobile(tokens.breakpoints.md);
+  const appIsMobile = useIsMobile(700);
 
   const [tables,    setTables]    = useState(initialState.tables);
   const [menuCourses, setMenuCourses] = useState([]); // live from Supabase

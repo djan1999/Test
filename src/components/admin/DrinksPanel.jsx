@@ -46,7 +46,7 @@ export default function DrinksPanel({
   dishes, wines, cocktails, spirits, beers,
   onUpdateWines, onSaveBeverages,
 }) {
-  const isMobile = useIsMobile(tokens.breakpoints.md);
+  const isMobile = useIsMobile(700);
   const [drinkTab, setDrinkTab] = useState("wines");
 
   // Local state for editing

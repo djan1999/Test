@@ -18,7 +18,7 @@ export default function AdminPanel({
 }) {
   const [tab, setTab] = useState("menu");
   const [drinkTab, setDrinkTab] = useState("wines");
-  const isMobile = useIsMobile(tokens.breakpoints.md);
+  const isMobile = useIsMobile(700);
 
   // ── Dishes ──
   const [localDishes, setLocalDishes] = useState(dishes.map(d => ({ ...d, pairings: [...d.pairings] })));

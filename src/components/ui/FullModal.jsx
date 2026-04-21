@@ -4,7 +4,7 @@ import { useModalEscape } from "../../hooks/useModalEscape.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 
 export default function FullModal({ title, onClose, actions, children }) {
-  const isMobile = useIsMobile(tokens.breakpoints.md);
+  const isMobile = useIsMobile(640);
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -28,8 +28,8 @@ export default function FullModal({ title, onClose, actions, children }) {
           justifyContent: "space-between",
           padding: isMobile ? "0 12px" : "0 20px",
           paddingTop: "env(safe-area-inset-top)",
-          height: isMobile ? "56px" : 60,
-          minHeight: isMobile ? "calc(56px + env(safe-area-inset-top))" : "calc(60px + env(safe-area-inset-top))",
+          height: isMobile ? 52 + "px" : 54,
+          minHeight: isMobile ? "calc(52px + env(safe-area-inset-top))" : "calc(54px + env(safe-area-inset-top))",
           borderBottom: tokens.border.default,
           background: tokens.surface.card,
           flexShrink: 0,
@@ -38,7 +38,7 @@ export default function FullModal({ title, onClose, actions, children }) {
       >
         <span style={{
           fontFamily: tokens.font,
-          fontSize: isMobile ? 10 : 11,
+          fontSize: 9,
           letterSpacing: isMobile ? 3 : 4,
           color: tokens.text.muted,
           textTransform: "uppercase",
@@ -53,7 +53,7 @@ export default function FullModal({ title, onClose, actions, children }) {
             onClick={onClose}
             style={{
               fontFamily: tokens.font,
-          fontSize: isMobile ? 12 : 11,
+              fontSize: isMobile ? 10 : 9,
               letterSpacing: 2,
               padding: isMobile ? "8px 12px" : "8px 16px",
               border: tokens.border.subtle,
@@ -61,10 +61,10 @@ export default function FullModal({ title, onClose, actions, children }) {
               cursor: "pointer",
               background: tokens.surface.card,
               color: tokens.text.secondary,
-              minHeight: tokens.mobile.touchTargetMin,
+              minHeight: isMobile ? 36 : undefined,
             }}
           >
-            {isMobile ? "CLOSE" : "✕ CLOSE"}
+            {isMobile ? "✕" : "✕ CLOSE"}
           </button>
         </div>
       </div>
@@ -72,7 +72,7 @@ export default function FullModal({ title, onClose, actions, children }) {
         flex: 1,
         overflowY: "auto",
         WebkitOverflowScrolling: "touch",
-        padding: isMobile ? "20px 14px" : "28px 24px 60px",
+        padding: isMobile ? "20px 12px" : "28px 20px 60px",
         paddingBottom: isMobile ? "calc(40px + env(safe-area-inset-bottom))" : 60,
       }}>{children}</div>
     </div>

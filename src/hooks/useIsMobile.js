@@ -1,26 +1,15 @@
 import { useState, useEffect } from "react";
-import { tokens } from "../styles/tokens.js";
 
-export function useIsMobile(bp = tokens.breakpoints.md) {
-  const supportsMatchMedia =
-    typeof window !== "undefined" && typeof window.matchMedia === "function";
-  const getValue = () =>
-    supportsMatchMedia
-      ? window.matchMedia(`(max-width: ${bp - 0.02}px)`).matches
-      : false;
+export function useIsMobile(bp = 700) {
+  const getValue = () => (typeof window !== "undefined" ? window.innerWidth < bp : false);
   const [isMobile, setIsMobile] = useState(getValue);
 
   useEffect(() => {
-    if (!supportsMatchMedia) {
-      setIsMobile(false);
-      return undefined;
-    }
-    const media = window.matchMedia(`(max-width: ${bp - 0.02}px)`);
-    const onChange = () => setIsMobile(media.matches);
-    onChange();
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, [bp, supportsMatchMedia]);
+    const onResize = () => setIsMobile(getValue());
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [bp]);
 
   return isMobile;
 }

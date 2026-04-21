@@ -4,7 +4,6 @@ import { blankTable, makeSeats } from "../../utils/tableHelpers.js";
 import { getCourseMod } from "../../utils/menuUtils.js";
 import { RESTRICTIONS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
-import { useIsMobile } from "../../hooks/useIsMobile.js";
 import { baseInput, fieldLabel as fieldLabelMixin, circleButton } from "../../styles/mixins.js";
 import ServiceDatePicker from "./ServiceDatePicker.jsx";
 import ResvForm from "./ResvForm.jsx";
@@ -182,7 +181,6 @@ function GlobalStyle() {
 }
 
 export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onExit, serviceDate, onSetServiceDate }) {
-  const isMobile = useIsMobile(tokens.breakpoints.md);
   const [weekOffset,  setWeekOffset]  = useState(0);
   const [selectedDay, setSelectedDay] = useState(null);   // "YYYY-MM-DD" or null (week view)
   const [editingId,   setEditingId]   = useState(null);   // reservation id being edited, or "new"
@@ -250,7 +248,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
         <GlobalStyle />
 
         {/* Sticky header */}
-        <div style={{ borderBottom: `1px solid ${tokens.neutral[200]}`, padding: isMobile ? "0 10px" : "0 16px", minHeight: isMobile ? 60 : 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: tokens.neutral[0], zIndex: 50, gap: isMobile ? 8 : 12, flexWrap: isMobile ? "wrap" : "nowrap", paddingTop: isMobile ? "max(8px, env(safe-area-inset-top))" : 0, paddingBottom: isMobile ? 8 : 0 }}>
+        <div style={{ borderBottom: `1px solid ${tokens.neutral[200]}`, padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: tokens.neutral[0], zIndex: 50, gap: 12 }}>
           <button onClick={() => { setSelectedDay(null); setEditingId(null); setTicketId(null); setDraftFromReservation(null); }}
             style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[900], flexShrink: 0 }}>← WEEK</button>
           <div style={{ flex: 1, textAlign: "center" }}>
@@ -281,7 +279,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
           />
         )}
 
-        <div style={{ padding: isMobile ? "12px 12px 60px" : "16px 16px 60px", maxWidth: 760, margin: "0 auto", width: "100%" }}>
+        <div style={{ padding: "16px 16px 60px", maxWidth: 700, margin: "0 auto" }}>
 
           {/* New reservation form */}
           {editingId === "new" && (
@@ -325,7 +323,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 background: tokens.neutral[0], overflow: "hidden",
               }}>
                 {/* Card header — always visible */}
-                <div style={{ padding: isMobile ? "12px" : "14px 16px", display: "flex", alignItems: isMobile ? "flex-start" : "center", gap: isMobile ? 10 : 12, flexDirection: isMobile ? "column" : "row" }}>
+                <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
                   {/* Table badge */}
                   <div style={{ background: tokens.neutral[150], color: tokens.text.primary, border: `1px solid ${tokens.charcoal.border}`, fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 1, padding: "8px 12px", borderRadius: 0, minWidth: 48, textAlign: "center" }}>{tLabel}</div>
                   {/* Info */}
@@ -352,7 +350,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                     {d.notes && <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.neutral[500], fontStyle: "italic", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.notes}</div>}
                   </div>
                   {/* Action buttons */}
-                  <div style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: 6, flexShrink: 0, flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
                     <button onClick={() => { setEditingId(isEditing ? null : r.id); if (!isEditing) setTicketId(null); }}
                       style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 10px", border: "1px solid " + (isEditing ? tokens.charcoal.default : tokens.neutral[300]), borderRadius: 0, cursor: "pointer", background: isEditing ? tokens.tint.parchment : tokens.neutral[0], color: isEditing ? tokens.text.body : tokens.neutral[600] }}>EDIT</button>
                     <button onClick={() => { setTicketId(showTicket ? null : r.id); if (!showTicket) setEditingId(null); }}
@@ -406,11 +404,11 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
 
   // ── WEEK OVERVIEW ────────────────────────────────────────────────────────
   return (
-      <div style={{ minHeight: "100vh", background: tokens.neutral[0], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+    <div style={{ minHeight: "100vh", background: tokens.neutral[0], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
 
       {/* Sticky header */}
-      <div style={{ borderBottom: `1px solid ${tokens.neutral[200]}`, padding: isMobile ? "0 10px" : "0 16px", minHeight: isMobile ? 64 : 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: tokens.neutral[0], zIndex: 50, gap: 10, flexWrap: isMobile ? "wrap" : "nowrap", paddingTop: isMobile ? "max(8px, env(safe-area-inset-top))" : 0, paddingBottom: isMobile ? 8 : 0 }}>
+      <div style={{ borderBottom: `1px solid ${tokens.neutral[200]}`, padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: tokens.neutral[0], zIndex: 50, gap: 12 }}>
         <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[900], flexShrink: 0 }}>← EXIT</button>
         <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: tokens.neutral[500], flex: 1, textAlign: "center" }}>RESERVATIONS</span>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
@@ -426,7 +424,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
       </div>
 
       {/* Service date strip */}
-      <div style={{ padding: isMobile ? "8px 10px" : "8px 16px", borderBottom: `1px solid ${tokens.neutral[200]}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ padding: "8px 16px", borderBottom: `1px solid ${tokens.neutral[200]}`, display: "flex", alignItems: "center", gap: 10 }}>
         {serviceDate ? (
           <>
             <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.green.text, fontWeight: 600 }}>
@@ -730,7 +728,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
       })()}
 
       {/* Week grid — big tappable day tiles */}
-      <div style={{ padding: isMobile ? "12px 10px 60px" : "16px 16px 60px", maxWidth: 640, margin: "0 auto", width: "100%" }}>
+      <div style={{ padding: "16px 16px 60px", maxWidth: 600, margin: "0 auto" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {weekDays.map(day => {
             const dateStr    = toDateStr(day);
