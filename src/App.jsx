@@ -36,6 +36,7 @@ import {
 import { useIsMobile } from "./hooks/useIsMobile.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useOfflineQueue } from "./hooks/useOfflineQueue.js";
+import { useModalEscape } from "./hooks/useModalEscape.js";
 import { AdminLayout } from "./components/admin/index.js";
 import { DIETARY_KEYS, RESTRICTIONS, RESTRICTION_GROUPS, restrLabel, restrCompact } from "./constants/dietary.js";
 import { WATER_OPTS, waterStyle, PAIRINGS, pairingStyle } from "./constants/pairings.js";
@@ -2598,6 +2599,11 @@ export default function App() {
   };
 
   const switchMode = () => { changeMode(null); setSel(null); };
+
+  // Escape = back. The hook stacks handlers so the most recently enabled
+  // one fires first: detail closes before mode exits.
+  useModalEscape(() => changeMode(null), !!mode);
+  useModalEscape(() => setSel(null), !!sel);
 
   // ── Persist locally + sync changed tables to Supabase ─────────────────────
   useEffect(() => {

@@ -8,6 +8,7 @@ import InventoryPanel from "./InventoryPanel.jsx";
 import SystemPanel from "./SystemPanel.jsx";
 import ArchivePanel from "./ArchivePanel.jsx";
 import QuickAccessPanel from "./QuickAccessPanel.jsx";
+import { useModalEscape } from "../../hooks/useModalEscape.js";
 
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
 
@@ -77,6 +78,8 @@ export default function AdminLayout({
   const [dishesCoursesOpen, setDishesCoursesOpen] = useState(true);
   const [navPinned, setNavPinned] = useState(false);
   const [navHover, setNavHover] = useState(false);
+
+  useModalEscape(onExit);
 
   const navOpen = navPinned || navHover;
   const NAV_W_OPEN = 220;
