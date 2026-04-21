@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
+import { useIsMobile } from "../../hooks/useIsMobile.js";
 import { FONT } from "./adminStyles.js";
 import MenuLayoutPanel from "./MenuLayoutPanel.jsx";
 import CourseEditorPanel from "./CourseEditorPanel.jsx";
@@ -77,6 +78,7 @@ export default function AdminLayout({
   const [dishesCoursesOpen, setDishesCoursesOpen] = useState(true);
   const [navPinned, setNavPinned] = useState(false);
   const [navHover, setNavHover] = useState(false);
+  const isMobile = useIsMobile(768);
 
   const navOpen = navPinned || navHover;
   const NAV_W_OPEN = 220;
@@ -89,36 +91,81 @@ export default function AdminLayout({
     }}>
       {/* Top header bar */}
       <div style={{
-        borderBottom: tokens.border.subtle, padding: "12px 20px",
+        borderBottom: tokens.border.subtle,
+        padding: isMobile ? "10px 12px" : "12px 20px",
+        paddingTop: `max(${isMobile ? 10 : 12}px, env(safe-area-inset-top))`,
         display: "flex", alignItems: "center", justifyContent: "space-between",
         background: tokens.surface.card, position: "sticky", top: 0, zIndex: 50,
+        gap: 8,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 4, color: tokens.text.primary }}>{APP_NAME}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 16, minWidth: 0 }}>
+          <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 600, letterSpacing: isMobile ? 3 : 4, color: tokens.text.primary }}>{APP_NAME}</span>
           <span style={{ width: 1, height: 14, background: tokens.neutral[300] }} />
-          <span style={{ fontSize: 10, letterSpacing: 3, color: tokens.text.secondary, textTransform: "uppercase", fontWeight: 700 }}>ADMIN</span>
+          <span style={{ fontSize: 10, letterSpacing: isMobile ? 2 : 3, color: tokens.text.secondary, textTransform: "uppercase", fontWeight: 700 }}>ADMIN</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 8, flexShrink: 0 }}>
           <span style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px",
+            fontFamily: FONT, fontSize: isMobile ? 10 : 9, letterSpacing: isMobile ? 1.5 : 2,
+            padding: isMobile ? "8px 10px" : "6px 10px",
             border: `1px solid ${syncStatus === "live" ? tokens.green.border : tokens.neutral[300]}`,
             borderRadius: 0,
             background: syncStatus === "live" ? tokens.green.bg : tokens.neutral[50],
             color: syncStatus === "live" ? tokens.green.text : tokens.text.muted,
             fontWeight: 600, whiteSpace: "nowrap",
+            minHeight: isMobile ? 36 : undefined,
+            display: "inline-flex", alignItems: "center",
           }}>{syncStatus === "live" ? "SYNC" : syncStatus === "local-only" ? "LOCAL" : syncStatus === "connecting" ? "LINK" : "ERROR"}</span>
           <button onClick={onExit} style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 10px",
+            fontFamily: FONT, fontSize: isMobile ? 10 : 9, letterSpacing: isMobile ? 1.5 : 2,
+            padding: isMobile ? "8px 12px" : "6px 10px",
             border: tokens.border.default, borderRadius: 0, cursor: "pointer",
             background: tokens.surface.card, color: tokens.text.primary, flexShrink: 0,
+            minHeight: isMobile ? 36 : undefined,
           }}>EXIT</button>
         </div>
       </div>
 
-      {/* Main content: sidebar + panel */}
+      {/* Mobile: horizontal section tabs (replaces sidebar) */}
+      {isMobile && (
+        <div style={{
+          display: "flex", overflowX: "auto", WebkitOverflowScrolling: "touch",
+          borderBottom: tokens.border.subtle,
+          background: tokens.neutral[50],
+          position: "sticky", top: "calc(env(safe-area-inset-top) + 52px)", zIndex: 49,
+        }}>
+          {SECTIONS.map(s => {
+            const active = activeSection === s.id;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setActiveSection(s.id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  flexShrink: 0, padding: "12px 14px",
+                  border: "none",
+                  borderBottom: `2px solid ${active ? tokens.charcoal.default : "transparent"}`,
+                  background: active ? tokens.surface.card : "transparent",
+                  cursor: "pointer",
+                  fontFamily: FONT, fontSize: 10, letterSpacing: 1.2,
+                  color: active ? tokens.text.primary : tokens.text.muted,
+                  fontWeight: active ? 600 : 400,
+                  textTransform: "uppercase", whiteSpace: "nowrap",
+                  minHeight: 40,
+                }}
+              >
+                <span style={{ fontSize: 13, color: active ? tokens.charcoal.default : tokens.neutral[400] }}>{s.icon}</span>
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Main content: sidebar + panel (sidebar hidden on mobile) */}
       <div style={{ display: "flex", flex: 1 }}>
-        {/* Sidebar */}
-        <nav
+        {/* Sidebar — desktop only */}
+        {!isMobile && <nav
           onMouseEnter={() => setNavHover(true)}
           onMouseLeave={() => setNavHover(false)}
           onFocus={() => setNavHover(true)}
@@ -184,10 +231,17 @@ export default function AdminLayout({
               {navOpen && s.label}
             </button>
           ))}
-        </nav>
+        </nav>}
 
         {/* Panel content */}
-        <main style={{ flex: 1, padding: "24px 24px", maxWidth: activeSection === "menu" ? "none" : 900, overflowY: "auto" }}>
+        <main style={{
+          flex: 1,
+          padding: isMobile ? "16px 12px" : "24px 24px",
+          paddingBottom: isMobile ? "calc(40px + env(safe-area-inset-bottom))" : 24,
+          maxWidth: activeSection === "menu" ? "none" : 900,
+          overflowY: "auto",
+          overflowX: "hidden",
+        }}>
           {activeSection === "menu" && (
             <div>
               <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 20 }}>

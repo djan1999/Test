@@ -6,25 +6,49 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+* { box-sizing: border-box; }
+
 html, body, #root {
   margin: 0;
   min-height: 100%;
   width: 100%;
 }
 
+html {
+  /* Prevent mobile browsers from auto-scaling text after rotation. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
+  color: #1a1a1a;
   background: #fff;
   overflow-x: hidden;
+  /* Stop rubber-band scroll on iOS from revealing the page behind the app. */
+  overscroll-behavior-y: none;
+}
+
+#root {
+  /* Honor iPhone notch / Android gesture bar on layouts that span the viewport. */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 button, input, select, textarea {
   font: inherit;
 }
 
-/* Eliminate the 300ms tap delay on all interactive elements.
+/* 16px minimum on form controls prevents iOS Safari's focus zoom.
+   Only applies when a component doesn't set fontSize inline (inline styles
+   have higher specificity), matching the previous GlobalStyle behavior. */
+input, textarea, select {
+  font-size: 16px;
+}
+
+/* Eliminate the 300ms tap delay on interactive elements.
    touch-action: manipulation disables double-tap-to-zoom so the browser
    fires click immediately on touch — critical for service-speed UI. */
-button, [role="button"], a {
+button, [role="button"], a, label {
   touch-action: manipulation;
 }
 
