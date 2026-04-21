@@ -284,6 +284,26 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
             }
       ),
     }));
+  const mergeBullet = (si, ri, bi) =>
+    setDoc((p) => ({
+      ...p,
+      slots: p.slots.map((s, i) =>
+        i !== si ? s : {
+          ...s,
+          reservations: s.reservations.map((r, j) =>
+            j !== ri ? r : {
+              ...r,
+              bullets: [
+                ...r.bullets.slice(0, bi - 1),
+                r.bullets[bi - 1] + r.bullets[bi],
+                ...r.bullets.slice(bi + 1),
+              ],
+            }
+          ),
+        }
+      ),
+    }));
+
   const splitBullet = (si, ri, bi, before, after) =>
     setDoc((p) => ({
       ...p,
@@ -452,16 +472,25 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                           onChange={(v) => updateBullet(si, ri, bi, v)}
                           textareaRef={(el) => { bulletRefs.current[`${si}-${ri}-${bi}`] = el; }}
                           onKeyDown={(e) => {
-                            if (e.key !== "Enter") return;
-                            e.preventDefault();
                             const el = e.target;
-                            const before = b.slice(0, el.selectionStart);
-                            const after = b.slice(el.selectionEnd);
-                            splitBullet(si, ri, bi, before, after);
-                            requestAnimationFrame(() => {
-                              const next = bulletRefs.current[`${si}-${ri}-${bi + 1}`];
-                              if (next) { next.focus(); next.selectionStart = next.selectionEnd = 0; }
-                            });
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              const before = b.slice(0, el.selectionStart);
+                              const after = b.slice(el.selectionEnd);
+                              splitBullet(si, ri, bi, before, after);
+                              requestAnimationFrame(() => {
+                                const next = bulletRefs.current[`${si}-${ri}-${bi + 1}`];
+                                if (next) { next.focus(); next.selectionStart = next.selectionEnd = 0; }
+                              });
+                            } else if (e.key === "Backspace" && el.selectionStart === 0 && el.selectionEnd === 0 && bi > 0) {
+                              e.preventDefault();
+                              const prevLen = doc.slots[si].reservations[ri].bullets[bi - 1].length;
+                              mergeBullet(si, ri, bi);
+                              requestAnimationFrame(() => {
+                                const prev = bulletRefs.current[`${si}-${ri}-${bi - 1}`];
+                                if (prev) { prev.focus(); prev.selectionStart = prev.selectionEnd = prevLen; }
+                              });
+                            }
                           }}
                         />
                       </div>
