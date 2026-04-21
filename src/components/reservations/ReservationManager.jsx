@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML } from "../../utils/weeklyPrintGenerator.js";
 import { blankTable, makeSeats } from "../../utils/tableHelpers.js";
+import { getCourseMod } from "../../utils/menuUtils.js";
 import { RESTRICTIONS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as fieldLabelMixin, circleButton } from "../../styles/mixins.js";
@@ -93,6 +94,79 @@ function weeklyRowsToHTML(rows, edits, totalGuests, dateRange) {
   return WEEKLY_RESV_HTML_SHELL(body);
 }
 
+function allergyBaseCell(course, resv) {
+  const d = resv.data || {};
+  const key = course.course_key || "";
+  const kcNote = d.kitchenCourseNotes?.[key];
+  const guests = d.guests || 2;
+  const restrictions = d.restrictions || [];
+  if (kcNote?.name || kcNote?.note) return [kcNote.name, kcNote.note].filter(Boolean).join("\n");
+  if (restrictions.length > 0) {
+    const modCounts = {};
+    for (let seatId = 1; seatId <= guests; seatId++) {
+      const seatRestrKeys = restrictions.filter(rs => !rs.pos || rs.pos === seatId).map(rs => rs.note);
+      if (!seatRestrKeys.length) continue;
+      const mod = getCourseMod(course, seatRestrKeys);
+      if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
+    }
+    if (Object.keys(modCounts).length > 0)
+      return Object.entries(modCounts).map(([mod, count]) => `${count}x ${mod.toLowerCase()}`).join("\n");
+  }
+  return "";
+}
+
+const ALLERGY_ROBOTO = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">`;
+
+function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdits, restrictionDefs) {
+  const resvCount = weekResv.length;
+  if (!resvCount) return `<!DOCTYPE html><html><body style="font-family:monospace;padding:40pt;text-align:center;">No restrictions or edits this week</body></html>`;
+  const escH = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const fmtS = ds => { const d = new Date(ds+"T00:00:00"); return `${d.getDate()}.${String(d.getMonth()+1).padStart(2,"0")}.`; };
+  const dates = [...new Set(weekResv.map(r => r.date))].sort();
+  const dateRange = dates.length ? `${fmtS(dates[0])}-${fmtS(dates[dates.length-1])}` : "";
+  const isLarge = resvCount > 5;
+  const baseFontPt = isLarge ? (resvCount <= 7 ? 6.5 : resvCount <= 9 ? 5.5 : 5) : 8;
+  const courseSubPt = Math.max(baseFontPt - 1.5, 4);
+  const cellPad = isLarge ? "1.5pt 3pt" : "2pt 4pt";
+  const tableLayout = isLarge ? "width:100%;table-layout:fixed;" : "width:auto;table-layout:auto;";
+  const courseColPct = resvCount <= 5 ? "22%" : resvCount <= 7 ? "18%" : "15%";
+  const resvColPct = `${Math.floor((100 - parseInt(courseColPct)) / resvCount)}%`;
+  const courseCS = isLarge ? `width:${courseColPct};text-align:left;padding-left:6pt;` : `min-width:110pt;text-align:left;padding-left:6pt;`;
+  const resvCS = isLarge ? `width:${resvColPct};text-align:center;` : `min-width:90pt;text-align:center;`;
+  const css = `*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Roboto Mono',monospace;font-size:${baseFontPt}pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@page{size:A4 landscape;margin:5mm 5mm;}@media print{body{margin:0;}}table{border-collapse:collapse;${tableLayout}}th,td{border:1px solid #aaa;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;color:#000;font-weight:700;overflow:hidden;word-wrap:break-word;line-height:1.15;}th{text-align:center;}.green-header{background:#3d6b4f;color:#fff;}.green-header th,.green-header td{border-color:#2e5a3e;color:#fff;}.highlight{background:#edf7ef;}.opt-row{background:#fafafa;}.course-name{text-transform:uppercase;font-size:${baseFontPt}pt;}.course-sub{font-size:${courseSubPt}pt;color:#555;font-weight:400;}.resv-cell{font-size:${baseFontPt}pt;line-height:1.15;white-space:pre-line;}`;
+  let body = `<table><tr class="green-header"><th style="${courseCS}">${escH(allergyEdits["hdr-date"] ?? dateRange)}</th>`;
+  weekResv.forEach(r => { body += `<th style="${resvCS}">${escH(allergyEdits[`name-${r.id}`] ?? (r.data?.resName || "—"))}</th>`; });
+  body += `</tr><tr><td style="padding-left:6pt;">Date</td>`;
+  weekResv.forEach(r => { body += `<td style="text-align:center;">${fmtS(r.date)}</td>`; });
+  body += `</tr><tr><td style="padding-left:6pt;font-weight:700;">Allergies/Restrictions</td>`;
+  weekResv.forEach(r => {
+    const d = r.data || {};
+    const mt = d.menuType === "short" ? "SHORT MENU" : "LONG MENU";
+    const rc = {};
+    (d.restrictions || []).forEach(rs => { rc[rs.note] = (rc[rs.note] || 0) + 1; });
+    const rLines = Object.entries(rc).map(([k, n]) => { const def = restrictionDefs.find(x => x.key === k); return `${n}x ${def ? def.label.toLowerCase() : k}`; });
+    const val = allergyEdits[`restr-${r.id}`] ?? `${mt}\n${rLines.join(", ")}`;
+    body += `<td style="text-align:center;white-space:pre-line;">${escH(val)}</td>`;
+  });
+  body += `</tr>`;
+  allergyTableCourses.forEach(course => {
+    const key = course.course_key || "";
+    const isOpt = String(course.course_category || "main") !== "main";
+    const baseName = course.menu?.name || key;
+    const baseSub = course.menu?.sub || "";
+    body += `<tr${isOpt ? ` class="opt-row"` : ""}><td style="padding-left:6pt;"><span class="course-name">${escH(baseName)}${isOpt ? ` <span style="font-weight:400;font-size:smaller;color:#999;">(opt)</span>` : ""}</span>${baseSub ? `<br><span class="course-sub">${escH(baseSub)}</span>` : ""}</td>`;
+    weekResv.forEach(r => {
+      const ck = `${key}-${r.id}`;
+      const base = allergyBaseCell(course, r);
+      const val = allergyEdits[ck] ?? base;
+      body += `<td class="resv-cell${val ? " highlight" : ""}${isOpt && !val ? " opt-row" : ""}">${escH(val)}</td>`;
+    });
+    body += `</tr>`;
+  });
+  body += `</table>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Allergy Sheet</title>${ALLERGY_ROBOTO}<style>${css}</style></head><body>${body}</body></html>`;
+}
+
 function GlobalStyle() {
   return (
     <style>{`
@@ -111,6 +185,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
   const [ticketId,    setTicketId]    = useState(null);    // reservation id showing kitchen preview
   const [weeklyPreview, setWeeklyPreview] = useState(null); // "reservations" | "allergies" | null
   const [weeklyEdits,   setWeeklyEdits]   = useState({});
+  const [allergyEdits,  setAllergyEdits]  = useState({});
   const [draftFromReservation, setDraftFromReservation] = useState(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
 
@@ -366,7 +441,16 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
       {weeklyPreview && (() => {
         const isResv = weeklyPreview === "reservations";
         const weeklyData = isResv ? buildWeeklyRows(reservations, weekDays, RESTRICTIONS) : null;
-        const allergyHtml = !isResv ? generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, RESTRICTIONS) : null;
+        const weekStart = toDateStr(weekDays[0]);
+        const weekEnd = toDateStr(weekDays[6]);
+        const allergyWeekResv = !isResv ? reservations
+          .filter(r => r.date >= weekStart && r.date <= weekEnd)
+          .filter(r => { const d = r.data || {}; return (d.restrictions?.length > 0) || (d.kitchenCourseNotes && Object.keys(d.kitchenCourseNotes).length > 0); })
+          .sort((a, b) => a.date.localeCompare(b.date) || (a.data?.resTime || "99").localeCompare(b.data?.resTime || "99"))
+          : null;
+        const allergyTableCourses = !isResv
+          ? menuCourses.filter(c => !c.is_snack).sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
+          : null;
 
         const COL_WIDTHS = ["11%","9%","9%","16%","8%","22%","25%"];
         const COLS = ["DATE","COVER","TIME","NAME","EXP.","INFO","ALLERGIES /\nRESTRICTIONS"];
@@ -399,7 +483,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
         const onPrint = () => {
           const printHtml = isResv
             ? weeklyRowsToHTML(weeklyData.rows, weeklyEdits, weeklyData.totalGuests, weeklyData.dateRange)
-            : allergyHtml;
+            : generateAllergyHTMLWithEdits(allergyWeekResv, allergyTableCourses, allergyEdits, RESTRICTIONS);
           const w = window.open("", "_blank", "width=900,height=700");
           if (!w) { alert("Pop-up blocked"); return; }
           w.document.write(printHtml);
@@ -438,8 +522,8 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 color: tokens.neutral[900],
                 cursor: "pointer", fontWeight: 600,
               }}>PRINT</button>
-              {isResv && Object.keys(weeklyEdits).length > 0 && (
-                <button onClick={() => setWeeklyEdits({})} style={{
+              {(isResv ? Object.keys(weeklyEdits).length > 0 : Object.keys(allergyEdits).length > 0) && (
+                <button onClick={() => isResv ? setWeeklyEdits({}) : setAllergyEdits({})} style={{
                   fontFamily: FONT, fontSize: 10, letterSpacing: 2,
                   padding: "8px 16px",
                   border: `1px solid ${tokens.neutral[400]}`,
@@ -527,23 +611,92 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                   </tbody>
                 </table>
               </div>
-            ) : (
-              <div style={{
-                background: "#fff",
-                width: 1123,
-                minHeight: 794,
-                margin: "0 auto",
-                boxShadow: `0 0 0 1px ${tokens.neutral[300]}`,
-                flexShrink: 0,
-                overflow: "hidden",
-              }}>
-                <iframe
-                  srcDoc={allergyHtml}
-                  title="weekly allergies"
-                  style={{ width: "100%", height: 794, border: "none" }}
-                />
-              </div>
-            )}
+            ) : (() => {
+              const isLarge = allergyWeekResv.length > 5;
+              const fmtS = ds => { const d = new Date(ds+"T00:00:00"); return `${d.getDate()}.${String(d.getMonth()+1).padStart(2,"0")}.`; };
+              const dates = [...new Set(allergyWeekResv.map(r => r.date))].sort();
+              const allergyDateRange = dates.length ? `${fmtS(dates[0])}-${fmtS(dates[dates.length-1])}` : "";
+              const aCellVal = (k, base) => allergyEdits[k] !== undefined ? allergyEdits[k] : (base || "");
+              const setACell = k => e => setAllergyEdits(p => ({ ...p, [k]: e.target.value }));
+              const transp = {
+                fontFamily: "'Roboto Mono', monospace", fontSize: "8pt", fontWeight: 700,
+                background: "transparent", border: "none", outline: "none",
+                resize: "none", padding: 0, margin: 0, width: "100%",
+                lineHeight: 1.15, color: "inherit",
+              };
+              const cColSt = { textAlign: "left", padding: "2pt 4pt 2pt 6pt", border: "1px solid #aaa", verticalAlign: "top", ...(isLarge ? {} : { minWidth: 110 }) };
+              const rColSt = { textAlign: "center", border: "1px solid #aaa", padding: "2pt 4pt", verticalAlign: "top", ...(isLarge ? {} : { minWidth: 90 }) };
+              if (!allergyWeekResv.length) return (
+                <div style={{ background: "#fff", width: 1123, minHeight: 400, margin: "0 auto", padding: "60px 40px", boxShadow: `0 0 0 1px ${tokens.neutral[300]}`, fontFamily: "'Roboto Mono', monospace", textAlign: "center", color: "#888", fontSize: "9pt" }}>
+                  No restrictions or kitchen edits this week
+                </div>
+              );
+              return (
+                <div style={{ background: "#fff", width: 1123, minHeight: 794, margin: "0 auto", padding: "19px", boxShadow: `0 0 0 1px ${tokens.neutral[300]}`, flexShrink: 0, overflowX: "auto" }}>
+                  <table style={{ borderCollapse: "collapse", width: isLarge ? "100%" : "auto", tableLayout: isLarge ? "fixed" : "auto", fontFamily: "'Roboto Mono', monospace", fontSize: "8pt" }}>
+                    <tbody>
+                      <tr style={{ background: "#3d6b4f" }}>
+                        <td style={{ ...cColSt, border: "1px solid #2e5a3e", color: "#fff", fontWeight: 700 }}>
+                          <input value={aCellVal("hdr-date", allergyDateRange)} onChange={setACell("hdr-date")} style={{ ...transp, color: "#fff" }} />
+                        </td>
+                        {allergyWeekResv.map(r => (
+                          <td key={r.id} style={{ ...rColSt, border: "1px solid #2e5a3e", color: "#fff" }}>
+                            <input value={aCellVal(`name-${r.id}`, r.data?.resName || "—")} onChange={setACell(`name-${r.id}`)} style={{ ...transp, color: "#fff", textAlign: "center" }} />
+                          </td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <td style={{ ...cColSt, fontWeight: 700 }}>Date</td>
+                        {allergyWeekResv.map(r => (
+                          <td key={r.id} style={{ ...rColSt }}>{fmtS(r.date)}</td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <td style={{ ...cColSt, fontWeight: 700 }}>Allergies/Restrictions</td>
+                        {allergyWeekResv.map(r => {
+                          const d = r.data || {};
+                          const mt = d.menuType === "short" ? "SHORT MENU" : "LONG MENU";
+                          const rc = {};
+                          (d.restrictions || []).forEach(rs => { rc[rs.note] = (rc[rs.note] || 0) + 1; });
+                          const rLines = Object.entries(rc).map(([k, n]) => { const def = RESTRICTIONS.find(x => x.key === k); return `${n}x ${def ? def.label.toLowerCase() : k}`; });
+                          const base = `${mt}\n${rLines.join(", ")}`;
+                          return (
+                            <td key={r.id} style={{ ...rColSt }}>
+                              <textarea rows={2} value={aCellVal(`restr-${r.id}`, base)} onChange={setACell(`restr-${r.id}`)} style={{ ...transp, display: "block", textAlign: "center", whiteSpace: "pre-wrap" }} />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      {allergyTableCourses.map(course => {
+                        const key = course.course_key || "";
+                        const isOpt = String(course.course_category || "main") !== "main";
+                        const baseName = course.menu?.name || key;
+                        const baseSub = course.menu?.sub || "";
+                        return (
+                          <tr key={key} style={{ background: isOpt ? "#f5f5f5" : "#fff" }}>
+                            <td style={{ ...cColSt }}>
+                              <span style={{ textTransform: "uppercase", fontWeight: 700, fontSize: "8pt" }}>{baseName}</span>
+                              {isOpt && <span style={{ fontWeight: 400, fontSize: "6.5pt", color: "#999" }}> (opt)</span>}
+                              {baseSub && <><br /><span style={{ fontWeight: 400, fontSize: "6.5pt", color: "#555" }}>{baseSub}</span></>}
+                            </td>
+                            {allergyWeekResv.map(r => {
+                              const ck = `${key}-${r.id}`;
+                              const base = allergyBaseCell(course, r);
+                              const val = aCellVal(ck, base);
+                              return (
+                                <td key={r.id} style={{ ...rColSt, background: val ? "#edf7ef" : (isOpt ? "#f5f5f5" : "#fff") }}>
+                                  <textarea rows={1} value={val} onChange={setACell(ck)} style={{ ...transp, display: "block", fontWeight: val ? 700 : 400, whiteSpace: "pre-wrap" }} />
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
