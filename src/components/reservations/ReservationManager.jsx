@@ -192,6 +192,17 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const weeklyChain = useFocusChain();
+  // Escape = back at every sub-level. useModalEscape stacks handlers so the
+  // most recently enabled one fires first (inner layers pop before outer).
+  useModalEscape(() => {
+    setSelectedDay(null);
+    setEditingId(null);
+    setTicketId(null);
+    setDraftFromReservation(null);
+  }, !!selectedDay);
+  useModalEscape(() => setEditingId(null), !!editingId);
+  useModalEscape(() => setTicketId(null), !!ticketId);
+  useModalEscape(() => setShowBreakdown(false), showBreakdown);
   useModalEscape(() => setWeeklyPreview(null), !!weeklyPreview);
 
   const todayStr = toLocalDateISO();
