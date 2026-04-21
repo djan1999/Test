@@ -362,75 +362,163 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
         )}
       </div>
 
-      {/* Weekly preview panel */}
+      {/* Weekly overview modal */}
       {weeklyPreview && (() => {
         const isResv = weeklyPreview === "reservations";
         const weeklyData = isResv ? buildWeeklyRows(reservations, weekDays, RESTRICTIONS) : null;
         const allergyHtml = !isResv ? generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, RESTRICTIONS) : null;
-        const containerW = Math.min(window.innerWidth - 32, 700);
-        const allergyScale = containerW / 1123;
 
-        const COLS = ["DATE","COVER","TIME","NAME","EXP.","INFO","ALLERGIES / RESTRICTIONS"];
+        const COL_WIDTHS = ["11%","9%","9%","16%","8%","22%","25%"];
+        const COLS = ["DATE","COVER","TIME","NAME","EXP.","INFO","ALLERGIES /\nRESTRICTIONS"];
         const MULTILINE = [false,false,false,false,false,true,true];
         const TALIGN = ["left","center","center","left","center","left","left"];
-        const MINW = [50,40,50,80,40,90,110];
 
         const cellVal = (row, ci) => weeklyEdits[`${row.id}-${ci}`] !== undefined ? weeklyEdits[`${row.id}-${ci}`] : (row.cells[ci] ?? "");
         const setCell = (rowId, ci, val) => setWeeklyEdits(p => ({ ...p, [`${rowId}-${ci}`]: val }));
         const cellFw = (row, ci) => (row.type === "date" || row.type === "sub" || ci === 3) ? 700 : 400;
 
-        const inputBase = (row, ci) => ({
-          fontFamily: "monospace", fontSize: 11, fontWeight: cellFw(row, ci),
-          color: tokens.neutral[900], background: "transparent",
-          border: "none", width: "100%", outline: "none",
-          resize: "none", padding: 0, margin: 0,
-          textAlign: TALIGN[ci], lineHeight: 1.4, cursor: "text",
+        const cellStyle = (row, ci) => ({
+          fontFamily: "'Roboto Mono', monospace",
+          fontSize: "8.5pt",
+          fontWeight: cellFw(row, ci),
+          color: "#000",
+          background: "transparent",
+          border: "none",
+          width: "100%",
+          outline: "none",
+          resize: "none",
+          padding: 0,
+          margin: 0,
+          textAlign: TALIGN[ci],
+          lineHeight: 1.4,
+          cursor: "text",
+          whiteSpace: "pre-wrap",
+          ...(ci === 4 ? { textDecoration: "underline" } : {}),
         });
 
+        const onPrint = () => {
+          const printHtml = isResv
+            ? weeklyRowsToHTML(weeklyData.rows, weeklyEdits, weeklyData.totalGuests, weeklyData.dateRange)
+            : allergyHtml;
+          const w = window.open("", "_blank", "width=900,height=700");
+          if (!w) { alert("Pop-up blocked"); return; }
+          w.document.write(printHtml);
+          w.document.close();
+          w.focus();
+          setTimeout(() => w.print(), 800);
+        };
+
+        const sheetW = isResv ? 794 : 1123;
+
         return (
-          <div style={{ padding: "12px 16px", borderBottom: `1px solid ${tokens.neutral[200]}`, background: tokens.neutral[50] }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.neutral[500], textTransform: "uppercase" }}>
-                {isResv ? "Weekly Overview" : "Weekly Allergies"} Preview
-              </span>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => {
-                  const printHtml = isResv
-                    ? weeklyRowsToHTML(weeklyData.rows, weeklyEdits, weeklyData.totalGuests, weeklyData.dateRange)
-                    : allergyHtml;
-                  const w = window.open("", "_blank", "width=900,height=700");
-                  if (!w) { alert("Pop-up blocked"); return; }
-                  w.document.write(printHtml); w.document.close(); w.focus();
-                  setTimeout(() => w.print(), 800);
-                }} style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, padding: "5px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 600 }}>PRINT</button>
-                {isResv && Object.keys(weeklyEdits).length > 0 && (
-                  <button onClick={() => setWeeklyEdits({})} style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "5px 10px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.secondary }}>RESET</button>
-                )}
-                <button onClick={() => setWeeklyPreview(null)} style={{ fontFamily: FONT, fontSize: 10, background: "none", border: "none", cursor: "pointer", color: tokens.neutral[400], padding: "0 4px" }}>×</button>
-              </div>
+          <div style={{
+            position: "fixed", inset: 0,
+            background: tokens.surface.overlay,
+            zIndex: 1000,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "auto",
+            padding: "24px 16px",
+          }}>
+            {/* Top bar */}
+            <div style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 8,
+              maxWidth: sheetW,
+              width: "100%",
+              margin: "0 auto 12px",
+            }}>
+              <button onClick={onPrint} style={{
+                fontFamily: FONT, fontSize: 10, letterSpacing: 2,
+                padding: "8px 16px",
+                border: `1px solid ${tokens.neutral[0]}`,
+                borderRadius: 0,
+                background: tokens.neutral[0],
+                color: tokens.neutral[900],
+                cursor: "pointer", fontWeight: 600,
+              }}>PRINT</button>
+              {isResv && Object.keys(weeklyEdits).length > 0 && (
+                <button onClick={() => setWeeklyEdits({})} style={{
+                  fontFamily: FONT, fontSize: 10, letterSpacing: 2,
+                  padding: "8px 16px",
+                  border: `1px solid ${tokens.neutral[400]}`,
+                  borderRadius: 0,
+                  background: "transparent",
+                  color: tokens.neutral[200],
+                  cursor: "pointer", fontWeight: 600,
+                }}>RESET</button>
+              )}
+              <button onClick={() => setWeeklyPreview(null)} style={{
+                fontFamily: FONT, fontSize: 10, letterSpacing: 2,
+                padding: "8px 16px",
+                border: `1px solid ${tokens.neutral[0]}`,
+                borderRadius: 0,
+                background: "transparent",
+                color: tokens.neutral[0],
+                cursor: "pointer", fontWeight: 600,
+              }}>CLOSE</button>
             </div>
 
+            {/* A4 sheet */}
             {isResv ? (
-              <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 520, border: `1px solid ${tokens.neutral[200]}`, background: tokens.neutral[0] }}>
-                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 560 }}>
-                  <thead>
-                    <tr style={{ background: tokens.neutral[100], position: "sticky", top: 0, zIndex: 1 }}>
+              <div style={{
+                background: "#fff",
+                color: "#000",
+                fontFamily: "'Roboto Mono', monospace",
+                fontSize: "8.5pt",
+                width: 794,
+                minHeight: 1123,
+                margin: "0 auto",
+                padding: "45px 38px",
+                boxShadow: `0 0 0 1px ${tokens.neutral[300]}`,
+                flexShrink: 0,
+              }}>
+                <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: "11pt", textAlign: "center", margin: "0 0 2pt", fontWeight: 700, color: "#000" }}>
+                  Reservations : {weeklyData.dateRange}
+                </div>
+                <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: "9pt", textAlign: "center", margin: "0 0 10pt", fontWeight: 700, color: "#000" }}>
+                  Guest count : {weeklyData.totalGuests}
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                  <colgroup>
+                    {COL_WIDTHS.map((w, i) => <col key={i} style={{ width: w }} />)}
+                  </colgroup>
+                  <tbody>
+                    <tr>
                       {COLS.map((col, i) => (
-                        <th key={i} style={{ border: `1px solid ${tokens.neutral[200]}`, padding: "5px 6px", fontFamily: FONT, fontSize: 7, letterSpacing: 1.2, color: tokens.text.secondary, textAlign: TALIGN[i], whiteSpace: "nowrap", fontWeight: 600, minWidth: MINW[i] }}>{col}</th>
+                        <th key={i} style={{
+                          border: "1px solid #aaa",
+                          padding: "4pt 5pt",
+                          fontFamily: "'Roboto Mono', monospace",
+                          fontSize: "8.5pt",
+                          fontWeight: 700,
+                          textAlign: "center",
+                          background: "#fff",
+                          color: "#000",
+                          wordWrap: "break-word",
+                          whiteSpace: "pre-line",
+                          verticalAlign: "top",
+                        }}>{col}</th>
                       ))}
                     </tr>
-                  </thead>
-                  <tbody>
                     {weeklyData.rows.map(row => (
-                      <tr key={row.id} style={{ background: row.type === "date" ? tokens.neutral[100] : tokens.neutral[0] }}>
+                      <tr key={row.id} style={{ background: row.type === "date" ? "#f0f0f0" : "#fff" }}>
                         {row.cells.map((_, ci) => (
-                          <td key={ci} style={{ border: `1px solid ${tokens.neutral[200]}`, padding: "3px 6px", verticalAlign: "top", minWidth: MINW[ci] }}>
+                          <td key={ci} style={{ border: "1px solid #aaa", padding: "4pt 5pt", verticalAlign: "top" }}>
                             {MULTILINE[ci] ? (
-                              <textarea rows={2} value={cellVal(row, ci)} onChange={e => setCell(row.id, ci, e.target.value)}
-                                style={{ ...inputBase(row, ci), display: "block", whiteSpace: "pre-wrap" }} />
+                              <textarea
+                                rows={2}
+                                value={cellVal(row, ci)}
+                                onChange={e => setCell(row.id, ci, e.target.value)}
+                                style={{ ...cellStyle(row, ci), display: "block" }}
+                              />
                             ) : (
-                              <input value={cellVal(row, ci)} onChange={e => setCell(row.id, ci, e.target.value)}
-                                style={inputBase(row, ci)} />
+                              <input
+                                value={cellVal(row, ci)}
+                                onChange={e => setCell(row.id, ci, e.target.value)}
+                                style={cellStyle(row, ci)}
+                              />
                             )}
                           </td>
                         ))}
@@ -440,9 +528,20 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 </table>
               </div>
             ) : (
-              <div style={{ width: containerW, height: Math.round(794 * allergyScale), overflow: "hidden", border: `1px solid ${tokens.neutral[200]}`, background: tokens.neutral[0] }}>
-                <iframe srcDoc={allergyHtml} title="weekly allergies preview"
-                  style={{ width: 1123, height: 794, border: "none", transform: `scale(${allergyScale})`, transformOrigin: "top left", pointerEvents: "none" }} />
+              <div style={{
+                background: "#fff",
+                width: 1123,
+                minHeight: 794,
+                margin: "0 auto",
+                boxShadow: `0 0 0 1px ${tokens.neutral[300]}`,
+                flexShrink: 0,
+                overflow: "hidden",
+              }}>
+                <iframe
+                  srcDoc={allergyHtml}
+                  title="weekly allergies"
+                  style={{ width: "100%", height: 794, border: "none" }}
+                />
               </div>
             )}
           </div>
