@@ -72,13 +72,13 @@ function buildWeeklyRows(reservations, weekDays, restrictionDefs = []) {
 
 const WEEKLY_RESV_HTML_SHELL = (body) => {
   const ROBOTO = `<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">`;
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Reservations</title>${ROBOTO}<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000}@page{size:A4 portrait;margin:12mm 10mm}table{width:100%;border-collapse:collapse}tr{page-break-inside:avoid}th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:center;font-size:8.5pt;color:#000;font-weight:700}.date-row td{background:#f0f0f0}u{text-decoration:underline}h1{font-size:11pt;text-align:center;margin:0 0 2pt;font-weight:700}h2{font-size:9pt;text-align:center;margin:0 0 10pt;font-weight:700}</style></head><body>${body}</body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Reservations</title>${ROBOTO}<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@page{size:A4 portrait;margin:12mm 10mm}@media print{body{margin:0}}table{width:100%;border-collapse:collapse;table-layout:fixed}col.c0{width:11%}col.c1{width:9%}col.c2{width:9%}col.c3{width:16%}col.c4{width:8%}col.c5{width:22%}col.c6{width:25%}tr{page-break-inside:avoid}th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:center;font-size:8.5pt;color:#000;font-weight:700;overflow:hidden;word-wrap:break-word}th{background:#fff}.date-row td{background:#f0f0f0}u{text-decoration:underline;color:#000}h1{font-size:11pt;text-align:center;margin:0 0 2pt;font-weight:700}h2{font-size:9pt;text-align:center;margin:0 0 10pt;font-weight:700}</style></head><body>${body}</body></html>`;
 };
 
 function weeklyRowsToHTML(rows, edits, totalGuests, dateRange) {
   const e = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   const gc = (rowId, ci) => edits[`${rowId}-${ci}`]!==undefined ? edits[`${rowId}-${ci}`] : (rows.find(r=>r.id===rowId)?.cells[ci]??"");
-  let body = `<h1>Reservations : ${e(dateRange)}</h1><h2>Guest count : ${totalGuests}</h2><table>`;
+  let body = `<h1>Reservations : ${e(dateRange)}</h1><h2>Guest count : ${totalGuests}</h2><table><colgroup>${[0,1,2,3,4,5,6].map(i=>`<col class="c${i}">`).join("")}</colgroup>`;
   body += `<tr><th>DATE</th><th>COVER</th><th>TIME</th><th>NAME</th><th>EXP.</th><th>INFO</th><th>ALLERGIES/<br>RESTRICTIONS</th></tr>`;
   for (const row of rows) {
     const c = row.cells.map((_,ci) => gc(row.id, ci));
