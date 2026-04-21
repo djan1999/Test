@@ -22,8 +22,8 @@ export default function SwapPicker({ seatId, totalSeats, onSwap }) {
         onClick={() => setOpen((o) => !o)}
         title="Swap position"
         style={{
-          width: 28,
-          height: 28,
+          width: 36,
+          height: 36,
           borderRadius: 0,
           border: `1px solid ${tokens.neutral[200]}`,
           background: open ? tokens.neutral[100] : tokens.neutral[0],

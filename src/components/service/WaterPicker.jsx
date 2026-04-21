@@ -25,7 +25,7 @@ export default function WaterPicker({ value, onChange }) {
           fontFamily: tokens.font,
           fontSize: 12,
           fontWeight: 500,
-          padding: "6px 10px",
+          padding: "10px 10px",
           border: `1px solid ${tokens.neutral[200]}`,
           borderRadius: 0,
           cursor: "pointer",

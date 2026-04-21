@@ -565,7 +565,7 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
 // ── Detail View ───────────────────────────────────────────────────────────────
 function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages }) {
   const isMobile = useIsMobile(860);
-  const row1 = isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
+  const row1 = isMobile ? "34px 68px 1fr 36px" : "38px 75px 1fr 36px";
   const seatCount = table.seats?.length || 0;
   const canApplySeatToAll = typeof onApplySeatToAll === "function" && seatCount > 1;
   const hasAnyBeverageData = (table.seats || []).some(s =>
@@ -614,9 +614,10 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
           onClick={() => onApplySeatToAll && onApplySeatToAll(table.id, 1)}
           disabled={!canApplySeatToAll}
           style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 1.2, padding: "6px 12px",
+            fontFamily: FONT, fontSize: 9, letterSpacing: 1.2, padding: isMobile ? "11px 12px" : "6px 12px",
             border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: canApplySeatToAll ? "pointer" : "not-allowed",
             background: tokens.neutral[0], color: tokens.text.secondary, opacity: canApplySeatToAll ? 1 : 0.5,
+            touchAction: "manipulation",
           }}
         >
           COPY P1 TO ALL
@@ -625,9 +626,10 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
           onClick={() => onClearBeverages && onClearBeverages(table.id)}
           disabled={!onClearBeverages || !hasAnyBeverageData}
           style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 1.2, padding: "6px 12px",
+            fontFamily: FONT, fontSize: 9, letterSpacing: 1.2, padding: isMobile ? "11px 12px" : "6px 12px",
             border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: (onClearBeverages && hasAnyBeverageData) ? "pointer" : "not-allowed",
             background: tokens.neutral[0], color: tokens.red.text, opacity: (onClearBeverages && hasAnyBeverageData) ? 1 : 0.5,
+            touchAction: "manipulation",
           }}
         >
           CLEAR ALL DRINKS
@@ -680,12 +682,12 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
           {WATER_OPTS.map(opt => (
             <button key={opt} onClick={() => table.seats.forEach(s => updSeat(s.id, "water", opt))} style={{
               fontFamily: FONT, fontSize: 11, letterSpacing: 0.5,
-              padding: "5px 10px", border: "1px solid",
+              padding: isMobile ? "10px 10px" : "5px 10px", border: "1px solid",
               borderColor: table.seats.every(s => s.water === opt) ? tokens.charcoal.default : tokens.neutral[200],
               borderRadius: 0, cursor: "pointer",
               background: table.seats.every(s => s.water === opt) ? tokens.tint.parchment : tokens.neutral[0],
               color: table.seats.every(s => s.water === opt) ? tokens.neutral[700] : tokens.text.secondary,
-              transition: "all 0.1s",
+              transition: "all 0.1s", touchAction: "manipulation",
             }}>{opt}</button>
           ))}
         </div>
@@ -731,10 +733,10 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                   return (
                     <button key={p} onClick={() => updSeat(seat.id, "pairing", p)} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
-                      padding: "5px 8px", border: "1px solid",
+                      padding: isMobile ? "10px 8px" : "5px 8px", border: "1px solid",
                       borderColor: on ? ps.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
                       background: on ? ps.bg : tokens.neutral[0], color: on ? ps.color : tokens.text.secondary,
-                      transition: "all 0.1s",
+                      transition: "all 0.1s", touchAction: "manipulation",
                     }}>{p}</button>
                   );
                 })}
@@ -767,9 +769,10 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                       const item = found || { name: ap.searchKey || ap.label, notes: "", __cocktail: true };
                       updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
                     }} style={{
-                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
+                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: isMobile ? "10px 9px" : "4px 9px",
                       border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer",
                       background: tokens.neutral[0], color: tokens.neutral[700], transition: "all 0.1s",
+                      touchAction: "manipulation",
                     }}>{ap.label}</button>
                   ))}
                 </div>
@@ -795,7 +798,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                           <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>
                             {label}{sub ? ` · ${sub}` : ""}
                           </span>
-                          <button onClick={() => updSeat(seat.id, "aperitifs", (seat.aperitifs||[]).filter((_,idx)=>idx!==i))} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
+                          <button onClick={() => updSeat(seat.id, "aperitifs", (seat.aperitifs||[]).filter((_,idx)=>idx!==i))} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.7, width: 28, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, touchAction: "manipulation" }}>×</button>
                         </div>
                       );
                     })}
@@ -837,7 +840,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                             <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>
                               {bev.label}{bev.sub ? ` · ${bev.sub}` : ""}
                             </span>
-                            <button onClick={bev.onRemove} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
+                            <button onClick={bev.onRemove} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.7, width: 28, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, touchAction: "manipulation" }}>×</button>
                           </div>
                         );
                       })}

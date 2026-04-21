@@ -37,8 +37,8 @@ export const chip = {
 };
 
 export const circleButton = {
-  width: 36,
-  height: 36,
+  width: 44,
+  height: 44,
   borderRadius: tokens.radius,
   border: `1px solid ${tokens.neutral[300]}`,
   background: tokens.surface.card,
