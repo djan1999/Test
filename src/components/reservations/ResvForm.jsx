@@ -2,6 +2,7 @@ import { useState } from "react";
 import { RESTRICTIONS, RESTRICTION_GROUPS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, circleButton } from "../../styles/mixins.js";
+import { useIsMobile } from "../../hooks/useIsMobile.js";
 
 const FONT = tokens.font;
 const MOBILE_SAFE_INPUT_SIZE = tokens.mobileInputSize;
@@ -26,6 +27,7 @@ const SITTING_TIMES = parseSittingTimes();
 const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
 
 export default function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }) {
+  const isMobile = useIsMobile(560);
   const [tableIds, setTableIds] = useState(
     initial?.data?.tableGroup?.length > 1 ? initial.data.tableGroup.map(Number)
       : initial?.table_id ? [Number(initial.table_id)]
@@ -104,17 +106,17 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
         {tableIds.length === 0 && <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 4 }}>Select at least one table</div>}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10, marginBottom: 10 }}>
         <div>
           <div style={fieldLabel}>Name</div>
           <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Guest name…" style={baseInp} />
         </div>
         <div>
           <div style={fieldLabel}>Sitting</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 5 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? `repeat(${SITTING_TIMES.length}, 1fr)` : "repeat(2, 1fr)", gap: 5 }}>
             {SITTING_TIMES.map((t) => (
               <button key={t} onClick={() => setTime(t === time ? "" : t)} style={{
-                fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "8px 0",
+                fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "10px 0",
                 border: "1px solid", borderColor: time === t ? tokens.charcoal.default : tokens.neutral[200],
                 borderRadius: 0, cursor: "pointer",
                 background: time === t ? tokens.tint.parchment : tokens.neutral[0],
@@ -125,7 +127,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr auto", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
         <div>
           <div style={fieldLabel}>Menu</div>
           <div style={{ display: "flex", gap: 5 }}>
@@ -164,7 +166,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10, alignItems: "flex-start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10, marginBottom: 10, alignItems: "flex-start" }}>
         <div>
           <div style={fieldLabel}>Guest type</div>
           <div style={{ display: "flex", gap: 5 }}>

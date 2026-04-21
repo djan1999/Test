@@ -1892,6 +1892,7 @@ export default function App() {
 
   const localBev = readLocalBeverages();
   const loadMenuCoursesRef = useRef(null);
+  const appIsMobile = useIsMobile(700);
 
   const [tables,    setTables]    = useState(initialState.tables);
   const [menuCourses, setMenuCourses] = useState([]); // live from Supabase
@@ -3272,7 +3273,7 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: tokens.neutral[0], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
       <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
-      <div style={{ padding: "20px 24px" }}>
+      <div style={{ padding: appIsMobile ? "12px 10px" : "20px 24px" }}>
         <KitchenBoard tables={tables} menuCourses={menuCourses} upd={upd} updMany={updMany} />
       </div>
       {archiveOpen && (
@@ -3381,9 +3382,9 @@ export default function App() {
       />
 
       {sel === null ? (
-        <div style={{ padding: "20px 24px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
+        <div style={{ padding: appIsMobile ? "14px 10px 32px" : "20px 24px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
           {/* Top bar: stats + Quick Access toggle */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: appIsMobile ? 14 : 20, gap: 10, flexWrap: "wrap" }}>
             <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
               {serviceDate && (
                 <span

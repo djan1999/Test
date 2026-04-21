@@ -506,17 +506,20 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
             zIndex: 1000,
             display: "flex",
             flexDirection: "column",
-            overflow: "auto",
-            padding: "24px 16px",
+            padding: "16px 12px",
+            paddingTop: "calc(16px + env(safe-area-inset-top))",
+            paddingBottom: "calc(16px + env(safe-area-inset-bottom))",
+            overflow: "hidden",
           }}>
-            {/* Top bar */}
+            {/* Top bar — stays pinned; sheet scrolls underneath it */}
             <div style={{
               display: "flex",
               justifyContent: "flex-end",
               gap: 8,
-              maxWidth: sheetW,
               width: "100%",
-              margin: "0 auto 12px",
+              margin: "0 0 12px",
+              flexShrink: 0,
+              flexWrap: "wrap",
             }}>
               <button onClick={onPrint} style={{
                 fontFamily: FONT, fontSize: 10, letterSpacing: 2,
@@ -549,7 +552,16 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
               }}>CLOSE</button>
             </div>
 
-            {/* A4 sheet */}
+            {/* A4 sheet — scrollable wrapper so the overlay doesn't clip
+                sheets wider than the viewport (reservations 794px, allergies 1123px) */}
+            <div style={{
+              flex: 1,
+              minHeight: 0,
+              overflow: "auto",
+              WebkitOverflowScrolling: "touch",
+              display: "flex",
+              flexDirection: "column",
+            }}>
             {isResv ? (
               <div style={{
                 background: "#fff",
@@ -710,6 +722,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 </div>
               );
             })()}
+            </div>
           </div>
         );
       })()}

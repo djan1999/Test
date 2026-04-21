@@ -50,9 +50,11 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
       <div style={{
         background: tokens.neutral[0], borderTop: `1px solid ${tokens.neutral[200]}`,
         borderRadius: 0,
-        padding: "24px 20px 32px",
+        padding: isMobile ? "18px 14px 24px" : "24px 20px 32px",
+        paddingBottom: isMobile ? "calc(24px + env(safe-area-inset-bottom))" : 32,
         width: "100%", maxWidth: 520,
-        maxHeight: "92vh", overflowY: "auto",
+        maxHeight: "92dvh", overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
         boxShadow: "0 -4px 40px rgba(0,0,0,0.10)",
       }} onClick={e => e.stopPropagation()}>
 
@@ -73,7 +75,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
               </span>
             )}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(5, 1fr)" : "repeat(5, 1fr)", gap: isMobile ? 5 : 6 }}>
             {Array.from({ length: 10 }, (_, i) => i + 1).map(tid => {
               const tObj     = tables.find(t => t.id === tid);
               const isActive = tObj?.active;
@@ -182,7 +184,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                 {["hotel"].map(type => (
                   <button key={type} onClick={() => { setGuestType(t => t === type ? "" : type); setRoom(""); }} style={{
                     fontFamily: FONT, fontSize: 11, letterSpacing: 1,
-                    padding: "12px 0", flex: 1, border: "1px solid",
+                    padding: "12px 20px", minWidth: 120, border: "1px solid",
                     borderColor: guestType === type ? tokens.charcoal.default : tokens.neutral[200],
                     borderRadius: 0, cursor: "pointer",
                     background: guestType === type ? tokens.tint.parchment : tokens.neutral[0],
