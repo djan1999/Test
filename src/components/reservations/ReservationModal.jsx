@@ -251,7 +251,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                           onClick={() => setRestrictions(rs => [...rs, { pos: null, note: opt.key }])}
                           style={{
                             fontFamily: FONT, fontSize: 10, letterSpacing: 0.5,
-                            padding: "6px 11px", borderRadius: 0, cursor: "pointer",
+                            padding: "10px 11px", borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
                             border: `1px solid ${active ? tokens.red.border : tokens.neutral[200]}`,
                             background: active ? tokens.red.bg : tokens.neutral[50],
                             color: active ? tokens.red.text : tokens.text.muted,
@@ -290,7 +290,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                     }}>
                       <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.red.text, fontWeight: 500 }}>{label}</span>
                       <button onClick={() => setRestrictions(rs => rs.filter((_, idx) => idx !== i))}
-                        style={{ background: "none", border: "none", color: tokens.red.border, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+                        style={{ background: "none", border: "none", color: tokens.red.border, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0, width: 32, height: 32, display: "inline-flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation", flexShrink: 0 }}>×</button>
                     </div>
                   );
                 })}

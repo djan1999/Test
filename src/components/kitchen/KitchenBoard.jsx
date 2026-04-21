@@ -201,7 +201,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             onPointerDown={e => e.stopPropagation()}
             onClick={e => { e.stopPropagation(); setShowEdit(v => !v); setPickingRestr(null); setCustomNote(""); setEditingCourse(null); }}
             style={{
-              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "2px 7px",
+              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "8px 7px",
               border: `1px solid ${showEdit ? tokens.charcoal.default : tokens.neutral[300]}`,
               borderRadius: 0, cursor: "pointer",
               background: showEdit ? tokens.tint.parchment : tokens.neutral[0],
@@ -231,7 +231,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               <button
                 onPointerDown={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); removeKitchenRestr(i); }}
-                style={{ fontFamily: FONT, fontSize: 10, padding: "1px 6px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation" }}>✕</button>
+                style={{ fontFamily: FONT, fontSize: 10, padding: 0, width: 32, height: 32, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation", flexShrink: 0 }}>✕</button>
             </div>
           ) : null)}
           {/* Step 1: pick restriction */}
@@ -243,14 +243,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                   <button key={r.key}
                     onPointerDown={e => e.stopPropagation()}
                     onClick={e => { e.stopPropagation(); setPickingRestr(r.key); }}
-                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.body, touchAction: "manipulation" }}>
+                    style={{ fontFamily: FONT, fontSize: 9, padding: "9px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.body, touchAction: "manipulation" }}>
                     {r.emoji} {r.label}
                   </button>
                 ))}
                 <button
                   onPointerDown={e => e.stopPropagation()}
                   onClick={e => { e.stopPropagation(); setPickingRestr("custom"); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.muted, touchAction: "manipulation" }}>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "9px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.muted, touchAction: "manipulation" }}>
                   + Custom
                 </button>
               </div>
@@ -264,13 +264,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "9px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 700, touchAction: "manipulation" }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, s.id); }}
-                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
+                    style={{ fontFamily: FONT, fontSize: 9, padding: "9px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
                 ))}
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPickingRestr(null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.disabled, touchAction: "manipulation" }}>cancel</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "9px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.disabled, touchAction: "manipulation" }}>cancel</button>
               </div>
             </div>
           )}
@@ -286,13 +286,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "9px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 700, touchAction: "manipulation" }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, s.id); }}
-                    style={{ fontFamily: FONT, fontSize: 9, padding: "4px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
+                    style={{ fontFamily: FONT, fontSize: 9, padding: "9px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
                 ))}
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPickingRestr(null); setCustomNote(""); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "4px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.disabled, touchAction: "manipulation" }}>cancel</button>
+                  style={{ fontFamily: FONT, fontSize: 9, padding: "9px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.disabled, touchAction: "manipulation" }}>cancel</button>
               </div>
             </div>
           )}
@@ -308,7 +308,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const col = colors[p];
           return (
             <button key={p} onClick={() => upd && upd(table.id, "pace", active ? "" : p)} style={{
-              fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "3px 10px",
+              fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "9px 10px",
               border: `1px solid ${active ? col.border : tokens.neutral[200]}`,
               borderRadius: 0, cursor: upd ? "pointer" : "default",
               background: active ? col.bg : tokens.neutral[0], color: active ? col.on : tokens.text.disabled,
@@ -353,11 +353,11 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     key={r._i}
                     onClick={() => setAssigningRestrIdx(assigningRestrIdx === r._i ? null : r._i)}
                     style={{
-                      fontFamily: FONT, fontSize: 9, padding: "2px 8px", borderRadius: 0,
+                      fontFamily: FONT, fontSize: 9, padding: "9px 8px", borderRadius: 0,
                       border: `1px solid ${tokens.red.border}`,
                       background: assigningRestrIdx === r._i ? tokens.red.text : tokens.red.bg,
                       color: assigningRestrIdx === r._i ? tokens.text.primary : tokens.red.text,
-                      fontWeight: 500, cursor: "pointer", userSelect: "none",
+                      fontWeight: 500, cursor: "pointer", userSelect: "none", touchAction: "manipulation",
                     }}
                   >{restrLabel(r.note)} {assigningRestrIdx === r._i ? "→ pick seat" : "→"}</span>
                 ))}
@@ -367,15 +367,15 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                   <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, flexShrink: 0 }}>Assign to:</span>
                   {seats.map(s => (
                     <button key={s.id} onClick={() => assignRestrToSeat(s.id)} style={{
-                      fontFamily: FONT, fontSize: 10, fontWeight: 700, padding: "3px 10px",
+                      fontFamily: FONT, fontSize: 10, fontWeight: 700, padding: "9px 10px",
                       border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer",
-                      background: tokens.neutral[0], color: tokens.red.text,
+                      background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation",
                     }}>P{s.id}</button>
                   ))}
                   <button onClick={() => setAssigningRestrIdx(null)} style={{
-                    fontFamily: FONT, fontSize: 9, padding: "3px 8px",
+                    fontFamily: FONT, fontSize: 9, padding: "9px 8px",
                     border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer",
-                    background: tokens.neutral[0], color: tokens.text.disabled,
+                    background: tokens.neutral[0], color: tokens.text.disabled, touchAction: "manipulation",
                   }}>cancel</button>
                 </div>
               )}
@@ -515,20 +515,20 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     onChange={e => setEditName(e.target.value)}
                     onBlur={() => saveCourseDraft(key, editName, editNote)}
                     placeholder={`Rename "${line1}"…`}
-                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 7px", border: `1px solid ${tokens.red.text}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
+                    style={{ fontFamily: FONT, fontSize: 10, padding: "9px 7px", border: `1px solid ${tokens.red.text}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
                   />
                   <input
                     value={editNote}
                     onChange={e => setEditNote(e.target.value)}
                     onBlur={() => saveCourseDraft(key, editName, editNote)}
                     placeholder="Add note (e.g. No Ricotta)…"
-                    style={{ fontFamily: FONT, fontSize: 10, padding: "4px 7px", border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
+                    style={{ fontFamily: FONT, fontSize: 10, padding: "9px 7px", border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
                   />
                   {(kcNote.name || kcNote.note) && (
                     <button
                       onPointerDown={e => e.stopPropagation()}
                       onClick={e => { e.stopPropagation(); clearCourseNote(key); }}
-                      style={{ fontFamily: FONT, fontSize: 8, padding: "3px 8px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, alignSelf: "flex-start", touchAction: "manipulation" }}>Clear override</button>
+                      style={{ fontFamily: FONT, fontSize: 8, padding: "9px 8px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, alignSelf: "flex-start", touchAction: "manipulation" }}>Clear override</button>
                   )}
                 </div>
               )}
@@ -559,9 +559,9 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             <button
               onClick={e => { e.stopPropagation(); upd && upd(table.id, "kitchenArchived", true); }}
               style={{
-                fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "4px 10px",
+                fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "9px 10px",
                 border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer",
-                background: tokens.neutral[0], color: tokens.green.border, textTransform: "uppercase",
+                background: tokens.neutral[0], color: tokens.green.border, textTransform: "uppercase", touchAction: "manipulation",
               }}
             >Archive</button>
           </div>

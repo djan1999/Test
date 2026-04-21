@@ -869,28 +869,28 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                         <button onClick={() => updSeat(seat.id, "extras", {
                           ...seat.extras, [dish.key]: { ...extra, ordered: !extra.ordered }
                         })} style={{
-                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 8px", border: "1px solid",
+                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: isMobile ? "10px 8px" : "5px 8px", border: "1px solid",
                           borderColor: extra.ordered ? tokens.green.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
                           background: extra.ordered ? tokens.green.bg : tokens.neutral[0], color: extra.ordered ? tokens.green.text : tokens.text.secondary,
-                          transition: "all 0.1s",
+                          transition: "all 0.1s", touchAction: "manipulation",
                         }}>{extra.ordered ? "YES" : "NO"}</button>
                         {linkedPairing ? (
                           <div style={{ display: "flex", gap: 3, opacity: extra.ordered ? 1 : 0.3, pointerEvents: extra.ordered ? "auto" : "none" }}>
                             <button onClick={() => updLp({ ordered: false, mode: null })} style={{
-                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: isMobile ? "9px 6px" : "3px 6px", border: "1px solid",
                               borderColor: !lpActive ? tokens.green.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
                               background: !lpActive ? tokens.green.bg : tokens.neutral[0], color: !lpActive ? tokens.green.text : tokens.text.disabled, flex: 1,
                             }}>OFF</button>
                             {linkedPairing.hasAlco && (
                               <button onClick={() => updLp({ ordered: true, mode: "alco" })} style={{
-                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: isMobile ? "9px 6px" : "3px 6px", border: "1px solid",
                                 borderColor: alcoOn ? tokens.neutral[300] : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
                                 background: alcoOn ? tokens.tint.parchment : tokens.neutral[0], color: alcoOn ? tokens.neutral[700] : tokens.text.disabled, flex: 1,
                               }}>ALCO</button>
                             )}
                             {linkedPairing.hasNonAlco && (
                               <button onClick={() => updLp({ ordered: true, mode: "nonalc" })} style={{
-                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: isMobile ? "9px 6px" : "3px 6px", border: "1px solid",
                                 borderColor: naOn ? tokens.neutral[300] : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
                                 background: naOn ? tokens.neutral[100] : tokens.neutral[0], color: naOn ? tokens.neutral[600] : tokens.text.disabled, flex: 1,
                               }}>N/A</button>
@@ -936,20 +936,20 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                           <div style={{ ...fieldLabel, marginBottom: 4 }}>{opt.label}</div>
                           <div style={{ display: "flex", gap: 3 }}>
                             <button onClick={() => updOpt({ ordered: false })} style={{
-                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: isMobile ? "9px 6px" : "3px 6px", border: "1px solid",
                               borderColor: !active ? tokens.green.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
                               background: !active ? tokens.green.bg : tokens.neutral[0], color: !active ? tokens.green.text : tokens.text.disabled, flex: 1,
                             }}>OFF</button>
                             {opt.hasAlco && (
                               <button onClick={() => updOpt({ ordered: true, mode: "alco" })} style={{
-                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: isMobile ? "9px 6px" : "3px 6px", border: "1px solid",
                                 borderColor: alcoOn ? tokens.neutral[300] : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
                                 background: alcoOn ? tokens.tint.parchment : tokens.neutral[0], color: alcoOn ? tokens.neutral[700] : tokens.text.disabled, flex: 1,
                               }}>ALCO</button>
                             )}
                             {opt.hasNonAlco && (
                               <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} style={{
-                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "3px 6px", border: "1px solid",
+                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: isMobile ? "9px 6px" : "3px 6px", border: "1px solid",
                                 borderColor: naOn ? tokens.neutral[300] : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
                                 background: naOn ? tokens.neutral[100] : tokens.neutral[0], color: naOn ? tokens.neutral[600] : tokens.text.disabled, flex: 1,
                               }}>N/A</button>
@@ -1008,9 +1008,9 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                         <button key={p} onClick={() => upd("restrictions", table.restrictions.map((x, ii) =>
                           ii === i ? { ...x, pos: p } : x
                         ))} style={{
-                          fontFamily: FONT, fontSize: 9, padding: "3px 6px",
+                          fontFamily: FONT, fontSize: 9, padding: isMobile ? "9px 8px" : "3px 6px",
                           border: `1px solid ${sel ? tokens.red.border : tokens.neutral[200]}`,
-                          borderRadius: 0, cursor: "pointer",
+                          borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
                           background: sel ? tokens.red.bg : tokens.neutral[0],
                           color: sel ? tokens.red.text : tokens.text.disabled, fontWeight: sel ? 700 : 400,
                         }}>P{p}</button>

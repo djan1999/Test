@@ -187,7 +187,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
               {ROOM_OPTIONS.map((r) => (
                 <button key={r} onClick={() => setRoom((x) => x === r ? "" : r)} style={{
-                  fontFamily: FONT, fontSize: 11, padding: "7px 10px",
+                  fontFamily: FONT, fontSize: 11, padding: "10px 10px", touchAction: "manipulation",
                   border: "1px solid", borderColor: room === r ? tokens.charcoal.default : tokens.neutral[200],
                   borderRadius: 0, cursor: "pointer",
                   background: room === r ? tokens.tint.parchment : tokens.neutral[0],
@@ -224,8 +224,8 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                   const cnt = restrictions.filter((r) => r.note === opt.key).length;
                   return (
                     <button key={opt.key} onClick={() => setRestrictions((rs) => [...rs, { pos: null, note: opt.key }])} style={{
-                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "5px 9px",
-                      borderRadius: 0, cursor: "pointer",
+                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "10px 9px",
+                      borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
                       border: `1px solid ${cnt > 0 ? tokens.red.border : tokens.neutral[200]}`,
                       background: cnt > 0 ? tokens.red.bg : tokens.neutral[50],
                       color: cnt > 0 ? tokens.red.text : tokens.text.muted,
@@ -248,7 +248,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               return (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, borderRadius: 0 }}>
                   <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text }}>{label}</span>
-                  <button onClick={() => setRestrictions((rs) => rs.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: tokens.red.border, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                  <button onClick={() => setRestrictions((rs) => rs.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: tokens.red.border, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0, width: 28, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation", flexShrink: 0 }}>×</button>
                 </div>
               );
             })}
