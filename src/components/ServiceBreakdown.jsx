@@ -447,70 +447,71 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
               ))}
             </div>
           ))}
-        </div>
 
-        {/* Bottom section — always rendered after the column flow */}
-        <div
-          className="bottom-section"
-          style={{
-            marginTop: 12,
-            paddingTop: 6,
-            borderTop: `1px solid ${tokens.neutral[900]}`,
-          }}
-        >
+          {/* Bottom section — flows as last item in column layout */}
           <div
+            className="bottom-section"
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              marginBottom: 4,
+              marginTop: 12,
+              paddingTop: 6,
+              borderTop: `1px solid ${tokens.neutral[900]}`,
+              breakInside: "avoid",
             }}
           >
-            <span style={{ fontWeight: 700, flexShrink: 0 }}>
-              Extra bread count:
-            </span>
-            <input
-              type="text"
-              value={doc.bread}
-              onChange={(e) => updateBread(e.target.value)}
-              className="sb-inline"
+            <div
               style={{
-                flex: 1,
-                fontFamily: "inherit",
-                fontSize: "inherit",
-                color: tokens.neutral[900],
-                border: "none",
-                borderBottom: `1px solid ${tokens.neutral[900]}`,
-                background: "transparent",
-                outline: "none",
-                padding: "2px 4px",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 4,
               }}
-            />
-          </div>
+            >
+              <span style={{ fontWeight: 700, flexShrink: 0 }}>
+                Extra bread count:
+              </span>
+              <input
+                type="text"
+                value={doc.bread}
+                onChange={(e) => updateBread(e.target.value)}
+                className="sb-inline"
+                style={{
+                  flex: 1,
+                  fontFamily: "inherit",
+                  fontSize: "inherit",
+                  color: tokens.neutral[900],
+                  border: "none",
+                  borderBottom: `1px solid ${tokens.neutral[900]}`,
+                  background: "transparent",
+                  outline: "none",
+                  padding: "2px 4px",
+                }}
+              />
+            </div>
 
-          <div style={{ fontWeight: 700, marginBottom: 2 }}>
-            Service Announcements:
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {doc.announcements.map((v, i) => (
-              <div
-                key={i}
-                style={{ display: "flex", alignItems: "flex-start", gap: 6 }}
-              >
-                <span>-</span>
-                <div style={{ flex: 1 }}>
-                  <AutoTextarea
-                    value={v}
-                    onChange={(nv) => updateAnnouncement(i, nv)}
-                    style={{
-                      border: `1px dashed ${tokens.neutral[400]}`,
-                      background: tokens.neutral[100],
-                      padding: "1px 4px",
-                    }}
-                  />
+            <div style={{ fontWeight: 700, marginBottom: 2 }}>
+              Service Announcements:
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {doc.announcements.map((v, i) => (
+                <div
+                  key={i}
+                  style={{ display: "flex", alignItems: "flex-start", gap: 6 }}
+                >
+                  <span>-</span>
+                  <div style={{ flex: 1 }}>
+                    <AutoTextarea
+                      value={v}
+                      onChange={(nv) => updateAnnouncement(i, nv)}
+                      style={{
+                        border: `1px dashed ${tokens.neutral[400]}`,
+                        background: tokens.neutral[100],
+                        padding: "1px 4px",
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -585,18 +586,19 @@ function PrintStyles() {
         .service-breakdown-print-area {
           column-count: 2;
           column-gap: 12mm;
-          column-fill: balance;
+          column-fill: auto;
         }
         .reservation-block {
           break-inside: avoid;
           page-break-inside: avoid;
         }
         .slot-block {
-          break-inside: avoid-column;
+          break-inside: avoid;
+          page-break-inside: avoid;
         }
         .bottom-section {
-          break-before: avoid;
-          page-break-before: avoid;
+          break-inside: avoid;
+          page-break-inside: avoid;
         }
 
         /* Aggressive compaction so a typical daily briefing fits
