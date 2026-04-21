@@ -320,6 +320,40 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
       ),
     }));
 
+  const prevBulletCoords = (si, ri, bi) => {
+    if (bi > 0) return { si, ri, bi: bi - 1 };
+    let rj = ri - 1;
+    let sj = si;
+    while (sj >= 0) {
+      const slot = doc.slots[sj];
+      while (rj >= 0) {
+        const blen = slot.reservations[rj].bullets.length;
+        if (blen > 0) return { si: sj, ri: rj, bi: blen - 1 };
+        rj--;
+      }
+      sj--;
+      if (sj >= 0) rj = doc.slots[sj].reservations.length - 1;
+    }
+    return null;
+  };
+
+  const nextBulletCoords = (si, ri, bi) => {
+    const slot = doc.slots[si];
+    if (bi < slot.reservations[ri].bullets.length - 1) return { si, ri, bi: bi + 1 };
+    let rj = ri + 1;
+    let sj = si;
+    while (sj < doc.slots.length) {
+      const s = doc.slots[sj];
+      while (rj < s.reservations.length) {
+        if (s.reservations[rj].bullets.length > 0) return { si: sj, ri: rj, bi: 0 };
+        rj++;
+      }
+      sj++;
+      rj = 0;
+    }
+    return null;
+  };
+
   const updateBread = (v) => setDoc((p) => ({ ...p, bread: v }));
   const updateAnnouncement = (i, v) =>
     setDoc((p) => ({
@@ -490,6 +524,28 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                                 const prev = bulletRefs.current[`${si}-${ri}-${bi - 1}`];
                                 if (prev) { prev.focus(); prev.selectionStart = prev.selectionEnd = prevLen; }
                               });
+                            } else if (e.key === "ArrowUp") {
+                              const firstNl = b.indexOf("\n");
+                              const onFirstLine = firstNl === -1 || el.selectionStart <= firstNl;
+                              if (onFirstLine) {
+                                const coords = prevBulletCoords(si, ri, bi);
+                                if (coords) {
+                                  e.preventDefault();
+                                  const prev = bulletRefs.current[`${coords.si}-${coords.ri}-${coords.bi}`];
+                                  if (prev) { prev.focus(); prev.selectionStart = prev.selectionEnd = prev.value.length; }
+                                }
+                              }
+                            } else if (e.key === "ArrowDown") {
+                              const lastNl = b.lastIndexOf("\n");
+                              const onLastLine = lastNl === -1 || el.selectionStart > lastNl;
+                              if (onLastLine) {
+                                const coords = nextBulletCoords(si, ri, bi);
+                                if (coords) {
+                                  e.preventDefault();
+                                  const next = bulletRefs.current[`${coords.si}-${coords.ri}-${coords.bi}`];
+                                  if (next) { next.focus(); next.selectionStart = next.selectionEnd = 0; }
+                                }
+                              }
                             }
                           }}
                         />
