@@ -50,7 +50,7 @@ function groupRestrictions(restrictions) {
     if (aGrouped !== bGrouped) return aGrouped ? -1 : 1;
     return a.label.localeCompare(b.label);
   });
-  return entries.map((e) => (e.count > 1 ? `${e.count}x ${e.label}` : e.label));
+  return entries.map((e) => `${e.count}x ${e.label}`);
 }
 
 // Build the auto-seeded bullet lines for a reservation.
@@ -433,23 +433,11 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                         <AutoTextarea
                           value={b}
                           onChange={(v) => updateBullet(si, ri, bi, v)}
+                          autoBullet
                         />
                       </div>
                     ))}
                   </div>
-                  <AutoTextarea
-                    value={r.intel}
-                    onChange={(v) => updateIntel(si, ri, v)}
-                    autoBullet
-                    placeholder="Guest intel / notes"
-                    style={{
-                      marginTop: 2,
-                      fontSize: "0.8rem",
-                      border: `1px dashed ${tokens.neutral[400]}`,
-                      background: tokens.neutral[100],
-                      padding: "1px 4px",
-                    }}
-                  />
                 </div>
               ))}
             </div>
