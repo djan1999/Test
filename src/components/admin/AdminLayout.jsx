@@ -83,6 +83,8 @@ export default function AdminLayout({
 
   useModalEscape(onExit);
 
+  useModalEscape(onExit);
+
   const navOpen = navPinned || navHover;
   const NAV_W_OPEN = 220;
   const NAV_W_CLOSED = 56;
