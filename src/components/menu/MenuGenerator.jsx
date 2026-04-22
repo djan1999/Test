@@ -85,8 +85,10 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
       const titleState = titleRes.data?.state;
       if (titleState && (typeof titleState.en === "string" || typeof titleState.si === "string")) {
         const val = titleState[currentLang] ?? "";
-        if (val) setMenuTitle(val);
-        // Hydrate the other language into localStorage so lang-switch works offline.
+        if (val) {
+          writeMenuTitle(currentLang, val); // Hydrate current lang to localStorage so the menuTitle effect reads the correct value
+          setMenuTitle(val);
+        }
         const otherLang = currentLang === "en" ? "si" : "en";
         if (titleState[otherLang]) writeMenuTitle(otherLang, titleState[otherLang]);
       }
@@ -94,7 +96,10 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
       const thankYouState = thankYouRes.data?.state;
       if (thankYouState && (typeof thankYouState.en === "string" || typeof thankYouState.si === "string")) {
         const val = thankYouState[currentLang] ?? "";
-        if (val) setThankYouNote(val);
+        if (val) {
+          writeThankYouNote(currentLang, val); // Same fix for thank-you note
+          setThankYouNote(val);
+        }
         const otherLang = currentLang === "en" ? "si" : "en";
         if (thankYouState[otherLang]) writeThankYouNote(otherLang, thankYouState[otherLang]);
       }

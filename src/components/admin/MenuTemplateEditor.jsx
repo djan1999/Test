@@ -30,7 +30,7 @@ import {
   BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
 } from "../../utils/menuTemplateSchema.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
-import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote, readTeamNames } from "../../utils/storage.js";
+import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote, readTeamNames, writeTeamNames } from "../../utils/storage.js";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
 import { MenuRulesPanel, LayoutStylesPanel } from "./MenuTemplatePanels.jsx";
 import { PreviewDataPanel } from "./MenuTemplatePreviewParts.jsx";
@@ -698,9 +698,10 @@ export default function MenuTemplateEditor({
   const [previewLang,     setPreviewLang]       = useState("en");
   const [previewMenuType, setPreviewMenuType]   = useState("");
 
-  // ── Menu title / thank-you note — read from shared localStorage, same source as MenuGenerator ──
+  // ── Menu title / thank-you note / team names — shared localStorage with MenuGenerator ──
   const [menuTitle,    setMenuTitle]    = useState(() => readMenuTitle("en"));
   const [thankYouNote, setThankYouNote] = useState(() => readThankYouNote("en"));
+  const [teamNames,    setTeamNames]    = useState(readTeamNames);
 
   // Persist both languages to Supabase so MenuGenerator's on-mount load sees
   // the admin's latest edits and doesn't overwrite them with a stale value.
@@ -716,6 +717,36 @@ export default function MenuTemplateEditor({
       .upsert({ id: "menu_gen_thankyou", state: { en: readThankYouNote("en"), si: readThankYouNote("si") }, updated_at: new Date().toISOString() }, { onConflict: "id" })
       .then(() => {});
   };
+
+  // On mount, pull title / thank-you / team names from Supabase so the editor
+  // shows correct values on a fresh device where localStorage isn't yet populated.
+  // Without this, switching language or any sync call would overwrite Supabase
+  // with empty strings from localStorage and permanently destroy saved values.
+  useEffect(() => {
+    if (!supabase) return;
+    Promise.all([
+      supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_title").single(),
+      supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_thankyou").single(),
+      supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_team").single(),
+    ]).then(([titleRes, thankYouRes, teamRes]) => {
+      const titleState = titleRes.data?.state;
+      if (titleState && (typeof titleState.en === "string" || typeof titleState.si === "string")) {
+        const val = titleState["en"] ?? "";
+        if (val) { writeMenuTitle("en", val); setMenuTitle(val); }
+        if (titleState["si"]) writeMenuTitle("si", titleState["si"]);
+      }
+      const thankYouState = thankYouRes.data?.state;
+      if (thankYouState && (typeof thankYouState.en === "string" || typeof thankYouState.si === "string")) {
+        const val = thankYouState["en"] ?? "";
+        if (val) { writeThankYouNote("en", val); setThankYouNote(val); }
+        if (thankYouState["si"]) writeThankYouNote("si", thankYouState["si"]);
+      }
+      if (teamRes.data?.state?.value) {
+        writeTeamNames(teamRes.data.state.value);
+        setTeamNames(teamRes.data.state.value);
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When language is switched, save current lang to storage then load the next lang
   const handleLangChange = (nextLang) => {
@@ -869,7 +900,7 @@ export default function MenuTemplateEditor({
           _logo: logoDataUri,
           menuTitle,
           thankYouNote,
-          teamNames: readTeamNames(),
+          teamNames,
           lang: previewLang,
           beerChoice: null,
           layoutStyles,
@@ -880,7 +911,7 @@ export default function MenuTemplateEditor({
       setPreviewLoading(false);
     }, 250);
     return () => clearTimeout(previewTimer.current);
-  }, [template, menuCourses, logoDataUri, layoutStyles, menuRules, previewSeats, previewSeatIdx, previewBottles, previewLang, previewMenuType, menuTitle, thankYouNote]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [template, menuCourses, logoDataUri, layoutStyles, menuRules, previewSeats, previewSeatIdx, previewBottles, previewLang, previewMenuType, menuTitle, thankYouNote, teamNames]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = useCallback(newRows => {
     onUpdateTemplate({ ...template, rows: newRows });
