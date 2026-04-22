@@ -8,6 +8,7 @@ import { restrLabel } from "../../constants/dietary.js";
 import { waterStyle } from "../../constants/pairings.js";
 import { parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
+import { useIsMobile } from "../../hooks/useIsMobile.js";
 
 const FONT = tokens.font;
 const PAIRING_COLOR = { Wine: tokens.text.body, "Non-Alc": tokens.neutral[500], Premium: tokens.neutral[500], "Our Story": tokens.green.text };
@@ -23,6 +24,7 @@ export default function ArchiveModal({
   onRestoreTicket,
   menuCourses,
 }) {
+  const isMobile = useIsMobile(640);
   const [entries, setEntries] = useState([]);
   const [deleted, setDeleted] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -108,19 +110,19 @@ export default function ArchiveModal({
   const activeTables = tables.filter((t) => t.active || t.arrivedAt || t.resName || t.resTime);
 
   const archiveActions = (
-    <div style={{ display: "flex", gap: 8 }}>
+    <div style={{ display: "flex", gap: isMobile ? 6 : 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
       <button onClick={onSeedTest} style={{
-        fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 14px",
+        fontFamily: FONT, fontSize: 9, letterSpacing: isMobile ? 1.5 : 2, padding: isMobile ? "6px 10px" : "8px 14px",
         border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer", background: tokens.green.bg, color: tokens.green.text,
-      }}>SEED TEST</button>
+      }}>{isMobile ? "SEED" : "SEED TEST"}</button>
       <button onClick={onClearAll} style={{
-        fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 14px",
+        fontFamily: FONT, fontSize: 9, letterSpacing: isMobile ? 1.5 : 2, padding: isMobile ? "6px 10px" : "8px 14px",
         border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[500],
-      }}>CLEAR ALL</button>
+      }}>{isMobile ? "CLEAR" : "CLEAR ALL"}</button>
       <button onClick={async () => { await onArchiveAndClear(); loadEntries(); }} style={{
-        fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
+        fontFamily: FONT, fontSize: 9, letterSpacing: isMobile ? 1.5 : 2, padding: isMobile ? "6px 10px" : "8px 16px",
         border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.tint.parchment, color: tokens.text.body,
-      }}>ARCHIVE & CLEAR ({activeTables.length})</button>
+      }}>{isMobile ? `ARCHIVE (${activeTables.length})` : `ARCHIVE & CLEAR (${activeTables.length})`}</button>
     </div>
   );
 
@@ -176,7 +178,7 @@ export default function ArchiveModal({
                     {isOpen && (
                       <div style={{ borderTop: `1px solid ${tokens.green.border}`, padding: "12px 14px", background: tokens.neutral[0] }}>
                         <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-                          <div style={{ width: 248, flexShrink: 0 }}>
+                          <div style={{ width: isMobile ? "100%" : 248, flexShrink: 0 }}>
                             <KitchenTicket table={t} menuCourses={menuCourses} upd={null} />
                           </div>
                           <div style={{ flex: 1, minWidth: 220 }}>

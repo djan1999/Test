@@ -121,41 +121,80 @@ export default function DrinksPanel({
 
       {drinkTab === "wines" && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 1fr 52px 28px", gap: 8, marginBottom: 8 }}>
-            {(isMobile ? ["Name", "Producer"] : ["Name", "Producer", "Vintage", "Region", "Glass", ""]).map((h, i) => (
-              <div key={i} style={{ fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 2, color: tokens.text.secondary, textTransform: "uppercase" }}>{h}</div>
-            ))}
-          </div>
-          <div style={{ borderTop: tokens.border.subtle, marginBottom: 10 }} />
-          <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 20 }}>
-            {localWines.map(w => (
-              <div key={w.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr auto" : "1fr 1fr 70px 1fr 52px 28px", gap: 8, alignItems: "center" }}>
-                <input value={w.name} onChange={e => updWine(w.id, "name", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Name" />
-                <input value={w.producer} onChange={e => updWine(w.id, "producer", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Producer" />
-                {!isMobile && <input value={w.vintage} onChange={e => updWine(w.id, "vintage", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="2020" />}
-                {!isMobile && <input value={w.region || ""} onChange={e => updWine(w.id, "region", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="e.g. Dolenjska, Slovenia" />}
-                <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
-                  fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                  borderColor: w.byGlass ? tokens.green.border : tokens.neutral[200], borderRadius: tokens.radius, cursor: "pointer",
-                  background: w.byGlass ? tokens.green.bg : tokens.surface.card, color: w.byGlass ? tokens.green.text : tokens.text.secondary,
-                }}>{w.byGlass ? "YES" : "NO"}</button>
-                <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: tokens.text.secondary, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+          {!isMobile && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 70px 1fr 52px 28px", gap: 8, marginBottom: 8 }}>
+                {["Name", "Producer", "Vintage", "Region", "Glass", ""].map((h, i) => (
+                  <div key={i} style={{ fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 2, color: tokens.text.secondary, textTransform: "uppercase" }}>{h}</div>
+                ))}
               </div>
+              <div style={{ borderTop: tokens.border.subtle, marginBottom: 10 }} />
+            </>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 12 : 7, marginBottom: 20 }}>
+            {localWines.map(w => (
+              isMobile ? (
+                <div key={w.id} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: tokens.radius, background: tokens.surface.card }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 28px", gap: 8, alignItems: "center" }}>
+                    <input value={w.name} onChange={e => updWine(w.id, "name", e.target.value)} style={{ ...baseInp, padding: "6px 8px" }} placeholder="Name" />
+                    <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: tokens.text.secondary, cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
+                  </div>
+                  <input value={w.producer} onChange={e => updWine(w.id, "producer", e.target.value)} style={{ ...baseInp, padding: "6px 8px" }} placeholder="Producer" />
+                  <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 60px", gap: 8 }}>
+                    <input value={w.vintage} onChange={e => updWine(w.id, "vintage", e.target.value)} style={{ ...baseInp, padding: "6px 8px" }} placeholder="2020" />
+                    <input value={w.region || ""} onChange={e => updWine(w.id, "region", e.target.value)} style={{ ...baseInp, padding: "6px 8px" }} placeholder="Region, Country" />
+                    <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
+                      fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 6px", border: "1px solid",
+                      borderColor: w.byGlass ? tokens.green.border : tokens.neutral[200], borderRadius: tokens.radius, cursor: "pointer",
+                      background: w.byGlass ? tokens.green.bg : tokens.surface.card, color: w.byGlass ? tokens.green.text : tokens.text.secondary,
+                    }}>{w.byGlass ? "GLASS" : "BTL"}</button>
+                  </div>
+                </div>
+              ) : (
+                <div key={w.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 70px 1fr 52px 28px", gap: 8, alignItems: "center" }}>
+                  <input value={w.name} onChange={e => updWine(w.id, "name", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Name" />
+                  <input value={w.producer} onChange={e => updWine(w.id, "producer", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="Producer" />
+                  <input value={w.vintage} onChange={e => updWine(w.id, "vintage", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="2020" />
+                  <input value={w.region || ""} onChange={e => updWine(w.id, "region", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="e.g. Dolenjska, Slovenia" />
+                  <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
+                    fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
+                    borderColor: w.byGlass ? tokens.green.border : tokens.neutral[200], borderRadius: tokens.radius, cursor: "pointer",
+                    background: w.byGlass ? tokens.green.bg : tokens.surface.card, color: w.byGlass ? tokens.green.text : tokens.text.secondary,
+                  }}>{w.byGlass ? "YES" : "NO"}</button>
+                  <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: tokens.text.secondary, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+                </div>
+              )
             ))}
           </div>
           <div style={{ borderTop: tokens.border.subtle, paddingTop: 16 }}>
             <div style={fieldLabel}>Add wine</div>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 1fr 52px", gap: 8, marginBottom: 10 }}>
-              <input value={newWine.name} onChange={e => setNewWine(w => ({ ...w, name: e.target.value }))} placeholder="Name" style={{ ...baseInp, padding: "5px 8px" }} />
-              <input value={newWine.producer} onChange={e => setNewWine(w => ({ ...w, producer: e.target.value }))} placeholder="Producer" style={{ ...baseInp, padding: "5px 8px" }} />
-              {!isMobile && <input value={newWine.vintage} onChange={e => setNewWine(w => ({ ...w, vintage: e.target.value }))} placeholder="2020" style={{ ...baseInp, padding: "5px 8px" }} />}
-              {!isMobile && <input value={newWine.region} onChange={e => setNewWine(w => ({ ...w, region: e.target.value }))} placeholder="e.g. Dolenjska, Slovenia" style={{ ...baseInp, padding: "5px 8px" }} />}
-              <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
-                fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                borderColor: newWine.byGlass ? tokens.green.border : tokens.neutral[200], borderRadius: tokens.radius, cursor: "pointer",
-                background: newWine.byGlass ? tokens.green.bg : tokens.surface.card, color: newWine.byGlass ? tokens.green.text : tokens.text.secondary,
-              }}>{newWine.byGlass ? "YES" : "NO"}</button>
-            </div>
+            {isMobile ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                <input value={newWine.name} onChange={e => setNewWine(w => ({ ...w, name: e.target.value }))} placeholder="Name" style={{ ...baseInp, padding: "6px 8px" }} />
+                <input value={newWine.producer} onChange={e => setNewWine(w => ({ ...w, producer: e.target.value }))} placeholder="Producer" style={{ ...baseInp, padding: "6px 8px" }} />
+                <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 60px", gap: 8 }}>
+                  <input value={newWine.vintage} onChange={e => setNewWine(w => ({ ...w, vintage: e.target.value }))} placeholder="2020" style={{ ...baseInp, padding: "6px 8px" }} />
+                  <input value={newWine.region} onChange={e => setNewWine(w => ({ ...w, region: e.target.value }))} placeholder="Region, Country" style={{ ...baseInp, padding: "6px 8px" }} />
+                  <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
+                    fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 6px", border: "1px solid",
+                    borderColor: newWine.byGlass ? tokens.green.border : tokens.neutral[200], borderRadius: tokens.radius, cursor: "pointer",
+                    background: newWine.byGlass ? tokens.green.bg : tokens.surface.card, color: newWine.byGlass ? tokens.green.text : tokens.text.secondary,
+                  }}>{newWine.byGlass ? "GLASS" : "BTL"}</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 70px 1fr 52px", gap: 8, marginBottom: 10 }}>
+                <input value={newWine.name} onChange={e => setNewWine(w => ({ ...w, name: e.target.value }))} placeholder="Name" style={{ ...baseInp, padding: "5px 8px" }} />
+                <input value={newWine.producer} onChange={e => setNewWine(w => ({ ...w, producer: e.target.value }))} placeholder="Producer" style={{ ...baseInp, padding: "5px 8px" }} />
+                <input value={newWine.vintage} onChange={e => setNewWine(w => ({ ...w, vintage: e.target.value }))} placeholder="2020" style={{ ...baseInp, padding: "5px 8px" }} />
+                <input value={newWine.region} onChange={e => setNewWine(w => ({ ...w, region: e.target.value }))} placeholder="e.g. Dolenjska, Slovenia" style={{ ...baseInp, padding: "5px 8px" }} />
+                <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
+                  fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
+                  borderColor: newWine.byGlass ? tokens.green.border : tokens.neutral[200], borderRadius: tokens.radius, cursor: "pointer",
+                  background: newWine.byGlass ? tokens.green.bg : tokens.surface.card, color: newWine.byGlass ? tokens.green.text : tokens.text.secondary,
+                }}>{newWine.byGlass ? "YES" : "NO"}</button>
+              </div>
+            )}
             <button onClick={addWine} style={primaryBtn}>+ ADD WINE</button>
           </div>
         </>

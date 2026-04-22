@@ -4,12 +4,14 @@ import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
 import { tokens } from "../../styles/tokens.js";
 import { restrLabel } from "../../constants/dietary.js";
+import { useIsMobile } from "../../hooks/useIsMobile.js";
 
 const FONT = tokens.font;
 const PAIRING_COLOR = { Wine: tokens.text.body, "Non-Alc": tokens.neutral[500], Premium: tokens.neutral[500], "Our Story": tokens.green.text };
 const PAIRING_BG = { Wine: tokens.tint.parchment, "Non-Alc": tokens.neutral[50], Premium: tokens.neutral[50], "Our Story": tokens.green.bg };
 
 export default function SummaryModal({ tables, optionalExtras = [], onClose }) {
+  const isMobile = useIsMobile(640);
   const active = tables.filter((t) => t.active || t.arrivedAt);
 
   const copyText = () => {
@@ -56,15 +58,15 @@ export default function SummaryModal({ tables, optionalExtras = [], onClose }) {
         {active.length === 0 && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[400], textAlign: "center", padding: "80px 0" }}>No active tables</div>}
         {active.map((t) => (
           <div key={t.id} style={{ border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, overflow: "hidden", marginBottom: 12 }}>
-            <div style={{ padding: "12px 16px", background: tokens.neutral[50], borderBottom: `1px solid ${tokens.neutral[200]}`, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ fontFamily: FONT, fontSize: 22, fontWeight: 300, color: tokens.neutral[900], letterSpacing: 1, lineHeight: 1 }}>{String(t.id).padStart(2, "0")}</span>
-              {t.resName && <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 500, color: tokens.neutral[900] }}>{t.resName}</span>}
+            <div style={{ padding: isMobile ? "10px 12px" : "12px 16px", background: tokens.neutral[50], borderBottom: `1px solid ${tokens.neutral[200]}`, display: "flex", gap: isMobile ? 10 : 14, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontFamily: FONT, fontSize: isMobile ? 18 : 22, fontWeight: 300, color: tokens.neutral[900], letterSpacing: 1, lineHeight: 1 }}>{String(t.id).padStart(2, "0")}</span>
+              {t.resName && <span style={{ fontFamily: FONT, fontSize: isMobile ? 13 : 14, fontWeight: 500, color: tokens.neutral[900] }}>{t.resName}</span>}
               {t.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.green.text, fontWeight: 500 }}>arr. {t.arrivedAt}</span>}
               {t.menuType && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, color: tokens.neutral[600], background: tokens.neutral[0] }}>{t.menuType}</span>}
               {t.birthday && <span style={{ fontSize: 14 }}>🎂</span>}
-              {t.notes && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[500], fontStyle: "italic", marginLeft: "auto" }}>{t.notes}</span>}
+              {t.notes && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[500], fontStyle: "italic", marginLeft: isMobile ? 0 : "auto", flexBasis: isMobile ? "100%" : "auto" }}>{t.notes}</span>}
             </div>
-            <div style={{ padding: "8px 12px 12px" }}>
+            <div style={{ padding: isMobile ? "6px 10px 10px" : "8px 12px 12px" }}>
               {t.seats.map((s) => {
                 const ws = waterStyle(s.water);
                 const restr = (t.restrictions || []).filter((r) => r.pos === s.id);

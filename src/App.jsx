@@ -564,7 +564,8 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
 // ── Detail View ───────────────────────────────────────────────────────────────
 function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages }) {
   const isMobile = useIsMobile(860);
-  const row1 = isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
+  const isNarrow = useIsMobile(520);
+  const row1 = isNarrow ? "30px 1fr 28px" : isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
   const seatCount = table.seats?.length || 0;
   const canApplySeatToAll = typeof onApplySeatToAll === "function" && seatCount > 1;
   const hasAnyBeverageData = (table.seats || []).some(s =>
@@ -692,7 +693,7 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
 
       {/* Column header row 1 */}
       <div style={{ display: "grid", gridTemplateColumns: row1, gap: 10, alignItems: "center", marginBottom: 4 }}>
-        {["", "Water", "Pairing", ""].map((h, i) => (
+        {(isNarrow ? ["", "Water", ""] : ["", "Water", "Pairing", ""]).map((h, i) => (
           <div key={i} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.secondary, textTransform: "uppercase" }}>{h}</div>
         ))}
       </div>
@@ -722,37 +723,66 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
               {/* Water */}
               <WaterPicker value={seat.water} onChange={v => updSeat(seat.id, "water", v)} />
 
-              {/* Pairing */}
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                {PAIRINGS.map(p => {
-                  const ps = pairingStyle[p];
-                  const on = seat.pairing === p;
-                  return (
-                    <button key={p} onClick={() => updSeat(seat.id, "pairing", p)} style={{
+              {/* Pairing (inline on wider screens) */}
+              {!isNarrow && (
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {PAIRINGS.map(p => {
+                    const ps = pairingStyle[p];
+                    const on = seat.pairing === p;
+                    return (
+                      <button key={p} onClick={() => updSeat(seat.id, "pairing", p)} style={{
+                        fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
+                        padding: "5px 8px", border: "1px solid",
+                        borderColor: on ? ps.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
+                        background: on ? ps.bg : tokens.neutral[0], color: on ? ps.color : tokens.text.secondary,
+                        transition: "all 0.1s",
+                      }}>{p}</button>
+                    );
+                  })}
+                  {seatRestrictions.map((r, i) => (
+                    <span key={i} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
-                      padding: "5px 8px", border: "1px solid",
-                      borderColor: on ? ps.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
-                      background: on ? ps.bg : tokens.neutral[0], color: on ? ps.color : tokens.text.secondary,
-                      transition: "all 0.1s",
-                    }}>{p}</button>
-                  );
-                })}
-                {/* Restriction tags inline */}
-                {seatRestrictions.map((r, i) => (
-                  <span key={i} style={{
-                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
-                    padding: "4px 8px", borderRadius: 0,
-                    background: tokens.red.bg, border: `1px solid ${tokens.red.border}`,
-                    color: tokens.red.text, whiteSpace: "nowrap",
-                  }}>⚠ {restrLabel(r.note)}</span>
-                ))}
-              </div>
+                      padding: "4px 8px", borderRadius: 0,
+                      background: tokens.red.bg, border: `1px solid ${tokens.red.border}`,
+                      color: tokens.red.text, whiteSpace: "nowrap",
+                    }}>⚠ {restrLabel(r.note)}</span>
+                  ))}
+                </div>
+              )}
 
               {/* Swap */}
               {table.seats.length > 1
                 ? <SwapPicker seatId={seat.id} totalSeats={table.seats.length} onSwap={t => swapSeats(seat.id, t)} />
                 : <div />}
             </div>
+
+            {/* Pairing on its own row on narrow phones */}
+            {isNarrow && (
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }}>
+                <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.secondary, textTransform: "uppercase", alignSelf: "center", marginRight: 2 }}>Pairing</div>
+                {PAIRINGS.map(p => {
+                  const ps = pairingStyle[p];
+                  const on = seat.pairing === p;
+                  return (
+                    <button key={p} onClick={() => updSeat(seat.id, "pairing", p)} style={{
+                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
+                      padding: "6px 10px", border: "1px solid",
+                      borderColor: on ? ps.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
+                      background: on ? ps.bg : tokens.neutral[0], color: on ? ps.color : tokens.text.secondary,
+                      transition: "all 0.1s",
+                    }}>{p}</button>
+                  );
+                })}
+                {seatRestrictions.map((r, i) => (
+                  <span key={i} style={{
+                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
+                    padding: "5px 8px", borderRadius: 0,
+                    background: tokens.red.bg, border: `1px solid ${tokens.red.border}`,
+                    color: tokens.red.text, whiteSpace: "nowrap",
+                  }}>⚠ {restrLabel(r.note)}</span>
+                ))}
+              </div>
+            )}
             {/* ── Beverages + Extras ── */}
             <div style={{ paddingLeft: isMobile ? 0 : 48, display: "flex", flexDirection: "column", gap: 12 }}>
               {/* ── Aperitif ── generates above Sour Soup */}
