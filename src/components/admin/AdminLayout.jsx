@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
-import { useIsMobile } from "../../hooks/useIsMobile.js";
+import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { FONT } from "./adminStyles.js";
 import MenuLayoutPanel from "./MenuLayoutPanel.jsx";
 import CourseEditorPanel from "./CourseEditorPanel.jsx";
@@ -79,7 +79,7 @@ export default function AdminLayout({
   const [dishesCoursesOpen, setDishesCoursesOpen] = useState(true);
   const [navPinned, setNavPinned] = useState(false);
   const [navHover, setNavHover] = useState(false);
-  const isMobile = useIsMobile(768);
+  const isMobile = useIsMobile(BP.lg);
 
   useModalEscape(onExit);
 

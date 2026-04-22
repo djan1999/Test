@@ -33,7 +33,7 @@ import {
   resolveAperitifFromQuickAccessOption,
   aperitifMatchesQuickAccessOption,
 } from "./utils/quickAccessResolve.js";
-import { useIsMobile } from "./hooks/useIsMobile.js";
+import { useIsMobile, BP } from "./hooks/useIsMobile.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useOfflineQueue } from "./hooks/useOfflineQueue.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
@@ -1589,7 +1589,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 }
 
 function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [], spirits = [], beers = [] }) {
-  const isMobile = useIsMobile(700);
+  const isMobile = useIsMobile(BP.md);
 
   // Auto-detect tables that share the same resName + resTime and have no explicit
   // tableGroup — treat them as a merged group for display only (no data mutation).
@@ -1896,7 +1896,7 @@ export default function App() {
 
   const localBev = readLocalBeverages();
   const loadMenuCoursesRef = useRef(null);
-  const appIsMobile = useIsMobile(700);
+  const appIsMobile = useIsMobile(BP.md);
 
   const [tables,    setTables]    = useState(initialState.tables);
   const [menuCourses, setMenuCourses] = useState([]); // live from Supabase

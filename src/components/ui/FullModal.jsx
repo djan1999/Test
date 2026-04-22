@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
-import { useIsMobile } from "../../hooks/useIsMobile.js";
+import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 
 export default function FullModal({ title, onClose, actions, children }) {
-  const isMobile = useIsMobile(640);
+  const isMobile = useIsMobile(BP.sm);
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";

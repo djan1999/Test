@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useIsMobile } from "../../hooks/useIsMobile.js";
+import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
 import { RESTRICTIONS, RESTRICTION_GROUPS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
@@ -25,7 +25,7 @@ const DEFAULT_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS ||
 const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
 
 export default function ReservationModal({ table, tables = [], onSave, onClose }) {
-  const isMobile = useIsMobile(700);
+  const isMobile = useIsMobile(BP.md);
   const [tableIds, setTableIds]   = useState(table.tableGroup?.length > 1 ? table.tableGroup : [table.id]);
   const [name, setName]           = useState(table.resName || "");
   const [time, setTime]           = useState(table.resTime || "");

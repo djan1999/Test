@@ -2,7 +2,7 @@ import { useState } from "react";
 import { RESTRICTIONS, RESTRICTION_GROUPS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, circleButton } from "../../styles/mixins.js";
-import { useIsMobile } from "../../hooks/useIsMobile.js";
+import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 
 const FONT = tokens.font;
 const MOBILE_SAFE_INPUT_SIZE = tokens.mobileInputSize;

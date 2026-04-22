@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
-import { useIsMobile } from "../../hooks/useIsMobile.js";
+import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 
 const FONT = tokens.font;
 
@@ -30,7 +30,7 @@ export default function Header({
   onSeed,
   onEndService,
 }) {
-  const isMobile = useIsMobile(640);
+  const isMobile = useIsMobile(BP.sm);
   const modeColor = modeLabel === "ADMIN" ? tokens.text.secondary : modeLabel === "SERVICE" ? tokens.green.text : tokens.text.muted;
   const [sSt, setSSt] = useState(null);
   const [sMsg, setSMsg] = useState("");

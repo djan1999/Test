@@ -347,7 +347,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           return (
             <div style={{ marginTop: 7, paddingTop: 7, borderTop: `1px solid ${tokens.neutral[200]}` }}>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.red.text, textTransform: "uppercase", flexShrink: 0 }}>⚠ Unassigned</span>
+                <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.red.text, textTransform: "uppercase", flexShrink: 0 }}>⚠ Unassigned</span>
                 {unassigned.map(r => (
                   <span
                     key={r._i}
@@ -528,7 +528,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     <button
                       onPointerDown={e => e.stopPropagation()}
                       onClick={e => { e.stopPropagation(); clearCourseNote(key); }}
-                      style={{ fontFamily: FONT, fontSize: 8, padding: "9px 8px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, alignSelf: "flex-start", touchAction: "manipulation" }}>Clear override</button>
+                      style={{ fontFamily: FONT, fontSize: 9, padding: "9px 8px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, alignSelf: "flex-start", touchAction: "manipulation" }}>Clear override</button>
                   )}
                 </div>
               )}
@@ -559,7 +559,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             <button
               onClick={e => { e.stopPropagation(); upd && upd(table.id, "kitchenArchived", true); }}
               style={{
-                fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "9px 10px",
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "9px 10px",
                 border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer",
                 background: tokens.neutral[0], color: tokens.green.border, textTransform: "uppercase", touchAction: "manipulation",
               }}

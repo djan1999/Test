@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT, baseInp, fieldLabel, primaryBtn } from "./adminStyles.js";
-import { useIsMobile } from "../../hooks/useIsMobile.js";
+import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 
 // ── DrinkListEditor — generic editor for cocktails, spirits, beers ──
 function DrinkListEditor({ list, setList, newItem, setNewItem, nextId, label }) {
@@ -46,7 +46,7 @@ export default function DrinksPanel({
   dishes, wines, cocktails, spirits, beers,
   onUpdateWines, onSaveBeverages,
 }) {
-  const isMobile = useIsMobile(700);
+  const isMobile = useIsMobile(BP.md);
   const [drinkTab, setDrinkTab] = useState("wines");
 
   // Local state for editing

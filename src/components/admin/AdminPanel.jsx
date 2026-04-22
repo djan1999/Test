@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback } from "react";
-import { useIsMobile } from "../../hooks/useIsMobile.js";
+import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel } from "../../styles/mixins.js";
 import MenuCoursesTab from "./MenuCoursesTab.jsx";
@@ -18,7 +18,7 @@ export default function AdminPanel({
 }) {
   const [tab, setTab] = useState("menu");
   const [drinkTab, setDrinkTab] = useState("wines");
-  const isMobile = useIsMobile(700);
+  const isMobile = useIsMobile(BP.md);
 
   // ── Dishes ──
   const [localDishes, setLocalDishes] = useState(dishes.map(d => ({ ...d, pairings: [...d.pairings] })));

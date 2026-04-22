@@ -424,12 +424,12 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
         <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: tokens.neutral[500], flex: 1, textAlign: "center" }}>RESERVATIONS</span>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           <button onClick={() => setWeeklyPreview(weeklyPreview === "reservations" ? null : "reservations")}
-            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "10px 8px", border: `1px solid ${weeklyPreview === "reservations" ? tokens.charcoal.default : tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "reservations" ? tokens.tint.parchment : tokens.neutral[0], color: weeklyPreview === "reservations" ? tokens.text.body : tokens.neutral[600], fontWeight: 600, flexShrink: 0, touchAction: "manipulation" }}>OVERVIEW</button>
+            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "10px 8px", border: `1px solid ${weeklyPreview === "reservations" ? tokens.charcoal.default : tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "reservations" ? tokens.tint.parchment : tokens.neutral[0], color: weeklyPreview === "reservations" ? tokens.text.body : tokens.neutral[600], fontWeight: 600, flexShrink: 0, touchAction: "manipulation" }}>OVERVIEW</button>
           <button onClick={() => setWeeklyPreview(weeklyPreview === "allergies" ? null : "allergies")}
-            style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 1, padding: "10px 8px", border: `1px solid ${weeklyPreview === "allergies" ? tokens.charcoal.default : tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "allergies" ? tokens.tint.parchment : tokens.neutral[0], color: weeklyPreview === "allergies" ? tokens.text.body : tokens.neutral[600], fontWeight: 600, flexShrink: 0, touchAction: "manipulation" }}>ALLERGIES</button>
+            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "10px 8px", border: `1px solid ${weeklyPreview === "allergies" ? tokens.charcoal.default : tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "allergies" ? tokens.tint.parchment : tokens.neutral[0], color: weeklyPreview === "allergies" ? tokens.text.body : tokens.neutral[600], fontWeight: 600, flexShrink: 0, touchAction: "manipulation" }}>ALLERGIES</button>
           <button onClick={() => setWeekOffset(w => w - 1)} style={navBtn}>◀</button>
           <button onClick={() => setWeekOffset(0)}
-            style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.neutral[500], minWidth: 110, textAlign: "center", background: "none", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, padding: "10px 0", cursor: "pointer", touchAction: "manipulation" }}>{fmtRange()}</button>
+            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: tokens.neutral[500], minWidth: 110, textAlign: "center", background: "none", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, padding: "10px 0", cursor: "pointer", touchAction: "manipulation" }}>{fmtRange()}</button>
           <button onClick={() => setWeekOffset(w => w + 1)} style={navBtn}>▶</button>
         </div>
       </div>
@@ -442,13 +442,13 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
               ● SERVICE: {new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}
             </span>
             <button onClick={() => { const nd = window.prompt("Change service date (YYYY-MM-DD):", serviceDate); if (nd && /^\d{4}-\d{2}-\d{2}$/.test(nd)) onSetServiceDate(nd); }}
-              style={{ fontFamily: FONT, fontSize: 8, color: tokens.neutral[400], background: "none", border: "none", cursor: "pointer" }}>change</button>
+              style={{ fontFamily: FONT, fontSize: 9, color: tokens.neutral[400], background: "none", border: "none", cursor: "pointer", touchAction: "manipulation", padding: "8px 4px" }}>change</button>
           </>
         ) : (
           <>
             <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.neutral[300] }}>NO ACTIVE SERVICE DATE</span>
             <button onClick={() => { const nd = window.prompt("Set service date (YYYY-MM-DD):", todayStr); if (nd && /^\d{4}-\d{2}-\d{2}$/.test(nd)) onSetServiceDate(nd); }}
-              style={{ fontFamily: FONT, fontSize: 8, color: tokens.neutral[500], background: "none", border: `1px solid ${tokens.neutral[200]}`, cursor: "pointer", borderRadius: 0, padding: "2px 8px" }}>SET DATE</button>
+              style={{ fontFamily: FONT, fontSize: 9, color: tokens.neutral[500], background: "none", border: `1px solid ${tokens.neutral[200]}`, cursor: "pointer", borderRadius: 0, padding: "9px 10px", touchAction: "manipulation" }}>SET DATE</button>
           </>
         )}
       </div>
