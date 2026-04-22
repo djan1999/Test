@@ -20,6 +20,7 @@ export default function MenuLayoutPanel({
   cocktails = [],
   spirits = [],
   beers = [],
+  aperitifOptions = [],
 }) {
   return (
     <MenuTemplateEditor
@@ -42,6 +43,7 @@ export default function MenuLayoutPanel({
       cocktails={cocktails}
       spirits={spirits}
       beers={beers}
+      aperitifOptions={aperitifOptions}
     />
   );
 }

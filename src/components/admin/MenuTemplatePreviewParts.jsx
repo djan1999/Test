@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FONT, baseInp } from "./adminStyles.js";
 import { optionalExtrasFromCourses, optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 import { tokens } from "../../styles/tokens.js";
+import { resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
 
 const SELECTED_RING = tokens.charcoal.default;
 
@@ -25,8 +26,6 @@ const PREVIEW_RESTRICTIONS = [
   { key: "no_alcohol",  label: "No Alcohol" },
   { key: "shellfish",   label: "Shellfish"  },
 ];
-
-const APERITIF_QUICK_KEYS = ["SFSC", "Slapšak", "Clandestin", "Krug"];
 
 const makePreviewSeat = (id) => ({
   id, pairing: "Wine", extras: {},
@@ -132,6 +131,7 @@ export function MiniSearch({ wines = [], cocktails = [], spirits = [], beers = [
 /** The collapsible preview data configuration panel */
 export function PreviewDataPanel({
   wines, cocktails, spirits, beers,
+  aperitifOptions = [],
   guests, onGuestsChange,
   seatIdx, onSeatIdxChange,
   seats, onUpdateSeat,
@@ -153,18 +153,18 @@ export function PreviewDataPanel({
   const addCock   = item => updSeat({ cocktails: [...seat.cocktails, item] });
   const addBottle = item => onBottleWinesChange([...bottleWines, item]);
 
-  const apQuickAdd = label => {
-    const q = label.toLowerCase();
-    const w = wines.find(x => (x.name || "").toLowerCase().includes(q));
-    if (w) { addAp({ __type: "wine", name: w.name, producer: w.producer, vintage: w.vintage, country: w.country, region: w.region }); return; }
-    const sp = spirits.find(x => (x.name || "").toLowerCase().includes(q));
-    if (sp) { addAp({ __type: "cocktail", name: sp.name, notes: sp.notes || "" }); return; }
-    const ck = cocktails.find(x => (x.name || "").toLowerCase().includes(q));
-    if (ck) { addAp({ __type: "cocktail", name: ck.name, notes: ck.notes || "" }); return; }
-    const b = beers.find(x => (x.name || "").toLowerCase().includes(q));
-    if (b) { addAp({ __type: "beer", name: b.name, notes: b.notes || "" }); return; }
-    // Fall back to bare label so template preview renders something even without a catalog match
-    addAp({ __type: "cocktail", name: label });
+  const apQuickAdd = opt => {
+    const resolved = resolveAperitifFromQuickAccessOption(opt, { wines, cocktails, spirits, beers });
+    const type = opt.type || "wine";
+    if (resolved) {
+      if (type === "wine") {
+        addAp({ __type: "wine", name: resolved.name, producer: resolved.producer, vintage: resolved.vintage, country: resolved.country, region: resolved.region });
+      } else {
+        addAp({ __type: type === "beer" ? "beer" : "cocktail", name: resolved.name, notes: resolved.notes || "" });
+      }
+      return;
+    }
+    addAp({ __type: type === "beer" ? "beer" : "cocktail", name: opt.label });
   };
 
   const toggleRestriction = key => {
@@ -315,11 +315,13 @@ export function PreviewDataPanel({
             <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 5 }}>
               P{seatIdx + 1} APERITIFS
             </div>
-            <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginBottom: 4 }}>
-              {APERITIF_QUICK_KEYS.map(k => (
-                <button key={k} onClick={() => apQuickAdd(k)} style={{ ...btnStyle(false), fontSize: 7.5 }}>{k}</button>
-              ))}
-            </div>
+            {aperitifOptions.length > 0 && (
+              <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginBottom: 4 }}>
+                {aperitifOptions.map(opt => (
+                  <button key={opt.label} onClick={() => apQuickAdd(opt)} style={{ ...btnStyle(false), fontSize: 7.5 }}>{opt.label}</button>
+                ))}
+              </div>
+            )}
             <div style={{ display: "flex", gap: 4, marginBottom: 5 }}>
               <MiniSearch wines={wines} cocktails={cocktails} spirits={spirits} beers={beers} placeholder="search aperitif…" onAdd={addAp} />
             </div>

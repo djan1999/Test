@@ -3395,6 +3395,7 @@ export default function App() {
         onSaveWineSyncConfig={saveWineSyncConfig}
         quickAccessItems={quickAccessItems}
         onUpdateQuickAccess={updateQuickAccess}
+        aperitifOptions={aperitifOptions}
         onExit={() => changeMode(null)}
       />
     </div>

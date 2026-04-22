@@ -667,6 +667,7 @@ export default function MenuTemplateEditor({
   cocktails = [],
   spirits = [],
   beers = [],
+  aperitifOptions = [],
 }) {
   const [selectedCell, setSelectedCell] = useState(null); // { rowId, side }
   const [pickerTarget, setPickerTarget] = useState(null); // { rowId, side }
@@ -1041,6 +1042,7 @@ export default function MenuTemplateEditor({
       {/* ── Preview Data Panel (collapsible strip above 3 panels) ── */}
       <PreviewDataPanel
         wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
+        aperitifOptions={aperitifOptions}
         guests={previewGuests}     onGuestsChange={setPreviewGuests}
         seatIdx={previewSeatIdx}   onSeatIdxChange={setPreviewSeatIdx}
         seats={previewSeats}       onUpdateSeat={updatePreviewSeat}
