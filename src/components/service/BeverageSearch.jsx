@@ -95,7 +95,7 @@ export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd
           {results.map((r, i) => {
             const ts = BEV_TYPES[r.type];
             return (
-              <div key={i} onMouseDown={() => handleAdd(r)} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${tokens.neutral[50]}`, display: "flex", alignItems: "center", gap: 10, background: tokens.neutral[0] }}>
+              <div key={i} onMouseDown={() => handleAdd(r)} onTouchEnd={(e) => { e.preventDefault(); handleAdd(r); }} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${tokens.neutral[50]}`, display: "flex", alignItems: "center", gap: 10, background: tokens.neutral[0], touchAction: "manipulation", userSelect: "none" }}>
                 <span style={{ fontFamily: tokens.font, fontSize: 8, letterSpacing: 1, fontWeight: 600, padding: "2px 6px", borderRadius: 0, color: ts.color, background: ts.bg, border: `1px solid ${ts.border}`, flexShrink: 0, textTransform: "uppercase" }}>{ts.label}</span>
                 <span style={{ fontFamily: tokens.font, fontSize: 12, color: tokens.neutral[900], flex: 1 }}>{r.label}</span>
                 {r.sub && <span style={{ fontFamily: tokens.font, fontSize: 11, color: tokens.neutral[500] }}>{r.sub}</span>}
