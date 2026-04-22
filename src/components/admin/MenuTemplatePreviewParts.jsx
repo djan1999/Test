@@ -163,7 +163,8 @@ export function PreviewDataPanel({
     if (ck) { addAp({ __type: "cocktail", name: ck.name, notes: ck.notes || "" }); return; }
     const b = beers.find(x => (x.name || "").toLowerCase().includes(q));
     if (b) { addAp({ __type: "beer", name: b.name, notes: b.notes || "" }); return; }
-    // No catalog match — do NOT add a bare text label
+    // Fall back to bare label so template preview renders something even without a catalog match
+    addAp({ __type: "cocktail", name: label });
   };
 
   const toggleRestriction = key => {

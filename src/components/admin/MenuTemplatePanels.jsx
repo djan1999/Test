@@ -108,30 +108,27 @@ function StyleInput({ label, lkey, def, step, unit, min, layoutStyles, onUpdateL
 export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLayoutStyles, open, onToggle }) {
   const si = (props) => <StyleInput layoutStyles={layoutStyles} onUpdateLayoutStyles={onUpdateLayoutStyles} {...props} />;
   return (
-    <div style={{ borderBottom: `1px solid ${tokens.neutral[200]}`, background: tokens.neutral[50], flexShrink: 0 }}>
+    <div style={{ borderTop: `1px solid ${tokens.neutral[200]}`, background: tokens.neutral[0], flexShrink: 0 }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: open ? `1px solid ${tokens.neutral[200]}` : "none" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderBottom: open ? `1px solid ${tokens.neutral[200]}` : "none" }}>
         <button
           onClick={onToggle}
-          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.charcoal.default, background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
-        >{open ? "▾ SPACING SETTINGS" : "▸ SPACING SETTINGS"}</button>
-        <span style={{ fontFamily: FONT, fontSize: 7.5, color: tokens.text.muted }}>
-          Page margins · columns · row gaps · footer — all configurable
-        </span>
+          style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.text.disabled, background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
+        >{open ? "▾ PAGE SETUP" : "▸ PAGE SETUP"}</button>
         {onSaveLayoutStyles && (
           <button
             onClick={onSaveLayoutStyles}
             style={{
-              marginLeft: "auto", fontFamily: FONT, fontSize: 8, letterSpacing: 1.2,
-              padding: "4px 10px", border: "none", borderRadius: 0, cursor: "pointer",
-              background: tokens.surface.card, color: tokens.text.primary, textTransform: "uppercase",
+              marginLeft: "auto", fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2,
+              padding: "3px 8px", border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer",
+              background: tokens.neutral[0], color: tokens.text.muted, textTransform: "uppercase",
             }}
-          >Save Styles</button>
+          >Save</button>
         )}
       </div>
 
       {open && (
-        <div style={{ padding: "12px 14px 14px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ padding: "12px 14px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
 
           {/* Page margins */}
           <div>

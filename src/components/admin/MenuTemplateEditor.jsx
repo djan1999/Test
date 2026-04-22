@@ -32,7 +32,7 @@ import {
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote, readTeamNames, writeTeamNames } from "../../utils/storage.js";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
-import { MenuRulesPanel, LayoutStylesPanel } from "./MenuTemplatePanels.jsx";
+import { LayoutStylesPanel } from "./MenuTemplatePanels.jsx";
 import { PreviewDataPanel } from "./MenuTemplatePreviewParts.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
       <div
         onClick={() => onAdd(rowId, side)}
         style={{
-          flex: 1, minWidth: 0, height: 28, borderRadius: 0,
+          flex: 1, minWidth: 0, height: 36, borderRadius: 0,
           border: `1.5px dashed ${CELL_EMPTY_BORDER}`,
           background: CELL_EMPTY_BG,
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -93,7 +93,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
         onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = CELL_EMPTY_BORDER; }}
       >
-        <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.disabled, fontWeight: 700 }}>+</span>
+        <span style={{ fontFamily: FONT, fontSize: 13, color: tokens.text.disabled, fontWeight: 700 }}>+</span>
       </div>
     );
   }
@@ -104,7 +104,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
     <div
       onClick={() => onSelect(rowId, side)}
       style={{
-        flex: 1, minWidth: 0, height: 28, borderRadius: 0, cursor: "pointer",
+        flex: 1, minWidth: 0, height: 36, borderRadius: 0, cursor: "pointer",
         border: `1.5px solid ${isSelected ? SELECTED_RING : tokens.neutral[200]}`,
         background: isSelected ? tokens.neutral[100] : (meta?.bg || tokens.neutral[50]),
         display: "flex", alignItems: "center", gap: 0,
@@ -114,9 +114,9 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
     >
       <div style={{ width: 3, alignSelf: "stretch", background: accentCol, flexShrink: 0 }} />
       <span style={{
-        fontFamily: FONT, fontSize: 8, color: isSelected ? SELECTED_RING : tokens.text.body,
-        padding: "0 6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        flex: 1, letterSpacing: 0.3,
+        fontFamily: FONT, fontSize: 10, color: isSelected ? SELECTED_RING : tokens.text.body,
+        padding: "0 7px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        flex: 1, letterSpacing: 0.2,
       }}>
         {chipLabel(block, menuCourses)}
       </span>
@@ -126,7 +126,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
         title={side === "left" ? "Move to right cell" : "Move to left cell"}
         style={{
           flexShrink: 0, border: "none", background: "transparent",
-          cursor: "pointer", color: tokens.text.disabled, fontSize: 9, padding: "0 3px", height: "100%",
+          cursor: "pointer", color: tokens.text.disabled, fontSize: 10, padding: "0 4px", height: "100%",
         }}
         onMouseEnter={e => { e.currentTarget.style.color = tokens.charcoal.default; }}
         onMouseLeave={e => { e.currentTarget.style.color = tokens.text.disabled; }}
@@ -135,7 +135,7 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
         onClick={e => { e.stopPropagation(); onRemove(rowId, side); }}
         style={{
           flexShrink: 0, border: "none", background: "transparent",
-          cursor: "pointer", color: tokens.text.disabled, fontSize: 9, padding: "0 4px", height: "100%",
+          cursor: "pointer", color: tokens.text.disabled, fontSize: 11, padding: "0 5px", height: "100%",
         }}
         onMouseEnter={e => { e.currentTarget.style.color = tokens.red.text; }}
         onMouseLeave={e => { e.currentTarget.style.color = tokens.text.disabled; }}
@@ -168,13 +168,13 @@ function SortableRow({
   const isGapRow = !row.left && !row.right && (Number(row.gap || 0) > 0);
 
   return (
-    <div ref={setNodeRef} style={{ ...style, marginBottom: 2 }}>
+    <div ref={setNodeRef} style={{ ...style, marginBottom: 3 }}>
 
       {isGapRow ? (
         /* ── Gap row — both cells empty, show gap inline ── */
         <div style={{
           display: "flex", alignItems: "center", gap: 4,
-          padding: "3px 4px",
+          padding: "5px 6px",
           background: tokens.neutral[50],
           border: `1.5px dashed ${tokens.neutral[300]}`,
           borderRadius: 0,
@@ -214,7 +214,7 @@ function SortableRow({
         <>
           <div style={{
             display: "flex", alignItems: "center", gap: 4,
-            padding: "3px 4px",
+            padding: "3px 6px 3px 4px",
             background: (leftSelected || rightSelected) ? tokens.neutral[100] : tokens.neutral[0],
             border: `1px solid ${(leftSelected || rightSelected) ? tokens.neutral[300] : tokens.neutral[200]}`,
             borderRadius: 0,
@@ -269,8 +269,8 @@ function RowActionBtn({ children, onClick, title, danger = false, active = false
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        width: 20, height: 22, border: "none", borderRadius: 0, cursor: "pointer",
-        fontFamily: FONT, fontSize: 10, padding: 0, lineHeight: 1,
+        width: 22, height: 28, border: "none", borderRadius: 0, cursor: "pointer",
+        fontFamily: FONT, fontSize: 11, padding: 0, lineHeight: 1,
         background: active ? tokens.neutral[100] : hov ? (danger ? tokens.red.bg : tokens.neutral[100]) : "transparent",
         color: active ? SELECTED_RING : hov ? (danger ? tokens.red.text : SELECTED_RING) : tokens.text.disabled,
         transition: "all 0.1s",
@@ -611,12 +611,6 @@ function LivePreview({ previewHtml, loading, label = "A5" }) {
         width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
       }}>
         <span>LIVE PREVIEW {loading ? "· updating…" : `· ${label}`}</span>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, letterSpacing: 1.2, color: tokens.text.secondary }}>
-          <input type="checkbox" checked={!!window.__menuSpacingDebug} onChange={(e) => {
-            window.__menuSpacingDebug = e.target.checked;
-          }} />
-          SPACING DEBUG
-        </label>
       </div>
 
       {/* Paper wrapper */}
@@ -682,7 +676,6 @@ export default function MenuTemplateEditor({
   const [leftOpen,    setLeftOpen]    = useState(true);
   const [rightOpen,   setRightOpen]   = useState(true);
   const [previewOpen, setPreviewOpen] = useState(true);
-  const [menuRulesOpen,    setMenuRulesOpen]    = useState(false);
   const [layoutStylesOpen, setLayoutStylesOpen] = useState(false);
   const previewTimer = useRef(null);
   const didMigrateSpacersRef = useRef(false);
@@ -1078,23 +1071,6 @@ export default function MenuTemplateEditor({
         </div>
       </div>
 
-      <MenuRulesPanel
-        menuRules={menuRules}
-        onUpdateMenuRules={onUpdateMenuRules}
-        onSaveMenuRules={onSaveMenuRules}
-        menuRulesSaving={menuRulesSaving}
-        menuRulesSaved={menuRulesSaved}
-        open={menuRulesOpen}
-        onToggle={() => setMenuRulesOpen(v => !v)}
-      />
-
-      <LayoutStylesPanel
-        layoutStyles={layoutStyles}
-        onUpdateLayoutStyles={onUpdateLayoutStyles}
-        onSaveLayoutStyles={onSaveLayoutStyles}
-        open={layoutStylesOpen}
-        onToggle={() => setLayoutStylesOpen(v => !v)}
-      />
 
       {/* ── Three-panel layout ── */}
       <div style={{ display: "flex", flex: 1, minHeight: 0, gap: 0 }}>
@@ -1286,15 +1262,16 @@ export default function MenuTemplateEditor({
         )}
       </div>
 
-      {/* ── Right: Block inspector ── */}
+      {/* ── Right: Block inspector + Page Setup ── */}
       <aside style={{
-        width: rightOpen ? 240 : 28, flexShrink: 0, borderLeft: `1px solid ${tokens.neutral[200]}`,
-        overflowY: rightOpen ? "auto" : "hidden", background: tokens.neutral[0],
+        width: rightOpen ? 264 : 28, flexShrink: 0, borderLeft: `1px solid ${tokens.neutral[200]}`,
+        background: tokens.neutral[0],
         display: "flex", flexDirection: "column",
+        overflow: "hidden",
         transition: "width 0.18s ease",
       }}>
         {/* Collapse toggle */}
-        <div style={{ padding: rightOpen ? "10px 14px 6px" : "8px 4px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: rightOpen ? "space-between" : "center" }}>
+        <div style={{ padding: rightOpen ? "10px 14px 6px" : "8px 4px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: rightOpen ? "space-between" : "center", borderBottom: rightOpen ? `1px solid ${tokens.neutral[200]}` : "none" }}>
           {rightOpen && (
             <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 3, color: tokens.text.disabled, textTransform: "uppercase" }}>
               BLOCK INSPECTOR
@@ -1313,15 +1290,24 @@ export default function MenuTemplateEditor({
           >{rightOpen ? "▸" : "◂"}</button>
         </div>
         {rightOpen && (
-          <div style={{ padding: "0 14px 14px", flex: 1, overflowY: "auto" }}>
-            <BlockInspector
-              block={selectedBlock}
-              onUpdate={updateSelectedBlock}
-              menuCourses={menuCourses}
-              wines={wines}
-              cocktails={cocktails}
-              spirits={spirits}
-              beers={beers}
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "12px 14px 14px", flex: 1 }}>
+              <BlockInspector
+                block={selectedBlock}
+                onUpdate={updateSelectedBlock}
+                menuCourses={menuCourses}
+                wines={wines}
+                cocktails={cocktails}
+                spirits={spirits}
+                beers={beers}
+              />
+            </div>
+            <LayoutStylesPanel
+              layoutStyles={layoutStyles}
+              onUpdateLayoutStyles={onUpdateLayoutStyles}
+              onSaveLayoutStyles={onSaveLayoutStyles}
+              open={layoutStylesOpen}
+              onToggle={() => setLayoutStylesOpen(v => !v)}
             />
           </div>
         )}
