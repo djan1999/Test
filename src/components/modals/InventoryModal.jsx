@@ -4,6 +4,7 @@ import { COUNTRY_NAMES } from "../../constants/countries.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput } from "../../styles/mixins.js";
 import FullModal from "../ui/FullModal.jsx";
+import { useIsMobile } from "../../hooks/useIsMobile.js";
 
 const FONT = tokens.font;
 const baseInp = { ...baseInput };
@@ -21,6 +22,7 @@ const getDeviceId = () => {
 };
 
 export default function InventoryModal({ wines, onClose }) {
+  const isMobile = useIsMobile(640);
   const myId = useRef(getDeviceId());
   const stRef = useRef(null);
   const saveTimer = useRef(null);
@@ -227,18 +229,18 @@ export default function InventoryModal({ wines, onClose }) {
   };
 
   const actions = (
-    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+    <div style={{ display: "flex", gap: isMobile ? 6 : 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
       <span style={{
         fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "4px 10px",
         border: `1px solid ${syncChip.border}`, borderRadius: 0,
         background: syncChip.bg, color: syncChip.color, whiteSpace: "nowrap",
       }}>{syncChip.label}</span>
       <button onClick={clearAll} style={{
-        fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 12px",
+        fontFamily: FONT, fontSize: 9, letterSpacing: isMobile ? 1.5 : 2, padding: isMobile ? "6px 10px" : "6px 12px",
         border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[500],
-      }}>CLEAR ALL</button>
+      }}>{isMobile ? "CLEAR" : "CLEAR ALL"}</button>
       <button onClick={handlePrint} style={{
-        fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
+        fontFamily: FONT, fontSize: 9, letterSpacing: isMobile ? 1.5 : 2, padding: isMobile ? "6px 10px" : "6px 14px",
         border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[50], color: tokens.neutral[500],
       }}>PRINT</button>
     </div>
@@ -271,8 +273,9 @@ export default function InventoryModal({ wines, onClose }) {
           const othersLabel = othersRaw > 0 ? (othersRaw % 1 >= 0.5 ? `${Math.floor(othersRaw)}½` : String(othersRaw)) : null;
           return (
             <div key={w.id} style={{
-              display: "flex", alignItems: "center", gap: 12,
+              display: "flex", alignItems: "center", gap: isMobile ? 8 : 12,
               padding: "10px 4px", borderBottom: `1px solid ${tokens.neutral[100]}`,
+              flexWrap: isMobile ? "wrap" : "nowrap",
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: tokens.neutral[900] }}>
