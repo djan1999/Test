@@ -13,6 +13,7 @@ const base = {
 
 export const BEV_TYPES = {
   wine:     { ...base, label: "Glass",    glyph: tokens.bevGlyph.wine },
+  bottle:   { ...base, label: "Bottle",   glyph: tokens.bevGlyph.bottle },
   cocktail: { ...base, label: "Cocktail", glyph: tokens.bevGlyph.cocktail },
   spirit:   { ...base, label: "Spirit",   glyph: tokens.bevGlyph.spirit },
   beer:     { ...base, label: "Beer",     glyph: tokens.bevGlyph.beer },

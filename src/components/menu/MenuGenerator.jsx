@@ -553,7 +553,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                     <BeverageSearch
                       wines={winesCatalog} cocktails={cocktailsCatalog} spirits={spiritsCatalog} beers={beersCatalog}
                       onAdd={({ type, item }) => {
-                        if (type === "wine")     updSeat(s.id, "glasses",   [...(s.glasses   || []), item]);
+                        if (type === "wine" || type === "bottle") updSeat(s.id, "glasses", [...(s.glasses || []), item]);
                         if (type === "cocktail") updSeat(s.id, "cocktails", [...(s.cocktails || []), item]);
                         if (type === "spirit")   updSeat(s.id, "spirits",   [...(s.spirits   || []), item]);
                         if (type === "beer")     updSeat(s.id, "beers",     [...(s.beers     || []), item]);
@@ -561,7 +561,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                     />
                     {(() => {
                       const allBevs = [
-                        ...(s.glasses   || []).map((x, i) => ({ key: `g${i}`, type: "wine",     label: x?.name, sub: x?.producer, onRemove: () => updSeat(s.id, "glasses",   (s.glasses  ||[]).filter((_,idx)=>idx!==i)) })),
+                        ...(s.glasses   || []).map((x, i) => ({ key: `g${i}`, type: x?.byGlass === false ? "bottle" : "wine", label: x?.name, sub: x?.producer, onRemove: () => updSeat(s.id, "glasses",   (s.glasses  ||[]).filter((_,idx)=>idx!==i)) })),
                         ...(s.cocktails || []).map((x, i) => ({ key: `c${i}`, type: "cocktail", label: x?.name, sub: x?.notes,    onRemove: () => updSeat(s.id, "cocktails", (s.cocktails||[]).filter((_,idx)=>idx!==i)) })),
                         ...(s.spirits   || []).map((x, i) => ({ key: `sp${i}`,type: "spirit",   label: x?.name, sub: x?.notes,    onRemove: () => updSeat(s.id, "spirits",   (s.spirits  ||[]).filter((_,idx)=>idx!==i)) })),
                         ...(s.beers     || []).map((x, i) => ({ key: `b${i}`, type: "beer",     label: x?.name, sub: x?.notes,    onRemove: () => updSeat(s.id, "beers",     (s.beers    ||[]).filter((_,idx)=>idx!==i)) })),

@@ -44,9 +44,9 @@ export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd
     }
     const lq = val.toLowerCase();
     const r = [];
-    wines.filter((w) => w.byGlass).forEach((w) => {
+    wines.forEach((w) => {
       if (w.name.toLowerCase().includes(lq) || w.producer?.toLowerCase().includes(lq) || w.vintage?.includes(lq)) {
-        r.push({ type: "wine", item: w, label: w.name, sub: `${w.producer} · ${w.vintage}` });
+        r.push({ type: w.byGlass ? "wine" : "bottle", item: w, label: w.name, sub: `${w.producer} · ${w.vintage}` });
       }
     });
     cocktails.forEach((c) => {
