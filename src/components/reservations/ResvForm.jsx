@@ -39,7 +39,11 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
   const [lang, setLang] = useState(initial?.data?.lang || "en");
   const [guests, setGuests] = useState(initial?.data?.guests || 2);
   const [guestType, setGuestType] = useState(initial?.data?.guestType || "");
-  const [room, setRoom] = useState(initial?.data?.room || "");
+  const [rooms, setRooms] = useState(
+    Array.isArray(initial?.data?.rooms) && initial.data.rooms.length
+      ? initial.data.rooms.filter(Boolean)
+      : (initial?.data?.room ? [initial.data.room] : [])
+  );
   const [birthday, setBirthday] = useState(!!initial?.data?.birthday);
   const [cakeNote, setCakeNote] = useState(initial?.data?.cakeNote || "");
   const [restrictions, setRestrictions] = useState(initial?.data?.restrictions || []);
@@ -59,9 +63,12 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
   const handleSave = async () => {
     if (!primaryId) return;
     setSaving(true);
+    const sortedRooms = guestType === "hotel" ? [...rooms].sort((a, b) => String(a).localeCompare(String(b))) : [];
     const data = {
       resName: name, resTime: time, menuType, lang, guests, guestType,
-      room: guestType === "hotel" ? room : "", birthday, cakeNote: birthday ? cakeNote : "", restrictions, notes,
+      room: sortedRooms[0] || "",
+      rooms: sortedRooms,
+      birthday, cakeNote: birthday ? cakeNote : "", restrictions, notes,
       tableGroup: sortedGroup,
       courseOverrides: initial?.data?.courseOverrides || {},
       kitchenCourseNotes: initial?.data?.kitchenCourseNotes || {},
@@ -171,7 +178,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
           <div style={fieldLabel}>Guest type</div>
           <div style={{ display: "flex", gap: 5 }}>
             {[["", "Regular"], ["hotel", "Hotel"]].map(([v, l]) => (
-              <button key={v || "r"} onClick={() => { setGuestType(v); if (v !== "hotel") setRoom(""); }} style={{
+              <button key={v || "r"} onClick={() => { setGuestType(v); if (v !== "hotel") setRooms([]); }} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "8px 0", flex: 1,
                 border: "1px solid", borderColor: guestType === v ? tokens.charcoal.default : tokens.neutral[200],
                 borderRadius: 0, cursor: "pointer",
@@ -183,17 +190,24 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
         </div>
         {guestType === "hotel" ? (
           <div>
-            <div style={fieldLabel}>Room</div>
+            <div style={fieldLabel}>
+              Rooms
+              {rooms.length > 0 && <span style={{ color: tokens.text.muted, fontWeight: 400, marginLeft: 6 }}>#{[...rooms].sort((a, b) => String(a).localeCompare(String(b))).join(", ")}</span>}
+            </div>
             <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-              {ROOM_OPTIONS.map((r) => (
-                <button key={r} onClick={() => setRoom((x) => x === r ? "" : r)} style={{
-                  fontFamily: FONT, fontSize: 11, padding: "10px 10px", touchAction: "manipulation",
-                  border: "1px solid", borderColor: room === r ? tokens.charcoal.default : tokens.neutral[200],
-                  borderRadius: 0, cursor: "pointer",
-                  background: room === r ? tokens.tint.parchment : tokens.neutral[0],
-                  color: room === r ? tokens.text.secondary : tokens.text.secondary,
-                }}>{r}</button>
-              ))}
+              {ROOM_OPTIONS.map((r) => {
+                const isSel = rooms.includes(r);
+                return (
+                  <button key={r} onClick={() => setRooms((prev) => prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r])} style={{
+                    fontFamily: FONT, fontSize: 11, padding: "10px 10px", touchAction: "manipulation",
+                    border: "1px solid", borderColor: isSel ? tokens.charcoal.default : tokens.neutral[200],
+                    borderRadius: 0, cursor: "pointer",
+                    background: isSel ? tokens.tint.parchment : tokens.neutral[0],
+                    color: tokens.text.secondary,
+                    fontWeight: isSel ? 600 : 400,
+                  }}>{r}</button>
+                );
+              })}
             </div>
           </div>
         ) : (

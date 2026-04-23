@@ -478,11 +478,14 @@ function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
           {table.birthday && (
             <span style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[2] }}>BIRTHDAY</span>
           )}
-          {table.guestType === "hotel" && (
-            <span style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[2] }}>
-              {table.room ? `HOTEL_${table.room}` : "HOTEL"}
-            </span>
-          )}
+          {table.guestType === "hotel" && (() => {
+            const rs = Array.isArray(table.rooms) && table.rooms.length ? table.rooms.filter(Boolean) : (table.room ? [table.room] : []);
+            return (
+              <span style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[2] }}>
+                {rs.length ? `HOTEL_${rs.join("_")}` : "HOTEL"}
+              </span>
+            );
+          })()}
           {table.menuType && (
             <span style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[2] }}>
               MENU_{table.menuType.toUpperCase()}
@@ -651,7 +654,10 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
               <div style={{ fontFamily: FONT, fontSize: 13, color: tokens.text.primary }}>
                 {table.resName}
                 {table.guestType && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.body, marginLeft: 8, letterSpacing: 1, textTransform: "uppercase" }}>{table.guestType}</span>}
-                {table.guestType === "hotel" && table.room && <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[600], marginLeft: 6, letterSpacing: 1 }}>· Hotel #{table.room}</span>}
+                {table.guestType === "hotel" && (() => {
+                  const rs = Array.isArray(table.rooms) && table.rooms.length ? table.rooms.filter(Boolean) : (table.room ? [table.room] : []);
+                  return rs.length ? <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[600], marginLeft: 6, letterSpacing: 1 }}>· Hotel #{rs.join(", ")}</span> : null;
+                })()}
               </div>
             </div>
           )}
@@ -1267,7 +1273,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
               const pc = { Slow: { color: tokens.neutral[700], bg: tokens.tint.parchment, border: tokens.neutral[300] }, Fast: { color: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } }[t.pace] || {};
               return <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 0, border: `1px solid ${pc.border}`, background: pc.bg, color: pc.color, fontWeight: 700 }}>{t.pace}</span>;
             })()}
-            {t.guestType === "hotel" && t.room && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 0, border: `1px solid ${tokens.neutral[300]}`, color: tokens.neutral[600], background: tokens.tint.parchment, fontWeight: 600 }}>#{t.room}</span>}
+            {t.guestType === "hotel" && (() => {
+              const rs = Array.isArray(t.rooms) && t.rooms.length ? t.rooms.filter(Boolean) : (t.room ? [t.room] : []);
+              return rs.length ? <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 0, border: `1px solid ${tokens.neutral[300]}`, color: tokens.neutral[600], background: tokens.tint.parchment, fontWeight: 600 }}>#{rs.join(", ")}</span> : null;
+            })()}
             {t.birthday && <span style={{ fontSize: 12 }}>🎂</span>}
           </div>
         </div>
@@ -2463,7 +2472,7 @@ export default function App() {
     }));
   };
 
-  const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, birthday, cakeNote, restrictions, notes, lang }) => {
+  const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, rooms, birthday, cakeNote, restrictions, notes, lang }) => {
     const group = tableIds ?? (tableId ? [tableId] : [id]);
     const sortedGroup = [...group].sort((a, b) => a - b);
     // Find old group to clear tables that are no longer part of it
@@ -2492,7 +2501,8 @@ export default function App() {
             },
           }))
         : newSeats;
-      return { ...t, resName: name, resTime: time, menuType, guestType, room, guests, seats, birthday, cakeNote: birthday ? (cakeNote || "") : "", restrictions, notes, lang: lang || "en", tableGroup: sortedGroup };
+      const normalizedRooms = Array.isArray(rooms) ? rooms.filter(Boolean) : (room ? [room] : []);
+      return { ...t, resName: name, resTime: time, menuType, guestType, room: normalizedRooms[0] || "", rooms: normalizedRooms, guests, seats, birthday, cakeNote: birthday ? (cakeNote || "") : "", restrictions, notes, lang: lang || "en", tableGroup: sortedGroup };
     }));
     setResModal(null);
   };
@@ -2579,7 +2589,8 @@ export default function App() {
             lang:               d.lang || "en",
             guests:             d.guests || 2,
             guestType:          d.guestType || "",
-            room:               d.room || "",
+            room:               (Array.isArray(d.rooms) && d.rooms.length ? d.rooms[0] : d.room) || "",
+            rooms:              Array.isArray(d.rooms) && d.rooms.length ? d.rooms.filter(Boolean) : (d.room ? [d.room] : []),
             birthday:           !!d.birthday,
             cakeNote:           d.birthday ? (d.cakeNote || "") : "",
             restrictions:       d.restrictions || [],

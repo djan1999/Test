@@ -90,7 +90,8 @@ function bulletsForReservation(r) {
 
   // Hotel
   if (d.guestType === "hotel") {
-    const roomPart = d.room ? ` #${d.room}` : "";
+    const rs = Array.isArray(d.rooms) && d.rooms.length ? d.rooms.filter(Boolean) : (d.room ? [d.room] : []);
+    const roomPart = rs.length ? ` #${rs.join(", ")}` : "";
     out.push(`Hotel${roomPart}`);
   }
 

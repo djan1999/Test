@@ -32,7 +32,11 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
   const [menuType, setMenuType]   = useState(table.menuType || "");
   const [guests, setGuests]       = useState(table.guests || 2);
   const [guestType, setGuestType] = useState(table.guestType || "");
-  const [room, setRoom]           = useState(table.room || "");
+  const [rooms, setRooms]         = useState(
+    Array.isArray(table.rooms) && table.rooms.length
+      ? table.rooms.filter(Boolean)
+      : (table.room ? [table.room] : [])
+  );
   const [birthday, setBirthday]   = useState(table.birthday || false);
   const [restrictions, setRestrictions] = useState(table.restrictions || []);
   const [notes, setNotes]         = useState(table.notes || "");
@@ -182,7 +186,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
               <div style={fieldLabel}>Guest Type</div>
               <div style={{ display: "flex", gap: 8 }}>
                 {["hotel"].map(type => (
-                  <button key={type} onClick={() => { setGuestType(t => t === type ? "" : type); setRoom(""); }} style={{
+                  <button key={type} onClick={() => { setGuestType(t => t === type ? "" : type); setRooms([]); }} style={{
                     fontFamily: FONT, fontSize: 11, letterSpacing: 1,
                     padding: "12px 20px", minWidth: 120, border: "1px solid",
                     borderColor: guestType === type ? tokens.charcoal.default : tokens.neutral[200],
@@ -195,20 +199,35 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
               </div>
               {guestType === "hotel" && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={fieldLabel}>Room</div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {ROOM_OPTIONS.map(r => (
-                      <button key={r} onClick={() => setRoom(x => x === r ? "" : r)} style={{
-                        fontFamily: FONT, fontSize: 13, fontWeight: 500, letterSpacing: 1,
-                        padding: "12px 16px", border: "1px solid",
-                        borderColor: room === r ? tokens.charcoal.default : tokens.neutral[200],
-                        borderRadius: 0, cursor: "pointer",
-                        background: room === r ? tokens.tint.parchment : tokens.neutral[0],
-                        color: room === r ? tokens.text.secondary : tokens.text.body,
-                        transition: "all 0.12s",
-                      }}>{r}</button>
-                    ))}
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+                    <div style={fieldLabel}>Rooms</div>
+                    {rooms.length > 0 && (
+                      <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.secondary, letterSpacing: 1 }}>
+                        #{[...rooms].sort((a, b) => String(a).localeCompare(String(b))).join(", ")}
+                      </span>
+                    )}
                   </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {ROOM_OPTIONS.map(r => {
+                      const isSel = rooms.includes(r);
+                      return (
+                        <button key={r} onClick={() => setRooms(prev => prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r])} style={{
+                          fontFamily: FONT, fontSize: 13, fontWeight: isSel ? 700 : 500, letterSpacing: 1,
+                          padding: "12px 16px", border: "1px solid",
+                          borderColor: isSel ? tokens.charcoal.default : tokens.neutral[200],
+                          borderRadius: 0, cursor: "pointer",
+                          background: isSel ? tokens.tint.parchment : tokens.neutral[0],
+                          color: isSel ? tokens.text.secondary : tokens.text.body,
+                          transition: "all 0.12s",
+                        }}>{r}</button>
+                      );
+                    })}
+                  </div>
+                  {rooms.length === 0 && (
+                    <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.muted, marginTop: 5, letterSpacing: 0.5 }}>
+                      Tap multiple rooms to combine (e.g. #01, 11, 21)
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -316,7 +335,10 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
             flex: 1, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
             padding: "14px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.body,
           }}>CANCEL</button>
-          <button onClick={() => onSave({ tableIds, name, time, menuType, guests, guestType, room, birthday, restrictions, notes, lang })} style={{
+          <button onClick={() => {
+            const sortedRooms = guestType === "hotel" ? [...rooms].sort((a, b) => String(a).localeCompare(String(b))) : [];
+            onSave({ tableIds, name, time, menuType, guests, guestType, room: sortedRooms[0] || "", rooms: sortedRooms, birthday, restrictions, notes, lang });
+          }} style={{
             flex: 2, fontFamily: FONT, fontSize: 12, letterSpacing: 2,
             padding: "14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary,
           }}>SAVE</button>

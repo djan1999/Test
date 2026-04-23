@@ -38,11 +38,19 @@ function buildWeeklyRows(reservations, weekDays, restrictionDefs = []) {
   const sorted = Object.keys(byDate).sort();
   const dateRange = sorted.length ? `${fmtS(sorted[0])} - ${fmtF(sorted[sorted.length-1])}` : "";
   const expLabel = r => r.data?.menuType === "short" ? "SM" : `L${String(new Date(r.date+"T00:00:00").getFullYear()).slice(-2)}`;
-  const infoTxt = d => [
-    d.guestType==="hotel" && d.room ? `Hotel #${d.room}` : "",
-    d.birthday ? `1xCAKE${d.cakeNote?`(${d.cakeNote})`:""}` : "",
-    d.notes || "",
-  ].filter(Boolean).join("\n");
+  const roomsOf = d => {
+    if (Array.isArray(d.rooms) && d.rooms.length) return d.rooms.filter(Boolean);
+    if (d.room) return [d.room];
+    return [];
+  };
+  const infoTxt = d => {
+    const rs = roomsOf(d);
+    return [
+      d.guestType === "hotel" && rs.length ? `Hotel #${rs.join(", ")}` : "",
+      d.birthday ? `1xCAKE${d.cakeNote?`(${d.cakeNote})`:""}` : "",
+      d.notes || "",
+    ].filter(Boolean).join("\n");
+  };
   const restrTxt = rs => {
     if (!rs?.length) return "";
     const c = {};
@@ -348,7 +356,10 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       {d.menuType && <span style={{ color: tokens.neutral[700], textTransform: "uppercase", letterSpacing: 1 }}>{d.menuType}</span>}
                       {d.lang === "si" && <span style={{ color: tokens.neutral[500] }}>SLO</span>}
                       {d.birthday && <span>🎂{d.cakeNote ? ` ${d.cakeNote}` : ""}</span>}
-                      {d.guestType === "hotel" && d.room && <span style={{ color: tokens.text.body }}>Room {d.room}</span>}
+                      {d.guestType === "hotel" && (() => {
+                        const rs = Array.isArray(d.rooms) && d.rooms.length ? d.rooms.filter(Boolean) : (d.room ? [d.room] : []);
+                        return rs.length ? <span style={{ color: tokens.text.body }}>Room{rs.length > 1 ? "s" : ""} #{rs.join(", ")}</span> : null;
+                      })()}
                     </div>
                     {d.restrictions?.length > 0 && (
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>

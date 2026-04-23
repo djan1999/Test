@@ -104,7 +104,8 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
 
   const infoText = (d, r) => {
     const parts = [];
-    if (d.guestType === "hotel" && d.room) parts.push(`<u>Hotel #${esc(d.room)}</u>`);
+    const rs = Array.isArray(d.rooms) && d.rooms.length ? d.rooms.filter(Boolean) : (d.room ? [d.room] : []);
+    if (d.guestType === "hotel" && rs.length) parts.push(`<u>Hotel #${esc(rs.join(", "))}</u>`);
     if (d.birthday) {
       const occasion = d.cakeNote ? `(${esc(d.cakeNote)})` : "";
       parts.push(`<u>1xCAKE${occasion}</u>`);

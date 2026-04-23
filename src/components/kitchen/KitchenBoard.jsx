@@ -186,7 +186,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             {table.menuType && <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 0, background: tokens.neutral[100], color: tokens.neutral[500] }}>{isShort ? "SHORT" : "LONG"}</span>}
             <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 0, background: table.lang === "si" ? tokens.red.bg : tokens.green.bg, color: table.lang === "si" ? tokens.red.text : tokens.green.text, border: "1px solid", borderColor: table.lang === "si" ? tokens.red.border : tokens.green.border }}>{table.lang === "si" ? "SI" : "EN"}</span>
             {table.birthday && <span style={{ fontSize: 10 }}>🎂</span>}
-            {table.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.text.muted, letterSpacing: 0.5 }}>{table.room ? `#${table.room}` : "Hotel"}</span>}
+            {table.guestType === "hotel" && (() => {
+              const rs = Array.isArray(table.rooms) && table.rooms.length ? table.rooms.filter(Boolean) : (table.room ? [table.room] : []);
+              return <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.text.muted, letterSpacing: 0.5 }}>{rs.length ? `#${rs.join(", ")}` : "Hotel"}</span>;
+            })()}
           </div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 1, flexWrap: "wrap" }}>
             <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: tokens.text.primary }}>{seats.length} <span style={{ fontWeight: 600, fontSize: 10, letterSpacing: 0.5 }}>PAX</span></span>
