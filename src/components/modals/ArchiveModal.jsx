@@ -3,7 +3,7 @@ import FullModal from "../ui/FullModal.jsx";
 import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
-import { COUNTRY_NAMES } from "../../constants/countries.js";
+import { COUNTRY_NAMES, stripCountryFromRegion } from "../../constants/countries.js";
 import { restrLabel } from "../../constants/dietary.js";
 import { waterStyle } from "../../constants/pairings.js";
 import { parseHHMM } from "../../utils/tableHelpers.js";
@@ -191,7 +191,7 @@ export default function ArchiveModal({
                                   const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
                                   const rawCountry = w?.country || "";
                                   const country = COUNTRY_NAMES[rawCountry] || rawCountry;
-                                  const region = (w?.region || "").replace(new RegExp(`,?\\s*${rawCountry}$`), "").trim();
+                                  const region = stripCountryFromRegion(w?.region, rawCountry);
                                   const sub = [region, country].filter(Boolean).join(", ") || w?.notes || "";
                                   return (
                                     <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 1, marginBottom: 4 }}>
@@ -286,7 +286,7 @@ export default function ArchiveModal({
                                 const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
                                 const rawCountry = w?.country || "";
                                 const country = COUNTRY_NAMES[rawCountry] || rawCountry;
-                                const region = (w?.region || "").replace(new RegExp(`,?\\s*${rawCountry}$`), "").trim();
+                                const region = stripCountryFromRegion(w?.region, rawCountry);
                                 const sub = [region, country].filter(Boolean).join(", ") || w?.notes || "";
                                 return (
                                   <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 1, marginBottom: 4 }}>

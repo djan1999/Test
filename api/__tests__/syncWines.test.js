@@ -150,7 +150,8 @@ describe("parseWinesFromHtml", () => {
     expect(wines).toHaveLength(1);
     expect(wines[0].producer).toBe("Štemberger");
     expect(wines[0].wine_name).toBe("Robinia");
-    expect(wines[0].region).toBe("Kras, SI");
+    expect(wines[0].region).toBe("Kras, Slovenia");
+    expect(wines[0].country).toBe("SI");
     expect(wines[0].by_glass).toBe(true);
   });
 

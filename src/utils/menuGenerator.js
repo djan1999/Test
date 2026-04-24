@@ -179,7 +179,11 @@ export function generateMenuHTML({
     const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
     const rawCountry = w?.country || "";
     const country = COUNTRY_NAMES[rawCountry] || rawCountry;
-    const region = (w?.region || "").replace(new RegExp(`,?\\s*${rawCountry}$`), "").trim();
+    const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const tags = [rawCountry, country].filter(Boolean).map(escRe);
+    const region = tags.length
+      ? (w?.region || "").replace(new RegExp(`,?\\s*(?:${tags.join("|")})$`, "i"), "").trim()
+      : (w?.region || "").trim();
     const subParts = [region, country].filter(Boolean);
     return {
       title: title || "",

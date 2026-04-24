@@ -34,12 +34,23 @@ const BROWSER_HEADERS = {
 };
 
 const WINE_COUNTRIES = [
-  { param: "Slovenija",     label: "SI" },
-  { param: "Avstrija",      label: "AT" },
-  { param: "Italija",       label: "IT" },
-  { param: "Francija",      label: "FR" },
-  { param: "Hrva%C5%A1ka",  label: "HR" },
+  { param: "Slovenija",     label: "SI", name: "Slovenia" },
+  { param: "Avstrija",      label: "AT", name: "Austria"  },
+  { param: "Italija",       label: "IT", name: "Italy"    },
+  { param: "Francija",      label: "FR", name: "France"   },
+  { param: "Hrva%C5%A1ka",  label: "HR", name: "Croatia"  },
 ];
+
+// Country code → full name, used when formatting the region string that ends
+// up in the admin drinks editor. Kept in sync with src/constants/countries.js.
+const COUNTRY_NAMES = {
+  SI: "Slovenia", AT: "Austria", IT: "Italy", FR: "France", HR: "Croatia",
+  ES: "Spain", DE: "Germany", PT: "Portugal", GR: "Greece", HU: "Hungary",
+  CH: "Switzerland", GE: "Georgia", RO: "Romania", BG: "Bulgaria", RS: "Serbia",
+  CZ: "Czech Republic", SK: "Slovakia", MD: "Moldova", AM: "Armenia",
+  US: "USA", AR: "Argentina", CL: "Chile", AU: "Australia", NZ: "New Zealand",
+  ZA: "South Africa", UY: "Uruguay",
+};
 
 const BEVERAGE_PAGES = [
   { url: `${BASE}/category/cocktails/`,   category: "cocktail", label: "Cocktail"        },
@@ -189,6 +200,7 @@ export function parseWinesFromHtml(html, countryLabel) {
       if (!producer || !name) continue;
       const vintageClean = (vintage || "").trim() || "NV";
       const key = `${producer}|${name}|${vintageClean}|${countryLabel}`.toLowerCase().replace(/\s/g, "_");
+      const countryName = COUNTRY_NAMES[countryLabel] || countryLabel;
       wines.push({
         key,
         source: "sync",
@@ -196,7 +208,7 @@ export function parseWinesFromHtml(html, countryLabel) {
         name: `${producer} – ${name}`,
         wine_name: name,
         vintage: vintageClean,
-        region: `${(region || "").trim()}, ${countryLabel}`,
+        region: `${(region || "").trim()}, ${countryName}`,
         country: countryLabel,
         by_glass: byGlass,
       });
