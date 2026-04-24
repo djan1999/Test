@@ -1,35 +1,17 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
-  DndContext, PointerSensor, TouchSensor,
-  useSensor, useSensors, DragOverlay, rectIntersection,
-  MeasuringStrategy,
-} from "@dnd-kit/core";
-import {
-  SortableContext, useSortable, rectSortingStrategy, arrayMove,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
-  firstFilled, applyMenuOverride, truthyCell, splitMainSubCell,
-  parseBilingual, applyCourseRestriction,
-  RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP,
-  parseMenuRow, RESTRICTION_KEYS, normalizeCourseCategory,
+  RESTRICTION_KEYS, normalizeCourseCategory,
   normalizeOptionalKey, optionalPairingsFromCourses,
 } from "./utils/menuUtils.js";
-import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
-import { buildDefaultTemplate, makeRowId } from "./utils/menuTemplateSchema.js";
-import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML } from "./utils/weeklyPrintGenerator.js";
+import { DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
+import { buildDefaultTemplate } from "./utils/menuTemplateSchema.js";
 import {
   readLocalBeverages, writeLocalBeverages,
-  readTeamNames, writeTeamNames,
-  readMenuTitle, writeMenuTitle,
-  readThankYouNote, writeThankYouNote,
   readLocalBoardState, writeLocalBoardState,
-  BEV_STORAGE_KEY, TEAM_STORAGE_KEY, STORAGE_KEY,
+  STORAGE_KEY,
 } from "./utils/storage.js";
-import { makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM } from "./utils/tableHelpers.js";
-import { fuzzy, fuzzyDrink } from "./utils/search.js";
+import { makeSeats, blankTable, sanitizeTable, initTables, fmt } from "./utils/tableHelpers.js";
 import {
-  buildBeverageLinkedKey,
   resolveAperitifFromQuickAccessOption,
   aperitifMatchesQuickAccessOption,
 } from "./utils/quickAccessResolve.js";
@@ -41,19 +23,14 @@ import { AdminLayout } from "./components/admin/index.js";
 import { DIETARY_KEYS, RESTRICTIONS, RESTRICTION_GROUPS, restrLabel, restrCompact } from "./constants/dietary.js";
 import { WATER_OPTS, waterStyle, PAIRINGS, pairingStyle } from "./constants/pairings.js";
 import { BEV_TYPES } from "./constants/beverageTypes.js";
-import { COUNTRY_NAMES } from "./constants/countries.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES } from "./lib/supabaseClient.js";
 import { tokens } from "./styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, chip as mixinChip, circleButton as mixinCircleButton } from "./styles/mixins.js";
 import WaterPicker from "./components/service/WaterPicker.jsx";
 import SwapPicker from "./components/service/SwapPicker.jsx";
-import BlurInput from "./components/ui/BlurInput.jsx";
-import FullModal from "./components/ui/FullModal.jsx";
-import BevEditRow from "./components/menu/BevEditRow.jsx";
-import KitchenBoard, { KitchenTicket } from "./components/kitchen/KitchenBoard.jsx";
+import KitchenBoard from "./components/kitchen/KitchenBoard.jsx";
 import ServiceDatePicker from "./components/reservations/ServiceDatePicker.jsx";
 import ReservationManager from "./components/reservations/ReservationManager.jsx";
-import ReservationModal from "./components/reservations/ReservationModal.jsx";
 import SummaryModal from "./components/modals/SummaryModal.jsx";
 import ArchiveModal from "./components/modals/ArchiveModal.jsx";
 import InventoryModal from "./components/modals/InventoryModal.jsx";
@@ -62,13 +39,7 @@ import GateScreen from "./components/gate/GateScreen.jsx";
 import LoginScreen from "./components/login/LoginScreen.jsx";
 import MenuPage from "./components/menu/MenuPage.jsx";
 import MenuGenerator from "./components/menu/MenuGenerator.jsx";
-import WineSyncTab from "./components/admin/WineSyncTab.jsx";
-import DrinkListEditor from "./components/admin/DrinkListEditor.jsx";
-import CourseEditor from "./components/admin/CourseEditor.jsx";
-import MenuCoursesTab from "./components/admin/MenuCoursesTab.jsx";
-import AdminPanel from "./components/admin/AdminPanel.jsx";
 import WineSearch from "./components/service/WineSearch.jsx";
-import DrinkSearch from "./components/service/DrinkSearch.jsx";
 import BeverageSearch from "./components/service/BeverageSearch.jsx";
 import TableCard from "./components/TableCard/TableCard.jsx";
 
@@ -392,179 +363,6 @@ function optionalExtrasFromCourses(menuCourses = []) {
 }
 
 const circBtnSm = { ...mixinCircleButton };
-// ── Menu Sync Tab ─────────────────────────────────────────────────────────────
-
-// ── Admin Panel ───────────────────────────────────────────────────────────────
-
-function Card({ table, mode, onClick, onSeat, onUnseat, onClear, onEditRes }) {
-  const hasRes = table.resName || table.resTime;
-  const isActive = table.active;
-
-  // Status dot color: gold = active, amber = fast pace, grey = inactive
-  const dotColor = !isActive          ? tokens.signal.done
-                 : table.pace === "Fast" ? tokens.signal.warn
-                 : tokens.signal.active;
-
-  // Header: TABLE_03   COVERS_04   SEATED_19:42
-  const tableLabel = table.tableGroup?.length > 1
-    ? `TABLE_${table.tableGroup.map(n => String(n).padStart(2, "0")).join("-")}`
-    : `TABLE_${String(table.id).padStart(2, "0")}`;
-  const headerParts = [
-    tableLabel,
-    isActive && table.guests != null ? `COVERS_${String(table.guests).padStart(2, "0")}` : null,
-    isActive && table.arrivedAt      ? `SEATED_${table.arrivedAt}`
-      : !isActive && table.resTime   ? `RES_${table.resTime}`
-      : null,
-  ].filter(Boolean);
-
-  // Group restrictions by seat position → { P1: ["GLUTEN_FREE"], TABLE: ["VEGAN"] }
-  const restrBySeat = {};
-  (table.restrictions || []).forEach(r => {
-    const guestKey = r.pos != null ? `P${r.pos}` : "TABLE";
-    if (!restrBySeat[guestKey]) restrBySeat[guestKey] = [];
-    restrBySeat[guestKey].push(restrCompact(r.note).replace(/\s+/g, "_").toUpperCase());
-  });
-  const restrEntries = Object.entries(restrBySeat);
-
-  // Footer ghost buttons
-  const actionBtns = [
-    !isActive && mode === "admin" ? { label: hasRes ? "EDIT" : "RESERVE", fn: onEditRes } : null,
-    !isActive && hasRes           ? { label: "SEAT",   fn: onSeat   } : null,
-    isActive  && mode === "admin" ? { label: "UNSEAT", fn: onUnseat } : null,
-    isActive  && mode === "admin" ? { label: "CLEAR",  fn: onClear  } : null,
-  ].filter(Boolean);
-
-  return (
-    <div
-      style={{
-        fontFamily: FONT,
-        backgroundColor: tokens.neutral[0],
-        borderRadius: 0,
-        borderTop:    `${tokens.rule.hairline} solid ${tokens.ink[4]}`,
-        borderBottom: `${tokens.rule.hairline} solid ${tokens.ink[4]}`,
-        paddingTop:    tokens.space[5],
-        paddingBottom: tokens.space[5],
-        paddingLeft:   tokens.space[4],
-        paddingRight:  tokens.space[4],
-        cursor:  isActive ? "pointer" : "default",
-        opacity: !isActive && !hasRes ? 0.35 : 1,
-        display: "flex", flexDirection: "column", gap: tokens.space[3],
-      }}
-      onClick={onClick}
-    >
-      {/* HEADER STRIP */}
-      <div style={{
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        paddingBottom: tokens.space[3],
-        borderBottom:  `${tokens.rule.hairline} solid ${tokens.ink[4]}`,
-      }}>
-        <span style={{ ...tokens.typeScale.meta, fontFamily: FONT, color: tokens.ink[2] }}>
-          {headerParts.join("   ")}
-        </span>
-        <div style={{ width: 6, height: 6, borderRadius: 0, flexShrink: 0, backgroundColor: dotColor }} />
-      </div>
-
-      {/* GUEST NAME */}
-      {table.resName && (
-        <div>
-          <div style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[3], marginBottom: tokens.space[1] }}>GUEST</div>
-          <div style={{ ...tokens.typeScale.value, fontFamily: FONT, color: tokens.ink[1] }}>{table.resName}</div>
-        </div>
-      )}
-
-      {/* METADATA: hotel, menu type, pace, birthday — all as label tokens */}
-      {(table.birthday || table.guestType === "hotel" || table.menuType || table.pace) && (
-        <div style={{ display: "flex", gap: tokens.space[3], flexWrap: "wrap" }}>
-          {table.birthday && (
-            <span style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[2] }}>BIRTHDAY</span>
-          )}
-          {table.guestType === "hotel" && (() => {
-            const rs = Array.isArray(table.rooms) && table.rooms.length ? table.rooms.filter(Boolean) : (table.room ? [table.room] : []);
-            return (
-              <span style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[2] }}>
-                {rs.length ? `HOTEL_${rs.join("_")}` : "HOTEL"}
-              </span>
-            );
-          })()}
-          {table.menuType && (
-            <span style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[2] }}>
-              MENU_{table.menuType.toUpperCase()}
-            </span>
-          )}
-          {table.pace && (
-            <span style={{ ...tokens.typeScale.label, fontFamily: FONT, color: table.pace === "Fast" ? tokens.signal.warn : tokens.ink[2] }}>
-              PACE_{table.pace.toUpperCase()}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* NOTES */}
-      {table.notes && (
-        <div style={{ ...tokens.typeScale.value, fontFamily: FONT, color: tokens.ink[2], fontSize: "12px", lineHeight: 1.5 }}>
-          {table.notes}
-        </div>
-      )}
-
-      {/* RESTRICTIONS: P1 [GLUTEN_FREE]  P2 [DAIRY_FREE] */}
-      {restrEntries.length > 0 && (
-        <div>
-          <div style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.ink[3], marginBottom: tokens.space[2] }}>RESTRICTIONS</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: tokens.space[2] }}>
-            {restrEntries.map(([guest, flags]) => (
-              <div key={guest} style={{ display: "flex", alignItems: "center", gap: tokens.space[1] }}>
-                <span style={{ ...tokens.typeScale.meta, fontFamily: FONT, color: tokens.ink[2] }}>{guest}</span>
-                {flags.map(flag => (
-                  <span key={flag} style={{ ...tokens.typeScale.label, fontFamily: FONT, color: tokens.signal.alert }}>
-                    [{flag}]
-                  </span>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* SEAT PAIRING DOTS — color still carries wine-type signal */}
-      {isActive && table.seats?.some(s => s.pairing) && (
-        <div style={{ display: "flex", gap: "3px", flexWrap: "wrap" }}>
-          {table.seats.map(s => (
-            <div key={s.id} style={{
-              width: 6, height: 6, borderRadius: 0,
-              backgroundColor: s.pairing ? (pairingStyle[s.pairing]?.color || tokens.ink[4]) : tokens.ink[5],
-            }} />
-          ))}
-        </div>
-      )}
-
-      {/* FOOTER — ghost buttons only */}
-      {actionBtns.length > 0 && (
-        <div
-          style={{
-            display: "flex", gap: tokens.space[4], flexWrap: "wrap",
-            borderTop:  `${tokens.rule.hairline} solid ${tokens.ink[4]}`,
-            paddingTop: tokens.space[3],
-            marginTop:  "auto",
-          }}
-          onClick={e => e.stopPropagation()}
-        >
-          {actionBtns.map(({ label, fn }) => (
-            <button
-              key={label}
-              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", ...tokens.typeScale.meta, fontFamily: FONT, color: tokens.ink[2] }}
-              onClick={fn}
-              onMouseEnter={e => { e.currentTarget.style.textDecoration = "underline"; }}
-              onMouseLeave={e => { e.currentTarget.style.textDecoration = "none"; }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Detail View ───────────────────────────────────────────────────────────────
 function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages }) {
   const isMobile = useIsMobile(860);
@@ -1091,91 +889,6 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
   );
 }
 
-
-// ── Table Seat Detail (read-only, used in DisplayBoard) ───────────────────────
-function TableSeatDetail({ table, isMobile, optionalExtras = [] }) {
-
-  const chip = (label, color, bg, border, bold = false) => (
-    <span style={{
-      fontFamily: FONT, fontSize: 11, letterSpacing: 0.5,
-      padding: "4px 10px", borderRadius: 0,
-      color, background: bg, border: `1px solid ${border}`,
-      whiteSpace: "nowrap", fontWeight: bold ? 500 : 400,
-    }}>{label}</span>
-  );
-
-  return (
-    <>
-      {table.notes && (
-        <div style={{
-          fontFamily: FONT, fontSize: 12, color: tokens.text.secondary, fontStyle: "italic",
-          padding: "10px 14px", background: tokens.neutral[50], border: `1px solid ${tokens.neutral[200]}`,
-          borderRadius: 0, marginBottom: 20,
-        }}>{table.notes}</div>
-      )}
-      {(table.restrictions || []).filter(r => !r.pos && r.note).length > 0 && (
-        <div style={{ marginBottom: 16, padding: "10px 14px", background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, borderRadius: 0 }}>
-          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 3, color: tokens.red.text, marginBottom: 6, textTransform: "uppercase" }}>
-            ⚠ Unassigned restrictions
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {table.restrictions.filter(r => !r.pos && r.note).map((r, i) => (
-              <span key={i} style={{ fontFamily: FONT, fontSize: 11, color: tokens.red.text, fontWeight: 500 }}>{restrLabel(r.note)}</span>
-            ))}
-          </div>
-        </div>
-      )}
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-        {table.seats.map(seat => {
-          const seatRestrictions = (table.restrictions || []).filter(r => r.pos === seat.id);
-          const seatExtras = optionalExtras.filter(d => seat.extras?.[d.key]?.ordered);
-          const ws = waterStyle(seat.water);
-          const pc = PC[seat.pairing] || PC["Non-Alc"];
-          const hasInfo = seatRestrictions.length > 0 || seatExtras.length > 0;
-          return (
-            <div key={seat.id} style={{ border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, padding: "12px", background: tokens.neutral[0] }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{
-                    width: 30, height: 30, borderRadius: 0,
-                    border: `1px solid ${seatRestrictions.length ? tokens.red.border : tokens.neutral[300]}`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontFamily: FONT, fontSize: 10, fontWeight: 600,
-                    color: seatRestrictions.length ? tokens.red.text : tokens.text.body,
-                  }}>P{seat.id}</div>
-                </div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                  <span style={{
-                    fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.5,
-                    padding: "4px 10px", borderRadius: 0,
-                    background: seat.water === "—" ? tokens.neutral[100] : (ws.bg || tokens.neutral[100]),
-                    color: seat.water === "—" ? tokens.text.secondary : tokens.text.primary, border: `1px solid ${tokens.neutral[200]}`,
-                  }}>{seat.water}</span>
-                  {seat.pairing && <span style={{
-                    fontFamily: FONT, fontSize: 11, fontWeight: 600, letterSpacing: 0.4,
-                    padding: "4px 10px", borderRadius: 0,
-                    background: pc.bg, border: `1px solid ${pc.border}`, color: pc.color,
-                  }}>{seat.pairing}</span>}
-                </div>
-              </div>
-              {hasInfo ? (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {seatRestrictions.map((r, i) => (
-                    <span key={i} style={{ fontFamily: FONT, fontSize: 11, fontWeight: 500, letterSpacing: 0.3, padding: "4px 9px", borderRadius: 0, background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, color: tokens.red.text }}>⚠ {restrLabel(r.note)}</span>
-                  ))}
-                  {seatExtras.map(d => {
-                    const ex = seat.extras[d.key];
-                    return <span key={d.key} style={{ fontFamily: FONT, fontSize: 11, letterSpacing: 0.3, padding: "4px 9px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text }}>{d.name}{ex.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}</span>;
-                  })}
-                </div>
-              ) : <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.muted }}>No extra notes</div>}
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}
 
 // ── Display Board ─────────────────────────────────────────────────────────────
 const PC = {
@@ -1722,166 +1435,6 @@ function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd,
   );
 }
 
-// ── Service Quick View ────────────────────────────────────────────────────────
-const WATER_QUICK = ["XC", "XW", "OC", "OW"];
-
-function ServiceQuickCard({ table, updSeat, onDetails, optionalExtras = [] }) {
-  const seats = table.seats || [];
-  const toggleExtra = (seat, dishId) => {
-    const cur = seat.extras?.[dishId] || { ordered: false, pairing: "—" };
-    updSeat(table.id, seat.id, "extras", { ...seat.extras, [dishId]: { ...cur, ordered: !cur.ordered } });
-  };
-
-  const waterBtn = (opt, active, onClick) => (
-    <button key={opt} onClick={onClick} style={{
-      fontFamily: FONT, fontSize: 10, letterSpacing: 0.5,
-      padding: "5px 9px", border: "1px solid",
-      borderColor: active ? tokens.charcoal.default : tokens.neutral[200],
-      borderRadius: 0, cursor: "pointer", lineHeight: 1,
-      background: active ? tokens.tint.parchment : tokens.neutral[0],
-      color: active ? tokens.neutral[700] : tokens.text.secondary,
-    }}>{opt}</button>
-  );
-
-  const extraBtn = (label, active, color, onClick) => (
-    <button onClick={onClick} style={{
-      fontFamily: FONT, fontSize: 9, letterSpacing: 1,
-      padding: "5px 9px", border: "1px solid",
-      borderColor: active ? color : tokens.neutral[200],
-      borderRadius: 0, cursor: "pointer", lineHeight: 1,
-      background: active ? color : tokens.neutral[0],
-      color: active ? tokens.text.primary : tokens.text.disabled,
-      textTransform: "uppercase",
-    }}>{label}</button>
-  );
-
-  const allWaterMatch = opt => seats.length > 0 && seats.every(s => s.water === opt);
-
-  return (
-    <div style={{ border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
-      {/* Table header */}
-      <div onClick={onDetails} style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "10px 14px", background: tokens.neutral[50], cursor: "pointer",
-        borderBottom: `1px solid ${tokens.neutral[100]}`,
-      }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <span style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: tokens.text.primary }}>T{table.id}</span>
-          {table.resName && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.secondary, letterSpacing: 1 }}>{table.resName}</span>}
-          {table.resTime && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.disabled, letterSpacing: 1 }}>{table.resTime}</span>}
-          <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.disabled }}>{seats.length}p</span>
-        </div>
-        <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.charcoal.default }}>→</span>
-      </div>
-
-      {/* All water quick row */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderBottom: `1px solid ${tokens.neutral[50]}`, background: tokens.neutral[50] }}>
-        <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", minWidth: 28 }}>ALL</span>
-        <div style={{ display: "flex", gap: 4 }}>
-          {WATER_QUICK.map(opt => waterBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat(table.id, s.id, "water", opt))))}
-        </div>
-      </div>
-
-      {/* Per-seat rows */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px" }}>
-        {seats.map(seat => {
-          const pairingColor = { Wine: tokens.neutral[700], "Non-Alc": tokens.green.text, Premium: tokens.neutral[700], "Our Story": tokens.neutral[600] };
-          const pairingBg   = { Wine: tokens.tint.parchment, "Non-Alc": tokens.green.bg, Premium: tokens.neutral[100], "Our Story": tokens.neutral[100] };
-          const PAIRING_OPTS = [["—","—"],["Wine","W"],["Non-Alc","N/A"],["Premium","Prem"],["Our Story","Story"]];
-          return (
-            <div key={seat.id} style={{
-              border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, overflow: "hidden",
-              background: tokens.neutral[50],
-            }}>
-              {/* Seat label strip */}
-              <div style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "3px 10px", background: tokens.neutral[100],
-                borderBottom: `1px solid ${tokens.neutral[200]}`,
-              }}>
-                <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: 2, color: tokens.text.muted }}>P{seat.id}</span>
-                {(table.restrictions || []).filter(r => r.pos === seat.id).map((r, i) => (
-                  <span key={i} style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, color: tokens.red.text }}>
-                    {restrLabel(r.note)}
-                  </span>
-                ))}
-              </div>
-
-              {/* Water + extras */}
-              <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap", padding: "7px 10px 5px" }}>
-                <div style={{ display: "flex", gap: 3 }}>
-                  {WATER_QUICK.map(opt => waterBtn(opt, seat.water === opt, () => updSeat(table.id, seat.id, "water", opt)))}
-                </div>
-                <div style={{ width: 1, height: 18, background: tokens.neutral[200], margin: "0 2px" }} />
-                <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                  {optionalExtras.slice(0, 3).map((dish) => {
-                    const extra = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
-                    const active = !!extra.ordered;
-                    return (
-                      <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
-                        {extraBtn(dish.name.slice(0, 4), active, tokens.text.muted, () => toggleExtra(seat, dish.key))}
-                        {active && (dish.pairings || ["—"]).slice(0, 3).map((p) => {
-                          const sel = (extra.pairing || "—") === p;
-                          return (
-                            <button key={p} onClick={() => updSeat(table.id, seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, pairing: p } })} style={{
-                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
-                              padding: "4px 6px", border: "1px solid",
-                              borderColor: sel ? tokens.text.muted : tokens.neutral[200],
-                              borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                              background: sel ? tokens.neutral[100] : tokens.neutral[0],
-                              color: sel ? tokens.text.body : tokens.text.disabled,
-                            }}>{p === "Champagne" ? "Champ" : p}</button>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Pairing */}
-              <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "0 10px 7px" }}>
-                {PAIRING_OPTS.map(([val, label]) => {
-                  const active = seat.pairing === val || (val === "—" && !seat.pairing);
-                  const col = pairingColor[val];
-                  const bg = pairingBg[val];
-                  return (
-                    <button key={val} onClick={() => updSeat(table.id, seat.id, "pairing", val)} style={{
-                      fontFamily: FONT, fontSize: 8, letterSpacing: 0.5,
-                      padding: "4px 7px", border: "1px solid",
-                      borderColor: active && val !== "—" ? col : active ? tokens.charcoal.default : tokens.neutral[200],
-                      borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                      background: active && val !== "—" ? bg : active ? tokens.tint.parchment : tokens.neutral[0],
-                      color: active && val !== "—" ? col : active ? tokens.neutral[700] : tokens.text.disabled,
-                    }}>{label}</button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function ServiceQuickView({ tables, updSeat, setSel, optionalExtras = [] }) {
-  const activeTables = tables.filter(t => t.active || t.resName || t.resTime);
-  if (activeTables.length === 0) return (
-    <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.disabled, textAlign: "center", paddingTop: 80 }}>
-      No active tables
-    </div>
-  );
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
-      {activeTables.map(t => (
-        <ServiceQuickCard key={t.id} table={t} updSeat={updSeat} optionalExtras={optionalExtras} onDetails={() => setSel(t.id)} />
-      ))}
-    </div>
-  );
-}
-
-// ── Kitchen Board (KDS) ────────────────────────────────────────────────────────
 // ── Access gate constants ─────────────────────────────────────────────────────
 const PINS = {
   admin: String(import.meta.env.VITE_PIN_ADMIN || "").trim(),
@@ -2018,7 +1571,6 @@ export default function App() {
     try { return !!localStorage.getItem(STORAGE_KEY); } catch { return false; }
   });
 
-  const applyingRemoteRef  = useRef(false);
   const saveTimerRef       = useRef(null);
   const prevTablesJsonRef  = useRef((initialState.tables || initTables).map(t => JSON.stringify(sanitizeTable(t))));
   const tablesRef          = useRef(tables);
@@ -2042,42 +1594,40 @@ export default function App() {
     const payloadRows = Array.isArray(rows) ? rows : [];
     if (payloadRows.length === 0) return { ok: true };
 
-    const op = async () => {
-      const { error } = await supabase.from(TABLES.SERVICE_TABLES).upsert(payloadRows, { onConflict: "table_id" });
-      if (error) throw error;
-    };
-
     if (!supabase) return { ok: false, queued: false };
 
+    const job = {
+      table: TABLES.SERVICE_TABLES,
+      op: "upsert",
+      payload: payloadRows,
+      options: { onConflict: "table_id" },
+    };
+
     if (!navigator.onLine) {
-      await offlineQueue.enqueue({
-        kind: "service_tables_upsert",
-        payload: { rows: payloadRows },
-        run: op,
-      });
+      await offlineQueue.enqueue(job);
       setSyncStatus("local-only");
       return { ok: true, queued: true };
     }
 
     try {
-      await op();
+      const { error } = await supabase.from(TABLES.SERVICE_TABLES).upsert(payloadRows, { onConflict: "table_id" });
+      if (error) throw error;
       return { ok: true, queued: false };
     } catch (error) {
-      await offlineQueue.enqueue({
-        kind: "service_tables_upsert",
-        payload: { rows: payloadRows },
-        run: op,
-      });
+      await offlineQueue.enqueue(job);
       setSyncStatus("sync-error");
       return { ok: false, queued: true, error };
     }
   }, [offlineQueue]);
 
-  const enqueueReservationMutation = useCallback(async ({ kind, run }) => {
+  // Run a Supabase mutation, falling back to the persistent offline queue when
+  // offline or on transient failure. `run` performs the live request and may
+  // capture inserted data via closure; `job` is the serializable retry payload.
+  const enqueueMutation = useCallback(async ({ run, job }) => {
     if (!supabase) return { ok: false, queued: false };
 
     if (!navigator.onLine) {
-      await offlineQueue.enqueue({ kind, payload: {}, run });
+      await offlineQueue.enqueue(job);
       setSyncStatus("local-only");
       return { ok: true, queued: true };
     }
@@ -2086,7 +1636,7 @@ export default function App() {
       await run();
       return { ok: true, queued: false };
     } catch (error) {
-      await offlineQueue.enqueue({ kind, payload: {}, run });
+      await offlineQueue.enqueue(job);
       setSyncStatus("sync-error");
       return { ok: false, queued: true, error };
     }
@@ -2119,9 +1669,7 @@ export default function App() {
     // Snapshot prevTablesJsonRef BEFORE setTables so the save-useEffect sees no diff
     // after a full poll and doesn't re-save the entire remote state.
     prevTablesJsonRef.current = nextTables.map(t => JSON.stringify(sanitizeTable(t)));
-    applyingRemoteRef.current = true;
     setTables(() => nextTables);
-    setTimeout(() => { applyingRemoteRef.current = false; }, 0);
   };
 
   const applyRemoteTableRow = row => {
@@ -2131,9 +1679,7 @@ export default function App() {
     const localTs = tableLocalFreshRef.current.get(tableId) || 0;
     if (remoteTs > 0 && localTs > 0 && remoteTs < localTs) return;
     const nextTable = sanitizeTable({ id: tableId, ...(row.data || {}) });
-    applyingRemoteRef.current = true;
     setTables(prev => prev.map(t => t.id === tableId ? nextTable : t));
-    setTimeout(() => { applyingRemoteRef.current = false; }, 0);
   };
 
   const selTable   = tables.find(t => t.id === sel);
@@ -2524,8 +2070,13 @@ export default function App() {
     const dbRow = { date, table_id, data: rData };
     if (id) {
       if (supabase) {
-        const result = await enqueueReservationMutation({
-          kind: "reservation_update",
+        const result = await enqueueMutation({
+          job: {
+            table: TABLES.RESERVATIONS,
+            op: "update",
+            payload: dbRow,
+            match: { id },
+          },
           run: async () => {
             const { error } = await supabase.from(TABLES.RESERVATIONS).update(dbRow).eq("id", id);
             if (error) throw error;
@@ -2539,8 +2090,12 @@ export default function App() {
     }
     if (supabase) {
       let inserted = null;
-      const result = await enqueueReservationMutation({
-        kind: "reservation_insert",
+      const result = await enqueueMutation({
+        job: {
+          table: TABLES.RESERVATIONS,
+          op: "insert",
+          payload: dbRow,
+        },
         run: async () => {
           const { data, error } = await supabase.from(TABLES.RESERVATIONS).insert(dbRow).select().single();
           if (error) throw error;
@@ -2558,8 +2113,12 @@ export default function App() {
   const deleteReservation = async (id) => {
     setReservations(prev => prev.filter(r => r.id !== id));
     if (!supabase) return { ok: true };
-    const result = await enqueueReservationMutation({
-      kind: "reservation_delete",
+    const result = await enqueueMutation({
+      job: {
+        table: TABLES.RESERVATIONS,
+        op: "delete",
+        match: { id },
+      },
       run: async () => {
         const { error } = await supabase.from(TABLES.RESERVATIONS).delete().eq("id", id);
         if (error) throw error;
@@ -2985,7 +2544,7 @@ export default function App() {
 
     loadRemoteTables();
 
-    // Polling fallback — refreshes every 5 s in case realtime misses an event
+    // Polling fallback — refreshes every 15 s in case realtime misses an event
     const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 15000);
 
     // Immediately re-fetch when the tab/screen becomes visible (e.g. kitchen display wakes up)
@@ -3009,9 +2568,7 @@ export default function App() {
         const tableId = Number(payload.old?.table_id);
         if (!tableId) return;
         bumpLocalTableFresh(tableId);
-        applyingRemoteRef.current = true;
         setTables(prev => prev.map(t => t.id === tableId ? blankTable(tableId) : t));
-        setTimeout(() => { applyingRemoteRef.current = false; }, 0);
         setSyncStatus("live");
         return;
       }
