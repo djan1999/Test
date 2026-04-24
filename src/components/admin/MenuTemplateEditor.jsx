@@ -899,6 +899,10 @@ export default function MenuTemplateEditor({
           beerChoice: null,
           layoutStyles,
           menuRules,
+          // Pass the same drink catalogs the final print uses so the Admin
+          // preview can resolve drinks-column references identically.
+          catalog: { wines, cocktails, spirits, beers },
+          aperitifOptions,
         });
         setPreviewHtml(html);
       } catch {}
