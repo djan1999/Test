@@ -177,7 +177,19 @@ export function generateMenuHTML({
     const rawVintage = String(w?.vintage || "").trim();
     const vintage = rawVintage.match(/^\d{4}$/) ? `'${rawVintage.slice(2)}` : rawVintage;
     const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
-    const rawCountry = w?.country || "";
+    // Fall back to the tail of the region when the row has no country column —
+    // manual wine entries don't persist a country code, so "Montagne de Reims,
+    // FR" would otherwise keep the short code.
+    let rawCountry = w?.country || "";
+    if (!rawCountry) {
+      const tail = String(w?.region || "").split(",").pop().trim();
+      const upper = tail.toUpperCase();
+      if (COUNTRY_NAMES[upper]) rawCountry = upper;
+      else {
+        const entry = Object.entries(COUNTRY_NAMES).find(([, n]) => n.toLowerCase() === tail.toLowerCase());
+        if (entry) rawCountry = entry[0];
+      }
+    }
     const country = COUNTRY_NAMES[rawCountry] || rawCountry;
     const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const tags = [rawCountry, country].filter(Boolean).map(escRe);

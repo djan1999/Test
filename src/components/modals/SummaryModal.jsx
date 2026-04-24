@@ -1,7 +1,7 @@
 import FullModal from "../ui/FullModal.jsx";
 import { waterStyle } from "../../constants/pairings.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
-import { COUNTRY_NAMES, stripCountryFromRegion } from "../../constants/countries.js";
+import { COUNTRY_NAMES, stripCountryFromRegion, inferCountryFromRegion } from "../../constants/countries.js";
 import { tokens } from "../../styles/tokens.js";
 import { restrLabel } from "../../constants/dietary.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
@@ -113,7 +113,7 @@ export default function SummaryModal({ tables, optionalExtras = [], onClose }) {
                   const rawVintage = String(w?.vintage || "").trim();
                   const vintage = rawVintage.match(/^\d{4}$/) ? `'${rawVintage.slice(2)}` : rawVintage;
                   const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
-                  const rawCountry = w?.country || "";
+                  const rawCountry = w?.country || inferCountryFromRegion(w?.region);
                   const country = COUNTRY_NAMES[rawCountry] || rawCountry;
                   const region = stripCountryFromRegion(w?.region, rawCountry);
                   const sub = [region, country].filter(Boolean).join(", ") || w?.notes || "";

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { TABLES, supabase } from "../../lib/supabaseClient.js";
-import { COUNTRY_NAMES, stripCountryFromRegion } from "../../constants/countries.js";
+import { COUNTRY_NAMES, stripCountryFromRegion, inferCountryFromRegion } from "../../constants/countries.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput } from "../../styles/mixins.js";
 import FullModal from "../ui/FullModal.jsx";
@@ -197,7 +197,8 @@ export default function InventoryModal({ wines, onClose }) {
       const n = displayCounts[w.id] || 0;
       const rawVin = String(w.vintage || "").trim();
       const vin = rawVin.match(/^\d{4}$/) ? `'${rawVin.slice(2)}` : rawVin;
-      const sub = [stripCountryFromRegion(w.region, w.country), COUNTRY_NAMES[w.country] || w.country].filter(Boolean).join(", ");
+      const rc = w.country || inferCountryFromRegion(w.region);
+      const sub = [stripCountryFromRegion(w.region, rc), COUNTRY_NAMES[rc] || rc].filter(Boolean).join(", ");
       return `<tr>
         <td style="padding:5px 4px;border-bottom:1px solid ${tokens.neutral[200]};vertical-align:top;">
           <div style="font-weight:600;">${w.producer} ${w.name} <span style="font-weight:400;color:${tokens.neutral[500]};">${vin}</span></div>
@@ -268,7 +269,8 @@ export default function InventoryModal({ wines, onClose }) {
           const isPartial = myCount % 1 >= 0.5;
           const rawVin = String(w.vintage || "").trim();
           const vin = rawVin.match(/^\d{4}$/) ? `'${rawVin.slice(2)}` : rawVin;
-          const sub = [stripCountryFromRegion(w.region, w.country), COUNTRY_NAMES[w.country] || w.country].filter(Boolean).join(", ");
+          const rc = w.country || inferCountryFromRegion(w.region);
+          const sub = [stripCountryFromRegion(w.region, rc), COUNTRY_NAMES[rc] || rc].filter(Boolean).join(", ");
           const othersRaw = Object.entries(allDevices).filter(([did]) => did !== myId.current).reduce((s, [, dev]) => s + (dev.counts?.[w.id] || 0), 0);
           const othersLabel = othersRaw > 0 ? (othersRaw % 1 >= 0.5 ? `${Math.floor(othersRaw)}½` : String(othersRaw)) : null;
           return (
