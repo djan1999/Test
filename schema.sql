@@ -215,8 +215,16 @@ create table if not exists public.wines (
   region text,
   country text,
   by_glass boolean not null default false,
+  source text not null default 'sync',
   updated_at timestamptz not null default now()
 );
+
+-- Migration: add source column if upgrading an existing table
+alter table public.wines
+  add column if not exists source text not null default 'sync';
+
+create index if not exists wines_source_country_idx
+  on public.wines(source, country);
 
 alter table public.wines enable row level security;
 
@@ -243,8 +251,16 @@ create table if not exists public.beverages (
   name text not null,
   notes text not null default '',
   position integer not null default 0,
+  source text not null default 'manual',
   updated_at timestamptz not null default now()
 );
+
+-- Migration: add source column if upgrading an existing table
+alter table public.beverages
+  add column if not exists source text not null default 'manual';
+
+create index if not exists beverages_source_category_idx
+  on public.beverages(source, category);
 
 alter table public.beverages enable row level security;
 
