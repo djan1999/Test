@@ -210,6 +210,7 @@ function supabaseRowToCourse(r) {
     force_pairing_sub_si: r.force_pairing_sub_si || "",
     kitchen_note: r.kitchen_note || "",
     aperitif_btn: r.aperitif_btn || null,
+    is_active: r.is_active !== false,
     restrictions,
   };
 }
@@ -262,6 +263,7 @@ function courseToSupabaseRow(course) {
     force_pairing_sub_si: course.force_pairing_sub_si,
     kitchen_note: course.kitchen_note,
     aperitif_btn: course.aperitif_btn,
+    is_active: course.is_active !== false,
     restrictions_si,
   };
   DIETARY_KEYS.forEach(k => { row[k] = course.restrictions?.[k] ?? null; });
@@ -1640,8 +1642,10 @@ export default function App() {
   boardStateRef.current = boardState;
   tablesRef.current = tables;
 
-  const dishes = useMemo(() => optionalExtrasFromCourses(menuCourses), [menuCourses]);
-  const pairings = useMemo(() => optionalPairingsFromCourses(menuCourses), [menuCourses]);
+  // Active courses (filter out archived/inactive). Admin sees the full list; service/menu/ticket views see only active.
+  const activeMenuCourses = useMemo(() => menuCourses.filter(c => c.is_active !== false), [menuCourses]);
+  const dishes = useMemo(() => optionalExtrasFromCourses(activeMenuCourses), [activeMenuCourses]);
+  const pairings = useMemo(() => optionalPairingsFromCourses(activeMenuCourses), [activeMenuCourses]);
 
   const mergeRemoteTables = rows => {
     const arr = Array.isArray(rows) ? rows : [];
@@ -2015,7 +2019,7 @@ export default function App() {
     // Find old group to clear tables that are no longer part of it
     const oldGroup = tables.find(t => t.id === id)?.tableGroup || [id];
     // Celebration-category dish keys to sync with the birthday flag
-    const celebrationKeys = (menuCourses || [])
+    const celebrationKeys = (activeMenuCourses || [])
       .filter(c => normalizeCourseCategory(c?.course_category, c?.optional_flag) === "celebration")
       .map(c => normalizeOptionalKey(c?.optional_flag))
       .filter(Boolean);
@@ -2465,7 +2469,7 @@ export default function App() {
       }));
     if (fromQuickAccess.length > 0) return fromQuickAccess;
     // Fallback to aperitif_btn column from courses
-    const fromSheet = [...new Set(menuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
+    const fromSheet = [...new Set(activeMenuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
     if (fromSheet.length > 0) return fromSheet.map(l => ({ label: l, searchKey: l, type: "wine" }));
     return DEFAULT_QUICK_ACCESS_ITEMS.filter(i => i.enabled).map(i => ({
       label: i.label,
@@ -2473,7 +2477,7 @@ export default function App() {
       linkedKey: i.linkedKey,
       type: i.type || "wine",
     }));
-  }, [quickAccessItems, menuCourses]);
+  }, [quickAccessItems, activeMenuCourses]);
 
   const serviceAperitifOptions = useMemo(() => {
     const fromQuickAccess = quickAccessItems.filter(i => i.enabled && !i.menuOnly)
@@ -2484,7 +2488,7 @@ export default function App() {
         type: i.type || "wine",
       }));
     if (fromQuickAccess.length > 0) return fromQuickAccess;
-    const fromSheet = [...new Set(menuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
+    const fromSheet = [...new Set(activeMenuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
     if (fromSheet.length > 0) return fromSheet.map(l => ({ label: l, searchKey: l, type: "wine" }));
     return DEFAULT_QUICK_ACCESS_ITEMS.filter(i => i.enabled && !i.menuOnly)
       .map(i => ({
@@ -2493,7 +2497,7 @@ export default function App() {
         linkedKey: i.linkedKey,
         type: i.type || "wine",
       }));
-  }, [quickAccessItems, menuCourses]);
+  }, [quickAccessItems, activeMenuCourses]);
 
   // ── Load service tables from Supabase + subscribe realtime ────────────────
   useEffect(() => {
@@ -2855,7 +2859,7 @@ export default function App() {
   // Reservation Manager mode
   if (mode === "reservation") return (<>{serviceDatePickerEl}<ReservationManager
       reservations={reservations}
-      menuCourses={menuCourses}
+      menuCourses={activeMenuCourses}
       tables={tables}
       onUpsert={upsertReservation}
       onDelete={deleteReservation}
@@ -2874,7 +2878,7 @@ export default function App() {
       <GlobalStyle />
       <Header modeLabel="KITCHEN" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
       <div style={{ padding: appIsMobile ? "12px 10px" : "20px 24px" }}>
-        <KitchenBoard tables={tables} menuCourses={menuCourses} upd={upd} updMany={updMany} />
+        <KitchenBoard tables={tables} menuCourses={activeMenuCourses} upd={upd} updMany={updMany} />
       </div>
       {archiveOpen && (
         <ArchiveModal
@@ -2896,7 +2900,7 @@ export default function App() {
       <GlobalStyle />
       <MenuPage
         tables={tables}
-        menuCourses={menuCourses}
+        menuCourses={activeMenuCourses}
         upd={upd}
         logoDataUri={logoDataUri}
         globalLayout={globalLayout}
@@ -3060,7 +3064,7 @@ export default function App() {
           cocktails={cocktails}
           spirits={spirits}
           beers={beers}
-          menuCourses={menuCourses}
+          menuCourses={activeMenuCourses}
           aperitifOptions={serviceAperitifOptions}
           mode={mode}
           onBack={() => setSel(null)}

@@ -79,12 +79,14 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
   const category = String(course.course_category || "main");
   const isOptional = category === "optional" || category === "celebration";
   const optionalPairingEnabled = !!course.optional_pairing_enabled;
+  const isActive = course.is_active !== false;
 
   return (
     <div style={{
       border: `1px solid ${isOptional ? tokens.neutral[300] : tokens.neutral[200]}`, borderRadius: tokens.radius,
-      background: isOptional ? tokens.tint.parchment : tokens.surface.card,
+      background: !isActive ? tokens.neutral[100] : (isOptional ? tokens.tint.parchment : tokens.surface.card),
       marginBottom: 8, overflow: "hidden",
+      opacity: isActive ? 1 : 0.7,
     }}>
       {/* Collapsed header */}
       <div
@@ -99,9 +101,22 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
           <span style={{ fontFamily: FONT, fontSize: tokens.fontSize.md, fontWeight: 700, color: tokens.text.primary }}>{course.menu?.name || "(unnamed)"}</span>
           {course.menu?.sub && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.muted, marginLeft: 8 }}>{course.menu.sub}</span>}
         </div>
+        {!isActive && <span style={{ fontFamily: FONT, fontSize: tokens.fontSize.xs, letterSpacing: 1, color: tokens.neutral[700], background: tokens.neutral[200], border: `1px solid ${tokens.neutral[400]}`, borderRadius: tokens.radius, padding: "2px 6px" }}>ARCHIVED</span>}
         {isOptional && <span style={{ fontFamily: FONT, fontSize: tokens.fontSize.xs, letterSpacing: 1, color: tokens.neutral[700], background: tokens.tint.parchment, border: `1px solid ${tokens.neutral[300]}`, borderRadius: tokens.radius, padding: "2px 6px" }}>OPTIONAL · {course.optional_flag}</span>}
         {activeRestrictions.length > 0 && <span style={{ fontFamily: FONT, fontSize: tokens.fontSize.xs, letterSpacing: 1, color: tokens.red.text, border: `1px solid ${tokens.red.border}`, borderRadius: tokens.radius, padding: "2px 6px" }}>{activeRestrictions.length}R</span>}
         {activePairings.length > 0 && <span style={{ fontFamily: FONT, fontSize: tokens.fontSize.xs, letterSpacing: 1, color: tokens.charcoal.default, border: `1px solid ${tokens.neutral[300]}`, borderRadius: tokens.radius, padding: "2px 6px" }}>{activePairings.length}P</span>}
+        <button
+          onClick={e => { e.stopPropagation(); onUpdate({ ...course, is_active: !isActive }); }}
+          title={isActive ? "Archive course (hide from ticket & menu generator)" : "Restore course"}
+          style={{
+            fontFamily: FONT, fontSize: tokens.fontSize.xs, letterSpacing: 1,
+            padding: "3px 8px", cursor: "pointer",
+            border: `1px solid ${isActive ? tokens.green.border : tokens.neutral[400]}`,
+            borderRadius: tokens.radius,
+            background: isActive ? tokens.green.bg : tokens.neutral[100],
+            color: isActive ? tokens.green.text : tokens.neutral[700],
+          }}
+        >{isActive ? "ACTIVE" : "INACTIVE"}</button>
         <div style={{ display: "flex", gap: 4 }}>
           <button onClick={e => { e.stopPropagation(); onMoveUp(); }} disabled={isFirst} style={{ background: "none", border: "none", cursor: isFirst ? "default" : "pointer", color: isFirst ? tokens.neutral[300] : tokens.text.muted, fontSize: tokens.fontSize.md, padding: "2px 4px" }}>▲</button>
           <button onClick={e => { e.stopPropagation(); onMoveDown(); }} disabled={isLast} style={{ background: "none", border: "none", cursor: isLast ? "default" : "pointer", color: isLast ? tokens.neutral[300] : tokens.text.muted, fontSize: tokens.fontSize.md, padding: "2px 4px" }}>▼</button>
@@ -321,6 +336,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
 export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, onSaveCourses }) {
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
+  const [showArchived, setShowArchived] = useState(true);
 
   const handleSave = async () => {
     setSaving(true); setSaved(false);
@@ -364,7 +380,7 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
       show_on_short: false, short_order: null,
       force_pairing_title: "", force_pairing_sub: "",
       force_pairing_title_si: "", force_pairing_sub_si: "",
-      kitchen_note: "", aperitif_btn: null, restrictions: {},
+      kitchen_note: "", aperitif_btn: null, is_active: true, restrictions: {},
     };
     onUpdateCourses([...menuCourses, newCourse]);
   };
@@ -384,8 +400,20 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
               + {menuCourses.filter(c => (c.course_category || "main") === "celebration").length} CELEBRATION
             </span>
           )}
+          {menuCourses.filter(c => c.is_active === false).length > 0 && (
+            <span style={{ color: tokens.neutral[500], marginLeft: 8 }}>
+              · {menuCourses.filter(c => c.is_active === false).length} ARCHIVED
+            </span>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          {menuCourses.some(c => c.is_active === false) && (
+            <button onClick={() => setShowArchived(v => !v)} style={{
+              fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
+              border: `1px solid ${tokens.neutral[300]}`, borderRadius: tokens.radius, cursor: "pointer",
+              background: tokens.surface.card, color: tokens.text.muted,
+            }}>{showArchived ? "HIDE ARCHIVED" : "SHOW ARCHIVED"}</button>
+          )}
           <button onClick={addCourse} style={{
             fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
             border: `1px solid ${tokens.charcoal.default}`, borderRadius: tokens.radius, cursor: "pointer",
@@ -400,18 +428,21 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
         </div>
       </div>
 
-      {menuCourses.map((course, idx) => (
-        <CourseCard
-          key={course.position}
-          course={course}
-          onUpdate={updated => updateCourse(course.position, updated)}
-          onDelete={() => deleteCourse(course.position)}
-          onMoveUp={() => moveCourse(course.position, -1)}
-          onMoveDown={() => moveCourse(course.position, +1)}
-          isFirst={idx === 0}
-          isLast={idx === menuCourses.length - 1}
-        />
-      ))}
+      {menuCourses.map((course, idx) => {
+        if (!showArchived && course.is_active === false) return null;
+        return (
+          <CourseCard
+            key={course.position}
+            course={course}
+            onUpdate={updated => updateCourse(course.position, updated)}
+            onDelete={() => deleteCourse(course.position)}
+            onMoveUp={() => moveCourse(course.position, -1)}
+            onMoveDown={() => moveCourse(course.position, +1)}
+            isFirst={idx === 0}
+            isLast={idx === menuCourses.length - 1}
+          />
+        );
+      })}
 
       {menuCourses.length === 0 && (
         <div style={{ fontFamily: FONT, fontSize: tokens.fontSize.base, color: tokens.text.disabled, textAlign: "center", padding: "40px 0" }}>

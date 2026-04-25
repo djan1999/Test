@@ -149,6 +149,7 @@ create table if not exists public.menu_courses (
   short_order integer,
   kitchen_note text not null default '',
   aperitif_btn text,
+  is_active boolean not null default true,
   updated_at timestamptz not null default now()
 );
 
@@ -185,7 +186,8 @@ alter table public.menu_courses
   add column if not exists no_garlic_onion jsonb,
   add column if not exists halal jsonb,
   add column if not exists low_fodmap jsonb,
-  add column if not exists aperitif_btn text;
+  add column if not exists aperitif_btn text,
+  add column if not exists is_active boolean not null default true;
 
 alter table public.menu_courses enable row level security;
 
