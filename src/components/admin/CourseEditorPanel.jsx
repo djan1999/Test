@@ -336,12 +336,20 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
 export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, onSaveCourses }) {
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const [migrationWarning, setMigrationWarning] = useState(false);
   const [showArchived, setShowArchived] = useState(true);
 
   const handleSave = async () => {
-    setSaving(true); setSaved(false);
-    await onSaveCourses(menuCourses);
-    setSaving(false); setSaved(true);
+    setSaving(true); setSaved(false); setSaveError(null);
+    const result = await onSaveCourses(menuCourses);
+    setSaving(false);
+    if (result && result.ok === false) {
+      setSaveError(result.error?.message || "Save failed — see console for details");
+      return;
+    }
+    setMigrationWarning(!!(result && result.isActiveSkipped));
+    setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
 
@@ -421,12 +429,31 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
           }}>+ ADD COURSE</button>
           <button onClick={handleSave} disabled={saving} style={{
             fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
-            border: `1px solid ${saved ? tokens.green.border : tokens.charcoal.default}`, borderRadius: tokens.radius,
+            border: `1px solid ${saveError ? tokens.red.border : saved ? tokens.green.border : tokens.charcoal.default}`, borderRadius: tokens.radius,
             cursor: saving ? "default" : "pointer",
-            background: tokens.surface.card, color: saved ? tokens.green.text : tokens.text.primary,
-          }}>{saving ? "SAVING..." : saved ? "SAVED" : "SAVE ALL COURSES"}</button>
+            background: tokens.surface.card, color: saveError ? tokens.red.text : saved ? tokens.green.text : tokens.text.primary,
+          }}>{saving ? "SAVING..." : saveError ? "SAVE FAILED" : saved ? "SAVED" : "SAVE ALL COURSES"}</button>
         </div>
       </div>
+
+      {saveError && (
+        <div style={{
+          fontFamily: FONT, fontSize: tokens.fontSize.sm, color: tokens.red.text,
+          background: tokens.red.bg, border: tokens.border.danger, borderRadius: tokens.radius,
+          padding: "8px 12px", marginBottom: 12,
+        }}>Save failed: {saveError}</div>
+      )}
+      {migrationWarning && (
+        <div style={{
+          fontFamily: FONT, fontSize: tokens.fontSize.sm, color: tokens.text.body,
+          background: tokens.tint.parchment, border: `1px solid ${tokens.neutral[300]}`, borderRadius: tokens.radius,
+          padding: "8px 12px", marginBottom: 12, lineHeight: 1.5,
+        }}>
+          Saved, but the <code>menu_courses.is_active</code> column is missing in the database, so archiving won't persist.
+          Run this in the Supabase SQL editor to enable it:
+          <pre style={{ marginTop: 6, padding: "6px 8px", background: tokens.neutral[0], border: `1px solid ${tokens.neutral[200]}`, fontSize: tokens.fontSize.xs, overflowX: "auto" }}>alter table public.menu_courses add column if not exists is_active boolean not null default true;</pre>
+        </div>
+      )}
 
       {menuCourses.map((course, idx) => {
         if (!showArchived && course.is_active === false) return null;

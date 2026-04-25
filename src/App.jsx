@@ -1831,7 +1831,7 @@ export default function App() {
 
   // Save menu courses directly to Supabase (the app is now the source of truth)
   const saveMenuCourses = async (courses) => {
-    if (!supabase) return;
+    if (!supabase) return { ok: true };
     // Auto-generate course_key from dish name when empty so the layout editor
     // can always reference every course (keyless courses produce value="" which
     // collides with the "(none)" dropdown option and silently clears the block).
@@ -1843,10 +1843,26 @@ export default function App() {
       return generated ? { ...c, course_key: generated } : c;
     });
     const rows = withKeys.map(c => courseToSupabaseRow(c));
-    const { error } = await supabase
+    let { error } = await supabase
       .from(TABLES.MENU_COURSES)
       .upsert(rows, { onConflict: "position" });
-    if (error) { console.error("Menu save failed:", error); return; }
+    // Pre-migration fallback: if the is_active column hasn't been added yet,
+    // retry without it so the rest of the save still goes through. The toggle
+    // won't persist until the schema migration is applied, but new courses,
+    // edits, and reorders won't be lost.
+    let isActiveSkipped = false;
+    if (error && (error.code === "PGRST204" || /is_active/i.test(String(error.message || "")))) {
+      const fallbackRows = rows.map(({ is_active, ...rest }) => rest);
+      const retry = await supabase
+        .from(TABLES.MENU_COURSES)
+        .upsert(fallbackRows, { onConflict: "position" });
+      error = retry.error;
+      if (!error) {
+        isActiveSkipped = true;
+        console.warn("menu_courses.is_active column missing — saved without it. Run the schema migration to enable archiving.");
+      }
+    }
+    if (error) { console.error("Menu save failed:", error); return { ok: false, error }; }
     // Reflect any auto-generated keys back into local state so the UI shows them.
     setMenuCourses(withKeys);
     // Remove courses that no longer exist
@@ -1854,6 +1870,7 @@ export default function App() {
     if (positions.length > 0) {
       await supabase.from(TABLES.MENU_COURSES).delete().not("position", "in", `(${positions.join(",")})`);
     }
+    return { ok: true, isActiveSkipped };
   };
 
   const saveWines = async (updatedWines) => {
