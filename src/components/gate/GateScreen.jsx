@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput } from "../../styles/mixins.js";
+import GlobalStyle from "../ui/GlobalStyle.jsx";
 
 const FONT = tokens.font;
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
@@ -11,17 +12,6 @@ const ACCESS_KEY = "milka_access";
 const writeAccess = () => {
   try { localStorage.setItem(ACCESS_KEY, JSON.stringify({ ts: Date.now() })); } catch {}
 };
-
-function GlobalStyle() {
-  return (
-    <style>{`
-      * { box-sizing: border-box; }
-      body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; color: ${tokens.text.primary}; }
-      input, textarea, select { font-size: ${tokens.mobileInputSize}px; }
-      button, a, label { touch-action: manipulation; }
-    `}</style>
-  );
-}
 
 // ── GateScreen — password wall before anything else ───────────────────────────
 export default function GateScreen({ onPass }) {

@@ -48,6 +48,8 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
         fontFamily: FONT,
         zIndex: 200,
         padding: 16,
+        paddingTop: "calc(16px + env(safe-area-inset-top))",
+        paddingBottom: "calc(16px + env(safe-area-inset-bottom))",
       }}
     >
       <div

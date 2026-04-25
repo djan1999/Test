@@ -9,6 +9,7 @@ import ServiceDatePicker from "./ServiceDatePicker.jsx";
 import ResvForm from "./ResvForm.jsx";
 import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
 import ServiceBreakdown from "../ServiceBreakdown.jsx";
+import GlobalStyle from "../ui/GlobalStyle.jsx";
 import { useFocusChain } from "../../hooks/useFocusChain.js";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
 
@@ -16,7 +17,6 @@ const FONT = tokens.font;
 const baseInp = { ...baseInput };
 const fieldLabel = { ...fieldLabelMixin };
 const circBtnSm = { ...circleButton };
-const MOBILE_SAFE_INPUT_SIZE = tokens.mobileInputSize;
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
 const SITTING_TIMES = String(import.meta.env.VITE_DEFAULT_SITTING_TIMES || "18:00,18:30,19:00,19:15").split(",").map(s => s.trim()).filter(Boolean);
 const ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "01,11,12,21,22,23").split(",").map(s => s.trim()).filter(Boolean);
@@ -175,17 +175,6 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   });
   body += `</table>`;
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Allergy Sheet</title>${ALLERGY_ROBOTO}<style>${css}</style></head><body>${body}</body></html>`;
-}
-
-function GlobalStyle() {
-  return (
-    <style>{`
-      * { box-sizing: border-box; }
-      body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; color: ${tokens.neutral[900]}; }
-      input, textarea, select { font-size: ${MOBILE_SAFE_INPUT_SIZE}px; }
-      button, a, label { touch-action: manipulation; }
-    `}</style>
-  );
 }
 
 export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onExit, serviceDate, onSetServiceDate }) {

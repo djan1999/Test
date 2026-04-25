@@ -65,14 +65,15 @@ export default function Header({
     fontFamily: FONT,
     fontSize: isMobile ? 10 : 9,
     letterSpacing: isMobile ? 1.5 : 2,
-    padding: isMobile ? "8px 12px" : "6px 10px",
+    padding: isMobile ? "12px 14px" : "6px 10px",
     border: tokens.border.default,
     borderRadius: 0,
     cursor: "pointer",
     background: tokens.surface.card,
     color: tokens.text.primary,
     flexShrink: 0,
-    minHeight: isMobile ? 36 : undefined,
+    minHeight: isMobile ? 44 : undefined,
+    touchAction: "manipulation",
   };
   return (
     <div style={{
@@ -102,13 +103,13 @@ export default function Header({
           )}
           <span style={{
             fontFamily: FONT, fontSize: isMobile ? 10 : 9, letterSpacing: isMobile ? 1.5 : 2,
-            padding: isMobile ? "8px 12px" : "6px 10px",
+            padding: isMobile ? "12px 14px" : "6px 10px",
             border: `1px solid ${syncLive ? tokens.green.border : tokens.neutral[300]}`,
             borderRadius: 0,
             background: syncLive ? tokens.green.bg : tokens.neutral[50],
             color: syncLive ? tokens.green.text : tokens.text.muted,
             fontWeight: 600, whiteSpace: "nowrap",
-            minHeight: isMobile ? 36 : undefined,
+            minHeight: isMobile ? 44 : undefined,
             display: "inline-flex", alignItems: "center",
           }}>{syncLabel}</span>
           {showEndService && (

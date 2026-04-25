@@ -176,7 +176,20 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     <div style={{ border: `2px solid ${tokens.neutral[200]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0], boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}>
 
       {/* ── Header (drag handle) ── */}
-      <div ref={dragHandleRef} {...dragListeners} style={{ background: tokens.neutral[0], borderBottom: `1px solid ${tokens.neutral[200]}`, padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8, cursor: dragListeners ? "grab" : undefined, touchAction: "none" }}>
+      <div
+        ref={dragHandleRef}
+        {...dragListeners}
+        role={dragListeners ? "button" : undefined}
+        aria-label={dragListeners ? "Drag to reorder ticket" : undefined}
+        style={{ background: tokens.neutral[0], borderBottom: `1px solid ${tokens.neutral[200]}`, padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8, cursor: dragListeners ? "grab" : undefined, touchAction: "none" }}
+      >
+        {dragListeners && (
+          <span aria-hidden="true" title="Drag to reorder" style={{
+            fontFamily: FONT, fontSize: 14, color: tokens.neutral[400],
+            lineHeight: 1, flexShrink: 0, alignSelf: "center", letterSpacing: -2,
+            userSelect: "none",
+          }}>⋮⋮</span>
+        )}
         <span style={{ fontFamily: FONT, fontSize: table.tableGroup?.length > 1 ? 16 : 21, fontWeight: 800, color: tokens.text.primary, lineHeight: 1, letterSpacing: -1, flexShrink: 0 }}>
           {table.tableGroup?.length > 1 ? `T${table.tableGroup.join("-")}` : `T${table.id}`}
         </span>
@@ -234,7 +247,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               <button
                 onPointerDown={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); removeKitchenRestr(i); }}
-                style={{ fontFamily: FONT, fontSize: 10, padding: 0, width: 32, height: 32, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation", flexShrink: 0 }}>✕</button>
+                aria-label={`Remove restriction ${restrLabel(r.note)}`}
+                style={{ fontFamily: FONT, fontSize: 10, padding: 0, width: 36, height: 36, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation", flexShrink: 0 }}>✕</button>
             </div>
           ) : null)}
           {/* Step 1: pick restriction */}
@@ -499,8 +513,11 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                   <button
                     onPointerDown={e => e.stopPropagation()}
                     onClick={e => { e.stopPropagation(); if (isEditingThis) { saveCourseDraft(key, editName, editNote); setEditingCourse(null); } else { startEditCourse(key); } }}
+                    aria-label={isEditingThis ? `Save changes to ${displayName}` : `Edit ${displayName}`}
+                    title={isEditingThis ? "Save course override" : "Edit course override"}
                     style={{
-                      fontFamily: FONT, fontSize: 9, padding: "2px 6px", flexShrink: 0,
+                      fontFamily: FONT, fontSize: 11, padding: 0, flexShrink: 0,
+                      width: 32, height: 32, display: "inline-flex", alignItems: "center", justifyContent: "center",
                       border: `1px solid ${isEditingThis ? tokens.charcoal.default : tokens.neutral[300]}`,
                       borderRadius: 0, cursor: "pointer",
                       background: isEditingThis ? tokens.tint.parchment : tokens.neutral[0],
@@ -615,11 +632,13 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
     "Our Story":{ color: tokens.text.body, bg: tokens.surface.card, border: tokens.neutral[300] },
   };
   return (
-    <div style={{
+    <div role="dialog" aria-label="Kitchen pairing alerts" style={{
       position: "fixed", inset: 0, zIndex: 9999,
       background: "rgba(0,0,0,0.72)",
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       gap: 16, padding: "24px 16px", overflowY: "auto",
+      paddingTop: "calc(24px + env(safe-area-inset-top))",
+      paddingBottom: "calc(24px + env(safe-area-inset-bottom))",
     }}>
       {alerts.map(({ tableId, alert }) => {
         const seats = alert.seats || [];

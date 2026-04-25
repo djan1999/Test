@@ -351,6 +351,8 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
         flexDirection: "column",
         overflow: "auto",
         padding: "24px 16px",
+        paddingTop: "calc(24px + env(safe-area-inset-top))",
+        paddingBottom: "calc(24px + env(safe-area-inset-bottom))",
       }}
     >
       <PrintStyles />

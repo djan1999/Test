@@ -78,7 +78,12 @@ export default function AdminLayout({
 }) {
   const [activeSection, setActiveSection] = useState("menu");
   const [dishesCoursesOpen, setDishesCoursesOpen] = useState(true);
-  const [navPinned, setNavPinned] = useState(false);
+  // Pin sidebar open by default on coarse-pointer devices (touchscreens) so
+  // staff don't have to rely on a hover that touch input can't deliver.
+  const [navPinned, setNavPinned] = useState(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return false;
+    return window.matchMedia("(hover: none), (pointer: coarse)").matches;
+  });
   const [navHover, setNavHover] = useState(false);
   const isMobile = useIsMobile(BP.lg);
 
@@ -110,21 +115,22 @@ export default function AdminLayout({
         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 8, flexShrink: 0 }}>
           <span style={{
             fontFamily: FONT, fontSize: isMobile ? 10 : 9, letterSpacing: isMobile ? 1.5 : 2,
-            padding: isMobile ? "8px 10px" : "6px 10px",
+            padding: isMobile ? "12px 12px" : "6px 10px",
             border: `1px solid ${syncStatus === "live" ? tokens.green.border : tokens.neutral[300]}`,
             borderRadius: 0,
             background: syncStatus === "live" ? tokens.green.bg : tokens.neutral[50],
             color: syncStatus === "live" ? tokens.green.text : tokens.text.muted,
             fontWeight: 600, whiteSpace: "nowrap",
-            minHeight: isMobile ? 36 : undefined,
+            minHeight: isMobile ? 44 : undefined,
             display: "inline-flex", alignItems: "center",
           }}>{syncStatus === "live" ? "SYNC" : syncStatus === "local-only" ? "LOCAL" : syncStatus === "connecting" ? "LINK" : "ERROR"}</span>
           <button onClick={onExit} style={{
             fontFamily: FONT, fontSize: isMobile ? 10 : 9, letterSpacing: isMobile ? 1.5 : 2,
-            padding: isMobile ? "8px 12px" : "6px 10px",
+            padding: isMobile ? "12px 14px" : "6px 10px",
             border: tokens.border.default, borderRadius: 0, cursor: "pointer",
             background: tokens.surface.card, color: tokens.text.primary, flexShrink: 0,
-            minHeight: isMobile ? 36 : undefined,
+            minHeight: isMobile ? 44 : undefined,
+            touchAction: "manipulation",
           }}>EXIT</button>
         </div>
       </div>
@@ -144,9 +150,10 @@ export default function AdminLayout({
                 key={s.id}
                 type="button"
                 onClick={() => setActiveSection(s.id)}
+                aria-pressed={active}
                 style={{
                   display: "flex", alignItems: "center", gap: 8,
-                  flexShrink: 0, padding: "12px 14px",
+                  flexShrink: 0, padding: "14px 16px",
                   border: "none",
                   borderBottom: `2px solid ${active ? tokens.charcoal.default : "transparent"}`,
                   background: active ? tokens.surface.card : "transparent",
@@ -155,7 +162,8 @@ export default function AdminLayout({
                   color: active ? tokens.text.primary : tokens.text.muted,
                   fontWeight: active ? 600 : 400,
                   textTransform: "uppercase", whiteSpace: "nowrap",
-                  minHeight: 40,
+                  minHeight: 44,
+                  touchAction: "manipulation",
                 }}
               >
                 <span style={{ fontSize: 13, color: active ? tokens.charcoal.default : tokens.neutral[400] }}>{s.icon}</span>
@@ -189,6 +197,8 @@ export default function AdminLayout({
             <button
               onClick={() => setNavPinned(v => !v)}
               title={navPinned ? "Unpin sidebar" : "Pin sidebar open"}
+              aria-label={navPinned ? "Unpin sidebar" : "Pin sidebar open"}
+              aria-pressed={navPinned}
               style={{
                 width: "100%",
                 display: "flex",
@@ -207,8 +217,8 @@ export default function AdminLayout({
                 textTransform: "uppercase",
               }}
             >
-              <span style={{ fontSize: 14, width: 20, textAlign: "center" }}>{navPinned ? "📌" : "☰"}</span>
-              {navOpen && <span style={{ flex: 1, textAlign: "left" }}>{navPinned ? "Pinned" : "Hover to open"}</span>}
+              <span aria-hidden="true" style={{ fontSize: 14, width: 20, textAlign: "center" }}>{navPinned ? "📌" : "☰"}</span>
+              {navOpen && <span style={{ flex: 1, textAlign: "left" }}>{navPinned ? "Pinned" : "Tap to pin"}</span>}
               {navOpen && <span style={{ color: tokens.neutral[300] }}>{navPinned ? "ON" : "OFF"}</span>}
             </button>
           </div>
@@ -217,10 +227,12 @@ export default function AdminLayout({
               key={s.id}
               type="button"
               title={s.label}
+              aria-label={s.label}
+              aria-pressed={activeSection === s.id}
               onClick={() => setActiveSection(s.id)}
               style={{
                 display: "flex", alignItems: "center", gap: 10,
-                width: "100%", padding: navOpen ? "12px 20px" : "12px 0", border: "none",
+                width: "100%", padding: navOpen ? "14px 20px" : "14px 0", border: "none",
                 background: activeSection === s.id ? tokens.surface.card : "transparent",
                 borderLeft: activeSection === s.id ? `3px solid ${tokens.charcoal.default}` : "3px solid transparent",
                 cursor: "pointer", transition: "all 0.1s",
@@ -229,6 +241,8 @@ export default function AdminLayout({
                 fontWeight: activeSection === s.id ? 600 : 400,
                 textAlign: "left",
                 justifyContent: navOpen ? "flex-start" : "center",
+                minHeight: 44,
+                touchAction: "manipulation",
               }}
             >
               <span style={{ fontSize: 14, color: activeSection === s.id ? tokens.charcoal.default : tokens.neutral[300], width: 20, textAlign: "center" }}>{s.icon}</span>

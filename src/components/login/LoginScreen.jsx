@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
+import GlobalStyle from "../ui/GlobalStyle.jsx";
 
 const FONT = tokens.font;
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
@@ -9,21 +10,10 @@ const PINS = {
   menu: String(import.meta.env.VITE_PIN_MENU || "").trim(),
 };
 
-function GlobalStyle() {
-  return (
-    <style>{`
-      * { box-sizing: border-box; }
-      body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; color: ${tokens.text.primary}; }
-      input, textarea, select { font-size: ${tokens.mobileInputSize}px; }
-      button, a, label { touch-action: manipulation; }
-    `}</style>
-  );
-}
-
 // ── Login Screen ──────────────────────────────────────────────────────────────
 export default function LoginScreen({ onEnter, onSyncAll }) {
   const MODES = [
-    { id: "display",     label: "Display",      sub: "read-only view",      icon: "◎", pin: false },
+    { id: "display",     label: "Kitchen",      sub: "fire courses · KDS",   icon: "◎", pin: false },
     { id: "service",     label: "Service",      sub: "full service access",  icon: "◈", pin: false },
     { id: "reservation", label: "Reservations", sub: "weekly planner",       icon: "◫", pin: false },
     { id: "admin",       label: "Admin",        sub: "pin required",         icon: "◆", pin: true  },
@@ -138,13 +128,14 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
               <button key={i} onClick={() => {
                 if (d === "⌫") setPin(p => p.slice(0,-1));
                 else if (d !== "") handleDigit(d);
-              }} disabled={d === ""} style={{
+              }} disabled={d === ""} aria-label={d === "⌫" ? "Backspace" : d === "" ? undefined : `Digit ${d}`} aria-hidden={d === "" ? true : undefined} style={{
                 fontFamily: FONT, fontSize: 22, fontWeight: 300,
                 padding: "18px 0", border: tokens.border.default, borderRadius: 0,
                 background: d === "" ? "transparent" : tokens.surface.card, cursor: d === "" ? "default" : "pointer",
                 color: tokens.text.primary, letterSpacing: 1,
                 opacity: d === "" ? 0 : 1,
                 transition: "all 0.08s",
+                minHeight: 56, touchAction: "manipulation",
               }}>{d}</button>
             ))}
           </div>

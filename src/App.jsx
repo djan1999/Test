@@ -35,6 +35,7 @@ import SummaryModal from "./components/modals/SummaryModal.jsx";
 import ArchiveModal from "./components/modals/ArchiveModal.jsx";
 import InventoryModal from "./components/modals/InventoryModal.jsx";
 import Header from "./components/ui/Header.jsx";
+import GlobalStyle from "./components/ui/GlobalStyle.jsx";
 import GateScreen from "./components/gate/GateScreen.jsx";
 import LoginScreen from "./components/login/LoginScreen.jsx";
 import MenuPage from "./components/menu/MenuPage.jsx";
@@ -279,7 +280,6 @@ async function fetchMenuCourses() {
 
 
 const FONT = tokens.font;
-const MOBILE_SAFE_INPUT_SIZE = tokens.mobileInputSize;
 
 // ── Wine DB ───────────────────────────────────────────────────────────────────
 const initWines = [];
@@ -1469,17 +1469,6 @@ const sanitizeLayoutProfiles = (profiles) => {
     }));
   return out.length > 0 ? out : [{ id: "layout_1", name: "Layout 1", layoutStyles: {}, menuTemplate: null }];
 };
-
-function GlobalStyle() {
-  return (
-    <style>{`
-      * { box-sizing: border-box; }
-      body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; color: ${tokens.text.primary}; }
-      input, textarea, select { font-size: ${MOBILE_SAFE_INPUT_SIZE}px; }
-      button, a, label { touch-action: manipulation; }
-    `}</style>
-  );
-}
 
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -2874,12 +2863,14 @@ export default function App() {
       onSetServiceDate={persistServiceDate}
     /></>);
 
-  // Display mode — unified board+kitchen view
+  // Kitchen mode (legacy id "display") — KDS board for firing courses.
+  // Mutation handlers `upd` / `updMany` are intentionally passed: kitchen
+  // staff need to fire/unfire and edit notes here, so this is NOT read-only.
   if (mode === "display") return (<>
     {serviceDatePickerEl}
     <div style={{ minHeight: "100vh", background: tokens.neutral[0], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
-      <Header modeLabel="DISPLAY" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
+      <Header modeLabel="KITCHEN" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
       <div style={{ padding: appIsMobile ? "12px 10px" : "20px 24px" }}>
         <KitchenBoard tables={tables} menuCourses={menuCourses} upd={upd} updMany={updMany} />
       </div>

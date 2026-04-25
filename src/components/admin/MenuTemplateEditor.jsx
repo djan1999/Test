@@ -265,15 +265,16 @@ function RowActionBtn({ children, onClick, title, danger = false, active = false
   const [hov, setHov] = useState(false);
   return (
     <button
-      onClick={onClick} title={title}
+      onClick={onClick} title={title} aria-label={title}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        width: 22, height: 28, border: "none", borderRadius: 0, cursor: "pointer",
-        fontFamily: FONT, fontSize: 11, padding: 0, lineHeight: 1,
+        width: 32, height: 36, border: "none", borderRadius: 0, cursor: "pointer",
+        fontFamily: FONT, fontSize: 12, padding: 0, lineHeight: 1,
         background: active ? tokens.neutral[100] : hov ? (danger ? tokens.red.bg : tokens.neutral[100]) : "transparent",
         color: active ? SELECTED_RING : hov ? (danger ? tokens.red.text : SELECTED_RING) : tokens.text.disabled,
         transition: "all 0.1s",
+        touchAction: "manipulation",
       }}
     >{children}</button>
   );
