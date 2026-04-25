@@ -78,7 +78,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
   };
 
   return (
-    <div style={{ background: tokens.neutral[50], border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, padding: "14px 14px 18px", margin: "4px 0 8px", fontFamily: FONT }}>
+    <div style={{ background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "14px 14px 18px", margin: "4px 0 8px", fontFamily: FONT }}>
       <div style={{ marginBottom: 14 }}>
         <div style={fieldLabel}>
           Table
@@ -98,10 +98,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                 style={{
                   fontFamily: FONT, fontSize: 11, padding: "9px 0",
                   border: "1px solid",
-                  borderColor: isSel ? tokens.charcoal.default : conflict ? tokens.neutral[300] : tokens.neutral[200],
+                  borderColor: isSel ? tokens.charcoal.default : conflict ? tokens.ink[4] : tokens.ink[4],
                   borderRadius: 0,
                   background: isSel ? tokens.tint.parchment : conflict ? tokens.neutral[50] : tokens.neutral[0],
-                  color: isSel ? tokens.text.secondary : conflict ? tokens.text.muted : tokens.text.secondary,
+                  color: isSel ? tokens.ink[1] : conflict ? tokens.ink[4] : tokens.ink[2],
                   cursor: conflict ? "not-allowed" : "pointer",
                 }}
               >
@@ -124,10 +124,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             {SITTING_TIMES.map((t) => (
               <button key={t} onClick={() => setTime(t === time ? "" : t)} style={{
                 fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "10px 0",
-                border: "1px solid", borderColor: time === t ? tokens.charcoal.default : tokens.neutral[200],
+                border: "1px solid", borderColor: time === t ? tokens.charcoal.default : tokens.ink[4],
                 borderRadius: 0, cursor: "pointer",
                 background: time === t ? tokens.tint.parchment : tokens.neutral[0],
-                color: time === t ? tokens.text.secondary : tokens.text.muted,
+                color: time === t ? tokens.ink[1] : tokens.ink[3],
               }}>{t}</button>
             ))}
           </div>
@@ -141,10 +141,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             {[["long", "Long"], ["short", "Short"]].map(([v, l]) => (
               <button key={v} onClick={() => setMenuType(menuType === v ? "" : v)} style={{
                 fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "8px 0", flex: 1,
-                border: "1px solid", borderColor: menuType === v ? tokens.charcoal.default : tokens.neutral[200],
+                border: "1px solid", borderColor: menuType === v ? tokens.charcoal.default : tokens.ink[4],
                 borderRadius: 0, cursor: "pointer",
                 background: menuType === v ? tokens.tint.parchment : tokens.neutral[0],
-                color: menuType === v ? tokens.text.secondary : tokens.text.muted,
+                color: menuType === v ? tokens.ink[1] : tokens.ink[3],
               }}>{l}</button>
             ))}
           </div>
@@ -155,10 +155,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             {[["en", "EN"], ["si", "SLO"]].map(([v, l]) => (
               <button key={v} onClick={() => setLang(v)} style={{
                 fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "8px 0", flex: 1,
-                border: "1px solid", borderColor: lang === v ? tokens.charcoal.default : tokens.neutral[200],
+                border: "1px solid", borderColor: lang === v ? tokens.charcoal.default : tokens.ink[4],
                 borderRadius: 0, cursor: "pointer",
                 background: lang === v ? tokens.tint.parchment : tokens.neutral[0],
-                color: lang === v ? tokens.text.secondary : tokens.text.muted,
+                color: lang === v ? tokens.ink[1] : tokens.ink[3],
               }}>{l}</button>
             ))}
           </div>
@@ -167,7 +167,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
           <div style={fieldLabel}>Guests</div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <button onClick={() => setGuests((g) => Math.max(1, g - 1))} style={circBtnSm}>−</button>
-            <span style={{ fontFamily: FONT, fontSize: 15, minWidth: 22, textAlign: "center", color: tokens.text.primary }}>{guests}</span>
+            <span style={{ fontFamily: FONT, fontSize: 15, minWidth: 22, textAlign: "center", color: tokens.ink[0] }}>{guests}</span>
             <button onClick={() => setGuests((g) => Math.min(14, g + 1))} style={circBtnSm}>+</button>
           </div>
         </div>
@@ -180,10 +180,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             {[["", "Regular"], ["hotel", "Hotel"]].map(([v, l]) => (
               <button key={v || "r"} onClick={() => { setGuestType(v); if (v !== "hotel") setRooms([]); }} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "8px 0", flex: 1,
-                border: "1px solid", borderColor: guestType === v ? tokens.charcoal.default : tokens.neutral[200],
+                border: "1px solid", borderColor: guestType === v ? tokens.charcoal.default : tokens.ink[4],
                 borderRadius: 0, cursor: "pointer",
                 background: guestType === v ? tokens.tint.parchment : tokens.neutral[0],
-                color: guestType === v ? tokens.text.secondary : tokens.text.muted,
+                color: guestType === v ? tokens.ink[1] : tokens.ink[3],
               }}>{l}</button>
             ))}
           </div>
@@ -200,10 +200,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                 return (
                   <button key={r} onClick={() => setRooms((prev) => prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r])} style={{
                     fontFamily: FONT, fontSize: 11, padding: "10px 10px", touchAction: "manipulation",
-                    border: "1px solid", borderColor: isSel ? tokens.charcoal.default : tokens.neutral[200],
+                    border: "1px solid", borderColor: isSel ? tokens.charcoal.default : tokens.ink[4],
                     borderRadius: 0, cursor: "pointer",
                     background: isSel ? tokens.tint.parchment : tokens.neutral[0],
-                    color: tokens.text.secondary,
+                    color: tokens.ink[1],
                     fontWeight: isSel ? 600 : 400,
                   }}>{r}</button>
                 );
@@ -232,7 +232,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
           const items = RESTRICTIONS.filter((r) => r.group === group);
           return (
             <div key={group} style={{ marginBottom: 10 }}>
-              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 5 }}>{groupLabel}</div>
+              <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[4], textTransform: "uppercase", marginBottom: 5 }}>{groupLabel}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
                 {items.map((opt) => {
                   const cnt = restrictions.filter((r) => r.note === opt.key).length;
@@ -276,8 +276,8 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
       </div>
 
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <button onClick={onCancel} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.muted }}>CANCEL</button>
-        <button onClick={handleSave} disabled={!primaryId || saving} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 20px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 600, opacity: (!primaryId || saving) ? 0.5 : 1 }}>
+        <button onClick={onCancel} style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 16px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3] }}>CANCEL</button>
+        <button onClick={handleSave} disabled={!primaryId || saving} style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 20px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 600, opacity: (!primaryId || saving) ? 0.5 : 1 }}>
           {saving ? "SAVING…" : "SAVE"}
         </button>
       </div>

@@ -235,7 +235,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
     return `${weekDays[0].toLocaleDateString("en-GB", o)} – ${weekDays[6].toLocaleDateString("en-GB", o)}`.toUpperCase();
   };
 
-  const navBtn = { fontFamily: FONT, fontSize: 12, padding: "10px 10px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[600], touchAction: "manipulation" };
+  const navBtn = { fontFamily: FONT, fontSize: "11px", padding: "10px 10px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[2], touchAction: "manipulation" };
 
   const resvForDate = (ds) => reservations
     .filter(r => r.date === ds)
@@ -263,16 +263,16 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
     };
 
     return (
-      <div style={{ minHeight: "100vh", background: tokens.neutral[0], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+      <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
         <GlobalStyle />
 
         {/* Sticky header */}
-        <div style={{ borderBottom: `1px solid ${tokens.neutral[200]}`, padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: tokens.neutral[0], zIndex: 50, gap: 12 }}>
+        <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: tokens.neutral[0], zIndex: 50, gap: 12 }}>
           <button onClick={() => { setSelectedDay(null); setEditingId(null); setTicketId(null); setDraftFromReservation(null); }}
-            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "10px 14px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[900], flexShrink: 0, touchAction: "manipulation" }}>← WEEK</button>
+            style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "10px 14px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[1], flexShrink: 0, touchAction: "manipulation" }}>← WEEK</button>
           <div style={{ flex: 1, textAlign: "center" }}>
-            <div style={{ fontSize: 10, letterSpacing: 3, color: isService ? tokens.green.text : tokens.neutral[900], fontWeight: 600 }}>{dayLabel}</div>
-            <div style={{ fontSize: 8, letterSpacing: 2, color: tokens.neutral[400], marginTop: 2 }}>
+            <div style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.18em", textTransform: "uppercase", color: isService ? tokens.green.text : tokens.ink[0], fontWeight: 600 }}>{dayLabel}</div>
+            <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", color: tokens.ink[3], marginTop: 3 }}>
               {dayResv.length} reservation{dayResv.length !== 1 ? "s" : ""} · {totalGuests} guests
               {isService && <span style={{ color: tokens.green.text, marginLeft: 6 }}>● ACTIVE SERVICE</span>}
             </div>
@@ -280,13 +280,13 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <button onClick={() => setShowBreakdown(true)}
               disabled={dayResv.length === 0}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "10px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1, touchAction: "manipulation" }}>SERVICE BREAKDOWN</button>
+              style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: tokens.neutral[0], color: tokens.ink[0], fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1, touchAction: "manipulation" }}>SERVICE BREAKDOWN</button>
             <button onClick={() => {
               const next = editingId === "new" ? null : "new";
               setEditingId(next);
               setDraftFromReservation(null);
             }}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "10px 14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 600, touchAction: "manipulation" }}>+ ADD</button>
+              style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "10px 14px", border: `1px solid ${tokens.ink[0]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[0], fontWeight: 600, touchAction: "manipulation" }}>[+] ADD</button>
           </div>
         </div>
 
@@ -303,7 +303,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
           {/* New reservation form */}
           {editingId === "new" && (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 3, color: tokens.neutral[500], marginBottom: 6, textTransform: "uppercase" }}>New Reservation</div>
+              <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], marginBottom: 6, textTransform: "uppercase" }}>[NEW RESERVATION]</div>
               <ResvForm
                 initial={draftFromReservation
                   ? { date: selectedDay, table_id: draftFromReservation.table_id ?? null, data: draftFromReservation.data || {} }
@@ -320,10 +320,10 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
 
           {/* Existing reservations as big clear cards */}
           {dayResv.length === 0 && editingId !== "new" && (
-            <div style={{ textAlign: "center", padding: "60px 0", color: tokens.neutral[300] }}>
-              <div style={{ fontSize: 28, marginBottom: 12 }}>◫</div>
-              <div style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2 }}>NO RESERVATIONS</div>
-              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, marginTop: 6, color: tokens.neutral[300] }}>Tap + ADD or TEMPLATE to create one</div>
+            <div style={{ textAlign: "center", padding: "60px 0", color: tokens.ink[4] }}>
+              <div style={{ fontFamily: FONT, fontSize: "24px", marginBottom: 12, letterSpacing: "0.10em" }}>[ ]</div>
+              <div style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.18em", textTransform: "uppercase", color: tokens.ink[3] }}>NO RESERVATIONS</div>
+              <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", marginTop: 6, color: tokens.ink[4] }}>Tap [+] ADD to create one</div>
             </div>
           )}
 
@@ -338,45 +338,49 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
 
             return (
               <div key={r.id} style={{
-                border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, marginBottom: 10,
+                borderTop: `1px solid ${tokens.ink[4]}`,
+                borderRight: `1px solid ${tokens.ink[4]}`,
+                borderBottom: `1px solid ${tokens.ink[4]}`,
+                borderLeft: `3px solid ${d.restrictions?.length > 0 ? tokens.red.border : tokens.ink[4]}`,
+                borderRadius: 0, marginBottom: 10,
                 background: tokens.neutral[0], overflow: "hidden",
               }}>
                 {/* Card header — always visible */}
                 <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
                   {/* Table badge */}
-                  <div style={{ background: tokens.neutral[150], color: tokens.text.primary, border: `1px solid ${tokens.charcoal.border}`, fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 1, padding: "8px 12px", borderRadius: 0, minWidth: 48, textAlign: "center" }}>{tLabel}</div>
+                  <div style={{ background: tokens.neutral[50], color: tokens.ink[0], border: `1px solid ${tokens.charcoal.border}`, fontFamily: FONT, fontSize: "11px", fontWeight: 700, letterSpacing: "0.06em", padding: "8px 12px", borderRadius: 0, minWidth: 48, textAlign: "center" }}>{tLabel}</div>
                   {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: FONT, fontSize: 13, color: tokens.neutral[900], fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontFamily: FONT, fontSize: "13px", color: tokens.ink[0], fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {d.resName || "—"}
                     </div>
-                    <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[500], marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <div style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.06em", color: tokens.ink[3], marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       {d.resTime && <span>{d.resTime}</span>}
                       <span>{d.guests || 2} guests</span>
-                      {d.menuType && <span style={{ color: tokens.neutral[700], textTransform: "uppercase", letterSpacing: 1 }}>{d.menuType}</span>}
-                      {d.lang === "si" && <span style={{ color: tokens.neutral[500] }}>SLO</span>}
+                      {d.menuType && <span style={{ color: tokens.ink[2], textTransform: "uppercase", letterSpacing: "0.08em" }}>{d.menuType}</span>}
+                      {d.lang === "si" && <span style={{ color: tokens.ink[3] }}>SLO</span>}
                       {d.birthday && <span>🎂{d.cakeNote ? ` ${d.cakeNote}` : ""}</span>}
                       {d.guestType === "hotel" && (() => {
                         const rs = Array.isArray(d.rooms) && d.rooms.length ? d.rooms.filter(Boolean) : (d.room ? [d.room] : []);
-                        return rs.length ? <span style={{ color: tokens.text.body }}>Room{rs.length > 1 ? "s" : ""} #{rs.join(", ")}</span> : null;
+                        return rs.length ? <span style={{ color: tokens.ink[2] }}>Room{rs.length > 1 ? "s" : ""} #{rs.join(", ")}</span> : null;
                       })()}
                     </div>
                     {d.restrictions?.length > 0 && (
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
                         {d.restrictions.map((rs, i) => {
                           const def = RESTRICTIONS.find(x => x.key === rs.note);
-                          return <span key={i} style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, borderRadius: 0, padding: "2px 6px" }}>{def ? `${def.emoji} ${def.label}` : rs.note}</span>;
+                          return <span key={i} style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.06em", color: tokens.red.text, background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, borderRadius: 0, padding: "2px 6px" }}>{def ? `${def.emoji} ${def.label}` : rs.note}</span>;
                         })}
                       </div>
                     )}
-                    {d.notes && <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.neutral[500], fontStyle: "italic", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.notes}</div>}
+                    {d.notes && <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.04em", color: tokens.ink[3], fontStyle: "italic", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.notes}</div>}
                   </div>
                   {/* Action buttons */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
                     <button onClick={() => { setEditingId(isEditing ? null : r.id); if (!isEditing) setTicketId(null); }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "9px 10px", border: "1px solid " + (isEditing ? tokens.charcoal.default : tokens.neutral[300]), borderRadius: 0, cursor: "pointer", background: isEditing ? tokens.tint.parchment : tokens.neutral[0], color: isEditing ? tokens.text.body : tokens.neutral[600], touchAction: "manipulation" }}>EDIT</button>
+                      style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "9px 10px", border: "1px solid " + (isEditing ? tokens.charcoal.default : tokens.ink[4]), borderRadius: 0, cursor: "pointer", background: isEditing ? tokens.tint.parchment : tokens.neutral[0], color: isEditing ? tokens.ink[0] : tokens.ink[2], touchAction: "manipulation" }}>EDIT</button>
                     <button onClick={() => { setTicketId(showTicket ? null : r.id); if (!showTicket) setEditingId(null); }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "9px 10px", border: "1px solid " + (showTicket ? tokens.charcoal.default : tokens.neutral[300]), borderRadius: 0, cursor: "pointer", background: showTicket ? tokens.tint.parchment : tokens.neutral[0], color: showTicket ? tokens.text.body : tokens.neutral[600], touchAction: "manipulation" }}>TICKET</button>
+                      style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "9px 10px", border: "1px solid " + (showTicket ? tokens.charcoal.default : tokens.ink[4]), borderRadius: 0, cursor: "pointer", background: showTicket ? tokens.tint.parchment : tokens.neutral[0], color: showTicket ? tokens.ink[0] : tokens.ink[2], touchAction: "manipulation" }}>TICKET</button>
                     <button onClick={() => {
                       setEditingId("new");
                       setTicketId(null);
@@ -386,15 +390,15 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                         date: selectedDay,
                       });
                     }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "9px 10px", border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[600], touchAction: "manipulation" }}>COPY</button>
+                      style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "9px 10px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[2], touchAction: "manipulation" }}>COPY</button>
                     <button onClick={async () => { if (window.confirm(`Delete reservation for ${d.resName || tLabel}?`)) { await onDelete(r.id); setEditingId(null); setTicketId(null); } }}
-                      style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "9px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.red.bg, color: tokens.red.text, touchAction: "manipulation" }}>DEL</button>
+                      style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "9px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.red.bg, color: tokens.red.text, touchAction: "manipulation" }}>DEL</button>
                   </div>
                 </div>
 
                 {/* Edit form */}
                 {isEditing && (
-                  <div style={{ borderTop: `1px solid ${tokens.neutral[200]}`, padding: "12px 16px" }}>
+                  <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, padding: "12px 16px" }}>
                     <ResvForm
                       initial={r}
                       tables={tables}
@@ -409,9 +413,9 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
 
                 {/* Kitchen ticket preview */}
                 {showTicket && ticketVirtualTable && (
-                  <div style={{ borderTop: `1px solid ${tokens.neutral[200]}`, padding: "12px 16px" }}>
-                    <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 3, color: tokens.neutral[400], marginBottom: 8, textTransform: "uppercase" }}>Kitchen Ticket Preview</div>
-                    <div style={{ border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
+                  <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, padding: "12px 16px" }}>
+                    <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], marginBottom: 8, textTransform: "uppercase" }}>[TICKET PREVIEW]</div>
+                    <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
                       <KitchenTicket table={ticketVirtualTable} menuCourses={menuCourses} upd={updForTicket} />
                     </div>
                   </div>
@@ -426,40 +430,40 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
 
   // ── WEEK OVERVIEW ────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: "100vh", background: tokens.neutral[0], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+    <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
 
       {/* Sticky header */}
-      <div style={{ borderBottom: `1px solid ${tokens.neutral[200]}`, padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: tokens.neutral[0], zIndex: 50, gap: 12 }}>
-        <button onClick={onExit} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "10px 12px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[900], flexShrink: 0, touchAction: "manipulation" }}>← EXIT</button>
-        <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: tokens.neutral[500], flex: 1, textAlign: "center" }}>RESERVATIONS</span>
+      <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: tokens.neutral[0], zIndex: 50, gap: 12 }}>
+        <button onClick={onExit} style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "10px 12px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[1], flexShrink: 0, touchAction: "manipulation" }}>← EXIT</button>
+        <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.22em", textTransform: "uppercase", color: tokens.ink[3], flex: 1, textAlign: "center" }}>[RESERVATIONS]</span>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           <button onClick={() => setWeeklyPreview(weeklyPreview === "reservations" ? null : "reservations")}
-            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "10px 8px", border: `1px solid ${weeklyPreview === "reservations" ? tokens.charcoal.default : tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "reservations" ? tokens.tint.parchment : tokens.neutral[0], color: weeklyPreview === "reservations" ? tokens.text.body : tokens.neutral[600], fontWeight: 600, flexShrink: 0, touchAction: "manipulation" }}>OVERVIEW</button>
+            style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 8px", border: `1px solid ${weeklyPreview === "reservations" ? tokens.charcoal.default : tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "reservations" ? tokens.tint.parchment : tokens.neutral[0], color: weeklyPreview === "reservations" ? tokens.ink[0] : tokens.ink[2], fontWeight: 600, flexShrink: 0, touchAction: "manipulation" }}>OVERVIEW</button>
           <button onClick={() => setWeeklyPreview(weeklyPreview === "allergies" ? null : "allergies")}
-            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "10px 8px", border: `1px solid ${weeklyPreview === "allergies" ? tokens.charcoal.default : tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "allergies" ? tokens.tint.parchment : tokens.neutral[0], color: weeklyPreview === "allergies" ? tokens.text.body : tokens.neutral[600], fontWeight: 600, flexShrink: 0, touchAction: "manipulation" }}>ALLERGIES</button>
+            style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 8px", border: `1px solid ${weeklyPreview === "allergies" ? tokens.charcoal.default : tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "allergies" ? tokens.tint.parchment : tokens.neutral[0], color: weeklyPreview === "allergies" ? tokens.ink[0] : tokens.ink[2], fontWeight: 600, flexShrink: 0, touchAction: "manipulation" }}>ALLERGIES</button>
           <button onClick={() => setWeekOffset(w => w - 1)} style={navBtn}>◀</button>
           <button onClick={() => setWeekOffset(0)}
-            style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: tokens.neutral[500], minWidth: 110, textAlign: "center", background: "none", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, padding: "10px 0", cursor: "pointer", touchAction: "manipulation" }}>{fmtRange()}</button>
+            style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 110, textAlign: "center", background: "none", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "10px 0", cursor: "pointer", touchAction: "manipulation" }}>{fmtRange()}</button>
           <button onClick={() => setWeekOffset(w => w + 1)} style={navBtn}>▶</button>
         </div>
       </div>
 
       {/* Service date strip */}
-      <div style={{ padding: "8px 16px", borderBottom: `1px solid ${tokens.neutral[200]}`, display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ padding: "8px 16px", borderBottom: `1px solid ${tokens.ink[4]}`, display: "flex", alignItems: "center", gap: 10, background: tokens.neutral[0] }}>
         {serviceDate ? (
           <>
-            <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.green.text, fontWeight: 600 }}>
+            <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.green.text, fontWeight: 600 }}>
               ● SERVICE: {new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}
             </span>
             <button onClick={() => { const nd = window.prompt("Change service date (YYYY-MM-DD):", serviceDate); if (nd && /^\d{4}-\d{2}-\d{2}$/.test(nd)) onSetServiceDate(nd); }}
-              style={{ fontFamily: FONT, fontSize: 9, color: tokens.neutral[400], background: "none", border: "none", cursor: "pointer", touchAction: "manipulation", padding: "8px 4px" }}>change</button>
+              style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", color: tokens.ink[3], background: "none", border: "none", cursor: "pointer", touchAction: "manipulation", padding: "8px 4px" }}>CHANGE</button>
           </>
         ) : (
           <>
-            <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.neutral[300] }}>NO ACTIVE SERVICE DATE</span>
+            <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[4] }}>NO ACTIVE SERVICE DATE</span>
             <button onClick={() => { const nd = window.prompt("Set service date (YYYY-MM-DD):", todayStr); if (nd && /^\d{4}-\d{2}-\d{2}$/.test(nd)) onSetServiceDate(nd); }}
-              style={{ fontFamily: FONT, fontSize: 9, color: tokens.neutral[500], background: "none", border: `1px solid ${tokens.neutral[200]}`, cursor: "pointer", borderRadius: 0, padding: "9px 10px", touchAction: "manipulation" }}>SET DATE</button>
+              style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", textTransform: "uppercase", color: tokens.ink[2], background: "none", border: `1px solid ${tokens.ink[4]}`, cursor: "pointer", borderRadius: 0, padding: "7px 10px", touchAction: "manipulation" }}>SET DATE</button>
           </>
         )}
       </div>
@@ -544,33 +548,33 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
               flexWrap: "wrap",
             }}>
               <button onClick={onPrint} style={{
-                fontFamily: FONT, fontSize: 10, letterSpacing: 2,
+                fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
                 padding: "8px 16px",
                 border: `1px solid ${tokens.neutral[0]}`,
                 borderRadius: 0,
                 background: tokens.neutral[0],
-                color: tokens.neutral[900],
+                color: tokens.ink[0],
                 cursor: "pointer", fontWeight: 600,
               }}>PRINT</button>
               {(isResv ? Object.keys(weeklyEdits).length > 0 : Object.keys(allergyEdits).length > 0) && (
                 <button onClick={() => isResv ? setWeeklyEdits({}) : setAllergyEdits({})} style={{
-                  fontFamily: FONT, fontSize: 10, letterSpacing: 2,
+                  fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
                   padding: "8px 16px",
-                  border: `1px solid ${tokens.neutral[400]}`,
+                  border: `1px solid rgba(255,255,255,0.3)`,
                   borderRadius: 0,
                   background: "transparent",
-                  color: tokens.neutral[200],
-                  cursor: "pointer", fontWeight: 600,
+                  color: "rgba(255,255,255,0.6)",
+                  cursor: "pointer", fontWeight: 400,
                 }}>RESET</button>
               )}
               <button onClick={() => setWeeklyPreview(null)} style={{
-                fontFamily: FONT, fontSize: 10, letterSpacing: 2,
+                fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
                 padding: "8px 16px",
-                border: `1px solid ${tokens.neutral[0]}`,
+                border: `1px solid rgba(255,255,255,0.4)`,
                 borderRadius: 0,
                 background: "transparent",
-                color: tokens.neutral[0],
-                cursor: "pointer", fontWeight: 600,
+                color: "rgba(255,255,255,0.8)",
+                cursor: "pointer", fontWeight: 400,
               }}>CLOSE</button>
             </div>
 
@@ -763,7 +767,10 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
               <button key={dateStr} onClick={() => setSelectedDay(dateStr)}
                 style={{
                   fontFamily: FONT, textAlign: "left", cursor: "pointer",
-                  border: `1.5px solid ${isServiceDay ? tokens.green.border : isToday ? tokens.neutral[300] : tokens.neutral[200]}`,
+                  borderTop:    `1px solid ${isServiceDay ? tokens.green.border : isToday ? tokens.ink[3] : tokens.ink[4]}`,
+                  borderRight:  `1px solid ${isServiceDay ? tokens.green.border : isToday ? tokens.ink[3] : tokens.ink[4]}`,
+                  borderBottom: `1px solid ${isServiceDay ? tokens.green.border : isToday ? tokens.ink[3] : tokens.ink[4]}`,
+                  borderLeft:   `3px solid ${isServiceDay ? tokens.green.border : isToday ? tokens.ink[3] : tokens.ink[4]}`,
                   borderRadius: 0, padding: "14px 16px",
                   background: isServiceDay ? tokens.green.bg : tokens.neutral[0],
                   display: "flex", alignItems: "center", gap: 14,
@@ -771,34 +778,34 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 }}>
                 {/* Day label */}
                 <div style={{ minWidth: 100 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: 1, color: isServiceDay ? tokens.green.text : isToday ? tokens.neutral[900] : tokens.neutral[500] }}>
+                  <div style={{ fontFamily: FONT, fontSize: "10px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: isServiceDay ? tokens.green.text : isToday ? tokens.ink[0] : tokens.ink[3] }}>
                     {day.toLocaleDateString("en-GB", { weekday: "short" }).toUpperCase()}
                   </div>
-                  <div style={{ fontSize: 10, letterSpacing: 1, color: isServiceDay ? tokens.green.border : isToday ? tokens.neutral[600] : tokens.neutral[400], marginTop: 2 }}>
+                  <div style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.08em", textTransform: "uppercase", color: isServiceDay ? tokens.green.border : isToday ? tokens.ink[2] : tokens.ink[3], marginTop: 2 }}>
                     {day.toLocaleDateString("en-GB", { day: "numeric", month: "short" }).toUpperCase()}
                   </div>
                 </div>
 
                 {/* Badges */}
                 <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
-                  {isServiceDay && <span style={{ fontSize: 8, letterSpacing: 1, color: tokens.green.text, fontWeight: 600 }}>● SERVICE</span>}
-                  {isToday && !isServiceDay && <span style={{ fontSize: 8, letterSpacing: 1, color: tokens.neutral[400] }}>TODAY</span>}
+                  {isServiceDay && <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", color: tokens.green.text, fontWeight: 600 }}>● SERVICE</span>}
+                  {isToday && !isServiceDay && <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", color: tokens.ink[3] }}>TODAY</span>}
                 </div>
 
                 {/* Count */}
                 <div style={{ textAlign: "right" }}>
                   {dayResv.length > 0 ? (
                     <>
-                      <div style={{ fontSize: 16, fontWeight: 600, color: tokens.neutral[900], lineHeight: 1 }}>{dayResv.length}</div>
-                      <div style={{ fontSize: 9, color: tokens.neutral[400], letterSpacing: 1, marginTop: 2 }}>{totalGuests} guests</div>
+                      <div style={{ fontFamily: FONT, fontSize: "16px", fontWeight: 700, color: tokens.ink[0], lineHeight: 1 }}>{dayResv.length}</div>
+                      <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", color: tokens.ink[3], marginTop: 2 }}>{totalGuests} guests</div>
                     </>
                   ) : (
-                    <div style={{ fontSize: 10, color: tokens.neutral[300], letterSpacing: 1 }}>—</div>
+                    <div style={{ fontFamily: FONT, fontSize: "10px", color: tokens.ink[4], letterSpacing: "0.10em" }}>—</div>
                   )}
                 </div>
 
                 {/* Arrow */}
-                <span style={{ fontSize: 14, color: tokens.neutral[300] }}>›</span>
+                <span style={{ fontFamily: FONT, fontSize: "14px", color: tokens.ink[4] }}>›</span>
               </button>
             );
           })}

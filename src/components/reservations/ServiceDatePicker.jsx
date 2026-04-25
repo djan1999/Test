@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 
 const FONT = tokens.font;
+const { ink, rule, neutral, green, charcoal, tint } = tokens;
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
@@ -41,7 +42,7 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.45)",
+        background: "rgba(0,0,0,0.55)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -56,33 +57,38 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
         style={{
           width: "100%",
           maxWidth: 420,
-          background: tokens.neutral[0],
+          background: neutral[0],
           borderRadius: 0,
           overflow: "hidden",
-          boxShadow: "0 12px 60px rgba(0,0,0,0.18)",
+          border: `${rule.hairline} solid ${ink[4]}`,
         }}
       >
-        <div style={{ background: tokens.neutral[0], padding: "20px 20px 16px", textAlign: "center", borderBottom: `1px solid ${tokens.neutral[200]}` }}>
-          <div style={{ fontSize: 9, letterSpacing: 4, color: tokens.neutral[500], marginBottom: 4 }}>{appName}</div>
-          <div style={{ fontSize: 13, letterSpacing: 3, color: tokens.neutral[900], fontWeight: 700 }}>SELECT SERVICE DATE</div>
+        {/* Header */}
+        <div style={{ background: neutral[0], padding: "20px 20px 16px", textAlign: "center", borderBottom: `${rule.hairline} solid ${ink[4]}` }}>
+          <div style={{
+            fontFamily: FONT, fontSize: "8px", letterSpacing: "0.22em",
+            textTransform: "uppercase", color: ink[3], marginBottom: 6,
+          }}>{appName}</div>
+          <div style={{
+            fontFamily: FONT, fontSize: "11px", letterSpacing: "0.18em",
+            textTransform: "uppercase", color: ink[0], fontWeight: 700,
+          }}>[SELECT SERVICE DATE]</div>
         </div>
 
+        {/* Month nav */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 10px" }}>
           <button
             onClick={() => setWeekOffset((o) => o - 1)}
-            style={{ fontFamily: FONT, fontSize: 16, border: "none", background: "none", cursor: "pointer", color: tokens.neutral[600], padding: "4px 10px", lineHeight: 1 }}
-          >
-            ‹
-          </button>
-          <span style={{ fontSize: 9, letterSpacing: 3, color: tokens.neutral[500], fontWeight: 600 }}>{monthLabel}</span>
+            style={{ fontFamily: FONT, fontSize: "16px", border: "none", background: "none", cursor: "pointer", color: ink[2], padding: "4px 10px", lineHeight: 1 }}
+          >‹</button>
+          <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: ink[3], fontWeight: 600 }}>{monthLabel}</span>
           <button
             onClick={() => setWeekOffset((o) => o + 1)}
-            style={{ fontFamily: FONT, fontSize: 16, border: "none", background: "none", cursor: "pointer", color: tokens.neutral[600], padding: "4px 10px", lineHeight: 1 }}
-          >
-            ›
-          </button>
+            style={{ fontFamily: FONT, fontSize: "16px", border: "none", background: "none", cursor: "pointer", color: ink[2], padding: "4px 10px", lineHeight: 1 }}
+          >›</button>
         </div>
 
+        {/* Day grid */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, padding: "0 14px 20px" }}>
           {weekDays.map((dateStr, i) => {
             const d = new Date(dateStr + "T00:00:00");
@@ -97,7 +103,7 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
                 onClick={() => setSelected(dateStr)}
                 style={{
                   fontFamily: FONT,
-                  border: "none",
+                  border: `${rule.hairline} solid ${isSel ? charcoal.default : isToday ? green.border : ink[4]}`,
                   borderRadius: 0,
                   cursor: "pointer",
                   padding: "10px 0",
@@ -106,31 +112,43 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
                   alignItems: "center",
                   gap: 4,
                   transition: "all 0.12s",
-                  background: isSel ? tokens.tint.parchment : isToday ? tokens.green.bg : tokens.neutral[100],
-                  outline: isToday && !isSel ? `1.5px solid ${tokens.green.text}` : "none",
+                  background: isSel ? tint.parchment : isToday ? green.bg : neutral[50],
                   opacity: isPast && !isSel ? 0.45 : 1,
                 }}
               >
-                <span style={{ fontSize: 8, letterSpacing: 1, color: isSel ? tokens.text.body : tokens.neutral[400], fontWeight: 600 }}>{DAY_LABELS[i]}</span>
-                <span style={{ fontSize: 16, fontWeight: 700, color: isSel ? tokens.text.body : isToday ? tokens.green.text : tokens.neutral[900], lineHeight: 1 }}>{dayNum}</span>
-                {isToday && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? tokens.charcoal.default : tokens.green.text }} />}
-                {dayResv.length > 0 && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? tokens.charcoal.default : tokens.neutral[400], marginTop: 2 }} />}
+                <span style={{
+                  fontFamily: FONT, fontSize: "7px", letterSpacing: "0.10em",
+                  color: isSel ? ink[0] : ink[3], fontWeight: 600,
+                }}>{DAY_LABELS[i]}</span>
+                <span style={{
+                  fontFamily: FONT, fontSize: "16px", fontWeight: 700,
+                  color: isSel ? ink[0] : isToday ? green.text : ink[0], lineHeight: 1,
+                }}>{dayNum}</span>
+                {isToday && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? charcoal.default : green.text }} />}
+                {dayResv.length > 0 && <span style={{ width: 4, height: 4, borderRadius: 0, background: isSel ? charcoal.default : ink[4], marginTop: 2 }} />}
               </button>
             );
           })}
         </div>
 
+        {/* Selected date summary */}
         {selected &&
           (() => {
             const selResv = reservations.filter((r) => r.date === selected);
             const selGuests = selResv.reduce((a, r) => a + (r.data?.guests || 2), 0);
             return (
               <div style={{ textAlign: "center", paddingBottom: 6 }}>
-                <span style={{ fontSize: 10, letterSpacing: 2, color: tokens.green.text, fontWeight: 600 }}>
+                <span style={{
+                  fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em",
+                  textTransform: "uppercase", color: green.text, fontWeight: 600,
+                }}>
                   {new Date(selected + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }).toUpperCase()}
                 </span>
                 {selResv.length > 0 && (
-                  <div style={{ fontSize: 9, letterSpacing: 1, color: tokens.green.text, fontWeight: 600, marginTop: 4 }}>
+                  <div style={{
+                    fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em",
+                    textTransform: "uppercase", color: green.text, fontWeight: 600, marginTop: 4,
+                  }}>
                     {selGuests} PAX · {selResv.length} {selResv.length === 1 ? "TABLE" : "TABLES"}
                   </div>
                 )}
@@ -138,20 +156,28 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
             );
           })()}
 
-        <div style={{ display: "flex", gap: 0, borderTop: `1px solid ${tokens.neutral[200]}`, marginTop: 14 }}>
+        {/* Footer actions */}
+        <div style={{ display: "flex", gap: 0, borderTop: `${rule.hairline} solid ${ink[4]}`, marginTop: 14 }}>
           <button
             onClick={onCancel}
-            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 1, border: "none", borderRight: `1px solid ${tokens.neutral[200]}`, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[500], fontWeight: 500 }}
-          >
-            CANCEL
-          </button>
+            style={{
+              fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em",
+              textTransform: "uppercase", padding: "16px 0", flex: 1,
+              border: "none", borderRight: `${rule.hairline} solid ${ink[4]}`,
+              cursor: "pointer", background: neutral[0], color: ink[3], fontWeight: 400,
+            }}
+          >CANCEL</button>
           <button
             onClick={() => selected && onConfirm(selected)}
             disabled={!selected}
-            style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "16px 0", flex: 2, border: "none", cursor: selected ? "pointer" : "not-allowed", background: tokens.surface.card, color: selected ? tokens.text.primary : tokens.text.disabled, fontWeight: 700, opacity: 1 }}
-          >
-            START SERVICE ›
-          </button>
+            style={{
+              fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em",
+              textTransform: "uppercase", padding: "16px 0", flex: 2,
+              border: "none", cursor: selected ? "pointer" : "not-allowed",
+              background: selected ? charcoal.default : neutral[50],
+              color: selected ? neutral[0] : ink[4], fontWeight: 600, opacity: 1,
+            }}
+          >START SERVICE ›</button>
         </div>
       </div>
     </div>
