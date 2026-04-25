@@ -278,7 +278,6 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     weekResv.forEach(r => {
       const d = r.data || {};
       const kcNote = d.kitchenCourseNotes?.[key];
-      const guests = d.guests || 2;
       const restrictions = d.restrictions || [];
 
       // Priority 1: Manual kitchen ticket edits
@@ -290,19 +289,29 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
         return;
       }
 
-      // Priority 2: Restriction-based modifications (per-seat, grouped)
+      // Priority 2: Restriction-based modifications.
+      // Each restriction entry represents one guest. Restrictions assigned to
+      // the same seat (pos > 0) are grouped so the resolver picks a combined
+      // substitute. Unassigned entries (pos null) each count as one guest —
+      // counts must reflect how many guests actually have the restriction,
+      // not the table size.
       if (restrictions.length > 0) {
         const modCounts = {};
-        for (let seatId = 1; seatId <= guests; seatId++) {
-          const seatRestrKeys = restrictions
-            .filter(rs => !rs.pos || rs.pos === seatId)
-            .map(rs => rs.note);
-          if (!seatRestrKeys.length) continue;
-          const mod = getCourseMod(course, seatRestrKeys);
-          if (mod) {
-            modCounts[mod] = (modCounts[mod] || 0) + 1;
+        const seatGroups = new Map();
+        const unassigned = [];
+        restrictions.forEach(rs => {
+          if (rs.pos) {
+            const arr = seatGroups.get(rs.pos) || [];
+            arr.push(rs.note);
+            seatGroups.set(rs.pos, arr);
+          } else {
+            unassigned.push([rs.note]);
           }
-        }
+        });
+        [...seatGroups.values(), ...unassigned].forEach(notes => {
+          const mod = getCourseMod(course, notes);
+          if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
+        });
 
         if (Object.keys(modCounts).length > 0) {
           const entries = Object.entries(modCounts)

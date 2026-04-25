@@ -108,17 +108,28 @@ function allergyBaseCell(course, resv) {
   const d = resv.data || {};
   const key = course.course_key || "";
   const kcNote = d.kitchenCourseNotes?.[key];
-  const guests = d.guests || 2;
   const restrictions = d.restrictions || [];
   if (kcNote?.name || kcNote?.note) return [kcNote.name, kcNote.note].filter(Boolean).join("\n");
   if (restrictions.length > 0) {
     const modCounts = {};
-    for (let seatId = 1; seatId <= guests; seatId++) {
-      const seatRestrKeys = restrictions.filter(rs => !rs.pos || rs.pos === seatId).map(rs => rs.note);
-      if (!seatRestrKeys.length) continue;
-      const mod = getCourseMod(course, seatRestrKeys);
+    // Each restriction entry represents one guest. Restrictions explicitly
+    // assigned to the same seat (pos > 0) are grouped so the resolver can
+    // produce a combined substitute. Unassigned (pos null) are each one guest.
+    const seatGroups = new Map();
+    const unassigned = [];
+    restrictions.forEach(rs => {
+      if (rs.pos) {
+        const arr = seatGroups.get(rs.pos) || [];
+        arr.push(rs.note);
+        seatGroups.set(rs.pos, arr);
+      } else {
+        unassigned.push([rs.note]);
+      }
+    });
+    [...seatGroups.values(), ...unassigned].forEach(notes => {
+      const mod = getCourseMod(course, notes);
       if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
-    }
+    });
     if (Object.keys(modCounts).length > 0)
       return Object.entries(modCounts).map(([mod, count]) => `${count}x ${mod.toLowerCase()}`).join("\n");
   }
