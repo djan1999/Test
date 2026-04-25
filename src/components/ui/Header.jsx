@@ -3,6 +3,7 @@ import { tokens } from "../../styles/tokens.js";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 
 const FONT = tokens.font;
+const { ink, rule, neutral, green, red, charcoal, tint } = tokens;
 
 export default function Header({
   appName = "MILKA",
@@ -31,9 +32,9 @@ export default function Header({
   onEndService,
 }) {
   const isMobile = useIsMobile(BP.sm);
-  const modeColor = modeLabel === "ADMIN" ? tokens.text.secondary : modeLabel === "SERVICE" ? tokens.green.text : tokens.text.muted;
   const [sSt, setSSt] = useState(null);
   const [sMsg, setSMsg] = useState("");
+
   const handleSyncAll = async () => {
     if (!onSyncAll || sSt === "syncing") return;
     setSSt("syncing");
@@ -60,70 +61,146 @@ export default function Header({
     }
     setTimeout(() => { setSSt(null); setSMsg(""); }, 6000);
   };
-  // Mobile-tuned action button: larger tap surface, slightly bigger text.
-  const actBtn = {
-    fontFamily: FONT,
-    fontSize: isMobile ? 10 : 9,
-    letterSpacing: isMobile ? 1.5 : 2,
-    padding: isMobile ? "12px 14px" : "6px 10px",
-    border: tokens.border.default,
-    borderRadius: 0,
-    cursor: "pointer",
-    background: tokens.surface.card,
-    color: tokens.text.primary,
-    flexShrink: 0,
-    minHeight: isMobile ? 44 : undefined,
-    touchAction: "manipulation",
+
+  // Base action button — editorial, no-radius, mono 9px
+  const btn = {
+    fontFamily:    FONT,
+    fontSize:      isMobile ? "10px" : "9px",
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+    fontWeight:    400,
+    padding:       isMobile ? "12px 14px" : "7px 11px",
+    border:        `${rule.hairline} solid ${ink[3]}`,
+    borderRadius:  0,
+    cursor:        "pointer",
+    background:    neutral[0],
+    color:         ink[1],
+    flexShrink:    0,
+    minHeight:     isMobile ? 44 : undefined,
+    touchAction:   "manipulation",
+    whiteSpace:    "nowrap",
   };
+
+  // Sync status chip
+  const syncBorder = sSt === "ok" ? green.border : sSt === "err" || sSt === "partial" ? red.border : syncLive ? green.border : ink[4];
+  const syncBg     = sSt === "ok" ? green.bg    : sSt === "err" || sSt === "partial" ? red.bg    : syncLive ? green.bg    : neutral[50];
+  const syncColor  = sSt === "ok" ? green.text  : sSt === "err" || sSt === "partial" ? red.text  : syncLive ? green.text  : ink[3];
+  const syncText   = sSt === "syncing" ? "SYNCING…" : sSt === "ok" ? "✓ SYNCED" : sSt === "partial" ? "⚠ PARTIAL" : sSt === "err" ? "✗ FAILED" : syncLabel;
+
   return (
     <div style={{
-      borderBottom: tokens.border.subtle,
-      padding: isMobile ? "8px 10px" : "10px 12px",
-      display: "flex", flexDirection: "column", gap: isMobile ? 8 : 10,
-      background: tokens.surface.card, position: "sticky", top: 0, zIndex: 50,
-      paddingTop: `max(${isMobile ? 8 : 10}px, env(safe-area-inset-top))`,
+      borderBottom: `${rule.hairline} solid ${ink[4]}`,
+      padding:      isMobile ? "8px 10px" : "9px 16px",
+      display:      "flex",
+      flexDirection:"column",
+      gap:          isMobile ? 8 : 6,
+      background:   neutral[0],
+      position:     "sticky",
+      top:          0,
+      zIndex:       50,
+      paddingTop:   `max(${isMobile ? 8 : 9}px, env(safe-area-inset-top))`,
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: isMobile ? 8 : 12, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 16, minWidth: 0 }}>
-          <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 600, letterSpacing: isMobile ? 3 : 4, color: tokens.text.primary }}>{appName}</span>
-          <span style={{ width: 1, height: 14, background: tokens.neutral[300] }} />
-          <span style={{ fontSize: 10, letterSpacing: isMobile ? 2 : 3, color: modeColor, textTransform: "uppercase", fontWeight: 700 }}>{modeLabel}</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          {showAddRes && (
-            <button onClick={onAddRes} style={{ ...actBtn, border: `1px solid ${tokens.charcoal.default}`, fontWeight: 600 }}>+ RES</button>
+
+        {/* Left — app name + mode label */}
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 14, minWidth: 0 }}>
+          <span style={{
+            fontFamily:    FONT,
+            fontSize:      isMobile ? "11px" : "12px",
+            fontWeight:    700,
+            letterSpacing: "0.28em",
+            color:         ink[0],
+          }}>{appName}</span>
+
+          {modeLabel && (
+            <span style={{
+              fontFamily:    FONT,
+              fontSize:      "9px",
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              fontWeight:    400,
+              color:         ink[3],
+            }}>[{modeLabel}]</span>
           )}
-          {showSummary && <button onClick={onSummary} style={actBtn}>SUMMARY</button>}
-          {showMenu && <button onClick={onMenu} style={actBtn}>MENU</button>}
-          {showInventory && <button onClick={onInventory} style={actBtn}>{isMobile ? "INV" : "INVENTORY"}</button>}
+        </div>
+
+        {/* Right — action buttons */}
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 5 : 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+
+          {showAddRes && (
+            <button onClick={onAddRes} style={{ ...btn, border: `${rule.hairline} solid ${ink[0]}`, fontWeight: 600 }}>
+              [+] {isMobile ? "RES" : "NEW RES"}
+            </button>
+          )}
+
+          {showSummary && (
+            <button onClick={onSummary} style={btn}>SUMMARY</button>
+          )}
+
+          {showMenu && (
+            <button onClick={onMenu} style={btn}>MENU</button>
+          )}
+
+          {showInventory && (
+            <button onClick={onInventory} style={btn}>{isMobile ? "INV" : "INVENTORY"}</button>
+          )}
+
           {showSeed && (
-            <button onClick={onSeed} style={{ ...actBtn, border: `1px solid ${tokens.green.border}`, background: tokens.green.bg, color: tokens.green.text }}>
+            <button onClick={onSeed} style={{
+              ...btn,
+              border:     `${rule.hairline} solid ${green.border}`,
+              background: green.bg,
+              color:      green.text,
+            }}>
               {isMobile ? "SEED" : "SEED TEST"}
             </button>
           )}
+
+          {/* Sync status chip */}
           <span style={{
-            fontFamily: FONT, fontSize: isMobile ? 10 : 9, letterSpacing: isMobile ? 1.5 : 2,
-            padding: isMobile ? "12px 14px" : "6px 10px",
-            border: `1px solid ${syncLive ? tokens.green.border : tokens.neutral[300]}`,
-            borderRadius: 0,
-            background: syncLive ? tokens.green.bg : tokens.neutral[50],
-            color: syncLive ? tokens.green.text : tokens.text.muted,
-            fontWeight: 600, whiteSpace: "nowrap",
-            minHeight: isMobile ? 44 : undefined,
-            display: "inline-flex", alignItems: "center",
-          }}>{syncLabel}</span>
+            fontFamily:    FONT,
+            fontSize:      isMobile ? "10px" : "9px",
+            letterSpacing: "0.12em",
+            padding:       isMobile ? "12px 12px" : "7px 10px",
+            border:        `${rule.hairline} solid ${syncBorder}`,
+            borderRadius:  0,
+            background:    syncBg,
+            color:         syncColor,
+            fontWeight:    500,
+            whiteSpace:    "nowrap",
+            minHeight:     isMobile ? 44 : undefined,
+            display:       "inline-flex",
+            alignItems:    "center",
+            cursor:        onSyncAll ? "pointer" : "default",
+          }}
+            onClick={onSyncAll ? handleSyncAll : undefined}
+          >{syncText}</span>
+
           {showEndService && (
             <button onClick={onEndService} style={{
-              ...actBtn,
-              border: `1px solid ${tokens.red.border}`,
-              background: tokens.red.bg,
-              color: tokens.red.text,
+              ...btn,
+              border:     `${rule.hairline} solid ${red.border}`,
+              background: red.bg,
+              color:      red.text,
               fontWeight: 600,
             }}>{isMobile ? "END" : "END SERVICE"}</button>
           )}
-          <button onClick={onExit} style={actBtn}>EXIT</button>
+
+          <button onClick={onExit} style={btn}>EXIT</button>
         </div>
       </div>
+
+      {/* Partial sync message */}
+      {sMsg && (
+        <div style={{
+          fontFamily:  FONT,
+          fontSize:    "8px",
+          letterSpacing: "0.08em",
+          color:       sSt === "partial" ? tokens.red.text : ink[3],
+          paddingLeft: 2,
+          lineHeight:  1.4,
+        }}>{sMsg}</div>
+      )}
     </div>
   );
 }

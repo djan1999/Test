@@ -381,134 +381,179 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
     (s.pairing && s.pairing !== "—")
   );
   return (
-    <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "20px 12px 28px" : "24px 16px", overflowX: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
+    <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "0 0 28px" : "0 0 40px", overflowX: "hidden" }}>
+      {/* [TABLE] header bar */}
+      <div style={{
+        borderBottom: `1px solid ${tokens.ink[4]}`,
+        padding: isMobile ? "10px 12px" : "10px 20px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        background: tokens.neutral[0], marginBottom: 0, gap: 12,
+      }}>
         <button onClick={onBack} style={{
           background: "none", border: "none", cursor: "pointer",
-          fontFamily: FONT, fontSize: 11, color: tokens.text.secondary, letterSpacing: 1, padding: 0,
-        }}>← all tables</button>
-      </div>
+          fontFamily: FONT, fontSize: "9px", color: tokens.ink[3],
+          letterSpacing: "0.12em", padding: 0, textTransform: "uppercase",
+        }}>← TABLES</button>
 
-      {/* Table number + guest count */}
-      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 12, gap: 16, flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 4, color: tokens.text.secondary, marginBottom: 6 }}>TABLE</div>
-          <div style={{ fontFamily: FONT, fontSize: 48, fontWeight: 300, color: tokens.text.primary, lineHeight: 1 }}>
-            {String(table.id).padStart(2, "0")}
-          </div>
+        {/* Table number */}
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+          <span style={{
+            fontFamily: FONT, fontSize: isMobile ? "28px" : "36px",
+            fontWeight: 700, color: tokens.ink[0], letterSpacing: "-0.02em", lineHeight: 1,
+          }}>T{String(table.id).padStart(2, "0")}</span>
+          {mode === "service" && (
+            <span style={{
+              fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em",
+              color: tokens.ink[3], textTransform: "uppercase",
+            }}>{table.guests} PAX</span>
+          )}
         </div>
-        {mode === "admin" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 6 }}>
-            <button onClick={() => setGuests(Math.max(1, table.guests - 1))} style={circBtnSm}>−</button>
-            <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.body, letterSpacing: 1, minWidth: 70, textAlign: "center" }}>
-              {table.guests} guests
-            </span>
-            <button onClick={() => setGuests(Math.min(14, table.guests + 1))} style={circBtnSm}>+</button>
-          </div>
-        )}
-        {mode === "service" && (
-          <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.body, letterSpacing: 1, marginBottom: 6 }}>
-            {table.guests} guests
-          </span>
-        )}
+
+        {/* Action buttons */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {mode === "admin" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button onClick={() => setGuests(Math.max(1, table.guests - 1))} style={circBtnSm}>−</button>
+              <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.body, letterSpacing: 1, minWidth: 60, textAlign: "center" }}>
+                {table.guests} guests
+              </span>
+              <button onClick={() => setGuests(Math.min(14, table.guests + 1))} style={circBtnSm}>+</button>
+            </div>
+          )}
+          <button
+            onClick={() => onApplySeatToAll && onApplySeatToAll(table.id, 1)}
+            disabled={!canApplySeatToAll}
+            style={{
+              fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em",
+              padding: isMobile ? "10px 10px" : "6px 10px",
+              border: `1px solid ${tokens.ink[4]}`, borderRadius: 0,
+              cursor: canApplySeatToAll ? "pointer" : "not-allowed",
+              background: tokens.neutral[0], color: tokens.ink[2],
+              opacity: canApplySeatToAll ? 1 : 0.4,
+              textTransform: "uppercase", touchAction: "manipulation",
+            }}
+          >[P1→ALL]</button>
+          <button
+            onClick={() => onClearBeverages && onClearBeverages(table.id)}
+            disabled={!onClearBeverages || !hasAnyBeverageData}
+            style={{
+              fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em",
+              padding: isMobile ? "10px 10px" : "6px 10px",
+              border: `1px solid ${tokens.red.border}`, borderRadius: 0,
+              cursor: (onClearBeverages && hasAnyBeverageData) ? "pointer" : "not-allowed",
+              background: tokens.neutral[0], color: tokens.red.text,
+              opacity: (onClearBeverages && hasAnyBeverageData) ? 1 : 0.4,
+              textTransform: "uppercase", touchAction: "manipulation",
+            }}
+          >CLEAR DRINKS</button>
+        </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-        <button
-          onClick={() => onApplySeatToAll && onApplySeatToAll(table.id, 1)}
-          disabled={!canApplySeatToAll}
-          style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 1.2, padding: isMobile ? "11px 12px" : "6px 12px",
-            border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: canApplySeatToAll ? "pointer" : "not-allowed",
-            background: tokens.neutral[0], color: tokens.text.secondary, opacity: canApplySeatToAll ? 1 : 0.5,
-            touchAction: "manipulation",
-          }}
-        >
-          COPY P1 TO ALL
-        </button>
-        <button
-          onClick={() => onClearBeverages && onClearBeverages(table.id)}
-          disabled={!onClearBeverages || !hasAnyBeverageData}
-          style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 1.2, padding: isMobile ? "11px 12px" : "6px 12px",
-            border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: (onClearBeverages && hasAnyBeverageData) ? "pointer" : "not-allowed",
-            background: tokens.neutral[0], color: tokens.red.text, opacity: (onClearBeverages && hasAnyBeverageData) ? 1 : 0.5,
-            touchAction: "manipulation",
-          }}
-        >
-          CLEAR ALL DRINKS
-        </button>
-      </div>
-
-      {/* Reservation strip */}
+      {/* [GUEST DOSSIER] strip */}
       {(table.resName || table.resTime || table.arrivedAt || table.menuType) && (
         <div style={{
-          display: "grid", gap: 14, alignItems: "start",
-          gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(160px, max-content))",
-          padding: isMobile ? "12px" : "10px 14px", background: tokens.neutral[50], border: `1px solid ${tokens.neutral[100]}`,
-          borderRadius: 0, marginBottom: 28,
+          display: "flex", gap: 0, alignItems: "stretch",
+          borderBottom: `1px solid ${tokens.ink[4]}`,
+          background: tokens.neutral[0],
+          marginBottom: 0,
+          flexWrap: "wrap",
         }}>
-          {table.resName && (
-            <div>
-              <div style={{ ...fieldLabel, marginBottom: 2 }}>Name</div>
-              <div style={{ fontFamily: FONT, fontSize: 13, color: tokens.text.primary }}>
-                {table.resName}
-                {table.guestType && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.body, marginLeft: 8, letterSpacing: 1, textTransform: "uppercase" }}>{table.guestType}</span>}
-                {table.guestType === "hotel" && (() => {
-                  const rs = Array.isArray(table.rooms) && table.rooms.length ? table.rooms.filter(Boolean) : (table.room ? [table.room] : []);
-                  return rs.length ? <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[600], marginLeft: 6, letterSpacing: 1 }}>· Hotel #{rs.join(", ")}</span> : null;
-                })()}
+          {/* Label */}
+          <div style={{
+            padding: isMobile ? "10px 12px" : "10px 20px",
+            borderRight: `1px solid ${tokens.ink[4]}`,
+            display: "flex", alignItems: "center",
+            flexShrink: 0,
+          }}>
+            <span style={{
+              fontFamily: FONT, fontSize: "8px", letterSpacing: "0.16em",
+              textTransform: "uppercase", color: tokens.ink[3], fontWeight: 400,
+            }}>[DOSSIER]</span>
+          </div>
+          {/* Fields */}
+          <div style={{
+            display: "flex", gap: 0, alignItems: "stretch", flexWrap: "wrap", flex: 1,
+          }}>
+            {table.resName && (
+              <div style={{ padding: isMobile ? "8px 12px" : "8px 16px", borderRight: `1px solid ${tokens.ink[4]}` }}>
+                <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", color: tokens.ink[3], textTransform: "uppercase", marginBottom: 3 }}>NAME</div>
+                <div style={{ fontFamily: FONT, fontSize: "13px", fontWeight: 500, color: tokens.ink[0], lineHeight: 1.2 }}>
+                  {table.resName}
+                  {table.guestType === "hotel" && (() => {
+                    const rs = Array.isArray(table.rooms) && table.rooms.length ? table.rooms.filter(Boolean) : (table.room ? [table.room] : []);
+                    return rs.length ? <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], marginLeft: 8 }}>· #{rs.join(", ")}</span> : null;
+                  })()}
+                </div>
               </div>
-            </div>
-          )}
-          {table.resTime && (
-            <div>
-              <div style={{ ...fieldLabel, marginBottom: 2 }}>Reserved</div>
-              <div style={{ fontFamily: FONT, fontSize: 13, color: tokens.text.primary }}>{table.resTime}</div>
-            </div>
-          )}
-          {table.menuType && (
-            <div>
-              <div style={{ ...fieldLabel, marginBottom: 2 }}>Menu</div>
-              <div style={{ fontFamily: FONT, fontSize: 13, color: tokens.text.primary }}>{table.menuType}</div>
-            </div>
-          )}
-          {table.arrivedAt && (
-            <div>
-              <div style={{ ...fieldLabel, marginBottom: 2 }}>Arrived</div>
-              <div style={{ fontFamily: FONT, fontSize: 13, color: tokens.green.text }}>{table.arrivedAt}</div>
-            </div>
-          )}
+            )}
+            {table.resTime && (
+              <div style={{ padding: isMobile ? "8px 12px" : "8px 16px", borderRight: `1px solid ${tokens.ink[4]}` }}>
+                <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", color: tokens.ink[3], textTransform: "uppercase", marginBottom: 3 }}>TIME</div>
+                <div style={{ fontFamily: FONT, fontSize: "13px", fontWeight: 500, color: tokens.ink[0], lineHeight: 1.2 }}>{table.resTime}</div>
+              </div>
+            )}
+            {table.menuType && (
+              <div style={{ padding: isMobile ? "8px 12px" : "8px 16px", borderRight: `1px solid ${tokens.ink[4]}` }}>
+                <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", color: tokens.ink[3], textTransform: "uppercase", marginBottom: 3 }}>MENU</div>
+                <div style={{ fontFamily: FONT, fontSize: "13px", fontWeight: 500, color: tokens.ink[0], lineHeight: 1.2, textTransform: "uppercase" }}>{table.menuType}</div>
+              </div>
+            )}
+            {table.arrivedAt && (
+              <div style={{ padding: isMobile ? "8px 12px" : "8px 16px" }}>
+                <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", color: tokens.ink[3], textTransform: "uppercase", marginBottom: 3 }}>ARRIVED</div>
+                <div style={{ fontFamily: FONT, fontSize: "13px", fontWeight: 500, color: tokens.green.text, lineHeight: 1.2 }}>{table.arrivedAt}</div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Quick set water for all seats */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "10px 12px", background: tokens.neutral[50], borderRadius: 0, border: `1px solid ${tokens.neutral[100]}` }}>
-        <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase", flexShrink: 0 }}>All water</span>
-        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-          {WATER_OPTS.map(opt => (
-            <button key={opt} onClick={() => table.seats.forEach(s => updSeat(s.id, "water", opt))} style={{
-              fontFamily: FONT, fontSize: 11, letterSpacing: 0.5,
-              padding: isMobile ? "10px 10px" : "5px 10px", border: "1px solid",
-              borderColor: table.seats.every(s => s.water === opt) ? tokens.charcoal.default : tokens.neutral[200],
-              borderRadius: 0, cursor: "pointer",
-              background: table.seats.every(s => s.water === opt) ? tokens.tint.parchment : tokens.neutral[0],
-              color: table.seats.every(s => s.water === opt) ? tokens.neutral[700] : tokens.text.secondary,
-              transition: "all 0.1s", touchAction: "manipulation",
-            }}>{opt}</button>
-          ))}
+      {/* [ALL WATER] strip */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        borderBottom: `1px solid ${tokens.ink[4]}`,
+        padding: isMobile ? "8px 12px" : "8px 20px",
+        background: tokens.neutral[50],
+      }}>
+        <span style={{
+          fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
+          color: tokens.ink[3], textTransform: "uppercase", flexShrink: 0,
+        }}>[ALL WATER]</span>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {WATER_OPTS.map(opt => {
+            const allMatch = table.seats.every(s => s.water === opt);
+            return (
+              <button key={opt} onClick={() => table.seats.forEach(s => updSeat(s.id, "water", opt))} style={{
+                fontFamily: FONT, fontSize: "9px", letterSpacing: "0.06em",
+                padding: isMobile ? "9px 9px" : "5px 9px",
+                border: `1px solid ${allMatch ? tokens.charcoal.default : tokens.ink[4]}`,
+                borderRadius: 0, cursor: "pointer",
+                background: allMatch ? tokens.tint.parchment : tokens.neutral[0],
+                color: allMatch ? tokens.ink[0] : tokens.ink[3],
+                fontWeight: allMatch ? 600 : 400,
+                transition: "all 0.1s", touchAction: "manipulation",
+              }}>{opt}</button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Column header row 1 */}
-      <div style={{ display: "grid", gridTemplateColumns: row1, gap: 10, alignItems: "center", marginBottom: 4 }}>
-        {(isNarrow ? ["", "Water", ""] : ["", "Water", "Pairing", ""]).map((h, i) => (
-          <div key={i} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.secondary, textTransform: "uppercase" }}>{h}</div>
+      {/* [SEATS] column header */}
+      <div style={{
+        display: "grid", gridTemplateColumns: row1, gap: 10, alignItems: "center",
+        padding: isMobile ? "6px 12px" : "6px 20px",
+        borderBottom: `1px solid ${tokens.ink[4]}`,
+        background: tokens.neutral[0],
+      }}>
+        {(isNarrow ? ["SEAT", "WATER", ""] : ["SEAT", "WATER", "PAIRING", ""]).map((h, i) => (
+          <div key={i} style={{
+            fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
+            color: tokens.ink[3], textTransform: "uppercase",
+          }}>{h}</div>
         ))}
       </div>
-      <div style={{ borderTop: `1px solid ${tokens.neutral[100]}`, marginBottom: 2 }} />
 
-      {/* Seat rows */}
+      {/* [GUEST MATRIX] seat rows */}
       {table.seats.map((seat, si) => {
         const glasses   = seat.glasses   || [];
         const cocktailList = seat.cocktails || [];
@@ -516,17 +561,23 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
         const seatRestrictions = (table.restrictions || []).filter(r => r.pos === seat.id);
         return (
           <div key={seat.id} style={{
-            borderBottom: si < table.seats.length - 1 ? `1px solid ${tokens.neutral[100]}` : "none",
-            padding: "10px 0",
+            borderBottom: `1px solid ${tokens.ink[4]}`,
+            background: tokens.neutral[0],
           }}>
-            {/* ── Line 1: P · [restrictions] · Water · Pairing · Swap ── */}
-            <div style={{ display: "grid", gridTemplateColumns: row1, gap: 10, alignItems: "start", marginBottom: 8 }}>
-              {/* P bubble */}
+            {/* ── Line 1: P · Water · Pairing · Swap ── */}
+            <div style={{
+              display: "grid", gridTemplateColumns: row1, gap: 10, alignItems: "start",
+              padding: isMobile ? "8px 12px" : "10px 20px",
+            }}>
+              {/* P position label */}
               <div style={{
-                width: 30, height: 30, borderRadius: 0, border: `1px solid ${tokens.neutral[200]}`,
+                width: 28, height: 28, borderRadius: 0,
+                border: `1px solid ${seatRestrictions.length ? tokens.red.border : tokens.ink[4]}`,
+                background: seatRestrictions.length ? tokens.red.bg : tokens.neutral[0],
                 display: "flex", alignItems: "center", justifyContent: "center",
-                fontFamily: FONT, fontSize: 9, color: tokens.text.body, letterSpacing: 0.5, flexShrink: 0,
-                marginTop: 2,
+                fontFamily: FONT, fontSize: "9px", fontWeight: 700,
+                color: seatRestrictions.length ? tokens.red.text : tokens.ink[1],
+                letterSpacing: "0.06em", flexShrink: 0, marginTop: 2,
               }}>P{seat.id}</div>
 
               {/* Water */}
@@ -593,10 +644,19 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
               </div>
             )}
             {/* ── Beverages + Extras ── */}
-            <div style={{ paddingLeft: isMobile ? 0 : 48, display: "flex", flexDirection: "column", gap: 12 }}>
-              {/* ── Aperitif ── generates above Sour Soup */}
-              <div style={{ background: tokens.tint.parchment, border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, padding: isMobile ? "10px" : "12px" }}>
-                <div style={{ ...fieldLabel, marginBottom: 8, color: tokens.neutral[600] }}>Aperitif</div>
+            <div style={{ paddingLeft: isMobile ? 0 : 48, display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* ── Aperitif ── */}
+              <div style={{
+                background: tokens.neutral[50],
+                borderTop: `1px solid ${tokens.ink[4]}`,
+                borderBottom: `1px solid ${tokens.ink[4]}`,
+                padding: isMobile ? "8px 0" : "10px 0",
+              }}>
+                <div style={{
+                  fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
+                  textTransform: "uppercase", color: tokens.ink[3], fontWeight: 400,
+                  marginBottom: 8, paddingLeft: isMobile ? 0 : 0,
+                }}>[APERITIF]</div>
                 {/* Quick-add buttons */}
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                   {aperitifOptions.map(ap => (
@@ -642,9 +702,18 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
                 )}
               </div>
 
-              {/* ── By the Glass ── generates from Danube Salmon row */}
-              <div style={{ background: tokens.neutral[50], border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, padding: isMobile ? "10px" : "12px" }}>
-                <div style={{ ...fieldLabel, marginBottom: 8, color: tokens.text.body }}>By the Glass</div>
+              {/* ── By the Glass ── */}
+              <div style={{
+                background: tokens.neutral[0],
+                borderTop: `1px solid ${tokens.ink[4]}`,
+                borderBottom: `1px solid ${tokens.ink[4]}`,
+                padding: isMobile ? "8px 0" : "10px 0",
+              }}>
+                <div style={{
+                  fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
+                  textTransform: "uppercase", color: tokens.ink[3], fontWeight: 400,
+                  marginBottom: 8,
+                }}>[BY THE GLASS]</div>
                 <BeverageSearch
                   wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
                   onAdd={({ type, item }) => {
@@ -802,10 +871,20 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
         );
       })}
 
-      <div style={{ borderTop: `1px solid ${tokens.neutral[200]}`, margin: "28px 0" }} />
+      {/* [TABLE INFO] section */}
+      <div style={{
+        borderTop: `1px solid ${tokens.ink[4]}`,
+        padding: isMobile ? "10px 12px" : "10px 20px",
+        background: tokens.neutral[50],
+      }}>
+        <div style={{
+          fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
+          textTransform: "uppercase", color: tokens.ink[3], fontWeight: 400,
+          marginBottom: 16,
+        }}>[TABLE INFO]</div>
 
       {/* Table-wide fields */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 }}>
         <div>
           <div style={fieldLabel}>🍾 Bottles</div>
           {(table.bottleWines || []).map((w, i) => (
@@ -873,19 +952,21 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
             style={{ ...baseInp, minHeight: 68, resize: "vertical", lineHeight: 1.5 }} />
         </div>
       </div>
+      </div>
 
-      {/* Sticky bottom back button */}
+      {/* Sticky back button */}
       <div style={{
         position: "sticky", bottom: 0, left: 0, right: 0,
-        padding: "12px 0 20px", marginTop: 28,
-        background: `linear-gradient(to bottom, transparent, ${tokens.neutral[0]} 30%)`,
+        padding: "10px 0 16px", marginTop: 0,
+        background: `linear-gradient(to bottom, transparent, ${tokens.ink.bg} 30%)`,
       }}>
         <button onClick={onBack} style={{
-          width: "100%", fontFamily: FONT, fontSize: 11, letterSpacing: 2,
-          padding: "14px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0,
-          cursor: "pointer", background: tokens.neutral[0], color: tokens.text.secondary,
+          width: "100%", fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          padding: "13px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0,
+          cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3],
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-        }}>← all tables</button>
+        }}>← ALL TABLES</button>
       </div>
     </div>
   );
@@ -928,12 +1009,13 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 
     const wBtn = (opt, active, onClick) => (
       <button key={opt} onClick={onClick} style={{
-        fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "7px 9px",
-        border: `1px solid ${active ? (opt === "OC" || opt === "OW" ? tokens.neutral[300] : tokens.neutral[300]) : tokens.neutral[200]}`,
+        fontFamily: FONT, fontSize: "9px", letterSpacing: "0.08em", padding: "6px 8px",
+        border: `1px solid ${active ? tokens.charcoal.default : tokens.ink[4]}`,
         borderRadius: 0, cursor: "pointer", lineHeight: 1,
-        background: active ? (opt === "OC" || opt === "OW" ? tokens.tint.parchment : tokens.neutral[100]) : tokens.neutral[0],
-        color: active ? (opt === "OC" || opt === "OW" ? tokens.neutral[700] : tokens.neutral[600]) : tokens.text.disabled,
-        transition: "all 0.1s",
+        background: active ? tokens.tint.parchment : tokens.neutral[0],
+        color: active ? tokens.ink[0] : tokens.ink[4],
+        transition: "all 0.1s", touchAction: "manipulation",
+        fontWeight: active ? 600 : 400,
       }}>{opt}</button>
     );
 
@@ -942,66 +1024,89 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
     return (
       <div style={{
         background: tokens.neutral[0],
-        border: `1px solid ${tokens.neutral[200]}`,
+        borderTop:    `1px solid ${tokens.ink[4]}`,
+        borderBottom: `1px solid ${tokens.ink[4]}`,
+        borderLeft:   `3px solid ${isSeated ? tokens.green.border : tokens.ink[4]}`,
+        borderRight:  `1px solid ${tokens.ink[4]}`,
         borderRadius: 0,
         overflow: "hidden",
-        boxShadow: isSeated ? "0 2px 12px rgba(0,0,0,0.10)" : "0 1px 4px rgba(0,0,0,0.04)",
-        transition: "box-shadow 0.15s",
+        transition: "border-color 0.12s",
       }}>
-        {/* Accent bar */}
-        <div style={{ height: 3, background: accentColor }} />
-
         {/* Header */}
         <div
           onClick={() => onCardClick && onCardClick(t.id)}
           style={{
-            padding: "12px 14px 10px",
-            borderBottom: `1px solid ${tokens.neutral[100]}`,
+            padding: "10px 12px 9px",
+            borderBottom: `1px solid ${tokens.ink[4]}`,
             display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8,
             cursor: onCardClick ? "pointer" : "default",
           }}
         >
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: FONT, fontSize: 20, fontWeight: 300, color: tokens.text.primary, letterSpacing: 1, lineHeight: 1 }}>
-              {String(t.id).padStart(2, "0")}
+            {/* Table number — dominant anchor */}
+            <span style={{
+              fontFamily: FONT, fontSize: "22px", fontWeight: 700,
+              color: tokens.ink[0], letterSpacing: "-0.02em", lineHeight: 1,
+            }}>
+              T{String(t.id).padStart(2, "0")}
             </span>
             {t.resName && (
-              <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: tokens.text.primary }}>
+              <span style={{
+                fontFamily: FONT, fontSize: "13px", fontWeight: 500,
+                color: tokens.ink[0], lineHeight: 1.2, overflow: "hidden",
+                textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140,
+              }}>
                 {t.resName}
               </span>
             )}
             {t.arrivedAt
-              ? <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.green.text, fontWeight: 600 }}>arr. {t.arrivedAt}</span>
+              ? <span style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.08em", color: tokens.green.text, fontWeight: 500 }}>arr. {t.arrivedAt}</span>
               : t.resTime
-                ? <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.disabled }}>res. {t.resTime}</span>
+                ? <span style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.08em", color: tokens.ink[3] }}>{t.resTime}</span>
                 : null
             }
           </div>
           <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <span style={{
-              fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "3px 8px", borderRadius: 0,
-              background: isSeated ? tokens.green.bg : tokens.neutral[100],
-              border: `1px solid ${isSeated ? tokens.green.border : tokens.neutral[300]}`,
-              color: isSeated ? tokens.green.text : tokens.neutral[600], fontWeight: 700,
+              fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em",
+              padding: "2px 7px", borderRadius: 0,
+              background: isSeated ? tokens.green.bg : tokens.neutral[50],
+              border: `1px solid ${isSeated ? tokens.green.border : tokens.ink[4]}`,
+              color: isSeated ? tokens.green.text : tokens.ink[3], fontWeight: 500,
+              textTransform: "uppercase",
             }}>{isSeated ? "SEATED" : "RESERVED"}</span>
-            {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 0, border: `1px solid ${tokens.neutral[200]}`, color: tokens.text.secondary }}>{t.menuType}</span>}
-            {t.lang === "si" && <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 0, border: `1px solid ${tokens.neutral[300]}`, color: tokens.neutral[600], background: tokens.neutral[100], fontWeight: 700 }}>SI</span>}
+            {t.menuType && (
+              <span style={{
+                fontFamily: FONT, fontSize: "8px", letterSpacing: "0.08em",
+                padding: "2px 6px", borderRadius: 0,
+                border: `1px solid ${tokens.ink[4]}`, color: tokens.ink[3],
+                textTransform: "uppercase",
+              }}>{t.menuType}</span>
+            )}
+            {t.lang === "si" && (
+              <span style={{
+                fontFamily: FONT, fontSize: "8px", letterSpacing: "0.08em",
+                padding: "2px 6px", borderRadius: 0,
+                border: `1px solid ${tokens.ink[4]}`, color: tokens.ink[3],
+                background: tokens.neutral[50], fontWeight: 600,
+              }}>SI</span>
+            )}
             {t.pace && (() => {
-              const pc = { Slow: { color: tokens.neutral[700], bg: tokens.tint.parchment, border: tokens.neutral[300] }, Fast: { color: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } }[t.pace] || {};
-              return <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 0, border: `1px solid ${pc.border}`, background: pc.bg, color: pc.color, fontWeight: 700 }}>{t.pace}</span>;
+              const pc = { Slow: { color: tokens.ink[2], bg: tokens.tint.parchment, border: tokens.ink[4] }, Fast: { color: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } }[t.pace] || {};
+              return <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.08em", padding: "2px 6px", borderRadius: 0, border: `1px solid ${pc.border}`, background: pc.bg, color: pc.color, fontWeight: 600, textTransform: "uppercase" }}>{t.pace}</span>;
             })()}
             {t.guestType === "hotel" && (() => {
               const rs = Array.isArray(t.rooms) && t.rooms.length ? t.rooms.filter(Boolean) : (t.room ? [t.room] : []);
-              return rs.length ? <span style={{ fontFamily: FONT, fontSize: 8, padding: "3px 7px", borderRadius: 0, border: `1px solid ${tokens.neutral[300]}`, color: tokens.neutral[600], background: tokens.tint.parchment, fontWeight: 600 }}>#{rs.join(", ")}</span> : null;
+              return rs.length ? <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.06em", padding: "2px 6px", borderRadius: 0, border: `1px solid ${tokens.ink[4]}`, color: tokens.ink[2], background: tokens.tint.parchment, fontWeight: 500 }}>#{rs.join(", ")}</span> : null;
             })()}
-            {t.birthday && <span style={{ fontSize: 12 }}>🎂</span>}
+            {t.birthday && <span style={{ fontSize: 11 }}>🎂</span>}
           </div>
         </div>
 
         {/* Notes */}
         {t.notes && (
-          <div style={{ padding: "7px 14px", borderBottom: `1px solid ${tokens.neutral[100]}`, background: tokens.neutral[50] }}>
-            <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.muted, fontStyle: "italic" }}>{t.notes}</span>
+          <div style={{ padding: "6px 12px", borderBottom: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[50] }}>
+            <span style={{ fontFamily: FONT, fontSize: "10px", letterSpacing: "0.02em", color: tokens.ink[3], fontStyle: "italic" }}>{t.notes}</span>
           </div>
         )}
 
@@ -1039,11 +1144,11 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
           </div>
         )}
 
-        {/* Quick mode — ALL water row (reserved tables too, so Quick Access is visible before seating) */}
+        {/* Quick mode — ALL water row */}
         {quickMode && seats.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", borderBottom: `1px solid ${tokens.neutral[100]}`, background: tokens.neutral[50] }}>
-            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.neutral[300], textTransform: "uppercase", minWidth: 64 }}>ALL</span>
-            <div style={{ display: "flex", gap: 5 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[50] }}>
+            <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[4], textTransform: "uppercase", minWidth: 56 }}>[ALL]</span>
+            <div style={{ display: "flex", gap: 4 }}>
               {WATER_QUICK.map(opt => wBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat && updSeat(t.id, s.id, "water", opt))))}
             </div>
           </div>
@@ -1051,7 +1156,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
 
         {/* Seat rows — in quick mode, show controls for reserved tables as well (pre-seat prep) */}
         {seats.length > 0 && (isSeated || quickMode) ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: quickMode ? 6 : 0, padding: quickMode ? "8px 10px" : "6px 0" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: quickMode ? 4 : 0, padding: quickMode ? "6px 8px" : "4px 0" }}>
             {seats.map(s => {
               const ws      = waterStyle(s.water);
               const pc      = PC[s.pairing];
@@ -1070,59 +1175,71 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                 const curPairing = s.pairing || "—";
                 const pcStyle = PC[curPairing] || PC["—"];
 
-                const sectionLabel = (txt) => (
+                const qSectionLabel = (txt) => (
                   <div style={{
-                    fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: tokens.text.disabled,
-                    textTransform: "uppercase", fontWeight: 600, marginBottom: 5,
-                  }}>{txt}</div>
+                    fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
+                    color: tokens.ink[3], textTransform: "uppercase", fontWeight: 400, marginBottom: 5,
+                  }}>[{txt}]</div>
                 );
                 const sectionBlock = (label, content) => (
-                  <div style={{ padding: "6px 14px" }}>
-                    {sectionLabel(label)}
+                  <div style={{ padding: "6px 12px" }}>
+                    {qSectionLabel(label)}
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>{content}</div>
                   </div>
                 );
 
                 return (
                   <div key={s.id} style={{
-                    border: `1px solid ${restr.length ? tokens.red.border : tokens.neutral[200]}`,
+                    border: `1px solid ${restr.length ? tokens.red.border : tokens.ink[4]}`,
+                    borderLeft: `2px solid ${restr.length ? tokens.red.border : tokens.ink[4]}`,
                     borderRadius: 0, overflow: "hidden",
-                    background: restr.length ? tokens.red.bg : tokens.neutral[50],
+                    background: restr.length ? tokens.red.bg : tokens.neutral[0],
                   }}>
                     {/* Seat label + restrictions */}
                     <div style={{
                       display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
-                      padding: "7px 14px", background: restr.length ? tokens.red.bg : tokens.neutral[100],
-                      borderBottom: `1px solid ${tokens.neutral[200]}`,
+                      padding: "6px 12px",
+                      background: restr.length ? tokens.red.bg : tokens.neutral[50],
+                      borderBottom: `1px solid ${tokens.ink[4]}`,
                     }}>
-                      <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: restr.length ? tokens.red.text : tokens.text.muted }}>P{s.id}</span>
+                      <span style={{
+                        fontFamily: FONT, fontSize: "9px", fontWeight: 700,
+                        letterSpacing: "0.10em", color: restr.length ? tokens.red.text : tokens.ink[1],
+                      }}>P{s.id}</span>
                       {restr.map((r, i) => (
-                        <span key={i} style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, fontWeight: 500 }}>
+                        <span key={i} style={{
+                          fontFamily: FONT, fontSize: "8px", letterSpacing: "0.06em",
+                          color: tokens.red.text, fontWeight: 500,
+                          border: `1px solid ${tokens.red.border}`,
+                          background: tokens.red.bg, padding: "1px 5px",
+                        }}>
                           {restrLabel(r.note)}
                         </span>
                       ))}
                     </div>
 
-                    {/* WATER + PAIRING — side by side, labels above */}
-                    <div style={{ display: "flex", gap: 14, padding: "10px 14px 6px", alignItems: "flex-start" }}>
+                    {/* WATER + PAIRING — side by side */}
+                    <div style={{ display: "flex", gap: 12, padding: "8px 12px 4px", alignItems: "flex-start" }}>
                       <div>
-                        {sectionLabel("Water")}
-                        <div style={{ display: "flex", gap: 5 }}>
+                        {qSectionLabel("Water")}
+                        <div style={{ display: "flex", gap: 4 }}>
                           {WATER_QUICK.map(opt => wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt)))}
                         </div>
                       </div>
                       <div style={{ flex: 1 }}>
-                        {sectionLabel("Pairing")}
+                        {qSectionLabel("Pairing")}
                         <button onClick={cyclePairing} style={{
-                          fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "7px 12px",
-                          border: `1px solid ${curPairing === "—" ? tokens.neutral[300] : pcStyle.border}`,
+                          fontFamily: FONT, fontSize: "10px", letterSpacing: "0.06em",
+                          padding: "6px 10px",
+                          border: `1px solid ${curPairing === "—" ? tokens.ink[4] : pcStyle.border}`,
                           borderRadius: 0, cursor: "pointer", lineHeight: 1, width: "100%", whiteSpace: "nowrap",
                           background: curPairing === "—" ? tokens.neutral[0] : pcStyle.bg,
-                          color: curPairing === "—" ? tokens.text.muted : pcStyle.color,
+                          color: curPairing === "—" ? tokens.ink[4] : pcStyle.color,
                           display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 600,
+                          touchAction: "manipulation",
                         }}>
                           <span>{curPairing}</span>
-                          <span style={{ fontSize: 9, opacity: 0.55, fontWeight: 400 }}>→ next</span>
+                          <span style={{ fontSize: "8px", opacity: 0.55, fontWeight: 400 }}>→</span>
                         </button>
                       </div>
                     </div>
@@ -1244,47 +1361,71 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
               // Normal display mode
               return (
                 <div key={s.id} style={{
-                  display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap",
-                  padding: "5px 14px", borderBottom: `1px solid ${tokens.neutral[50]}`,
+                  display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap",
+                  padding: "5px 12px", borderBottom: `1px solid ${tokens.ink[5]}`,
                   background: restr.length ? tokens.red.bg : "transparent",
                 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, minWidth: 22, color: restr.length ? tokens.red.text : tokens.text.disabled, letterSpacing: 0.5 }}>P{s.id}</span>
-                  {!hasContent && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[200] }}>—</span>}
+                  <span style={{
+                    fontFamily: FONT, fontSize: "9px", fontWeight: 700,
+                    minWidth: 22, color: restr.length ? tokens.red.text : tokens.ink[2],
+                    letterSpacing: "0.06em",
+                  }}>P{s.id}</span>
+                  {!hasContent && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[5] }}>—</span>}
                   {s.water && s.water !== "—" && (
-                    <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 0, background: ws.bg || tokens.neutral[100], color: tokens.text.body, border: `1px solid ${tokens.neutral[200]}` }}>{s.water}</span>
+                    <span style={{
+                      fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
+                      background: tokens.neutral[50], color: tokens.ink[1],
+                      border: `1px solid ${tokens.ink[4]}`,
+                    }}>{s.water}</span>
                   )}
                   {s.pairing && pc && (
-                    <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 0, background: pc.bg, border: `1px solid ${pc.border}`, color: pc.color, fontWeight: 500 }}>{s.pairing}</span>
+                    <span style={{
+                      fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
+                      background: pc.bg, border: `1px solid ${pc.border}`,
+                      color: pc.color, fontWeight: 500,
+                    }}>{s.pairing}</span>
                   )}
                   {extras.map(d => {
                     const ex = s.extras[d.key] || s.extras[d.id];
                     return (
-                      <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 0, border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg }}>
+                      <span key={d.key} style={{
+                        fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
+                        border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg,
+                      }}>
                         {d.name}{ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}
                       </span>
                     );
                   })}
                   {restr.map((r, i) => (
-                    <span key={i} style={{ fontFamily: FONT, fontSize: 8, padding: "1px 5px", borderRadius: 0, border: `1px solid ${tokens.red.border}`, color: tokens.red.text, background: tokens.red.bg, fontWeight: 500 }}>⚠ {restrCompact(r.note)}</span>
+                    <span key={i} style={{
+                      fontFamily: FONT, fontSize: "8px", padding: "1px 5px", borderRadius: 0,
+                      border: `1px solid ${tokens.red.border}`, color: tokens.red.text,
+                      background: tokens.red.bg, fontWeight: 500,
+                    }}>⚠ {restrCompact(r.note)}</span>
                   ))}
                 </div>
               );
             })}
           </div>
         ) : !isSeated ? (
-          <div style={{ padding: "11px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.disabled }}>{t.guests} guest{t.guests !== 1 ? "s" : ""}</span>
+          <div style={{ padding: "9px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.06em", color: tokens.ink[3] }}>{t.guests} pax</span>
               {allRestr.map((r, i) => (
-                <span key={i} style={{ fontFamily: FONT, fontSize: 8, padding: "1px 5px", borderRadius: 0, border: `1px solid ${tokens.red.border}`, color: tokens.red.text, background: tokens.red.bg, fontWeight: 500 }}>⚠ {restrCompact(r.note)}</span>
+                <span key={i} style={{
+                  fontFamily: FONT, fontSize: "8px", padding: "1px 5px", borderRadius: 0,
+                  border: `1px solid ${tokens.red.border}`, color: tokens.red.text,
+                  background: tokens.red.bg, fontWeight: 500,
+                }}>⚠ {restrCompact(r.note)}</span>
               ))}
             </div>
             {onSeat && (
               <button onClick={() => onSeat(t.id)} style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 14px",
+                fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", padding: "5px 12px",
                 border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer",
-                background: tokens.green.bg, color: tokens.green.text, fontWeight: 600, textTransform: "uppercase",
-              }}>Seat</button>
+                background: tokens.green.bg, color: tokens.green.text,
+                fontWeight: 500, textTransform: "uppercase", touchAction: "manipulation",
+              }}>SEAT</button>
             )}
           </div>
         ) : null}
@@ -1388,9 +1529,9 @@ function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd,
   const hasAny = rowsData.some(r => r.tables.length > 0);
 
   return (
-    <div style={{ overflowY: "auto", overflowX: "hidden", padding: isMobile ? "16px 12px 40px" : "20px 0 48px" }}>
+    <div style={{ overflowY: "auto", overflowX: "hidden", padding: isMobile ? "0 12px 40px" : "0 24px 48px" }}>
       {!hasAny && (
-        <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[300], textAlign: "center", marginTop: 80, letterSpacing: 2 }}>
+        <div style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[4], textAlign: "center", marginTop: 80, letterSpacing: "0.16em", textTransform: "uppercase" }}>
           no reservations
         </div>
       )}
@@ -1398,18 +1539,25 @@ function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd,
         if (rowTables.length === 0) return null;
         const seatedCount = rowTables.filter(t => t.active).length;
         return (
-          <div key={time} style={{ marginBottom: 32 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: tokens.text.disabled, textTransform: "uppercase" }}>{time}</span>
-              <div style={{ flex: 1, height: 1, background: tokens.neutral[100] }} />
-              <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.neutral[300] }}>
-                {seatedCount}/{rowTables.length} seated · {rowTables.reduce((a, t) => a + (t.guests || 0), 0)} guests
+          <div key={time} style={{ marginBottom: 28 }}>
+            {/* Time section header — hairline rule + bracket label */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, paddingTop: 20 }}>
+              <span style={{
+                fontFamily: FONT, fontSize: "9px", letterSpacing: "0.14em",
+                color: tokens.ink[2], textTransform: "uppercase", fontWeight: 500, flexShrink: 0,
+              }}>[{time}]</span>
+              <div style={{ flex: 1, height: 1, background: tokens.ink[4] }} />
+              <span style={{
+                fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em",
+                color: tokens.ink[3], textTransform: "uppercase", flexShrink: 0,
+              }}>
+                {seatedCount}/{rowTables.length} seated · {rowTables.reduce((a, t) => a + (t.guests || 0), 0)} pax
               </span>
             </div>
             <div style={{
               display: "grid",
               gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(340px, 1fr))",
-              gap: isMobile ? 10 : 14,
+              gap: isMobile ? 8 : 12,
               alignItems: "start",
             }}>
               {rowTables.map(t => (
@@ -2891,7 +3039,7 @@ export default function App() {
   // staff need to fire/unfire and edit notes here, so this is NOT read-only.
   if (mode === "display") return (<>
     {serviceDatePickerEl}
-    <div style={{ minHeight: "100vh", background: tokens.neutral[0], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+    <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
       <Header modeLabel="KITCHEN" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
       <div style={{ padding: appIsMobile ? "12px 10px" : "20px 24px" }}>
@@ -2986,7 +3134,7 @@ export default function App() {
   // Service mode only
   return (<>
     {serviceDatePickerEl}
-    <div style={{ minHeight: "100vh", background: tokens.neutral[0], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+    <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
 
       <Header
@@ -3004,15 +3152,31 @@ export default function App() {
       />
 
       {sel === null ? (
-        <div style={{ padding: appIsMobile ? "14px 10px 32px" : "20px 24px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
-          {/* Top bar: stats + Quick Access toggle */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: appIsMobile ? 14 : 20, gap: 10, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+        <div style={{ padding: appIsMobile ? "0 0 32px" : "0 0 48px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
+          {/* [SERVICE READOUT] strip — stats + Quick Access toggle */}
+          <div style={{
+            borderBottom: `1px solid ${tokens.ink[4]}`,
+            padding: appIsMobile ? "10px 12px" : "10px 24px",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            gap: 10, flexWrap: "wrap",
+            background: tokens.neutral[0],
+            marginBottom: appIsMobile ? 14 : 20,
+          }}>
+            <div style={{ display: "flex", gap: appIsMobile ? 10 : 20, alignItems: "center", flexWrap: "wrap" }}>
+              {/* [SERVICE READOUT] label */}
+              <span style={{
+                fontFamily: FONT, fontSize: "8px", letterSpacing: "0.16em",
+                textTransform: "uppercase", color: tokens.ink[3], fontWeight: 400,
+              }}>[READOUT]</span>
+
               {serviceDate && (
                 <span
                   title="Click to change service date"
                   onClick={() => { setPendingModeAfterDate(mode); setShowServiceDatePicker(true); }}
-                  style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.green.text, cursor: "pointer", textTransform: "uppercase" }}
+                  style={{
+                    fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em",
+                    color: tokens.ink[1], cursor: "pointer", textTransform: "uppercase", fontWeight: 500,
+                  }}
                 >
                   {new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}
                 </span>
@@ -3022,10 +3186,18 @@ export default function App() {
                 const guestsNow = tables.filter(t => t.active).filter(isPrimary).reduce((a, t) => a + (t.guests || 0), 0);
                 const resvNow   = tables.filter(t => !t.active && (t.resName || t.resTime)).filter(isPrimary).length;
                 return (
-                  <>
-                    {seatedNow > 0 && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.green.text, textTransform: "uppercase" }}>{seatedNow} tables · {guestsNow} guests</span>}
-                    {resvNow   > 0 && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase" }}>{resvNow} reserved</span>}
-                  </>
+                  <div style={{ display: "flex", gap: appIsMobile ? 8 : 16, alignItems: "center" }}>
+                    {seatedNow > 0 && (
+                      <span style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", color: tokens.green.text, textTransform: "uppercase", fontWeight: 500 }}>
+                        ● {seatedNow} ACTIVE · {guestsNow} PAX
+                      </span>
+                    )}
+                    {resvNow > 0 && (
+                      <span style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", color: tokens.ink[3], textTransform: "uppercase" }}>
+                        {resvNow} RESERVED
+                      </span>
+                    )}
+                  </div>
                 );
               })()}
             </div>
@@ -3033,16 +3205,20 @@ export default function App() {
               type="button"
               onClick={() => setQuickView(v => v === "service" ? "board" : "service")}
               style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "7px 16px",
-                border: `1.5px solid ${quickView === "service" ? tokens.charcoal.default : tokens.neutral[300]}`,
+                fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                padding: appIsMobile ? "10px 14px" : "7px 14px",
+                border: `1px solid ${quickView === "service" ? tokens.charcoal.default : tokens.ink[4]}`,
                 background: quickView === "service" ? tokens.tint.parchment : tokens.neutral[0],
-                color: quickView === "service" ? tokens.neutral[700] : tokens.text.muted,
+                color: quickView === "service" ? tokens.ink[0] : tokens.ink[3],
                 borderRadius: 0, cursor: "pointer",
-                transition: "all 0.15s",
+                transition: "all 0.12s",
                 display: "flex", alignItems: "center", gap: 6,
+                minHeight: appIsMobile ? 40 : undefined,
+                touchAction: "manipulation",
               }}
             >
-              <span style={{ fontSize: 10 }}>◈</span> QUICK ACCESS
+              [◈] QUICK ACCESS
             </button>
           </div>
 

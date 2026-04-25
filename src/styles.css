@@ -22,7 +22,7 @@ html {
 
 body {
   color: #1a1a1a;
-  background: #fff;
+  background: #f8f7f5;  /* ink.bg — warm off-white paper surface */
   overflow-x: hidden;
   /* Stop rubber-band scroll on iOS from revealing the page behind the app. */
   overscroll-behavior-y: none;
@@ -52,7 +52,7 @@ button, [role="button"], a, label {
   touch-action: manipulation;
 }
 
-body { color: #1a1a1a; background: #fff; }
+body { color: #1a1a1a; background: #f8f7f5; }
 
 /* Subtle hover/press feedback on all buttons */
 button:not(:disabled):hover {
