@@ -88,34 +88,33 @@ export default function AdminPanel({
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "9px 18px",
     border: "none", cursor: "pointer", textTransform: "uppercase", transition: "all 0.1s",
-    background: tokens.surface.card,
-    color: tab === t ? tokens.text.primary : tokens.text.body,
-    borderBottom: tab === t ? `2px solid ${tokens.charcoal.default}` : tokens.border.default,
+    background: tokens.neutral[0],
+    color: tab === t ? tokens.ink[0] : tokens.ink[2],
+    borderBottom: tab === t ? `2px solid ${tokens.charcoal.default}` : `1px solid ${tokens.ink[4]}`,
     whiteSpace: "nowrap",
   });
 
   return (
     <div style={{
-      position: "fixed", inset: 0, background: "rgba(255,255,255,0.92)",
-      backdropFilter: "blur(4px)", zIndex: 500,
+      position: "fixed", inset: 0, background: tokens.ink.bg,
+      zIndex: 500,
       display: "flex", alignItems: "stretch", justifyContent: "center",
     }} onClick={onClose}>
       <div style={{
-        background: tokens.surface.card, borderTop: tokens.border.default,
+        background: tokens.neutral[0], borderTop: `1px solid ${tokens.ink[4]}`,
         width: "100%", maxWidth: 900,
         maxHeight: "100vh", overflow: "hidden",
-        boxShadow: "0 -4px 40px rgba(0,0,0,0.10)",
         display: "flex", flexDirection: "column",
       }} onClick={e => e.stopPropagation()}>
 
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: tokens.border.default, flexShrink: 0 }}>
-          <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 3, color: tokens.text.primary }}>ADMIN</span>
-          <button onClick={onClose} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: tokens.border.default, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.muted }}>CLOSE</button>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: `1px solid ${tokens.ink[4]}`, flexShrink: 0 }}>
+          <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 3, color: tokens.ink[0] }}>ADMIN</span>
+          <button onClick={onClose} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3] }}>CLOSE</button>
         </div>
 
         {/* Section tabs */}
-        <div style={{ display: "flex", borderBottom: tokens.border.default, flexShrink: 0, overflowX: "auto" }}>
+        <div style={{ display: "flex", borderBottom: `1px solid ${tokens.ink[4]}`, flexShrink: 0, overflowX: "auto" }}>
           {SECTIONS.map(s => <button key={s.id} style={tabBtn(s.id)} onClick={() => setTab(s.id)}>{s.label}</button>)}
         </div>
 
@@ -138,17 +137,17 @@ export default function AdminPanel({
                 {["wines", "cocktails", "spirits", "beers"].map(t => (
                   <button key={t} style={{
                     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
-                    border: `1px solid ${drinkTab === t ? tokens.charcoal.default : tokens.neutral[200]}`,
+                    border: `1px solid ${drinkTab === t ? tokens.charcoal.default : tokens.ink[4]}`,
                     borderRadius: 0, cursor: "pointer",
-                    background: tokens.surface.card,
-                    color: drinkTab === t ? tokens.text.primary : tokens.text.muted,
+                    background: tokens.neutral[0],
+                    color: drinkTab === t ? tokens.ink[0] : tokens.ink[3],
                     marginRight: 6, marginBottom: 12,
                   }} onClick={() => setDrinkTab(t)}>{t.toUpperCase()}</button>
                 ))}
                 <button type="button" onClick={handleSaveDrinks} style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
                   border: `1px solid ${drinksSaved ? tokens.green.border : drinksSaveError ? tokens.red.border : tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer",
-                  background: tokens.surface.card, color: drinksSaved ? tokens.green.text : drinksSaveError ? tokens.red.text : tokens.text.primary, marginLeft: "auto",
+                  background: tokens.neutral[0], color: drinksSaved ? tokens.green.text : drinksSaveError ? tokens.red.text : tokens.ink[0], marginLeft: "auto",
                   transition: "background 0.2s, border-color 0.2s",
                 }}>{drinksSaved ? "SAVED" : "SAVE DRINKS"}</button>
               </div>
@@ -162,10 +161,10 @@ export default function AdminPanel({
                 <>
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 52px 28px", gap: 8, marginBottom: 8 }}>
                     {(isMobile ? ["Name", "Producer"] : ["Name", "Producer", "Vintage", "Glass", ""]).map((h, i) => (
-                      <div key={i} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.secondary, textTransform: "uppercase" }}>{h}</div>
+                      <div key={i} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.ink[2], textTransform: "uppercase" }}>{h}</div>
                     ))}
                   </div>
-                  <div style={{ borderTop: tokens.border.subtle, marginBottom: 10 }} />
+                  <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, marginBottom: 10 }} />
                   <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 20 }}>
                     {localWines.map(w => (
                       <div key={w.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr auto" : "1fr 1fr 70px 52px 28px", gap: 8, alignItems: "center" }}>
@@ -174,14 +173,14 @@ export default function AdminPanel({
                         {!isMobile && <input value={w.vintage} onChange={e => updWine(w.id, "vintage", e.target.value)} style={{ ...baseInp, padding: "5px 8px" }} placeholder="2020" />}
                         <button onClick={() => updWine(w.id, "byGlass", !w.byGlass)} style={{
                           fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                          borderColor: w.byGlass ? tokens.green.border : tokens.neutral[300], borderRadius: 0, cursor: "pointer",
-                          background: w.byGlass ? tokens.green.bg : tokens.surface.card, color: w.byGlass ? tokens.green.text : tokens.text.muted,
+                          borderColor: w.byGlass ? tokens.green.border : tokens.ink[4], borderRadius: 0, cursor: "pointer",
+                          background: w.byGlass ? tokens.green.bg : tokens.neutral[0], color: w.byGlass ? tokens.green.text : tokens.ink[3],
                         }}>{w.byGlass ? "YES" : "NO"}</button>
-                        <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: tokens.text.muted, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+                        <button onClick={() => removeWine(w.id)} style={{ background: "none", border: "none", color: tokens.ink[3], cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
                       </div>
                     ))}
                   </div>
-                  <div style={{ borderTop: tokens.border.subtle, paddingTop: 16 }}>
+                  <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, paddingTop: 16 }}>
                     <div style={fieldLabel}>Add wine</div>
                     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 70px 52px", gap: 8, marginBottom: 10 }}>
                       <input value={newWine.name} onChange={e => setNewWine(w => ({ ...w, name: e.target.value }))} placeholder="Name" style={{ ...baseInp, padding: "5px 8px" }} />
@@ -189,13 +188,13 @@ export default function AdminPanel({
                       {!isMobile && <input value={newWine.vintage} onChange={e => setNewWine(w => ({ ...w, vintage: e.target.value }))} placeholder="2020" style={{ ...baseInp, padding: "5px 8px" }} />}
                       <button onClick={() => setNewWine(w => ({ ...w, byGlass: !w.byGlass }))} style={{
                         fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 6px", border: "1px solid",
-                        borderColor: newWine.byGlass ? tokens.green.border : tokens.neutral[300], borderRadius: 0, cursor: "pointer",
-                        background: newWine.byGlass ? tokens.green.bg : tokens.surface.card, color: newWine.byGlass ? tokens.green.text : tokens.text.muted,
+                        borderColor: newWine.byGlass ? tokens.green.border : tokens.ink[4], borderRadius: 0, cursor: "pointer",
+                        background: newWine.byGlass ? tokens.green.bg : tokens.neutral[0], color: newWine.byGlass ? tokens.green.text : tokens.ink[3],
                       }}>{newWine.byGlass ? "YES" : "NO"}</button>
                     </div>
                     <button onClick={addWine} style={{
                       fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 20px",
-                      border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary,
+                      border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[0],
                     }}>+ ADD WINE</button>
                   </div>
                 </>
@@ -224,12 +223,12 @@ export default function AdminPanel({
           {/* ── EXTRAS (dishes) ── */}
           {tab === "dishes" && (
             <>
-              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: tokens.text.muted, marginBottom: 16 }}>
+              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: tokens.ink[3], marginBottom: 16 }}>
                 EXTRA DISH OPTIONS — optional courses offered to guests (beetroot, cheese, cake, etc.)
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
                 {localDishes.map(dish => (
-                  <div key={dish.id} style={{ border: tokens.border.subtle, borderRadius: 0, padding: "14px 16px" }}>
+                  <div key={dish.id} style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "14px 16px" }}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
                       <input value={dish.name} onChange={e => updDishName(dish.id, e.target.value)} style={{ ...baseInp, fontWeight: 500, flex: 1 }} />
                       <button onClick={() => removeDish(dish.id)} style={{ background: "none", border: `1px solid ${tokens.red.border}`, borderRadius: 0, color: tokens.red.text, cursor: "pointer", fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px" }}>REMOVE</button>
@@ -239,28 +238,28 @@ export default function AdminPanel({
                       {dish.pairings.map((p, idx) => (
                         <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                           <input value={p} onChange={e => updPairing(dish.id, idx, e.target.value)}
-                            style={{ fontFamily: FONT, fontSize: 11, padding: "4px 8px", border: tokens.border.default, borderRadius: 0, width: 80, outline: "none", color: tokens.text.primary, background: tokens.neutral[50] }} />
+                            style={{ fontFamily: FONT, fontSize: 11, padding: "4px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, width: 80, outline: "none", color: tokens.ink[0], background: tokens.ink.bg }} />
                           {dish.pairings.length > 1 && (
-                            <button onClick={() => removePairing(dish.id, idx)} style={{ background: "none", border: "none", color: tokens.text.muted, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                            <button onClick={() => removePairing(dish.id, idx)} style={{ background: "none", border: "none", color: tokens.ink[3], cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
                           )}
                         </div>
                       ))}
-                      <button onClick={() => addPairing(dish.id)} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 9px", border: tokens.border.subtle, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.body }}>+ option</button>
+                      <button onClick={() => addPairing(dish.id)} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 9px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[1] }}>+ option</button>
                     </div>
                   </div>
                 ))}
               </div>
-              <div style={{ borderTop: tokens.border.subtle, paddingTop: 18 }}>
+              <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, paddingTop: 18 }}>
                 <div style={fieldLabel}>Add dish</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input value={newDishName} onChange={e => setNewDishName(e.target.value)} onKeyDown={e => e.key === "Enter" && addDish()} placeholder="Dish name…" style={{ ...baseInp, flex: 1 }} />
-                  <button onClick={addDish} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 16px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, whiteSpace: "nowrap" }}>+ ADD</button>
+                  <button onClick={addDish} style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "8px 16px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[0], whiteSpace: "nowrap" }}>+ ADD</button>
                 </div>
               </div>
-              <div style={{ borderTop: tokens.border.subtle, marginTop: 24, paddingTop: 14 }}>
+              <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, marginTop: 24, paddingTop: 14 }}>
                 <button onClick={() => { onUpdateDishes(localDishes); }} style={{
                   fontFamily: FONT, fontSize: 10, letterSpacing: 2, padding: "10px 24px",
-                  border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary,
+                  border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[0],
                 }}>SAVE EXTRAS</button>
               </div>
             </>
@@ -276,19 +275,19 @@ export default function AdminPanel({
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
               {/* Logo */}
               <div>
-                <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 14 }}>Menu Logo</div>
+                <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 14 }}>Menu Logo</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                  <div style={{ width: 64, height: 64, border: tokens.border.default, borderRadius: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tokens.neutral[50], flexShrink: 0 }}>
+                  <div style={{ width: 64, height: 64, border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tokens.ink.bg, flexShrink: 0 }}>
                     {logoDataUri
                       ? <img src={logoDataUri} alt="logo" style={{ width: 52, height: 52, objectFit: "contain" }} />
-                      : <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.neutral[300], letterSpacing: 1 }}>NO LOGO</span>
+                      : <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[4], letterSpacing: 1 }}>NO LOGO</span>
                     }
                   </div>
                   <div>
-                    <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.muted, marginBottom: 8 }}>
+                    <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], marginBottom: 8 }}>
                       Upload PNG, JPG, or SVG. Will be embedded in all printed menus.
                     </div>
-                    <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, display: "inline-block" }}>
+                    <label style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[0], display: "inline-block" }}>
                       UPLOAD LOGO
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
                         const file = e.target.files[0];
@@ -299,7 +298,7 @@ export default function AdminPanel({
                       }} />
                     </label>
                     {logoDataUri && (
-                      <button onClick={() => onSaveLogo("")} style={{ marginLeft: 8, fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.red.text }}>
+                      <button onClick={() => onSaveLogo("")} style={{ marginLeft: 8, fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text }}>
                         REMOVE
                       </button>
                     )}
@@ -309,15 +308,15 @@ export default function AdminPanel({
 
               {/* Layout reset */}
               <div>
-                <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 14 }}>Print Layout</div>
+                <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 14 }}>Print Layout</div>
                 <div style={{ border: `1px solid ${tokens.red.border}`, borderRadius: 0, padding: "16px 18px", background: tokens.red.bg }}>
-                  <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.body, marginBottom: 6 }}>Reset to factory defaults</div>
-                  <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.muted, marginBottom: 14 }}>
+                  <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[1], marginBottom: 6 }}>Reset to factory defaults</div>
+                  <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], marginBottom: 14 }}>
                     Clears all saved layout customisations (row spacing, padding, font size, etc.) and restores the original values.
                   </div>
                   <button
                     onClick={() => { if (window.confirm("Reset print layout to factory defaults?")) onResetMenuLayout(); }}
-                    style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.red.text }}
+                    style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text }}
                   >RESET LAYOUT TO DEFAULTS</button>
                 </div>
               </div>

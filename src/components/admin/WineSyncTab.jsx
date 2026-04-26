@@ -34,7 +34,7 @@ export default function WineSyncTab({ onSyncWines }) {
 
   return (
     <div>
-      <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 16 }}>
+      <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.ink[3], textTransform: "uppercase", marginBottom: 16 }}>
         Wine &amp; beverage sync from hotel website
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -49,8 +49,8 @@ export default function WineSyncTab({ onSyncWines }) {
             border: `1px solid ${tokens.charcoal.default}`,
             borderRadius: 0,
             cursor: status === "syncing" ? "not-allowed" : "pointer",
-            background: tokens.surface.card,
-            color: tokens.text.primary,
+            background: tokens.neutral[0],
+            color: tokens.ink[0],
           }}
         >
           {status === "syncing" ? "SYNCING…" : "SYNC WINES & BEVERAGES"}

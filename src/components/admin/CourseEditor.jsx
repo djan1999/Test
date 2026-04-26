@@ -9,7 +9,7 @@ const baseInp = { ...baseInput };
 export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst, isLast }) {
   const [expanded, setExpanded] = useState(false);
   const inpSm = { ...baseInp, padding: "5px 8px", fontSize: 11 };
-  const labelSm = { fontFamily: FONT, fontSize: tokens.fontSize.xs, letterSpacing: 1, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 2 };
+  const labelSm = { fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[3], textTransform: "uppercase", marginBottom: 2 };
 
   const upd = (field, value) => onUpdate({ ...course, [field]: value });
   const updMenu = (lang, field, value) => {
@@ -41,7 +41,7 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
 
   return (
     <div style={{
-      border: tokens.border.subtle, borderRadius: tokens.radius, background: tokens.surface.card,
+      border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, background: tokens.neutral[0],
       marginBottom: 8, overflow: "hidden",
     }}>
       {/* Collapsed header */}
@@ -49,26 +49,26 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
         onClick={() => setExpanded(x => !x)}
         style={{
           display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
-          cursor: "pointer", background: expanded ? tokens.surface.hover : tokens.surface.card,
+          cursor: "pointer", background: expanded ? tokens.ink.bg : tokens.neutral[0],
         }}
       >
-        <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.disabled, minWidth: 22 }}>{course.position}</span>
+        <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[4], minWidth: 22 }}>{course.position}</span>
         <div style={{ flex: 1 }}>
-          <span style={{ fontFamily: FONT, fontSize: tokens.fontSize.md, fontWeight: 700, color: tokens.text.primary }}>{course.menu?.name || "(unnamed)"}</span>
-          {course.menu?.sub && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.muted, marginLeft: 8 }}>{course.menu.sub}</span>}
+          <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: tokens.ink[0] }}>{course.menu?.name || "(unnamed)"}</span>
+          {course.menu?.sub && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginLeft: 8 }}>{course.menu.sub}</span>}
         </div>
-        {course.is_snack && <span style={{ fontFamily: FONT, fontSize: tokens.fontSize.xs, letterSpacing: 1, color: tokens.charcoal.default, border: `1px solid ${tokens.neutral[300]}`, borderRadius: tokens.radius, padding: "2px 6px" }}>SNACK</span>}
+        {course.is_snack && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.charcoal.default, border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "2px 6px" }}>SNACK</span>}
         <div style={{ display: "flex", gap: 4 }}>
-          <button onClick={e => { e.stopPropagation(); onMoveUp(); }} disabled={isFirst} style={{ background: "none", border: "none", cursor: isFirst ? "default" : "pointer", color: isFirst ? tokens.neutral[300] : tokens.text.muted, fontSize: tokens.fontSize.md, padding: "2px 4px" }}>▲</button>
-          <button onClick={e => { e.stopPropagation(); onMoveDown(); }} disabled={isLast} style={{ background: "none", border: "none", cursor: isLast ? "default" : "pointer", color: isLast ? tokens.neutral[300] : tokens.text.muted, fontSize: tokens.fontSize.md, padding: "2px 4px" }}>▼</button>
+          <button onClick={e => { e.stopPropagation(); onMoveUp(); }} disabled={isFirst} style={{ background: "none", border: "none", cursor: isFirst ? "default" : "pointer", color: isFirst ? tokens.ink[4] : tokens.ink[3], fontSize: 12, padding: "2px 4px" }}>▲</button>
+          <button onClick={e => { e.stopPropagation(); onMoveDown(); }} disabled={isLast} style={{ background: "none", border: "none", cursor: isLast ? "default" : "pointer", color: isLast ? tokens.ink[4] : tokens.ink[3], fontSize: 12, padding: "2px 4px" }}>▼</button>
         </div>
-        <span style={{ fontFamily: FONT, fontSize: tokens.fontSize.lg, color: tokens.neutral[300], transition: "transform 0.15s", transform: expanded ? "rotate(180deg)" : "none" }}>▾</span>
+        <span style={{ fontFamily: FONT, fontSize: 14, color: tokens.ink[4], transition: "transform 0.15s", transform: expanded ? "rotate(180deg)" : "none" }}>▾</span>
       </div>
 
       {expanded && (
-        <div style={{ padding: "12px 14px 16px", borderTop: tokens.border.subtle }}>
+        <div style={{ padding: "12px 14px 16px", borderTop: `1px solid ${tokens.ink[4]}` }}>
           {/* ── Dish Info ── */}
-          <div style={{ ...labelSm, marginBottom: 6, fontSize: tokens.fontSize.sm, letterSpacing: 2, color: tokens.text.muted }}>DISH INFO</div>
+          <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: tokens.ink[3] }}>DISH INFO</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
             <div><div style={labelSm}>Name (EN)</div><input value={course.menu?.name || ""} onChange={e => updMenu("en", "name", e.target.value)} style={inpSm} placeholder="Dish name" /></div>
             <div><div style={labelSm}>Description (EN)</div><input value={course.menu?.sub || ""} onChange={e => updMenu("en", "sub", e.target.value)} style={inpSm} placeholder="ingredients, description" /></div>
@@ -90,7 +90,7 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
             <div><div style={labelSm}>Optional Flag</div><input value={course.optional_flag || ""} onChange={e => upd("optional_flag", e.target.value)} style={inpSm} placeholder="e.g. cheese" disabled={!isOptionalCategory} /></div>
             <div>
               <div style={labelSm}>Optional Pairing</div>
-              <label style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[600], display: "flex", alignItems: "center", gap: 6 }}>
+              <label style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2], display: "flex", alignItems: "center", gap: 6 }}>
                 <input
                   type="checkbox"
                   checked={!!course.optional_pairing_enabled}
@@ -115,12 +115,12 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
             <div><div style={labelSm}>Aperitif Btn</div><input value={course.aperitif_btn || ""} onChange={e => upd("aperitif_btn", e.target.value || null)} style={inpSm} placeholder="Button label" /></div>
           </div>
           {hasOptionalPairing && (
-            <div style={{ fontFamily: FONT, fontSize: tokens.fontSize.sm, color: tokens.neutral[700], marginBottom: 12 }}>
+            <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[1], marginBottom: 12 }}>
               Optional pairing is course-owned. Menu generation auto-picks <strong>Alcoholic</strong> for Wine / Premium / Our Story pairings and <strong>Non-Alcoholic</strong> for Non-Alc pairing. Uses this course pairings in the active language.
             </div>
           )}
           {hasOptionalPairing && !hasPairingData && (
-            <div style={{ fontFamily: FONT, fontSize: tokens.fontSize.sm, color: tokens.neutral[600], marginBottom: 12 }}>
+            <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[2], marginBottom: 12 }}>
               Add pairing data below (WP/NA/OS/Premium). Optional pairing is only available when course pairing data exists.
             </div>
           )}
@@ -131,19 +131,19 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
               { key: "is_snack", label: "Snack" },
               { key: "show_on_short", label: "Show on Short" },
             ].map(({ key, label }) => (
-              <label key={key} style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[600], display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
+              <label key={key} style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2], display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
                 <input type="checkbox" checked={!!course[key]} onChange={e => upd(key, e.target.checked)} />
                 {label}
               </label>
             ))}
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[600] }}>Short order:</span>
+              <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2] }}>Short order:</span>
               <input type="number" value={course.short_order ?? ""} onChange={e => upd("short_order", e.target.value ? Number(e.target.value) : null)} style={{ ...inpSm, width: 60 }} />
             </div>
           </div>
 
           {/* ── Pairings ── */}
-          <div style={{ ...labelSm, marginBottom: 6, fontSize: tokens.fontSize.sm, letterSpacing: 2, color: tokens.text.muted }}>PAIRINGS</div>
+          <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: tokens.ink[3] }}>PAIRINGS</div>
           {[
             { key: "wp", label: "Wine" },
             { key: "na", label: "Non-Alc" },
@@ -151,7 +151,7 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
             { key: "premium", label: "Premium" },
           ].map(({ key, label }) => (
             <div key={key} style={{ display: "grid", gridTemplateColumns: "70px 1fr 1fr 1fr 1fr", gap: 6, marginBottom: 4, alignItems: "center" }}>
-              <span style={{ fontFamily: FONT, fontSize: tokens.fontSize.sm, color: tokens.charcoal.default, fontWeight: 600 }}>{label}</span>
+              <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.charcoal.default, fontWeight: 600 }}>{label}</span>
               <input value={course[key]?.name || ""} onChange={e => updPairing(key, "en", "name", e.target.value)} style={inpSm} placeholder="Name (EN)" />
               <input value={course[key]?.sub || ""} onChange={e => updPairing(key, "en", "sub", e.target.value)} style={inpSm} placeholder="Sub (EN)" />
               <input value={course[`${key}_si`]?.name || ""} onChange={e => updPairing(key, "si", "name", e.target.value)} style={inpSm} placeholder="Name (SI)" />
@@ -160,14 +160,14 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
           ))}
 
           {/* ── Restrictions ── */}
-          <div style={{ ...labelSm, marginBottom: 6, fontSize: tokens.fontSize.sm, letterSpacing: 2, color: tokens.text.muted }}>DIETARY RESTRICTIONS</div>
+          <div style={{ ...labelSm, marginBottom: 6, fontSize: 9, letterSpacing: 2, color: tokens.ink[3] }}>DIETARY RESTRICTIONS</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 14 }}>
             {DIETARY_KEYS.map(rKey => {
               const val = course.restrictions?.[rKey];
               const hasVal = val && (val.name || val.sub);
               return (
                 <div key={rKey} style={{ display: "grid", gridTemplateColumns: "110px 1fr 1fr", gap: 6, alignItems: "center" }}>
-                  <span style={{ fontFamily: FONT, fontSize: tokens.fontSize.sm, color: hasVal ? tokens.red.text : tokens.neutral[300] }}>{rKey.replace(/_/g, " ")}</span>
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: hasVal ? tokens.red.text : tokens.ink[4] }}>{rKey.replace(/_/g, " ")}</span>
                   <input value={val?.name || ""} onChange={e => updRestriction(rKey, "name", e.target.value)} style={inpSm} placeholder="Alt name" />
                   <input value={val?.sub || ""} onChange={e => updRestriction(rKey, "sub", e.target.value)} style={inpSm} placeholder="Alt desc" />
                 </div>
@@ -176,10 +176,10 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
           </div>
 
           {/* ── Actions ── */}
-          <div style={{ display: "flex", gap: 8, borderTop: tokens.border.subtle, paddingTop: 12 }}>
+          <div style={{ display: "flex", gap: 8, borderTop: `1px solid ${tokens.ink[4]}`, paddingTop: 12 }}>
             <button onClick={onDelete} style={{
-              fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
-              border: tokens.border.danger, borderRadius: tokens.radius, cursor: "pointer",
+              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
+              border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer",
               background: tokens.red.bg, color: tokens.red.text,
             }}>DELETE COURSE</button>
           </div>

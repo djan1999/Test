@@ -62,20 +62,20 @@ export default function MenuCoursesTab({ menuCourses = [], onUpdateCourses, onSa
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.muted, letterSpacing: 1 }}>
+        <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], letterSpacing: 1 }}>
           {menuCourses.length} COURSES
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={addCourse} style={{
-            fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
-            border: `1px solid ${tokens.charcoal.default}`, borderRadius: tokens.radius, cursor: "pointer",
-            background: tokens.surface.card, color: tokens.text.primary,
+            fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
+            border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer",
+            background: tokens.neutral[0], color: tokens.ink[0],
           }}>+ ADD COURSE</button>
           <button onClick={handleSave} disabled={saving} style={{
-            fontFamily: FONT, fontSize: tokens.fontSize.sm, letterSpacing: 1, padding: "6px 14px",
-            border: `1px solid ${saved ? tokens.green.border : tokens.charcoal.default}`, borderRadius: tokens.radius,
+            fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
+            border: `1px solid ${saved ? tokens.green.border : tokens.charcoal.default}`, borderRadius: 0,
             cursor: saving ? "default" : "pointer",
-            background: tokens.surface.card, color: saved ? tokens.green.text : tokens.text.primary,
+            background: tokens.neutral[0], color: saved ? tokens.green.text : tokens.ink[0],
           }}>{saving ? "SAVING…" : saved ? "SAVED ✓" : "SAVE ALL COURSES"}</button>
         </div>
       </div>
@@ -94,7 +94,7 @@ export default function MenuCoursesTab({ menuCourses = [], onUpdateCourses, onSa
       ))}
 
       {menuCourses.length === 0 && (
-        <div style={{ fontFamily: FONT, fontSize: tokens.fontSize.base, color: tokens.text.disabled, textAlign: "center", padding: "40px 0" }}>
+        <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[4], textAlign: "center", padding: "40px 0" }}>
           No courses yet — add your first course above
         </div>
       )}
