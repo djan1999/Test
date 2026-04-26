@@ -16,7 +16,7 @@ export default function FullModal({ title, onClose, actions, children }) {
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 500,
-      background: tokens.surface.card,
+      background: tokens.ink.bg,
       display: "flex", flexDirection: "column",
       // Use dynamic viewport height so the mobile URL bar doesn't clip content.
       height: "100dvh",
@@ -30,17 +30,17 @@ export default function FullModal({ title, onClose, actions, children }) {
           paddingTop: "env(safe-area-inset-top)",
           height: isMobile ? 52 + "px" : 54,
           minHeight: isMobile ? "calc(52px + env(safe-area-inset-top))" : "calc(54px + env(safe-area-inset-top))",
-          borderBottom: tokens.border.default,
-          background: tokens.surface.card,
+          borderBottom: `1px solid ${tokens.ink[4]}`,
+          background: tokens.neutral[0],
           flexShrink: 0,
           gap: 8,
         }}
       >
         <span style={{
           fontFamily: tokens.font,
-          fontSize: 9,
-          letterSpacing: isMobile ? 3 : 4,
-          color: tokens.text.muted,
+          fontSize: "8px",
+          letterSpacing: isMobile ? "0.18em" : "0.22em",
+          color: tokens.ink[3],
           textTransform: "uppercase",
           minWidth: 0,
           overflow: "hidden",
@@ -56,11 +56,11 @@ export default function FullModal({ title, onClose, actions, children }) {
               fontSize: isMobile ? 10 : 9,
               letterSpacing: 2,
               padding: isMobile ? "8px 12px" : "8px 16px",
-              border: tokens.border.subtle,
+              border: `1px solid ${tokens.ink[4]}`,
               borderRadius: 0,
               cursor: "pointer",
-              background: tokens.surface.card,
-              color: tokens.text.secondary,
+              background: tokens.neutral[0],
+              color: tokens.ink[2],
               minHeight: isMobile ? 36 : undefined,
             }}
           >

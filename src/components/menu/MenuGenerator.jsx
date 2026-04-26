@@ -18,10 +18,10 @@ const baseInp = {
   fontFamily: FONT,
   fontSize: tokens.mobileInputSize,
   padding: "10px 12px",
-  border: `1px solid ${tokens.neutral[200]}`,
+  border: `1px solid ${tokens.ink[4]}`,
   borderRadius: 0,
   outline: "none",
-  color: tokens.text.primary,
+  color: tokens.ink[0],
   background: tokens.neutral[0],
   boxSizing: "border-box",
   width: "100%",
@@ -265,42 +265,42 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
         {/* Language + Title + Team */}
         <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
-          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase" }}>Language</div>
+          <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase" }}>Language</div>
           {[{val:"en",label:"EN"},{val:"si",label:"SLO"}].map(opt => (
             <button key={opt.val} onClick={() => {
               setLanguageWithDefaults(opt.val);
             }} style={{
-              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 12px",
-              border: `1px solid ${lang === opt.val ? tokens.charcoal.default : tokens.neutral[200]}`,
+              fontFamily: FONT, fontSize: "9px", letterSpacing: "0.08em", padding: "5px 12px",
+              border: `1px solid ${lang === opt.val ? tokens.charcoal.default : tokens.ink[4]}`,
               borderRadius: 0, cursor: "pointer",
               background: lang === opt.val ? tokens.tint.parchment : tokens.neutral[0],
-              color: lang === opt.val ? tokens.text.secondary : tokens.text.muted,
+              color: lang === opt.val ? tokens.ink[1] : tokens.ink[3],
             }}>{opt.label}</button>
           ))}
         </div>
         <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 160 }}>
-            <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 6 }}>Menu Title</div>
+            <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase", marginBottom: 6 }}>Menu Title</div>
             <input value={menuTitle} onChange={e => { setMenuTitle(e.target.value); writeMenuTitle(lang, e.target.value); }}
-              style={{ fontFamily: FONT, fontSize: 11, padding: "8px 10px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, outline: "none", width: "100%" }} />
+              style={{ fontFamily: FONT, fontSize: "11px", padding: "8px 10px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, outline: "none", width: "100%" }} />
           </div>
           <div style={{ flex: 2, minWidth: 220 }}>
-            <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 6 }}>Team</div>
+            <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase", marginBottom: 6 }}>Team</div>
             <input value={teamNames} onChange={e => setTeamNames(e.target.value)}
-              style={{ fontFamily: FONT, fontSize: 11, padding: "8px 10px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, outline: "none", width: "100%" }} />
+              style={{ fontFamily: FONT, fontSize: "11px", padding: "8px 10px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, outline: "none", width: "100%" }} />
           </div>
         </div>
         <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 6 }}>Thank You Note</div>
+            <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase", marginBottom: 6 }}>Thank You Note</div>
             <input value={thankYouNote} onChange={e => { setThankYouNote(e.target.value); writeThankYouNote(lang, e.target.value); }}
-              style={{ fontFamily: FONT, fontSize: 11, padding: "8px 10px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, outline: "none", width: "100%" }} />
+              style={{ fontFamily: FONT, fontSize: "11px", padding: "8px 10px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, outline: "none", width: "100%" }} />
           </div>
         </div>
 
         {/* Menu behavior rules (in-app configurable) */}
         {/* Seat rows */}
-        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 10 }}>Seats</div>
+        <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase", marginBottom: 10 }}>[SEATS]</div>
 
         {seats.map(s => {
           const seatRestr  = restrictions.filter(r => r.pos === s.id);
@@ -318,19 +318,23 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
           return (
             <div key={s.id} style={{
-              border: `1px solid ${seatHasEdits ? tokens.charcoal.default : tokens.neutral[100]}`, borderRadius: 0, marginBottom: 8,
-              background: seatHasEdits ? tokens.neutral[50] : tokens.neutral[0],
+              borderTop:    `1px solid ${seatHasEdits ? tokens.charcoal.default : tokens.ink[4]}`,
+              borderRight:  `1px solid ${seatHasEdits ? tokens.charcoal.default : tokens.ink[4]}`,
+              borderBottom: `1px solid ${seatHasEdits ? tokens.charcoal.default : tokens.ink[4]}`,
+              borderLeft:   `3px solid ${seatHasEdits ? tokens.charcoal.default : tokens.ink[4]}`,
+              borderRadius: 0, marginBottom: 8,
+              background: seatHasEdits ? tokens.tint.parchment : tokens.neutral[0],
             }}>
               {/* Main row */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", flexWrap: "wrap" }}>
-                <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: tokens.text.muted, minWidth: 28 }}>P{s.id}</span>
+                <span style={{ fontFamily: FONT, fontSize: "10px", fontWeight: 700, color: tokens.ink[2], minWidth: 28 }}>P{s.id}</span>
 
                 {/* Pairing badge */}
                 {s.pairing && s.pairing !== "—"
-                  ? <span style={{ fontFamily: FONT, fontSize: 10, padding: "3px 9px", borderRadius: 0, background: pairingBg[s.pairing] || tokens.neutral[50], color: pairingColor[s.pairing] || tokens.text.secondary, border: `1px solid ${tokens.neutral[200]}`, fontWeight: 500 }}>{s.pairing}</span>
+                  ? <span style={{ fontFamily: FONT, fontSize: "9px", padding: "3px 9px", borderRadius: 0, background: pairingBg[s.pairing] || tokens.neutral[50], color: pairingColor[s.pairing] || tokens.ink[2], border: `1px solid ${tokens.ink[4]}`, fontWeight: 500 }}>{s.pairing}</span>
                   : glasses.length > 0 || cocktails.length > 0 || tableBottles.length > 0
-                    ? <span style={{ fontFamily: FONT, fontSize: 10, padding: "3px 9px", borderRadius: 0, background: tokens.neutral[50], color: tokens.text.muted, border: `1px solid ${tokens.neutral[200]}` }}>drinks</span>
-                    : <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.disabled }}>no pairing</span>}
+                    ? <span style={{ fontFamily: FONT, fontSize: "9px", padding: "3px 9px", borderRadius: 0, background: tokens.neutral[50], color: tokens.ink[3], border: `1px solid ${tokens.ink[4]}` }}>drinks</span>
+                    : <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[4] }}>no pairing</span>}
 
                 {seatRestr.map((r, i) => {
                   const isDietary = ["veg","vegan","pescetarian"].includes(r.note);
@@ -344,7 +348,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                   );
                 })}
                 {orderedExtras.map(d => (
-                  <span key={d.key} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 0, background: tokens.tint.parchment, color: tokens.text.body, border: `1px solid ${tokens.neutral[300]}` }}>+{String(d.name).toUpperCase()}</span>
+                  <span key={d.key} style={{ fontFamily: FONT, fontSize: "8px", padding: "2px 7px", borderRadius: 0, background: tokens.tint.parchment, color: tokens.ink[2], border: `1px solid ${tokens.ink[4]}` }}>+{String(d.name).toUpperCase()}</span>
                 ))}
 
                 {/* Manually added beverages */}
@@ -354,7 +358,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                   </span>
                 ))}
                 {cocktails.map((c, i) => (
-                  <span key={`c${i}`} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 0, background: tokens.neutral[100], color: tokens.text.secondary, border: `1px solid ${tokens.neutral[300]}`, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span key={`c${i}`} style={{ fontFamily: FONT, fontSize: "8px", padding: "2px 7px", borderRadius: 0, background: tokens.neutral[50], color: tokens.ink[2], border: `1px solid ${tokens.ink[4]}`, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🍹 {c.name}
                   </span>
                 ))}
@@ -371,35 +375,35 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
 
                 {/* Edit button — opens per-seat ephemeral course editor */}
                 <button onClick={() => { setExpandedSeatId(isExpanded ? null : s.id); setExpandedDrinksId(null); setPreviewSeatId(null); }} style={{
-                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
-                  border: `1px solid ${seatHasEdits ? tokens.charcoal.default : tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer",
-                  background: seatHasEdits ? tokens.tint.parchment : tokens.neutral[50],
-                  color: seatHasEdits ? tokens.text.body : tokens.text.muted,
+                  fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "6px 10px",
+                  border: `1px solid ${seatHasEdits ? tokens.charcoal.default : tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
+                  background: seatHasEdits ? tokens.tint.parchment : tokens.neutral[0],
+                  color: seatHasEdits ? tokens.ink[0] : tokens.ink[3],
                 }}>{isExpanded ? "▲" : (seatHasEdits ? "✎ EDITED" : "✎")}</button>
 
                 {/* Drinks edit button */}
                 {upd && (
                   <button onClick={() => { setExpandedDrinksId(expandedDrinksId === s.id ? null : s.id); setExpandedSeatId(null); setPreviewSeatId(null); }} style={{
-                    fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
-                    border: `1px solid ${expandedDrinksId === s.id ? tokens.neutral[400] : tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer",
-                    background: expandedDrinksId === s.id ? tokens.neutral[100] : tokens.neutral[50],
-                    color: expandedDrinksId === s.id ? tokens.text.secondary : tokens.text.muted,
+                    fontFamily: FONT, fontSize: "9px", padding: "6px 10px",
+                    border: `1px solid ${expandedDrinksId === s.id ? tokens.ink[3] : tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
+                    background: expandedDrinksId === s.id ? tokens.neutral[50] : tokens.neutral[0],
+                    color: expandedDrinksId === s.id ? tokens.ink[1] : tokens.ink[3],
                   }}>🍷</button>
                 )}
 
                 {/* Preview button */}
                 <button onClick={() => previewSeatId === s.id ? setPreviewSeatId(null) : openPreview(s)} style={{
-                  fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 10px",
-                  border: `1px solid ${previewSeatId === s.id ? tokens.neutral[400] : tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer",
-                  background: previewSeatId === s.id ? tokens.neutral[100] : tokens.neutral[50],
-                  color: previewSeatId === s.id ? tokens.text.secondary : tokens.text.muted,
+                  fontFamily: FONT, fontSize: "9px", padding: "6px 10px",
+                  border: `1px solid ${previewSeatId === s.id ? tokens.ink[3] : tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
+                  background: previewSeatId === s.id ? tokens.neutral[50] : tokens.neutral[0],
+                  color: previewSeatId === s.id ? tokens.ink[1] : tokens.ink[3],
                 }}>👁</button>
 
                 <button onClick={() => openPrint(s)} style={{
-                  marginLeft: "auto", fontFamily: FONT, fontSize: 9, letterSpacing: 2,
+                  marginLeft: "auto", fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
                   padding: "8px 16px", border: `1px solid ${tokens.charcoal.default}`,
                   borderRadius: 0, cursor: "pointer",
-                  background: tokens.surface.card, color: tokens.text.primary,
+                  background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 600,
                 }}>PDF</button>
               </div>
 
@@ -407,7 +411,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
               {isExpanded && (
                 <div style={{ borderTop: `1px solid ${tokens.neutral[50]}`, padding: "10px 16px 14px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: tokens.text.muted, textTransform: "uppercase" }}>
+                    <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", color: tokens.ink[3], textTransform: "uppercase" }}>
                       Menu edit for P{s.id} — one-time, auto-cleared on PDF
                     </span>
                     {seatHasEdits && (

@@ -83,8 +83,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       .filter(r => r.pos === seat.id)
       .map(r => r.note);
 
-  const pairingColor = { Wine: tokens.text.body, "Non-Alc": tokens.text.body, Premium: tokens.text.body, "Our Story": tokens.text.body };
-  const pairingBg   = { Wine: tokens.surface.card, "Non-Alc": tokens.surface.card, Premium: tokens.surface.card, "Our Story": tokens.surface.card };
+  const pairingColor = { Wine: tokens.ink[2], "Non-Alc": tokens.ink[2], Premium: tokens.ink[2], "Our Story": tokens.ink[2] };
+  const pairingBg   = { Wine: tokens.neutral[0], "Non-Alc": tokens.neutral[0], Premium: tokens.neutral[0], "Our Story": tokens.neutral[0] };
 
   const normFlag = s => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   const normCategory = (course) => {
@@ -173,7 +173,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const pLabel = p => p === "Non-Alc" ? "N/A" : p === "Our Story" ? "O.S." : p === "Premium" ? "Prem" : p === "Wine" ? "Wine" : p;
 
   return (
-    <div style={{ border: `2px solid ${tokens.neutral[200]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0], boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}>
+    <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
 
       {/* ── Header (drag handle) ── */}
       <div
@@ -181,47 +181,47 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         {...dragListeners}
         role={dragListeners ? "button" : undefined}
         aria-label={dragListeners ? "Drag to reorder ticket" : undefined}
-        style={{ background: tokens.neutral[0], borderBottom: `1px solid ${tokens.neutral[200]}`, padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8, cursor: dragListeners ? "grab" : undefined, touchAction: "none" }}
+        style={{ background: tokens.neutral[0], borderBottom: `1px solid ${tokens.ink[4]}`, padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8, cursor: dragListeners ? "grab" : undefined, touchAction: "none" }}
       >
         {dragListeners && (
           <span aria-hidden="true" title="Drag to reorder" style={{
-            fontFamily: FONT, fontSize: 14, color: tokens.neutral[400],
+            fontFamily: FONT, fontSize: 14, color: tokens.ink[4],
             lineHeight: 1, flexShrink: 0, alignSelf: "center", letterSpacing: -2,
             userSelect: "none",
           }}>⋮⋮</span>
         )}
-        <span style={{ fontFamily: FONT, fontSize: table.tableGroup?.length > 1 ? 16 : 21, fontWeight: 800, color: tokens.text.primary, lineHeight: 1, letterSpacing: -1, flexShrink: 0 }}>
+        <span style={{ fontFamily: FONT, fontSize: table.tableGroup?.length > 1 ? "15px" : "20px", fontWeight: 800, color: tokens.ink[0], lineHeight: 1, letterSpacing: "-0.02em", flexShrink: 0 }}>
           {table.tableGroup?.length > 1 ? `T${table.tableGroup.join("-")}` : `T${table.id}`}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
-            {table.resName && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: tokens.text.primary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
-            {table.menuType && <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 0, background: tokens.neutral[100], color: tokens.neutral[500] }}>{isShort ? "SHORT" : "LONG"}</span>}
-            <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 0, background: table.lang === "si" ? tokens.red.bg : tokens.green.bg, color: table.lang === "si" ? tokens.red.text : tokens.green.text, border: "1px solid", borderColor: table.lang === "si" ? tokens.red.border : tokens.green.border }}>{table.lang === "si" ? "SI" : "EN"}</span>
-            {table.birthday && <span style={{ fontSize: 10 }}>🎂</span>}
+            {table.resName && <span style={{ fontFamily: FONT, fontSize: "11px", fontWeight: 700, color: tokens.ink[0], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
+            {table.menuType && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 600, letterSpacing: "0.08em", padding: "1px 5px", borderRadius: 0, background: tokens.ink[5], color: tokens.ink[3] }}>{isShort ? "SHORT" : "LONG"}</span>}
+            <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 600, letterSpacing: "0.08em", padding: "1px 5px", borderRadius: 0, background: table.lang === "si" ? tokens.red.bg : tokens.green.bg, color: table.lang === "si" ? tokens.red.text : tokens.green.text, border: "1px solid", borderColor: table.lang === "si" ? tokens.red.border : tokens.green.border }}>{table.lang === "si" ? "SI" : "EN"}</span>
+            {table.birthday && <span style={{ fontSize: "10px" }}>🎂</span>}
             {table.guestType === "hotel" && (() => {
               const rs = Array.isArray(table.rooms) && table.rooms.length ? table.rooms.filter(Boolean) : (table.room ? [table.room] : []);
-              return <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.text.muted, letterSpacing: 0.5 }}>{rs.length ? `#${rs.join(", ")}` : "Hotel"}</span>;
+              return <span style={{ fontFamily: FONT, fontSize: "8px", color: tokens.ink[3], letterSpacing: "0.06em" }}>{rs.length ? `#${rs.join(", ")}` : "Hotel"}</span>;
             })()}
           </div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 1, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: tokens.text.primary }}>{seats.length} <span style={{ fontWeight: 600, fontSize: 10, letterSpacing: 0.5 }}>PAX</span></span>
-            {table.resTime && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: tokens.text.body }}>{table.resTime}</span>}
-            {table.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: tokens.green.border }}>arr. {table.arrivedAt}</span>}
+            <span style={{ fontFamily: FONT, fontSize: "10px", fontWeight: 700, color: tokens.ink[0] }}>{seats.length} <span style={{ fontWeight: 400, fontSize: "9px", letterSpacing: "0.06em" }}>PAX</span></span>
+            {table.resTime && <span style={{ fontFamily: FONT, fontSize: "10px", fontWeight: 600, color: tokens.ink[2] }}>{table.resTime}</span>}
+            {table.arrivedAt && <span style={{ fontFamily: FONT, fontSize: "10px", fontWeight: 600, color: tokens.green.border }}>arr. {table.arrivedAt}</span>}
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-          <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: allDone ? tokens.green.border : tokens.text.primary, lineHeight: 1 }}>{firedCount}<span style={{ fontSize: 10, color: tokens.text.muted, fontWeight: 400 }}>/{totalCourses}</span></div>
-          {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.border }}>{durationMins} min</div>}
+          <div style={{ fontFamily: FONT, fontSize: "14px", fontWeight: 700, color: allDone ? tokens.green.border : tokens.ink[0], lineHeight: 1 }}>{firedCount}<span style={{ fontSize: "9px", color: tokens.ink[3], fontWeight: 400 }}>/{totalCourses}</span></div>
+          {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: "8px", color: tokens.green.border }}>{durationMins} min</div>}
           <button
             onPointerDown={e => e.stopPropagation()}
             onClick={e => { e.stopPropagation(); setShowEdit(v => !v); setPickingRestr(null); setCustomNote(""); setEditingCourse(null); }}
             style={{
-              fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "8px 7px",
-              border: `1px solid ${showEdit ? tokens.charcoal.default : tokens.neutral[300]}`,
+              fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "8px 7px",
+              border: `1px solid ${showEdit ? tokens.charcoal.default : tokens.ink[4]}`,
               borderRadius: 0, cursor: "pointer",
               background: showEdit ? tokens.tint.parchment : tokens.neutral[0],
-              color: showEdit ? tokens.text.secondary : tokens.text.muted,
+              color: showEdit ? tokens.ink[0] : tokens.ink[3],
               touchAction: "manipulation",
             }}>✏ EDIT</button>
         </div>
@@ -229,45 +229,45 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
       {/* ── Notes banner ── */}
       {table.notes && (
-        <div style={{ background: tokens.tint.parchment, borderBottom: `1px solid ${tokens.neutral[300]}`, padding: "5px 10px", display: "flex", gap: 6, alignItems: "flex-start" }}>
-          <span style={{ fontSize: 10, flexShrink: 0, lineHeight: 1.4 }}>📋</span>
-          <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.muted, lineHeight: 1.35, fontStyle: "italic" }}>{table.notes}</span>
+        <div style={{ background: tokens.tint.parchment, borderBottom: `1px solid ${tokens.ink[4]}`, padding: "5px 10px", display: "flex", gap: 6, alignItems: "flex-start" }}>
+          <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], flexShrink: 0, lineHeight: 1.4 }}>📋</span>
+          <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[2], lineHeight: 1.35, fontStyle: "italic" }}>{table.notes}</span>
         </div>
       )}
 
       {/* ── Temp restriction editor ── */}
       {showEdit && (
-        <div style={{ borderBottom: `1px solid ${tokens.neutral[200]}`, padding: "8px 10px", background: tokens.neutral[50] }}>
+        <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: "8px 10px", background: tokens.neutral[0] }}>
           {/* Existing kitchen-added restrictions */}
           {restrictions.map((r, i) => r.kitchenAdded ? (
             <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text, fontWeight: 600 }}>
+              <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>
                 {restrLabel(r.note)}{r.pos ? ` → P${r.pos}` : " → All"}
               </span>
               <button
                 onPointerDown={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); removeKitchenRestr(i); }}
                 aria-label={`Remove restriction ${restrLabel(r.note)}`}
-                style={{ fontFamily: FONT, fontSize: 10, padding: 0, width: 36, height: 36, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation", flexShrink: 0 }}>✕</button>
+                style={{ fontFamily: FONT, fontSize: "10px", padding: 0, width: 36, height: 36, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation", flexShrink: 0 }}>✕</button>
             </div>
           ) : null)}
           {/* Step 1: pick restriction */}
           {!pickingRestr && (
             <>
-              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: tokens.text.muted, textTransform: "uppercase", marginBottom: 6 }}>Add restriction</div>
+              <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], marginBottom: 6 }}>ADD RESTRICTION</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 {RESTRICTIONS.map(r => (
                   <button key={r.key}
                     onPointerDown={e => e.stopPropagation()}
                     onClick={e => { e.stopPropagation(); setPickingRestr(r.key); }}
-                    style={{ fontFamily: FONT, fontSize: 9, padding: "9px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.body, touchAction: "manipulation" }}>
+                    style={{ fontFamily: FONT, fontSize: "9px", padding: "9px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[2], touchAction: "manipulation" }}>
                     {r.emoji} {r.label}
                   </button>
                 ))}
                 <button
                   onPointerDown={e => e.stopPropagation()}
                   onClick={e => { e.stopPropagation(); setPickingRestr("custom"); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "9px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.muted, touchAction: "manipulation" }}>
+                  style={{ fontFamily: FONT, fontSize: "9px", padding: "9px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3], touchAction: "manipulation" }}>
                   + Custom
                 </button>
               </div>
@@ -276,18 +276,18 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           {/* Step 2a: assign to seat */}
           {pickingRestr && pickingRestr !== "custom" && (
             <div>
-              <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.body, marginBottom: 6 }}>
+              <div style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[2], marginBottom: 6 }}>
                 {restrLabel(pickingRestr)} → assign to:
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "9px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: "9px", padding: "9px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 700, touchAction: "manipulation" }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, s.id); }}
-                    style={{ fontFamily: FONT, fontSize: 9, padding: "9px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
+                    style={{ fontFamily: FONT, fontSize: "9px", padding: "9px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
                 ))}
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPickingRestr(null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "9px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.disabled, touchAction: "manipulation" }}>cancel</button>
+                  style={{ fontFamily: FONT, fontSize: "9px", padding: "9px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3], touchAction: "manipulation" }}>cancel</button>
               </div>
             </div>
           )}
@@ -299,17 +299,17 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                 onChange={e => setCustomNote(e.target.value)}
                 placeholder="e.g. No Ricotta"
                 onPointerDown={e => e.stopPropagation()}
-                style={{ fontFamily: FONT, fontSize: 10, padding: "5px 8px", border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, width: "100%", marginBottom: 6, boxSizing: "border-box" }}
+                style={{ fontFamily: FONT, fontSize: "10px", padding: "5px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, width: "100%", marginBottom: 6, boxSizing: "border-box" }}
               />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, null); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "9px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.surface.card, color: tokens.text.primary, fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                  style={{ fontFamily: FONT, fontSize: "9px", padding: "9px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 700, touchAction: "manipulation" }}>All</button>
                 {seats.map(s => (
                   <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, s.id); }}
-                    style={{ fontFamily: FONT, fontSize: 9, padding: "9px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
+                    style={{ fontFamily: FONT, fontSize: "9px", padding: "9px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
                 ))}
                 <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPickingRestr(null); setCustomNote(""); }}
-                  style={{ fontFamily: FONT, fontSize: 9, padding: "9px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.text.disabled, touchAction: "manipulation" }}>cancel</button>
+                  style={{ fontFamily: FONT, fontSize: "9px", padding: "9px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3], touchAction: "manipulation" }}>cancel</button>
               </div>
             </div>
           )}
@@ -317,18 +317,18 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       )}
 
       {/* ── Pace ── */}
-      <div style={{ borderBottom: `1px solid ${tokens.neutral[200]}`, padding: "5px 10px", display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.text.muted, textTransform: "uppercase", flexShrink: 0 }}>Pace</span>
+      <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: "5px 10px", display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase", flexShrink: 0 }}>PACE</span>
         {["Slow", "Fast"].map(p => {
-          const colors = { Slow: { on: tokens.text.primary, bg: tokens.surface.card, border: tokens.charcoal.default }, Fast: { on: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } };
+          const colors = { Slow: { on: tokens.ink[0], bg: tokens.neutral[0], border: tokens.charcoal.default }, Fast: { on: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } };
           const active = table.pace === p;
           const col = colors[p];
           return (
             <button key={p} onClick={() => upd && upd(table.id, "pace", active ? "" : p)} style={{
-              fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "9px 10px",
-              border: `1px solid ${active ? col.border : tokens.neutral[200]}`,
+              fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "9px 10px",
+              border: `1px solid ${active ? col.border : tokens.ink[4]}`,
               borderRadius: 0, cursor: upd ? "pointer" : "default",
-              background: active ? col.bg : tokens.neutral[0], color: active ? col.on : tokens.text.disabled,
+              background: active ? col.bg : tokens.neutral[0], color: active ? col.on : tokens.ink[3],
               transition: "all 0.1s",
             }}>{p}</button>
           );
@@ -336,7 +336,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       </div>
 
       {/* ── Seats ── */}
-      <div style={{ background: tokens.neutral[50], borderBottom: `1px solid ${tokens.neutral[200]}`, padding: "5px 10px" }}>
+      <div style={{ background: tokens.neutral[0], borderBottom: `1px solid ${tokens.ink[4]}`, padding: "5px 10px" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 6px" }}>
           {seats.map(s => {
             const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
@@ -345,12 +345,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             return (
               <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 3 }}>
                 <span style={{
-                  fontFamily: FONT, fontSize: 9, fontWeight: 700, padding: "2px 5px", borderRadius: 0,
-                  background: p ? (pairingBg[p] || tokens.neutral[200]) : tokens.neutral[200],
-                  color: p ? (pairingColor[p] || tokens.text.body) : tokens.text.body,
+                  fontFamily: FONT, fontSize: "8px", fontWeight: 700, padding: "2px 5px", borderRadius: 0,
+                  background: p ? (pairingBg[p] || tokens.ink[5]) : tokens.ink[5],
+                  color: p ? (pairingColor[p] || tokens.ink[2]) : tokens.ink[2],
+                  border: `1px solid ${tokens.ink[4]}`,
                 }}>P{s.id}{p ? ` · ${pLabel(p)}` : ""}</span>
                 {restrList.length > 0 && (
-                  <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.red.text, letterSpacing: 0.2, fontWeight: 600 }}>{restrList.map(restrShort).join(" · ")}</span>
+                  <span style={{ fontFamily: FONT, fontSize: "8px", color: tokens.red.text, letterSpacing: "0.06em", fontWeight: 600 }}>{restrList.map(restrShort).join(" · ")}</span>
                 )}
               </div>
             );
@@ -362,18 +363,18 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const unassigned = restrictions.map((r, i) => ({ ...r, _i: i })).filter(r => !r.pos && r.note);
           if (unassigned.length === 0) return null;
           return (
-            <div style={{ marginTop: 7, paddingTop: 7, borderTop: `1px solid ${tokens.neutral[200]}` }}>
+            <div style={{ marginTop: 7, paddingTop: 7, borderTop: `1px solid ${tokens.ink[4]}` }}>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.red.text, textTransform: "uppercase", flexShrink: 0 }}>⚠ Unassigned</span>
+                <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", color: tokens.red.text, textTransform: "uppercase", flexShrink: 0 }}>⚠ UNASSIGNED</span>
                 {unassigned.map(r => (
                   <span
                     key={r._i}
                     onClick={() => setAssigningRestrIdx(assigningRestrIdx === r._i ? null : r._i)}
                     style={{
-                      fontFamily: FONT, fontSize: 9, padding: "9px 8px", borderRadius: 0,
+                      fontFamily: FONT, fontSize: "8px", padding: "9px 8px", borderRadius: 0,
                       border: `1px solid ${tokens.red.border}`,
                       background: assigningRestrIdx === r._i ? tokens.red.text : tokens.red.bg,
-                      color: assigningRestrIdx === r._i ? tokens.text.primary : tokens.red.text,
+                      color: assigningRestrIdx === r._i ? tokens.neutral[0] : tokens.red.text,
                       fontWeight: 500, cursor: "pointer", userSelect: "none", touchAction: "manipulation",
                     }}
                   >{restrLabel(r.note)} {assigningRestrIdx === r._i ? "→ pick seat" : "→"}</span>
@@ -381,18 +382,18 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               </div>
               {assigningRestrIdx !== null && (
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", marginTop: 5 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, flexShrink: 0 }}>Assign to:</span>
+                  <span style={{ fontFamily: FONT, fontSize: "8px", color: tokens.red.text, flexShrink: 0 }}>ASSIGN TO:</span>
                   {seats.map(s => (
                     <button key={s.id} onClick={() => assignRestrToSeat(s.id)} style={{
-                      fontFamily: FONT, fontSize: 10, fontWeight: 700, padding: "9px 10px",
+                      fontFamily: FONT, fontSize: "9px", fontWeight: 700, padding: "9px 10px",
                       border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer",
                       background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation",
                     }}>P{s.id}</button>
                   ))}
                   <button onClick={() => setAssigningRestrIdx(null)} style={{
-                    fontFamily: FONT, fontSize: 9, padding: "9px 8px",
-                    border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer",
-                    background: tokens.neutral[0], color: tokens.text.disabled, touchAction: "manipulation",
+                    fontFamily: FONT, fontSize: "9px", padding: "9px 8px",
+                    border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
+                    background: tokens.neutral[0], color: tokens.ink[3], touchAction: "manipulation",
                   }}>cancel</button>
                 </div>
               )}
@@ -479,33 +480,33 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
           return (
             <div key={key} style={{
-              borderBottom: `1px solid ${tokens.neutral[200]}`,
+              borderBottom: `1px solid ${tokens.ink[4]}`,
               background: fired ? tokens.green.bg : tokens.neutral[0],
               borderLeft: fired ? `4px solid ${tokens.green.border}` : kcNote.name || kcNote.note ? `4px solid ${tokens.red.text}` : "4px solid transparent",
             }}>
               <div
                 onClick={() => !isEditingThis && (fired ? unfire(key) : fire(key))}
                 style={{ display: "flex", alignItems: "center", padding: "7px 10px 7px 8px", gap: 7, cursor: isEditingThis ? "default" : "pointer" }}>
-                <span style={{ fontFamily: FONT, fontSize: 13, color: fired ? tokens.green.border : tokens.neutral[300], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
+                <span style={{ fontFamily: FONT, fontSize: "12px", color: fired ? tokens.green.border : tokens.ink[4], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
-                    fontFamily: FONT, fontSize: 11, fontWeight: 700, lineHeight: 1.25,
-                    color: fired ? tokens.text.disabled : kcNote.name ? tokens.red.text : tokens.text.primary,
+                    fontFamily: FONT, fontSize: "11px", fontWeight: 700, lineHeight: 1.25,
+                    color: fired ? tokens.ink[4] : kcNote.name ? tokens.red.text : tokens.ink[0],
                     textDecoration: fired ? "line-through" : "none",
-                    letterSpacing: 0.2,
+                    letterSpacing: "0.02em",
                   }}>
                     {displayName}
-                    {kcNote.name && <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 400, color: tokens.text.muted, marginLeft: 5 }}>({line1})</span>}
-                    {extraLabel && <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 400, color: tokens.text.disabled, marginLeft: 6 }}>{extraLabel}</span>}
+                    {kcNote.name && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[3], marginLeft: 5 }}>({line1})</span>}
+                    {extraLabel && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[4], marginLeft: 6 }}>{extraLabel}</span>}
                   </div>
                   {(pairingAlert || modGroups || kitchenNote || kcNote.note) && !fired && (
                     <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
-                      {pairingAlert && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.muted, fontWeight: 600 }}>{pairingAlert}</span>}
+                      {pairingAlert && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], fontWeight: 600 }}>{pairingAlert}</span>}
                       {modGroups && Object.entries(modGroups).sort(([a], [b]) => (a === baseName ? -1 : 1) - (b === baseName ? -1 : 1)).map(([name, count]) => (
-                        <span key={name} style={{ fontFamily: FONT, fontSize: 10, color: name === baseName ? tokens.text.body : tokens.red.text, fontWeight: 600 }}>{count}× {name}</span>
+                        <span key={name} style={{ fontFamily: FONT, fontSize: "9px", color: name === baseName ? tokens.ink[2] : tokens.red.text, fontWeight: 600 }}>{count}× {name}</span>
                       ))}
-                      {kitchenNote && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text, fontWeight: 600 }}>{kitchenNote}</span>}
-                      {kcNote.note && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text, fontWeight: 600 }}>⚑ {kcNote.note}</span>}
+                      {kitchenNote && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>{kitchenNote}</span>}
+                      {kcNote.note && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>⚑ {kcNote.note}</span>}
                     </div>
                   )}
                 </div>
@@ -516,12 +517,12 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     aria-label={isEditingThis ? `Save changes to ${displayName}` : `Edit ${displayName}`}
                     title={isEditingThis ? "Save course override" : "Edit course override"}
                     style={{
-                      fontFamily: FONT, fontSize: 11, padding: 0, flexShrink: 0,
+                      fontFamily: FONT, fontSize: "10px", padding: 0, flexShrink: 0,
                       width: 32, height: 32, display: "inline-flex", alignItems: "center", justifyContent: "center",
-                      border: `1px solid ${isEditingThis ? tokens.charcoal.default : tokens.neutral[300]}`,
+                      border: `1px solid ${isEditingThis ? tokens.charcoal.default : tokens.ink[4]}`,
                       borderRadius: 0, cursor: "pointer",
                       background: isEditingThis ? tokens.tint.parchment : tokens.neutral[0],
-                      color: isEditingThis ? tokens.text.secondary : tokens.text.muted,
+                      color: isEditingThis ? tokens.ink[0] : tokens.ink[3],
                       touchAction: "manipulation",
                     }}>✏</button>
                 )}
@@ -535,14 +536,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     onChange={e => setEditName(e.target.value)}
                     onBlur={() => saveCourseDraft(key, editName, editNote)}
                     placeholder={`Rename "${line1}"…`}
-                    style={{ fontFamily: FONT, fontSize: 10, padding: "9px 7px", border: `1px solid ${tokens.red.text}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
+                    style={{ fontFamily: FONT, fontSize: "10px", padding: "9px 7px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
                   />
                   <input
                     value={editNote}
                     onChange={e => setEditNote(e.target.value)}
                     onBlur={() => saveCourseDraft(key, editName, editNote)}
                     placeholder="Add note (e.g. No Ricotta)…"
-                    style={{ fontFamily: FONT, fontSize: 10, padding: "9px 7px", border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
+                    style={{ fontFamily: FONT, fontSize: "10px", padding: "9px 7px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
                   />
                   {(kcNote.name || kcNote.note) && (
                     <button
@@ -626,10 +627,10 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
 export function KitchenAlertOverlay({ alerts, onConfirm }) {
   if (alerts.length === 0) return null;
   const PAIR_COLORS = {
-    Wine:      { color: tokens.text.body, bg: tokens.surface.card, border: tokens.neutral[300] },
-    "Non-Alc": { color: tokens.text.body, bg: tokens.surface.card, border: tokens.neutral[300] },
-    Premium:   { color: tokens.text.body, bg: tokens.surface.card, border: tokens.neutral[300] },
-    "Our Story":{ color: tokens.text.body, bg: tokens.surface.card, border: tokens.neutral[300] },
+    Wine:      { color: tokens.ink[2], bg: tokens.neutral[0], border: tokens.ink[4] },
+    "Non-Alc": { color: tokens.ink[2], bg: tokens.neutral[0], border: tokens.ink[4] },
+    Premium:   { color: tokens.ink[2], bg: tokens.neutral[0], border: tokens.ink[4] },
+    "Our Story":{ color: tokens.ink[2], bg: tokens.neutral[0], border: tokens.ink[4] },
   };
   return (
     <div role="dialog" aria-label="Kitchen pairing alerts" style={{
@@ -669,31 +670,31 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
         return (
           <div key={tableId} style={{
             background: tokens.neutral[0], borderRadius: 0, maxWidth: 480, width: "100%",
-            boxShadow: "0 16px 48px rgba(0,0,0,0.4)",
+            border: `1px solid ${tokens.ink[4]}`,
             overflow: "hidden",
           }}>
             {/* Header */}
             <div style={{
               background: tokens.neutral[0], padding: "14px 20px",
-              borderBottom: `1px solid ${tokens.neutral[200]}`,
+              borderBottom: `1px solid ${tokens.ink[4]}`,
               display: "flex", alignItems: "center", justifyContent: "space-between",
             }}>
               <div>
-                <span style={{ fontFamily: FONT, fontSize: 16, fontWeight: 700, letterSpacing: 2, color: tokens.text.primary }}>
-                  TABLE {tableId}{alert.tableName ? ` — ${alert.tableName}` : ""}
+                <span style={{ fontFamily: FONT, fontSize: "14px", fontWeight: 700, letterSpacing: "0.10em", textTransform: "uppercase", color: tokens.ink[0] }}>
+                  T{tableId}{alert.tableName ? ` — ${alert.tableName}` : ""}
                 </span>
               </div>
-              <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.text.muted, letterSpacing: 1 }}>{timeStr}</span>
+              <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], letterSpacing: "0.10em" }}>{timeStr}</span>
             </div>
             {/* Body */}
             <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
               {pairSeats.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: tokens.text.muted, minWidth: 60 }}>PAIRING</span>
+                  <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>PAIRING</span>
                   {pairSeats.map(s => {
                     const c = PAIR_COLORS[s.pairing] || {};
                     return (
-                      <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${c.border || tokens.neutral[300]}`, color: c.color || tokens.text.body }}>
+                      <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${c.border || tokens.ink[4]}`, color: c.color || tokens.ink[2] }}>
                         P{s.id} {s.pairing}
                       </span>
                     );
@@ -702,25 +703,25 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
               )}
               {extrasGroups.map(group => (
                 <div key={group.name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, color: tokens.text.muted, minWidth: 60 }}>{group.name.toUpperCase()}</span>
+                  <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>{group.name.toUpperCase()}</span>
                   {group.seats.map(s => (
-                    <span key={s.id} style={{ fontFamily: FONT, fontSize: 11, padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text }}>
+                    <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text }}>
                       P{s.id}{s.pairing && s.pairing !== "—" ? ` · ${s.pairing}` : ""}
                     </span>
                   ))}
                 </div>
               ))}
               {pairSeats.length === 0 && extrasGroups.length === 0 && (
-                <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.disabled }}>No extras noted</span>
+                <span style={{ fontFamily: FONT, fontSize: "10px", color: tokens.ink[4] }}>No extras noted</span>
               )}
             </div>
             {/* Confirm */}
-            <div style={{ padding: "12px 20px", borderTop: `1px solid ${tokens.neutral[200]}`, display: "flex", justifyContent: "flex-end" }}>
+            <div style={{ padding: "12px 20px", borderTop: `1px solid ${tokens.ink[4]}`, display: "flex", justifyContent: "flex-end" }}>
               <button onClick={() => onConfirm(tableId)} style={{
-                fontFamily: FONT, fontSize: 11, letterSpacing: 1.5, padding: "10px 28px",
+                fontFamily: FONT, fontSize: "9px", letterSpacing: "0.14em", padding: "10px 28px",
                 border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer",
-                background: tokens.surface.card, color: tokens.text.primary, fontWeight: 700, textTransform: "uppercase",
-              }}>Confirm</button>
+                background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 700, textTransform: "uppercase",
+              }}>CONFIRM</button>
             </div>
           </div>
         );
@@ -763,7 +764,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany }) {
 
   if (activeTables.length === 0) return (
     <>
-      <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.text.disabled, textAlign: "center", paddingTop: 80 }}>
+      <div style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[4], textAlign: "center", paddingTop: 80 }}>
         No active tables
       </div>
       <KitchenAlertOverlay alerts={pendingAlerts} onConfirm={confirmAlert} />
@@ -812,7 +813,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany }) {
         {activeTable && (
           <div style={{
             width: 248, borderRadius: 0,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.10)",
             opacity: 0.97,
           }}>
             <KitchenTicket table={activeTable} menuCourses={menuCourses} upd={upd} />

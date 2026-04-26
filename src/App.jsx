@@ -3061,7 +3061,7 @@ export default function App() {
   </>);
 
   if (mode === "menu") return (
-    <div style={{ minHeight: "100vh", background: tokens.neutral[50], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+    <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
       <MenuPage
         tables={tables}
