@@ -80,6 +80,8 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
     background:  neutral[0],
     border:      `${rule.hairline} solid ${ink[4]}`,
     borderRadius: 0,
+    WebkitAppearance: "none",
+    appearance: "none",
     padding:     "20px 24px",
     width:       148,
     textAlign:   "left",
@@ -134,16 +136,6 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 500 }}>
             {MODES.map(m => (
               <button key={m.id} onClick={() => handleTile(m)} style={tileSt}>
-                {/* Bracket label */}
-                <div style={{
-                  fontFamily:    FONT,
-                  fontSize:      "8px",
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  color:         ink[4],
-                  lineHeight:    1,
-                }}>[ ]</div>
-                {/* Mode name */}
                 <div style={{
                   fontFamily:    FONT,
                   fontSize:      "11px",
@@ -152,8 +144,7 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
                   color:         ink[0],
                   fontWeight:    600,
                   lineHeight:    1,
-                }}>{m.label}</div>
-                {/* Sub */}
+                }}>[{m.label}]</div>
                 <div style={{
                   fontFamily:    FONT,
                   fontSize:      "8px",
