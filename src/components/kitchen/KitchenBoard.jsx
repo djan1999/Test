@@ -416,8 +416,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             const notes = new Set();
             seats.forEach(seat => {
               seatRestrKeys(seat).forEach(k => {
-                const n = course.restrictions?.[k]?.kitchen_note;
-                if (n?.trim()) notes.add(n.trim());
+                // Notes are stored at the sibling key `${k}_note` (per the DB serializer).
+                // Fall back to the legacy nested form for any in-flight local state.
+                const n = course.restrictions?.[`${k}_note`] || course.restrictions?.[k]?.kitchen_note;
+                if (typeof n === "string" && n.trim()) notes.add(n.trim());
               });
             });
             return [...notes].join(" · ");
