@@ -106,54 +106,95 @@ function IdentityStrip({ table }) {
   );
 }
 
-// ── Center: course progression ────────────────────────────────
+// ── Center: compact course state window ───────────────────────
+// Shows only LAST OUT / NEXT / AFTER. Full history lives in TimelineRail.
 function CourseSection({ courses }) {
+  const total = courses.length;
   const firedCount = courses.filter(c => c.firedAt).length;
-  const currentIdx = courses.findIndex(c => !c.firedAt);
+
+  // Latest OUT = the highest-index course that has a firedAt timestamp.
+  // Walk from the end so we honour the menu order, not the time-of-press.
+  let lastOutIdx = -1;
+  for (let i = courses.length - 1; i >= 0; i--) {
+    if (courses[i].firedAt) { lastOutIdx = i; break; }
+  }
+  const lastOut = lastOutIdx >= 0 ? courses[lastOutIdx] : null;
+
+  // NEXT = first course after lastOut without a firedAt.
+  // If nothing fired yet, NEXT = first course.
+  let nextIdx = -1;
+  for (let i = lastOutIdx + 1; i < courses.length; i++) {
+    if (!courses[i].firedAt) { nextIdx = i; break; }
+  }
+  const next  = nextIdx >= 0 ? courses[nextIdx] : null;
+
+  // AFTER = course following NEXT.
+  let afterIdx = -1;
+  if (nextIdx >= 0) {
+    for (let i = nextIdx + 1; i < courses.length; i++) {
+      if (!courses[i].firedAt) { afterIdx = i; break; }
+    }
+  }
+  const after = afterIdx >= 0 ? courses[afterIdx] : null;
+
+  const allComplete = total > 0 && firedCount === total;
+
+  const Row = ({ label, c, emphasis, placeholder }) => {
+    const isStrong = emphasis === "strong";
+    const isMuted  = emphasis === "muted";
+    const labelColor = isStrong ? tokens.ink[1] : tokens.ink[3];
+    const numColor   = isStrong ? tokens.ink[0] : isMuted ? tokens.ink[3] : tokens.ink[2];
+    const nameColor  = isStrong ? tokens.ink[0] : isMuted ? tokens.ink[3] : tokens.ink[1];
+    const nameWeight = isStrong ? 600 : isMuted ? 400 : 500;
+    const rowHeight  = isStrong ? 34 : 30;
+    const nameSize   = isStrong ? "13px" : "11px";
+
+    return (
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "72px 28px 1fr 84px",
+        alignItems: "center", gap: 8,
+        height: rowHeight,
+        borderBottom: `1px solid ${tokens.ink[5]}`,
+        fontFamily: F,
+      }}>
+        <span style={{ ...lbl, color: labelColor, fontWeight: isStrong ? 600 : 500 }}>
+          {label}
+        </span>
+        <span style={{ fontSize: "10px", color: numColor, letterSpacing: "0.06em", fontWeight: isStrong ? 600 : 400 }}>
+          {c ? String(c.index).padStart(2, "0") : "—"}
+        </span>
+        <span style={{
+          fontSize: nameSize, color: nameColor, fontWeight: nameWeight,
+          textTransform: "uppercase", letterSpacing: "0.04em",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {c ? c.name : (placeholder || "—")}
+        </span>
+        <span style={{ fontSize: "10px", color: c?.firedAt ? tokens.green.text : tokens.ink[4], textAlign: "right", letterSpacing: "0.04em" }}>
+          {c?.firedAt ? `OUT ${c.firedAt}` : "—"}
+        </span>
+      </div>
+    );
+  };
+
   return (
     <div style={{ marginBottom: 14 }}>
-      <SecHead label="COURSE PROGRESSION" right={`${String(firedCount).padStart(2,"0")} / ${String(courses.length).padStart(2,"0")}`} />
-      {/* Dot scoreline */}
-      <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
-        {courses.map((c, i) => {
-          const done = !!c.firedAt;
-          const cur  = !done && i === currentIdx;
-          return (
-            <span key={c.key} style={{
-              display: "inline-block", width: 8, height: 8, borderRadius: "50%",
-              background: done ? tokens.green.text : cur ? tokens.signal.active : "transparent",
-              border: `1px solid ${done ? tokens.green.text : cur ? tokens.signal.active : tokens.ink[4]}`,
-              flexShrink: 0,
-            }} />
-          );
-        })}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <span style={{ ...lbl, color: tokens.ink[2], fontWeight: 500 }}>[COURSE STATE]</span>
+        <div style={{ flex: 1, ...hr }} />
+        <span style={{ ...lbl }}>
+          [PROGRESS] {String(firedCount).padStart(2, "0")} / {String(total).padStart(2, "0")} OUT
+        </span>
       </div>
-      {/* Course rows */}
-      <div>
-        {courses.map((c, i) => {
-          const done = !!c.firedAt;
-          const cur  = !done && i === currentIdx;
-          const textColor = done ? tokens.ink[3] : cur ? tokens.ink[0] : tokens.ink[3];
-          return (
-            <div key={c.key} style={{
-              display: "grid", gridTemplateColumns: "28px 1fr 72px",
-              alignItems: "center", gap: 8,
-              height: 28, borderBottom: `1px solid ${tokens.ink[5]}`,
-              fontFamily: F,
-            }}>
-              <span style={{ fontSize: "9px", color: tokens.ink[3], letterSpacing: "0.08em" }}>
-                {String(c.index).padStart(2, "0")}
-              </span>
-              <span style={{ fontSize: "11px", color: textColor, fontWeight: cur ? 500 : 400, textTransform: "uppercase", letterSpacing: "0.04em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {c.name}
-              </span>
-              <span style={{ fontSize: "10px", color: done ? tokens.green.text : tokens.ink[4], textAlign: "right", letterSpacing: "0.04em" }}>
-                {c.firedAt ? `OUT ${c.firedAt}` : "—"}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      <Row label="LAST OUT" c={lastOut} emphasis="strong" placeholder="—" />
+      <Row
+        label="NEXT"
+        c={allComplete ? null : next}
+        emphasis="default"
+        placeholder={allComplete ? "COMPLETE" : "—"}
+      />
+      <Row label="AFTER" c={allComplete ? null : after} emphasis="muted" placeholder="—" />
     </div>
   );
 }
