@@ -36,8 +36,17 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
   };
   const updRestriction = (rKey, field, value) => {
     const restrictions = { ...course.restrictions };
-    const current = restrictions[rKey] || { name: "", sub: "", kitchen_note: "" };
-    restrictions[rKey] = { ...current, [field]: value };
+    // kitchen_note lives at the sibling key `${rKey}_note` because that's the
+    // shape the DB serializer / kitchen board / menu generator all expect.
+    // Storing it nested inside the substitute object would silently drop on save.
+    if (field === "kitchen_note") {
+      const noteKey = `${rKey}_note`;
+      if (value) restrictions[noteKey] = value;
+      else delete restrictions[noteKey];
+    } else {
+      const current = restrictions[rKey] || { name: "", sub: "" };
+      restrictions[rKey] = { ...current, [field]: value };
+    }
     onUpdate({ ...course, restrictions });
   };
   const updRestrictionSi = (rKey, field, value) => {
@@ -51,6 +60,8 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
   const removeRestriction = (rKey) => {
     const restrictions = { ...course.restrictions };
     delete restrictions[rKey];
+    delete restrictions[`${rKey}_si`];
+    delete restrictions[`${rKey}_note`];
     onUpdate({ ...course, restrictions });
   };
 
@@ -63,7 +74,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
 
   const addRestriction = (rKey) => {
     if (!rKey || course.restrictions?.[rKey] != null) return;
-    const restrictions = { ...course.restrictions, [rKey]: { name: "", sub: "", kitchen_note: "" } };
+    const restrictions = { ...course.restrictions, [rKey]: { name: "", sub: "" } };
     onUpdate({ ...course, restrictions });
   };
 
@@ -275,15 +286,16 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
                 {activeRestrictions.map(rKey => {
                   const val = course.restrictions?.[rKey];
                   const valSi = course.restrictions?.[`${rKey}_si`];
+                  const kitchenNote = course.restrictions?.[`${rKey}_note`] || val?.kitchen_note || "";
                   return (
                     <div key={rKey} style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 1fr 1fr 1fr 20px", gap: 6, alignItems: "center" }}>
                       <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text }}>{rKey.replace(/_/g, " ")}</span>
                       <input value={val?.name || ""} onChange={e => updRestriction(rKey, "name", e.target.value)} style={inpSm} placeholder={course.menu?.name || "Alt name"} />
                       <input value={val?.sub || ""} onChange={e => updRestriction(rKey, "sub", e.target.value)} style={inpSm} placeholder={course.menu?.sub || "Alt desc"} />
-                      <input value={valSi?.name || ""} onChange={e => updRestrictionSi(rKey, "name", e.target.value)} style={{ ...inpSm, borderColor: tokens.ink[4] }} placeholder={course.menu_si?.name || "Slov. ime"} />
-                      <input value={valSi?.sub || ""} onChange={e => updRestrictionSi(rKey, "sub", e.target.value)} style={{ ...inpSm, borderColor: tokens.ink[4] }} placeholder={course.menu_si?.sub || "Slov. opis"} />
-                      <input value={val?.kitchen_note || ""} onChange={e => updRestriction(rKey, "kitchen_note", e.target.value)} style={inpSm} placeholder="Kitchen note" />
-                      <button onClick={() => removeRestriction(rKey)} title="Remove restriction" style={{ background: "none", border: "none", cursor: "pointer", color: tokens.ink[4], fontSize: 14, padding: 0, lineHeight: 1 }}
+                      <input value={valSi?.name || ""} onChange={e => updRestrictionSi(rKey, "name", e.target.value)} style={{ ...inpSm, borderColor: tokens.neutral[300] }} placeholder={course.menu_si?.name || "Slov. ime"} />
+                      <input value={valSi?.sub || ""} onChange={e => updRestrictionSi(rKey, "sub", e.target.value)} style={{ ...inpSm, borderColor: tokens.neutral[300] }} placeholder={course.menu_si?.sub || "Slov. opis"} />
+                      <input value={kitchenNote} onChange={e => updRestriction(rKey, "kitchen_note", e.target.value)} style={inpSm} placeholder="Kitchen note" />
+                      <button onClick={() => removeRestriction(rKey)} title="Remove restriction" style={{ background: "none", border: "none", cursor: "pointer", color: tokens.neutral[300], fontSize: tokens.fontSize.lg, padding: 0, lineHeight: 1 }}
                         onMouseEnter={e => e.currentTarget.style.color = tokens.red.text}
                         onMouseLeave={e => e.currentTarget.style.color = tokens.ink[4]}>×</button>
                     </div>
