@@ -43,6 +43,7 @@ import MenuGenerator from "./components/menu/MenuGenerator.jsx";
 import WineSearch from "./components/service/WineSearch.jsx";
 import BeverageSearch from "./components/service/BeverageSearch.jsx";
 import TableCard from "./components/TableCard/TableCard.jsx";
+import SheetView from "./components/service/SheetView.jsx";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
@@ -1642,6 +1643,7 @@ export default function App() {
   });
   const [sel,          setSel]          = useState(null);
   const [quickView,    setQuickView]    = useState("board");
+  const [sheetSel,     setSheetSel]     = useState(null);
   const [resModal,     setResModal]     = useState(null);
   const [resModalPresetTime, setResModalPresetTime] = useState(null);
   const [adminOpen,      setAdminOpen]      = useState(false);
@@ -3201,29 +3203,61 @@ export default function App() {
                 );
               })()}
             </div>
-            <button
-              type="button"
-              onClick={() => setQuickView(v => v === "service" ? "board" : "service")}
-              style={{
-                fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                padding: appIsMobile ? "10px 14px" : "7px 14px",
-                border: `1px solid ${quickView === "service" ? tokens.charcoal.default : tokens.ink[4]}`,
-                background: quickView === "service" ? tokens.tint.parchment : tokens.neutral[0],
-                color: quickView === "service" ? tokens.ink[0] : tokens.ink[3],
-                borderRadius: 0, cursor: "pointer",
-                transition: "all 0.12s",
-                display: "flex", alignItems: "center", gap: 6,
-                minHeight: appIsMobile ? 40 : undefined,
-                touchAction: "manipulation",
-              }}
-            >
-              [◈] QUICK ACCESS
-            </button>
+            <div role="tablist" aria-label="Service view" style={{ display: "flex", gap: 0, border: `1px solid ${tokens.ink[4]}` }}>
+              {[
+                { id: "board", label: "[▦] BOARD" },
+                { id: "quick", label: "[◈] QUICK" },
+                { id: "sheet", label: "[≡] SHEET" },
+              ].map((v, i, arr) => {
+                const active = quickView === v.id;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setQuickView(v.id)}
+                    style={{
+                      fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                      padding: appIsMobile ? "10px 12px" : "7px 12px",
+                      border: "none",
+                      borderRight: i < arr.length - 1 ? `1px solid ${tokens.ink[4]}` : "none",
+                      background: active ? tokens.charcoal.default : tokens.neutral[0],
+                      color: active ? tokens.neutral[0] : tokens.ink[2],
+                      borderRadius: 0, cursor: "pointer",
+                      transition: "all 0.12s",
+                      minHeight: appIsMobile ? 40 : undefined,
+                      touchAction: "manipulation",
+                      fontWeight: active ? 500 : 400,
+                    }}
+                  >
+                    {v.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Service DisplayBoard */}
-          {(() => {
+          {/* Service sub-view: BOARD / QUICK / SHEET */}
+          {quickView === "sheet" ? (
+            <SheetView
+              tables={tables}
+              menuCourses={activeMenuCourses}
+              selectedId={sheetSel}
+              onSelect={id => setSheetSel(id)}
+              onOpenDetail={id => setSel(id)}
+              onFireNext={(tableId, courseKey) => {
+                const t = tables.find(x => x.id === tableId);
+                const log = { ...(t?.kitchenLog || {}) };
+                log[courseKey] = { firedAt: fmt(new Date()) };
+                upd(tableId, "kitchenLog", log);
+              }}
+              onSeat={seatTable}
+              onUnseat={unseatTable}
+              isMobile={appIsMobile}
+            />
+          ) : (() => {
             const visibleTables = tables
               .filter(t => t.active || t.resName || t.resTime)
               .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
@@ -3234,7 +3268,7 @@ export default function App() {
                 optionalExtras={dishes}
                 optionalPairings={pairings}
                 upd={upd}
-                quickMode={quickView === "service"}
+                quickMode={quickView === "quick"}
                 updSeat={updSeat}
                 onCardClick={id => setSel(id)}
                 onSeat={seatTable}
