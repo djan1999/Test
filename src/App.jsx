@@ -1643,6 +1643,7 @@ export default function App() {
   });
   const [sel,          setSel]          = useState(null);
   const [quickView,    setQuickView]    = useState("board");
+  const [sheetSel,     setSheetSel]     = useState(null);
   const [resModal,     setResModal]     = useState(null);
   const [resModalPresetTime, setResModalPresetTime] = useState(null);
   const [adminOpen,      setAdminOpen]      = useState(false);
@@ -3243,8 +3244,8 @@ export default function App() {
             <SheetView
               tables={tables}
               menuCourses={activeMenuCourses}
-              selectedId={sel}
-              onSelect={id => setSel(id)}
+              selectedId={sheetSel}
+              onSelect={id => setSheetSel(id)}
               onOpenDetail={id => setSel(id)}
               onFireNext={(tableId, courseKey) => {
                 const t = tables.find(x => x.id === tableId);
