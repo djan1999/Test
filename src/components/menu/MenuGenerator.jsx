@@ -586,6 +586,73 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
                       );
                     })()}
                   </div>
+                  {/* Optional pairings without linked extra dish (e.g. Beer, Martini) */}
+                  {(() => {
+                    const standalones = optionalPairings.filter(opt => !opt.extraKey);
+                    if (!standalones.length) return null;
+                    return (
+                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${tokens.neutral[100]}` }}>
+                        <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 6 }}>Pairings</div>
+                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                          {standalones.map((opt, oi) => {
+                            const raw = s.optionalPairings?.[opt.key];
+                            const ordered = raw?.ordered !== undefined ? !!raw.ordered : (opt.defaultOn !== false);
+                            const mode = raw?.mode || null;
+                            const states = ["off", ...(opt.hasAlco ? ["alco"] : []), ...(opt.hasNonAlco ? ["nonalc"] : [])];
+                            let cur;
+                            if (!ordered) cur = "off";
+                            else if (mode === "alco") cur = "alco";
+                            else if (mode === "nonalc") cur = "nonalc";
+                            else cur = states[1] || "off";
+                            const applyNext = () => updSeatFull(s.id, seat => {
+                              const r = seat.optionalPairings?.[opt.key];
+                              const o = r?.ordered !== undefined ? !!r.ordered : (opt.defaultOn !== false);
+                              const m = r?.mode || null;
+                              let c;
+                              if (!o) c = "off";
+                              else if (m === "alco") c = "alco";
+                              else if (m === "nonalc") c = "nonalc";
+                              else c = states[1] || "off";
+                              const nx = states[(states.indexOf(c) + 1) % states.length];
+                              return {
+                                ...seat,
+                                optionalPairings: {
+                                  ...(seat.optionalPairings || {}),
+                                  [opt.key]: {
+                                    ...(r || {}),
+                                    ordered: nx !== "off",
+                                    ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }),
+                                  },
+                                },
+                              };
+                            });
+                            const onlyOne = states.length === 2;
+                            const shortLabel = opt.label.length > 6 ? opt.label.slice(0, 5) : opt.label;
+                            const label =
+                              cur === "off"   ? `${opt.label} off` :
+                              cur === "alco"  ? (onlyOne ? `${opt.label} ✓` : `${shortLabel} · ALCO`) :
+                              cur === "nonalc"? (onlyOne ? `${opt.label} ✓` : `${shortLabel} · N/A`) :
+                              `${opt.label} ✓`;
+                            const colors =
+                              cur === "off"    ? { border: tokens.neutral[300],    bg: tokens.neutral[50],      color: tokens.text.muted      } :
+                              onlyOne          ? { border: tokens.green.border,     bg: tokens.green.bg,         color: tokens.green.text       } :
+                              cur === "alco"   ? { border: tokens.charcoal.default, bg: tokens.tint.parchment,   color: tokens.text.body        } :
+                                                 { border: tokens.neutral[400],    bg: tokens.neutral[100],     color: tokens.text.secondary   };
+                            return (
+                              <div key={opt.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                                {oi > 0 && <div style={{ width: 1, height: 18, background: tokens.neutral[200], marginRight: 2 }} />}
+                                <button onClick={applyNext} style={{
+                                  fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                                  border: `1px solid ${colors.border}`, borderRadius: 0, cursor: "pointer",
+                                  background: colors.bg, color: colors.color,
+                                }}>{label}</button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {/* Extras — optional dishes (some have optional drink pairings) */}
                   {optionalExtras.length > 0 && (
                     <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${tokens.neutral[100]}` }}>
