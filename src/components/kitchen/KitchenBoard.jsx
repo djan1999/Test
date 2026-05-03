@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
-import { applyCourseRestriction, applyMenuOverride, RESTRICTION_COLUMN_MAP, RESTRICTION_PRIORITY_KEYS } from "../../utils/menuUtils.js";
+import { applyCourseRestriction, applyMenuOverride } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 
@@ -435,12 +435,6 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const allSeatDishes = seats.map(seat => {
             const restrKeys = seatRestrKeys(seat);
             if (restrKeys.length) {
-              for (const key of RESTRICTION_PRIORITY_KEYS) {
-                if (!restrKeys.includes(key)) continue;
-                const mapped = RESTRICTION_COLUMN_MAP[key] || key;
-                const note = course.restrictions?.[`${mapped}_note`];
-                if (note) return note.toUpperCase();
-              }
               const modified = applyCourseRestriction(course, restrKeys);
               if (modified) {
                 if (modified.name !== baseName) return modified.name;

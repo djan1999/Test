@@ -3,6 +3,7 @@ import { FONT, baseInp } from "./adminStyles.js";
 import { optionalExtrasFromCourses, optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 import { tokens } from "../../styles/tokens.js";
 import { resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
+import { RESTRICTIONS } from "../../constants/dietary.js";
 
 const SELECTED_RING = tokens.charcoal.default;
 
@@ -14,18 +15,6 @@ const PREVIEW_PAIRINGS = [
   { value: "Premium",   label: "Premium"   },
 ];
 
-const PREVIEW_RESTRICTIONS = [
-  { key: "veg",         label: "Veg"        },
-  { key: "vegan",       label: "Vegan"      },
-  { key: "gluten",      label: "Gluten-Free"},
-  { key: "dairy",       label: "Dairy-Free" },
-  { key: "nut",         label: "Nut-Free"   },
-  { key: "no_pork",     label: "No Pork"    },
-  { key: "no_red_meat", label: "No Red Meat"},
-  { key: "no_game",     label: "No Game"    },
-  { key: "no_alcohol",  label: "No Alcohol" },
-  { key: "shellfish",   label: "Shellfish"  },
-];
 
 const makePreviewSeat = (id) => ({
   id, pairing: "Wine", extras: {},
@@ -252,7 +241,7 @@ export function PreviewDataPanel({
               P{seatIdx + 1} RESTRICTIONS
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 12 }}>
-              {PREVIEW_RESTRICTIONS.map(r => (
+              {RESTRICTIONS.map(r => (
                 <button key={r.key} onClick={() => toggleRestriction(r.key)} style={btnStyle((seat.restrictions || []).includes(r.key))}>
                   {r.label}
                 </button>

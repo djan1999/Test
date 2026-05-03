@@ -1,13 +1,7 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT, baseInp } from "./adminStyles.js";
-
-// ── Dietary restriction keys ──────────────────────────────────────────────────
-const DIETARY_KEYS = [
-  "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
-  "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
-  "no_garlic_onion","halal","low_fodmap",
-];
+import { DIETARY_KEYS } from "../../constants/dietary.js";
 
 // ── Pairing types ─────────────────────────────────────────────────────────────
 const PAIRING_KEYS = [

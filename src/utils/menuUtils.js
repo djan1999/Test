@@ -1,6 +1,7 @@
 /**
  * Menu data utility functions shared across the application.
  */
+import { DIETARY_KEYS } from "../constants/dietary.js";
 
 export const firstFilled = (...vals) => vals.find(v => String(v ?? "").trim()) ?? "";
 
@@ -229,12 +230,7 @@ export function getCourseMod(course, restrKeys) {
   return null; // standard dish
 }
 
-// Restriction keys shared between frontend and API sync
-export const RESTRICTION_KEYS = [
-  "veg","vegan","pescetarian","gluten_free","dairy_free","nut_free","shellfish_free",
-  "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
-  "no_garlic_onion","halal","low_fodmap",
-];
+export const RESTRICTION_KEYS = DIETARY_KEYS;
 
 /**
  * Parse a single row object into the canonical menu-course shape.
