@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
-import { applyCourseRestriction, applyMenuOverride } from "../../utils/menuUtils.js";
+import { applyCourseRestriction, applyMenuOverride, deriveKitchenNote } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 
@@ -417,10 +417,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             const notes = new Set();
             seats.forEach(seat => {
               seatRestrKeys(seat).forEach(k => {
-                // Notes are stored at the sibling key `${k}_note` (per the DB serializer).
-                // Fall back to the legacy nested form for any in-flight local state.
-                const n = course.restrictions?.[`${k}_note`] || course.restrictions?.[k]?.kitchen_note;
-                if (typeof n === "string" && n.trim()) notes.add(n.trim());
+                const n = deriveKitchenNote(course, k, baseName, baseSub);
+                if (n) notes.add(n);
               });
             });
             return [...notes].join(" · ");

@@ -197,6 +197,44 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
 }
 
 /**
+ * Derive the kitchen note for a single restriction key on a course.
+ * Checks explicit stored notes first (handling the short→long key mapping for
+ * allergy keys), then auto-derives from the restriction variant:
+ *   - name changed → use the new name
+ *   - sub changed  → use the first new/different sub token
+ * Returns null when the dish is standard and no note applies.
+ */
+export function deriveKitchenNote(course, restrKey, baseName = "", baseSub = "") {
+  const mapped = RESTRICTION_COLUMN_MAP[restrKey] || restrKey;
+
+  // Explicit note — check both the mapped and raw key forms
+  const explicit =
+    course.restrictions?.[`${mapped}_note`] ||
+    course.restrictions?.[`${restrKey}_note`] ||
+    course.restrictions?.[mapped]?.kitchen_note ||
+    course.restrictions?.[restrKey]?.kitchen_note;
+  if (typeof explicit === "string" && explicit.trim()) return explicit.trim();
+
+  // Auto-derive from restriction variant
+  const variant = course.restrictions?.[mapped] || course.restrictions?.[restrKey];
+  if (!variant) return null;
+
+  if (variant.name && variant.name !== baseName) return variant.name;
+
+  if (variant.sub && variant.sub !== baseSub) {
+    const baseTokens = new Set(
+      String(baseSub || "").split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean)
+    );
+    const modTokens = String(variant.sub).split(/[,·]+/).map(s => s.trim()).filter(Boolean);
+    const newOnes = modTokens.filter(t => !baseTokens.has(t.toLowerCase()));
+    const note = newOnes.length > 0 ? newOnes[0] : variant.sub;
+    return note || null;
+  }
+
+  return null;
+}
+
+/**
  * Get the modification string for a course given restriction keys,
  * matching exactly what the kitchen ticket displays.
  * Returns null if the dish is unchanged (standard).
