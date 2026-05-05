@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
-import { applyMenuOverride, getCourseMod } from "../../utils/menuUtils.js";
+import { applyMenuOverride, getCourseNote } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 
@@ -415,10 +415,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             if (fired) return null;
             const counts = {};
             seats.forEach(seat => {
-              const restrKeys = seatRestrKeys(seat);
-              if (!restrKeys.length) return;
-              const mod = getCourseMod(course, restrKeys);
-              if (mod) counts[mod] = (counts[mod] || 0) + 1;
+              seatRestrKeys(seat).forEach(k => {
+                const note = getCourseNote(course, k);
+                if (note) counts[note] = (counts[note] || 0) + 1;
+              });
             });
             return Object.keys(counts).length > 0 ? counts : null;
           })();

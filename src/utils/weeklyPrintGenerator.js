@@ -2,7 +2,7 @@
  * Weekly print generators for the Reservation Manager.
  * Produces two HTML documents: reservations sheet and allergy/restriction sheet.
  */
-import { applyCourseRestriction, getCourseMod, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, deriveKitchenNote, applyMenuOverride } from "./menuUtils.js";
+import { getCourseNote } from "./menuUtils.js";
 
 const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -289,33 +289,16 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
         return;
       }
 
-      // Priority 2: Restriction-based modifications.
-      // Each restriction entry represents one guest. Restrictions assigned to
-      // the same seat (pos > 0) are grouped so the resolver picks a combined
-      // substitute. Unassigned entries (pos null) each count as one guest —
-      // counts must reflect how many guests actually have the restriction,
-      // not the table size.
+      // Kitchen notes only — one entry per restriction, counted across guests
       if (restrictions.length > 0) {
-        const modCounts = {};
-        const seatGroups = new Map();
-        const unassigned = [];
+        const noteCounts = {};
         restrictions.forEach(rs => {
-          if (rs.pos) {
-            const arr = seatGroups.get(rs.pos) || [];
-            arr.push(rs.note);
-            seatGroups.set(rs.pos, arr);
-          } else {
-            unassigned.push([rs.note]);
-          }
+          const note = getCourseNote(course, rs.note);
+          if (note) noteCounts[note] = (noteCounts[note] || 0) + 1;
         });
-        [...seatGroups.values(), ...unassigned].forEach(notes => {
-          const mod = getCourseMod(course, notes);
-          if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
-        });
-
-        if (Object.keys(modCounts).length > 0) {
-          const entries = Object.entries(modCounts)
-            .map(([mod, count]) => `${count}x ${mod.toLowerCase()}`)
+        if (Object.keys(noteCounts).length > 0) {
+          const entries = Object.entries(noteCounts)
+            .map(([note, count]) => `${count}x ${note}`)
             .join("<br>");
           body += `<td class="resv-cell highlight">${entries}</td>`;
           return;
