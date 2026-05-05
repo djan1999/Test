@@ -20,7 +20,7 @@ import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useOfflineQueue } from "./hooks/useOfflineQueue.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
 import { AdminLayout } from "./components/admin/index.js";
-import { DIETARY_KEYS, RESTRICTIONS, RESTRICTION_GROUPS, restrLabel, restrCompact } from "./constants/dietary.js";
+import { DIETARY_KEYS, RESTRICTIONS, restrLabel, restrCompact } from "./constants/dietary.js";
 import { WATER_OPTS, waterStyle, PAIRINGS, pairingStyle } from "./constants/pairings.js";
 import { BEV_TYPES } from "./constants/beverageTypes.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES } from "./lib/supabaseClient.js";
@@ -2317,9 +2317,7 @@ export default function App() {
             restrictions:       d.restrictions || [],
             notes:              d.notes || "",
             tableGroup:         group,
-            courseOverrides:    d.courseOverrides || {},
             kitchenCourseNotes: d.kitchenCourseNotes || {},
-            extrasConfirmed:   t.extrasConfirmed || {},
             seats:              makeSeats(d.guests || 2, t.seats),
           };
         }
