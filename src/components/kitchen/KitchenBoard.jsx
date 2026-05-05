@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
-import { applyMenuOverride, getCourseNote } from "../../utils/menuUtils.js";
+import { applyCourseRestriction, deriveKitchenNote } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 
@@ -140,12 +140,9 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const isShort = String(table.menuType || "").trim().toLowerCase() === "short";
   const isTruthyShort = v => { const s = String(v ?? "").trim().toLowerCase(); return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr"; };
 
-  // Apply per-table course overrides on top of the (already globally-overridden) menuCourses
-  const tableOverriddenCourses = (menuCourses || []).map(c => applyMenuOverride(c, table.courseOverrides || {}));
-
   // Courses to show: non-snack, optional extras only when ordered, short menu filtered
   // Celebration courses auto-show when table.birthday is on
-  const courses = tableOverriddenCourses.filter(c => {
+  const courses = (menuCourses || []).filter(c => {
     if (c.is_snack) return false;
     const category = normCategory(c);
     if (category === "celebration" && table.birthday) return true;

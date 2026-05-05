@@ -33,19 +33,6 @@ export const parseHHMM = s => {
   return isNaN(h) || isNaN(m) ? null : h * 60 + m;
 };
 
-export const getRooms = (src) => {
-  if (!src) return [];
-  if (Array.isArray(src.rooms) && src.rooms.length) return src.rooms.filter(Boolean);
-  if (src.room) return [src.room];
-  return [];
-};
-
-export const formatRoomsLabel = (src, { prefix = "Hotel ", joiner = ", " } = {}) => {
-  const rs = getRooms(src);
-  if (!rs.length) return prefix.trim();
-  return `${prefix}#${rs.join(joiner)}`;
-};
-
 export const blankTable = id => ({
   id,
   active: false,
@@ -82,7 +69,6 @@ export const sanitizeTable = t => ({
   ),
   restrictions: Array.isArray(t.restrictions) ? t.restrictions : [],
   kitchenLog: t.kitchenLog && typeof t.kitchenLog === "object" ? t.kitchenLog : {},
-  courseOverrides: t.courseOverrides && typeof t.courseOverrides === "object" ? t.courseOverrides : {},
   tableGroup: Array.isArray(t.tableGroup) ? t.tableGroup : [],
   rooms: Array.isArray(t.rooms) ? t.rooms.filter(Boolean) : (t.room ? [t.room] : []),
 });

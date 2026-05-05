@@ -88,10 +88,7 @@ describe("sanitizeTable", () => {
     expect(t.kitchenLog).toEqual({});
   });
 
-  it("resets non-object courseOverrides to empty object", () => {
-    const t = sanitizeTable({ id: 1, guests: 2, courseOverrides: null });
-    expect(t.courseOverrides).toEqual({});
-  });
+
 
   it("resets non-array tableGroup to empty array", () => {
     const t = sanitizeTable({ id: 1, guests: 2, tableGroup: "bad" });

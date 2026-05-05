@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 import { writeTeamNames, readTeamNames, writeMenuTitle, readMenuTitle, writeThankYouNote, readThankYouNote } from "../../utils/storage.js";
-import { applyMenuOverride, applyCourseRestriction, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, optionalExtrasFromCourses, optionalPairingsFromCourses } from "../../utils/menuUtils.js";
+import { applyCourseRestriction, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, optionalExtrasFromCourses, optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 import { TABLES, supabase } from "../../lib/supabaseClient.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
@@ -140,16 +140,10 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
   const restrictions = table.restrictions || [];
   const tableBottles = table.bottleWines  || [];
 
-  // Table-wide persistent overrides (applied silently, managed via Admin panel)
-  const courseOverrides = table.courseOverrides || {};
-
-  // Get the restriction+override-applied dish text for a course as it would appear for a seat.
-  // Used to pre-populate the per-seat editor with the already-adjusted menu.
   const getSeatDish = (course, seatId) => {
-    const withOv = applyMenuOverride(course, courseOverrides, seatId);
     const seatRestrKeys = restrictions.filter(r => r.pos === seatId).map(r => r.note);
-    const resolved = lang === "si" && withOv.menu_si?.name ? { ...withOv, menu: withOv.menu_si } : withOv;
-    return applyCourseRestriction(resolved, seatRestrKeys, lang) || { name: withOv.menu?.name || "", sub: withOv.menu?.sub || "" };
+    const resolved = lang === "si" && course.menu_si?.name ? { ...course, menu: course.menu_si } : course;
+    return applyCourseRestriction(resolved, seatRestrKeys, lang) || { name: course.menu?.name || "", sub: course.menu?.sub || "" };
   };
 
   const setSeatEditField = (seatId, courseKey, field, value) => {
@@ -193,7 +187,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
   const seatBottles = () => tableBottles;
 
   const openPrint = (seat) => {
-    const seatCourses = menuCourses.map(c => applyMenuOverride(c, courseOverrides, seat.id));
+    const seatCourses = menuCourses;
     const html = generateMenuHTML({
       seat,
       table: { menuType: table.menuType || "", restrictions, bottleWines: tableBottles, birthday: table.birthday || false },
@@ -232,7 +226,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
   };
 
   const openPreview = (seat) => {
-    const seatCourses = menuCourses.map(c => applyMenuOverride(c, courseOverrides, seat.id));
+    const seatCourses = menuCourses;
     const html = generateMenuHTML({
       seat,
       table: { menuType: table.menuType || "", restrictions, bottleWines: tableBottles, birthday: table.birthday || false },
