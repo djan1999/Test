@@ -511,8 +511,8 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           }
         }
 
-        if (isOpt || isCelebration) {
-          // Optional extras (Beetroot, Cheese, Cake): blank quantity — staff fills in
+        if (isOpt) {
+          // Optional extras (Beetroot, Cheese): blank quantity — staff fills in
           html += `<div class="cr cr-opt"><span class="qty"></span><span class="cname">${esc(displayName)}${inlineNote}</span></div>`;
         } else {
           html += `<div class="cr"><span class="qty">${guests}</span><span class="cname">${esc(displayName)}${inlineNote}</span>`;
