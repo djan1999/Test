@@ -356,8 +356,6 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
     return def ? def.label : key;
   };
 
-  const pLabelShort = p => p === "Non-Alc" ? "NA" : p === "Our Story" ? "OS" : p === "Premium" ? "PP" : p === "Wine" ? "WP" : (p || "");
-
   const ticketCards = [...reservations]
     .sort((a, b) => (a.data?.resTime || "99:99").localeCompare(b.data?.resTime || "99:99"))
     .map(resv => {
@@ -398,11 +396,6 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           return (Number(a.position) || 0) - (Number(b.position) || 0);
         });
 
-      // Pairing abbreviations per seat (only seats with a pairing assigned)
-      const pairingParts = seats
-        .filter(s => s.pairing && s.pairing !== "—")
-        .map(s => `P${s.id}: ${pLabelShort(s.pairing)}`);
-
       // All optional extra course names for the summary block
       const optExtras = [];
       const seenOptKeys = new Set();
@@ -442,10 +435,8 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
       }
       html += `</div>`; // .hdr
 
-      // Pairing line (only when seats have pairings assigned)
-      if (pairingParts.length > 0) {
-        html += `<div class="pair">${pairingParts.join("  /  ")}</div>`;
-      }
+      // Fixed pairing template — staff circles the applicable options
+      html += `<div class="pair">WP &nbsp;/&nbsp; PWP &nbsp;/&nbsp; OS &nbsp;/&nbsp; NA &nbsp;/&nbsp; BTB &nbsp;/&nbsp; BTG</div>`;
 
       // Notes banner
       if (d.notes) {
@@ -461,13 +452,11 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
         const isCelebration = category === "celebration";
         const kcNote = kitchenCourseNotes[key] || {};
         const displayName = kcNote.name || course.menu?.name || key;
-
-        // Manual course note override (e.g. "No Ricotta") shown inline
         const inlineNote = kcNote.note ? ` [${kcNote.note}]` : "";
 
-        // For main courses: detect any seat-level substitutions so kitchen
-        // knows to prepare a different dish for specific seats
-        let modNote = "";
+        // For main courses: find the actual alternative dish name for each
+        // restriction substitution so kitchen knows what to plate differently
+        let modLines = [];
         if (!isOpt && !isCelebration && restrictions.length > 0) {
           const baseName = course.menu?.name || key;
           const baseSub = course.menu?.sub || "";
@@ -490,15 +479,18 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
             }
             if (label) modCounts[label] = (modCounts[label] || 0) + 1;
           });
-          const modParts = Object.entries(modCounts).map(([name, count]) => `${count}x ${name}`);
-          if (modParts.length) modNote = ` (${modParts.join(", ")})`;
+          modLines = Object.entries(modCounts).map(([name, count]) => `${count}&#215; ${esc(name)}`);
         }
 
         if (isOpt || isCelebration) {
           // Optional extras (Beetroot, Cheese, Cake): blank quantity — staff fills in
-          html += `<div class="cr cr-opt"><span class="qty"></span><span class="cname">${esc(displayName)}${inlineNote}</span></div>`;
+          html += `<div class="cr cr-opt"><span class="qty"></span><div class="cnwrap"><span class="cname">${esc(displayName)}${inlineNote}</span></div></div>`;
         } else {
-          html += `<div class="cr"><span class="qty">${guests}</span><span class="cname">${esc(displayName)}${inlineNote}${modNote}</span></div>`;
+          html += `<div class="cr"><span class="qty">${guests}</span><div class="cnwrap"><span class="cname">${esc(displayName)}${inlineNote}</span>`;
+          if (modLines.length) {
+            html += `<div class="cmods">${modLines.join(" &nbsp;&middot;&nbsp; ")}</div>`;
+          }
+          html += `</div></div>`;
         }
       });
       html += `</div>`; // .courses
@@ -516,6 +508,8 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
       html += `<div class="srow srestr-row"><span class="slbl">Allergies &amp; Restrictions:</span>`;
       if (restrSummary) html += ` <span class="srestr-val">${esc(restrSummary)}</span>`;
       html += `</div>`;
+      // Extra blank space at the bottom for sharpie annotations
+      html += `<div class="srow srow-notes"></div>`;
       html += `</div>`; // .summary
 
       html += `</div>`; // .ticket
@@ -534,20 +528,21 @@ body{font-family:'Roboto Mono',monospace;font-size:10pt;color:#000;background:#f
 .hfull{grid-column:1/-1;display:flex;align-items:baseline;gap:3pt;}
 .hlbl{font-size:7.5pt;font-weight:400;letter-spacing:0.04em;flex-shrink:0;}
 .hval{font-size:11pt;font-weight:700;line-height:1.1;}
-.pair{border-bottom:1pt solid #000;padding:3pt 7pt;font-size:8pt;font-weight:700;letter-spacing:0.06em;}
+.pair{border-bottom:1pt solid #000;padding:4pt 7pt;font-size:8pt;font-weight:700;letter-spacing:0.10em;text-align:center;}
 .notes{border-bottom:1pt solid #000;padding:3pt 7pt;font-size:8pt;font-style:italic;}
 .courses{border-bottom:1pt solid #000;}
-.cr{display:flex;align-items:baseline;padding:2pt 7pt;border-bottom:0.5pt dotted #bbb;}
+.cr{display:flex;align-items:flex-start;padding:2.5pt 7pt;border-bottom:0.5pt dotted #aaa;}
 .cr:last-child{border-bottom:none;}
-.cr-opt{}
-.qty{min-width:13pt;font-size:10pt;font-weight:700;flex-shrink:0;}
-.cname{font-size:10pt;font-weight:700;flex:1;line-height:1.25;}
+.qty{min-width:14pt;font-size:10pt;font-weight:700;flex-shrink:0;padding-top:1pt;}
+.cnwrap{flex:1;min-width:0;}
+.cname{font-size:10pt;font-weight:700;line-height:1.25;display:block;}
+.cmods{font-size:8pt;font-weight:700;margin-top:1pt;padding-left:2pt;}
 .summary{padding:4pt 7pt;}
-.srow{font-size:8.5pt;font-weight:700;padding:1.5pt 0;border-bottom:0.5pt dotted #bbb;}
+.srow{font-size:9pt;font-weight:700;min-height:18pt;padding:3pt 0;border-bottom:0.5pt dotted #aaa;display:flex;align-items:flex-start;}
+.srow-notes{min-height:28pt;border-bottom:none;}
 .srow:last-child{border-bottom:none;}
-.slbl{}
-.srestr-row{font-weight:700;}
-.srestr-val{font-weight:400;}
+.slbl{flex-shrink:0;}
+.srestr-val{font-weight:400;margin-left:4pt;}
 `;
 
   return `<!DOCTYPE html>
