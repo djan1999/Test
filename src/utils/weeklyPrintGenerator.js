@@ -533,7 +533,6 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
         const cakeExtra = d.cakeNote ? ` ${esc(d.cakeNote)}` : "";
         html += `<div class="srow"><span class="slbl">Cake:${cakeExtra}</span></div>`;
       }
-      html += `<div class="srow"><span class="slbl">Coffee / Tea:</span></div>`;
       html += `<div class="srow srestr-row"><span class="slbl">Allergies &amp; Restrictions:</span>`;
       if (restrSummary) html += ` <span class="srestr-val">${esc(restrSummary)}</span>`;
       html += `</div>`;
