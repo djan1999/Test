@@ -513,13 +513,13 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
 
         if (isOpt || isCelebration) {
           // Optional extras (Beetroot, Cheese, Cake): blank quantity — staff fills in
-          html += `<div class="cr cr-opt"><span class="qty"></span><div class="cnwrap"><span class="cname">${esc(displayName)}${inlineNote}</span></div></div>`;
+          html += `<div class="cr cr-opt"><span class="qty"></span><span class="cname">${esc(displayName)}${inlineNote}</span></div>`;
         } else {
-          html += `<div class="cr"><span class="qty">${guests}</span><div class="cnwrap"><span class="cname">${esc(displayName)}${inlineNote}</span>`;
+          html += `<div class="cr"><span class="qty">${guests}</span><span class="cname">${esc(displayName)}${inlineNote}</span>`;
           if (modLines.length) {
-            html += `<div class="cmods">${modLines.join(" &nbsp;&middot;&nbsp; ")}</div>`;
+            html += `<span class="cmods">&nbsp;&middot;&nbsp; ${modLines.join(" &middot;&nbsp; ")}</span>`;
           }
-          html += `</div></div>`;
+          html += `</div>`;
         }
       });
       html += `</div>`; // .courses
@@ -560,12 +560,11 @@ body{font-family:'Roboto Mono',monospace;font-size:10pt;color:#000;background:#f
 .pair{border-bottom:1pt solid #000;padding:4pt 7pt;font-size:8pt;font-weight:700;letter-spacing:0.10em;text-align:center;}
 .notes{border-bottom:1pt solid #000;padding:3pt 7pt;font-size:8pt;font-style:italic;}
 .courses{border-bottom:1pt solid #000;}
-.cr{display:flex;align-items:flex-start;padding:2.5pt 7pt;border-bottom:0.5pt dotted #aaa;}
+.cr{display:flex;align-items:baseline;padding:2.5pt 7pt;border-bottom:0.5pt dotted #aaa;flex-wrap:wrap;}
 .cr:last-child{border-bottom:none;}
-.qty{min-width:14pt;font-size:10pt;font-weight:700;flex-shrink:0;padding-top:1pt;}
-.cnwrap{flex:1;min-width:0;}
-.cname{font-size:10pt;font-weight:700;line-height:1.25;display:block;}
-.cmods{font-size:8pt;font-weight:700;margin-top:1pt;padding-left:2pt;}
+.qty{min-width:14pt;font-size:10pt;font-weight:700;flex-shrink:0;}
+.cname{font-size:10pt;font-weight:700;line-height:1.25;}
+.cmods{font-size:9pt;font-weight:400;}
 .summary{padding:4pt 7pt;}
 .srow{font-size:9pt;font-weight:700;min-height:18pt;padding:3pt 0;border-bottom:0.5pt dotted #aaa;display:flex;align-items:flex-start;}
 .srow-notes{min-height:28pt;border-bottom:none;}
