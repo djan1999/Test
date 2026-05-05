@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
-import { applyCourseRestriction, deriveKitchenNote } from "../../utils/menuUtils.js";
+import { getCourseMod } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 
@@ -76,8 +76,6 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     setAssigningRestrIdx(null);
   };
 
-  // Seat restriction keys per seat (for course substitution lookup).
-  // Return raw r.note — applyCourseRestriction does its own RESTRICTION_COLUMN_MAP lookup internally.
   const seatRestrKeys = (seat) =>
     (restrictions || [])
       .filter(r => r.pos === seat.id)
@@ -406,44 +404,17 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const fired = !!log[key];
           const firedAt = log[key]?.firedAt;
 
-          const baseName    = course.menu?.name || key;
-          const baseSub     = course.menu?.sub  || "";
-          const baseNameSi  = course.menu_si?.name || null;
-          const baseSubSi   = course.menu_si?.sub  || "";
-          const kitchenNote = (() => {
-            const notes = new Set();
+          const baseName = course.menu?.name || key;
+          const mods = (() => {
+            if (fired) return null;
+            const counts = {};
             seats.forEach(seat => {
-              seatRestrKeys(seat).forEach(k => {
-                const n = deriveKitchenNote(course, k, baseName, baseSub);
-                if (n) notes.add(n);
-              });
+              const restrKeys = seatRestrKeys(seat);
+              if (!restrKeys.length) return;
+              const mod = getCourseMod(course, restrKeys);
+              if (mod) counts[mod] = (counts[mod] || 0) + 1;
             });
-            return [...notes].join(" · ");
-          })();
-          const line1 = baseName;
-          const subDiff = (modSub) => {
-            const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
-            const modTokens  = modSub.split(/[,·]+/).map(s => s.trim()).filter(Boolean);
-            const newOnes    = modTokens.filter(t => !baseTokens.has(t.toLowerCase()));
-            return newOnes.length > 0 ? newOnes[0] : modSub;
-          };
-          const allSeatDishes = seats.map(seat => {
-            const restrKeys = seatRestrKeys(seat);
-            if (restrKeys.length) {
-              const modified = applyCourseRestriction(course, restrKeys);
-              if (modified) {
-                if (modified.name !== baseName) return modified.name;
-                if (modified.sub  !== baseSub)  return subDiff(modified.sub).toUpperCase();
-              }
-            }
-            return baseName;
-          });
-          const anyMod = allSeatDishes.some(n => n !== baseName);
-          const modGroups = (() => {
-            if (!anyMod || fired) return null;
-            const g = {};
-            allSeatDishes.forEach(n => { g[n] = (g[n] || 0) + 1; });
-            return g;
+            return Object.keys(counts).length > 0 ? counts : null;
           })();
           const extraLabel = (() => {
             const optKey = optionalKeyForCourse(course);
@@ -466,7 +437,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           })();
 
           const kcNote = kitchenCourseNotes[key] || {};
-          const displayName = kcNote.name || line1;
+          const displayName = kcNote.name || baseName;
           const isEditingThis = editingCourse === key;
 
           return (
@@ -487,16 +458,15 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     letterSpacing: "0.02em",
                   }}>
                     {displayName}
-                    {kcNote.name && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[3], marginLeft: 5 }}>({line1})</span>}
+                    {kcNote.name && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[3], marginLeft: 5 }}>({baseName})</span>}
                     {extraLabel && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[4], marginLeft: 6 }}>{extraLabel}</span>}
                   </div>
-                  {(pairingAlert || modGroups || kitchenNote || kcNote.note) && !fired && (
+                  {(pairingAlert || mods || kcNote.note) && !fired && (
                     <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
                       {pairingAlert && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], fontWeight: 600 }}>{pairingAlert}</span>}
-                      {modGroups && Object.entries(modGroups).sort(([a], [b]) => (a === baseName ? -1 : 1) - (b === baseName ? -1 : 1)).map(([name, count]) => (
-                        <span key={name} style={{ fontFamily: FONT, fontSize: "9px", color: name === baseName ? tokens.ink[2] : tokens.red.text, fontWeight: 600 }}>{count}× {name}</span>
+                      {mods && Object.entries(mods).map(([mod, count]) => (
+                        <span key={mod} style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>{count}× {mod}</span>
                       ))}
-                      {kitchenNote && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>{kitchenNote}</span>}
                       {kcNote.note && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>⚑ {kcNote.note}</span>}
                     </div>
                   )}
@@ -526,7 +496,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     value={editName}
                     onChange={e => setEditName(e.target.value)}
                     onBlur={() => saveCourseDraft(key, editName, editNote)}
-                    placeholder={`Rename "${line1}"…`}
+                    placeholder={`Rename "${baseName}"…`}
                     style={{ fontFamily: FONT, fontSize: "10px", padding: "9px 7px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
                   />
                   <input
