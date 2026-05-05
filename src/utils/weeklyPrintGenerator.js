@@ -455,31 +455,60 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
         const inlineNote = kcNote.note ? ` [${kcNote.note}]` : "";
 
         // For main courses: find the actual alternative dish name for each
-        // restriction substitution so kitchen knows what to plate differently
+        // restriction group and show a count breakdown, e.g. "1× Danube · 1× Parsnip Root".
+        // Handles both seat-assigned (pos > 0) and unassigned (pos null) restrictions —
+        // unassigned ones are each treated as one guest of unknown seat.
         let modLines = [];
         if (!isOpt && !isCelebration && restrictions.length > 0) {
           const baseName = course.menu?.name || key;
           const baseSub = course.menu?.sub || "";
           const modCounts = {};
-          seats.forEach(seat => {
-            const restrKeys = seatRestrKeys(seat);
-            if (!restrKeys.length) return;
+          let modifiedCount = 0;
+
+          // Group seat-assigned restrictions by pos; each unassigned entry is its own group
+          const seatGroups = new Map();
+          const unassignedGroups = [];
+          restrictions.forEach(r => {
+            if (!r.note) return;
+            if (r.pos) {
+              const arr = seatGroups.get(r.pos) || [];
+              arr.push(r.note);
+              seatGroups.set(r.pos, arr);
+            } else {
+              unassignedGroups.push([r.note]);
+            }
+          });
+
+          [...seatGroups.values(), ...unassignedGroups].forEach(restrKeys => {
             const modified = applyCourseRestriction(course, restrKeys);
             let label = null;
             if (modified) {
               if (modified.name !== baseName) {
                 label = modified.name;
+              } else if (modified.sub !== baseSub) {
+                const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
+                const newOnes = modified.sub.split(/[,·]+/).map(s => s.trim()).filter(t => !baseTokens.has(t.toLowerCase()));
+                label = newOnes.length > 0 ? newOnes[0] : modified.sub;
               } else {
-                restrKeys.forEach(k => {
-                  if (label) return;
+                for (const k of restrKeys) {
                   const n = deriveKitchenNote(course, k, baseName, baseSub);
-                  if (n) label = n;
-                });
+                  if (n) { label = n; break; }
+                }
               }
             }
-            if (label) modCounts[label] = (modCounts[label] || 0) + 1;
+            if (label) {
+              modCounts[label] = (modCounts[label] || 0) + 1;
+              modifiedCount++;
+            }
           });
-          modLines = Object.entries(modCounts).map(([name, count]) => `${count}&#215; ${esc(name)}`);
+
+          if (Object.keys(modCounts).length > 0) {
+            const standardCount = guests - modifiedCount;
+            const parts = [];
+            if (standardCount > 0) parts.push(`${standardCount}&#215; ${esc(displayName)}`);
+            Object.entries(modCounts).forEach(([name, count]) => parts.push(`${count}&#215; ${esc(name)}`));
+            modLines = parts;
+          }
         }
 
         if (isOpt || isCelebration) {
