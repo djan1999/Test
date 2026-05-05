@@ -284,11 +284,19 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
             <button
               disabled={dayResv.length === 0}
               onClick={() => {
-                const html = generateKitchenTicketsHTML(dayResv, menuCourses, RESTRICTIONS);
-                const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-                const w = window.open(url, "_blank");
-                if (!w) { alert("Pop-up blocked — please allow pop-ups for this site"); return; }
-                setTimeout(() => URL.revokeObjectURL(url), 30000);
+                try {
+                  const html = generateKitchenTicketsHTML(dayResv, menuCourses, RESTRICTIONS);
+                  const blob = new Blob([html], { type: "text/html" });
+                  const url = URL.createObjectURL(blob);
+                  const iframe = document.createElement("iframe");
+                  iframe.style.cssText = "position:fixed;width:0;height:0;border:0;top:0;left:0;";
+                  document.body.appendChild(iframe);
+                  iframe.onload = () => {
+                    try { iframe.contentWindow.print(); } catch(e) { window.open(url, "_blank"); }
+                    setTimeout(() => { document.body.removeChild(iframe); URL.revokeObjectURL(url); }, 5000);
+                  };
+                  iframe.src = url;
+                } catch(e) { alert("Print failed: " + e.message); }
               }}
               style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: tokens.neutral[0], color: tokens.ink[0], fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1, touchAction: "manipulation" }}>PRINT TICKETS</button>
             <button onClick={() => {
