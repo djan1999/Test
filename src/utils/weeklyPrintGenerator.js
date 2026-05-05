@@ -334,6 +334,9 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
 }
 
 // ── PDF 3: Printable Kitchen Tickets ─────────────────────────────────────────
+// Skeleton format matching the physical ticket taped to the kitchen pass:
+// pre-printed quantities for main courses, blank rows for optional extras,
+// summary block at the bottom with restrictions pre-filled.
 
 export function generateKitchenTicketsHTML(reservations, menuCourses, restrictionDefs = []) {
   if (!reservations || reservations.length === 0) {
@@ -348,19 +351,12 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
   };
   const isTruthyShort = v => { const s = String(v ?? "").trim().toLowerCase(); return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr"; };
 
-  const subDiff = (baseSub, modSub) => {
-    const baseTokens = new Set(String(baseSub || "").split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
-    const modTokens = String(modSub || "").split(/[,·]+/).map(s => s.trim()).filter(Boolean);
-    const newOnes = modTokens.filter(t => !baseTokens.has(t.toLowerCase()));
-    return newOnes.length > 0 ? newOnes[0] : modSub;
-  };
-
   const restrLabel = (key) => {
     const def = restrictionDefs.find(r => r.key === key);
     return def ? def.label : key;
   };
 
-  const pLabel = p => p === "Non-Alc" ? "N/A" : p === "Our Story" ? "O.S." : p === "Premium" ? "Prem" : p === "Wine" ? "Wine" : p;
+  const pLabelShort = p => p === "Non-Alc" ? "NA" : p === "Our Story" ? "OS" : p === "Premium" ? "PP" : p === "Wine" ? "WP" : (p || "");
 
   const ticketCards = [...reservations]
     .sort((a, b) => (a.data?.resTime || "99:99").localeCompare(b.data?.resTime || "99:99"))
@@ -369,7 +365,7 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
       const tableId = resv.table_id;
       const tableGroup = Array.isArray(d.tableGroup) && d.tableGroup.length > 1
         ? d.tableGroup.map(Number).sort((a, b) => a - b) : null;
-      const tLabel = tableGroup ? `T${tableGroup.join("-")}` : `T${tableId}`;
+      const tLabel = tableGroup ? tableGroup.join("-") : String(tableId);
       const guests = d.guests || 2;
       const rawSeats = Array.isArray(d.seats) ? d.seats : [];
       const seats = Array.from({ length: guests }, (_, i) => ({
@@ -387,7 +383,8 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
 
       const overriddenCourses = (menuCourses || []).map(c => applyMenuOverride(c, courseOverrides));
 
-      // Optional extras always shown in print; celebration (cake) only when birthday is on
+      // All non-snack courses in order. Optional extras always included.
+      // Celebration (cake) only when birthday is on.
       const courses = overriddenCourses
         .filter(c => {
           if (c.is_snack) return false;
@@ -401,174 +398,163 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           return (Number(a.position) || 0) - (Number(b.position) || 0);
         });
 
-      // Header
+      // Pairing abbreviations per seat (only seats with a pairing assigned)
+      const pairingParts = seats
+        .filter(s => s.pairing && s.pairing !== "—")
+        .map(s => `P${s.id}: ${pLabelShort(s.pairing)}`);
+
+      // All optional extra course names for the summary block
+      const optExtras = [];
+      const seenOptKeys = new Set();
+      overriddenCourses
+        .filter(c => !c.is_snack && normCategory(c) === "optional")
+        .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+        .forEach(c => {
+          const k = normFlag(c?.optional_flag || "");
+          if (k && !seenOptKeys.has(k)) {
+            seenOptKeys.add(k);
+            optExtras.push(c.menu?.name || k);
+          }
+        });
+
+      // Restrictions summary: all restrictions, no positions, deduplicated with counts
+      const restrCounts = {};
+      restrictions.forEach(r => { if (r.note) restrCounts[r.note] = (restrCounts[r.note] || 0) + 1; });
+      const restrSummary = Object.entries(restrCounts)
+        .map(([key, count]) => count > 1 ? `${count}x ${restrLabel(key)}` : restrLabel(key))
+        .join(", ");
+
+      // ── Build HTML ──────────────────────────────────────────────────────────
+
       let html = `<div class="ticket">`;
+
+      // Header — two-column grid matching physical ticket layout
       html += `<div class="hdr">`;
-      html += `<span class="tbl">${esc(tLabel)}</span>`;
-      html += `<div class="hinfo">`;
-      html += `<div class="nrow">`;
-      if (d.resName) html += `<span class="rname">${esc(d.resName)}</span>`;
-      if (d.menuType) html += `<span class="badge${isShort ? " bshort" : ""}">${isShort ? "SHORT" : "LONG"}</span>`;
-      html += `<span class="badge${d.lang === "si" ? " bsi" : " ben"}">${d.lang === "si" ? "SI" : "EN"}</span>`;
-      if (d.birthday) html += ` &#x1F382;`;
-      html += `</div>`;
-      html += `<div class="mrow"><b>${guests}</b> <span class="muted">PAX</span>`;
-      if (d.resTime) html += ` <span class="rtime">${esc(d.resTime)}</span>`;
-      if (d.guestType === "hotel") {
-        const rs = Array.isArray(d.rooms) && d.rooms.length ? d.rooms.filter(Boolean) : (d.room ? [d.room] : []);
-        if (rs.length) html += ` <span class="muted">#${esc(rs.join(", "))}</span>`;
+      html += `<div class="hcol"><span class="hlbl">TABLE:</span> <span class="hval">${esc(tLabel)}</span></div>`;
+      html += `<div class="hcol"><span class="hlbl">GUESTS:</span> <span class="hval">${guests}</span></div>`;
+      html += `<div class="hcol"><span class="hlbl">LANG:</span> <span class="hval">${d.lang === "si" ? "SI" : "ENG"}</span></div>`;
+      html += `<div class="hcol"><span class="hlbl">TIME:</span> <span class="hval">${esc(d.resTime || "")}</span></div>`;
+      if (d.resName) {
+        html += `<div class="hfull"><span class="hlbl">NAME:</span> <span class="hval">${esc(d.resName)}</span></div>`;
       }
-      html += `</div>`;
-      html += `</div>`;
+      if (d.menuType) {
+        html += `<div class="hfull"><span class="hlbl">MENU:</span> <span class="hval">${isShort ? "SHORT" : "LONG"}</span></div>`;
+      }
       html += `</div>`; // .hdr
 
-      // Notes
+      // Pairing line (only when seats have pairings assigned)
+      if (pairingParts.length > 0) {
+        html += `<div class="pair">${pairingParts.join("  /  ")}</div>`;
+      }
+
+      // Notes banner
       if (d.notes) {
         html += `<div class="notes">${esc(d.notes)}</div>`;
       }
 
-      // Seats with pairings and restrictions
-      const unassigned = restrictions.filter(r => !r.pos && r.note);
-      html += `<div class="seats">`;
-      seats.forEach(s => {
-        const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
-        const restrList = restrictions.filter(r => r.pos === s.id).map(r => r.note).filter(Boolean);
-        html += `<span class="stag">P${s.id}${p ? ` · ${pLabel(p)}` : ""}`;
-        if (restrList.length) html += ` <span class="srestr">${restrList.map(restrLabel).join(" · ")}</span>`;
-        html += `</span>`;
-      });
-      if (unassigned.length) {
-        html += `<div class="unassigned">&#9888; ${unassigned.map(r => restrLabel(r.note)).join(", ")} (unassigned)</div>`;
-      }
-      html += `</div>`; // .seats
-
-      // Courses
+      // Course list
       html += `<div class="courses">`;
       courses.forEach((course, idx) => {
         const key = course.course_key || `course_${idx}`;
-        const baseName = course.menu?.name || key;
-        const baseSub = course.menu?.sub || "";
         const category = normCategory(course);
-        const optKey = normFlag(course?.optional_flag || "");
+        const isOpt = category === "optional";
+        const isCelebration = category === "celebration";
         const kcNote = kitchenCourseNotes[key] || {};
-        const displayName = kcNote.name || baseName;
+        const displayName = kcNote.name || course.menu?.name || key;
 
-        // Per-seat modifications
-        const allSeatDishes = seats.map(seat => {
-          const restrKeys = seatRestrKeys(seat);
-          if (restrKeys.length) {
-            const modified = applyCourseRestriction(course, restrKeys);
-            if (modified) {
-              if (modified.name !== baseName) return modified.name;
-              if (modified.sub !== baseSub) return subDiff(baseSub, modified.sub).toUpperCase();
-            }
-          }
-          return baseName;
-        });
-        const anyMod = allSeatDishes.some(n => n !== baseName);
-        const modGroups = anyMod ? (() => {
-          const g = {};
-          allSeatDishes.forEach(n => { g[n] = (g[n] || 0) + 1; });
-          return g;
-        })() : null;
+        // Manual course note override (e.g. "No Ricotta") shown inline
+        const inlineNote = kcNote.note ? ` [${kcNote.note}]` : "";
 
-        // Derived kitchen note from restriction variants
-        const kitchenNote = (() => {
-          const notes = new Set();
+        // For main courses: detect any seat-level substitutions so kitchen
+        // knows to prepare a different dish for specific seats
+        let modNote = "";
+        if (!isOpt && !isCelebration && restrictions.length > 0) {
+          const baseName = course.menu?.name || key;
+          const baseSub = course.menu?.sub || "";
+          const modCounts = {};
           seats.forEach(seat => {
-            seatRestrKeys(seat).forEach(k => {
-              const n = deriveKitchenNote(course, k, baseName, baseSub);
-              if (n) notes.add(n);
-            });
+            const restrKeys = seatRestrKeys(seat);
+            if (!restrKeys.length) return;
+            const modified = applyCourseRestriction(course, restrKeys);
+            let label = null;
+            if (modified) {
+              if (modified.name !== baseName) {
+                label = modified.name;
+              } else {
+                restrKeys.forEach(k => {
+                  if (label) return;
+                  const n = deriveKitchenNote(course, k, baseName, baseSub);
+                  if (n) label = n;
+                });
+              }
+            }
+            if (label) modCounts[label] = (modCounts[label] || 0) + 1;
           });
-          return [...notes].join(" · ");
-        })();
-
-        // Extra label: for optional (beetroot/cheese) always show quantity or "—";
-        // for celebration (cake) show only when birthday is on
-        let extraLabel = null;
-        if (optKey) {
-          if (category === "celebration" && d.birthday) {
-            extraLabel = "ALL" + (optKey === "cake" && d.cakeNote ? ` — ${d.cakeNote}` : "");
-          } else if (category === "optional") {
-            const orderedSeats = seats.filter(s => !!s.extras?.[optKey]?.ordered);
-            extraLabel = orderedSeats.length > 0
-              ? `${orderedSeats.length}× ${orderedSeats.map(s => `P${s.id}`).join(" ")}`
-              : "—";
-          }
+          const modParts = Object.entries(modCounts).map(([name, count]) => `${count}x ${name}`);
+          if (modParts.length) modNote = ` (${modParts.join(", ")})`;
         }
 
-        const isOpt = category === "optional" || category === "celebration";
-        html += `<div class="cr${isOpt ? " cr-opt" : ""}">`;
-        html += `<div class="cm">`;
-        html += `<span class="cn">${esc(displayName)}`;
-        if (kcNote.name) html += ` <span class="corig">(${esc(baseName)})</span>`;
-        html += `</span>`;
-        if (extraLabel !== null) html += `<span class="el">${esc(extraLabel)}</span>`;
-        html += `</div>`;
-        if (modGroups || kitchenNote || kcNote.note) {
-          html += `<div class="mods">`;
-          if (modGroups) {
-            Object.entries(modGroups)
-              .sort(([a], [b]) => (a === baseName ? -1 : 1) - (b === baseName ? -1 : 1))
-              .forEach(([name, count]) => {
-                html += `<span class="mod${name !== baseName ? " malt" : ""}">${count}× ${esc(name)}</span>`;
-              });
-          }
-          if (kitchenNote) html += `<span class="mod malt">${esc(kitchenNote)}</span>`;
-          if (kcNote.note) html += `<span class="mod malt">&#9873; ${esc(kcNote.note)}</span>`;
-          html += `</div>`;
+        if (isOpt || isCelebration) {
+          // Optional extras (Beetroot, Cheese, Cake): blank quantity — staff fills in
+          html += `<div class="cr cr-opt"><span class="qty"></span><span class="cname">${esc(displayName)}${inlineNote}</span></div>`;
+        } else {
+          html += `<div class="cr"><span class="qty">${guests}</span><span class="cname">${esc(displayName)}${inlineNote}${modNote}</span></div>`;
         }
-        html += `</div>`; // .cr
       });
       html += `</div>`; // .courses
+
+      // Summary block — always present, staff fills in quantities during service
+      html += `<div class="summary">`;
+      optExtras.forEach(name => {
+        html += `<div class="srow"><span class="slbl">${esc(name)}:</span></div>`;
+      });
+      if (d.birthday) {
+        const cakeExtra = d.cakeNote ? ` ${esc(d.cakeNote)}` : "";
+        html += `<div class="srow"><span class="slbl">Cake:${cakeExtra}</span></div>`;
+      }
+      html += `<div class="srow"><span class="slbl">Coffee / Tea:</span></div>`;
+      html += `<div class="srow srestr-row"><span class="slbl">Allergies &amp; Restrictions:</span>`;
+      if (restrSummary) html += ` <span class="srestr-val">${esc(restrSummary)}</span>`;
+      html += `</div>`;
+      html += `</div>`; // .summary
+
       html += `</div>`; // .ticket
       return html;
     });
 
   const css = `
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:5mm;}
+body{font-family:'Roboto Mono',monospace;font-size:10pt;color:#000;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:5mm;}
 @page{size:A4 portrait;margin:8mm 8mm;}
 @media print{body{padding:0;}}
 .grid{display:flex;flex-wrap:wrap;gap:5mm;align-items:flex-start;}
-.ticket{border:1.5pt solid #000;width:92mm;font-family:'Roboto Mono',monospace;page-break-inside:avoid;break-inside:avoid;}
-.hdr{border-bottom:1pt solid #aaa;padding:5pt 8pt;display:flex;align-items:flex-start;gap:5pt;}
-.tbl{font-size:18pt;font-weight:700;letter-spacing:-0.02em;line-height:1;flex-shrink:0;}
-.hinfo{flex:1;min-width:0;}
-.nrow{display:flex;align-items:baseline;gap:3pt;flex-wrap:wrap;}
-.rname{font-size:10pt;font-weight:700;}
-.badge{font-size:5.5pt;font-weight:700;letter-spacing:0.08em;padding:1pt 3pt;border:1pt solid #aaa;background:#f0f0f0;color:#444;}
-.bshort{background:#fff3cd;border-color:#d4a017;color:#856404;}
-.ben{background:#d4edda;border-color:#5a9a6a;color:#155724;}
-.bsi{background:#f8d7da;border-color:#c04040;color:#721c24;}
-.mrow{display:flex;gap:5pt;margin-top:2pt;align-items:baseline;}
-.rtime{font-size:9pt;font-weight:600;color:#333;}
-.muted{font-size:8pt;color:#666;font-weight:400;}
-.notes{background:#fffbf0;border-bottom:1pt solid #e8e0c0;padding:3pt 8pt;font-size:7.5pt;color:#666;font-style:italic;}
-.seats{border-bottom:1pt solid #aaa;padding:4pt 8pt;display:flex;flex-wrap:wrap;gap:2.5pt 4pt;background:#f9f9f9;}
-.stag{font-size:7pt;font-weight:700;padding:1.5pt 4pt;border:1pt solid #ccc;background:#fff;}
-.srestr{color:#c04040;font-weight:700;}
-.unassigned{font-size:7pt;color:#c04040;width:100%;margin-top:2pt;font-weight:700;}
-.courses{}
-.cr{border-bottom:1pt solid #eee;padding:4pt 8pt;}
+.ticket{border:1.5pt solid #000;width:88mm;font-family:'Roboto Mono',monospace;page-break-inside:avoid;break-inside:avoid;}
+.hdr{border-bottom:1pt solid #000;padding:5pt 7pt;display:grid;grid-template-columns:1fr 1fr;gap:1pt 6pt;}
+.hcol{display:flex;align-items:baseline;gap:3pt;}
+.hfull{grid-column:1/-1;display:flex;align-items:baseline;gap:3pt;}
+.hlbl{font-size:7.5pt;font-weight:400;letter-spacing:0.04em;flex-shrink:0;}
+.hval{font-size:11pt;font-weight:700;line-height:1.1;}
+.pair{border-bottom:1pt solid #000;padding:3pt 7pt;font-size:8pt;font-weight:700;letter-spacing:0.06em;}
+.notes{border-bottom:1pt solid #000;padding:3pt 7pt;font-size:8pt;font-style:italic;}
+.courses{border-bottom:1pt solid #000;}
+.cr{display:flex;align-items:baseline;padding:2pt 7pt;border-bottom:0.5pt dotted #bbb;}
 .cr:last-child{border-bottom:none;}
-.cr-opt{background:#fafff8;}
-.cm{display:flex;align-items:baseline;justify-content:space-between;gap:4pt;}
-.cn{font-size:9pt;font-weight:700;letter-spacing:0.01em;}
-.corig{font-size:6.5pt;font-weight:400;color:#999;}
-.el{font-size:8pt;font-weight:600;color:#555;flex-shrink:0;text-align:right;}
-.mods{margin-top:2pt;display:flex;flex-wrap:wrap;gap:1.5pt 5pt;}
-.mod{font-size:8pt;font-weight:600;color:#555;}
-.malt{color:#c04040;}
+.cr-opt{}
+.qty{min-width:13pt;font-size:10pt;font-weight:700;flex-shrink:0;}
+.cname{font-size:10pt;font-weight:700;flex:1;line-height:1.25;}
+.summary{padding:4pt 7pt;}
+.srow{font-size:8.5pt;font-weight:700;padding:1.5pt 0;border-bottom:0.5pt dotted #bbb;}
+.srow:last-child{border-bottom:none;}
+.slbl{}
+.srestr-row{font-weight:700;}
+.srestr-val{font-weight:400;}
 `;
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Kitchen Tickets</title>
 ${ROBOTO_LINK}
 <style>${css}</style>
-</head><body>
-<div class="grid">
+</head><body><div class="grid">
 ${ticketCards.join("\n")}
 </div>
 </body></html>`;
