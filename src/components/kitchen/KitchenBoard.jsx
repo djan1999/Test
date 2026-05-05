@@ -493,12 +493,17 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     {kcNote.name && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[3], marginLeft: 5 }}>({line1})</span>}
                     {extraLabel && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[4], marginLeft: 6 }}>{extraLabel}</span>}
                   </div>
-                  {(pairingAlert || modGroups || kitchenNote || kcNote.note) && !fired && (
+                  {(pairingAlert || modGroups) && !fired && (
                     <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
                       {pairingAlert && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], fontWeight: 600 }}>{pairingAlert}</span>}
-                      {modGroups && Object.entries(modGroups).sort(([a], [b]) => (a === baseName ? -1 : 1) - (b === baseName ? -1 : 1)).map(([name, count]) => (
-                        <span key={name} style={{ fontFamily: FONT, fontSize: "9px", color: name === baseName ? tokens.ink[2] : tokens.red.text, fontWeight: 600 }}>{count}× {name}</span>
-                      ))}
+                      {modGroups && Object.entries(modGroups).sort(([a], [b]) => (a === baseName ? -1 : 1) - (b === baseName ? -1 : 1)).map(([name, count]) => {
+                        if (name === baseName && count === 1) return null;
+                        return <span key={name} style={{ fontFamily: FONT, fontSize: "9px", color: name === baseName ? tokens.ink[2] : tokens.red.text, fontWeight: 600 }}>{count}× {name}</span>;
+                      })}
+                    </div>
+                  )}
+                  {(kitchenNote || kcNote.note) && !fired && (
+                    <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
                       {kitchenNote && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>{kitchenNote}</span>}
                       {kcNote.note && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>⚑ {kcNote.note}</span>}
                     </div>
