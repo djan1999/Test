@@ -207,7 +207,7 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
 export function deriveKitchenNote(course, restrKey, baseName = "", baseSub = "") {
   const mapped = RESTRICTION_COLUMN_MAP[restrKey] || restrKey;
 
-  // Explicit note — check both the mapped and raw key forms
+  // Explicit note — check both the mapped and raw key forms; always show
   const explicit =
     course.restrictions?.[`${mapped}_note`] ||
     course.restrictions?.[`${restrKey}_note`] ||
@@ -215,20 +215,32 @@ export function deriveKitchenNote(course, restrKey, baseName = "", baseSub = "")
     course.restrictions?.[restrKey]?.kitchen_note;
   if (typeof explicit === "string" && explicit.trim()) return explicit.trim();
 
-  // Auto-derive from restriction variant
   const variant = course.restrictions?.[mapped] || course.restrictions?.[restrKey];
   if (!variant) return null;
 
-  if (variant.name && variant.name !== baseName) return variant.name;
+  const nameChanged = !!(variant.name && variant.name !== baseName);
+  const subChanged  = !!(variant.sub  && variant.sub  !== baseSub);
 
-  if (variant.sub && variant.sub !== baseSub) {
+  if (nameChanged) {
+    // modGroups already shows the new dish name; only add kitchenNote when the
+    // variant sub provides genuine extra detail (not just the name repeated)
+    if (subChanged && variant.sub.toLowerCase().trim() !== variant.name.toLowerCase().trim()) {
+      return variant.sub;
+    }
+    return null;
+  }
+
+  if (subChanged) {
+    // modGroups shows the first new sub token; only add kitchenNote when the
+    // full variant sub carries more info than that single token
     const baseTokens = new Set(
       String(baseSub || "").split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean)
     );
-    const modTokens = String(variant.sub).split(/[,·]+/).map(s => s.trim()).filter(Boolean);
-    const newOnes = modTokens.filter(t => !baseTokens.has(t.toLowerCase()));
-    const note = newOnes.length > 0 ? newOnes[0] : variant.sub;
-    return note || null;
+    const varTokens = String(variant.sub).split(/[,·]+/).map(s => s.trim()).filter(Boolean);
+    const newTokens = varTokens.filter(t => !baseTokens.has(t.toLowerCase()));
+    const diffToken = (newTokens[0] ?? variant.sub).toLowerCase();
+    if (variant.sub.toLowerCase().trim() !== diffToken) return variant.sub;
+    return null;
   }
 
   return null;
