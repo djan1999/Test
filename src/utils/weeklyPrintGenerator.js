@@ -2,7 +2,7 @@
  * Weekly print generators for the Reservation Manager.
  * Produces two HTML documents: reservations sheet and allergy/restriction sheet.
  */
-import { applyCourseRestriction, getCourseMod, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, deriveKitchenNote } from "./menuUtils.js";
+import { applyCourseRestriction, getCourseMod, deriveKitchenNote } from "./menuUtils.js";
 
 const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -338,18 +338,9 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
         ? d.tableGroup.map(Number).sort((a, b) => a - b) : null;
       const tLabel = tableGroup ? tableGroup.join("-") : String(tableId);
       const guests = d.guests || 2;
-      const rawSeats = Array.isArray(d.seats) ? d.seats : [];
-      const seats = Array.from({ length: guests }, (_, i) => ({
-        id: i + 1,
-        pairing: rawSeats[i]?.pairing || "",
-        extras: rawSeats[i]?.extras || {},
-      }));
       const restrictions = Array.isArray(d.restrictions) ? d.restrictions : [];
       const isShort = String(d.menuType || "").trim().toLowerCase() === "short";
       const kitchenCourseNotes = d.kitchenCourseNotes || {};
-
-      const seatRestrKeys = (seat) =>
-        restrictions.filter(r => r.pos === seat.id).map(r => r.note);
 
       const allCourses = menuCourses || [];
 
@@ -421,7 +412,6 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           const baseName = course.menu?.name || key;
           const baseSub = course.menu?.sub || "";
           const modCounts = {};
-          let modifiedCount = 0;
 
           const seatGroups = new Map();
           const unassignedGroups = [];
@@ -455,7 +445,6 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
             }
             if (label) {
               modCounts[label] = (modCounts[label] || 0) + 1;
-              modifiedCount++;
             }
           });
 

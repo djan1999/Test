@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
-import { applyCourseRestriction, deriveKitchenNote } from "../../utils/menuUtils.js";
+import { getCourseMod } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 
@@ -76,7 +76,6 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     setAssigningRestrIdx(null);
   };
 
-  // Seat restriction keys per seat (for course substitution lookup).
   const seatRestrKeys = (seat) =>
     (restrictions || [])
       .filter(r => r.pos === seat.id)
@@ -406,16 +405,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const firedAt = log[key]?.firedAt;
 
           const baseName = course.menu?.name || key;
-          // Mirrors the printable allergy sheet: call getCourseMod per seat,
-          // count identical modifications, display as Nx MOD.
           const mods = (() => {
             if (fired) return null;
             const counts = {};
             seats.forEach(seat => {
-              seatRestrKeys(seat).forEach(k => {
-                const note = getCourseNote(course, k);
-                if (note) counts[note] = (counts[note] || 0) + 1;
-              });
+              const restrKeys = seatRestrKeys(seat);
+              if (!restrKeys.length) return;
+              const mod = getCourseMod(course, restrKeys);
+              if (mod) counts[mod] = (counts[mod] || 0) + 1;
             });
             return Object.keys(counts).length > 0 ? counts : null;
           })();
