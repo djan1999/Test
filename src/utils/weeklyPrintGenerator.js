@@ -4,25 +4,6 @@
  */
 import { applyCourseRestriction, getCourseMod, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, deriveKitchenNote } from "./menuUtils.js";
 
-const applyMenuOverride = (course, overrides, seatId = null) => {
-  const base = overrides?.[course.course_key];
-  if (!base) return course;
-  const seatOv = seatId != null ? (base.seats?.[seatId] || {}) : {};
-  const ov = { ...base, ...seatOv };
-  if (!Object.keys(ov).filter(k => k !== "seats").length) return course;
-  return {
-    ...course,
-    menu: {
-      name: "name" in ov ? ov.name : course.menu?.name,
-      sub:  "sub"  in ov ? ov.sub  : course.menu?.sub,
-    },
-    menu_si: ("name_si" in ov || "sub_si" in ov) ? {
-      name: "name_si" in ov ? ov.name_si : (course.menu_si?.name || ""),
-      sub:  "sub_si"  in ov ? ov.sub_si  : (course.menu_si?.sub  || ""),
-    } : course.menu_si,
-  };
-};
-
 const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const ROBOTO_LINK = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">`;
@@ -376,16 +357,15 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
       const restrictions = Array.isArray(d.restrictions) ? d.restrictions : [];
       const isShort = String(d.menuType || "").trim().toLowerCase() === "short";
       const kitchenCourseNotes = d.kitchenCourseNotes || {};
-      const courseOverrides = d.courseOverrides || {};
 
       const seatRestrKeys = (seat) =>
         restrictions.filter(r => r.pos === seat.id).map(r => r.note);
 
-      const overriddenCourses = (menuCourses || []).map(c => applyMenuOverride(c, courseOverrides));
+      const allCourses = menuCourses || [];
 
       // All non-snack courses in order. Optional extras always included.
       // Celebration (cake) only when birthday is on.
-      const courses = overriddenCourses
+      const courses = allCourses
         .filter(c => {
           if (c.is_snack) return false;
           const category = normCategory(c);
@@ -401,7 +381,7 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
       // All optional extra course names for the summary block
       const optExtras = [];
       const seenOptKeys = new Set();
-      overriddenCourses
+      allCourses
         .filter(c => !c.is_snack && normCategory(c) === "optional")
         .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
         .forEach(c => {
