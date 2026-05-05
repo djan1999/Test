@@ -579,5 +579,6 @@ ${ROBOTO_LINK}
 </head><body><div class="grid">
 ${ticketCards.join("\n")}
 </div>
+<script>window.onload = function(){ window.print(); };</script>
 </body></html>`;
 }

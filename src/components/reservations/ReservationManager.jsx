@@ -285,12 +285,10 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
               disabled={dayResv.length === 0}
               onClick={() => {
                 const html = generateKitchenTicketsHTML(dayResv, menuCourses, RESTRICTIONS);
-                const w = window.open("", "_blank", "width=900,height=700");
+                const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+                const w = window.open(url, "_blank");
                 if (!w) { alert("Pop-up blocked — please allow pop-ups for this site"); return; }
-                w.document.write(html);
-                w.document.close();
-                w.focus();
-                setTimeout(() => w.print(), 800);
+                setTimeout(() => URL.revokeObjectURL(url), 30000);
               }}
               style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: tokens.neutral[0], color: tokens.ink[0], fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1, touchAction: "manipulation" }}>PRINT TICKETS</button>
             <button onClick={() => {
