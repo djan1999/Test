@@ -2,7 +2,26 @@
  * Weekly print generators for the Reservation Manager.
  * Produces two HTML documents: reservations sheet and allergy/restriction sheet.
  */
-import { applyCourseRestriction, getCourseMod, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, deriveKitchenNote, applyMenuOverride } from "./menuUtils.js";
+import { applyCourseRestriction, getCourseMod, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, deriveKitchenNote } from "./menuUtils.js";
+
+const applyMenuOverride = (course, overrides, seatId = null) => {
+  const base = overrides?.[course.course_key];
+  if (!base) return course;
+  const seatOv = seatId != null ? (base.seats?.[seatId] || {}) : {};
+  const ov = { ...base, ...seatOv };
+  if (!Object.keys(ov).filter(k => k !== "seats").length) return course;
+  return {
+    ...course,
+    menu: {
+      name: "name" in ov ? ov.name : course.menu?.name,
+      sub:  "sub"  in ov ? ov.sub  : course.menu?.sub,
+    },
+    menu_si: ("name_si" in ov || "sub_si" in ov) ? {
+      name: "name_si" in ov ? ov.name_si : (course.menu_si?.name || ""),
+      sub:  "sub_si"  in ov ? ov.sub_si  : (course.menu_si?.sub  || ""),
+    } : course.menu_si,
+  };
+};
 
 const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
