@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML } from "../../utils/weeklyPrintGenerator.js";
+import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML, generateKitchenTicketsHTML } from "../../utils/weeklyPrintGenerator.js";
 import { blankTable, makeSeats } from "../../utils/tableHelpers.js";
 import { getCourseMod } from "../../utils/menuUtils.js";
 import { RESTRICTIONS } from "../../constants/dietary.js";
@@ -281,6 +281,18 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
             <button onClick={() => setShowBreakdown(true)}
               disabled={dayResv.length === 0}
               style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: tokens.neutral[0], color: tokens.ink[0], fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1, touchAction: "manipulation" }}>SERVICE BREAKDOWN</button>
+            <button
+              disabled={dayResv.length === 0}
+              onClick={() => {
+                const html = generateKitchenTicketsHTML(dayResv, menuCourses, RESTRICTIONS);
+                const w = window.open("", "_blank", "width=900,height=700");
+                if (!w) { alert("Pop-up blocked — please allow pop-ups for this site"); return; }
+                w.document.write(html);
+                w.document.close();
+                w.focus();
+                setTimeout(() => w.print(), 800);
+              }}
+              style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: tokens.neutral[0], color: tokens.ink[0], fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1, touchAction: "manipulation" }}>PRINT TICKETS</button>
             <button onClick={() => {
               const next = editingId === "new" ? null : "new";
               setEditingId(next);
