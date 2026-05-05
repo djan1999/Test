@@ -204,15 +204,34 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
  *   - sub changed  → use the first new/different sub token
  * Returns null when the dish is standard and no note applies.
  */
-export function getCourseNote(course, restrKey) {
+export function deriveKitchenNote(course, restrKey, baseName = "", baseSub = "") {
   const mapped = RESTRICTION_COLUMN_MAP[restrKey] || restrKey;
-  const note =
+
+  // Explicit note — check both the mapped and raw key forms
+  const explicit =
     course.restrictions?.[`${mapped}_note`] ||
     course.restrictions?.[`${restrKey}_note`] ||
     course.restrictions?.[mapped]?.kitchen_note ||
-    course.restrictions?.[restrKey]?.kitchen_note ||
-    null;
-  return typeof note === "string" && note.trim() ? note.trim() : null;
+    course.restrictions?.[restrKey]?.kitchen_note;
+  if (typeof explicit === "string" && explicit.trim()) return explicit.trim();
+
+  // Auto-derive from restriction variant
+  const variant = course.restrictions?.[mapped] || course.restrictions?.[restrKey];
+  if (!variant) return null;
+
+  if (variant.name && variant.name !== baseName) return variant.name;
+
+  if (variant.sub && variant.sub !== baseSub) {
+    const baseTokens = new Set(
+      String(baseSub || "").split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean)
+    );
+    const modTokens = String(variant.sub).split(/[,·]+/).map(s => s.trim()).filter(Boolean);
+    const newOnes = modTokens.filter(t => !baseTokens.has(t.toLowerCase()));
+    const note = newOnes.length > 0 ? newOnes[0] : variant.sub;
+    return note || null;
+  }
+
+  return null;
 }
 
 /**
@@ -238,7 +257,6 @@ export function getCourseMod(course, restrKeys) {
   if (modified) {
     if (modified.name !== baseName) return modified.name;
     if (modified.sub !== baseSub) {
-      // Show only the new/different parts of sub
       const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
       const modTokens = modified.sub.split(/[,·]+/).map(s => s.trim()).filter(Boolean);
       const newOnes = modTokens.filter(t => !baseTokens.has(t.toLowerCase()));
@@ -246,7 +264,7 @@ export function getCourseMod(course, restrKeys) {
     }
   }
 
-  return null; // standard dish
+  return null;
 }
 
 export const RESTRICTION_KEYS = DIETARY_KEYS;

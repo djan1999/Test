@@ -27,7 +27,6 @@ h2{font-family:'Roboto Mono',monospace;font-size:9pt;text-align:center;margin:0 
 </style></head><body>${bodyHtml}</body></html>`;
 
 const allergyHtmlShell = (title, bodyHtml, resvCount) => {
-  // For few reservations use natural column widths; only compress for large counts
   const isLarge = resvCount > 5;
   const baseFontPt = isLarge ? (resvCount <= 7 ? 6.5 : resvCount <= 9 ? 5.5 : 5) : 8;
   const courseSubPt = Math.max(baseFontPt - 1.5, 4);
@@ -69,13 +68,12 @@ const fmtDateFull = ds => {
 const toDateStr = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-// ── PDF 1: Weekly Reservations Sheet ──────────────────────────────────────────
+// ── PDF 1: Weekly Reservations Sheet ─────────────────────────────────────────────
 
 export function generateWeeklyReservationsHTML(reservations, weekDays, restrictionDefs = []) {
   const weekStart = toDateStr(weekDays[0]);
   const weekEnd   = toDateStr(weekDays[6]);
 
-  // Filter & group
   const weekResv = reservations
     .filter(r => r.date >= weekStart && r.date <= weekEnd)
     .sort((a, b) => a.date.localeCompare(b.date) || (a.data?.resTime || "99").localeCompare(b.data?.resTime || "99"));
@@ -88,7 +86,6 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
 
   const totalGuests = weekResv.reduce((a, r) => a + (r.data?.guests || 2), 0);
 
-  // Date range: first date with reservations to last
   const sortedDates = Object.keys(byDate).sort();
   const firstDate = sortedDates[0] || weekStart;
   const lastDate  = sortedDates[sortedDates.length - 1] || weekEnd;
@@ -114,7 +111,6 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
     return parts.join("<br>");
   };
 
-  // Build restriction text
   const restrText = (restrictions) => {
     if (!restrictions?.length) return "";
     const counts = {};
@@ -130,7 +126,6 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
 
   let body = `<h1>Reservations : ${esc(dateRange)}</h1>`;
   body += `<h2>Guest count : ${totalGuests}</h2>`;
-
   body += `<table>`;
   body += `<tr><th>DATE</th><th>COVER</th><th>TIME</th><th>NAME</th><th>EXP.</th><th>INFO</th><th>ALLERGIES/<br>RESTRICTIONS</th></tr>`;
 
@@ -139,14 +134,12 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
     const dayGuests = dayResv.reduce((a, r) => a + (r.data?.guests || 2), 0);
     const dateLabel = fmtDateShort(ds);
 
-    // Date + total guest row
     body += `<tr class="date-row">`;
     body += `<td class="bold">${esc(dateLabel)}</td>`;
     body += `<td style="font-size:8pt;">Total<br>guest:<br><span class="bold">${dayGuests}</span></td>`;
     body += `<td></td><td></td><td></td><td></td><td></td>`;
     body += `</tr>`;
 
-    // Check if we need LUNCH / DINNER subheadings
     const lunchResv  = dayResv.filter(r => { const t = r.data?.resTime || ""; return t < "15:00"; });
     const dinnerResv = dayResv.filter(r => { const t = r.data?.resTime || ""; return t >= "15:00"; });
     const needsSplit = lunchResv.length > 0 && dinnerResv.length > 0;
@@ -165,7 +158,7 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
         body += `<td></td>`;
         body += `<td class="center">${d.guests || 2}</td>`;
         body += `<td>${esc(d.resTime || "")}</td>`;
-        body += `<td class="bold">${esc(d.resName || "\u2014")}</td>`;
+        body += `<td class="bold">${esc(d.resName || "—")}</td>`;
         body += `<td class="center"><u>${esc(expLabelForResv(r))}</u></td>`;
         body += `<td style="font-size:8pt;">${infoText(d, r)}</td>`;
         body += `<td style="font-size:8pt;white-space:pre-line;">${esc(restr)}</td>`;
@@ -185,14 +178,13 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
   return resvHtmlShell("Weekly Reservations", body);
 }
 
-// ── PDF 2: Weekly Allergy/Restriction Sheet ───────────────────────────────────
+// ── PDF 2: Weekly Allergy/Restriction Sheet ───────────────────────────────────────────────
 
 export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, restrictionDefs = []) {
   const weekStart = toDateStr(weekDays[0]);
   const weekEnd   = toDateStr(weekDays[6]);
   const dateRange = `${fmtDateShort(weekStart)}-${fmtDateShort(weekEnd)}`;
 
-  // Filter to week, then to only reservations with restrictions or manual edits
   const weekResv = reservations
     .filter(r => r.date >= weekStart && r.date <= weekEnd)
     .filter(r => {
@@ -207,7 +199,6 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     return allergyHtmlShell("Weekly Allergy Sheet", `<h1 style="margin-top:40pt;font-family:Arial,Helvetica,sans-serif;">No restrictions or edits for ${esc(dateRange)}</h1>`, 0);
   }
 
-  // Courses: all non-snack courses in order (main + optional)
   const courses = menuCourses
     .filter(c => !c.is_snack)
     .sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
@@ -215,7 +206,6 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
   let body = "";
   body += `<table>`;
 
-  // Column widths: natural sizing for few reservations, compressed for many
   const isLarge = weekResv.length > 5;
   const courseColPct = weekResv.length <= 5 ? "22%" : weekResv.length <= 7 ? "18%" : "15%";
   const resvColPct = `${Math.floor((100 - parseInt(courseColPct)) / weekResv.length)}%`;
@@ -226,16 +216,14 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     ? `width:${resvColPct};text-align:center;`
     : `min-width:90pt;text-align:center;`;
 
-  // Header row 1: date range + guest names
   body += `<tr class="green-header">`;
   body += `<th style="${courseColStyle}">${esc(dateRange)}</th>`;
   weekResv.forEach(r => {
     const d = r.data || {};
-    body += `<th style="${resvColStyle}">${esc(d.resName || "\u2014")}</th>`;
+    body += `<th style="${resvColStyle}">${esc(d.resName || "—")}</th>`;
   });
   body += `</tr>`;
 
-  // Header row 2: dates (white background)
   body += `<tr>`;
   body += `<td style="padding-left:6pt;">Date</td>`;
   weekResv.forEach(r => {
@@ -243,7 +231,6 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
   });
   body += `</tr>`;
 
-  // Header row 3: allergies/restrictions summary + menu type (white background)
   body += `<tr>`;
   body += `<td style="padding-left:6pt;font-weight:700;">Allergies/Restrictions</td>`;
   weekResv.forEach(r => {
@@ -262,25 +249,21 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
   });
   body += `</tr>`;
 
-  // Course rows
   courses.forEach(course => {
     const key = course.course_key || "";
     const baseName = course.menu?.name || key;
     const baseSub  = course.menu?.sub || "";
 
     body += `<tr>`;
-    // Course name column
     body += `<td style="padding-left:6pt;"><span class="course-name">${esc(baseName)}</span>`;
     if (baseSub) body += `<br><span class="course-sub">${esc(baseSub)}</span>`;
     body += `</td>`;
 
-    // Per-reservation columns
     weekResv.forEach(r => {
       const d = r.data || {};
       const kcNote = d.kitchenCourseNotes?.[key];
       const restrictions = d.restrictions || [];
 
-      // Priority 1: Manual kitchen ticket edits
       if (kcNote?.name || kcNote?.note) {
         const parts = [];
         if (kcNote.name) parts.push(esc(kcNote.name));
@@ -289,23 +272,33 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
         return;
       }
 
-      // Kitchen notes only — one entry per restriction, counted across guests
       if (restrictions.length > 0) {
-        const noteCounts = {};
+        const modCounts = {};
+        const seatGroups = new Map();
+        const unassigned = [];
         restrictions.forEach(rs => {
-          const note = getCourseNote(course, rs.note);
-          if (note) noteCounts[note] = (noteCounts[note] || 0) + 1;
+          if (rs.pos) {
+            const arr = seatGroups.get(rs.pos) || [];
+            arr.push(rs.note);
+            seatGroups.set(rs.pos, arr);
+          } else {
+            unassigned.push([rs.note]);
+          }
         });
-        if (Object.keys(noteCounts).length > 0) {
-          const entries = Object.entries(noteCounts)
-            .map(([note, count]) => `${count}x ${note}`)
+        [...seatGroups.values(), ...unassigned].forEach(notes => {
+          const mod = getCourseMod(course, notes);
+          if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
+        });
+
+        if (Object.keys(modCounts).length > 0) {
+          const entries = Object.entries(modCounts)
+            .map(([mod, count]) => `${count}x ${mod.toLowerCase()}`)
             .join("<br>");
           body += `<td class="resv-cell highlight">${entries}</td>`;
           return;
         }
       }
 
-      // Priority 3: no change
       body += `<td class="resv-cell"></td>`;
     });
 
@@ -316,10 +309,7 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
   return allergyHtmlShell("Weekly Allergy Sheet", body, weekResv.length);
 }
 
-// ── PDF 3: Printable Kitchen Tickets ─────────────────────────────────────────
-// Skeleton format matching the physical ticket taped to the kitchen pass:
-// pre-printed quantities for main courses, blank rows for optional extras,
-// summary block at the bottom with restrictions pre-filled.
+// ── PDF 3: Printable Kitchen Tickets ─────────────────────────────────────────────────
 
 export function generateKitchenTicketsHTML(reservations, menuCourses, restrictionDefs = []) {
   if (!reservations || reservations.length === 0) {
@@ -363,8 +353,6 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
 
       const allCourses = menuCourses || [];
 
-      // All non-snack courses in order. Optional extras always included.
-      // Celebration (cake) only when birthday is on.
       const courses = allCourses
         .filter(c => {
           if (c.is_snack) return false;
@@ -378,7 +366,6 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           return (Number(a.position) || 0) - (Number(b.position) || 0);
         });
 
-      // All optional extra course names for the summary block
       const optExtras = [];
       const seenOptKeys = new Set();
       allCourses
@@ -392,18 +379,14 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           }
         });
 
-      // Restrictions summary: all restrictions, no positions, deduplicated with counts
       const restrCounts = {};
       restrictions.forEach(r => { if (r.note) restrCounts[r.note] = (restrCounts[r.note] || 0) + 1; });
       const restrSummary = Object.entries(restrCounts)
         .map(([key, count]) => count > 1 ? `${count}x ${restrLabel(key)}` : restrLabel(key))
         .join(", ");
 
-      // ── Build HTML ──────────────────────────────────────────────────────────
-
       let html = `<div class="ticket">`;
 
-      // Header — two-column grid matching physical ticket layout
       html += `<div class="hdr">`;
       html += `<div class="hcol"><span class="hlbl">TABLE:</span> <span class="hval">${esc(tLabel)}</span></div>`;
       html += `<div class="hcol"><span class="hlbl">GUESTS:</span> <span class="hval">${guests}</span></div>`;
@@ -415,17 +398,14 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
       if (d.menuType) {
         html += `<div class="hfull"><span class="hlbl">MENU:</span> <span class="hval">${isShort ? "SHORT" : "LONG"}</span></div>`;
       }
-      html += `</div>`; // .hdr
+      html += `</div>`;
 
-      // Fixed pairing template — staff circles the applicable options
       html += `<div class="pair">WP &nbsp;/&nbsp; PWP &nbsp;/&nbsp; OS &nbsp;/&nbsp; NA &nbsp;/&nbsp; BTB &nbsp;/&nbsp; BTG</div>`;
 
-      // Notes banner
       if (d.notes) {
         html += `<div class="notes">${esc(d.notes)}</div>`;
       }
 
-      // Course list
       html += `<div class="courses">`;
       courses.forEach((course, idx) => {
         const key = course.course_key || `course_${idx}`;
@@ -436,10 +416,6 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
         const displayName = kcNote.name || course.menu?.name || key;
         const inlineNote = kcNote.note ? ` [${kcNote.note}]` : "";
 
-        // For main courses: find the actual alternative dish name for each
-        // restriction group and show a count breakdown, e.g. "1× Danube · 1× Parsnip Root".
-        // Handles both seat-assigned (pos > 0) and unassigned (pos null) restrictions —
-        // unassigned ones are each treated as one guest of unknown seat.
         let modLines = [];
         if (!isOpt && !isCelebration && restrictions.length > 0) {
           const baseName = course.menu?.name || key;
@@ -447,7 +423,6 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           const modCounts = {};
           let modifiedCount = 0;
 
-          // Group seat-assigned restrictions by pos; each unassigned entry is its own group
           const seatGroups = new Map();
           const unassignedGroups = [];
           restrictions.forEach(r => {
@@ -485,16 +460,12 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           });
 
           if (Object.keys(modCounts).length > 0) {
-            // Only show the alternatives — main line already has the total count
-            // and standard dish name, so repeating them is redundant.
-            // Lowercase so it reads as a note, not a heading.
             modLines = Object.entries(modCounts)
               .map(([name, count]) => `${count}&#215; ${esc(name.toLowerCase())}`);
           }
         }
 
         if (isOpt) {
-          // Optional extras (Beetroot, Cheese): blank quantity — staff fills in
           html += `<div class="cr cr-opt"><span class="qty"></span><span class="cname">${esc(displayName)}${inlineNote}</span></div>`;
         } else {
           html += `<div class="cr"><span class="qty">${guests}</span><span class="cname">${esc(displayName)}${inlineNote}</span>`;
@@ -504,9 +475,8 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           html += `</div>`;
         }
       });
-      html += `</div>`; // .courses
+      html += `</div>`;
 
-      // Summary block — always present, staff fills in quantities during service
       html += `<div class="summary">`;
       optExtras.forEach(name => {
         html += `<div class="srow"><span class="slbl">${esc(name)}:</span></div>`;
@@ -518,11 +488,10 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
       html += `<div class="srow srestr-row"><span class="slbl">Allergies &amp; Restrictions:</span>`;
       if (restrSummary) html += ` <span class="srestr-val">${esc(restrSummary)}</span>`;
       html += `</div>`;
-      // Extra blank space at the bottom for sharpie annotations
       html += `<div class="srow srow-notes"></div>`;
-      html += `</div>`; // .summary
+      html += `</div>`;
 
-      html += `</div>`; // .ticket
+      html += `</div>`;
       return html;
     });
 
@@ -561,6 +530,6 @@ ${ROBOTO_LINK}
 </head><body><div class="grid">
 ${ticketCards.join("\n")}
 </div>
-<script>window.onload = function(){ window.print(); };</script>
+<script>window.onload = function(){ window.print(); };<\/script>
 </body></html>`;
 }
