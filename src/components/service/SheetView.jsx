@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { fmt } from "../../utils/tableHelpers.js";
 import { restrLabel } from "../../constants/dietary.js";
+import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 
 const F = tokens.font;
 
@@ -29,19 +30,6 @@ function sortedTableList(tables) {
       if (a.active !== b.active) return a.active ? -1 : 1;
       return (a.arrivedAt || a.resTime || "99").localeCompare(b.arrivedAt || b.resTime || "99");
     });
-}
-
-function buildCourses(table, menuCourses) {
-  const log = table.kitchenLog || {};
-  const overrides = table.kitchenCourseNotes || {};
-  return menuCourses
-    .filter(c => c?.course_key)
-    .map((c, i) => ({
-      index: i + 1,
-      key: c.course_key,
-      name: overrides[c.course_key]?.name || c?.menu?.name || c?.menu_si?.name || c.course_key,
-      firedAt: log[c.course_key]?.firedAt || null,
-    }));
 }
 
 // ── Left: compact table list ───────────────────────────────────
@@ -107,37 +95,9 @@ function IdentityStrip({ table }) {
 }
 
 // ── Center: compact course state window ───────────────────────
-// Shows only LAST OUT / NEXT / AFTER. Full history lives in TimelineRail.
-function CourseSection({ courses }) {
-  const total = courses.length;
-  const firedCount = courses.filter(c => c.firedAt).length;
-
-  // Latest OUT = the highest-index course that has a firedAt timestamp.
-  // Walk from the end so we honour the menu order, not the time-of-press.
-  let lastOutIdx = -1;
-  for (let i = courses.length - 1; i >= 0; i--) {
-    if (courses[i].firedAt) { lastOutIdx = i; break; }
-  }
-  const lastOut = lastOutIdx >= 0 ? courses[lastOutIdx] : null;
-
-  // NEXT = first course after lastOut without a firedAt.
-  // If nothing fired yet, NEXT = first course.
-  let nextIdx = -1;
-  for (let i = lastOutIdx + 1; i < courses.length; i++) {
-    if (!courses[i].firedAt) { nextIdx = i; break; }
-  }
-  const next  = nextIdx >= 0 ? courses[nextIdx] : null;
-
-  // AFTER = course following NEXT.
-  let afterIdx = -1;
-  if (nextIdx >= 0) {
-    for (let i = nextIdx + 1; i < courses.length; i++) {
-      if (!courses[i].firedAt) { afterIdx = i; break; }
-    }
-  }
-  const after = afterIdx >= 0 ? courses[afterIdx] : null;
-
-  const allComplete = total > 0 && firedCount === total;
+// Shows PREVIOUS / CURRENT / NEXT FIRE derived from getCourseProgressState().
+function CourseSection({ progressState }) {
+  const { previous, current, nextFire, allComplete, firedCount, total } = progressState;
 
   const Row = ({ label, c, emphasis, placeholder }) => {
     const isStrong = emphasis === "strong";
@@ -152,7 +112,7 @@ function CourseSection({ courses }) {
     return (
       <div style={{
         display: "grid",
-        gridTemplateColumns: "72px 28px 1fr 84px",
+        gridTemplateColumns: "80px 28px 1fr 84px",
         alignItems: "center", gap: 8,
         height: rowHeight,
         borderBottom: `1px solid ${tokens.ink[5]}`,
@@ -187,14 +147,22 @@ function CourseSection({ courses }) {
           [PROGRESS] {String(firedCount).padStart(2, "0")} / {String(total).padStart(2, "0")} OUT
         </span>
       </div>
-      <Row label="LAST OUT" c={lastOut} emphasis="strong" placeholder="—" />
+      {/* PREVIOUS = fired course before current */}
+      <Row label="PREVIOUS" c={previous} emphasis="muted" placeholder="—" />
+      {/* CURRENT = latest fired course / what is on the table */}
       <Row
-        label="NEXT"
-        c={allComplete ? null : next}
-        emphasis="default"
-        placeholder={allComplete ? "COMPLETE" : "—"}
+        label="CURRENT"
+        c={current}
+        emphasis="strong"
+        placeholder={total === 0 ? "—" : "WAITING"}
       />
-      <Row label="AFTER" c={allComplete ? null : after} emphasis="muted" placeholder="—" />
+      {/* NEXT FIRE = first unfired after current */}
+      <Row
+        label="NEXT FIRE"
+        c={allComplete ? null : nextFire}
+        emphasis="default"
+        placeholder={allComplete ? "COMPLETE" : (total === 0 ? "—" : current ? "—" : (nextFire ? undefined : "—"))}
+      />
     </div>
   );
 }
@@ -246,9 +214,9 @@ function GuestMatrix({ table }) {
 }
 
 // ── Center: action strip ──────────────────────────────────────
-function ActionStrip({ table, courses, onFireNext, onOpenDetail, onSeat, onUnseat }) {
-  const nextCourse = courses.find(c => !c.firedAt);
-  const canFire = table.active && !!nextCourse;
+function ActionStrip({ table, progressState, onFireNext, onUndoFire, onOpenDetail, onSeat, onUnseat }) {
+  const { nextFire, current } = progressState;
+  const canFire = table.active && !!nextFire;
 
   const btn = (label, onClick, opts = {}) => (
     <button
@@ -273,9 +241,14 @@ function ActionStrip({ table, courses, onFireNext, onOpenDetail, onSeat, onUnsea
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingTop: 10, borderTop: `1px solid ${tokens.ink[4]}` }}>
       {btn(
-        canFire ? `FIRE C${String(nextCourse.index).padStart(2,"0")} · ${nextCourse.name}` : "FIRE NEXT",
-        () => canFire && onFireNext(nextCourse.key),
+        canFire ? `FIRE C${String(nextFire.index).padStart(2,"0")} · ${nextFire.name}` : "FIRE NEXT",
+        () => canFire && onFireNext(nextFire.key),
         { primary: true, disabled: !canFire },
+      )}
+      {current && btn(
+        "UNDO LAST FIRE",
+        () => onUndoFire(current.key),
+        {},
       )}
       {table.active
         ? btn("UNSEAT", () => onUnseat(table.id))
@@ -377,6 +350,7 @@ export default function SheetView({
   onSelect,
   onOpenDetail,
   onFireNext,
+  onUndoFire,
   onSeat,
   onUnseat,
   isMobile = false,
@@ -388,8 +362,15 @@ export default function SheetView({
     ? selectedId
     : (list[0]?.id ?? null);
 
-  const table  = useMemo(() => list.find(t => t.id === effectiveId) || null, [list, effectiveId]);
-  const courses = useMemo(() => (table ? buildCourses(table, menuCourses) : []), [table, menuCourses]);
+  const table = useMemo(() => list.find(t => t.id === effectiveId) || null, [list, effectiveId]);
+
+  // Use shared helper so course list matches KitchenBoard exactly
+  const courses = useMemo(
+    () => (table ? getVisibleCoursesForTable(table, menuCourses) : []),
+    [table, menuCourses],
+  );
+
+  const progressState = useMemo(() => getCourseProgressState(table, courses), [table, courses]);
 
   // ── MOBILE layout ──────────────────────────────────────────
   if (isMobile) {
@@ -412,13 +393,19 @@ export default function SheetView({
         {!table ? <EmptySheet /> : (
           <div style={{ background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}`, padding: 14 }}>
             <IdentityStrip table={table} />
-            <CourseSection courses={courses} />
+            <CourseSection progressState={progressState} />
             <GuestMatrix table={table} />
             <AlertsRail table={table} />
             <TimelineRail table={table} courses={courses} />
-            <ActionStrip table={table} courses={courses}
+            <ActionStrip
+              table={table}
+              progressState={progressState}
               onFireNext={key => onFireNext(table.id, key)}
-              onOpenDetail={onOpenDetail} onSeat={onSeat} onUnseat={onUnseat} />
+              onUndoFire={key => onUndoFire(table.id, key)}
+              onOpenDetail={onOpenDetail}
+              onSeat={onSeat}
+              onUnseat={onUnseat}
+            />
           </div>
         )}
       </div>
@@ -460,12 +447,18 @@ export default function SheetView({
           <>
             <IdentityStrip table={table} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 14 }}>
-              <CourseSection courses={courses} />
+              <CourseSection progressState={progressState} />
               <GuestMatrix table={table} />
             </div>
-            <ActionStrip table={table} courses={courses}
+            <ActionStrip
+              table={table}
+              progressState={progressState}
               onFireNext={key => onFireNext(table.id, key)}
-              onOpenDetail={onOpenDetail} onSeat={onSeat} onUnseat={onUnseat} />
+              onUndoFire={key => onUndoFire(table.id, key)}
+              onOpenDetail={onOpenDetail}
+              onSeat={onSeat}
+              onUnseat={onUnseat}
+            />
           </>
         )}
       </main>

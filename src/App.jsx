@@ -1644,9 +1644,6 @@ export default function App() {
   const [sel,          setSel]          = useState(null);
   const [quickView,    setQuickView]    = useState("board");
   const [sheetSel,     setSheetSel]     = useState(null);
-  const [resModal,     setResModal]     = useState(null);
-  const [resModalPresetTime, setResModalPresetTime] = useState(null);
-  const [adminOpen,      setAdminOpen]      = useState(false);
   const [summaryOpen,    setSummaryOpen]    = useState(false);
   const [archiveOpen,    setArchiveOpen]    = useState(false);
   const [inventoryOpen,  setInventoryOpen]  = useState(false);
@@ -1828,7 +1825,6 @@ export default function App() {
   };
 
   const selTable   = tables.find(t => t.id === sel);
-  const modalTable = tables.find(t => t.id === resModal);
 
   const upd = (id, f, v) => {
     bumpLocalTableFresh(id);
@@ -2933,17 +2929,11 @@ export default function App() {
     syncLabel, syncLive,
     activeCount: active.length, reserved, seated,
     onExit: switchMode,
-    onMenu: () => setAdminOpen(true),
     onSummary: () => setSummaryOpen(true),
     onArchive: () => setArchiveOpen(true),
     onInventory: () => setInventoryOpen(true),
     onSeed: seedTestData,
     onSyncAll: syncWines,
-    onAddRes: () => {
-      const freeTable = tables.find(t => !t.active && !t.resName && !t.resTime);
-      if (freeTable) { setResModalPresetTime(null); setResModal(freeTable.id); }
-      else { setResModalPresetTime(null); setResModal(tables[0].id); }
-    },
   };
 
   // Preview — visit /#preview to inspect TableCard design without auth
@@ -3249,6 +3239,12 @@ export default function App() {
                 const t = tables.find(x => x.id === tableId);
                 const log = { ...(t?.kitchenLog || {}) };
                 log[courseKey] = { firedAt: fmt(new Date()) };
+                upd(tableId, "kitchenLog", log);
+              }}
+              onUndoFire={(tableId, courseKey) => {
+                const t = tables.find(x => x.id === tableId);
+                const log = { ...(t?.kitchenLog || {}) };
+                delete log[courseKey];
                 upd(tableId, "kitchenLog", log);
               }}
               onSeat={seatTable}
