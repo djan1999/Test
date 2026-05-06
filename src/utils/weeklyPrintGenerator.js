@@ -515,10 +515,10 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
   const css = `
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Roboto Mono',monospace;font-size:10pt;color:#000;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:5mm;}
-@page{size:A4 portrait;margin:8mm 8mm;}
+@page{size:A4 landscape;margin:8mm 8mm;}
 @media print{body{padding:0;}}
-.grid{display:flex;flex-wrap:wrap;gap:5mm;align-items:flex-start;}
-.ticket{border:1.5pt solid #000;width:88mm;font-family:'Roboto Mono',monospace;page-break-inside:avoid;break-inside:avoid;}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm;align-items:start;}
+.ticket{border:1.5pt solid #000;width:100%;font-family:'Roboto Mono',monospace;page-break-inside:avoid;break-inside:avoid;}
 .hdr{border-bottom:1pt solid #000;padding:5pt 7pt;display:grid;grid-template-columns:1fr 1fr;gap:1pt 6pt;}
 .hcol{display:flex;align-items:baseline;gap:3pt;}
 .hfull{grid-column:1/-1;display:flex;align-items:baseline;gap:3pt;}
