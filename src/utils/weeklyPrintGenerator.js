@@ -2,7 +2,7 @@
  * Weekly print generators for the Reservation Manager.
  * Produces two HTML documents: reservations sheet and allergy/restriction sheet.
  */
-import { applyCourseRestriction, getCourseMod, deriveKitchenNote } from "./menuUtils.js";
+import { getCourseMod } from "./menuUtils.js";
 
 const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -450,11 +450,8 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
         // unassigned ones are each treated as one guest of unknown seat.
         let modLines = [];
         if (!isOpt && !isCelebration && restrictions.length > 0) {
-          const baseName = course.menu?.name || key;
-          const baseSub = course.menu?.sub || "";
           const modCounts = {};
 
-          // Group seat-assigned restrictions by pos; each unassigned entry is its own group
           const seatGroups = new Map();
           const unassignedGroups = [];
           restrictions.forEach(r => {
@@ -469,25 +466,8 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           });
 
           [...seatGroups.values(), ...unassignedGroups].forEach(restrKeys => {
-            const modified = applyCourseRestriction(course, restrKeys);
-            let label = null;
-            if (modified) {
-              if (modified.name !== baseName) {
-                label = modified.name;
-              } else if (modified.sub !== baseSub) {
-                const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
-                const newOnes = modified.sub.split(/[,·]+/).map(s => s.trim()).filter(t => !baseTokens.has(t.toLowerCase()));
-                label = newOnes.length > 0 ? newOnes[0] : modified.sub;
-              } else {
-                for (const k of restrKeys) {
-                  const n = deriveKitchenNote(course, k, baseName, baseSub);
-                  if (n) { label = n; break; }
-                }
-              }
-            }
-            if (label) {
-              modCounts[label] = (modCounts[label] || 0) + 1;
-            }
+            const mod = getCourseMod(course, restrKeys);
+            if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
           });
 
           if (Object.keys(modCounts).length > 0) {
