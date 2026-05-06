@@ -3,6 +3,7 @@ import {
   applyCourseRestriction,
   applyMenuOverride,
   mergeDishes,
+  getCourseMod,
 } from "../utils/menuUtils.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -209,5 +210,49 @@ describe("mergeDishes", () => {
   it("handles null/undefined input gracefully", () => {
     expect(mergeDishes(null)).toHaveLength(3);
     expect(mergeDishes(undefined)).toHaveLength(3);
+  });
+});
+
+// ── getCourseMod ───────────────────────────────────────────────────────────────
+
+describe("getCourseMod", () => {
+  const baseCourse = (restrictions = {}) => ({
+    course_key: "main",
+    menu: { name: "Chicken", sub: "Jus" },
+    restrictions,
+  });
+
+  it("returns null when no restriction keys", () => {
+    expect(getCourseMod(baseCourse(), [])).toBeNull();
+    expect(getCourseMod(baseCourse(), null)).toBeNull();
+  });
+
+  it("reads mapped flat note (gluten_free_note)", () => {
+    const course = baseCourse({ gluten_free_note: "GF bread" });
+    expect(getCourseMod(course, ["gluten"])).toBe("GF BREAD");
+  });
+
+  it("reads raw-key flat note (gluten_note) — previously missed", () => {
+    const course = baseCourse({ gluten_note: "GF version" });
+    expect(getCourseMod(course, ["gluten"])).toBe("GF VERSION");
+  });
+
+  it("reads nested kitchen_note on mapped variant (gluten_free.kitchen_note) — previously missed", () => {
+    const course = baseCourse({ gluten_free: { kitchen_note: "No flour sauce" } });
+    expect(getCourseMod(course, ["gluten"])).toBe("NO FLOUR SAUCE");
+  });
+
+  it("reads nested kitchen_note on raw-key variant (gluten.kitchen_note) — previously missed", () => {
+    const course = baseCourse({ gluten: { kitchen_note: "Rice noodles" } });
+    expect(getCourseMod(course, ["gluten"])).toBe("RICE NOODLES");
+  });
+
+  it("falls back to substitution name when no note", () => {
+    const course = baseCourse({ gluten_free: { name: "GF Pasta", sub: "Olive oil" } });
+    expect(getCourseMod(course, ["gluten"])).toBe("GF Pasta");
+  });
+
+  it("returns null when dish is unchanged for the restriction", () => {
+    expect(getCourseMod(baseCourse(), ["gluten"])).toBeNull();
   });
 });

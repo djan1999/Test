@@ -244,12 +244,17 @@ export function getCourseMod(course, restrKeys) {
   const baseName = course?.menu?.name || "";
   const baseSub  = course?.menu?.sub  || "";
 
-  // Priority 1: restriction notes
+  // Priority 1: restriction notes — check all storage patterns (flat _note,
+  // raw-key _note, and nested kitchen_note inside the variant object)
   for (const key of RESTRICTION_PRIORITY_KEYS) {
     if (!restrKeys.includes(key)) continue;
     const mapped = RESTRICTION_COLUMN_MAP[key] || key;
-    const note = course.restrictions?.[`${mapped}_note`];
-    if (note) return note.toUpperCase();
+    const note =
+      course.restrictions?.[`${mapped}_note`] ||
+      course.restrictions?.[`${key}_note`] ||
+      course.restrictions?.[mapped]?.kitchen_note ||
+      course.restrictions?.[key]?.kitchen_note;
+    if (note) return String(note).toUpperCase();
   }
 
   // Priority 2: full substitution
