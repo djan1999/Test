@@ -449,7 +449,7 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
         // Handles both seat-assigned (pos > 0) and unassigned (pos null) restrictions —
         // unassigned ones are each treated as one guest of unknown seat.
         let modLines = [];
-        if (!isOpt && !isCelebration && restrictions.length > 0) {
+        if (!isCelebration && restrictions.length > 0) {
           const modCounts = {};
 
           const seatGroups = new Map();
@@ -480,8 +480,11 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
         }
 
         if (isOpt) {
-          // Optional extras (Beetroot, Cheese): blank quantity — staff fills in
-          html += `<div class="cr cr-opt"><span class="qty"></span><span class="cname">${esc(displayName)}${inlineNote}</span></div>`;
+          html += `<div class="cr cr-opt"><span class="qty"></span><span class="cname">${esc(displayName)}${inlineNote}</span>`;
+          if (modLines.length) {
+            html += `<span class="cmods">&nbsp;&middot;&nbsp; ${modLines.join(" &middot;&nbsp; ")}</span>`;
+          }
+          html += `</div>`;
         } else {
           html += `<div class="cr"><span class="qty">${guests}</span><span class="cname">${esc(displayName)}${inlineNote}</span>`;
           if (modLines.length) {
