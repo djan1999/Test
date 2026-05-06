@@ -442,13 +442,9 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
         const isCelebration = category === "celebration";
         const kcNote = kitchenCourseNotes[key] || {};
         const displayName = kcNote.name || course.menu?.name || key;
-        const inlineNote = kcNote.note ? ` [${kcNote.note}]` : "";
 
-        // For main courses: find the actual alternative dish name for each
-        // restriction group and show a count breakdown, e.g. "1× Danube · 1× Parsnip Root".
-        // Handles both seat-assigned (pos > 0) and unassigned (pos null) restrictions —
-        // unassigned ones are each treated as one guest of unknown seat.
-        let modLines = [];
+        // kcNote.note rendered as a mod (same style as restriction mods, no brackets)
+        let modLines = kcNote.note ? [esc(kcNote.note)] : [];
         if (!isCelebration && restrictions.length > 0) {
           const modCounts = {};
 
@@ -480,13 +476,13 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
         }
 
         if (isOpt) {
-          html += `<div class="cr cr-opt"><span class="qty"></span><span class="cname">${esc(displayName)}${inlineNote}</span>`;
+          html += `<div class="cr cr-opt"><span class="qty"></span><span class="cname">${esc(displayName)}</span>`;
           if (modLines.length) {
             html += `<span class="cmods">&nbsp;&middot;&nbsp; ${modLines.join(" &middot;&nbsp; ")}</span>`;
           }
           html += `</div>`;
         } else {
-          html += `<div class="cr"><span class="qty">${guests}</span><span class="cname">${esc(displayName)}${inlineNote}</span>`;
+          html += `<div class="cr"><span class="qty">${guests}</span><span class="cname">${esc(displayName)}</span>`;
           if (modLines.length) {
             html += `<span class="cmods">&nbsp;&middot;&nbsp; ${modLines.join(" &middot;&nbsp; ")}</span>`;
           }
