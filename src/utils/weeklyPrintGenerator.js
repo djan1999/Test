@@ -515,7 +515,7 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
   const css = `
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:4mm;}
-@page{size:A4 landscape;margin:5mm 5mm;}
+@page{size:A4 landscape;margin:4mm 4mm;}
 @media print{body{padding:0;}}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;align-items:start;}
 .ticket{border:1.5pt solid #000;width:100%;font-family:'Roboto Mono',monospace;page-break-inside:avoid;break-inside:avoid;}
@@ -527,14 +527,13 @@ body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;background:#ff
 .pair{border-bottom:1pt solid #000;padding:2.5pt 5pt;font-size:7pt;font-weight:700;letter-spacing:0.08em;text-align:center;}
 .notes{border-bottom:1pt solid #000;padding:2pt 5pt;font-size:7pt;font-style:italic;}
 .courses{border-bottom:1pt solid #000;}
-.cr{display:flex;align-items:baseline;padding:1.5pt 5pt;border-bottom:0.5pt dotted #aaa;flex-wrap:wrap;}
-.cr:last-child{border-bottom:none;}
+.cr{display:flex;align-items:baseline;padding:1pt 5pt;overflow:hidden;}
 .qty{min-width:12pt;font-size:9pt;font-weight:700;flex-shrink:0;}
-.cname{font-size:9pt;font-weight:700;line-height:1.2;}
-.cmods{font-size:8pt;font-weight:400;}
-.summary{padding:3pt 5pt;}
-.srow{font-size:8pt;font-weight:700;min-height:14pt;padding:2pt 0;border-bottom:0.5pt dotted #aaa;display:flex;align-items:flex-start;}
-.srow-notes{min-height:20pt;border-bottom:none;}
+.cname{font-size:9pt;font-weight:700;line-height:1.2;flex-shrink:0;}
+.cmods{font-size:7.5pt;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.summary{padding:2pt 5pt;}
+.srow{font-size:8pt;font-weight:700;min-height:12pt;padding:1.5pt 0;border-bottom:0.5pt solid #ccc;display:flex;align-items:flex-start;}
+.srow-notes{min-height:16pt;border-bottom:none;}
 .srow:last-child{border-bottom:none;}
 .slbl{flex-shrink:0;}
 .srestr-val{font-weight:400;margin-left:3pt;}
