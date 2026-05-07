@@ -6,6 +6,11 @@ import {
 import { DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
 import { buildDefaultTemplate } from "./utils/menuTemplateSchema.js";
 import {
+  createDefaultLayouts,
+  sanitizeLayoutsPayload,
+  getAssignedLayout,
+} from "./utils/menuLayouts.js";
+import {
   readLocalBeverages, writeLocalBeverages,
   readLocalBoardState, writeLocalBoardState,
   STORAGE_KEY,
@@ -92,6 +97,7 @@ const SITTING_TIMES = DEFAULT_SITTING_TIMES;
 const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
 const MENU_LAYOUT_PROFILES_KEY = "milka_menu_layout_profiles_v1";
 const MENU_ACTIVE_LAYOUT_PROFILE_KEY = "milka_active_layout_profile_v1";
+const MENU_LAYOUTS_KEY = "milka_menu_layouts_v1";
 const SYNC_CONFIG_KEY = "milka_sync_config_v1";
 const DEFAULT_SYNC_CONFIG = {
   winesEnabled: true,
@@ -1684,6 +1690,21 @@ export default function App() {
       return normalizeMenuRules(DEFAULT_MENU_RULES);
     }
   });
+  // ── Named Menu Layouts (Long/Short layout assignment) ─────────────────────
+  // Each layout is an ordered list of items: course refs, static text, headers,
+  // spacers, dividers. The Long Menu and Short Menu each pick which layout to
+  // render. Persisted in service_settings under id="menu_layouts_v1".
+  const [menuLayoutsState, setMenuLayoutsState] = useState(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(MENU_LAYOUTS_KEY) || "null");
+      const sanitized = sanitizeLayoutsPayload(raw);
+      if (sanitized.layouts.length > 0) return sanitized;
+    } catch {}
+    return { layouts: [], assignments: { longMenuLayoutId: null, shortMenuLayoutId: null } };
+  });
+  const menuLayoutsRef = useRef(menuLayoutsState);
+  menuLayoutsRef.current = menuLayoutsState;
+  const menuLayoutsLoaded = useRef(false);
   const [menuRulesSaving, setMenuRulesSaving] = useState(false);
   const [menuRulesSaved, setMenuRulesSaved] = useState(false);
   const menuRulesRef = useRef(menuRules);
@@ -2595,6 +2616,51 @@ export default function App() {
     setTimeout(() => setMenuRulesSaved(false), 2500);
   };
 
+  // ── Named Menu Layouts persistence ────────────────────────────────────────
+  useEffect(() => {
+    try { localStorage.setItem(MENU_LAYOUTS_KEY, JSON.stringify(menuLayoutsState)); } catch {}
+  }, [menuLayoutsState]);
+
+  const persistMenuLayouts = useCallback(async (payload) => {
+    if (!supabase) return;
+    await supabase.from(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "menu_layouts_v1", state: payload, updated_at: new Date().toISOString() }, { onConflict: "id" });
+  }, []);
+
+  const updateMenuLayouts = useCallback((nextOrFn) => {
+    setMenuLayoutsState(prev => {
+      const draft = typeof nextOrFn === "function" ? nextOrFn(prev) : nextOrFn;
+      const sanitized = sanitizeLayoutsPayload(draft);
+      // Fire-and-forget remote save; localStorage is handled by the effect above.
+      persistMenuLayouts(sanitized);
+      return sanitized;
+    });
+  }, [persistMenuLayouts]);
+
+  // Load Menu Layouts from Supabase, or seed defaults from menuCourses on first run.
+  useEffect(() => {
+    if (!supabase) { menuLayoutsLoaded.current = true; return; }
+    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layouts_v1").maybeSingle()
+      .then(({ data }) => {
+        const sanitized = sanitizeLayoutsPayload(data?.state);
+        if (sanitized.layouts.length > 0) {
+          setMenuLayoutsState(sanitized);
+        }
+        menuLayoutsLoaded.current = true;
+      })
+      .catch(() => { menuLayoutsLoaded.current = true; });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Seed default Long/Short layouts once menuCourses are loaded and no layouts exist yet.
+  // This only runs once per session and only when the layouts payload is empty.
+  useEffect(() => {
+    if (!menuLayoutsLoaded.current) return;
+    if (menuLayoutsState.layouts.length > 0) return;
+    if (!Array.isArray(menuCourses) || menuCourses.length === 0) return;
+    const defaults = createDefaultLayouts(menuCourses);
+    updateMenuLayouts(defaults);
+  }, [menuCourses, menuLayoutsState.layouts.length, updateMenuLayouts]);
+
   // ── Quick Access persistence ──────────────────────────────────────────────
   useEffect(() => {
     try { localStorage.setItem("milka_quick_access", JSON.stringify(quickAccessItems)); } catch {}
@@ -3066,6 +3132,8 @@ export default function App() {
         beers={beers}
         aperitifOptions={aperitifOptions}
         menuRules={menuRules}
+        menuLayouts={menuLayoutsState.layouts}
+        layoutAssignments={menuLayoutsState.assignments}
         onExit={() => changeMode(null)}
       />
     </div>
@@ -3116,6 +3184,9 @@ export default function App() {
         quickAccessItems={quickAccessItems}
         onUpdateQuickAccess={updateQuickAccess}
         aperitifOptions={aperitifOptions}
+        menuLayouts={menuLayoutsState.layouts}
+        layoutAssignments={menuLayoutsState.assignments}
+        onUpdateMenuLayouts={updateMenuLayouts}
         onExit={() => changeMode(null)}
       />
     </div>

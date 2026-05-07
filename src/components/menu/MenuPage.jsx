@@ -6,7 +6,7 @@ import MenuGenerator from "./MenuGenerator.jsx";
 const FONT = tokens.font;
 const { ink, rule, neutral, green } = tokens;
 
-export default function MenuPage({ tables, menuCourses, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], globalLayout = {}, menuTemplate = null, aperitifOptions = [], menuRules = DEFAULT_MENU_RULES, onExit }) {
+export default function MenuPage({ tables, menuCourses, upd, logoDataUri = "", wines = [], cocktails = [], spirits = [], beers = [], globalLayout = {}, menuTemplate = null, aperitifOptions = [], menuRules = DEFAULT_MENU_RULES, menuLayouts = [], layoutAssignments = {}, onExit }) {
   const [menuGenTable, setMenuGenTable] = useState(null);
 
   return (
@@ -67,6 +67,8 @@ export default function MenuPage({ tables, menuCourses, upd, logoDataUri = "", w
           upd={upd}
           defaultLayoutStyles={globalLayout}
           menuTemplate={menuTemplate}
+          menuLayouts={menuLayouts}
+          layoutAssignments={layoutAssignments}
           logoDataUri={logoDataUri}
           wines={wines}
           cocktails={cocktails}

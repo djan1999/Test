@@ -34,6 +34,16 @@ from generate_series(1, 10) as gs
 on conflict (table_id) do nothing;
 
 -- ── service_settings ────────────────────────────────────────
+-- Generic key/value JSON store. Notable rows used by the app:
+--   id = "menu_layouts_v1"      → { layouts: [...], assignments: { longMenuLayoutId, shortMenuLayoutId } }
+--   id = "menu_layout_v2"       → per-seat printed-menu template (header/footer/drinks scaffolding)
+--   id = "menu_layout_global"   → layout style overrides (legacy; kept for back-compat)
+--   id = "menu_layout_profiles_v1" → multi-profile wrapper for the per-seat template
+--   id = "menu_gen_rules"       → generator behaviour flags
+--   id = "menu_gen_team"        → team names
+--   id = "menu_gen_title"       → menu title (per-language)
+--   id = "menu_gen_thankyou"    → thank-you note (per-language)
+--   id = "quick_access"         → quick-access items
 create table if not exists public.service_settings (
   id text primary key,
   state jsonb not null default '{}'::jsonb,
@@ -56,6 +66,12 @@ create policy "service_settings_update" on public.service_settings
 
 insert into public.service_settings (id, state)
 values ('main', '{}'::jsonb)
+on conflict (id) do nothing;
+
+-- Seed empty Menu Layouts payload so the app has a row to read on first load.
+-- The app populates default Long/Short layouts from menuCourses on first run.
+insert into public.service_settings (id, state)
+values ('menu_layouts_v1', '{"layouts":[],"assignments":{"longMenuLayoutId":null,"shortMenuLayoutId":null}}'::jsonb)
 on conflict (id) do nothing;
 
 -- ── service_archive ─────────────────────────────────────────

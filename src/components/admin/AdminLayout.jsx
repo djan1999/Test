@@ -73,6 +73,10 @@ export default function AdminLayout({
   quickAccessItems,
   onUpdateQuickAccess,
   aperitifOptions = [],
+  // Named Menu Layouts
+  menuLayouts = [],
+  layoutAssignments = {},
+  onUpdateMenuLayouts,
   // Navigation
   onExit,
 }) {
@@ -286,6 +290,9 @@ export default function AdminLayout({
                 spirits={spirits}
                 beers={beers}
                 aperitifOptions={aperitifOptions}
+                menuLayouts={menuLayouts}
+                layoutAssignments={layoutAssignments}
+                onUpdateMenuLayouts={onUpdateMenuLayouts}
               />
             </div>
           )}

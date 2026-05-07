@@ -11,6 +11,7 @@
 
 import { applyCourseRestriction } from "./menuUtils.js";
 import { buildDefaultTemplate, parseWidthPreset } from "./menuTemplateSchema.js";
+import { spacerSizeToPt } from "./menuLayouts.js";
 
 export const DEFAULT_MENU_RULES = {
   overwriteTitleAndThankYouOnLanguageSwitch: true,
@@ -104,6 +105,12 @@ export function generateMenuHTML({
   // Template v2 — when provided, drives the row order / block resolution.
   // When null/absent, auto-migrated from menuCourses via buildDefaultTemplate().
   menuTemplate = null,
+  // Named Menu Layout (v3 layout system) — when provided, the layout's items
+  // determine which courses appear and in what order, plus any static text /
+  // header / spacer / divider blocks. Course content still comes from
+  // menuCourses; the menuTemplate provides header/footer/pairing scaffolding.
+  // When null/absent, falls back to the legacy menuType-based filtering.
+  menuLayout = null,
   menuRules = DEFAULT_MENU_RULES,
   // Font/logo assets
   _fontBold = "",
@@ -250,34 +257,68 @@ export function generateMenuHTML({
   };
 
   // ── Build visibleCourses (filtered and sorted) ────────────────────────────
+  // Layout-driven mode: when a menuLayout is provided, the layout's course
+  // items decide visibility and order. The legacy isShort filter is bypassed.
+  const useLayout = !!(menuLayout && Array.isArray(menuLayout.items));
   const visibleCourses = [];
-  menuCourses.forEach((course, i) => {
-    const courseKey = normalizeCourseToken(course?.course_key || course?.key || course?.menu?.name);
-    const courseName = String(course?.menu?.name || "").trim().toUpperCase();
-    const optionalFlag = normalizeCourseToken(course?.optional_flag || "");
-    const category = normalizeCourseCategory(course?.course_category, optionalFlag);
-    if ((category === "optional" || category === "celebration") && optionalFlag) {
-      const extra = getExtra(optionalFlag);
-      if (!extra?.ordered) return;
-    }
-
-    if (isShort) {
-      if (!isTruthyShort(course?.show_on_short)) return;
-      const rank = Number(course?.short_order) || 9999;
-      visibleCourses.push({ course, i, courseName, courseKey, optionalFlag, orderValue: rank });
-      return;
-    }
-
-    visibleCourses.push({
-      course,
-      i,
-      courseName,
-      courseKey,
-      optionalFlag,
-      orderValue: Number(course.position) || i + 1,
+  if (useLayout) {
+    const courseByKey = new Map();
+    menuCourses.forEach((course, i) => {
+      const k = normalizeCourseToken(course?.course_key || course?.key || course?.menu?.name);
+      if (k && !courseByKey.has(k)) courseByKey.set(k, { course, i });
     });
-  });
-  visibleCourses.sort((a, b) => a.orderValue - b.orderValue);
+    let orderCounter = 0;
+    menuLayout.items.forEach((item) => {
+      if (item?.type !== "course") return;
+      const k = normalizeCourseToken(item.courseKey || "");
+      const found = courseByKey.get(k);
+      if (!found) return; // missing courses are skipped silently
+      const { course, i } = found;
+      const optionalFlag = normalizeCourseToken(course?.optional_flag || "");
+      const category = normalizeCourseCategory(course?.course_category, optionalFlag);
+      if ((category === "optional" || category === "celebration") && optionalFlag) {
+        const extra = getExtra(optionalFlag);
+        if (!extra?.ordered) return;
+      }
+      orderCounter += 1;
+      visibleCourses.push({
+        course,
+        i,
+        courseName: String(course?.menu?.name || "").trim().toUpperCase(),
+        courseKey: k,
+        optionalFlag,
+        orderValue: orderCounter,
+      });
+    });
+  } else {
+    menuCourses.forEach((course, i) => {
+      const courseKey = normalizeCourseToken(course?.course_key || course?.key || course?.menu?.name);
+      const courseName = String(course?.menu?.name || "").trim().toUpperCase();
+      const optionalFlag = normalizeCourseToken(course?.optional_flag || "");
+      const category = normalizeCourseCategory(course?.course_category, optionalFlag);
+      if ((category === "optional" || category === "celebration") && optionalFlag) {
+        const extra = getExtra(optionalFlag);
+        if (!extra?.ordered) return;
+      }
+
+      if (isShort) {
+        if (!isTruthyShort(course?.show_on_short)) return;
+        const rank = Number(course?.short_order) || 9999;
+        visibleCourses.push({ course, i, courseName, courseKey, optionalFlag, orderValue: rank });
+        return;
+      }
+
+      visibleCourses.push({
+        course,
+        i,
+        courseName,
+        courseKey,
+        optionalFlag,
+        orderValue: Number(course.position) || i + 1,
+      });
+    });
+    visibleCourses.sort((a, b) => a.orderValue - b.orderValue);
+  }
 
   const DANUBE_SALMON_IDX = visibleCourses.find(vc => vc.courseKey === DANUBE_SALMON_KEY)?.i ?? Infinity;
 
@@ -312,14 +353,152 @@ export function generateMenuHTML({
     ? menuTemplate
     : buildDefaultTemplate(menuCourses);
 
-  // ── Reorder template course rows for short menu ──────────────────────────
-  // When isShort, course rows are sorted by their course's short_order while
-  // structural rows (spacers, headers, etc.) stay at their original positions.
-  // This ensures the short_order field drives the render sequence rather than
-  // the template's long-menu layout order.
+  // ── Build effective template rows ────────────────────────────────────────
+  // Layout-driven mode (preferred): the assigned Menu Layout drives the body
+  // order — course items, plus any text / header / spacer / divider items the
+  // layout contains. The menuTemplate's pre-course rows (header, aperitif,
+  // pairing label) and post-course rows (goodbye, team) are preserved.
+  //
+  // Legacy fallback: when no layout is provided, we keep the previous
+  // short-menu reordering by short_order; this remains for backwards
+  // compatibility with sessions that haven't migrated yet.
   const effectiveTemplateRows = (() => {
-    if (!isShort) return template.rows;
     const tRows = template.rows;
+    if (useLayout) {
+      // Locate course-row indices in the template so we can split it into
+      // pre-course / post-course segments. Pairing-label rows that originally
+      // sat in the course zone are forwarded so the section break still renders.
+      const isCourseRow = (row) => row.left?.type === "course" || row.right?.type === "course";
+      const isPairingLabel = (row) => row.left?.type === "pairing_label" || row.right?.type === "pairing_label";
+      const firstCourseIdx = tRows.findIndex(isCourseRow);
+      const lastCourseIdx = (() => {
+        for (let i = tRows.length - 1; i >= 0; i--) if (isCourseRow(tRows[i])) return i;
+        return -1;
+      })();
+
+      const preRows = firstCourseIdx >= 0 ? tRows.slice(0, firstCourseIdx) : [...tRows];
+      const postRows = lastCourseIdx >= 0 ? tRows.slice(lastCourseIdx + 1) : [];
+      const courseZone = (firstCourseIdx >= 0 && lastCourseIdx >= 0)
+        ? tRows.slice(firstCourseIdx, lastCourseIdx + 1)
+        : [];
+
+      // Embedded pairing-label rows (carry forward into the new body so the
+      // pairing section still renders before the same target course).
+      const embeddedLabelRows = courseZone.filter(isPairingLabel);
+
+      // Map of courseKey → original course row from menuTemplate, so we keep
+      // any custom right-block (drinks/pairing) the user configured per-course.
+      const tplCourseRowByKey = new Map();
+      courseZone.forEach(r => {
+        if (r.left?.type === "course") {
+          const k = normalizeCourseToken(r.left.courseKey || "");
+          if (k && !tplCourseRowByKey.has(k)) tplCourseRowByKey.set(k, r);
+        }
+      });
+
+      const layoutRows = [];
+      const layoutItems = Array.isArray(menuLayout.items) ? menuLayout.items : [];
+
+      // Determine which course (if any) the embedded pairing-label rows should
+      // appear before. Default behavior in buildDefaultTemplate places it before
+      // danube_salmon. Generalize: place pairing-label before the same course it
+      // immediately preceded in the original template.
+      const labelInsertBeforeKey = (() => {
+        for (let i = 0; i < courseZone.length; i++) {
+          if (!isPairingLabel(courseZone[i])) continue;
+          for (let j = i + 1; j < courseZone.length; j++) {
+            if (courseZone[j].left?.type === "course") {
+              return normalizeCourseToken(courseZone[j].left.courseKey || "");
+            }
+          }
+        }
+        return null;
+      })();
+      const labelEmitted = { current: false };
+
+      const emitPairingLabelsIfNeeded = (beforeKey) => {
+        if (labelEmitted.current) return;
+        if (!labelInsertBeforeKey || labelInsertBeforeKey !== beforeKey) return;
+        embeddedLabelRows.forEach(r => layoutRows.push({ ...r }));
+        labelEmitted.current = true;
+      };
+
+      let synthSeq = 0;
+      const synthId = (kind) => `layout_${kind}_${++synthSeq}`;
+
+      layoutItems.forEach((item) => {
+        if (!item || !item.type) return;
+        if (item.type === "course") {
+          const key = normalizeCourseToken(item.courseKey || "");
+          if (!key) return;
+          emitPairingLabelsIfNeeded(key);
+          const tplRow = tplCourseRowByKey.get(key);
+          if (tplRow) { layoutRows.push(tplRow); return; }
+          // Default course row: course block on the left, drinks (pairing) on the right.
+          layoutRows.push({
+            id: synthId(`course_${key}`),
+            left:  { type: "course", courseKey: key, showPairing: true },
+            right: { type: "drinks", drinkSource: "pairing", showByGlass: true, showBottle: true },
+            widthPreset: "55/45",
+            gap: 0,
+          });
+          return;
+        }
+        if (item.type === "spacer") {
+          const pt = spacerSizeToPt(item.size || "medium");
+          layoutRows.push({ id: synthId("spacer"), left: null, right: null, gap: pt, widthPreset: "100/0" });
+          return;
+        }
+        if (item.type === "divider") {
+          layoutRows.push({
+            id: synthId("divider"),
+            left: { type: "divider", thickness: 0.5, color: "#cccccc", marginTop: 3, marginBottom: 3 },
+            right: null, widthPreset: "100/0", gap: 0,
+          });
+          return;
+        }
+        if (item.type === "sectionHeader") {
+          layoutRows.push({
+            id: synthId("header"),
+            left: { type: "text", text: item.text || "", bold: true, fontSize: null, lineHeight: null, align: item.align || "left" },
+            right: null, widthPreset: "100/0", gap: 0,
+          });
+          return;
+        }
+        if (item.type === "staticText") {
+          layoutRows.push({
+            id: synthId("text"),
+            left: { type: "text", text: item.text || "", bold: !!item.bold, fontSize: null, lineHeight: null, align: item.align || "left" },
+            right: null, widthPreset: "100/0", gap: 0,
+          });
+          return;
+        }
+        if (item.type === "optionalNote") {
+          layoutRows.push({
+            id: synthId("note"),
+            left: { type: "text", text: item.text || "", bold: false, fontSize: null, lineHeight: null, align: "left" },
+            right: null, widthPreset: "100/0", gap: 0,
+          });
+          return;
+        }
+      });
+
+      // If the embedded pairing label never matched a course in the layout,
+      // fall back to inserting it before the first course row that we emitted.
+      if (!labelEmitted.current && embeddedLabelRows.length > 0) {
+        const firstCourseInLayoutIdx = layoutRows.findIndex(r => r.left?.type === "course");
+        if (firstCourseInLayoutIdx >= 0) {
+          layoutRows.splice(firstCourseInLayoutIdx, 0, ...embeddedLabelRows.map(r => ({ ...r })));
+        } else {
+          layoutRows.push(...embeddedLabelRows.map(r => ({ ...r })));
+        }
+      }
+
+      return [...preRows, ...layoutRows, ...postRows];
+    }
+
+    // Legacy short-menu reorder by short_order.
+    if (!isShort) return tRows;
     const courseIdxs = tRows.reduce((acc, row, i) => {
       if (row.left?.type === "course") acc.push(i);
       return acc;
@@ -406,7 +585,9 @@ export function generateMenuHTML({
     const plSide  = lb?.type === "pairing_label" ? "left" : "right";
     const plBlock = lb?.type === "pairing_label" ? lb : rb?.type === "pairing_label" ? rb : null;
     if (plBlock) {
-      if (!isShort) {
+      // In layout-driven mode the assigned layout decides what renders, so we
+      // bypass the legacy short-menu suppression of pairing labels.
+      if (useLayout || !isShort) {
         // Per-block control. Default is to keep the reserved row (back-compat with old behavior).
         // Set to false on the block to disable reserving space when no pairing is selected.
         // (We support both historic/internal key names to avoid breaking old saved templates.)
