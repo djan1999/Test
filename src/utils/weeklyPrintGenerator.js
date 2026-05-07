@@ -513,7 +513,8 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
 body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:4mm;}
 @page{size:A4 portrait;margin:4mm 4mm;}
 @media print{body{padding:0;}}
-.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:4mm;align-items:start;}
+.page{display:grid;grid-template-columns:repeat(2,1fr);gap:4mm;align-items:start;page-break-after:always;break-after:page;}
+.page:last-child{page-break-after:auto;break-after:auto;}
 .ticket{border:1.5pt solid #000;width:100%;font-family:'Roboto Mono',monospace;page-break-inside:avoid;break-inside:avoid;}
 .hdr{border-bottom:1pt solid #000;padding:4pt 6pt;display:grid;grid-template-columns:1fr 1fr;gap:1pt 5pt;}
 .hcol{display:flex;align-items:baseline;gap:2pt;}
@@ -539,9 +540,11 @@ body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;background:#ff
 <html><head><meta charset="utf-8"><title>Kitchen Tickets</title>
 ${ROBOTO_LINK}
 <style>${css}</style>
-</head><body><div class="grid">
-${ticketCards.join("\n")}
-</div>
-<script>window.onload = function(){ window.print(); };<\/script>
+</head><body>
+${Array.from({ length: Math.ceil(ticketCards.length / 2) }, (_, i) =>
+  `<div class="page">${ticketCards.slice(i * 2, i * 2 + 2).join("\n")}</div>`
+).join("\n")}
+
+<script>window.onload = function(){ window.print(); };</script>
 </body></html>`;
 }
