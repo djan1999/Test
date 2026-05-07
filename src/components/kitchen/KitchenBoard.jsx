@@ -9,7 +9,7 @@ import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
 
 const FONT = tokens.font;
 
-export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners }) {
+export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, menuLayouts = [], layoutAssignments = {} }) {
   const seats = table.seats || [];
   const restrictions = table.restrictions || [];
   const log = table.kitchenLog || {};
@@ -139,9 +139,24 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
   const isShort = String(table.menuType || "").trim().toLowerCase() === "short";
 
-  // Courses to show — delegated to shared helper so SheetView and KitchenBoard
-  // always use the same table-specific course list.
-  const courses = getVisibleCoursesForTable(table, menuCourses || []).map(c => c.rawCourse);
+  // Courses to show — delegated to shared helper. When menu_layouts_v1 is
+  // populated and a kitchen layout is assigned, that layout drives course
+  // visibility/order; otherwise we fall back to the legacy show_on_short /
+  // position rules so older sessions stay stable.
+  const visibleCoursesForTable = getVisibleCoursesForTable(
+    table,
+    menuCourses || [],
+    { layouts: menuLayouts, assignments: layoutAssignments }
+  );
+  const kitchenItemByCourseKey = visibleCoursesForTable.reduce((acc, vc) => {
+    if (vc.kitchenItem) acc[vc.key] = vc.kitchenItem;
+    return acc;
+  }, {});
+  const kitchenNameByCourseKey = visibleCoursesForTable.reduce((acc, vc) => {
+    acc[vc.key] = vc.name;
+    return acc;
+  }, {});
+  const courses = visibleCoursesForTable.map(c => c.rawCourse);
 
   const firedCount   = Object.keys(log).length;
   const totalCourses = courses.length; // extras are now included in courses
@@ -394,9 +409,19 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const fired = !!log[key];
           const firedAt = log[key]?.firedAt;
 
-          const baseName = course.menu?.name || key;
+          // Kitchen layout item (when this table's assigned kitchen layout
+          // contains this course). It can override the display name and turn
+          // off restriction/pairing/seat/course-note overlays per course.
+          const kitchenItem = kitchenItemByCourseKey[key] || null;
+          const layoutName = kitchenItem?.kitchenDisplayName?.trim?.() || "";
+          const showRestrictions = kitchenItem ? kitchenItem.showRestrictions !== false : true;
+          const showSeatNotes    = kitchenItem ? kitchenItem.showSeatNotes    !== false : true;
+          const showCourseNotes  = kitchenItem ? kitchenItem.showCourseNotes  !== false : true;
+          const showPairingAlert = kitchenItem ? kitchenItem.showPairingAlert !== false : true;
+
+          const baseName = layoutName || course.menu?.name || key;
           const mods = (() => {
-            if (fired) return null;
+            if (fired || !showRestrictions) return null;
             const counts = {};
             seats.forEach(seat => {
               const restrKeys = seatRestrKeys(seat);
@@ -407,6 +432,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             return Object.keys(counts).length > 0 ? counts : null;
           })();
           const extraLabel = (() => {
+            if (!showSeatNotes) return null;
             const optKey = optionalKeyForCourse(course);
             if (!optKey) return null;
             const orderedSeats = optionalSeatMap[optKey] || [];
@@ -420,6 +446,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           // Optional drink pairing alert — only shown for the Crayfish course;
           // all other courses with optional_pairing_flag are not surfaced on the ticket.
           const pairingAlert = (() => {
+            if (!showPairingAlert) return null;
             const pKey = normFlag(course?.optional_pairing_flag);
             if (!pKey) return null;
             if (normFlag(course?.course_key) !== "crayfish") return null;
@@ -451,13 +478,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     {kcNote.name && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[3], marginLeft: 5 }}>({baseName})</span>}
                     {extraLabel && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[4], marginLeft: 6 }}>{extraLabel}</span>}
                   </div>
-                  {(pairingAlert || mods || kcNote.note) && !fired && (
+                  {(pairingAlert || mods || (kcNote.note && showCourseNotes)) && !fired && (
                     <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
                       {pairingAlert && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], fontWeight: 600 }}>{pairingAlert}</span>}
                       {mods && Object.entries(mods).map(([mod, count]) => (
                         <span key={mod} style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>{count}× {mod}</span>
                       ))}
-                      {kcNote.note && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>⚑ {kcNote.note}</span>}
+                      {kcNote.note && showCourseNotes && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>⚑ {kcNote.note}</span>}
                     </div>
                   )}
                 </div>
@@ -543,7 +570,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   );
 }
 
-export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging }) {
+export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, menuLayouts = [], layoutAssignments = {} }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
@@ -569,7 +596,15 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
           background: tokens.green.bg,
         }} />
       ) : (
-        <KitchenTicket table={table} menuCourses={menuCourses} upd={upd} dragHandleRef={setActivatorNodeRef} dragListeners={listeners} />
+        <KitchenTicket
+          table={table}
+          menuCourses={menuCourses}
+          upd={upd}
+          dragHandleRef={setActivatorNodeRef}
+          dragListeners={listeners}
+          menuLayouts={menuLayouts}
+          layoutAssignments={layoutAssignments}
+        />
       )}
     </div>
   );
@@ -681,7 +716,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
   );
 }
 
-export default function KitchenBoard({ tables, menuCourses, upd, updMany }) {
+export default function KitchenBoard({ tables, menuCourses, upd, updMany, menuLayouts = [], layoutAssignments = {} }) {
   const activeTables = tables
     .filter(t => t.active && !t.kitchenArchived)
     .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
@@ -755,6 +790,8 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany }) {
                 upd={upd}
                 isDragging={activeId === t.id}
                 anyDragging={activeId !== null}
+                menuLayouts={menuLayouts}
+                layoutAssignments={layoutAssignments}
               />
             ))}
           </div>
@@ -767,7 +804,13 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany }) {
             boxShadow: "0 4px 16px rgba(0,0,0,0.10)",
             opacity: 0.97,
           }}>
-            <KitchenTicket table={activeTable} menuCourses={menuCourses} upd={upd} />
+            <KitchenTicket
+              table={activeTable}
+              menuCourses={menuCourses}
+              upd={upd}
+              menuLayouts={menuLayouts}
+              layoutAssignments={layoutAssignments}
+            />
           </div>
         )}
       </DragOverlay>

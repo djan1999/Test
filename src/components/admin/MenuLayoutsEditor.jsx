@@ -1,16 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { generateMenuHTML } from "../../utils/menuGenerator.js";
 import {
-  LAYOUT_ITEM_TYPES,
   SPACER_SIZES,
+  itemTypesForTarget,
   makeLayout,
   makeLayoutItem,
   duplicateLayout,
   renameLayout,
   isLayoutAssigned,
   canDeleteLayout,
-  resolveMenuLayout,
   getAssignedLayout,
   moveLayoutItem,
 } from "../../utils/menuLayouts.js";
@@ -25,6 +24,11 @@ const ITEM_LABELS = {
   divider:       "Divider",
   optionalNote:  "Optional note",
 };
+
+const TABS = [
+  { id: "guest_menu",   label: "Guest Menu Layouts",  desc: "Drives the printed/preview customer menu." },
+  { id: "kitchen_flow", label: "Kitchen Flow Layouts", desc: "Drives KitchenBoard / SheetView course visibility & order." },
+];
 
 const btnStyle = (active = false) => ({
   fontFamily: FONT,
@@ -61,10 +65,17 @@ const labelStyle = {
   display: "block",
 };
 
+const badge = (text, color = tokens.charcoal.default) => (
+  <span style={{
+    fontSize: 8, letterSpacing: "0.12em", padding: "1px 5px",
+    border: `1px solid ${color}`, color: tokens.ink[1], borderRadius: 0,
+  }}>{text}</span>
+);
+
 /**
- * Layout Manager + Editor — manages the named Menu Layouts list and lets the
- * user edit one layout at a time. Long Menu and Short Menu each pick which
- * layout to use, persisted in the parent.
+ * Layout Manager + Editor — manages both Guest Menu Layouts and Kitchen Flow
+ * Layouts. Long/Short Menu and Long/Short Kitchen each pick which layout to
+ * use, persisted via the parent's onUpdateMenuLayouts.
  */
 export default function MenuLayoutsEditor({
   menuLayouts = [],
@@ -76,15 +87,34 @@ export default function MenuLayoutsEditor({
   menuRules,
   logoDataUri = "",
 }) {
-  const [selectedId, setSelectedId] = useState(() => menuLayouts[0]?.id || null);
+  const [tab, setTab] = useState("guest_menu");
+  const [selectedIdByTab, setSelectedIdByTab] = useState({ guest_menu: null, kitchen_flow: null });
   const [previewMode, setPreviewMode] = useState(""); // "" | "long" | "short"
   const [renameDraft, setRenameDraft] = useState("");
   const [renaming, setRenaming] = useState(false);
 
-  const selected = useMemo(
-    () => menuLayouts.find(l => l.id === selectedId) || menuLayouts[0] || null,
-    [menuLayouts, selectedId]
+  const layoutsForTab = useMemo(
+    () => menuLayouts.filter(l => (l?.target || "guest_menu") === tab),
+    [menuLayouts, tab]
   );
+
+  // Default-select the first layout in the active tab when it changes / on mount
+  useEffect(() => {
+    setSelectedIdByTab(prev => {
+      if (prev[tab] && layoutsForTab.some(l => l.id === prev[tab])) return prev;
+      return { ...prev, [tab]: layoutsForTab[0]?.id || null };
+    });
+    setPreviewMode("");
+    setRenaming(false);
+  }, [tab, layoutsForTab]);
+
+  const selectedId = selectedIdByTab[tab];
+  const selected = useMemo(
+    () => layoutsForTab.find(l => l.id === selectedId) || layoutsForTab[0] || null,
+    [layoutsForTab, selectedId]
+  );
+
+  const allowedItemTypes = itemTypesForTarget(tab);
 
   // Course options for the course picker (sorted by position).
   const courseOptions = useMemo(() => {
@@ -97,34 +127,36 @@ export default function MenuLayoutsEditor({
       }));
   }, [menuCourses]);
 
+  const setSelected = (id) => setSelectedIdByTab(prev => ({ ...prev, [tab]: id }));
+
   const replaceLayouts = (mutator) => {
     if (typeof onUpdateMenuLayouts !== "function") return;
-    onUpdateMenuLayouts(prev => {
-      const next = mutator({
-        layouts: Array.isArray(prev?.layouts) ? prev.layouts : [],
-        assignments: prev?.assignments || {},
-      });
-      return next;
-    });
+    onUpdateMenuLayouts(prev => mutator({
+      layouts: Array.isArray(prev?.layouts) ? prev.layouts : [],
+      assignments: prev?.assignments || {},
+    }));
+  };
+
+  const assignmentSlotFor = (kind) => {
+    if (tab === "kitchen_flow") return kind === "long" ? "longKitchenLayoutId" : "shortKitchenLayoutId";
+    return kind === "long" ? "longMenuLayoutId" : "shortMenuLayoutId";
   };
 
   const assign = (kind, id) => {
+    const slot = assignmentSlotFor(kind);
     replaceLayouts(({ layouts, assignments }) => ({
       layouts,
-      assignments: {
-        ...assignments,
-        [kind === "long" ? "longMenuLayoutId" : "shortMenuLayoutId"]: id || null,
-      },
+      assignments: { ...assignments, [slot]: id || null },
     }));
   };
 
   const handleCreate = () => {
-    const created = makeLayout(`Layout ${(menuLayouts.length || 0) + 1}`);
+    const created = makeLayout(`${tab === "kitchen_flow" ? "Kitchen Layout" : "Layout"} ${(layoutsForTab.length || 0) + 1}`, [], tab);
     replaceLayouts(({ layouts, assignments }) => ({
       layouts: [...layouts, created],
       assignments,
     }));
-    setSelectedId(created.id);
+    setSelected(created.id);
   };
 
   const handleDuplicate = () => {
@@ -134,7 +166,7 @@ export default function MenuLayoutsEditor({
       layouts: [...layouts, copy],
       assignments,
     }));
-    setSelectedId(copy.id);
+    setSelected(copy.id);
   };
 
   const handleRename = (next) => {
@@ -150,19 +182,19 @@ export default function MenuLayoutsEditor({
     if (!canDeleteLayout(selected.id, menuLayouts, layoutAssignments)) {
       const reason = isLayoutAssigned(selected.id, layoutAssignments)
         ? "Reassign Long/Short to a different layout first."
-        : "At least one layout must remain.";
+        : "At least one layout per category must remain.";
       // eslint-disable-next-line no-alert
       alert(`Cannot delete this layout. ${reason}`);
       return;
     }
     // eslint-disable-next-line no-alert
     if (!confirm(`Delete layout "${selected.name}"?`)) return;
-    replaceLayouts(({ layouts, assignments }) => {
-      const nextLayouts = layouts.filter(l => l.id !== selected.id);
-      return { layouts: nextLayouts, assignments };
-    });
-    const fallback = menuLayouts.find(l => l.id !== selected.id);
-    setSelectedId(fallback ? fallback.id : null);
+    replaceLayouts(({ layouts, assignments }) => ({
+      layouts: layouts.filter(l => l.id !== selected.id),
+      assignments,
+    }));
+    const fallback = layoutsForTab.find(l => l.id !== selected.id);
+    setSelected(fallback ? fallback.id : null);
   };
 
   const updateSelectedItems = (mutator) => {
@@ -174,7 +206,7 @@ export default function MenuLayoutsEditor({
   };
 
   const addItem = (type, fields = {}) => {
-    updateSelectedItems(items => [...items, makeLayoutItem(type, fields)]);
+    updateSelectedItems(items => [...items, makeLayoutItem(type, fields, tab)]);
   };
   const removeItem = (id) => updateSelectedItems(items => items.filter(it => it.id !== id));
   const updateItem = (id, patch) =>
@@ -184,13 +216,13 @@ export default function MenuLayoutsEditor({
     updateSelectedItems(items => moveLayoutItem(items, idx, target));
   };
 
-  // ── Preview HTML ───────────────────────────────────────────────────────────
+  // ── Preview HTML (guest_menu only) ─────────────────────────────────────────
   const previewLayout = previewMode
-    ? getAssignedLayout(previewMode, menuLayouts, layoutAssignments)
+    ? getAssignedLayout(previewMode, menuLayouts, layoutAssignments, "guest_menu")
     : null;
 
   const previewHtml = useMemo(() => {
-    if (!previewLayout) return "";
+    if (!previewLayout || tab !== "guest_menu") return "";
     return generateMenuHTML({
       seat: { id: 1, pairing: "Wine", aperitifs: [], glasses: [], cocktails: [], beers: [] },
       table: { menuType: previewMode, restrictions: [], bottleWines: [] },
@@ -205,7 +237,10 @@ export default function MenuLayoutsEditor({
       menuRules,
       _logo: logoDataUri,
     });
-  }, [previewLayout, previewMode, menuCourses, layoutStyles, menuTemplate, menuRules, logoDataUri]);
+  }, [previewLayout, previewMode, tab, menuCourses, layoutStyles, menuTemplate, menuRules, logoDataUri]);
+
+  const longSlot = assignmentSlotFor("long");
+  const shortSlot = assignmentSlotFor("short");
 
   return (
     <div style={{
@@ -216,7 +251,7 @@ export default function MenuLayoutsEditor({
       marginBottom: 18,
     }}>
       <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
+        display: "flex", alignItems: "flex-start", justifyContent: "space-between",
         marginBottom: 12, paddingBottom: 10, borderBottom: `1px solid ${tokens.ink[5]}`, flexWrap: "wrap", gap: 10,
       }}>
         <div>
@@ -224,39 +259,70 @@ export default function MenuLayoutsEditor({
             ▨ Menu Layouts
           </div>
           <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginTop: 4, lineHeight: 1.5 }}>
-            Each layout is an ordered list of items (courses + static blocks).
-            Long Menu and Short Menu pick which layout they render. Course content stays in Courses.
+            Course content stays in Courses; layouts only control structure / order / visibility.
+            Guest layouts drive the printed menu. Kitchen layouts drive KitchenBoard and SheetView.
           </div>
         </div>
-        <button onClick={handleCreate} style={btnStyle(false)}>+ New Layout</button>
+        <button onClick={handleCreate} style={btnStyle(false)}>+ New {tab === "kitchen_flow" ? "Kitchen" : "Guest"} Layout</button>
       </div>
 
-      {/* Long/Short assignment */}
+      {/* Tabs */}
+      <div role="tablist" aria-label="Layout categories" style={{ display: "flex", gap: 0, borderBottom: `1px solid ${tokens.ink[5]}`, marginBottom: 12 }}>
+        {TABS.map(t => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(t.id)}
+              style={{
+                fontFamily: FONT, fontSize: 10, letterSpacing: "0.10em", textTransform: "uppercase",
+                padding: "10px 14px",
+                background: active ? tokens.neutral[0] : "transparent",
+                border: "none",
+                borderBottom: `2px solid ${active ? tokens.charcoal.default : "transparent"}`,
+                color: active ? tokens.ink[0] : tokens.ink[3],
+                cursor: "pointer",
+                fontWeight: active ? 600 : 400,
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginBottom: 10 }}>
+        {TABS.find(t => t.id === tab)?.desc}
+      </div>
+
+      {/* Long/Short assignment for the active tab */}
       <div style={{
         display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
         gap: 12, marginBottom: 14,
         background: tokens.ink.bg, border: `1px solid ${tokens.ink[5]}`, padding: 12,
       }}>
         <div>
-          <label style={labelStyle}>Long Menu uses</label>
+          <label style={labelStyle}>Long {tab === "kitchen_flow" ? "Kitchen" : "Menu"} uses</label>
           <select
-            value={layoutAssignments?.longMenuLayoutId || ""}
+            value={layoutAssignments?.[longSlot] || ""}
             onChange={(e) => assign("long", e.target.value || null)}
             style={{ ...inputStyle, width: "100%" }}
           >
             <option value="">— None —</option>
-            {menuLayouts.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            {layoutsForTab.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
         </div>
         <div>
-          <label style={labelStyle}>Short Menu uses</label>
+          <label style={labelStyle}>Short {tab === "kitchen_flow" ? "Kitchen" : "Menu"} uses</label>
           <select
-            value={layoutAssignments?.shortMenuLayoutId || ""}
+            value={layoutAssignments?.[shortSlot] || ""}
             onChange={(e) => assign("short", e.target.value || null)}
             style={{ ...inputStyle, width: "100%" }}
           >
             <option value="">— None —</option>
-            {menuLayouts.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            {layoutsForTab.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
         </div>
       </div>
@@ -264,22 +330,24 @@ export default function MenuLayoutsEditor({
       {/* Layout list / actions */}
       <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 14, alignItems: "start" }}>
         <div style={{ borderRight: `1px solid ${tokens.ink[5]}`, paddingRight: 12 }}>
-          <div style={{ ...labelStyle, marginBottom: 6 }}>Layouts ({menuLayouts.length})</div>
+          <div style={{ ...labelStyle, marginBottom: 6 }}>{tab === "kitchen_flow" ? "Kitchen Layouts" : "Guest Menu Layouts"} ({layoutsForTab.length})</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {menuLayouts.length === 0 && (
+            {layoutsForTab.length === 0 && (
               <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], padding: 8 }}>
-                No layouts yet. Click "+ New Layout" to create one.
+                No layouts in this category yet. Click "+ New Layout" above.
               </div>
             )}
-            {menuLayouts.map(l => {
-              const isLong = layoutAssignments?.longMenuLayoutId === l.id;
-              const isShort = layoutAssignments?.shortMenuLayoutId === l.id;
+            {layoutsForTab.map(l => {
               const active = selected?.id === l.id;
+              const isLongMenu  = layoutAssignments?.longMenuLayoutId    === l.id;
+              const isShortMenu = layoutAssignments?.shortMenuLayoutId   === l.id;
+              const isLongKit   = layoutAssignments?.longKitchenLayoutId === l.id;
+              const isShortKit  = layoutAssignments?.shortKitchenLayoutId=== l.id;
               return (
                 <button
                   key={l.id}
                   type="button"
-                  onClick={() => { setSelectedId(l.id); setRenaming(false); }}
+                  onClick={() => { setSelected(l.id); setRenaming(false); }}
                   style={{
                     textAlign: "left", padding: "8px 10px",
                     fontFamily: FONT, fontSize: 11,
@@ -291,8 +359,10 @@ export default function MenuLayoutsEditor({
                 >
                   <div style={{ fontWeight: 600, marginBottom: 2 }}>{l.name}</div>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    {isLong && <span style={{ fontSize: 8, letterSpacing: "0.12em", padding: "1px 5px", border: `1px solid ${tokens.charcoal.default}`, color: tokens.ink[1] }}>LONG</span>}
-                    {isShort && <span style={{ fontSize: 8, letterSpacing: "0.12em", padding: "1px 5px", border: `1px solid ${tokens.charcoal.default}`, color: tokens.ink[1] }}>SHORT</span>}
+                    {isLongMenu  && badge("LONG MENU")}
+                    {isShortMenu && badge("SHORT MENU")}
+                    {isLongKit   && badge("LONG KITCHEN")}
+                    {isShortKit  && badge("SHORT KITCHEN")}
                     <span style={{ fontSize: 9, color: tokens.ink[3] }}>{(l.items || []).length} items</span>
                   </div>
                 </button>
@@ -333,7 +403,7 @@ export default function MenuLayoutsEditor({
                     title={
                       isLayoutAssigned(selected.id, layoutAssignments)
                         ? "Reassign Long/Short before deleting"
-                        : (menuLayouts.length <= 1 ? "At least one layout must remain" : "Delete this layout")
+                        : "At least one layout must remain"
                     }
                     style={{
                       ...btnStyle(false),
@@ -346,13 +416,13 @@ export default function MenuLayoutsEditor({
               )}
             </div>
 
-            {/* Add item buttons */}
+            {/* Add item buttons (filtered by target) */}
             <div style={{
               display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12,
               padding: 10, border: `1px dashed ${tokens.ink[5]}`,
             }}>
               <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], letterSpacing: "0.10em", textTransform: "uppercase", marginRight: 6, alignSelf: "center" }}>Add:</span>
-              {LAYOUT_ITEM_TYPES.map(t => (
+              {allowedItemTypes.map(t => (
                 <button key={t} onClick={() => addItem(t)} style={btnStyle(false)}>
                   + {ITEM_LABELS[t] || t}
                 </button>
@@ -370,6 +440,7 @@ export default function MenuLayoutsEditor({
                 <LayoutItemRow
                   key={item.id}
                   item={item}
+                  target={tab}
                   index={idx}
                   total={selected.items.length}
                   courseOptions={courseOptions}
@@ -380,31 +451,35 @@ export default function MenuLayoutsEditor({
               ))}
             </div>
 
-            {/* Preview controls */}
-            <div style={{
-              marginTop: 18, paddingTop: 12, borderTop: `1px solid ${tokens.ink[5]}`,
-              display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
-            }}>
-              <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], letterSpacing: "0.14em", textTransform: "uppercase", marginRight: 6 }}>Preview:</span>
-              <button onClick={() => setPreviewMode(previewMode === "long" ? "" : "long")} style={btnStyle(previewMode === "long")}>Long Menu</button>
-              <button onClick={() => setPreviewMode(previewMode === "short" ? "" : "short")} style={btnStyle(previewMode === "short")}>Short Menu</button>
-              {previewMode && previewLayout && (
-                <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2] }}>→ {previewLayout.name}</span>
-              )}
-              {previewMode && !previewLayout && (
-                <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text }}>No layout assigned to {previewMode}</span>
-              )}
-            </div>
-            {previewMode && previewLayout && (
-              <div style={{
-                marginTop: 10, padding: 10, background: tokens.ink.bg, border: `1px solid ${tokens.ink[5]}`,
-              }}>
-                <iframe
-                  title={`menu-layout-preview-${previewMode}`}
-                  srcDoc={previewHtml}
-                  style={{ width: "100%", height: 760, border: `1px solid ${tokens.ink[5]}`, background: tokens.neutral[0] }}
-                />
-              </div>
+            {/* Preview controls — only meaningful for guest_menu (kitchen has no print preview) */}
+            {tab === "guest_menu" && (
+              <>
+                <div style={{
+                  marginTop: 18, paddingTop: 12, borderTop: `1px solid ${tokens.ink[5]}`,
+                  display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+                }}>
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], letterSpacing: "0.14em", textTransform: "uppercase", marginRight: 6 }}>Preview:</span>
+                  <button onClick={() => setPreviewMode(previewMode === "long" ? "" : "long")} style={btnStyle(previewMode === "long")}>Long Menu</button>
+                  <button onClick={() => setPreviewMode(previewMode === "short" ? "" : "short")} style={btnStyle(previewMode === "short")}>Short Menu</button>
+                  {previewMode && previewLayout && (
+                    <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2] }}>→ {previewLayout.name}</span>
+                  )}
+                  {previewMode && !previewLayout && (
+                    <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text }}>No layout assigned to {previewMode}</span>
+                  )}
+                </div>
+                {previewMode && previewLayout && (
+                  <div style={{
+                    marginTop: 10, padding: 10, background: tokens.ink.bg, border: `1px solid ${tokens.ink[5]}`,
+                  }}>
+                    <iframe
+                      title={`menu-layout-preview-${previewMode}`}
+                      srcDoc={previewHtml}
+                      style={{ width: "100%", height: 760, border: `1px solid ${tokens.ink[5]}`, background: tokens.neutral[0] }}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
         ) : (
@@ -417,7 +492,7 @@ export default function MenuLayoutsEditor({
   );
 }
 
-function LayoutItemRow({ item, index, total, courseOptions, onMove, onRemove, onUpdate }) {
+function LayoutItemRow({ item, target, index, total, courseOptions, onMove, onRemove, onUpdate }) {
   const isFirst = index === 0;
   const isLast = index === total - 1;
   const itemLabel = ITEM_LABELS[item.type] || item.type;
@@ -440,7 +515,7 @@ function LayoutItemRow({ item, index, total, courseOptions, onMove, onRemove, on
   return (
     <div style={{
       display: "grid", gridTemplateColumns: "auto 1fr auto",
-      alignItems: "center", gap: 8,
+      alignItems: "start", gap: 8,
       padding: "8px 10px",
       border: `1px solid ${isMissing ? tokens.red.border : tokens.ink[5]}`,
       background: isMissing ? tokens.red.bg : tokens.neutral[0],
@@ -456,7 +531,7 @@ function LayoutItemRow({ item, index, total, courseOptions, onMove, onRemove, on
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.12em", color: tokens.ink[3], textTransform: "uppercase", marginBottom: 4 }}>
           {itemLabel}
         </div>
-        <ItemFields item={item} courseOptions={courseOptions} onUpdate={onUpdate} displayName={displayName} />
+        <ItemFields item={item} target={target} courseOptions={courseOptions} onUpdate={onUpdate} displayName={displayName} />
       </div>
 
       <button onClick={onRemove} title="Remove" style={{ ...btnStyle(false), color: tokens.red.text, borderColor: tokens.red.border }}>×</button>
@@ -464,23 +539,55 @@ function LayoutItemRow({ item, index, total, courseOptions, onMove, onRemove, on
   );
 }
 
-function ItemFields({ item, courseOptions, onUpdate, displayName }) {
+function ItemFields({ item, target, courseOptions, onUpdate, displayName }) {
   if (item.type === "course") {
     return (
-      <select
-        value={item.courseKey || ""}
-        onChange={e => onUpdate({ courseKey: e.target.value })}
-        style={{ ...inputStyle, width: "100%" }}
-      >
-        <option value="">— Select a course —</option>
-        {courseOptions.map(c => (
-          <option key={c.key} value={c.key}>{c.name} ({c.key})</option>
-        ))}
-        {/* Preserve dangling refs so the user can see them */}
-        {item.courseKey && !courseOptions.find(c => c.key === item.courseKey) && (
-          <option value={item.courseKey}>[missing] {item.courseKey}</option>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <select
+          value={item.courseKey || ""}
+          onChange={e => onUpdate({ courseKey: e.target.value })}
+          style={{ ...inputStyle, width: "100%" }}
+        >
+          <option value="">— Select a course —</option>
+          {courseOptions.map(c => (
+            <option key={c.key} value={c.key}>{c.name} ({c.key})</option>
+          ))}
+          {item.courseKey && !courseOptions.find(c => c.key === item.courseKey) && (
+            <option value={item.courseKey}>[missing] {item.courseKey}</option>
+          )}
+        </select>
+
+        {target === "kitchen_flow" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, padding: 6, background: tokens.ink.bg, border: `1px solid ${tokens.ink[5]}` }}>
+            <input
+              value={item.kitchenDisplayName || ""}
+              placeholder="Kitchen display name (optional override)"
+              onChange={e => onUpdate({ kitchenDisplayName: e.target.value })}
+              style={{ ...inputStyle, width: "100%" }}
+            />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {[
+                ["showRestrictions", "Restrictions"],
+                ["showPairingAlert", "Pairing alert"],
+                ["showSeatNotes",    "Seat notes"],
+                ["showCourseNotes",  "Course notes"],
+              ].map(([key, label]) => {
+                const checked = item[key] !== false;
+                return (
+                  <label key={key} style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2], display: "inline-flex", gap: 4, alignItems: "center", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={e => onUpdate({ [key]: e.target.checked })}
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
         )}
-      </select>
+      </div>
     );
   }
   if (item.type === "spacer") {

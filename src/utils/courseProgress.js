@@ -1,7 +1,19 @@
 /**
  * Shared course visibility and progression logic used by SheetView,
  * KitchenBoard, and any future service views.
+ *
+ * Layout-driven (preferred) vs. legacy (fallback):
+ *   - When the caller passes an assigned kitchen layout (or the full
+ *     `{ layouts, assignments }` payload), course visibility and order are
+ *     decided by that layout. show_on_short / short_order / position are
+ *     ignored.
+ *   - When no layout context is provided (or no kitchen layout is assigned
+ *     for this menu type), behaviour falls back to the original
+ *     show_on_short / short_order / position rules so older tables and tests
+ *     keep working unchanged.
  */
+
+import { getAssignedKitchenLayout, resolveKitchenCourses } from "./menuLayouts.js";
 
 const normFlag = s =>
   String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -18,25 +30,59 @@ const isTruthyShort = v => {
 };
 
 /**
+ * Resolve which kitchen layout to use, if any. Accepts either:
+ *   - an already-resolved layout object ({ id, items, target }) — used as-is
+ *   - the full payload `{ layouts, assignments }` — looked up via menuType
+ *   - undefined / null — returns null and the legacy path is used
+ */
+function pickKitchenLayout(table, options) {
+  if (!options) return null;
+  if (Array.isArray(options.items)) return options;
+  if (options.kitchenLayout && Array.isArray(options.kitchenLayout.items)) return options.kitchenLayout;
+  const layouts = options.layouts;
+  const assignments = options.assignments;
+  if (!Array.isArray(layouts) || !assignments) return null;
+  return getAssignedKitchenLayout(table?.menuType || "", layouts, assignments);
+}
+
+/**
  * Return filtered, sorted, display-ready course objects for a given table.
  *
- * Matches KitchenBoard filtering behavior exactly:
+ * Layout-driven path (when an assigned kitchen layout is found):
+ *   - Course list & order come from layout.items (course-type entries only).
+ *   - Inactive / snack courses excluded even if listed.
+ *   - Optional courses appear only when at least one seat ordered them.
+ *   - Celebration courses appear when birthday is on, or at least one seat
+ *     ordered the matching extra.
+ *
+ * Legacy path (no layout context):
  *   - Skips inactive (is_active === false) and snack courses
  *   - Celebration courses auto-include all seats when table.birthday is on
  *   - Optional/celebration courses hidden unless at least one seat ordered them
  *   - Short menu: only courses with show_on_short truthy, sorted by short_order
  *   - Long menu: sorted by position
  *
- * Each returned object: { index, key, name, firedAt, rawCourse }
+ * Each returned object: { index, key, name, firedAt, rawCourse, kitchenItem? }
+ *
+ * Signature: getVisibleCoursesForTable(table, menuCourses, options)
+ *   options can be:
+ *     - undefined          → legacy fallback
+ *     - resolved layout    → use directly
+ *     - { kitchenLayout }  → use the bundled resolved layout
+ *     - { layouts, assignments } → resolve kitchen layout via table.menuType
  */
-export function getVisibleCoursesForTable(table, menuCourses) {
-  const log      = table.kitchenLog        || {};
-  const overrides = table.kitchenCourseNotes || {};
-  const seats    = table.seats             || [];
-  const isShort  = String(table.menuType || "").trim().toLowerCase() === "short";
+export function getVisibleCoursesForTable(table, menuCourses, options) {
+  const layout = pickKitchenLayout(table, options);
+  if (layout) {
+    return resolveKitchenCourses(layout, table || {}, menuCourses || []);
+  }
 
-  // Build ordered-seat map per optional flag, matching KitchenBoard's reduce logic exactly.
-  // Last course with a given flag wins (same-key courses overwrite each other).
+  // ── Legacy path (unchanged) ────────────────────────────────────────────────
+  const log       = table?.kitchenLog        || {};
+  const overrides = table?.kitchenCourseNotes || {};
+  const seats     = table?.seats             || [];
+  const isShort   = String(table?.menuType || "").trim().toLowerCase() === "short";
+
   const orderedSeatsForFlag = (menuCourses || []).reduce((acc, course) => {
     const flag = normFlag(course?.optional_flag);
     if (!flag) return acc;
@@ -44,7 +90,7 @@ export function getVisibleCoursesForTable(table, menuCourses) {
     const isCelebration =
       cat === "celebration" ||
       (cat !== "optional" && cat !== "main" && flag);
-    acc[flag] = isCelebration && table.birthday
+    acc[flag] = isCelebration && table?.birthday
       ? [...seats]
       : seats.filter(s => !!s.extras?.[flag]?.ordered);
     return acc;
@@ -59,7 +105,7 @@ export function getVisibleCoursesForTable(table, menuCourses) {
       const flag = normFlag(c?.optional_flag);
 
       // Celebration + birthday → always include, skip all remaining checks
-      if (category === "celebration" && table.birthday) return true;
+      if (category === "celebration" && table?.birthday) return true;
 
       // Optional / celebration with no seats ordered → exclude
       // (if seats did order it, fall through to the short-menu check below)

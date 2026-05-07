@@ -2651,15 +2651,32 @@ export default function App() {
       .catch(() => { menuLayoutsLoaded.current = true; });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Seed default Long/Short layouts once menuCourses are loaded and no layouts exist yet.
-  // This only runs once per session and only when the layouts payload is empty.
+  // Seed defaults once menuCourses are loaded.
+  //   1. No layouts at all → seed full default set (long/short guest + long/short kitchen).
+  //   2. Guest layouts exist but no kitchen layouts → append default kitchen layouts
+  //      and auto-assign Long/Short Kitchen, leaving guest layouts untouched. This
+  //      upgrades sessions that pre-date the kitchen-layout system.
   useEffect(() => {
     if (!menuLayoutsLoaded.current) return;
-    if (menuLayoutsState.layouts.length > 0) return;
     if (!Array.isArray(menuCourses) || menuCourses.length === 0) return;
+    const layouts = Array.isArray(menuLayoutsState.layouts) ? menuLayoutsState.layouts : [];
+    if (layouts.length === 0) {
+      updateMenuLayouts(createDefaultLayouts(menuCourses));
+      return;
+    }
+    const hasKitchen = layouts.some(l => (l?.target || "guest_menu") === "kitchen_flow");
+    if (hasKitchen) return;
     const defaults = createDefaultLayouts(menuCourses);
-    updateMenuLayouts(defaults);
-  }, [menuCourses, menuLayoutsState.layouts.length, updateMenuLayouts]);
+    const kitchenLayouts = defaults.layouts.filter(l => l.target === "kitchen_flow");
+    updateMenuLayouts(prev => ({
+      layouts: [...(prev?.layouts || []), ...kitchenLayouts],
+      assignments: {
+        ...(prev?.assignments || {}),
+        longKitchenLayoutId: defaults.assignments.longKitchenLayoutId,
+        shortKitchenLayoutId: defaults.assignments.shortKitchenLayoutId,
+      },
+    }));
+  }, [menuCourses, menuLayoutsState.layouts, updateMenuLayouts]);
 
   // ── Quick Access persistence ──────────────────────────────────────────────
   useEffect(() => {
@@ -3099,7 +3116,14 @@ export default function App() {
       <GlobalStyle />
       <Header modeLabel="KITCHEN" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
       <div style={{ padding: appIsMobile ? "12px 10px" : "20px 24px" }}>
-        <KitchenBoard tables={tables} menuCourses={activeMenuCourses} upd={upd} updMany={updMany} />
+        <KitchenBoard
+          tables={tables}
+          menuCourses={activeMenuCourses}
+          upd={upd}
+          updMany={updMany}
+          menuLayouts={menuLayoutsState.layouts}
+          layoutAssignments={menuLayoutsState.assignments}
+        />
       </div>
       {archiveOpen && (
         <ArchiveModal
@@ -3321,6 +3345,8 @@ export default function App() {
               onSeat={seatTable}
               onUnseat={unseatTable}
               isMobile={appIsMobile}
+              menuLayouts={menuLayoutsState.layouts}
+              layoutAssignments={menuLayoutsState.assignments}
             />
           ) : (() => {
             const visibleTables = tables

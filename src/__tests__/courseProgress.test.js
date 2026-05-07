@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../utils/courseProgress.js";
+import { makeLayout, makeLayoutItem } from "../utils/menuLayouts.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -327,5 +328,174 @@ describe("getCourseProgressState", () => {
     expect(state.previous).toBeNull();
     expect(state.nextFire).toBeNull();
     expect(state.allComplete).toBe(true);
+  });
+});
+
+// ── Layout-driven path (kitchen layout overrides legacy filtering) ────────────
+
+describe("getVisibleCoursesForTable — assigned kitchen layout", () => {
+  const makeKitchenLayout = (id, courseKeys) => ({
+    ...makeLayout(`Kitchen ${id}`, courseKeys.map(k => makeLayoutItem("course", { courseKey: k }, "kitchen_flow")), "kitchen_flow"),
+    id,
+  });
+
+  it("long table uses the assigned long kitchen layout (not show_on_short)", () => {
+    const longLayout  = makeKitchenLayout("LK", ["a", "b", "c"]);
+    const shortLayout = makeKitchenLayout("SK", ["b"]);
+    const layouts = [longLayout, shortLayout];
+    const assignments = { longKitchenLayoutId: "LK", shortKitchenLayoutId: "SK" };
+    const table = makeTable({ menuType: "long" });
+    const courses = [
+      makeCourse({ course_key: "a", position: 3, show_on_short: false }),
+      makeCourse({ course_key: "b", position: 1, show_on_short: true,  short_order: 1 }),
+      makeCourse({ course_key: "c", position: 2, show_on_short: false }),
+    ];
+    const visible = getVisibleCoursesForTable(table, courses, { layouts, assignments });
+    expect(visible.map(c => c.key)).toEqual(["a", "b", "c"]); // layout order, not position
+  });
+
+  it("short table uses the assigned short kitchen layout, ignoring show_on_short", () => {
+    // Short layout deliberately includes a course where show_on_short=false
+    // and excludes one where show_on_short=true.
+    const longLayout  = makeKitchenLayout("LK", ["a", "b", "c"]);
+    const shortLayout = makeKitchenLayout("SK", ["c", "a"]);
+    const layouts = [longLayout, shortLayout];
+    const assignments = { longKitchenLayoutId: "LK", shortKitchenLayoutId: "SK" };
+    const table = makeTable({ menuType: "short" });
+    const courses = [
+      makeCourse({ course_key: "a", position: 1, show_on_short: false }),
+      makeCourse({ course_key: "b", position: 2, show_on_short: true, short_order: 1 }),
+      makeCourse({ course_key: "c", position: 3, show_on_short: false }),
+    ];
+    const visible = getVisibleCoursesForTable(table, courses, { layouts, assignments });
+    expect(visible.map(c => c.key)).toEqual(["c", "a"]);
+  });
+
+  it("excludes inactive courses even if listed in the kitchen layout", () => {
+    const layout = makeKitchenLayout("LK", ["a", "b"]);
+    const layouts = [layout];
+    const assignments = { longKitchenLayoutId: "LK" };
+    const table = makeTable({ menuType: "long" });
+    const courses = [
+      makeCourse({ course_key: "a", is_active: true }),
+      makeCourse({ course_key: "b", is_active: false }),
+    ];
+    const visible = getVisibleCoursesForTable(table, courses, { layouts, assignments });
+    expect(visible.map(c => c.key)).toEqual(["a"]);
+  });
+
+  it("hides optional course unless at least one seat ordered it", () => {
+    const layout = makeKitchenLayout("LK", ["main", "cheese"]);
+    const layouts = [layout];
+    const assignments = { longKitchenLayoutId: "LK" };
+    const courses = [
+      makeCourse({ course_key: "main", course_category: "main" }),
+      makeCourse({ course_key: "cheese", course_category: "optional", optional_flag: "cheese" }),
+    ];
+
+    const tableNo  = makeTable({ menuType: "long", seats: [{ id: 1, extras: {} }] });
+    const tableYes = makeTable({ menuType: "long", seats: [{ id: 1, extras: { cheese: { ordered: true } } }] });
+
+    expect(getVisibleCoursesForTable(tableNo,  courses, { layouts, assignments }).map(c => c.key))
+      .toEqual(["main"]);
+    expect(getVisibleCoursesForTable(tableYes, courses, { layouts, assignments }).map(c => c.key))
+      .toEqual(["main", "cheese"]);
+  });
+
+  it("celebration course shown when birthday is on", () => {
+    const layout = makeKitchenLayout("LK", ["main", "cake"]);
+    const layouts = [layout];
+    const assignments = { longKitchenLayoutId: "LK" };
+    const courses = [
+      makeCourse({ course_key: "main" }),
+      makeCourse({ course_key: "cake", course_category: "celebration", optional_flag: "cake" }),
+    ];
+    const tableBday = makeTable({ menuType: "long", birthday: true, seats: [] });
+    const tableOff  = makeTable({ menuType: "long", birthday: false, seats: [{ id: 1, extras: {} }] });
+    expect(getVisibleCoursesForTable(tableBday, courses, { layouts, assignments }).map(c => c.key))
+      .toEqual(["main", "cake"]);
+    expect(getVisibleCoursesForTable(tableOff,  courses, { layouts, assignments }).map(c => c.key))
+      .toEqual(["main"]);
+  });
+
+  it("preserves firedAt state from table.kitchenLog", () => {
+    const layout = makeKitchenLayout("LK", ["a", "b"]);
+    const layouts = [layout];
+    const assignments = { longKitchenLayoutId: "LK" };
+    const courses = [makeCourse({ course_key: "a" }), makeCourse({ course_key: "b" })];
+    const table = makeTable({ menuType: "long", kitchenLog: { a: { firedAt: "20:15" } } });
+    const visible = getVisibleCoursesForTable(table, courses, { layouts, assignments });
+    expect(visible[0].firedAt).toBe("20:15");
+    expect(visible[1].firedAt).toBeNull();
+  });
+
+  it("nextFire follows the kitchen layout order, not position/short_order", () => {
+    // Layout order: [c, a, b]; position would yield [a, b, c]
+    const layout = makeKitchenLayout("LK", ["c", "a", "b"]);
+    const layouts = [layout];
+    const assignments = { longKitchenLayoutId: "LK" };
+    const courses = [
+      makeCourse({ course_key: "a", position: 1 }),
+      makeCourse({ course_key: "b", position: 2 }),
+      makeCourse({ course_key: "c", position: 3 }),
+    ];
+    const table = makeTable({ menuType: "long" });
+    const visible = getVisibleCoursesForTable(table, courses, { layouts, assignments });
+    const state = getCourseProgressState(table, visible);
+    expect(state.nextFire?.key).toBe("c");
+
+    // After firing c, next is a
+    const visibleAfterFire = getVisibleCoursesForTable(
+      { ...table, kitchenLog: { c: { firedAt: "19:00" } } },
+      courses,
+      { layouts, assignments }
+    );
+    const state2 = getCourseProgressState(
+      { ...table, kitchenLog: { c: { firedAt: "19:00" } } },
+      visibleAfterFire
+    );
+    expect(state2.nextFire?.key).toBe("a");
+  });
+
+  it("falls back to legacy show_on_short when no kitchen layout is assigned", () => {
+    // Empty payload — no layouts at all → legacy path.
+    const table = makeTable({ menuType: "short" });
+    const courses = [
+      makeCourse({ course_key: "on",  show_on_short: true,  short_order: 1 }),
+      makeCourse({ course_key: "off", show_on_short: false, short_order: 2 }),
+    ];
+    const visible = getVisibleCoursesForTable(table, courses, { layouts: [], assignments: {} });
+    expect(visible.map(c => c.key)).toEqual(["on"]);
+  });
+
+  it("falls back to legacy when assignments don't include a kitchen slot for this menu type", () => {
+    // Only guest assignments are populated; kitchen ones are null.
+    const courses = [
+      makeCourse({ course_key: "a", position: 2 }),
+      makeCourse({ course_key: "b", position: 1 }),
+    ];
+    const table = makeTable({ menuType: "long" });
+    const layouts = [];
+    const assignments = { longMenuLayoutId: "x", shortMenuLayoutId: "y", longKitchenLayoutId: null, shortKitchenLayoutId: null };
+    const visible = getVisibleCoursesForTable(table, courses, { layouts, assignments });
+    // Sorted by position (legacy)
+    expect(visible.map(c => c.key)).toEqual(["b", "a"]);
+  });
+
+  it("attaches kitchenItem so callers can read showRestrictions/etc.", () => {
+    const layout = {
+      ...makeLayout("K", [
+        makeLayoutItem("course", { courseKey: "a", showRestrictions: false, kitchenDisplayName: "Plate A" }, "kitchen_flow"),
+      ], "kitchen_flow"),
+      id: "LK",
+    };
+    const layouts = [layout];
+    const assignments = { longKitchenLayoutId: "LK" };
+    const courses = [makeCourse({ course_key: "a" })];
+    const visible = getVisibleCoursesForTable(makeTable(), courses, { layouts, assignments });
+    expect(visible[0].kitchenItem).toBeDefined();
+    expect(visible[0].kitchenItem.showRestrictions).toBe(false);
+    expect(visible[0].kitchenItem.kitchenDisplayName).toBe("Plate A");
+    expect(visible[0].name).toBe("Plate A");
   });
 });

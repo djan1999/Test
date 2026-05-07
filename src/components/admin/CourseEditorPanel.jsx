@@ -187,10 +187,20 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
           </div>
 
           {/* Toggles */}
+          {/*
+            Legacy / migration fields: `show_on_short`, `short_order`, and `position`
+            no longer drive printed-menu or kitchen course visibility once Menu
+            Layouts (Admin → Menu Layout) are configured. They remain editable here
+            because (a) seeding the default Long/Short layouts uses them, and (b)
+            courseProgress falls back to them when no kitchen layout is assigned.
+          */}
           <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-            <label style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2], display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
+            <label
+              title="Legacy field — Menu Layouts now decide which courses appear on the short menu."
+              style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}
+            >
               <input type="checkbox" checked={!!course.show_on_short} onChange={e => upd("show_on_short", e.target.checked)} />
-              Show on Short
+              Show on Short <span style={{ fontSize: 8, letterSpacing: "0.10em", color: tokens.ink[4] }}>(legacy)</span>
             </label>
             {isOptional && (
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -215,8 +225,11 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
               <input value={course.optional_pairing_label || ""} onChange={e => upd("optional_pairing_label", e.target.value)} style={{ ...inpSm, width: 200 }} placeholder="e.g. Crayfish Martini" disabled={!optionalPairingEnabled} />
               <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[4] }}>shown in service UI</span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2] }}>Short order:</span>
+            <div
+              style={{ display: "flex", alignItems: "center", gap: 4 }}
+              title="Legacy field — Menu Layouts now control short-menu order."
+            >
+              <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3] }}>Short order <span style={{ fontSize: 8, letterSpacing: "0.10em", color: tokens.ink[4] }}>(legacy)</span>:</span>
               <input type="number" value={course.short_order ?? ""} onChange={e => upd("short_order", e.target.value ? Number(e.target.value) : null)} style={{ ...inpSm, width: 60 }} />
             </div>
           </div>
