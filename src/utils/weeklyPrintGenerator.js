@@ -417,9 +417,6 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
       html += `<div class="hcol"><span class="hlbl">GUESTS:</span> <span class="hval">${guests}</span></div>`;
       html += `<div class="hcol"><span class="hlbl">LANG:</span> <span class="hval">${d.lang === "si" ? "SI" : "ENG"}</span></div>`;
       html += `<div class="hcol"><span class="hlbl">TIME:</span> <span class="hval">${esc(d.resTime || "")}</span></div>`;
-      if (d.resName) {
-        html += `<div class="hfull"><span class="hlbl">NAME:</span> <span class="hval">${esc(d.resName)}</span></div>`;
-      }
       if (d.menuType) {
         html += `<div class="hfull"><span class="hlbl">MENU:</span> <span class="hval">${isShort ? "SHORT" : "LONG"}</span></div>`;
       }
