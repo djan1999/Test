@@ -66,6 +66,11 @@ export default function AdminLayout({
   onSelectLayoutProfile,
   onCreateLayoutProfile,
   onDeleteLayoutProfile,
+  onRenameLayoutProfile,
+  onDuplicateLayoutProfile,
+  onSetProfileTarget,
+  layoutAssignments = {},
+  onSetProfileAssignment,
   wineSyncConfig,
   onUpdateWineSyncConfig,
   onSaveWineSyncConfig,
@@ -73,10 +78,6 @@ export default function AdminLayout({
   quickAccessItems,
   onUpdateQuickAccess,
   aperitifOptions = [],
-  // Named Menu Layouts
-  menuLayouts = [],
-  layoutAssignments = {},
-  onUpdateMenuLayouts,
   // Navigation
   onExit,
 }) {
@@ -290,9 +291,16 @@ export default function AdminLayout({
                 spirits={spirits}
                 beers={beers}
                 aperitifOptions={aperitifOptions}
-                menuLayouts={menuLayouts}
+                layoutProfiles={layoutProfiles}
+                activeLayoutProfileId={activeLayoutProfileId}
+                onSelectLayoutProfile={onSelectLayoutProfile}
+                onCreateLayoutProfile={onCreateLayoutProfile}
+                onRenameLayoutProfile={onRenameLayoutProfile}
+                onDuplicateLayoutProfile={onDuplicateLayoutProfile}
+                onDeleteLayoutProfile={onDeleteLayoutProfile}
+                onSetProfileTarget={onSetProfileTarget}
                 layoutAssignments={layoutAssignments}
-                onUpdateMenuLayouts={onUpdateMenuLayouts}
+                onSetProfileAssignment={onSetProfileAssignment}
               />
             </div>
           )}

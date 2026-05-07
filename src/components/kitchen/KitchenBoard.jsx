@@ -9,7 +9,7 @@ import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
 
 const FONT = tokens.font;
 
-export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, menuLayouts = [], layoutAssignments = {} }) {
+export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {} }) {
   const seats = table.seats || [];
   const restrictions = table.restrictions || [];
   const log = table.kitchenLog || {};
@@ -139,21 +139,18 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
   const isShort = String(table.menuType || "").trim().toLowerCase() === "short";
 
-  // Courses to show — delegated to shared helper. When menu_layouts_v1 is
-  // populated and a kitchen layout is assigned, that layout drives course
-  // visibility/order; otherwise we fall back to the legacy show_on_short /
-  // position rules so older sessions stay stable.
+  // Courses to show — delegated to shared helper. When a kitchen profile is
+  // assigned for this table.menuType, the profile's row-based menuTemplate
+  // drives course visibility/order via deriveCourseKeysFromTemplate; otherwise
+  // we fall back to the legacy show_on_short / position rules so older
+  // sessions stay stable.
   const visibleCoursesForTable = getVisibleCoursesForTable(
     table,
     menuCourses || [],
-    { layouts: menuLayouts, assignments: layoutAssignments }
+    { profiles, assignments }
   );
   const kitchenItemByCourseKey = visibleCoursesForTable.reduce((acc, vc) => {
     if (vc.kitchenItem) acc[vc.key] = vc.kitchenItem;
-    return acc;
-  }, {});
-  const kitchenNameByCourseKey = visibleCoursesForTable.reduce((acc, vc) => {
-    acc[vc.key] = vc.name;
     return acc;
   }, {});
   const courses = visibleCoursesForTable.map(c => c.rawCourse);
@@ -570,7 +567,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   );
 }
 
-export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, menuLayouts = [], layoutAssignments = {} }) {
+export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {} }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
@@ -602,8 +599,8 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
           upd={upd}
           dragHandleRef={setActivatorNodeRef}
           dragListeners={listeners}
-          menuLayouts={menuLayouts}
-          layoutAssignments={layoutAssignments}
+          profiles={profiles}
+          assignments={assignments}
         />
       )}
     </div>
@@ -716,7 +713,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
   );
 }
 
-export default function KitchenBoard({ tables, menuCourses, upd, updMany, menuLayouts = [], layoutAssignments = {} }) {
+export default function KitchenBoard({ tables, menuCourses, upd, updMany, profiles = [], assignments = {} }) {
   const activeTables = tables
     .filter(t => t.active && !t.kitchenArchived)
     .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
@@ -790,8 +787,8 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, menuLa
                 upd={upd}
                 isDragging={activeId === t.id}
                 anyDragging={activeId !== null}
-                menuLayouts={menuLayouts}
-                layoutAssignments={layoutAssignments}
+                profiles={profiles}
+                assignments={assignments}
               />
             ))}
           </div>
@@ -808,8 +805,8 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, menuLa
               table={activeTable}
               menuCourses={menuCourses}
               upd={upd}
-              menuLayouts={menuLayouts}
-              layoutAssignments={layoutAssignments}
+              profiles={profiles}
+              assignments={assignments}
             />
           </div>
         )}

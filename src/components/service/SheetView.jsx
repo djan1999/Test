@@ -354,8 +354,8 @@ export default function SheetView({
   onSeat,
   onUnseat,
   isMobile = false,
-  menuLayouts = [],
-  layoutAssignments = {},
+  profiles = [],
+  assignments = {},
 }) {
   const list = useMemo(() => sortedTableList(tables), [tables]);
 
@@ -366,14 +366,15 @@ export default function SheetView({
 
   const table = useMemo(() => list.find(t => t.id === effectiveId) || null, [list, effectiveId]);
 
-  // Use shared helper so course list matches KitchenBoard exactly. The kitchen
-  // layout assignment (when present) drives course visibility/order; otherwise
-  // we fall back to legacy show_on_short / position rules.
+  // Use shared helper so course list matches KitchenBoard exactly. When a
+  // kitchen profile is assigned for this table.menuType, the profile's
+  // row-based menuTemplate drives course visibility/order; otherwise the
+  // legacy show_on_short / position path is used.
   const courses = useMemo(
     () => (table
-      ? getVisibleCoursesForTable(table, menuCourses, { layouts: menuLayouts, assignments: layoutAssignments })
+      ? getVisibleCoursesForTable(table, menuCourses, { profiles, assignments })
       : []),
-    [table, menuCourses, menuLayouts, layoutAssignments],
+    [table, menuCourses, profiles, assignments],
   );
 
   const progressState = useMemo(() => getCourseProgressState(table, courses), [table, courses]);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
-import { getAssignedLayout } from "../../utils/menuLayouts.js";
+import { getAssignedGuestProfile } from "../../utils/menuLayoutProfiles.js";
 import { writeTeamNames, readTeamNames, writeMenuTitle, readMenuTitle, writeThankYouNote, readThankYouNote } from "../../utils/storage.js";
 import { applyCourseRestriction, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, optionalExtrasFromCourses, optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 import { TABLES, supabase } from "../../lib/supabaseClient.js";
@@ -34,13 +34,17 @@ const baseInp = {
 const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium": "premium" };
 
 
-export default function MenuGenerator({ table, menuCourses = [], upd, onClose, defaultLayoutStyles = {}, menuTemplate = null, menuLayouts = [], layoutAssignments = {}, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [], aperitifOptions = [], menuRules = DEFAULT_MENU_RULES }) {
-  // Resolve the layout assigned to this table's menu type once, so both
-  // print and preview render exactly the same body order.
-  const assignedLayout = useMemo(
-    () => getAssignedLayout(table?.menuType || "", menuLayouts, layoutAssignments),
-    [table?.menuType, menuLayouts, layoutAssignments]
+export default function MenuGenerator({ table, menuCourses = [], upd, onClose, profiles = [], assignments = {}, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [], aperitifOptions = [], menuRules = DEFAULT_MENU_RULES }) {
+  // Resolve the guest profile assigned to this table's menuType. The
+  // resolved profile decides BOTH the row-based menuTemplate and the
+  // layoutStyles passed into generateMenuHTML, so Long and Short menus are
+  // truly separate templates rather than a filtered view of the same one.
+  const assignedProfile = useMemo(
+    () => getAssignedGuestProfile(table?.menuType || "", profiles, assignments),
+    [table?.menuType, profiles, assignments]
   );
+  const menuTemplate = assignedProfile?.menuTemplate || null;
+  const defaultLayoutStyles = assignedProfile?.layoutStyles || {};
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState(() => readMenuTitle(table.lang || "en"));
   const [thankYouNote, setThankYouNote] = useState(() => readThankYouNote(table.lang || "en"));
@@ -208,7 +212,6 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
       layoutStyles,
       menuRules: normalizedMenuRules,
       menuTemplate,
-      menuLayout: assignedLayout,
       catalog: { wines: winesCatalog, cocktails: cocktailsCatalog, spirits: spiritsCatalog, beers: beersCatalog },
       _logo: logoDataUri,
     });
@@ -248,7 +251,6 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, d
       layoutStyles,
       menuRules: normalizedMenuRules,
       menuTemplate,
-      menuLayout: assignedLayout,
       catalog: { wines: winesCatalog, cocktails: cocktailsCatalog, spirits: spiritsCatalog, beers: beersCatalog },
       _logo: logoDataUri,
     });

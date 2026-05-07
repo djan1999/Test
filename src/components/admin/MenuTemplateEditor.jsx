@@ -916,32 +916,12 @@ export default function MenuTemplateEditor({
     onUpdateTemplate({ ...template, rows: newRows });
   }, [template, onUpdateTemplate]);
 
-  // ── Short-menu row filter ──
-  const isShortFilter = previewMenuType === "short";
-  const rowMatchesShort = (row) => {
-    const hasCourse = b => b?.type === "course";
-    if (!hasCourse(row.left) && !hasCourse(row.right)) return true;
-    const ok = b => hasCourse(b) && !!menuCourses.find(c => c.course_key === b.courseKey)?.show_on_short;
-    return ok(row.left) || ok(row.right);
-  };
-  const visibleRows = isShortFilter ? rows.filter(rowMatchesShort) : rows;
-
-  // In short mode, display rows in short_order to match the preview order.
-  const displayRows = (() => {
-    if (!isShortFilter) return visibleRows;
-    const isCourseRow = r => r.left?.type === "course" || r.right?.type === "course";
-    const courseIdxs = visibleRows.reduce((acc, r, i) => { if (isCourseRow(r)) acc.push(i); return acc; }, []);
-    if (courseIdxs.length === 0) return visibleRows;
-    const withOrder = courseIdxs.map(i => {
-      const cb = visibleRows[i].left?.type === "course" ? visibleRows[i].left : visibleRows[i].right;
-      const mc = menuCourses.find(c => c.course_key === (cb?.courseKey || ""));
-      return { i, order: Number(mc?.short_order) ?? 9999 };
-    });
-    const sorted = [...withOrder].sort((a, b) => a.order - b.order);
-    const reordered = [...visibleRows];
-    courseIdxs.forEach((origIdx, slot) => { reordered[origIdx] = visibleRows[sorted[slot].i]; });
-    return reordered;
-  })();
+  // The editor always shows the actual rows of the active profile. Long /
+  // Short menu differences are now expressed by editing separate profiles
+  // (assigned to Long Menu and Short Menu in the panel above), not by
+  // filtering this template by show_on_short / short_order.
+  const visibleRows = rows;
+  const displayRows = rows;
 
   // ── DnD ──
   const sensors = useSensors(
@@ -1173,11 +1153,6 @@ export default function MenuTemplateEditor({
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            {isShortFilter && (
-              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[3], background: tokens.tint.parchment, border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "5px 8px", margin: "0 0 6px", textTransform: "uppercase" }}>
-                Short menu — {displayRows.length} blocks · Switch to FULL to see all
-              </div>
-            )}
             <SortableContext items={displayRows.map(r => r.id)} strategy={verticalListSortingStrategy}>
               {displayRows.map(row => (
                 <SortableRow

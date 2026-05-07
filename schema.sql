@@ -35,15 +35,26 @@ on conflict (table_id) do nothing;
 
 -- ── service_settings ────────────────────────────────────────
 -- Generic key/value JSON store. Notable rows used by the app:
---   id = "menu_layouts_v1"      → { layouts: [...], assignments: { longMenuLayoutId, shortMenuLayoutId } }
---   id = "menu_layout_v2"       → per-seat printed-menu template (header/footer/drinks scaffolding)
---   id = "menu_layout_global"   → layout style overrides (legacy; kept for back-compat)
---   id = "menu_layout_profiles_v1" → multi-profile wrapper for the per-seat template
---   id = "menu_gen_rules"       → generator behaviour flags
---   id = "menu_gen_team"        → team names
---   id = "menu_gen_title"       → menu title (per-language)
---   id = "menu_gen_thankyou"    → thank-you note (per-language)
---   id = "quick_access"         → quick-access items
+--   id = "menu_layout_profiles_v2" → unified layout profiles. Shape:
+--     { profiles: [{ id, name, target: "guest_menu"|"kitchen_flow",
+--                    menuTemplate, layoutStyles }],
+--       assignments: { longMenuProfileId, shortMenuProfileId,
+--                      longKitchenProfileId, shortKitchenProfileId },
+--       activeProfileId }
+--     This is the single source of truth for menu layouts. Long Menu / Short
+--     Menu / Long Kitchen / Short Kitchen each pick a profile by id.
+--   id = "menu_layout_profiles_v1" → legacy multi-profile wrapper (auto-migrated to v2)
+--   id = "menu_layout_v2"          → legacy single-profile menuTemplate (auto-migrated to v2)
+--   id = "menu_layout_global"      → legacy single-profile layoutStyles (auto-migrated to v2)
+--   id = "menu_gen_rules"          → generator behaviour flags
+--   id = "menu_gen_team"           → team names
+--   id = "menu_gen_title"          → menu title (per-language)
+--   id = "menu_gen_thankyou"       → thank-you note (per-language)
+--   id = "quick_access"            → quick-access items
+--
+-- The flat `menu_layouts_v1` row from a previous design pass is intentionally
+-- not read by the current app. It can be left in place; the row-based
+-- menuTemplate is the only guest layout system.
 create table if not exists public.service_settings (
   id text primary key,
   state jsonb not null default '{}'::jsonb,
@@ -68,10 +79,11 @@ insert into public.service_settings (id, state)
 values ('main', '{}'::jsonb)
 on conflict (id) do nothing;
 
--- Seed empty Menu Layouts payload so the app has a row to read on first load.
--- The app populates default Long/Short layouts from menuCourses on first run.
+-- Seed empty Menu Layout Profiles payload so the app has a row to read on first load.
+-- The app populates default Long/Short Menu and Long/Short Kitchen profiles
+-- from menuCourses on first run.
 insert into public.service_settings (id, state)
-values ('menu_layouts_v1', '{"layouts":[],"assignments":{"longMenuLayoutId":null,"shortMenuLayoutId":null}}'::jsonb)
+values ('menu_layout_profiles_v2', '{"profiles":[],"assignments":{"longMenuProfileId":null,"shortMenuProfileId":null,"longKitchenProfileId":null,"shortKitchenProfileId":null},"activeProfileId":null}'::jsonb)
 on conflict (id) do nothing;
 
 -- ── service_archive ─────────────────────────────────────────

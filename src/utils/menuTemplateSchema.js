@@ -43,8 +43,23 @@ export const BLOCK_META = {
     fields: [
       { key: "courseKey",   label: "Course",              type: "course_select" },
       { key: "showPairing", label: "Show pairing column", type: "checkbox" },
+      // Kitchen-only fields. Ignored by guest menu rendering; KitchenBoard /
+      // SheetView read these when this profile is assigned to Long/Short Kitchen.
+      { key: "kitchenDisplayName", label: "Kitchen display name (override)", type: "text",     placeholder: "Leave empty to use the menu name" },
+      { key: "showRestrictions",   label: "Kitchen: show restrictions",      type: "checkbox" },
+      { key: "showPairingAlert",   label: "Kitchen: show pairing alert",     type: "checkbox" },
+      { key: "showSeatNotes",      label: "Kitchen: show seat notes",        type: "checkbox" },
+      { key: "showCourseNotes",    label: "Kitchen: show course notes",      type: "checkbox" },
     ],
-    defaults: { courseKey: "", showPairing: true },
+    defaults: {
+      courseKey: "",
+      showPairing: true,
+      kitchenDisplayName: "",
+      showRestrictions: true,
+      showPairingAlert: true,
+      showSeatNotes: true,
+      showCourseNotes: true,
+    },
   },
   drinks: {
     label: "Drinks",        group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "◎",

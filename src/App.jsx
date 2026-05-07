@@ -6,10 +6,17 @@ import {
 import { DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
 import { buildDefaultTemplate } from "./utils/menuTemplateSchema.js";
 import {
-  createDefaultLayouts,
-  sanitizeLayoutsPayload,
-  getAssignedLayout,
-} from "./utils/menuLayouts.js";
+  createDefaultProfiles,
+  sanitizeProfilesPayload,
+  migrateV1ToV2,
+  migrateLegacySingleLayout,
+  duplicateProfile,
+  renameProfile,
+  setProfileTarget,
+  canDeleteProfile,
+  isProfileAssigned,
+  makeProfile,
+} from "./utils/menuLayoutProfiles.js";
 import {
   readLocalBeverages, writeLocalBeverages,
   readLocalBoardState, writeLocalBoardState,
@@ -95,9 +102,15 @@ const DEFAULT_QUICK_ACCESS_ITEMS = parseDefaultQuickAccessItems();
 
 const SITTING_TIMES = DEFAULT_SITTING_TIMES;
 const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
-const MENU_LAYOUT_PROFILES_KEY = "milka_menu_layout_profiles_v1";
+// Unified profile payload key. `menu_layout_profiles_v1` and the legacy
+// single-layout pair (`menu_layout_global` + `menu_layout_v2`) are migrated
+// into v2 on first read. The flat `menu_layouts_v1` payload from a previous
+// pass is intentionally ignored — the row-based menuTemplate is the only
+// guest layout system.
+const MENU_LAYOUT_PROFILES_V2_KEY = "milka_menu_layout_profiles_v2";
 const MENU_ACTIVE_LAYOUT_PROFILE_KEY = "milka_active_layout_profile_v1";
-const MENU_LAYOUTS_KEY = "milka_menu_layouts_v1";
+// Legacy keys, only read for migration.
+const MENU_LAYOUT_PROFILES_V1_KEY = "milka_menu_layout_profiles_v1";
 const SYNC_CONFIG_KEY = "milka_sync_config_v1";
 const DEFAULT_SYNC_CONFIG = {
   winesEnabled: true,
@@ -1616,19 +1629,6 @@ const writeAccess = () => {
   try { localStorage.setItem(ACCESS_KEY, JSON.stringify({ ts: Date.now() })); } catch {}
 };
 
-const sanitizeLayoutProfiles = (profiles) => {
-  const list = Array.isArray(profiles) ? profiles : [];
-  const out = list
-    .filter((p) => p && typeof p === "object")
-    .map((p, idx) => ({
-      id: String(p.id || `layout_${idx + 1}`),
-      name: String(p.name || `Layout ${idx + 1}`),
-      layoutStyles: p.layoutStyles && typeof p.layoutStyles === "object" ? p.layoutStyles : {},
-      menuTemplate: p.menuTemplate && typeof p.menuTemplate === "object" ? p.menuTemplate : null,
-    }));
-  return out.length > 0 ? out : [{ id: "layout_1", name: "Layout 1", layoutStyles: {}, menuTemplate: null }];
-};
-
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
   const localSnapshot = readLocalBoardState();
@@ -1660,28 +1660,46 @@ export default function App() {
   });
   const syncConfigRef = useRef(wineSyncConfig);
   syncConfigRef.current = wineSyncConfig;
-  const [layoutProfiles, setLayoutProfiles] = useState(() => {
+  // ── Unified Menu Layout Profiles (v2) ────────────────────────────────────
+  // Single source of truth for all menu layouts. Each profile wraps the
+  // existing row-based menuTemplate + layoutStyles with a name and target
+  // ("guest_menu" or "kitchen_flow"). Long Menu, Short Menu, Long Kitchen,
+  // and Short Kitchen each pick which profile they use via assignments.
+  // Persisted in service_settings under id="menu_layout_profiles_v2"; the
+  // older menu_layout_profiles_v1 payload and the legacy single-layout pair
+  // (menu_layout_global + menu_layout_v2) are migrated on first read.
+  const [profilesState, setProfilesState] = useState(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem(MENU_LAYOUT_PROFILES_KEY) || "null");
-      if (Array.isArray(raw) && raw.length > 0) return raw;
+      const v2 = JSON.parse(localStorage.getItem(MENU_LAYOUT_PROFILES_V2_KEY) || "null");
+      if (v2 && Array.isArray(v2.profiles) && v2.profiles.length > 0) {
+        return sanitizeProfilesPayload(v2);
+      }
     } catch {}
-    return [{ id: "layout_1", name: "Layout 1", layoutStyles: {}, menuTemplate: null }];
+    try {
+      const v1Raw = JSON.parse(localStorage.getItem(MENU_LAYOUT_PROFILES_V1_KEY) || "null");
+      if (Array.isArray(v1Raw) && v1Raw.length > 0) {
+        const activeId = (() => { try { return localStorage.getItem(MENU_ACTIVE_LAYOUT_PROFILE_KEY) || ""; } catch { return ""; } })();
+        return sanitizeProfilesPayload(migrateV1ToV2({ profiles: v1Raw, activeId }));
+      }
+    } catch {}
+    return { profiles: [], assignments: {}, activeProfileId: null };
   });
-  const [activeLayoutProfileId, setActiveLayoutProfileId] = useState(() => {
-    try { return localStorage.getItem(MENU_ACTIVE_LAYOUT_PROFILE_KEY) || "layout_1"; } catch { return "layout_1"; }
-  });
-  // Print layout state (lifted from MenuPage into App for Admin access)
-  const activeLayoutProfile = useMemo(
-    () => layoutProfiles.find(p => p.id === activeLayoutProfileId) || layoutProfiles[0] || null,
-    [layoutProfiles, activeLayoutProfileId]
+  const profilesStateRef = useRef(profilesState);
+  profilesStateRef.current = profilesState;
+  const profilesLoaded = useRef(false);
+
+  // Active profile + its derived menuTemplate / layoutStyles. The Admin
+  // template editor edits the active profile in place; persistence flushes
+  // whatever's currently in profilesState back to Supabase.
+  const activeProfile = useMemo(
+    () => profilesState.profiles.find(p => p.id === profilesState.activeProfileId) || profilesState.profiles[0] || null,
+    [profilesState.profiles, profilesState.activeProfileId]
   );
-  const [globalLayout, setGlobalLayout] = useState(() => activeLayoutProfile?.layoutStyles || {});
-  const [menuTemplate, setMenuTemplate] = useState(() => activeLayoutProfile?.menuTemplate || null);
+  const menuTemplate = activeProfile?.menuTemplate || null;
+  const globalLayout = activeProfile?.layoutStyles || {};
   const [layoutSaving, setLayoutSaving] = useState(false);
   const [layoutSaved,  setLayoutSaved]  = useState(false);
-  const layoutLoaded = useRef(false);
-  const globalLayoutRef = useRef(globalLayout);
-  globalLayoutRef.current = globalLayout;
+
   const [menuRules, setMenuRules] = useState(() => {
     try {
       const raw = JSON.parse(localStorage.getItem("milka_menu_rules") || "null");
@@ -1690,21 +1708,6 @@ export default function App() {
       return normalizeMenuRules(DEFAULT_MENU_RULES);
     }
   });
-  // ── Named Menu Layouts (Long/Short layout assignment) ─────────────────────
-  // Each layout is an ordered list of items: course refs, static text, headers,
-  // spacers, dividers. The Long Menu and Short Menu each pick which layout to
-  // render. Persisted in service_settings under id="menu_layouts_v1".
-  const [menuLayoutsState, setMenuLayoutsState] = useState(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem(MENU_LAYOUTS_KEY) || "null");
-      const sanitized = sanitizeLayoutsPayload(raw);
-      if (sanitized.layouts.length > 0) return sanitized;
-    } catch {}
-    return { layouts: [], assignments: { longMenuLayoutId: null, shortMenuLayoutId: null } };
-  });
-  const menuLayoutsRef = useRef(menuLayoutsState);
-  menuLayoutsRef.current = menuLayoutsState;
-  const menuLayoutsLoaded = useRef(false);
   const [menuRulesSaving, setMenuRulesSaving] = useState(false);
   const [menuRulesSaved, setMenuRulesSaved] = useState(false);
   const menuRulesRef = useRef(menuRules);
@@ -2458,119 +2461,197 @@ export default function App() {
       .upsert({ id: "wine_sync_config", state: next, updated_at: new Date().toISOString() }, { onConflict: "id" });
   };
 
+  // ── Profile persistence (localStorage + Supabase v2) ─────────────────────
   useEffect(() => {
-    try { localStorage.setItem(MENU_LAYOUT_PROFILES_KEY, JSON.stringify(layoutProfiles)); } catch {}
-  }, [layoutProfiles]);
+    try { localStorage.setItem(MENU_LAYOUT_PROFILES_V2_KEY, JSON.stringify(profilesState)); } catch {}
+    try {
+      if (profilesState.activeProfileId) {
+        localStorage.setItem(MENU_ACTIVE_LAYOUT_PROFILE_KEY, profilesState.activeProfileId);
+      }
+    } catch {}
+  }, [profilesState]);
 
-  useEffect(() => {
-    try { localStorage.setItem(MENU_ACTIVE_LAYOUT_PROFILE_KEY, activeLayoutProfileId || ""); } catch {}
-  }, [activeLayoutProfileId]);
-
-  const persistLayoutProfiles = async (profiles, activeId) => {
+  const persistProfilesPayload = useCallback(async (payload) => {
     if (!supabase) return;
     await supabase.from(TABLES.SERVICE_SETTINGS)
-      .upsert(
-        { id: "menu_layout_profiles_v1", state: { profiles, activeId }, updated_at: new Date().toISOString() },
-        { onConflict: "id" }
-      );
-  };
+      .upsert({ id: "menu_layout_profiles_v2", state: payload, updated_at: new Date().toISOString() }, { onConflict: "id" });
+  }, []);
 
-  const selectLayoutProfile = (profileId) => {
-    const target = layoutProfiles.find(p => p.id === profileId);
-    if (!target) return;
-    setActiveLayoutProfileId(target.id);
-    setGlobalLayout(target.layoutStyles || {});
-    setMenuTemplate(target.menuTemplate || null);
-  };
+  // Single mutator: accepts (profilesState) → next profilesState.
+  // The result is sanitized so assignments never point at deleted/missing
+  // profiles; persistence runs fire-and-forget so callers can stay synchronous.
+  const updateProfiles = useCallback((mutator) => {
+    setProfilesState(prev => {
+      const draft = typeof mutator === "function" ? mutator(prev) : mutator;
+      const sanitized = sanitizeProfilesPayload(draft);
+      persistProfilesPayload(sanitized);
+      return sanitized;
+    });
+  }, [persistProfilesPayload]);
 
-  const createLayoutProfile = () => {
-    const nextId = `layout_${Date.now()}`;
-    const nextName = `Layout ${layoutProfiles.length + 1}`;
-    const profile = { id: nextId, name: nextName, layoutStyles: {}, menuTemplate: null };
-    const nextProfiles = [...layoutProfiles, profile];
-    setLayoutProfiles(nextProfiles);
-    setActiveLayoutProfileId(nextId);
-    setGlobalLayout({});
-    setMenuTemplate(null);
-    persistLayoutProfiles(nextProfiles, nextId);
-  };
+  // Active profile selector — drives which template the editor shows.
+  const selectProfile = useCallback((profileId) => {
+    if (!profileId) return;
+    updateProfiles(prev => {
+      const exists = prev.profiles.some(p => p.id === profileId);
+      if (!exists) return prev;
+      return { ...prev, activeProfileId: profileId };
+    });
+  }, [updateProfiles]);
 
-  const deleteLayoutProfile = (profileId) => {
-    if (layoutProfiles.length <= 1) return;
-    const nextProfiles = layoutProfiles.filter(p => p.id !== profileId);
-    const fallback = nextProfiles[0];
-    const nextActiveId = activeLayoutProfileId === profileId ? fallback.id : activeLayoutProfileId;
-    setLayoutProfiles(nextProfiles);
-    setActiveLayoutProfileId(nextActiveId);
-    const active = nextProfiles.find(p => p.id === nextActiveId) || fallback;
-    setGlobalLayout(active?.layoutStyles || {});
-    setMenuTemplate(active?.menuTemplate || null);
-    persistLayoutProfiles(nextProfiles, nextActiveId);
-  };
+  // Create a new profile for the given target. Optionally seed the template
+  // by cloning the currently-active profile so the user has a starting point.
+  const createProfile = useCallback(({ name, target = "guest_menu", cloneFromActive = false } = {}) => {
+    const fallbackName = target === "kitchen_flow" ? "New Kitchen Layout" : "New Menu Layout";
+    let createdId = null;
+    updateProfiles(prev => {
+      const seed = cloneFromActive
+        ? prev.profiles.find(p => p.id === prev.activeProfileId)
+        : null;
+      const created = seed
+        ? { ...duplicateProfile(seed, name || fallbackName), target }
+        : makeProfile({ name: name || fallbackName, target, menuTemplate: null, layoutStyles: {} });
+      createdId = created.id;
+      return {
+        profiles: [...prev.profiles, created],
+        assignments: prev.assignments,
+        activeProfileId: created.id,
+      };
+    });
+    return createdId;
+  }, [updateProfiles]);
 
-  useEffect(() => {
-    if (!supabase) return;
-    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_profiles_v1").maybeSingle()
-      .then(({ data }) => {
-        const profiles = Array.isArray(data?.state?.profiles) ? data.state.profiles : null;
-        if (profiles?.length) {
-          setLayoutProfiles(profiles);
-          const activeId = String(data?.state?.activeId || profiles[0]?.id || "");
-          setActiveLayoutProfileId(activeId);
-          const active = profiles.find(p => p.id === activeId) || profiles[0];
-          setGlobalLayout(active?.layoutStyles || {});
-          setMenuTemplate(active?.menuTemplate || null);
-          return;
-        }
-        // Compatibility fallback: hydrate from legacy single-layout keys if profile payload
-        // has not been created yet.
-        Promise.all([
-          supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_global").maybeSingle(),
-          supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_v2").maybeSingle(),
-        ]).then(([legacyLayoutRes, legacyTemplateRes]) => {
-          const legacyLayout = (legacyLayoutRes?.data?.state && typeof legacyLayoutRes.data.state === "object")
-            ? legacyLayoutRes.data.state
-            : {};
-          const legacyTemplate = (legacyTemplateRes?.data?.state?.version === 2 && Array.isArray(legacyTemplateRes.data.state.rows))
-            ? legacyTemplateRes.data.state
-            : null;
-          if (!legacyTemplate && Object.keys(legacyLayout).length === 0) return;
-          const migrated = [{ id: "layout_1", name: "Layout 1", layoutStyles: legacyLayout, menuTemplate: legacyTemplate }];
-          setLayoutProfiles(migrated);
-          setActiveLayoutProfileId("layout_1");
-          setGlobalLayout(legacyLayout);
-          setMenuTemplate(legacyTemplate);
-          persistLayoutProfiles(migrated, "layout_1");
-        }).catch(() => {});
-      });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const renameProfileById = useCallback((profileId, nextName) => {
+    updateProfiles(prev => ({ ...prev, profiles: renameProfile(prev.profiles, profileId, nextName) }));
+  }, [updateProfiles]);
+
+  const duplicateProfileById = useCallback((profileId, nextName) => {
+    let createdId = null;
+    updateProfiles(prev => {
+      const target = prev.profiles.find(p => p.id === profileId);
+      if (!target) return prev;
+      const copy = duplicateProfile(target, nextName);
+      createdId = copy.id;
+      return { ...prev, profiles: [...prev.profiles, copy], activeProfileId: copy.id };
+    });
+    return createdId;
+  }, [updateProfiles]);
+
+  const deleteProfileById = useCallback((profileId) => {
+    updateProfiles(prev => {
+      if (!canDeleteProfile(profileId, prev.profiles, prev.assignments)) return prev;
+      const remaining = prev.profiles.filter(p => p.id !== profileId);
+      const nextActive = prev.activeProfileId === profileId
+        ? (remaining[0]?.id || null)
+        : prev.activeProfileId;
+      return { ...prev, profiles: remaining, activeProfileId: nextActive };
+    });
+  }, [updateProfiles]);
+
+  const setProfileTargetById = useCallback((profileId, target) => {
+    updateProfiles(prev => ({ ...prev, profiles: setProfileTarget(prev.profiles, profileId, target) }));
+  }, [updateProfiles]);
+
+  const setProfileAssignment = useCallback((slot, profileId) => {
+    updateProfiles(prev => ({
+      ...prev,
+      assignments: { ...prev.assignments, [slot]: profileId || null },
+    }));
+  }, [updateProfiles]);
+
+  // Edit hooks for the Admin template editor — they target the currently
+  // active profile and merge changes back into profilesState immediately.
+  const setMenuTemplate = useCallback((next) => {
+    setProfilesState(prev => {
+      const activeId = prev.activeProfileId;
+      if (!activeId) return prev;
+      const value = typeof next === "function"
+        ? next(prev.profiles.find(p => p.id === activeId)?.menuTemplate || null)
+        : next;
+      return {
+        ...prev,
+        profiles: prev.profiles.map(p => p.id === activeId ? { ...p, menuTemplate: value || null } : p),
+      };
+    });
+  }, []);
+
+  const setGlobalLayout = useCallback((next) => {
+    setProfilesState(prev => {
+      const activeId = prev.activeProfileId;
+      if (!activeId) return prev;
+      const value = typeof next === "function"
+        ? next(prev.profiles.find(p => p.id === activeId)?.layoutStyles || {})
+        : next;
+      return {
+        ...prev,
+        profiles: prev.profiles.map(p => p.id === activeId ? { ...p, layoutStyles: value || {} } : p),
+      };
+    });
+  }, []);
 
   const saveGlobalLayout = async () => {
     setLayoutSaving(true); setLayoutSaved(false);
-    const toSave = globalLayoutRef.current;
-    setLayoutProfiles(prev => {
-      const next = prev.map(p => p.id === activeLayoutProfileId ? { ...p, layoutStyles: toSave } : p);
-      persistLayoutProfiles(next, activeLayoutProfileId);
-      return next;
-    });
+    await persistProfilesPayload(profilesStateRef.current);
     setLayoutSaving(false); setLayoutSaved(true);
     setTimeout(() => setLayoutSaved(false), 2500);
   };
+
+  // Initial load from Supabase: prefer v2, fall back to v1, then to the
+  // legacy single-layout pair. The bad flat menu_layouts_v1 payload is
+  // never read here — the row-based menuTemplate is the only system.
+  useEffect(() => {
+    if (!supabase) { profilesLoaded.current = true; return; }
+    (async () => {
+      try {
+        const { data: v2Data } = await supabase.from(TABLES.SERVICE_SETTINGS)
+          .select("state").eq("id", "menu_layout_profiles_v2").maybeSingle();
+        const v2 = v2Data?.state;
+        if (v2 && Array.isArray(v2.profiles) && v2.profiles.length > 0) {
+          setProfilesState(sanitizeProfilesPayload(v2));
+          profilesLoaded.current = true;
+          return;
+        }
+        const { data: v1Data } = await supabase.from(TABLES.SERVICE_SETTINGS)
+          .select("state").eq("id", "menu_layout_profiles_v1").maybeSingle();
+        if (v1Data?.state?.profiles?.length) {
+          const migrated = sanitizeProfilesPayload(migrateV1ToV2(v1Data.state));
+          setProfilesState(migrated);
+          persistProfilesPayload(migrated);
+          profilesLoaded.current = true;
+          return;
+        }
+        const [legacyLayoutRes, legacyTemplateRes] = await Promise.all([
+          supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_global").maybeSingle(),
+          supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_v2").maybeSingle(),
+        ]);
+        const legacyLayout = (legacyLayoutRes?.data?.state && typeof legacyLayoutRes.data.state === "object") ? legacyLayoutRes.data.state : {};
+        const legacyTemplate = (legacyTemplateRes?.data?.state?.version === 2 && Array.isArray(legacyTemplateRes.data.state.rows)) ? legacyTemplateRes.data.state : null;
+        if (legacyTemplate || Object.keys(legacyLayout).length > 0) {
+          const migrated = sanitizeProfilesPayload(migrateLegacySingleLayout(legacyLayout, legacyTemplate));
+          setProfilesState(migrated);
+          persistProfilesPayload(migrated);
+        }
+      } catch {}
+      profilesLoaded.current = true;
+    })();
+  }, [persistProfilesPayload]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Seed defaults once menuCourses are loaded and no profiles exist yet.
+  // Never overwrites existing profiles — only fills the empty case.
+  useEffect(() => {
+    if (!profilesLoaded.current) return;
+    if (profilesState.profiles.length > 0) return;
+    if (!Array.isArray(menuCourses) || menuCourses.length === 0) return;
+    updateProfiles(() => createDefaultProfiles(menuCourses));
+  }, [menuCourses, profilesState.profiles.length, updateProfiles]);
 
 
   // ── Menu template v2 (row-based canvas editor) ───────────────────────────
   const [templateSaving, setTemplateSaving] = useState(false);
   const [templateSaved,  setTemplateSaved]  = useState(false);
-  const menuTemplateRef = useRef(menuTemplate);
-  menuTemplateRef.current = menuTemplate;
   const saveMenuTemplate = async () => {
     setTemplateSaving(true); setTemplateSaved(false);
-    const toSave = menuTemplateRef.current;
-    setLayoutProfiles(prev => {
-      const next = prev.map(p => p.id === activeLayoutProfileId ? { ...p, menuTemplate: toSave || null } : p);
-      persistLayoutProfiles(next, activeLayoutProfileId);
-      return next;
-    });
+    await persistProfilesPayload(profilesStateRef.current);
     setTemplateSaving(false); setTemplateSaved(true);
     setTimeout(() => setTemplateSaved(false), 2500);
   };
@@ -2616,67 +2697,6 @@ export default function App() {
     setTimeout(() => setMenuRulesSaved(false), 2500);
   };
 
-  // ── Named Menu Layouts persistence ────────────────────────────────────────
-  useEffect(() => {
-    try { localStorage.setItem(MENU_LAYOUTS_KEY, JSON.stringify(menuLayoutsState)); } catch {}
-  }, [menuLayoutsState]);
-
-  const persistMenuLayouts = useCallback(async (payload) => {
-    if (!supabase) return;
-    await supabase.from(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "menu_layouts_v1", state: payload, updated_at: new Date().toISOString() }, { onConflict: "id" });
-  }, []);
-
-  const updateMenuLayouts = useCallback((nextOrFn) => {
-    setMenuLayoutsState(prev => {
-      const draft = typeof nextOrFn === "function" ? nextOrFn(prev) : nextOrFn;
-      const sanitized = sanitizeLayoutsPayload(draft);
-      // Fire-and-forget remote save; localStorage is handled by the effect above.
-      persistMenuLayouts(sanitized);
-      return sanitized;
-    });
-  }, [persistMenuLayouts]);
-
-  // Load Menu Layouts from Supabase, or seed defaults from menuCourses on first run.
-  useEffect(() => {
-    if (!supabase) { menuLayoutsLoaded.current = true; return; }
-    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layouts_v1").maybeSingle()
-      .then(({ data }) => {
-        const sanitized = sanitizeLayoutsPayload(data?.state);
-        if (sanitized.layouts.length > 0) {
-          setMenuLayoutsState(sanitized);
-        }
-        menuLayoutsLoaded.current = true;
-      })
-      .catch(() => { menuLayoutsLoaded.current = true; });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Seed defaults once menuCourses are loaded.
-  //   1. No layouts at all → seed full default set (long/short guest + long/short kitchen).
-  //   2. Guest layouts exist but no kitchen layouts → append default kitchen layouts
-  //      and auto-assign Long/Short Kitchen, leaving guest layouts untouched. This
-  //      upgrades sessions that pre-date the kitchen-layout system.
-  useEffect(() => {
-    if (!menuLayoutsLoaded.current) return;
-    if (!Array.isArray(menuCourses) || menuCourses.length === 0) return;
-    const layouts = Array.isArray(menuLayoutsState.layouts) ? menuLayoutsState.layouts : [];
-    if (layouts.length === 0) {
-      updateMenuLayouts(createDefaultLayouts(menuCourses));
-      return;
-    }
-    const hasKitchen = layouts.some(l => (l?.target || "guest_menu") === "kitchen_flow");
-    if (hasKitchen) return;
-    const defaults = createDefaultLayouts(menuCourses);
-    const kitchenLayouts = defaults.layouts.filter(l => l.target === "kitchen_flow");
-    updateMenuLayouts(prev => ({
-      layouts: [...(prev?.layouts || []), ...kitchenLayouts],
-      assignments: {
-        ...(prev?.assignments || {}),
-        longKitchenLayoutId: defaults.assignments.longKitchenLayoutId,
-        shortKitchenLayoutId: defaults.assignments.shortKitchenLayoutId,
-      },
-    }));
-  }, [menuCourses, menuLayoutsState.layouts, updateMenuLayouts]);
 
   // ── Quick Access persistence ──────────────────────────────────────────────
   useEffect(() => {
@@ -3121,8 +3141,8 @@ export default function App() {
           menuCourses={activeMenuCourses}
           upd={upd}
           updMany={updMany}
-          menuLayouts={menuLayoutsState.layouts}
-          layoutAssignments={menuLayoutsState.assignments}
+          profiles={profilesState.profiles}
+          assignments={profilesState.assignments}
         />
       </div>
       {archiveOpen && (
@@ -3148,16 +3168,14 @@ export default function App() {
         menuCourses={activeMenuCourses}
         upd={upd}
         logoDataUri={logoDataUri}
-        globalLayout={globalLayout}
-        menuTemplate={menuTemplate}
         wines={wines}
         cocktails={cocktails}
         spirits={spirits}
         beers={beers}
         aperitifOptions={aperitifOptions}
         menuRules={menuRules}
-        menuLayouts={menuLayoutsState.layouts}
-        layoutAssignments={menuLayoutsState.assignments}
+        profiles={profilesState.profiles}
+        assignments={profilesState.assignments}
         onExit={() => changeMode(null)}
       />
     </div>
@@ -3197,20 +3215,22 @@ export default function App() {
         layoutStyles={globalLayout}
         onUpdateLayoutStyles={setGlobalLayout}
         onSaveLayoutStyles={saveGlobalLayout}
-        layoutProfiles={layoutProfiles}
-        activeLayoutProfileId={activeLayoutProfileId}
-        onSelectLayoutProfile={selectLayoutProfile}
-        onCreateLayoutProfile={createLayoutProfile}
-        onDeleteLayoutProfile={deleteLayoutProfile}
+        layoutProfiles={profilesState.profiles}
+        activeLayoutProfileId={profilesState.activeProfileId}
+        onSelectLayoutProfile={selectProfile}
+        onCreateLayoutProfile={createProfile}
+        onDeleteLayoutProfile={deleteProfileById}
+        onRenameLayoutProfile={renameProfileById}
+        onDuplicateLayoutProfile={duplicateProfileById}
+        onSetProfileTarget={setProfileTargetById}
+        layoutAssignments={profilesState.assignments}
+        onSetProfileAssignment={setProfileAssignment}
         wineSyncConfig={wineSyncConfig}
         onUpdateWineSyncConfig={setWineSyncConfig}
         onSaveWineSyncConfig={saveWineSyncConfig}
         quickAccessItems={quickAccessItems}
         onUpdateQuickAccess={updateQuickAccess}
         aperitifOptions={aperitifOptions}
-        menuLayouts={menuLayoutsState.layouts}
-        layoutAssignments={menuLayoutsState.assignments}
-        onUpdateMenuLayouts={updateMenuLayouts}
         onExit={() => changeMode(null)}
       />
     </div>
@@ -3345,8 +3365,8 @@ export default function App() {
               onSeat={seatTable}
               onUnseat={unseatTable}
               isMobile={appIsMobile}
-              menuLayouts={menuLayoutsState.layouts}
-              layoutAssignments={menuLayoutsState.assignments}
+              profiles={profilesState.profiles}
+              assignments={profilesState.assignments}
             />
           ) : (() => {
             const visibleTables = tables
