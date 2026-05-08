@@ -188,7 +188,7 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Allergy Sheet</title>${ALLERGY_ROBOTO}<style>${css}</style></head><body>${body}</body></html>`;
 }
 
-export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onExit, serviceDate, onSetServiceDate }) {
+export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onExit, serviceDate, onSetServiceDate, onOpenArchive }) {
   const [weekOffset,  setWeekOffset]  = useState(0);
   const [selectedDay, setSelectedDay] = useState(null);   // "YYYY-MM-DD" or null (week view)
   const [editingId,   setEditingId]   = useState(null);   // reservation id being edited, or "new"
@@ -460,6 +460,10 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
             style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 8px", border: `1px solid ${weeklyPreview === "reservations" ? tokens.charcoal.default : tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "reservations" ? tokens.tint.parchment : tokens.neutral[0], color: weeklyPreview === "reservations" ? tokens.ink[0] : tokens.ink[2], fontWeight: 600, flexShrink: 0, touchAction: "manipulation" }}>OVERVIEW</button>
           <button onClick={() => setWeeklyPreview(weeklyPreview === "allergies" ? null : "allergies")}
             style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 8px", border: `1px solid ${weeklyPreview === "allergies" ? tokens.charcoal.default : tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "allergies" ? tokens.tint.parchment : tokens.neutral[0], color: weeklyPreview === "allergies" ? tokens.ink[0] : tokens.ink[2], fontWeight: 600, flexShrink: 0, touchAction: "manipulation" }}>ALLERGIES</button>
+          {onOpenArchive && (
+            <button onClick={onOpenArchive}
+              style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[2], fontWeight: 600, flexShrink: 0, touchAction: "manipulation" }}>ARCHIVE</button>
+          )}
           <button onClick={() => setWeekOffset(w => w - 1)} style={navBtn}>◀</button>
           <button onClick={() => setWeekOffset(0)}
             style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 110, textAlign: "center", background: "none", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "10px 0", cursor: "pointer", touchAction: "manipulation" }}>{fmtRange()}</button>

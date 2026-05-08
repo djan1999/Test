@@ -3122,7 +3122,20 @@ export default function App() {
       onExit={() => changeMode(null)}
       serviceDate={serviceDate}
       onSetServiceDate={persistServiceDate}
-    /></>);
+      onOpenArchive={() => setArchiveOpen(true)}
+    />
+    {archiveOpen && (
+      <ArchiveModal
+        tables={tables} optionalExtras={dishes} optionalPairings={pairings}
+        onArchiveAndClear={archiveAndClearAll}
+        onClearAll={clearAll}
+        onSeedTest={seedTestData}
+        onClose={() => setArchiveOpen(false)}
+        onRestoreTicket={id => upd(id, "kitchenArchived", false)}
+        menuCourses={menuCourses}
+      />
+    )}
+    </>);
 
   // Kitchen mode (legacy id "display") — KDS board for firing courses.
   // Mutation handlers `upd` / `updMany` are intentionally passed: kitchen
