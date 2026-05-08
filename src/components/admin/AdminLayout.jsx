@@ -406,7 +406,7 @@ export default function AdminLayout({
           )}
 
           {activeSection === "archive" && (
-            <ArchivePanel />
+            <ArchivePanel optionalExtras={dishes} />
           )}
         </main>
       </div>

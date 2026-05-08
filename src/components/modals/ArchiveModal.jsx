@@ -1,18 +1,13 @@
 import { useEffect, useState } from "react";
 import FullModal from "../ui/FullModal.jsx";
+import TableSummaryCard from "./TableSummaryCard.jsx";
 import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
-import { BEV_TYPES } from "../../constants/beverageTypes.js";
-import { COUNTRY_NAMES, stripCountryFromRegion, inferCountryFromRegion } from "../../constants/countries.js";
-import { restrLabel } from "../../constants/dietary.js";
-import { waterStyle } from "../../constants/pairings.js";
 import { parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 
 const FONT = tokens.font;
-const PAIRING_COLOR = { Wine: tokens.text.body, "Non-Alc": tokens.neutral[500], Premium: tokens.neutral[500], "Our Story": tokens.green.text };
-const PAIRING_BG = { Wine: tokens.tint.parchment, "Non-Alc": tokens.neutral[50], Premium: tokens.neutral[50], "Our Story": tokens.green.bg };
 
 export default function ArchiveModal({
   tables,
@@ -182,49 +177,7 @@ export default function ArchiveModal({
                             <KitchenTicket table={t} menuCourses={menuCourses} upd={null} />
                           </div>
                           <div style={{ flex: 1, minWidth: 220 }}>
-                            {(t.bottleWines || []).length > 0 && (
-                              <div style={{ marginBottom: 12 }}>
-                                <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.neutral[400], textTransform: "uppercase", marginBottom: 6 }}>Bottles</div>
-                                {(t.bottleWines || []).map((w, wi) => {
-                                  const rawVintage = String(w?.vintage || "").trim();
-                                  const vintage = rawVintage.match(/^\d{4}$/) ? `'${rawVintage.slice(2)}` : rawVintage;
-                                  const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
-                                  const rawCountry = w?.country || inferCountryFromRegion(w?.region);
-                                  const country = COUNTRY_NAMES[rawCountry] || rawCountry;
-                                  const region = stripCountryFromRegion(w?.region, rawCountry);
-                                  const sub = [region, country].filter(Boolean).join(", ") || w?.notes || "";
-                                  return (
-                                    <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 1, marginBottom: 4 }}>
-                                      <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: tokens.neutral[900], letterSpacing: 0.3 }}>🍾 {title}</span>
-                                      {sub && <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[500] }}>{sub}</span>}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.neutral[400], textTransform: "uppercase", marginBottom: 6 }}>Seats</div>
-                            {(t.seats || []).map((s) => {
-                              const ws = waterStyle(s.water);
-                              const restr = (t.restrictions || []).filter((r) => r.pos === s.id);
-                              const extra = (optionalExtras || []).filter((d) => (s.extras?.[d.key] || s.extras?.[d.id])?.ordered);
-                              const bevs = [
-                                ...(s.aperitifs || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.aperitif })),
-                                ...(s.glasses || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.wine })),
-                                ...(s.cocktails || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.cocktail })),
-                                ...(s.spirits || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.spirit })),
-                                ...(s.beers || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.beer })),
-                              ];
-                              return (
-                                <div key={s.id} style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", padding: "5px 4px", borderBottom: `1px solid ${tokens.neutral[100]}` }}>
-                                  <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: tokens.neutral[500], minWidth: 26 }}>P{s.id}</span>
-                                  {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, background: ws.bg || tokens.neutral[100], color: tokens.neutral[700], border: `1px solid ${tokens.neutral[200]}` }}>{s.water}</span>}
-                                  {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, color: PAIRING_COLOR[s.pairing] || tokens.neutral[600], background: PAIRING_BG[s.pairing] || tokens.neutral[50], border: `1px solid ${tokens.neutral[200]}` }}>{s.pairing}</span>}
-                                  {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
-                                  {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg }}>{d.name}</span>)}
-                                  {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, border: `1px solid ${tokens.red.border}`, color: tokens.red.text, background: tokens.red.bg }}>⚠ {restrLabel(r.note)}</span>)}
-                                </div>
-                              );
-                            })}
+                            <TableSummaryCard table={t} optionalExtras={optionalExtras} />
                           </div>
                         </div>
                       </div>
@@ -251,6 +204,7 @@ export default function ArchiveModal({
         {entries.map((entry) => {
           const isExp = expanded === entry.id;
           const entryTables = entry.state?.tables || [];
+          const entryMenuCourses = entry.state?.menuCourses || [];
           const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
           return (
             <div key={entry.id} style={{ border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, marginBottom: 8, overflow: "hidden" }}>
@@ -269,60 +223,9 @@ export default function ArchiveModal({
                 </div>
               </div>
               {isExp && (
-                <div style={{ borderTop: `1px solid ${tokens.neutral[200]}` }}>
+                <div style={{ borderTop: `1px solid ${tokens.neutral[200]}`, padding: "12px 16px", background: tokens.neutral[0] }}>
                   {entryTables.map((t) => (
-                    <div key={t.id} style={{ padding: "12px 16px", borderBottom: `1px solid ${tokens.neutral[50]}` }}>
-                      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-                        <div style={{ width: 248, flexShrink: 0 }}>
-                          <KitchenTicket table={t} menuCourses={entry.state?.menuCourses || []} upd={null} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 220 }}>
-                          {(t.bottleWines || []).length > 0 && (
-                            <div style={{ marginBottom: 12 }}>
-                              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.neutral[400], textTransform: "uppercase", marginBottom: 6 }}>Bottles</div>
-                              {(t.bottleWines || []).map((w, wi) => {
-                                const rawVintage = String(w?.vintage || "").trim();
-                                const vintage = rawVintage.match(/^\d{4}$/) ? `'${rawVintage.slice(2)}` : rawVintage;
-                                const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
-                                const rawCountry = w?.country || inferCountryFromRegion(w?.region);
-                                const country = COUNTRY_NAMES[rawCountry] || rawCountry;
-                                const region = stripCountryFromRegion(w?.region, rawCountry);
-                                const sub = [region, country].filter(Boolean).join(", ") || w?.notes || "";
-                                return (
-                                  <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 1, marginBottom: 4 }}>
-                                    <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: tokens.neutral[900], letterSpacing: 0.3 }}>🍾 {title}</span>
-                                    {sub && <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[500] }}>{sub}</span>}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.neutral[400], textTransform: "uppercase", marginBottom: 6 }}>Seats</div>
-                          {(t.seats || []).map((s) => {
-                            const ws = waterStyle(s.water);
-                            const restr = (t.restrictions || []).filter((r) => r.pos === s.id);
-                            const extra = (optionalExtras || []).filter((d) => (s.extras?.[d.key] || s.extras?.[d.id])?.ordered);
-                            const bevs = [
-                              ...(s.aperitifs || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.aperitif })),
-                              ...(s.glasses || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.wine })),
-                              ...(s.cocktails || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.cocktail })),
-                              ...(s.spirits || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.spirit })),
-                              ...(s.beers || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.beer })),
-                            ];
-                            return (
-                              <div key={s.id} style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", padding: "5px 4px", borderBottom: `1px solid ${tokens.neutral[50]}` }}>
-                                <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: tokens.neutral[500], minWidth: 26 }}>P{s.id}</span>
-                                {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, background: ws.bg || tokens.neutral[100], color: tokens.neutral[700], border: `1px solid ${tokens.neutral[200]}` }}>{s.water}</span>}
-                                {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, color: PAIRING_COLOR[s.pairing] || tokens.neutral[600], background: PAIRING_BG[s.pairing] || tokens.neutral[50], border: `1px solid ${tokens.neutral[200]}` }}>{s.pairing}</span>}
-                                {bevs.map((b, bi) => <span key={bi} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>{b.label}</span>)}
-                                {extra.map((d) => <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg }}>{d.name}</span>)}
-                                {restr.map((r, ri) => <span key={ri} style={{ fontFamily: FONT, fontSize: 10, padding: "1px 7px", borderRadius: 0, border: `1px solid ${tokens.red.border}`, color: tokens.red.text, background: tokens.red.bg }}>⚠ {restrLabel(r.note)}</span>)}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
+                    <ArchivedTableRow key={t.id} table={t} optionalExtras={optionalExtras} menuCourses={entryMenuCourses} />
                   ))}
                 </div>
               )}
@@ -373,5 +276,28 @@ export default function ArchiveModal({
         )}
       </div>
     </FullModal>
+  );
+}
+
+function ArchivedTableRow({ table, optionalExtras, menuCourses }) {
+  const isMobile = useIsMobile(640);
+  const [showTicket, setShowTicket] = useState(false);
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <TableSummaryCard table={table} optionalExtras={optionalExtras} />
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -8, marginBottom: 4 }}>
+        <button
+          onClick={() => setShowTicket((v) => !v)}
+          style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "3px 10px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[500], textTransform: "uppercase" }}
+        >
+          {showTicket ? "Hide ticket" : "Show ticket"}
+        </button>
+      </div>
+      {showTicket && (
+        <div style={{ width: isMobile ? "100%" : 248, marginTop: 6 }}>
+          <KitchenTicket table={table} menuCourses={menuCourses} upd={null} />
+        </div>
+      )}
+    </div>
   );
 }

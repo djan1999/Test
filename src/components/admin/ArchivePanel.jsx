@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
+import TableSummaryCard from "../modals/TableSummaryCard.jsx";
 
 // ── ArchivePanel — view, restore, delete saved service archives ──
-export default function ArchivePanel() {
+export default function ArchivePanel({ optionalExtras = [] }) {
   const [entries, setEntries]         = useState([]);
   const [deleted, setDeleted]         = useState([]);
   const [loading, setLoading]         = useState(true);
@@ -127,15 +128,7 @@ export default function ArchivePanel() {
             {isExp && (
               <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, padding: "12px 16px" }}>
                 {entryTables.map(t => (
-                  <div key={t.id} style={{ padding: "8px 0", borderBottom: `1px solid ${tokens.ink[4]}` }}>
-                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                      <span style={{ fontFamily: FONT, fontSize: 16, fontWeight: 300, color: tokens.ink[3] }}>{String(t.id).padStart(2, "0")}</span>
-                      {t.resName && <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: tokens.ink[0] }}>{t.resName}</span>}
-                      <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3] }}>{t.guests || 0} guests</span>
-                      {t.menuType && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[1], border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "1px 6px" }}>{t.menuType}</span>}
-                      {t.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.text }}>{t.arrivedAt}</span>}
-                    </div>
-                  </div>
+                  <TableSummaryCard key={t.id} table={t} optionalExtras={optionalExtras} />
                 ))}
               </div>
             )}
