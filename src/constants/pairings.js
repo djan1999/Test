@@ -12,27 +12,24 @@ export const PAIRINGS = ["—", "Wine", "Non-Alc", "Premium", "Our Story"];
 
 export const extraPairingLabel = (p) => {
   const v = String(p || "").trim();
-  if (!v || v === "—") return "N/A";
+  if (!v || v === "—") return "";
   return v;
 };
 
 // Resolves the pairing label for an optional-extra dish on a given seat.
-// When the dish has a linked optional pairing course (e.g. cheese pairing),
-// the seat's optionalPairings drives the label (alco → wine name, nonalc →
-// non-alc name). Otherwise we fall back to the seat's direct extras.pairing.
+// Returns the label (e.g. "Wine") or "" when the seat ordered the dish
+// without a paired drink. Linked optional pairings (cheese, beetroot, …)
+// drive the label via seat.optionalPairings[linkedKey].mode; otherwise we
+// fall back to seat.extras[key].pairing.
 export const extraPairingForSeat = (seat, dish, optionalPairings = []) => {
   const linked = (optionalPairings || []).find(
     (op) => op?.extraKey && (op.extraKey === dish?.key || op.extraKey === dish?.id)
   );
   if (linked) {
     const lp = seat?.optionalPairings?.[linked.key];
-    const ordered = lp?.ordered ?? linked.defaultOn !== false;
-    if (!ordered) return "N/A";
     if (lp?.mode === "alco")   return linked.alcoName    || "Wine";
-    if (lp?.mode === "nonalc") return linked.nonAlcoName || "N/A";
-    const sp = String(seat?.pairing || "").trim();
-    if (sp && sp !== "—") return sp === "Non-Alc" ? "N/A" : sp;
-    return "Wine";
+    if (lp?.mode === "nonalc") return linked.nonAlcoName || "Non-Alc";
+    return "";
   }
   const ex = seat?.extras?.[dish?.key] || seat?.extras?.[dish?.id];
   return extraPairingLabel(ex?.pairing);

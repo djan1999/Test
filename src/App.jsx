@@ -1405,14 +1405,17 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                       color: pc.color, fontWeight: 500,
                     }}>{s.pairing}</span>
                   )}
-                  {extras.map(d => (
-                    <span key={d.key} style={{
-                      fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
-                      border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg,
-                    }}>
-                      {d.name} · {extraPairingForSeat(s, d, optionalPairings)}
-                    </span>
-                  ))}
+                  {extras.map(d => {
+                    const p = extraPairingForSeat(s, d, optionalPairings);
+                    return (
+                      <span key={d.key} style={{
+                        fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
+                        border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg,
+                      }}>
+                        {d.name}{p ? ` · ${p}` : ""}
+                      </span>
+                    );
+                  })}
                   {restr.map((r, i) => (
                     <span key={i} style={{
                       fontFamily: FONT, fontSize: "8px", padding: "1px 5px", borderRadius: 0,

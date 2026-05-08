@@ -440,7 +440,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             const dish = { key: optKey, id: optKey };
             const marks = isBirthdayCake
               ? "ALL"
-              : orderedSeats.map(s => `P${s.id}·${extraPairingForSeat(s, dish, optionalPairings)}`).join(" ");
+              : orderedSeats.map(s => {
+                  const p = extraPairingForSeat(s, dish, optionalPairings);
+                  return `P${s.id}${p ? `·${p}` : ""}`;
+                }).join(" ");
             return marks + ((optKey === "cake" && table.cakeNote) ? ` — ${table.cakeNote}` : "");
           })();
 
@@ -693,7 +696,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>{group.name.toUpperCase()}</span>
                   {group.seats.map(s => (
                     <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text }}>
-                      P{s.id} · {extraPairingLabel(s.pairing)}
+                      P{s.id}{(() => { const p = extraPairingLabel(s.pairing); return p ? ` · ${p}` : ""; })()}
                     </span>
                   ))}
                 </div>
