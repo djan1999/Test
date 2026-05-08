@@ -1,4 +1,4 @@
-import { waterStyle, extraPairingLabel } from "../../constants/pairings.js";
+import { waterStyle, extraPairingForSeat } from "../../constants/pairings.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES, stripCountryFromRegion, inferCountryFromRegion } from "../../constants/countries.js";
 import { restrLabel } from "../../constants/dietary.js";
@@ -9,7 +9,7 @@ const FONT = tokens.font;
 const PAIRING_COLOR = { Wine: tokens.text.body, "Non-Alc": tokens.neutral[500], Premium: tokens.neutral[500], "Our Story": tokens.green.text };
 const PAIRING_BG = { Wine: tokens.tint.parchment, "Non-Alc": tokens.neutral[50], Premium: tokens.neutral[50], "Our Story": tokens.green.bg };
 
-export default function TableSummaryCard({ table: t, optionalExtras = [] }) {
+export default function TableSummaryCard({ table: t, optionalExtras = [], optionalPairings = [] }) {
   const isMobile = useIsMobile(640);
   return (
     <div style={{ border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, overflow: "hidden", marginBottom: 12 }}>
@@ -39,14 +39,11 @@ export default function TableSummaryCard({ table: t, optionalExtras = [] }) {
               <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: restr.length ? tokens.red.text : tokens.neutral[500], minWidth: 28, letterSpacing: 0.5 }}>P{s.id}</span>
               {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 0, background: ws.bg || tokens.neutral[100], color: tokens.neutral[700], border: `1px solid ${tokens.neutral[200]}` }}>{s.water}</span>}
               {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 0, border: `1px solid ${tokens.neutral[200]}`, color: PAIRING_COLOR[s.pairing] || tokens.neutral[600], background: PAIRING_BG[s.pairing] || tokens.neutral[50] }}>{s.pairing}</span>}
-              {extras.map((d) => {
-                const ex = s.extras[d.key] || s.extras[d.id];
-                return (
-                  <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 0, border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg }}>
-                    {d.name} · {extraPairingLabel(ex?.pairing)}
-                  </span>
-                );
-              })}
+              {extras.map((d) => (
+                <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 0, border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg }}>
+                  {d.name} · {extraPairingForSeat(s, d, optionalPairings)}
+                </span>
+              ))}
               {allBevs.map((b, i) => (
                 <span key={i} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 0, border: `1px solid ${b.ts.border}`, color: b.ts.color, background: b.ts.bg }}>
                   {b.label}

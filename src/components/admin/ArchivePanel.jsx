@@ -3,6 +3,7 @@ import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
 import TableSummaryCard from "../modals/TableSummaryCard.jsx";
+import { optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 
 // ── ArchivePanel — view, restore, delete saved service archives ──
 export default function ArchivePanel({ optionalExtras = [] }) {
@@ -108,6 +109,7 @@ export default function ArchivePanel({ optionalExtras = [] }) {
       {entries.map(entry => {
         const isExp       = expanded === entry.id;
         const entryTables = entry.state?.tables || [];
+        const entryOptionalPairings = optionalPairingsFromCourses(entry.state?.menuCourses || []);
         const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
         return (
           <div key={entry.id} style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, marginBottom: 8, overflow: "hidden" }}>
@@ -128,7 +130,7 @@ export default function ArchivePanel({ optionalExtras = [] }) {
             {isExp && (
               <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, padding: "12px 16px" }}>
                 {entryTables.map(t => (
-                  <TableSummaryCard key={t.id} table={t} optionalExtras={optionalExtras} />
+                  <TableSummaryCard key={t.id} table={t} optionalExtras={optionalExtras} optionalPairings={entryOptionalPairings} />
                 ))}
               </div>
             )}

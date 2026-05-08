@@ -33,7 +33,7 @@ import { useOfflineQueue } from "./hooks/useOfflineQueue.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
 import { AdminLayout } from "./components/admin/index.js";
 import { DIETARY_KEYS, RESTRICTIONS, restrLabel, restrCompact } from "./constants/dietary.js";
-import { WATER_OPTS, waterStyle, PAIRINGS, pairingStyle, extraPairingLabel } from "./constants/pairings.js";
+import { WATER_OPTS, waterStyle, PAIRINGS, pairingStyle, extraPairingForSeat } from "./constants/pairings.js";
 import { BEV_TYPES } from "./constants/beverageTypes.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES } from "./lib/supabaseClient.js";
 import { tokens } from "./styles/tokens.js";
@@ -1405,17 +1405,14 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                       color: pc.color, fontWeight: 500,
                     }}>{s.pairing}</span>
                   )}
-                  {extras.map(d => {
-                    const ex = s.extras[d.key] || s.extras[d.id];
-                    return (
-                      <span key={d.key} style={{
-                        fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
-                        border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg,
-                      }}>
-                        {d.name} · {extraPairingLabel(ex?.pairing)}
-                      </span>
-                    );
-                  })}
+                  {extras.map(d => (
+                    <span key={d.key} style={{
+                      fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
+                      border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg,
+                    }}>
+                      {d.name} · {extraPairingForSeat(s, d, optionalPairings)}
+                    </span>
+                  ))}
                   {restr.map((r, i) => (
                     <span key={i} style={{
                       fontFamily: FONT, fontSize: "8px", padding: "1px 5px", borderRadius: 0,
@@ -1461,10 +1458,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                     pairing: s.pairing || null,
                     extras: (optionalExtras || [])
                       .filter(d => !!(s.extras?.[d.key] || s.extras?.[d.id])?.ordered)
-                      .map(d => {
-                        const ex = s.extras?.[d.key] || s.extras?.[d.id];
-                        return { key: d.key, name: d.name, pairing: ex?.pairing || "—" };
-                      }),
+                      .map(d => ({ key: d.key, name: d.name, pairing: extraPairingForSeat(s, d, optionalPairings) })),
                   }));
                   upd(t.id, "kitchenAlert", {
                     timestamp: new Date().toISOString(),
@@ -3416,11 +3410,11 @@ export default function App() {
       )}
 
       {summaryOpen && (
-        <SummaryModal tables={tables} optionalExtras={dishes} onClose={() => setSummaryOpen(false)} />
+        <SummaryModal tables={tables} optionalExtras={dishes} optionalPairings={pairings} onClose={() => setSummaryOpen(false)} />
       )}
       {archiveOpen && (
         <ArchiveModal
-          tables={tables} optionalExtras={dishes}
+          tables={tables} optionalExtras={dishes} optionalPairings={pairings}
           onArchiveAndClear={archiveAndClearAll}
           onClearAll={clearAll}
           onSeedTest={seedTestData}

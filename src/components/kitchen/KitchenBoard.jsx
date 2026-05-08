@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
-import { getCourseMod } from "../../utils/menuUtils.js";
+import { getCourseMod, optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
-import { extraPairingLabel } from "../../constants/pairings.js";
+import { extraPairingLabel, extraPairingForSeat } from "../../constants/pairings.js";
 
 const FONT = tokens.font;
 
@@ -85,6 +85,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
   const pairingColor = { Wine: tokens.ink[2], "Non-Alc": tokens.ink[2], Premium: tokens.ink[2], "Our Story": tokens.ink[2] };
   const pairingBg   = { Wine: tokens.neutral[0], "Non-Alc": tokens.neutral[0], Premium: tokens.neutral[0], "Our Story": tokens.neutral[0] };
+  const optionalPairings = optionalPairingsFromCourses(menuCourses || []);
 
   const normFlag = s => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   const normCategory = (course) => {
@@ -436,12 +437,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             const orderedSeats = optionalSeatMap[optKey] || [];
             if (orderedSeats.length === 0) return null;
             const isBirthdayCake = table.birthday && normCategory(course) === "celebration";
+            const dish = { key: optKey, id: optKey };
             const marks = isBirthdayCake
               ? "ALL"
-              : orderedSeats.map(s => {
-                  const ex = s.extras?.[optKey];
-                  return `P${s.id}·${extraPairingLabel(ex?.pairing)}`;
-                }).join(" ");
+              : orderedSeats.map(s => `P${s.id}·${extraPairingForSeat(s, dish, optionalPairings)}`).join(" ");
             return marks + ((optKey === "cake" && table.cakeNote) ? ` — ${table.cakeNote}` : "");
           })();
 

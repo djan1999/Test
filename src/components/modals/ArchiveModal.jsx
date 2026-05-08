@@ -4,6 +4,7 @@ import TableSummaryCard from "./TableSummaryCard.jsx";
 import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
 import { parseHHMM } from "../../utils/tableHelpers.js";
+import { optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 
@@ -12,6 +13,7 @@ const FONT = tokens.font;
 export default function ArchiveModal({
   tables,
   optionalExtras = [],
+  optionalPairings = [],
   onArchiveAndClear,
   onClearAll,
   onSeedTest,
@@ -177,7 +179,7 @@ export default function ArchiveModal({
                             <KitchenTicket table={t} menuCourses={menuCourses} upd={null} />
                           </div>
                           <div style={{ flex: 1, minWidth: 220 }}>
-                            <TableSummaryCard table={t} optionalExtras={optionalExtras} />
+                            <TableSummaryCard table={t} optionalExtras={optionalExtras} optionalPairings={optionalPairings} />
                           </div>
                         </div>
                       </div>
@@ -205,6 +207,7 @@ export default function ArchiveModal({
           const isExp = expanded === entry.id;
           const entryTables = entry.state?.tables || [];
           const entryMenuCourses = entry.state?.menuCourses || [];
+          const entryOptionalPairings = optionalPairingsFromCourses(entryMenuCourses);
           const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
           return (
             <div key={entry.id} style={{ border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, marginBottom: 8, overflow: "hidden" }}>
@@ -225,7 +228,7 @@ export default function ArchiveModal({
               {isExp && (
                 <div style={{ borderTop: `1px solid ${tokens.neutral[200]}`, padding: "12px 16px", background: tokens.neutral[0] }}>
                   {entryTables.map((t) => (
-                    <ArchivedTableRow key={t.id} table={t} optionalExtras={optionalExtras} menuCourses={entryMenuCourses} />
+                    <ArchivedTableRow key={t.id} table={t} optionalExtras={optionalExtras} optionalPairings={entryOptionalPairings} menuCourses={entryMenuCourses} />
                   ))}
                 </div>
               )}
@@ -279,12 +282,12 @@ export default function ArchiveModal({
   );
 }
 
-function ArchivedTableRow({ table, optionalExtras, menuCourses }) {
+function ArchivedTableRow({ table, optionalExtras, optionalPairings = [], menuCourses }) {
   const isMobile = useIsMobile(640);
   const [showTicket, setShowTicket] = useState(false);
   return (
     <div style={{ marginBottom: 12 }}>
-      <TableSummaryCard table={table} optionalExtras={optionalExtras} />
+      <TableSummaryCard table={table} optionalExtras={optionalExtras} optionalPairings={optionalPairings} />
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -8, marginBottom: 4 }}>
         <button
           onClick={() => setShowTicket((v) => !v)}
