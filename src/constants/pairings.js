@@ -27,8 +27,8 @@ export const extraPairingForSeat = (seat, dish, optionalPairings = []) => {
   );
   if (linked) {
     const lp = seat?.optionalPairings?.[linked.key];
-    if (lp?.mode === "alco")   return linked.alcoName    || "Wine";
-    if (lp?.mode === "nonalc") return linked.nonAlcoName || "Non-Alc";
+    if (lp?.mode === "alco")   return "Wine";
+    if (lp?.mode === "nonalc") return "N/A";
     return "";
   }
   const ex = seat?.extras?.[dish?.key] || seat?.extras?.[dish?.id];
