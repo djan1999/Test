@@ -6,6 +6,7 @@ import { getCourseMod } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
+import { extraPairingLabel } from "../../constants/pairings.js";
 
 const FONT = tokens.font;
 
@@ -434,9 +435,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             if (!optKey) return null;
             const orderedSeats = optionalSeatMap[optKey] || [];
             if (orderedSeats.length === 0) return null;
-            const marks = table.birthday && normCategory(course) === "celebration"
+            const isBirthdayCake = table.birthday && normCategory(course) === "celebration";
+            const marks = isBirthdayCake
               ? "ALL"
-              : orderedSeats.map(s => `P${s.id}`).join(" ");
+              : orderedSeats.map(s => {
+                  const ex = s.extras?.[optKey];
+                  return `P${s.id}·${extraPairingLabel(ex?.pairing)}`;
+                }).join(" ");
             return marks + ((optKey === "cake" && table.cakeNote) ? ` — ${table.cakeNote}` : "");
           })();
 
@@ -689,7 +694,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>{group.name.toUpperCase()}</span>
                   {group.seats.map(s => (
                     <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text }}>
-                      P{s.id}{s.pairing && s.pairing !== "—" ? ` · ${s.pairing}` : ""}
+                      P{s.id} · {extraPairingLabel(s.pairing)}
                     </span>
                   ))}
                 </div>

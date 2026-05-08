@@ -1,4 +1,4 @@
-import { waterStyle } from "../../constants/pairings.js";
+import { waterStyle, extraPairingLabel } from "../../constants/pairings.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES, stripCountryFromRegion, inferCountryFromRegion } from "../../constants/countries.js";
 import { restrLabel } from "../../constants/dietary.js";
@@ -43,8 +43,7 @@ export default function TableSummaryCard({ table: t, optionalExtras = [] }) {
                 const ex = s.extras[d.key] || s.extras[d.id];
                 return (
                   <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 0, border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg }}>
-                    {d.name}
-                    {ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}
+                    {d.name} · {extraPairingLabel(ex?.pairing)}
                   </span>
                 );
               })}

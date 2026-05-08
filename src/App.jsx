@@ -33,7 +33,7 @@ import { useOfflineQueue } from "./hooks/useOfflineQueue.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
 import { AdminLayout } from "./components/admin/index.js";
 import { DIETARY_KEYS, RESTRICTIONS, restrLabel, restrCompact } from "./constants/dietary.js";
-import { WATER_OPTS, waterStyle, PAIRINGS, pairingStyle } from "./constants/pairings.js";
+import { WATER_OPTS, waterStyle, PAIRINGS, pairingStyle, extraPairingLabel } from "./constants/pairings.js";
 import { BEV_TYPES } from "./constants/beverageTypes.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES } from "./lib/supabaseClient.js";
 import { tokens } from "./styles/tokens.js";
@@ -1412,7 +1412,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                         fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
                         border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg,
                       }}>
-                        {d.name}{ex?.pairing && ex.pairing !== "—" ? ` · ${ex.pairing}` : ""}
+                        {d.name} · {extraPairingLabel(ex?.pairing)}
                       </span>
                     );
                   })}

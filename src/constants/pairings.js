@@ -10,6 +10,12 @@ export const waterStyle = (v) => {
 
 export const PAIRINGS = ["—", "Wine", "Non-Alc", "Premium", "Our Story"];
 
+export const extraPairingLabel = (p) => {
+  const v = String(p || "").trim();
+  if (!v || v === "—") return "N/A";
+  return v;
+};
+
 export const pairingStyle = {
   "—":         { color: tokens.text.secondary, border: tokens.neutral[300], bg: tokens.neutral[100] },
   "Non-Alc":   { color: tokens.text.body,      border: tokens.neutral[200], bg: tokens.neutral[50] },
