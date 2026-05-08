@@ -16,7 +16,6 @@ export default function ArchiveModal({
   optionalPairings = [],
   onArchiveAndClear,
   onClearAll,
-  onSeedTest,
   onClose,
   onRestoreTicket,
   menuCourses,
@@ -108,10 +107,6 @@ export default function ArchiveModal({
 
   const archiveActions = (
     <div style={{ display: "flex", gap: isMobile ? 6 : 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-      <button onClick={onSeedTest} style={{
-        fontFamily: FONT, fontSize: 9, letterSpacing: isMobile ? 1.5 : 2, padding: isMobile ? "6px 10px" : "8px 14px",
-        border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer", background: tokens.green.bg, color: tokens.green.text,
-      }}>{isMobile ? "SEED" : "SEED TEST"}</button>
       <button onClick={onClearAll} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: isMobile ? 1.5 : 2, padding: isMobile ? "6px 10px" : "8px 14px",
         border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[500],

@@ -2113,43 +2113,6 @@ export default function App() {
     setArchiveOpen(false);
   };
 
-  const seedTestData = () => {
-    const names = ["Novak", "Kovač", "Krajnc", "Zupan", "Horvat", "Mlakar", "Kralj", "Kos", "Smith", "Müller"];
-    const times = ["18:00","18:00","18:30","18:30","19:00","19:00","19:00","19:15","19:15","19:15"];
-    const types = ["long","long","long","short","long","long","short","long","long","long"];
-    const pax   = [2,4,3,2,6,4,2,5,3,2];
-    const langs = ["en","en","si","si","en","si","en","en","si","en"];
-    const restrPool = ["vegetarian","vegan","gluten free","lactose free","nut allergy","shellfish allergy","no pork"];
-    const rng = (arr) => arr[Math.floor(Math.random() * arr.length)];
-    const now = fmt(new Date());
-    for (let i = 1; i <= 10; i++) bumpLocalTableFresh(i);
-    setTables(Array.from({ length: 10 }, (_, i) => {
-      const id = i + 1;
-      const n = pax[i];
-      const restrCount = Math.random() < 0.4 ? 1 : 0;
-      const restrictions = restrCount ? [{ note: rng(restrPool), pos: null }] : [];
-      return {
-        ...blankTable(id),
-        active: true,
-        resName: names[i],
-        resTime: times[i],
-        menuType: types[i],
-        guests: n,
-        guestType: Math.random() < 0.2 ? "hotel" : "regular",
-        room: Math.random() < 0.2 ? String(100 + Math.floor(Math.random() * 50)) : "",
-        birthday: Math.random() < 0.15,
-        lang: langs[i],
-        restrictions,
-        notes: Math.random() < 0.2 ? "Window seat please" : "",
-        arrivedAt: Math.random() < 0.6 ? now : null,
-        seats: makeSeats(n),
-        kitchenLog: {},
-        tableGroup: [],
-      };
-    }));
-    setArchiveOpen(false);
-  };
-
   const archiveAndClearAll = async () => {
     if (typeof window !== "undefined" && !window.confirm("Archive today's service and clear all tables?")) return;
     const snap = boardStateRef.current; // stable reference, never stale
@@ -3032,7 +2995,6 @@ export default function App() {
     onSummary: () => setSummaryOpen(true),
     onArchive: () => setArchiveOpen(true),
     onInventory: () => setInventoryOpen(true),
-    onSeed: seedTestData,
     onSyncAll: syncWines,
   };
 
@@ -3129,7 +3091,6 @@ export default function App() {
         tables={tables} optionalExtras={dishes} optionalPairings={pairings}
         onArchiveAndClear={archiveAndClearAll}
         onClearAll={clearAll}
-        onSeedTest={seedTestData}
         onClose={() => setArchiveOpen(false)}
         onRestoreTicket={id => upd(id, "kitchenArchived", false)}
         menuCourses={menuCourses}
@@ -3160,8 +3121,7 @@ export default function App() {
           tables={tables} optionalExtras={dishes}
           onArchiveAndClear={archiveAndClearAll}
           onClearAll={clearAll}
-          onSeedTest={seedTestData}
-          onClose={() => setArchiveOpen(false)}
+            onClose={() => setArchiveOpen(false)}
           onRestoreTicket={id => upd(id, "kitchenArchived", false)}
           menuCourses={menuCourses}
         />
@@ -3259,7 +3219,6 @@ export default function App() {
         showMenu={false}
         showArchive={true}
         showInventory={false}
-        showSeed={false}
         showSync={true}
         showEndService={true}
         onEndService={endService}
@@ -3433,8 +3392,7 @@ export default function App() {
           tables={tables} optionalExtras={dishes} optionalPairings={pairings}
           onArchiveAndClear={archiveAndClearAll}
           onClearAll={clearAll}
-          onSeedTest={seedTestData}
-          onClose={() => setArchiveOpen(false)}
+            onClose={() => setArchiveOpen(false)}
           onRestoreTicket={id => upd(id, "kitchenArchived", false)}
           menuCourses={menuCourses}
         />

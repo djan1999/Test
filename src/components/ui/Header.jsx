@@ -14,7 +14,6 @@ export default function Header({
   showArchive = false,
   showInventory = false,
   showSync = false,
-  showSeed = false,
   showEndService = false,
   syncLabel,
   syncLive,
@@ -28,7 +27,6 @@ export default function Header({
   onAddRes,
   onInventory,
   onSyncAll,
-  onSeed,
   onEndService,
 }) {
   const isMobile = useIsMobile(BP.sm);
@@ -143,17 +141,6 @@ export default function Header({
 
           {showInventory && (
             <button onClick={onInventory} style={btn}>{isMobile ? "INV" : "INVENTORY"}</button>
-          )}
-
-          {showSeed && (
-            <button onClick={onSeed} style={{
-              ...btn,
-              border:     `${rule.hairline} solid ${green.border}`,
-              background: green.bg,
-              color:      green.text,
-            }}>
-              {isMobile ? "SEED" : "SEED TEST"}
-            </button>
           )}
 
           {/* Sync status chip */}
