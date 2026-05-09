@@ -464,11 +464,8 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           });
 
           if (Object.keys(modCounts).length > 0) {
-            // Only show the alternatives — main line already has the total count
-            // and standard dish name, so repeating them is redundant.
-            // Lowercase so it reads as a note, not a heading.
-            modLines = Object.entries(modCounts)
-              .map(([name, count]) => `${count}&#215; ${esc(name.toLowerCase())}`);
+            modLines.push(...Object.entries(modCounts)
+              .map(([name, count]) => `${count}&#215; ${esc(name.toLowerCase())}`));
           }
         }
 
