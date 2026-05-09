@@ -60,6 +60,9 @@ import SheetView from "./components/service/SheetView.jsx";
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
   `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+// ISO YYYY-MM-DD strings sort lexicographically by calendar date.
+const isStaleServiceDate = (date, today = toLocalDateISO()) =>
+  Boolean(date) && String(date) < today;
 
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
 const APP_SUBTITLE = String(import.meta.env.VITE_APP_SUBTITLE || "SERVICE BOARD").trim() || "SERVICE BOARD";
@@ -1642,7 +1645,16 @@ export default function App() {
   const [spirits,   setSpirits]   = useState(localBev?.spirits   ?? initialState.spirits   ?? initSpirits);
   const [beers,     setBeers]     = useState(localBev?.beers      ?? initialState.beers     ?? initBeers);
   const [mode, setMode] = useState(() => {
-    try { return localStorage.getItem("milka_mode") || null; } catch { return null; }
+    try {
+      const storedMode = localStorage.getItem("milka_mode") || null;
+      const storedDate = localStorage.getItem("milka_service_date");
+      // If the saved service date rolled over to yesterday, don't auto-resume
+      // service/display — those modes require a date that matches today.
+      if ((storedMode === "service" || storedMode === "display") && isStaleServiceDate(storedDate)) {
+        return null;
+      }
+      return storedMode;
+    } catch { return null; }
   });
   const [sel,          setSel]          = useState(null);
   const [quickView,    setQuickView]    = useState("board");
@@ -1722,7 +1734,18 @@ export default function App() {
   // Reservations & service date
   const [reservations, setReservations] = useState([]);
   const [serviceDate,  setServiceDate]  = useState(() => {
-    try { return localStorage.getItem("milka_service_date") || null; } catch { return null; }
+    try {
+      const stored = localStorage.getItem("milka_service_date");
+      if (!stored) return null;
+      if (isStaleServiceDate(stored)) {
+        // Date rolled over since last session — drop the stale value so
+        // "Start Service" prompts for today's date instead of silently
+        // resuming yesterday's (now empty) service.
+        try { localStorage.removeItem("milka_service_date"); } catch {}
+        return null;
+      }
+      return stored;
+    } catch { return null; }
   });
   const [showServiceDatePicker,  setShowServiceDatePicker]  = useState(false);
   const [pendingModeAfterDate,   setPendingModeAfterDate]   = useState(null);
@@ -2197,11 +2220,21 @@ export default function App() {
 
   // ── Service date ──────────────────────────────────────────────────────────
   const persistServiceDate = async (date) => {
+    const previousDate = serviceDate;
     setServiceDate(date);
     try {
       if (date) localStorage.setItem("milka_service_date", date);
       else      localStorage.removeItem("milka_service_date");
     } catch {}
+    // Switching to a *different* day means yesterday's table state is stale —
+    // clearing here lets prePopulateFromReservations() fill tables for the new
+    // date (it skips rows that already carry resName/active). Skip when the
+    // date is being released to null, since callers like archiveAndClearAll
+    // already cleared local state.
+    if (date && date !== previousDate) {
+      tableLocalFreshRef.current = new Map();
+      setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
+    }
     if (!supabase) return;
     await supabase.from(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "service_date", state: date ? { date } : {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
@@ -2903,12 +2936,28 @@ export default function App() {
     if (!supabase) return;
     let mounted = true;
 
-    // Restore service date saved by a previous session
+    // Restore service date saved by a previous session — but if it has
+    // rolled over (yesterday or earlier), drop it and clear remote table
+    // state so today's "Start Service" prompts for a fresh date and
+    // pre-populates today's reservations on blank tables.
     supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "service_date").single()
-      .then(({ data }) => {
-        if (!mounted || !data?.state?.date) return;
-        setServiceDate(d => d || data.state.date); // local state wins if already set
-        try { localStorage.setItem("milka_service_date", data.state.date); } catch {}
+      .then(async ({ data }) => {
+        if (!mounted) return;
+        const persisted = data?.state?.date;
+        if (!persisted) return;
+        if (isStaleServiceDate(persisted)) {
+          try { localStorage.removeItem("milka_service_date"); } catch {}
+          setServiceDate(null);
+          tableLocalFreshRef.current = new Map();
+          setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
+          await supabase.from(TABLES.SERVICE_SETTINGS)
+            .upsert({ id: "service_date", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
+          const blankRows = Array.from({ length: 10 }, (_, i) => ({ table_id: i + 1, data: {} }));
+          await supabase.from(TABLES.SERVICE_TABLES).upsert(blankRows, { onConflict: "table_id" });
+          return;
+        }
+        setServiceDate(d => d || persisted); // local state wins if already set
+        try { localStorage.setItem("milka_service_date", persisted); } catch {}
       });
 
     // Load reservations for -7 days … +30 days so the planner is pre-populated
