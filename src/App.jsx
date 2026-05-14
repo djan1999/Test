@@ -1733,6 +1733,11 @@ export default function App() {
   const [authed,       setAuthed]       = useState(() => readAccess());
   // Reservations & service date
   const [reservations, setReservations] = useState([]);
+  // Gates the board↔reservations reconciliation effect: it must not run (and
+  // especially must not clear ghost tables) until both reservations and the
+  // remote service-table state have actually loaded.
+  const [reservationsLoaded, setReservationsLoaded] = useState(!supabase);
+  const [boardSyncTick, setBoardSyncTick] = useState(0);
   const [serviceDate,  setServiceDate]  = useState(() => {
     try {
       const stored = localStorage.getItem("milka_service_date");
@@ -2227,10 +2232,9 @@ export default function App() {
       else      localStorage.removeItem("milka_service_date");
     } catch {}
     // Switching to a *different* day means yesterday's table state is stale —
-    // clearing here lets prePopulateFromReservations() fill tables for the new
-    // date (it skips rows that already carry resName/active). Skip when the
-    // date is being released to null, since callers like archiveAndClearAll
-    // already cleared local state.
+    // clearing here lets the reconciliation effect rebuild the board from the
+    // new date's reservations. Skip when the date is being released to null,
+    // since callers like archiveAndClearAll already cleared local state.
     if (date && date !== previousDate) {
       tableLocalFreshRef.current = new Map();
       setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
@@ -2302,40 +2306,62 @@ export default function App() {
     return { ok: result.ok };
   };
 
-  // Apply reservation data to tables that are still blank (not yet active / named)
-  const prePopulateFromReservations = (rows) => {
-    if (!rows?.length) return;
+  // Reconcile the service board with the reservations for the active service
+  // date. Unlike a one-way pre-populate, this also *updates* tables whose
+  // reservation changed and *clears* tables whose reservation moved away or was
+  // deleted — so editing/moving a reservation no longer leaves a ghost table.
+  // Tables that service has already started on (seated / arrived / kitchen
+  // activity) are never touched.
+  const reconcileBoardWithReservations = (rows) => {
     setTables(prev => {
-      let next = [...prev];
-      for (const row of rows) {
+      // table id → the reservation row that owns it (first claim wins)
+      const byTable = new Map();
+      for (const row of rows || []) {
         const d = row.data || {};
         const group = (d.tableGroup?.length > 1 ? d.tableGroup : [row.table_id]).map(Number);
         for (const tid of group) {
-          const idx = next.findIndex(t => t.id === tid);
-          if (idx === -1) continue;
-          const t = next[idx];
-          if (t.active || t.resName) continue; // never overwrite occupied / named tables
-          next[idx] = {
-            ...t,
-            resName:            d.resName || "",
-            resTime:            d.resTime || "",
-            menuType:           d.menuType || "",
-            lang:               d.lang || "en",
-            guests:             d.guests || 2,
-            guestType:          d.guestType || "",
-            room:               (Array.isArray(d.rooms) && d.rooms.length ? d.rooms[0] : d.room) || "",
-            rooms:              Array.isArray(d.rooms) && d.rooms.length ? d.rooms.filter(Boolean) : (d.room ? [d.room] : []),
-            birthday:           !!d.birthday,
-            cakeNote:           d.birthday ? (d.cakeNote || "") : "",
-            restrictions:       d.restrictions || [],
-            notes:              d.notes || "",
-            tableGroup:         group,
-            kitchenCourseNotes: d.kitchenCourseNotes || {},
-            seats:              makeSeats(d.guests || 2, t.seats),
-          };
+          if (!byTable.has(tid)) byTable.set(tid, { d, group });
         }
       }
-      return next;
+      let changed = false;
+      const next = prev.map(t => {
+        const started = t.active || t.arrivedAt
+          || (t.kitchenLog && Object.keys(t.kitchenLog).length > 0)
+          || t.kitchenArchived;
+        if (started) return t; // live service is sacrosanct
+
+        const owner = byTable.get(t.id);
+        if (!owner) {
+          // No reservation maps here — drop any stale reservation ghost.
+          const blank = blankTable(t.id);
+          if (JSON.stringify(sanitizeTable(t)) === JSON.stringify(sanitizeTable(blank))) return t;
+          changed = true;
+          return blank;
+        }
+        const { d, group } = owner;
+        const updated = {
+          ...t,
+          resName:            d.resName || "",
+          resTime:            d.resTime || "",
+          menuType:           d.menuType || "",
+          lang:               d.lang || "en",
+          guests:             d.guests || 2,
+          guestType:          d.guestType || "",
+          room:               (Array.isArray(d.rooms) && d.rooms.length ? d.rooms[0] : d.room) || "",
+          rooms:              Array.isArray(d.rooms) && d.rooms.length ? d.rooms.filter(Boolean) : (d.room ? [d.room] : []),
+          birthday:           !!d.birthday,
+          cakeNote:           d.birthday ? (d.cakeNote || "") : "",
+          restrictions:       d.restrictions || [],
+          notes:              d.notes || "",
+          tableGroup:         group,
+          kitchenCourseNotes: d.kitchenCourseNotes || {},
+          seats:              makeSeats(d.guests || 2, t.seats),
+        };
+        if (JSON.stringify(sanitizeTable(updated)) === JSON.stringify(sanitizeTable(t))) return t;
+        changed = true;
+        return updated;
+      });
+      return changed ? next : prev;
     });
   };
 
@@ -2368,12 +2394,19 @@ export default function App() {
       if (nextMode) localStorage.setItem("milka_mode", nextMode);
       else          localStorage.removeItem("milka_mode");
     } catch {}
-    // Pre-populate tables from reservations when entering live modes
-    if ((nextMode === "service" || nextMode === "display") && serviceDate && supabase) {
-      supabase.from(TABLES.RESERVATIONS).select("*").eq("date", serviceDate)
-        .then(({ data }) => { if (data?.length) prePopulateFromReservations(data); });
-    }
+    // Entering a live mode triggers the reconciliation effect below (it watches
+    // `mode`), so the board is filled from reservations without an extra fetch.
   };
+
+  // ── Keep the service board in sync with reservations ──────────────────────
+  // Runs whenever reservations / the service date / the mode change, so a
+  // newly-added reservation appears immediately, an edited one updates in
+  // place, and a moved/deleted one stops leaving a ghost table behind.
+  useEffect(() => {
+    if (!hydrated || !reservationsLoaded) return;
+    if ((mode !== "service" && mode !== "display") || !serviceDate) return;
+    reconcileBoardWithReservations(reservations.filter(r => r.date === serviceDate));
+  }, [reservations, serviceDate, mode, hydrated, reservationsLoaded, boardSyncTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const switchMode = () => { changeMode(null); setSel(null); };
 
@@ -2775,6 +2808,7 @@ export default function App() {
       if (error) {
         setSyncStatus("sync-error");
         setHydrated(true);
+        setBoardSyncTick(t => t + 1);
         return;
       }
 
@@ -2792,6 +2826,9 @@ export default function App() {
 
       setSyncStatus("live");
       setHydrated(true);
+      // Signal that remote table state is loaded so the reconciliation effect
+      // can run against fresh data (covers the gateTimeout race).
+      setBoardSyncTick(t => t + 1);
     };
 
     loadRemoteTables();
@@ -2968,8 +3005,9 @@ export default function App() {
       .lte("date", toLocalDateISO(future))
       .order("date").order("created_at")
       .then(({ data, error }) => {
-        if (!mounted || error || !data) return;
-        setReservations(data);
+        if (!mounted) return;
+        if (!error && data) setReservations(data);
+        setReservationsLoaded(true);
       });
 
     return () => { mounted = false; };
@@ -3110,10 +3148,8 @@ export default function App() {
         if (target) {
           setMode(target);
           try { localStorage.setItem("milka_mode", target); } catch {}
-          if ((target === "service" || target === "display") && supabase) {
-            supabase.from(TABLES.RESERVATIONS).select("*").eq("date", date)
-              .then(({ data }) => { if (data?.length) prePopulateFromReservations(data); });
-          }
+          // The reconciliation effect (watches `mode` + `serviceDate`) fills
+          // the board from reservations for the chosen date.
         }
       }}
       onCancel={() => { setShowServiceDatePicker(false); setPendingModeAfterDate(null); }}
