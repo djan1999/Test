@@ -417,9 +417,12 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                   </div>
                 </div>
 
-                {/* Edit form */}
+                {/* Edit form — centered modal */}
                 {isEditing && (
-                  <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, padding: "12px 16px" }}>
+                  <CenteredModal
+                    onClose={() => { setEditingId(null); setDraftFromReservation(null); }}
+                    label={`[EDIT RESERVATION · ${d.resName || tLabel}]`}
+                  >
                     <ResvForm
                       initial={r}
                       tables={tables}
@@ -429,17 +432,20 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       onSave={async (row) => { await onUpsert(row); setEditingId(null); setDraftFromReservation(null); }}
                       onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
                     />
-                  </div>
+                  </CenteredModal>
                 )}
 
-                {/* Kitchen ticket preview */}
+                {/* Kitchen ticket preview — centered modal */}
                 {showTicket && ticketVirtualTable && (
-                  <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, padding: "12px 16px" }}>
-                    <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], marginBottom: 8, textTransform: "uppercase" }}>[TICKET PREVIEW]</div>
+                  <CenteredModal onClose={() => setTicketId(null)} label={`[TICKET PREVIEW · ${tLabel}]`}>
                     <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
                       <KitchenTicket table={ticketVirtualTable} menuCourses={menuCourses} upd={updForTicket} />
                     </div>
-                  </div>
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                      <button onClick={() => setTicketId(null)}
+                        style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 16px", border: `1px solid ${tokens.neutral[0]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[0], fontWeight: 600, touchAction: "manipulation" }}>CLOSE</button>
+                    </div>
+                  </CenteredModal>
                 )}
               </div>
             );
