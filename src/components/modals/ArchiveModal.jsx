@@ -204,12 +204,15 @@ export default function ArchiveModal({
           const entryMenuCourses = entry.state?.menuCourses || [];
           const entryOptionalPairings = optionalPairingsFromCourses(entryMenuCourses);
           const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
+          const drinks = archiveDrinkSummary(entryTables);
           return (
             <div key={entry.id} style={{ border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, marginBottom: 8, overflow: "hidden" }}>
               <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: isExp ? tokens.neutral[50] : tokens.neutral[0] }}>
                 <div onClick={() => setExpanded(isExp ? null : entry.id)} style={{ cursor: "pointer", flex: 1 }}>
                   <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 500, color: tokens.neutral[900], marginBottom: 3 }}>{entry.label}</div>
-                  <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[500] }}>{entryTables.length} tables · {totalGuests} guests</div>
+                  <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[500] }}>
+                    {entryTables.length} tables · {totalGuests} guests · {drinks.total} drink{drinks.total === 1 ? "" : "s"}
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <button onClick={() => deleteEntry(entry.id)} disabled={deleting === entry.id} style={{
@@ -222,6 +225,7 @@ export default function ArchiveModal({
               </div>
               {isExp && (
                 <div style={{ borderTop: `1px solid ${tokens.neutral[200]}`, padding: "12px 16px", background: tokens.neutral[0] }}>
+                  <ArchiveSummary tableCount={entryTables.length} totalGuests={totalGuests} drinks={drinks} />
                   {entryTables.map((t) => (
                     <ArchivedTableRow key={t.id} table={t} optionalExtras={optionalExtras} optionalPairings={entryOptionalPairings} menuCourses={entryMenuCourses} />
                   ))}
@@ -274,6 +278,62 @@ export default function ArchiveModal({
         )}
       </div>
     </FullModal>
+  );
+}
+
+// Aggregate per-seat drink selections across every table in an archived service.
+function archiveDrinkSummary(tables) {
+  const s = { aperitifs: 0, glasses: 0, bottles: 0, cocktails: 0, spirits: 0, beers: 0 };
+  for (const t of tables || []) {
+    for (const seat of t.seats || []) {
+      s.aperitifs += (seat.aperitifs || []).filter(Boolean).length;
+      s.glasses   += (seat.glasses   || []).filter(Boolean).length;
+      s.cocktails += (seat.cocktails || []).filter(Boolean).length;
+      s.spirits   += (seat.spirits   || []).filter(Boolean).length;
+      s.beers     += (seat.beers     || []).filter(Boolean).length;
+    }
+    s.bottles += (t.bottleWines || []).length;
+  }
+  s.total = s.aperitifs + s.glasses + s.bottles + s.cocktails + s.spirits + s.beers;
+  return s;
+}
+
+function SummaryBadge({ label, value }) {
+  return (
+    <span style={{
+      fontFamily: FONT, fontSize: 10, padding: "4px 9px",
+      border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0,
+      color: tokens.neutral[700], background: tokens.neutral[50],
+    }}>
+      <strong style={{ fontWeight: 700, color: tokens.neutral[900] }}>{value}</strong> {label}
+    </span>
+  );
+}
+
+function ArchiveSummary({ tableCount, totalGuests, drinks }) {
+  const breakdown = [
+    ["Aperitifs", drinks.aperitifs],
+    ["Glasses", drinks.glasses],
+    ["Bottles", drinks.bottles],
+    ["Cocktails", drinks.cocktails],
+    ["Spirits", drinks.spirits],
+    ["Beers", drinks.beers],
+  ].filter(([, n]) => n > 0);
+  return (
+    <div style={{ marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${tokens.neutral[200]}` }}>
+      <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 3, color: tokens.neutral[500], textTransform: "uppercase", marginBottom: 8 }}>Service summary</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <SummaryBadge label="Tables" value={tableCount} />
+        <SummaryBadge label="Guests" value={totalGuests} />
+        <SummaryBadge label="Drinks" value={drinks.total} />
+        {breakdown.map(([label, n]) => <SummaryBadge key={label} label={label} value={n} />)}
+      </div>
+      {drinks.total === 0 && (
+        <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[400], marginTop: 8, fontStyle: "italic" }}>
+          No drinks were logged for this service.
+        </div>
+      )}
+    </div>
   );
 }
 

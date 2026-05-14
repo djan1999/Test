@@ -44,6 +44,7 @@ import KitchenBoard from "./components/kitchen/KitchenBoard.jsx";
 import ServiceDatePicker from "./components/reservations/ServiceDatePicker.jsx";
 import ReservationManager from "./components/reservations/ReservationManager.jsx";
 import ResvForm from "./components/reservations/ResvForm.jsx";
+import CenteredModal from "./components/ui/CenteredModal.jsx";
 import SummaryModal from "./components/modals/SummaryModal.jsx";
 import ArchiveModal from "./components/modals/ArchiveModal.jsx";
 import InventoryModal from "./components/modals/InventoryModal.jsx";
@@ -2146,11 +2147,15 @@ export default function App() {
   const archiveAndClearAll = async () => {
     if (typeof window !== "undefined" && !window.confirm("Archive today's service and clear all tables?")) return;
     const snap = boardStateRef.current; // stable reference, never stale
-    const dateStr = new Date().toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
+    // Stamp the archive with the service's actual date, not whatever today
+    // happens to be — otherwise a service ended after midnight (or a stale
+    // day) lands under the wrong date.
+    const archiveDate = serviceDate || toLocalDateISO();
+    const dateStr = new Date(archiveDate + "T00:00:00").toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
     const activeTables = snap.tables.filter(t => t.active || t.arrivedAt || t.resName || t.resTime);
     if (supabase) {
       const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).insert({
-        date: toLocalDateISO(),
+        date: archiveDate,
         label: dateStr,
         state: { ...snap, tables: activeTables, menuCourses: menuCourses },
       });
@@ -3489,32 +3494,19 @@ export default function App() {
       {inventoryOpen && <InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} />}
 
       {addResOpen && serviceDate && (
-        <div
-          onClick={() => setAddResOpen(false)}
-          style={{
-            position: "fixed", inset: 0, zIndex: 600,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex", alignItems: "flex-start", justifyContent: "center",
-            padding: "24px 12px",
-            paddingTop: "calc(24px + env(safe-area-inset-top))",
-            paddingBottom: "calc(24px + env(safe-area-inset-bottom))",
-            overflowY: "auto",
-          }}
+        <CenteredModal
+          onClose={() => setAddResOpen(false)}
+          label={`[NEW RESERVATION · ${new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }).toUpperCase()}]`}
         >
-          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 560 }}>
-            <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.neutral[0], marginBottom: 6, textTransform: "uppercase" }}>
-              [NEW RESERVATION · {new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }).toUpperCase()}]
-            </div>
-            <ResvForm
-              initial={{ date: serviceDate, table_id: null, data: {} }}
-              tables={tables}
-              reservations={reservations}
-              excludeId={null}
-              onSave={async (row) => { const r = await upsertReservation(row); if (r?.ok) setAddResOpen(false); }}
-              onCancel={() => setAddResOpen(false)}
-            />
-          </div>
-        </div>
+          <ResvForm
+            initial={{ date: serviceDate, table_id: null, data: {} }}
+            tables={tables}
+            reservations={reservations}
+            excludeId={null}
+            onSave={async (row) => { const r = await upsertReservation(row); if (r?.ok) setAddResOpen(false); }}
+            onCancel={() => setAddResOpen(false)}
+          />
+        </CenteredModal>
       )}
     </div>
   </>);

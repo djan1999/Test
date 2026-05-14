@@ -7,6 +7,7 @@ import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as fieldLabelMixin, circleButton } from "../../styles/mixins.js";
 import ServiceDatePicker from "./ServiceDatePicker.jsx";
 import ResvForm from "./ResvForm.jsx";
+import CenteredModal from "../ui/CenteredModal.jsx";
 import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
 import ServiceBreakdown from "../ServiceBreakdown.jsx";
 import GlobalStyle from "../ui/GlobalStyle.jsx";
@@ -318,10 +319,12 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
 
         <div style={{ padding: "16px 16px 60px", maxWidth: 700, margin: "0 auto" }}>
 
-          {/* New reservation form */}
+          {/* New reservation form — centered modal over the day list */}
           {editingId === "new" && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], marginBottom: 6, textTransform: "uppercase" }}>[NEW RESERVATION]</div>
+            <CenteredModal
+              onClose={() => { setEditingId(null); setDraftFromReservation(null); }}
+              label="[NEW RESERVATION]"
+            >
               <ResvForm
                 initial={draftFromReservation
                   ? { date: selectedDay, table_id: draftFromReservation.table_id ?? null, data: draftFromReservation.data || {} }
@@ -333,7 +336,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) { setEditingId(null); setDraftFromReservation(null); } }}
                 onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
               />
-            </div>
+            </CenteredModal>
           )}
 
           {/* Existing reservations as big clear cards */}
