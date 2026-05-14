@@ -685,7 +685,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>PAIRING</span>
                   {pairSeats.map(s => {
                     const c = PAIR_COLORS[s.pairing] || {};
-                    const gs = s.gender === "M" ? tokens.gender.male : s.gender === "F" ? tokens.gender.female : null;
+                    const gs = s.gender === "Mr" ? tokens.gender.male : s.gender === "Mrs" ? tokens.gender.female : null;
                     return (
                       <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${c.border || tokens.ink[4]}`, color: c.color || tokens.ink[2], display: "inline-flex", alignItems: "center", gap: 4 }}>
                         P{s.id}
@@ -702,7 +702,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                     {group.name.toUpperCase()}{group.anyShared ? " ½" : ""}
                   </span>
                   {group.seats.map(s => {
-                    const gs = s.gender === "M" ? tokens.gender.male : s.gender === "F" ? tokens.gender.female : null;
+                    const gs = s.gender === "Mr" ? tokens.gender.male : s.gender === "Mrs" ? tokens.gender.female : null;
                     return (
                       <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text, display: "inline-flex", alignItems: "center", gap: 4 }}>
                         P{s.id}

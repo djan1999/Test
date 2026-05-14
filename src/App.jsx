@@ -1262,12 +1262,12 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                             letterSpacing: "0.10em", color: restr.length ? tokens.red.text : tokens.ink[1],
                           }}>P{s.id}</span>
                           {[
-                            { g: "M", style: tokens.gender.male },
-                            { g: "F", style: tokens.gender.female },
+                            { g: "Mr", style: tokens.gender.male },
+                            { g: "Mrs", style: tokens.gender.female },
                           ].map(({ g, style }) => (
                             <button key={g} onClick={() => updSeat && updSeat(t.id, s.id, "gender", s.gender === g ? null : g)} style={{
-                              fontFamily: FONT, fontSize: "8px", fontWeight: 700, letterSpacing: "0.06em",
-                              padding: "1px 6px",
+                              fontFamily: FONT, fontSize: "9px", fontWeight: 700, letterSpacing: "0.06em",
+                              padding: "3px 9px",
                               border: `1px solid ${s.gender === g ? style.border : tokens.ink[4]}`,
                               borderRadius: 0, cursor: "pointer", lineHeight: 1,
                               background: s.gender === g ? style.bg : tokens.neutral[0],
@@ -1337,10 +1337,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                             return (
                               <button onClick={cycleShare} style={{
                                 fontFamily: FONT, fontSize: "10px", fontWeight: 700, padding: "6px 8px",
-                                border: `1px solid ${shareActive ? tokens.charcoal.default : tokens.ink[4]}`,
+                                border: `1px solid ${shareActive ? tokens.neutral[500] : tokens.ink[4]}`,
                                 borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                                background: shareActive ? tokens.charcoal.default : tokens.neutral[0],
-                                color: shareActive ? tokens.neutral[0] : tokens.ink[3],
+                                background: shareActive ? tokens.tint.parchment : tokens.neutral[0],
+                                color: shareActive ? tokens.neutral[700] : tokens.ink[3],
                                 touchAction: "manipulation", whiteSpace: "nowrap",
                               }}>
                                 {shareActive ? `½P${curShared}` : "½"}
@@ -1379,7 +1379,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                             }
                             if (seat.id === curSharedWith && curSharedWith !== null && curSharedWith !== newSharedWith) {
                               const oldEx = seat.extras?.[dish.key] || {};
-                              return { ...seat, extras: { ...seat.extras, [dish.key]: { ...oldEx, sharedWith: null } } };
+                              return { ...seat, extras: { ...seat.extras, [dish.key]: { ...oldEx, ordered: false, sharedWith: null } } };
                             }
                             if (seat.id === newSharedWith && newSharedWith !== null) {
                               const tEx = seat.extras?.[dish.key] || { ordered: false, pairing: extra.pairing };
@@ -1446,10 +1446,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                               {dishOn && otherSeats.length > 0 && (
                                 <button onClick={cycleExtraShare} style={{
                                   fontFamily: FONT, fontSize: 9, fontWeight: 700, padding: "7px 7px",
-                                  border: `1px solid ${curSharedWith !== null ? tokens.charcoal.default : tokens.ink[4]}`,
+                                  border: `1px solid ${curSharedWith !== null ? tokens.neutral[500] : tokens.ink[4]}`,
                                   borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                                  background: curSharedWith !== null ? tokens.charcoal.default : tokens.neutral[0],
-                                  color: curSharedWith !== null ? tokens.neutral[0] : tokens.ink[3],
+                                  background: curSharedWith !== null ? tokens.tint.parchment : tokens.neutral[0],
+                                  color: curSharedWith !== null ? tokens.neutral[700] : tokens.ink[3],
                                   touchAction: "manipulation", whiteSpace: "nowrap",
                                 }}>{curSharedWith !== null ? `½P${curSharedWith}` : "½"}</button>
                               )}
@@ -1523,7 +1523,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                     letterSpacing: "0.06em",
                   }}>P{s.id}</span>
                   {s.gender && (() => {
-                    const gs = s.gender === "M" ? tokens.gender.male : tokens.gender.female;
+                    const gs = s.gender === "Mr" ? tokens.gender.male : tokens.gender.female;
                     return (
                       <span style={{
                         fontFamily: FONT, fontSize: "8px", fontWeight: 700, letterSpacing: "0.06em",
