@@ -700,16 +700,11 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   return (
                     <div key={pType} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                       <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>PAIRING</span>
-                      {group.seats.map(s => {
-                        const gs = s.gender === "Mr" ? tokens.gender.male : s.gender === "Mrs" ? tokens.gender.female : null;
-                        return (
-                          <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${c.border || tokens.ink[4]}`, color: c.color || tokens.ink[2], display: "inline-flex", alignItems: "center", gap: 4 }}>
-                            P{s.id}
-                            {gs && <span style={{ fontSize: 8, fontWeight: 700, padding: "0px 3px", background: gs.bg, color: gs.text, borderRadius: 0 }}>{s.gender}</span>}
-                            {" "}{pType}
-                          </span>
-                        );
-                      })}
+                      {group.seats.map(s => (
+                        <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${c.border || tokens.ink[4]}`, color: c.color || tokens.ink[2] }}>
+                          P{s.id} {pType}
+                        </span>
+                      ))}
                       {group.anyShared && <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, letterSpacing: "0.10em", color: tokens.ink[2], padding: "2px 6px", border: `1px solid ${tokens.ink[4]}`, background: tokens.ink[5] }}>SHARE</span>}
                     </div>
                   );
@@ -720,16 +715,11 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>
                     {group.name.toUpperCase()}
                   </span>
-                  {group.seats.map(s => {
-                    const gs = s.gender === "Mr" ? tokens.gender.male : s.gender === "Mrs" ? tokens.gender.female : null;
-                    return (
-                      <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        P{s.id}
-                        {gs && <span style={{ fontSize: 8, fontWeight: 700, padding: "0px 3px", background: gs.bg, color: gs.text, borderRadius: 0 }}>{s.gender}</span>}
-                        {(() => { const p = extraPairingLabel(s.pairing); return p ? ` · ${p}` : ""; })()}
-                      </span>
-                    );
-                  })}
+                  {group.seats.map(s => (
+                    <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text }}>
+                      P{s.id}{(() => { const p = extraPairingLabel(s.pairing); return p ? ` · ${p}` : ""; })()}
+                    </span>
+                  ))}
                   {group.anyShared && <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, letterSpacing: "0.10em", color: tokens.ink[2], padding: "2px 6px", border: `1px solid ${tokens.ink[4]}`, background: tokens.ink[5] }}>SHARE</span>}
                 </div>
               ))}

@@ -143,8 +143,8 @@ const ink = {
 
 // ── Gender — seat identity colors ────────────────────────────
 const gender = {
-  male:   { bg: "#3B82F6", border: "#2563EB", text: "#ffffff" },
-  female: { bg: "#EC4899", border: "#DB2777", text: "#ffffff" },
+  male:   { bg: "#dbeafe", border: "#93c5fd", text: "#1e40af" },
+  female: { bg: "#fce7f3", border: "#f9a8d4", text: "#9d174d" },
 };
 
 // ── Signal colors — functional state ONLY, never decoration ───
