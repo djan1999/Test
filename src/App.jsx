@@ -2509,6 +2509,22 @@ export default function App() {
           return blank;
         }
         const { d, group } = owner;
+        const rawSeats = makeSeats(d.guests || 2, t.seats);
+        const reconcileCelebrationKeys = (activeMenuCourses || [])
+          .filter(c => normalizeCourseCategory(c?.course_category, c?.optional_flag) === "celebration")
+          .map(c => normalizeOptionalKey(c?.optional_flag))
+          .filter(Boolean);
+        const reconciledSeats = reconcileCelebrationKeys.length > 0
+          ? rawSeats.map(s => ({
+              ...s,
+              extras: {
+                ...s.extras,
+                ...Object.fromEntries(
+                  reconcileCelebrationKeys.map(k => [k, { ordered: !!d.birthday, pairing: s.extras?.[k]?.pairing || "—" }])
+                ),
+              },
+            }))
+          : rawSeats;
         const updated = {
           ...t,
           resName:            d.resName || "",
@@ -2525,7 +2541,7 @@ export default function App() {
           notes:              d.notes || "",
           tableGroup:         group,
           kitchenCourseNotes: d.kitchenCourseNotes || {},
-          seats:              makeSeats(d.guests || 2, t.seats),
+          seats:              reconciledSeats,
         };
         if (JSON.stringify(sanitizeTable(updated)) === JSON.stringify(sanitizeTable(t))) return t;
         changed = true;

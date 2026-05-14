@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 import { getAssignedGuestProfile } from "../../utils/menuLayoutProfiles.js";
 import { writeTeamNames, readTeamNames, writeMenuTitle, readMenuTitle, writeThankYouNote, readThankYouNote } from "../../utils/storage.js";
-import { applyCourseRestriction, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, optionalExtrasFromCourses, optionalPairingsFromCourses } from "../../utils/menuUtils.js";
+import { applyCourseRestriction, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, optionalExtrasFromCourses, optionalPairingsFromCourses, normalizeOptionalKey } from "../../utils/menuUtils.js";
 import { TABLES, supabase } from "../../lib/supabaseClient.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
@@ -434,10 +434,27 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, p
                       const edit = seatEdits[s.id]?.[key] || {};
                       const hasEdit = "name" in edit || "sub" in edit || "drinkName" in edit || "drinkSub" in edit;
                       const inpStyle = { ...baseInp, padding: "3px 6px", fontSize: 11 };
-                      const baseDrink = hasPair ? (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]) : null;
+                      const standardDrink = hasPair ? (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]) : null;
+                      // Resolve optional pairing drink (beer, martini, etc.) for this course
+                      const optPairingKey = normalizeOptionalKey(course.optional_pairing_flag || "");
+                      const optPairingState = optPairingKey ? s.optionalPairings?.[optPairingKey] : null;
+                      const optPairingOrdered = optPairingState?.ordered !== undefined
+                        ? !!optPairingState.ordered
+                        : (course.optional_pairing_default_on !== false);
+                      const optIsNonAlc = optPairingState?.mode
+                        ? optPairingState.mode === "nonalc"
+                        : s.pairing === "Non-Alc";
+                      const optDrink = (optPairingKey && optPairingOrdered)
+                        ? (optIsNonAlc
+                          ? (lang === "si" ? (course.optional_pairing_na_si || course.optional_pairing_na) : course.optional_pairing_na) || null
+                          : (lang === "si" ? (course.optional_pairing_alco_si || course.optional_pairing_alco) : course.optional_pairing_alco) || null)
+                        : null;
+                      const baseDrink = standardDrink || optDrink;
+                      const drinkLabel = hasPair ? s.pairing : (optDrink ? (optIsNonAlc ? "N/A" : "ALCO") : null);
+                      const showDrink = hasPair || !!(optDrink?.name || optDrink?.sub);
                       return (
                         <div key={key} style={{
-                          display: "grid", gridTemplateColumns: hasPair ? "100px 1fr 1.2fr 44px 1fr 1.2fr 20px" : "120px 1fr 1.6fr 20px",
+                          display: "grid", gridTemplateColumns: showDrink ? "100px 1fr 1.2fr 44px 1fr 1.2fr 20px" : "120px 1fr 1.6fr 20px",
                           gap: 5, alignItems: "center",
                           borderRadius: 0, padding: "2px 4px",
                           background: hasEdit ? tokens.neutral[50] : "transparent",
@@ -458,9 +475,9 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, p
                             placeholder={"sub" in edit ? "" : (baseDish?.sub || "—")}
                             style={inpStyle}
                           />
-                          {hasPair && <>
+                          {showDrink && <>
                             <span style={{ fontFamily: FONT, fontSize: 7, color: tokens.text.muted, textAlign: "center", whiteSpace: "nowrap" }}>
-                              {s.pairing}
+                              {drinkLabel}
                             </span>
                             <BlurInput
                               committedValue={"drinkName" in edit ? edit.drinkName : ""}
