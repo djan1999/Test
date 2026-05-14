@@ -57,7 +57,8 @@ import MenuGenerator from "./components/menu/MenuGenerator.jsx";
 import WineSearch from "./components/service/WineSearch.jsx";
 import BeverageSearch from "./components/service/BeverageSearch.jsx";
 import TableCard from "./components/TableCard/TableCard.jsx";
-import SheetView from "./components/service/SheetView.jsx";
+// SHEET view temporarily disabled — combined into the Board/Quick Access view.
+// import SheetView from "./components/service/SheetView.jsx";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
@@ -1015,7 +1016,7 @@ const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
 // cards on every DisplayBoard re-render (which caused the visual overlap animation glitch).
-function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onUnseat, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [] }) {
+function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [] }) {
     const isSeated = t.active;
     const allRestr = (t.restrictions || []).filter(r => r.note);
     const [assigningIdx, setAssigningIdx] = useState(null);
@@ -1454,8 +1455,16 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
             )}
           </div>
         ) : null}
-        {seats.length > 0 && ((isSeated && (quickMode || onUnseat)) || (quickMode && !isSeated && onSeat)) && (
-          <div style={{ padding: "6px 14px", borderTop: `1px solid ${tokens.neutral[100]}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        {seats.length > 0 && (isSeated || quickMode) && (
+          <div style={{ padding: "6px 14px", borderTop: `1px solid ${tokens.neutral[100]}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            {onOpenDetail && (
+              <button onClick={() => onOpenDetail(t.id)} style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 12px",
+                border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
+                background: tokens.neutral[0], color: tokens.ink[2], textTransform: "uppercase",
+              }}>Details</button>
+            )}
             {quickMode && upd && isSeated ? (
               <button
                 disabled={justSent}
@@ -1486,13 +1495,13 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
                   fontWeight: 700, textTransform: "uppercase",
                   transition: "all 0.15s ease",
                 }}>{justSent ? "✓ Sent" : "Send"}</button>
-            ) : <span />}
+            ) : null}
+            </div>
             {quickMode && !isSeated && onSeat ? (
               <button onClick={() => onSeat(t.id)} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 14px",
                 border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer",
                 background: tokens.green.bg, color: tokens.green.text, fontWeight: 600, textTransform: "uppercase",
-                marginLeft: "auto",
               }}>Seat</button>
             ) : onUnseat && isSeated ? (
               <button onClick={() => onUnseat(t.id)} style={{
@@ -1507,7 +1516,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onSeat, onU
     );
 }
 
-function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd, quickMode = false, updSeat, onCardClick, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [], spirits = [], beers = [] }) {
+function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd, quickTableId = null, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [], spirits = [], beers = [] }) {
   const isMobile = useIsMobile(BP.md);
 
   // Auto-detect tables that share the same resName + resTime and have no explicit
@@ -1586,10 +1595,11 @@ function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd,
                 <DisplayBoardCard
                   key={t.id}
                   t={t}
-                  quickMode={quickMode}
+                  quickMode={quickTableId === t.id}
                   upd={upd}
                   updSeat={updSeat}
                   onCardClick={onCardClick}
+                  onOpenDetail={onOpenDetail}
                   onSeat={onSeat}
                   onUnseat={onUnseat}
                   optionalExtras={optionalExtras}
@@ -1659,8 +1669,9 @@ export default function App() {
     } catch { return null; }
   });
   const [sel,          setSel]          = useState(null);
-  const [quickView,    setQuickView]    = useState("board");
-  const [sheetSel,     setSheetSel]     = useState(null);
+  // Which table (if any) is currently expanded into Quick Access on the board.
+  // Clicking a reservation name toggles this; the rest of the board stays compact.
+  const [quickTableId, setQuickTableId] = useState(null);
   const [summaryOpen,    setSummaryOpen]    = useState(false);
   const [archiveOpen,    setArchiveOpen]    = useState(false);
   const [inventoryOpen,  setInventoryOpen]  = useState(false);
@@ -3369,69 +3380,12 @@ export default function App() {
                 );
               })()}
             </div>
-            <div role="tablist" aria-label="Service view" style={{ display: "flex", gap: 0, border: `1px solid ${tokens.ink[4]}` }}>
-              {[
-                { id: "board", label: "[▦] BOARD" },
-                { id: "quick", label: "[◈] QUICK" },
-                { id: "sheet", label: "[≡] SHEET" },
-              ].map((v, i, arr) => {
-                const active = quickView === v.id;
-                return (
-                  <button
-                    key={v.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setQuickView(v.id)}
-                    style={{
-                      fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em",
-                      textTransform: "uppercase",
-                      padding: appIsMobile ? "10px 12px" : "7px 12px",
-                      border: "none",
-                      borderRight: i < arr.length - 1 ? `1px solid ${tokens.ink[4]}` : "none",
-                      background: active ? tokens.charcoal.default : tokens.neutral[0],
-                      color: active ? tokens.neutral[0] : tokens.ink[2],
-                      borderRadius: 0, cursor: "pointer",
-                      transition: "all 0.12s",
-                      minHeight: appIsMobile ? 40 : undefined,
-                      touchAction: "manipulation",
-                      fontWeight: active ? 500 : 400,
-                    }}
-                  >
-                    {v.label}
-                  </button>
-                );
-              })}
-            </div>
+            {/* SHEET tab temporarily disabled; BOARD and QUICK ACCESS are now a
+                single combined view — tap a reservation name to expand its card. */}
           </div>
 
-          {/* Service sub-view: BOARD / QUICK / SHEET */}
-          {quickView === "sheet" ? (
-            <SheetView
-              tables={tables}
-              menuCourses={activeMenuCourses}
-              selectedId={sheetSel}
-              onSelect={id => setSheetSel(id)}
-              onOpenDetail={id => setSel(id)}
-              onFireNext={(tableId, courseKey) => {
-                const t = tables.find(x => x.id === tableId);
-                const log = { ...(t?.kitchenLog || {}) };
-                log[courseKey] = { firedAt: fmt(new Date()) };
-                upd(tableId, "kitchenLog", log);
-              }}
-              onUndoFire={(tableId, courseKey) => {
-                const t = tables.find(x => x.id === tableId);
-                const log = { ...(t?.kitchenLog || {}) };
-                delete log[courseKey];
-                upd(tableId, "kitchenLog", log);
-              }}
-              onSeat={seatTable}
-              onUnseat={unseatTable}
-              isMobile={appIsMobile}
-              profiles={profilesState.profiles}
-              assignments={profilesState.assignments}
-            />
-          ) : (() => {
+          {/* Combined Board + per-table Quick Access view */}
+          {(() => {
             const visibleTables = tables
               .filter(t => t.active || t.resName || t.resTime)
               .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
@@ -3442,9 +3396,10 @@ export default function App() {
                 optionalExtras={dishes}
                 optionalPairings={pairings}
                 upd={upd}
-                quickMode={quickView === "quick"}
+                quickTableId={quickTableId}
                 updSeat={updSeat}
-                onCardClick={id => setSel(id)}
+                onCardClick={id => setQuickTableId(prev => (prev === id ? null : id))}
+                onOpenDetail={id => setSel(id)}
                 onSeat={seatTable}
                 onUnseat={unseatTable}
                 aperitifOptions={serviceAperitifOptions}
