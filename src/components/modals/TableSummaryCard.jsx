@@ -37,13 +37,18 @@ export default function TableSummaryCard({ table: t, optionalExtras = [], option
           return (
             <div key={s.id} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", padding: "8px 4px", borderBottom: `1px solid ${tokens.neutral[100]}` }}>
               <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: restr.length ? tokens.red.text : tokens.neutral[500], minWidth: 28, letterSpacing: 0.5 }}>P{s.id}</span>
+              {s.gender && (() => {
+                const gs = s.gender === "Mr" ? tokens.gender.male : tokens.gender.female;
+                return <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, padding: "1px 5px", border: `1px solid ${gs.border}`, background: gs.bg, color: gs.text }}>{s.gender}</span>;
+              })()}
               {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 0, background: ws.bg || tokens.neutral[100], color: tokens.neutral[700], border: `1px solid ${tokens.neutral[200]}` }}>{s.water}</span>}
-              {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 0, border: `1px solid ${tokens.neutral[200]}`, color: PAIRING_COLOR[s.pairing] || tokens.neutral[600], background: PAIRING_BG[s.pairing] || tokens.neutral[50] }}>{s.pairing}</span>}
+              {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 0, border: `1px solid ${tokens.neutral[200]}`, color: PAIRING_COLOR[s.pairing] || tokens.neutral[600], background: PAIRING_BG[s.pairing] || tokens.neutral[50] }}>{s.pairing}{s.pairingSharedWith ? ` ½P${s.pairingSharedWith}` : ""}</span>}
               {extras.map((d) => {
                 const p = extraPairingForSeat(s, d, optionalPairings);
+                const exSharedWith = (s.extras?.[d.key] || s.extras?.[d.id])?.sharedWith ?? null;
                 return (
                   <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 0, border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg }}>
-                    {d.name}{p ? ` · ${p}` : ""}
+                    {d.name}{p ? ` · ${p}` : ""}{exSharedWith !== null ? ` ½P${exSharedWith}` : ""}
                   </span>
                 );
               })}

@@ -337,10 +337,11 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       {/* ── Seats ── */}
       <div style={{ background: tokens.neutral[0], borderBottom: `1px solid ${tokens.ink[4]}`, padding: "5px 10px" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 6px" }}>
-          {seats.map(s => {
+        {seats.map(s => {
             const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
             const restrList = restrictions.filter(r => r.pos === s.id).map(r => r.note).filter(Boolean);
             const restrShort = k => { const d = RESTRICTIONS.find(r => r.key === k); return d ? d.label : k; };
+            const gs = s.gender === "Mr" ? tokens.gender.male : s.gender === "Mrs" ? tokens.gender.female : null;
             return (
               <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 3 }}>
                 <span style={{
@@ -348,7 +349,12 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                   background: p ? (pairingBg[p] || tokens.ink[5]) : tokens.ink[5],
                   color: p ? (pairingColor[p] || tokens.ink[2]) : tokens.ink[2],
                   border: `1px solid ${tokens.ink[4]}`,
-                }}>P{s.id}{p ? ` · ${pLabel(p)}` : ""}</span>
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                }}>
+                  P{s.id}
+                  {gs && <span style={{ fontSize: "7px", fontWeight: 700, padding: "0 3px", background: gs.bg, color: gs.text, letterSpacing: 0 }}>{s.gender}</span>}
+                  {p ? ` · ${pLabel(p)}` : ""}
+                </span>
                 {restrList.length > 0 && (
                   <span style={{ fontFamily: FONT, fontSize: "8px", color: tokens.red.text, letterSpacing: "0.06em", fontWeight: 600 }}>{restrList.map(restrShort).join(" · ")}</span>
                 )}
@@ -438,13 +444,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             if (orderedSeats.length === 0) return null;
             const isBirthdayCake = table.birthday && normCategory(course) === "celebration";
             const dish = { key: optKey, id: optKey };
+            const anyShared = !isBirthdayCake && orderedSeats.some(s => (s.extras?.[optKey]?.sharedWith ?? null) !== null);
             const marks = isBirthdayCake
               ? "ALL"
               : orderedSeats.map(s => {
                   const p = extraPairingForSeat(s, dish, optionalPairings);
                   return `P${s.id}${p ? `·${p}` : ""}`;
                 }).join(" ");
-            return marks + ((optKey === "cake" && table.cakeNote) ? ` — ${table.cakeNote}` : "");
+            return marks + (anyShared ? " Share" : "") + ((optKey === "cake" && table.cakeNote) ? ` — ${table.cakeNote}` : "");
           })();
 
           // Optional drink pairing alert — only shown for the Crayfish course;
@@ -639,18 +646,20 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
         seats.forEach(s => {
           if (Array.isArray(s.extras)) {
             s.extras.forEach(ex => {
-              if (!extrasMap[ex.key]) extrasMap[ex.key] = { name: ex.name, seats: [] };
-              extrasMap[ex.key].seats.push({ id: s.id, pairing: ex.pairing });
+              if (!extrasMap[ex.key]) extrasMap[ex.key] = { name: ex.name, seats: [], anyShared: false };
+              const sw = ex.sharedWith ?? null;
+              extrasMap[ex.key].seats.push({ id: s.id, gender: s.gender || null, pairing: ex.pairing, sharedWith: sw });
+              if (sw !== null) extrasMap[ex.key].anyShared = true;
             });
           } else {
             // legacy format
             if (s.beet) {
-              if (!extrasMap.beetroot) extrasMap.beetroot = { name: "Beetroot", seats: [] };
-              extrasMap.beetroot.seats.push({ id: s.id, pairing: s.beet.pairing });
+              if (!extrasMap.beetroot) extrasMap.beetroot = { name: "Beetroot", seats: [], anyShared: false };
+              extrasMap.beetroot.seats.push({ id: s.id, gender: s.gender || null, pairing: s.beet.pairing, sharedWith: null });
             }
             if (s.cheese) {
-              if (!extrasMap.cheese) extrasMap.cheese = { name: "Cheese", seats: [] };
-              extrasMap.cheese.seats.push({ id: s.id, pairing: "—" });
+              if (!extrasMap.cheese) extrasMap.cheese = { name: "Cheese", seats: [], anyShared: false };
+              extrasMap.cheese.seats.push({ id: s.id, gender: s.gender || null, pairing: "—", sharedWith: null });
             }
           }
         });
@@ -678,27 +687,40 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
             </div>
             {/* Body */}
             <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-              {pairSeats.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>PAIRING</span>
-                  {pairSeats.map(s => {
-                    const c = PAIR_COLORS[s.pairing] || {};
-                    return (
-                      <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${c.border || tokens.ink[4]}`, color: c.color || tokens.ink[2] }}>
-                        P{s.id} {s.pairing}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
+              {pairSeats.length > 0 && (() => {
+                // Group seats by pairing type
+                const pairingGroups = {};
+                pairSeats.forEach(s => {
+                  if (!pairingGroups[s.pairing]) pairingGroups[s.pairing] = { seats: [], anyShared: false };
+                  pairingGroups[s.pairing].seats.push(s);
+                  if (s.pairingSharedWith) pairingGroups[s.pairing].anyShared = true;
+                });
+                return Object.entries(pairingGroups).map(([pType, group]) => {
+                  const c = PAIR_COLORS[pType] || {};
+                  return (
+                    <div key={pType} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>PAIRING</span>
+                      {group.seats.map(s => (
+                        <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${c.border || tokens.ink[4]}`, color: c.color || tokens.ink[2] }}>
+                          P{s.id} {pType}
+                        </span>
+                      ))}
+                      {group.anyShared && <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, letterSpacing: "0.10em", color: tokens.ink[2], padding: "2px 6px", border: `1px solid ${tokens.ink[4]}`, background: tokens.ink[5] }}>SHARE</span>}
+                    </div>
+                  );
+                });
+              })()}
               {extrasGroups.map(group => (
                 <div key={group.name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>{group.name.toUpperCase()}</span>
+                  <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>
+                    {group.name.toUpperCase()}
+                  </span>
                   {group.seats.map(s => (
                     <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text }}>
                       P{s.id}{(() => { const p = extraPairingLabel(s.pairing); return p ? ` · ${p}` : ""; })()}
                     </span>
                   ))}
+                  {group.anyShared && <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, letterSpacing: "0.10em", color: tokens.ink[2], padding: "2px 6px", border: `1px solid ${tokens.ink[4]}`, background: tokens.ink[5] }}>SHARE</span>}
                 </div>
               ))}
               {pairSeats.length === 0 && extrasGroups.length === 0 && (

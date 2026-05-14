@@ -141,6 +141,12 @@ const ink = {
   bg: '#f8f7f5',   // canvas (matches neutral[100])
 };
 
+// ── Gender — seat identity colors ────────────────────────────
+const gender = {
+  male:   { bg: "#dbeafe", border: "#93c5fd", text: "#1e40af" },
+  female: { bg: "#fce7f3", border: "#f9a8d4", text: "#9d174d" },
+};
+
 // ── Signal colors — functional state ONLY, never decoration ───
 const signal = {
   active: '#c8a96e',   // gold — active / in-progress state
@@ -185,6 +191,7 @@ export const tokens = {
   charcoal,
   green,
   red,
+  gender,
   tint,
   surface,
   text,
