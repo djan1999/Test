@@ -6,8 +6,9 @@
 export const makeSeats = (n, ex = []) =>
   Array.from({ length: n }, (_, i) => ({
     id: i + 1,
-    gender:    ex[i]?.gender    ?? null,
-    water:     ex[i]?.water     ?? "—",
+    gender:            ex[i]?.gender            ?? null,
+    pairingSharedWith: ex[i]?.pairingSharedWith ?? null,
+    water:             ex[i]?.water             ?? "—",
     aperitifs: ex[i]?.aperitifs ?? [],
     glasses:   ex[i]?.glasses   ?? [],
     cocktails: ex[i]?.cocktails ?? [],

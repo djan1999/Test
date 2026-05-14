@@ -640,18 +640,19 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
           if (Array.isArray(s.extras)) {
             s.extras.forEach(ex => {
               if (!extrasMap[ex.key]) extrasMap[ex.key] = { name: ex.name, seats: [], anyShared: false };
-              extrasMap[ex.key].seats.push({ id: s.id, gender: s.gender || null, pairing: ex.pairing, shared: !!ex.shared });
-              if (ex.shared) extrasMap[ex.key].anyShared = true;
+              const sw = ex.sharedWith ?? null;
+              extrasMap[ex.key].seats.push({ id: s.id, gender: s.gender || null, pairing: ex.pairing, sharedWith: sw });
+              if (sw !== null) extrasMap[ex.key].anyShared = true;
             });
           } else {
             // legacy format
             if (s.beet) {
               if (!extrasMap.beetroot) extrasMap.beetroot = { name: "Beetroot", seats: [], anyShared: false };
-              extrasMap.beetroot.seats.push({ id: s.id, gender: s.gender || null, pairing: s.beet.pairing, shared: false });
+              extrasMap.beetroot.seats.push({ id: s.id, gender: s.gender || null, pairing: s.beet.pairing, sharedWith: null });
             }
             if (s.cheese) {
               if (!extrasMap.cheese) extrasMap.cheese = { name: "Cheese", seats: [], anyShared: false };
-              extrasMap.cheese.seats.push({ id: s.id, gender: s.gender || null, pairing: "—", shared: false });
+              extrasMap.cheese.seats.push({ id: s.id, gender: s.gender || null, pairing: "—", sharedWith: null });
             }
           }
         });
@@ -684,9 +685,12 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>PAIRING</span>
                   {pairSeats.map(s => {
                     const c = PAIR_COLORS[s.pairing] || {};
+                    const gs = s.gender === "M" ? tokens.gender.male : s.gender === "F" ? tokens.gender.female : null;
                     return (
-                      <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${c.border || tokens.ink[4]}`, color: c.color || tokens.ink[2] }}>
-                        P{s.id}{s.gender ? ` ${s.gender}` : ""} {s.pairing}
+                      <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${c.border || tokens.ink[4]}`, color: c.color || tokens.ink[2], display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        P{s.id}
+                        {gs && <span style={{ fontSize: 8, fontWeight: 700, padding: "0px 3px", background: gs.bg, color: gs.text, borderRadius: 0 }}>{s.gender}</span>}
+                        {" "}{s.pairing}{s.pairingSharedWith ? ` ½P${s.pairingSharedWith}` : ""}
                       </span>
                     );
                   })}
@@ -695,13 +699,18 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
               {extrasGroups.map(group => (
                 <div key={group.name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                   <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>
-                    {group.name.toUpperCase()}{group.anyShared ? " ÷2" : ""}
+                    {group.name.toUpperCase()}{group.anyShared ? " ½" : ""}
                   </span>
-                  {group.seats.map(s => (
-                    <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text }}>
-                      P{s.id}{s.gender ? ` ${s.gender}` : ""}{s.shared ? " ÷" : ""}{(() => { const p = extraPairingLabel(s.pairing); return p ? ` · ${p}` : ""; })()}
-                    </span>
-                  ))}
+                  {group.seats.map(s => {
+                    const gs = s.gender === "M" ? tokens.gender.male : s.gender === "F" ? tokens.gender.female : null;
+                    return (
+                      <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        P{s.id}
+                        {gs && <span style={{ fontSize: 8, fontWeight: 700, padding: "0px 3px", background: gs.bg, color: gs.text, borderRadius: 0 }}>{s.gender}</span>}
+                        {s.sharedWith !== null ? ` ½P${s.sharedWith}` : ""}{(() => { const p = extraPairingLabel(s.pairing); return p ? ` · ${p}` : ""; })()}
+                      </span>
+                    );
+                  })}
                 </div>
               ))}
               {pairSeats.length === 0 && extrasGroups.length === 0 && (
