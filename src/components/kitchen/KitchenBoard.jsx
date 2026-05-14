@@ -639,18 +639,19 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
         seats.forEach(s => {
           if (Array.isArray(s.extras)) {
             s.extras.forEach(ex => {
-              if (!extrasMap[ex.key]) extrasMap[ex.key] = { name: ex.name, seats: [] };
-              extrasMap[ex.key].seats.push({ id: s.id, pairing: ex.pairing });
+              if (!extrasMap[ex.key]) extrasMap[ex.key] = { name: ex.name, seats: [], anyShared: false };
+              extrasMap[ex.key].seats.push({ id: s.id, gender: s.gender || null, pairing: ex.pairing, shared: !!ex.shared });
+              if (ex.shared) extrasMap[ex.key].anyShared = true;
             });
           } else {
             // legacy format
             if (s.beet) {
-              if (!extrasMap.beetroot) extrasMap.beetroot = { name: "Beetroot", seats: [] };
-              extrasMap.beetroot.seats.push({ id: s.id, pairing: s.beet.pairing });
+              if (!extrasMap.beetroot) extrasMap.beetroot = { name: "Beetroot", seats: [], anyShared: false };
+              extrasMap.beetroot.seats.push({ id: s.id, gender: s.gender || null, pairing: s.beet.pairing, shared: false });
             }
             if (s.cheese) {
-              if (!extrasMap.cheese) extrasMap.cheese = { name: "Cheese", seats: [] };
-              extrasMap.cheese.seats.push({ id: s.id, pairing: "—" });
+              if (!extrasMap.cheese) extrasMap.cheese = { name: "Cheese", seats: [], anyShared: false };
+              extrasMap.cheese.seats.push({ id: s.id, gender: s.gender || null, pairing: "—", shared: false });
             }
           }
         });
@@ -685,7 +686,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                     const c = PAIR_COLORS[s.pairing] || {};
                     return (
                       <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${c.border || tokens.ink[4]}`, color: c.color || tokens.ink[2] }}>
-                        P{s.id} {s.pairing}
+                        P{s.id}{s.gender ? ` ${s.gender}` : ""} {s.pairing}
                       </span>
                     );
                   })}
@@ -693,10 +694,12 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
               )}
               {extrasGroups.map(group => (
                 <div key={group.name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>{group.name.toUpperCase()}</span>
+                  <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>
+                    {group.name.toUpperCase()}{group.anyShared ? " ÷2" : ""}
+                  </span>
                   {group.seats.map(s => (
                     <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text }}>
-                      P{s.id}{(() => { const p = extraPairingLabel(s.pairing); return p ? ` · ${p}` : ""; })()}
+                      P{s.id}{s.gender ? ` ${s.gender}` : ""}{s.shared ? " ÷" : ""}{(() => { const p = extraPairingLabel(s.pairing); return p ? ` · ${p}` : ""; })()}
                     </span>
                   ))}
                 </div>
