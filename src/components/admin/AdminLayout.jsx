@@ -36,6 +36,8 @@ export default function AdminLayout({
   onSaveTemplate,
   templateSaving,
   templateSaved,
+  ticketTemplate,
+  onUpdateTicketTemplate,
   menuRules,
   onUpdateMenuRules,
   onSaveMenuRules,
@@ -277,6 +279,8 @@ export default function AdminLayout({
                 onSaveLayoutStyles={onSaveLayoutStyles}
                 onUpdateTemplate={onUpdateTemplate}
                 onSaveTemplate={onSaveTemplate}
+                ticketTemplate={ticketTemplate}
+                onUpdateTicketTemplate={onUpdateTicketTemplate}
                 templateSaving={templateSaving}
                 templateSaved={templateSaved}
                 menuRules={menuRules}

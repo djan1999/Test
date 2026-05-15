@@ -29,7 +29,9 @@ import { tokens } from "../../styles/tokens.js";
 import {
   BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
 } from "../../utils/menuTemplateSchema.js";
+import { KT_BLOCK_META, KT_BLOCK_GROUPS, makeKtBlock, makeKtRow, buildDefaultTicketTemplate } from "../../utils/kitchenTicketSchema.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
+import { generateKitchenTicketHTML } from "../../utils/kitchenTicketGenerator.js";
 import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote, readTeamNames, writeTeamNames } from "../../utils/storage.js";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
 import { LayoutStylesPanel } from "./MenuTemplatePanels.jsx";
@@ -59,7 +61,7 @@ const makePreviewSeat = (id) => ({
 
 function chipLabel(block, menuCourses) {
   if (!block) return null;
-  const meta = BLOCK_META[block.type] || {};
+  const meta = BLOCK_META[block.type] || KT_BLOCK_META[block.type] || {};
   if (block.type === "course") {
     const c = menuCourses.find(c => c.course_key === block.courseKey);
     const name = c?.menu?.name || block.courseKey;
@@ -69,8 +71,10 @@ function chipLabel(block, menuCourses) {
   let detail = "";
   if (block.type === "spacer") {
     detail = `${block.height ?? 8}pt`;
-  } else if (block.type === "divider") {
-    detail = `${block.thickness ?? 0.5}pt`;
+  } else if (block.type === "divider" || block.type === "kt_divider") {
+    detail = `${block.thickness ?? (block.type === "kt_divider" ? 1 : 0.5)}px`;
+  } else if (block.type === "kt_text" && block.text) {
+    detail = block.text.slice(0, 16) + (block.text.length > 16 ? "…" : "");
   } else if (block.text) {
     detail = block.text.slice(0, 16) + (block.text.length > 16 ? "…" : "");
   }
@@ -285,6 +289,11 @@ function RowActionBtn({ children, onClick, title, danger = false, active = false
 
 // ── Drag overlay ──────────────────────────────────────────────────────────────
 
+function getBlockLabel(block) {
+  if (!block) return "—";
+  return (BLOCK_META[block.type] || KT_BLOCK_META[block.type] || {}).label || block.type;
+}
+
 function OverlayRow({ row }) {
   return (
     <div style={{
@@ -292,21 +301,21 @@ function OverlayRow({ row }) {
       padding: "5px 10px", opacity: 0.9,
       fontFamily: FONT, fontSize: 8.5, color: SELECTED_RING, letterSpacing: 1,
     }}>
-      {row.left ? (BLOCK_META[row.left.type]?.label || row.left.type) : "—"}
+      {getBlockLabel(row.left)}
       {" · "}
-      {row.right ? (BLOCK_META[row.right.type]?.label || row.right.type) : "—"}
+      {getBlockLabel(row.right)}
     </div>
   );
 }
 
 // ── Block picker modal ────────────────────────────────────────────────────────
 
-function BlockPickerModal({ onPick, onClose, menuCourses }) {
+function BlockPickerModal({ onPick, onClose, menuCourses, blockMeta = BLOCK_META, blockGroups = BLOCK_GROUPS }) {
   const [hov, setHov] = useState(null);
   const [filter, setFilter] = useState("");
 
   const filtered = filter.trim()
-    ? Object.entries(BLOCK_META).filter(([t, m]) =>
+    ? Object.entries(blockMeta).filter(([t, m]) =>
         m.label.toLowerCase().includes(filter.toLowerCase()) ||
         m.desc.toLowerCase().includes(filter.toLowerCase()) ||
         t.includes(filter.toLowerCase()))
@@ -345,10 +354,10 @@ function BlockPickerModal({ onPick, onClose, menuCourses }) {
           style={{ ...baseInp, width: "100%", marginBottom: 14, fontSize: 11 }}
         />
 
-        {(filtered ? [{ id: "search", label: "Results", desc: "" }] : BLOCK_GROUPS).map(group => {
+        {(filtered ? [{ id: "search", label: "Results", desc: "" }] : blockGroups).map(group => {
           const entries = filtered
             ? filtered
-            : Object.entries(BLOCK_META).filter(([, m]) => m.group === group.id);
+            : Object.entries(blockMeta).filter(([, m]) => m.group === group.id);
           if (entries.length === 0) return null;
           return (
             <div key={group.id} style={{ marginBottom: 16 }}>
@@ -430,7 +439,7 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
     </div>
   );
 
-  const meta = BLOCK_META[block.type] || {};
+  const meta = BLOCK_META[block.type] || KT_BLOCK_META[block.type] || {};
   const fields = meta.fields || [];
 
   const setField = (key, val) => onUpdate({ ...block, [key]: val });
@@ -646,6 +655,43 @@ function LivePreview({ previewHtml, loading, label = "A5" }) {
   );
 }
 
+// ── Ticket preview (kitchen mode) ────────────────────────────────────────────
+
+const TICKET_PX_W = 260; // matches kitchenTicketGenerator width
+
+function TicketPreview({ previewHtml, loading }) {
+  return (
+    <div style={{
+      flex: 1, overflow: "auto", background: tokens.ink[5],
+      display: "flex", flexDirection: "column", alignItems: "center",
+      padding: "20px 16px",
+    }}>
+      <div style={{
+        fontFamily: FONT, fontSize: 7.5, letterSpacing: 3, color: tokens.ink[3],
+        textTransform: "uppercase", marginBottom: 14, flexShrink: 0,
+        width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        LIVE PREVIEW · TICKET {loading ? "· updating…" : ""}
+      </div>
+      <div style={{
+        width: TICKET_PX_W,
+        minHeight: 200,
+        overflow: "hidden",
+        flexShrink: 0,
+        background: tokens.neutral[0],
+        border: `1px solid ${tokens.ink[4]}`,
+      }}>
+        <iframe
+          srcDoc={previewHtml || `<html><body style='background:#fff'></body></html>`}
+          style={{ width: TICKET_PX_W, minHeight: 200, height: 900, border: "none", display: "block" }}
+          title="Kitchen ticket preview"
+          sandbox="allow-scripts"
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── Preview helpers ───────────────────────────────────────────────────────────
 
 /** Compact removable tag for items in preview drink lists */
@@ -680,6 +726,10 @@ export default function MenuTemplateEditor({
   shortMenuProfileId = null,
   activeProfileId = null,
   onSelectProfile = null,
+  // Kitchen mode
+  profileTarget = "guest_menu",
+  ticketTemplate = null,
+  onUpdateTicketTemplate = null,
 }) {
   const [selectedCell, setSelectedCell] = useState(null); // { rowId, side }
   const [pickerTarget, setPickerTarget] = useState(null); // { rowId, side }
@@ -690,6 +740,8 @@ export default function MenuTemplateEditor({
   const [rightOpen,   setRightOpen]   = useState(true);
   const [previewOpen, setPreviewOpen] = useState(true);
   const [layoutStylesOpen, setLayoutStylesOpen] = useState(false);
+  // Kitchen mode: "ticket" edits the ticket layout; "courses" edits course order
+  const [kitchenTab, setKitchenTab] = useState("ticket");
   const previewTimer = useRef(null);
   const didMigrateSpacersRef = useRef(false);
   const didNormalizeRowGapsRef = useRef(false);
@@ -778,6 +830,11 @@ export default function MenuTemplateEditor({
 
   const template = menuTemplate || { version: 2, rows: [] };
   const rows = Array.isArray(template.rows) ? template.rows : [];
+
+  // ── Kitchen mode — active rows/update switch ──────────────────────────────
+  const isKitchen = profileTarget === "kitchen_flow";
+  const editingTicketLayout = isKitchen && kitchenTab === "ticket";
+  const ticketRows = Array.isArray(ticketTemplate?.rows) ? ticketTemplate.rows : [];
 
   // ── One-time migration: convert any old spacer-block rows to gap rows ──────
   // Old templates stored gaps as { left: { type: "spacer", height: N } } rows.
@@ -897,47 +954,69 @@ export default function MenuTemplateEditor({
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
-  // ── Live preview (debounced 250ms) — uses configurable dummy seat ──
+  // ── Live preview (debounced 250ms) ──
   useEffect(() => {
     clearTimeout(previewTimer.current);
     setPreviewLoading(true);
     previewTimer.current = setTimeout(() => {
       try {
-        const seat = previewSeats[previewSeatIdx] || makePreviewSeat(previewSeatIdx + 1);
-        const table = {
-          menuType: previewMenuType,
-          restrictions: (seat.restrictions || []).map(key => ({ note: key, pos: seat.id })),
-          bottleWines: previewBottles,
-          birthday: false,
-        };
-        const html = generateMenuHTML({
-          seat,
-          table,
-          menuCourses,
-          menuTemplate: template,
-          _logo: logoDataUri,
-          menuTitle,
-          thankYouNote,
-          teamNames,
-          lang: previewLang,
-          beerChoice: null,
-          layoutStyles,
-          menuRules,
-          // Pass the same drink catalogs the final print uses so the Admin
-          // preview can resolve drinks-column references identically.
-          catalog: { wines, cocktails, spirits, beers },
-          aperitifOptions,
-        });
-        setPreviewHtml(html);
+        if (isKitchen) {
+          // Kitchen mode: render ticket HTML from courses + ticket template
+          // Derive course list from the kitchen profile's menuTemplate (course blocks)
+          const kitchenCourses = rows
+            .map(r => [r.left, r.right])
+            .flat()
+            .filter(b => b?.type === "course" && b.courseKey)
+            .map(b => {
+              const found = menuCourses.find(c => c.course_key === b.courseKey);
+              return found || { course_key: b.courseKey, menu: { name: b.courseKey } };
+            });
+          const html = generateKitchenTicketHTML(kitchenCourses, ticketTemplate);
+          setPreviewHtml(html);
+        } else {
+          const seat = previewSeats[previewSeatIdx] || makePreviewSeat(previewSeatIdx + 1);
+          const table = {
+            menuType: previewMenuType,
+            restrictions: (seat.restrictions || []).map(key => ({ note: key, pos: seat.id })),
+            bottleWines: previewBottles,
+            birthday: false,
+          };
+          const html = generateMenuHTML({
+            seat,
+            table,
+            menuCourses,
+            menuTemplate: template,
+            _logo: logoDataUri,
+            menuTitle,
+            thankYouNote,
+            teamNames,
+            lang: previewLang,
+            beerChoice: null,
+            layoutStyles,
+            menuRules,
+            catalog: { wines, cocktails, spirits, beers },
+            aperitifOptions,
+          });
+          setPreviewHtml(html);
+        }
       } catch {}
       setPreviewLoading(false);
     }, 250);
     return () => clearTimeout(previewTimer.current);
-  }, [template, menuCourses, logoDataUri, layoutStyles, menuRules, previewSeats, previewSeatIdx, previewBottles, previewLang, previewMenuType, menuTitle, thankYouNote, teamNames]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isKitchen, template, rows, ticketTemplate, menuCourses, logoDataUri, layoutStyles, menuRules, previewSeats, previewSeatIdx, previewBottles, previewLang, previewMenuType, menuTitle, thankYouNote, teamNames]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = useCallback(newRows => {
     onUpdateTemplate({ ...template, rows: newRows });
   }, [template, onUpdateTemplate]);
+
+  const updateTicketRows = useCallback((newRows) => {
+    const base = ticketTemplate && typeof ticketTemplate === "object" ? ticketTemplate : { version: 1, rows: [] };
+    onUpdateTicketTemplate?.({ ...base, rows: newRows });
+  }, [ticketTemplate, onUpdateTicketTemplate]);
+
+  // Active rows and update function switch based on kitchen tab
+  const activeRows = editingTicketLayout ? ticketRows : rows;
+  const activeUpdateFn = editingTicketLayout ? updateTicketRows : update;
 
   // ── DnD ──
   const sensors = useSensors(
@@ -948,59 +1027,65 @@ export default function MenuTemplateEditor({
   function handleDragEnd({ active, over }) {
     setActiveRowId(null);
     if (!over || active.id === over.id) return;
-    const oi = rows.findIndex(r => r.id === active.id);
-    const ni = rows.findIndex(r => r.id === over.id);
-    if (oi !== -1 && ni !== -1) update(arrayMove(rows, oi, ni));
+    const oi = activeRows.findIndex(r => r.id === active.id);
+    const ni = activeRows.findIndex(r => r.id === over.id);
+    if (oi !== -1 && ni !== -1) activeUpdateFn(arrayMove(activeRows, oi, ni));
   }
 
   // ── Row mutations ──
-  const addRow    = () => update([...rows, makeRow()]);
-  const addGapRow = () => update([...rows, { ...makeRow(), gap: 12 }]);
+  const addRow = () => {
+    if (editingTicketLayout) {
+      activeUpdateFn([...activeRows, makeKtRow()]);
+    } else {
+      activeUpdateFn([...activeRows, makeRow()]);
+    }
+  };
+  const addGapRow = () => activeUpdateFn([...activeRows, { ...(editingTicketLayout ? makeKtRow() : makeRow()), gap: 12 }]);
 
   const removeRow = rowId => {
-    update(rows.filter(r => r.id !== rowId));
+    activeUpdateFn(activeRows.filter(r => r.id !== rowId));
     if (selectedCell?.rowId === rowId) setSelectedCell(null);
   };
 
   const duplicateRow = rowId => {
-    const idx = rows.findIndex(r => r.id === rowId);
+    const idx = activeRows.findIndex(r => r.id === rowId);
     if (idx === -1) return;
-    const orig = rows[idx];
-    const copy = { ...orig, id: makeRowId("row"), left: orig.left ? { ...orig.left } : null, right: orig.right ? { ...orig.right } : null };
-    const next = [...rows];
+    const orig = activeRows[idx];
+    const copy = { ...orig, id: makeRowId(editingTicketLayout ? "kt" : "row"), left: orig.left ? { ...orig.left } : null, right: orig.right ? { ...orig.right } : null };
+    const next = [...activeRows];
     next.splice(idx + 1, 0, copy);
-    update(next);
+    activeUpdateFn(next);
   };
 
   const insertAbove = rowId => {
-    const idx = rows.findIndex(r => r.id === rowId);
+    const idx = activeRows.findIndex(r => r.id === rowId);
     if (idx === -1) return;
-    const next = [...rows];
-    next.splice(idx, 0, makeRow());
-    update(next);
+    const next = [...activeRows];
+    next.splice(idx, 0, editingTicketLayout ? makeKtRow() : makeRow());
+    activeUpdateFn(next);
   };
 
   const insertBelow = rowId => {
-    const idx = rows.findIndex(r => r.id === rowId);
+    const idx = activeRows.findIndex(r => r.id === rowId);
     if (idx === -1) return;
-    const next = [...rows];
-    next.splice(idx + 1, 0, makeRow());
-    update(next);
+    const next = [...activeRows];
+    next.splice(idx + 1, 0, editingTicketLayout ? makeKtRow() : makeRow());
+    activeUpdateFn(next);
   };
 
   const updateRow = updatedRow => {
-    update(rows.map(r => r.id === updatedRow.id ? updatedRow : r));
+    activeUpdateFn(activeRows.map(r => r.id === updatedRow.id ? updatedRow : r));
   };
 
   const removeBlock = (rowId, side) => {
-    update(rows.map(r => r.id === rowId ? { ...r, [side]: null } : r));
+    activeUpdateFn(activeRows.map(r => r.id === rowId ? { ...r, [side]: null } : r));
     if (selectedCell?.rowId === rowId && selectedCell?.side === side) setSelectedCell(null);
   };
 
   // Swap a block to the other cell (left↔right)
   const moveBlock = (rowId, fromSide) => {
     const toSide = fromSide === "left" ? "right" : "left";
-    update(rows.map(r => {
+    activeUpdateFn(activeRows.map(r => {
       if (r.id !== rowId) return r;
       return { ...r, [toSide]: r[fromSide], [fromSide]: r[toSide] };
     }));
@@ -1013,8 +1098,8 @@ export default function MenuTemplateEditor({
   const pickBlock = type => {
     if (!pickerTarget) return;
     const { rowId, side } = pickerTarget;
-    const block = makeBlock(type);
-    update(rows.map(r => r.id === rowId ? { ...r, [side]: block } : r));
+    const block = editingTicketLayout ? makeKtBlock(type) : makeBlock(type);
+    activeUpdateFn(activeRows.map(r => r.id === rowId ? { ...r, [side]: block } : r));
     setSelectedCell({ rowId, side });
     setPickerTarget(null);
   };
@@ -1022,73 +1107,90 @@ export default function MenuTemplateEditor({
   const updateSelectedBlock = newBlock => {
     if (!selectedCell) return;
     const { rowId, side } = selectedCell;
-    update(rows.map(r => r.id === rowId ? { ...r, [side]: newBlock } : r));
+    activeUpdateFn(activeRows.map(r => r.id === rowId ? { ...r, [side]: newBlock } : r));
   };
 
   const selectedBlock = selectedCell
-    ? rows.find(r => r.id === selectedCell.rowId)?.[selectedCell.side] ?? null
+    ? activeRows.find(r => r.id === selectedCell.rowId)?.[selectedCell.side] ?? null
     : null;
 
   const rebuild = () => {
-    onUpdateTemplate(buildDefaultTemplate(menuCoursesForRebuild || menuCourses));
+    if (editingTicketLayout) {
+      onUpdateTicketTemplate?.(buildDefaultTicketTemplate());
+    } else {
+      onUpdateTemplate(buildDefaultTemplate(menuCoursesForRebuild || menuCourses));
+    }
     setSelectedCell(null);
   };
 
-  const activeRow = activeRowId ? rows.find(r => r.id === activeRowId) : null;
+  const activeRow = activeRowId ? activeRows.find(r => r.id === activeRowId) : null;
 
   // ── Render ──
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 500, fontFamily: FONT }}>
 
-      {/* ── Preview Data Panel (collapsible strip above 3 panels) ── */}
-      <PreviewDataPanel
-        wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
-        aperitifOptions={aperitifOptions}
-        guests={previewGuests}     onGuestsChange={setPreviewGuests}
-        seatIdx={previewSeatIdx}   onSeatIdxChange={setPreviewSeatIdx}
-        seats={previewSeats}       onUpdateSeat={updatePreviewSeat}
-        menuCourses={menuCourses}
-        bottleWines={previewBottles} onBottleWinesChange={setPreviewBottles}
-        lang={previewLang}         onLangChange={handleLangChange}
-        menuType={previewMenuType} onMenuTypeChange={(nextType) => {
-          setPreviewMenuType(nextType);
-          // FULL/SHORT toggle also switches which profile is being edited so
-          // each menu type owns its own template. Long Menu and Short Menu are
-          // resolved via their assigned profile IDs from the parent.
-          if (!onSelectProfile) return;
-          if (nextType === "short" && shortMenuProfileId && shortMenuProfileId !== activeProfileId) {
-            onSelectProfile(shortMenuProfileId);
-          } else if (nextType === "" && longMenuProfileId && longMenuProfileId !== activeProfileId) {
-            onSelectProfile(longMenuProfileId);
-          }
-        }}
-        open={previewDataOpen}     onToggle={() => setPreviewDataOpen(v => !v)}
-      />
+      {/* ── Preview Data Panel (collapsible strip above 3 panels) — guest menu only ── */}
+      {!isKitchen && (
+        <PreviewDataPanel
+          wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
+          aperitifOptions={aperitifOptions}
+          guests={previewGuests}     onGuestsChange={setPreviewGuests}
+          seatIdx={previewSeatIdx}   onSeatIdxChange={setPreviewSeatIdx}
+          seats={previewSeats}       onUpdateSeat={updatePreviewSeat}
+          menuCourses={menuCourses}
+          bottleWines={previewBottles} onBottleWinesChange={setPreviewBottles}
+          lang={previewLang}         onLangChange={handleLangChange}
+          menuType={previewMenuType} onMenuTypeChange={(nextType) => {
+            setPreviewMenuType(nextType);
+            if (!onSelectProfile) return;
+            if (nextType === "short" && shortMenuProfileId && shortMenuProfileId !== activeProfileId) {
+              onSelectProfile(shortMenuProfileId);
+            } else if (nextType === "" && longMenuProfileId && longMenuProfileId !== activeProfileId) {
+              onSelectProfile(longMenuProfileId);
+            }
+          }}
+          open={previewDataOpen}     onToggle={() => setPreviewDataOpen(v => !v)}
+        />
+      )}
 
-      {/* ── Menu Title + Thank You Note (shared with MenuGenerator via localStorage) ── */}
-      <div style={{ display: "flex", gap: 12, padding: "8px 14px", borderBottom: `1px solid ${tokens.ink[4]}`, background: tokens.ink.bg, alignItems: "center", flexShrink: 0 }}>
-        {profileLabel && (
-          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.charcoal?.default || "#222", textTransform: "uppercase", whiteSpace: "nowrap", border: `1px solid ${tokens.ink[4]}`, padding: "2px 7px", flexShrink: 0 }}>
+      {/* ── Menu Title + Thank You Note — guest menu only ── */}
+      {!isKitchen && (
+        <div style={{ display: "flex", gap: 12, padding: "8px 14px", borderBottom: `1px solid ${tokens.ink[4]}`, background: tokens.ink.bg, alignItems: "center", flexShrink: 0 }}>
+          {profileLabel && (
+            <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.charcoal?.default || "#222", textTransform: "uppercase", whiteSpace: "nowrap", border: `1px solid ${tokens.ink[4]}`, padding: "2px 7px", flexShrink: 0 }}>
+              {profileLabel}
+            </span>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+            <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", whiteSpace: "nowrap" }}>Menu Title</span>
+            <input
+              value={menuTitle}
+              onChange={e => { setMenuTitle(e.target.value); writeMenuTitle(previewLang, e.target.value); syncTitleToSupabase(); }}
+              style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, outline: "none", flex: 1, minWidth: 80 }}
+            />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 2 }}>
+            <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", whiteSpace: "nowrap" }}>Thank You Note</span>
+            <input
+              value={thankYouNote}
+              onChange={e => { setThankYouNote(e.target.value); writeThankYouNote(previewLang, e.target.value); syncThankYouToSupabase(); }}
+              style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, outline: "none", flex: 1, minWidth: 140 }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Kitchen profile label bar */}
+      {isKitchen && profileLabel && (
+        <div style={{ padding: "6px 14px", borderBottom: `1px solid ${tokens.ink[4]}`, background: tokens.ink.bg, display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.charcoal?.default || "#222", textTransform: "uppercase", border: `1px solid ${tokens.ink[4]}`, padding: "2px 7px" }}>
             {profileLabel}
           </span>
-        )}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", whiteSpace: "nowrap" }}>Menu Title</span>
-          <input
-            value={menuTitle}
-            onChange={e => { setMenuTitle(e.target.value); writeMenuTitle(previewLang, e.target.value); syncTitleToSupabase(); }}
-            style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, outline: "none", flex: 1, minWidth: 80 }}
-          />
+          <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3] }}>
+            Kitchen ticket editor — preview uses sample data
+          </span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 2 }}>
-          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", whiteSpace: "nowrap" }}>Thank You Note</span>
-          <input
-            value={thankYouNote}
-            onChange={e => { setThankYouNote(e.target.value); writeThankYouNote(previewLang, e.target.value); syncThankYouToSupabase(); }}
-            style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, outline: "none", flex: 1, minWidth: 140 }}
-          />
-        </div>
-      </div>
+      )}
 
 
       {/* ── Three-panel layout ── */}
@@ -1102,16 +1204,37 @@ export default function MenuTemplateEditor({
       }}>
         {/* Header */}
         <div style={{ padding: leftOpen ? "12px 12px 8px" : "8px 4px", borderBottom: `1px solid ${tokens.ink[4]}`, flexShrink: 0 }}>
+          {/* Kitchen mode tab toggle */}
+          {leftOpen && isKitchen && (
+            <div style={{ display: "flex", gap: 2, marginBottom: 8 }}>
+              {[
+                { id: "ticket",  label: "TICKET LAYOUT" },
+                { id: "courses", label: "COURSE ORDER"  },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => { setKitchenTab(tab.id); setSelectedCell(null); setPickerTarget(null); }}
+                  style={{
+                    flex: 1, fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5,
+                    padding: "6px 0", border: `1px solid ${kitchenTab === tab.id ? tokens.charcoal.default : tokens.ink[4]}`,
+                    borderRadius: 0, cursor: "pointer", textTransform: "uppercase",
+                    background: kitchenTab === tab.id ? tokens.charcoal.default : tokens.neutral[0],
+                    color: kitchenTab === tab.id ? tokens.neutral[0] : tokens.ink[3],
+                  }}
+                >{tab.label}</button>
+              ))}
+            </div>
+          )}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: leftOpen ? 8 : 0 }}>
             {leftOpen && (
               <span style={{ fontSize: 7.5, letterSpacing: 3, color: tokens.ink[4], textTransform: "uppercase" }}>
-                LAYOUT EDITOR
+                {isKitchen ? (editingTicketLayout ? "TICKET LAYOUT" : "COURSE ORDER") : "LAYOUT EDITOR"}
               </span>
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: leftOpen ? 0 : "auto", marginRight: leftOpen ? 0 : "auto" }}>
               {leftOpen && (
                 <span style={{ fontSize: 7.5, color: tokens.ink[4], fontFamily: FONT }}>
-                  {rows.length} row{rows.length !== 1 ? "s" : ""}
+                  {activeRows.length} row{activeRows.length !== 1 ? "s" : ""}
                 </span>
               )}
               <button
@@ -1150,8 +1273,8 @@ export default function MenuTemplateEditor({
               cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3],
               textTransform: "uppercase",
             }}
-            title="Rebuild template from current courses"
-          >↺ REBUILD FROM COURSES</button>
+            title={editingTicketLayout ? "Reset ticket layout to default" : "Rebuild template from current courses"}
+          >↺ {editingTicketLayout ? "RESET TICKET LAYOUT" : "REBUILD FROM COURSES"}</button>
           )}
 
           {/* Spacing settings moved to the SPACING SETTINGS panel above the 3-panel area */}
@@ -1159,7 +1282,7 @@ export default function MenuTemplateEditor({
 
         {/* Scrollable row list */}
         {leftOpen && <div style={{ flex: 1, overflowY: "auto", padding: "8px 8px 0" }}>
-          {rows.length === 0 && (
+          {activeRows.length === 0 && (
             <div style={{
               textAlign: "center", padding: "32px 16px",
               fontSize: 8.5, color: tokens.ink[4], letterSpacing: 1.5, lineHeight: 2.2,
@@ -1185,8 +1308,8 @@ export default function MenuTemplateEditor({
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <SortableContext items={rows.map(r => r.id)} strategy={verticalListSortingStrategy}>
-              {rows.map(row => (
+            <SortableContext items={activeRows.map(r => r.id)} strategy={verticalListSortingStrategy}>
+              {activeRows.map(row => (
                 <SortableRow
                   key={row.id}
                   row={row}
@@ -1267,11 +1390,15 @@ export default function MenuTemplateEditor({
               onMouseEnter={e => { e.currentTarget.style.color = GOLD; }}
               onMouseLeave={e => { e.currentTarget.style.color = tokens.ink[4]; }}
             >✕</button>
-            <LivePreview
-              previewHtml={previewHtml}
-              loading={previewLoading}
-              label={`P${previewSeatIdx + 1} · ${(previewSeats[previewSeatIdx]?.pairing || "—")} · ${previewLang.toUpperCase()}${previewMenuType === "short" ? " · SHORT" : ""}`}
-            />
+            {isKitchen ? (
+              <TicketPreview previewHtml={previewHtml} loading={previewLoading} />
+            ) : (
+              <LivePreview
+                previewHtml={previewHtml}
+                loading={previewLoading}
+                label={`P${previewSeatIdx + 1} · ${(previewSeats[previewSeatIdx]?.pairing || "—")} · ${previewLang.toUpperCase()}${previewMenuType === "short" ? " · SHORT" : ""}`}
+              />
+            )}
           </div>
         )}
       </div>
@@ -1333,6 +1460,8 @@ export default function MenuTemplateEditor({
           onPick={pickBlock}
           onClose={() => setPickerTarget(null)}
           menuCourses={menuCourses}
+          blockMeta={editingTicketLayout ? KT_BLOCK_META : BLOCK_META}
+          blockGroups={editingTicketLayout ? KT_BLOCK_GROUPS : BLOCK_GROUPS}
         />
       )}
       </div>{/* end three-panel */}

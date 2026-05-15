@@ -36,6 +36,7 @@
  */
 
 import { buildDefaultTemplate } from "./menuTemplateSchema.js";
+import { buildDefaultTicketTemplate } from "./kitchenTicketSchema.js";
 
 export const PROFILE_TARGETS = ["guest_menu", "kitchen_flow"];
 
@@ -146,18 +147,24 @@ export function createDefaultProfiles(menuCourses = []) {
     menuTemplate: buildDefaultTemplate(shortSorted),
     layoutStyles: {},
   });
-  const longKitchen = makeProfile({
-    name: "Default Long Kitchen",
-    target: "kitchen_flow",
-    menuTemplate: buildKitchenTemplate(longSorted),
-    layoutStyles: {},
-  });
-  const shortKitchen = makeProfile({
-    name: "Default Short Kitchen",
-    target: "kitchen_flow",
-    menuTemplate: buildKitchenTemplate(shortSorted),
-    layoutStyles: {},
-  });
+  const longKitchen = {
+    ...makeProfile({
+      name: "Default Long Kitchen",
+      target: "kitchen_flow",
+      menuTemplate: buildKitchenTemplate(longSorted),
+      layoutStyles: {},
+    }),
+    ticketTemplate: buildDefaultTicketTemplate(),
+  };
+  const shortKitchen = {
+    ...makeProfile({
+      name: "Default Short Kitchen",
+      target: "kitchen_flow",
+      menuTemplate: buildKitchenTemplate(shortSorted),
+      layoutStyles: {},
+    }),
+    ticketTemplate: buildDefaultTicketTemplate(),
+  };
 
   return {
     profiles: [longGuest, shortGuest, longKitchen, shortKitchen],
@@ -197,6 +204,7 @@ export function sanitizeProfilesPayload(raw) {
       target: normalizeTarget(p.target),
       menuTemplate: p.menuTemplate && typeof p.menuTemplate === "object" ? p.menuTemplate : null,
       layoutStyles: p.layoutStyles && typeof p.layoutStyles === "object" ? p.layoutStyles : {},
+      ticketTemplate: p.ticketTemplate && typeof p.ticketTemplate === "object" ? p.ticketTemplate : null,
     }));
 
   const a = raw?.assignments || {};
@@ -291,6 +299,7 @@ export function duplicateProfile(profile, nextName) {
     target: normalizeTarget(profile.target),
     menuTemplate: cloneTemplate(profile.menuTemplate),
     layoutStyles: profile.layoutStyles ? { ...profile.layoutStyles } : {},
+    ticketTemplate: profile.ticketTemplate ? cloneTemplate(profile.ticketTemplate) : null,
   };
 }
 
