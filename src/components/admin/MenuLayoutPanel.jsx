@@ -125,6 +125,27 @@ export default function MenuLayoutPanel({
   const guestProfiles   = layoutProfiles.filter(p => (p.target || "guest_menu") === "guest_menu");
   const kitchenProfiles = layoutProfiles.filter(p => p.target === "kitchen_flow");
 
+  const activeSlots = useMemo(() => {
+    if (!active) return [];
+    return Object.entries(layoutAssignments || {})
+      .filter(([, id]) => id === active.id)
+      .map(([slot]) => slot);
+  }, [active, layoutAssignments]);
+
+  const profileLabel = useMemo(() => {
+    if (!active) return "";
+    const slotNames = activeSlots.map(s => SLOT_BADGE[s] || s);
+    if (slotNames.length > 0) return `Editing: ${active.name} — ${slotNames.join(", ")}`;
+    return `Editing: ${active.name}`;
+  }, [active, activeSlots]);
+
+  const isShortMenuAssigned = activeSlots.includes("shortMenuProfileId");
+  const menuCoursesForRebuild = useMemo(() => {
+    if (!isShortMenuAssigned) return menuCourses;
+    const shortCourses = menuCourses.filter(c => c.show_on_short);
+    return shortCourses.length > 0 ? shortCourses : menuCourses;
+  }, [isShortMenuAssigned, menuCourses]);
+
   const handleCreate = () => {
     onCreateLayoutProfile?.({
       name: createTarget === "kitchen_flow" ? "New Kitchen Layout" : "New Menu Layout",
@@ -323,6 +344,7 @@ export default function MenuLayoutPanel({
           menuRulesSaving={menuRulesSaving}
           menuRulesSaved={menuRulesSaved}
           menuCourses={menuCourses}
+          menuCoursesForRebuild={menuCoursesForRebuild}
           logoDataUri={logoDataUri}
           layoutStyles={layoutStyles}
           wines={wines}
@@ -330,6 +352,7 @@ export default function MenuLayoutPanel({
           spirits={spirits}
           beers={beers}
           aperitifOptions={aperitifOptions}
+          profileLabel={profileLabel}
         />
       ) : (
         <div style={{

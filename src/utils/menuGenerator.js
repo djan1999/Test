@@ -150,7 +150,6 @@ export function generateMenuHTML({
 
   // Restrictions are seat-specific. `pos: null` entries are considered unassigned (apply to none).
   const restrictions = (table.restrictions || []).filter(r => r.pos === seatId).map(r => r.note);
-  const isShort = String(table.menuType || "").toLowerCase() === "short";
 
   const extras = seat.extras || {};
   const getExtra = (key) => extras[key] || null;
@@ -246,15 +245,11 @@ export function generateMenuHTML({
     return null;
   };
 
-  const isTruthyShort = (value) => {
-    const v = String(value ?? "").trim().toLowerCase();
-    return v === "true" || v === "1" || v === "yes" || v === "y" || v === "x" || v === "wahr";
-  };
-
-  // ── Build visibleCourses (filtered and sorted) ────────────────────────────
-  // Course visibility/order is now driven by the assigned profile's
-  // menuTemplate (set by MenuGenerator). The isShort filter below is only a
-  // legacy fallback for callers that don't pass a menuTemplate yet.
+  // ── Build visibleCourses ─────────────────────────────────────────────────
+  // Course visibility/order is driven by the assigned profile's menuTemplate.
+  // The template's course blocks reference specific courseKeys — only courses
+  // that appear as blocks in the template will render. Optional courses are
+  // still filtered by whether they were ordered for this seat.
   const visibleCourses = [];
   menuCourses.forEach((course, i) => {
     const courseKey = normalizeCourseToken(course?.course_key || course?.key || course?.menu?.name);
@@ -265,14 +260,6 @@ export function generateMenuHTML({
       const extra = getExtra(optionalFlag);
       if (!extra?.ordered) return;
     }
-
-    if (isShort) {
-      if (!isTruthyShort(course?.show_on_short)) return;
-      const rank = Number(course?.short_order) || 9999;
-      visibleCourses.push({ course, i, courseName, courseKey, optionalFlag, orderValue: rank });
-      return;
-    }
-
     visibleCourses.push({
       course,
       i,
@@ -394,39 +381,34 @@ export function generateMenuHTML({
     const plSide  = lb?.type === "pairing_label" ? "left" : "right";
     const plBlock = lb?.type === "pairing_label" ? lb : rb?.type === "pairing_label" ? rb : null;
     if (plBlock) {
-      if (!isShort) {
-        // Per-block control. Default is to keep the reserved row (back-compat with old behavior).
-        // Set to false on the block to disable reserving space when no pairing is selected.
-        // (We support both historic/internal key names to avoid breaking old saved templates.)
-        const keepWhenNoPairing =
-          plBlock.reserveWhenNoPairing === false ? false
-          : plBlock.reserveWhenNoPairing === true ? true
-          : plBlock.keepWhenNoPairing !== false;
-        if (!hasPairing && !keepWhenNoPairing) {
-          continue;
-        }
-        const autoLabel = PAIRING_LABELS[pkey] || "PAIRING";
-        const allAutoLabels = new Set([
-          ...Object.values(PAIRING_LABELS),
-          "WINE PAIRING", "NON-ALCO PAIRING", "OUR STORY PAIRING", "PREMIUM PAIRING", "PREMIUM WINE PAIRING",
-          "VINSKA SPREMLJAVA", "BREZALKOHOLNA SPREMLJAVA", "OUR STORY SPREMLJAVA", "PREMIUM SPREMLJAVA", "PREMIUM VINSKA SPREMLJAVA",
-        ]);
-        const label = (plBlock.text && !allAutoLabels.has(plBlock.text)) ? plBlock.text : autoLabel;
-        rows.push({
-          type: "section",
-          // Preserve section break spacing even when the seat has no pairing.
-          label: hasPairing ? label : "",
-          // If this row is rendered at all, reservePt should always control row height.
-          // (Previously this only applied when no pairing was selected.)
-          reserveHeight: true,
-          reservePt: plBlock.reserveHeightPt ?? plBlock.reserveMinHeight ?? null,
-          side: plSide,
-          align: plBlock.align || "right",
-          spacing: plBlock.spacing ?? 6,
-          widthPreset: wp,
-          gap: consumeGap(),
-        });
+      // Per-block control. Default is to keep the reserved row (back-compat with old behavior).
+      // Set to false on the block to disable reserving space when no pairing is selected.
+      // (We support both historic/internal key names to avoid breaking old saved templates.)
+      const keepWhenNoPairing =
+        plBlock.reserveWhenNoPairing === false ? false
+        : plBlock.reserveWhenNoPairing === true ? true
+        : plBlock.keepWhenNoPairing !== false;
+      if (!hasPairing && !keepWhenNoPairing) {
+        continue;
       }
+      const autoLabel = PAIRING_LABELS[pkey] || "PAIRING";
+      const allAutoLabels = new Set([
+        ...Object.values(PAIRING_LABELS),
+        "WINE PAIRING", "NON-ALCO PAIRING", "OUR STORY PAIRING", "PREMIUM PAIRING", "PREMIUM WINE PAIRING",
+        "VINSKA SPREMLJAVA", "BREZALKOHOLNA SPREMLJAVA", "OUR STORY SPREMLJAVA", "PREMIUM SPREMLJAVA", "PREMIUM VINSKA SPREMLJAVA",
+      ]);
+      const label = (plBlock.text && !allAutoLabels.has(plBlock.text)) ? plBlock.text : autoLabel;
+      rows.push({
+        type: "section",
+        label: hasPairing ? label : "",
+        reserveHeight: true,
+        reservePt: plBlock.reserveHeightPt ?? plBlock.reserveMinHeight ?? null,
+        side: plSide,
+        align: plBlock.align || "right",
+        spacing: plBlock.spacing ?? 6,
+        widthPreset: wp,
+        gap: consumeGap(),
+      });
       continue;
     }
 

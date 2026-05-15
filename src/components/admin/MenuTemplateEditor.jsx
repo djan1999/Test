@@ -181,7 +181,7 @@ function SortableRow({
         }}>
           <div
             {...attributes} {...listeners}
-            style={{ width: 14, cursor: "grab", color: tokens.ink[4], fontSize: 10, userSelect: "none", textAlign: "center", flexShrink: 0 }}
+            style={{ width: 10, cursor: "grab", color: tokens.ink[4], fontSize: 9, userSelect: "none", textAlign: "center", flexShrink: 0 }}
             title="Drag to reorder"
           >⋮⋮</div>
           <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.ink[2], textTransform: "uppercase", flexShrink: 0 }}>
@@ -269,8 +269,8 @@ function RowActionBtn({ children, onClick, title, danger = false, active = false
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        width: 32, height: 36, border: "none", borderRadius: 0, cursor: "pointer",
-        fontFamily: FONT, fontSize: 12, padding: 0, lineHeight: 1,
+        width: 24, height: 36, border: "none", borderRadius: 0, cursor: "pointer",
+        fontFamily: FONT, fontSize: 11, padding: 0, lineHeight: 1,
         background: active ? tokens.ink[5] : hov ? (danger ? tokens.red.bg : tokens.ink[5]) : "transparent",
         color: active ? SELECTED_RING : hov ? (danger ? tokens.red.text : SELECTED_RING) : tokens.ink[4],
         transition: "all 0.1s",
@@ -669,6 +669,8 @@ export default function MenuTemplateEditor({
   spirits = [],
   beers = [],
   aperitifOptions = [],
+  profileLabel = "",
+  menuCoursesForRebuild = null,
 }) {
   const [selectedCell, setSelectedCell] = useState(null); // { rowId, side }
   const [pickerTarget, setPickerTarget] = useState(null); // { rowId, side }
@@ -916,13 +918,6 @@ export default function MenuTemplateEditor({
     onUpdateTemplate({ ...template, rows: newRows });
   }, [template, onUpdateTemplate]);
 
-  // The editor always shows the actual rows of the active profile. Long /
-  // Short menu differences are now expressed by editing separate profiles
-  // (assigned to Long Menu and Short Menu in the panel above), not by
-  // filtering this template by show_on_short / short_order.
-  const visibleRows = rows;
-  const displayRows = rows;
-
   // ── DnD ──
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -1014,7 +1009,7 @@ export default function MenuTemplateEditor({
     : null;
 
   const rebuild = () => {
-    onUpdateTemplate(buildDefaultTemplate(menuCourses));
+    onUpdateTemplate(buildDefaultTemplate(menuCoursesForRebuild || menuCourses));
     setSelectedCell(null);
   };
 
@@ -1040,6 +1035,11 @@ export default function MenuTemplateEditor({
 
       {/* ── Menu Title + Thank You Note (shared with MenuGenerator via localStorage) ── */}
       <div style={{ display: "flex", gap: 12, padding: "8px 14px", borderBottom: `1px solid ${tokens.ink[4]}`, background: tokens.ink.bg, alignItems: "center", flexShrink: 0 }}>
+        {profileLabel && (
+          <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.charcoal?.default || "#222", textTransform: "uppercase", whiteSpace: "nowrap", border: `1px solid ${tokens.ink[4]}`, padding: "2px 7px", flexShrink: 0 }}>
+            {profileLabel}
+          </span>
+        )}
         <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
           <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", whiteSpace: "nowrap" }}>Menu Title</span>
           <input
@@ -1064,7 +1064,7 @@ export default function MenuTemplateEditor({
 
       {/* ── Left: Row editor ── */}
       <aside style={{
-        width: leftOpen ? 288 : 28, flexShrink: 0, borderRight: `1px solid ${tokens.ink[4]}`,
+        width: leftOpen ? 380 : 28, flexShrink: 0, borderRight: `1px solid ${tokens.ink[4]}`,
         background: tokens.ink.bg, display: "flex", flexDirection: "column",
         overflow: "hidden", transition: "width 0.18s ease",
       }}>
@@ -1153,8 +1153,8 @@ export default function MenuTemplateEditor({
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <SortableContext items={displayRows.map(r => r.id)} strategy={verticalListSortingStrategy}>
-              {displayRows.map(row => (
+            <SortableContext items={rows.map(r => r.id)} strategy={verticalListSortingStrategy}>
+              {rows.map(row => (
                 <SortableRow
                   key={row.id}
                   row={row}
