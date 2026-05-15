@@ -353,6 +353,10 @@ export default function MenuLayoutPanel({
           beers={beers}
           aperitifOptions={aperitifOptions}
           profileLabel={profileLabel}
+          longMenuProfileId={layoutAssignments?.longMenuProfileId || null}
+          shortMenuProfileId={layoutAssignments?.shortMenuProfileId || null}
+          activeProfileId={active?.id || null}
+          onSelectProfile={onSelectLayoutProfile}
         />
       ) : (
         <div style={{

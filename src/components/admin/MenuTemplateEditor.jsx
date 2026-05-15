@@ -60,11 +60,14 @@ const makePreviewSeat = (id) => ({
 function chipLabel(block, menuCourses) {
   if (!block) return null;
   const meta = BLOCK_META[block.type] || {};
-  let detail = "";
   if (block.type === "course") {
     const c = menuCourses.find(c => c.course_key === block.courseKey);
-    detail = c?.menu?.name || block.courseKey || "?";
-  } else if (block.type === "spacer") {
+    const name = c?.menu?.name || block.courseKey;
+    if (name) return `${meta.icon || ""} ${String(name).toUpperCase()}`;
+    return `${meta.icon || ""} ${meta.label || block.type} · ?`;
+  }
+  let detail = "";
+  if (block.type === "spacer") {
     detail = `${block.height ?? 8}pt`;
   } else if (block.type === "divider") {
     detail = `${block.thickness ?? 0.5}pt`;
@@ -671,6 +674,12 @@ export default function MenuTemplateEditor({
   aperitifOptions = [],
   profileLabel = "",
   menuCoursesForRebuild = null,
+  // Quick-switch between Long and Short menu profiles via the FULL/SHORT toggle
+  // in the preview data panel.
+  longMenuProfileId = null,
+  shortMenuProfileId = null,
+  activeProfileId = null,
+  onSelectProfile = null,
 }) {
   const [selectedCell, setSelectedCell] = useState(null); // { rowId, side }
   const [pickerTarget, setPickerTarget] = useState(null); // { rowId, side }
@@ -864,6 +873,18 @@ export default function MenuTemplateEditor({
 
   // menuTitle and thankYouNote come from state (shared localStorage with MenuGenerator)
 
+  // Keep the previewMenuType ("" = FULL, "short" = SHORT) in sync with whichever
+  // profile is active, so the FULL/SHORT toggle and preview label always reflect
+  // the menu currently being edited.
+  useEffect(() => {
+    if (!activeProfileId) return;
+    if (activeProfileId === shortMenuProfileId && previewMenuType !== "short") {
+      setPreviewMenuType("short");
+    } else if (activeProfileId === longMenuProfileId && previewMenuType !== "") {
+      setPreviewMenuType("");
+    }
+  }, [activeProfileId, longMenuProfileId, shortMenuProfileId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Keyboard: Escape deselects / closes picker ──
   useEffect(() => {
     const handler = (e) => {
@@ -1029,7 +1050,18 @@ export default function MenuTemplateEditor({
         menuCourses={menuCourses}
         bottleWines={previewBottles} onBottleWinesChange={setPreviewBottles}
         lang={previewLang}         onLangChange={handleLangChange}
-        menuType={previewMenuType} onMenuTypeChange={setPreviewMenuType}
+        menuType={previewMenuType} onMenuTypeChange={(nextType) => {
+          setPreviewMenuType(nextType);
+          // FULL/SHORT toggle also switches which profile is being edited so
+          // each menu type owns its own template. Long Menu and Short Menu are
+          // resolved via their assigned profile IDs from the parent.
+          if (!onSelectProfile) return;
+          if (nextType === "short" && shortMenuProfileId && shortMenuProfileId !== activeProfileId) {
+            onSelectProfile(shortMenuProfileId);
+          } else if (nextType === "" && longMenuProfileId && longMenuProfileId !== activeProfileId) {
+            onSelectProfile(longMenuProfileId);
+          }
+        }}
         open={previewDataOpen}     onToggle={() => setPreviewDataOpen(v => !v)}
       />
 
