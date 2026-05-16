@@ -2153,9 +2153,11 @@ export default function App() {
 
   const syncWines = async () => {
     // Client-side budget. Vercel function caps at 60 s (see sync-wines.js);
-    // give it slack for headers + DB writes then hard-abort so the UI doesn't hang.
+    // give it 30 s of slack for headers + DB writes + return trip then hard-abort
+    // so the UI doesn't hang. Previously 70 s, which was too close to the 60 s
+    // server cap and would fire before the server's own response could land.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 70_000);
+    const timeoutId = setTimeout(() => controller.abort(), 90_000);
     try {
       const secret = import.meta.env.VITE_SYNC_SECRET || "";
       if (!secret) {
@@ -2184,7 +2186,7 @@ export default function App() {
         skippedCategories: json.skippedCategories || [],
       };
     } catch (e) {
-      if (e?.name === "AbortError") return { ok: false, error: "Timed out after 70 s" };
+      if (e?.name === "AbortError") return { ok: false, error: "Timed out after 90 s" };
       return { ok: false, error: e.message || e.name || "Request failed" };
     } finally {
       clearTimeout(timeoutId);

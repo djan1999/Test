@@ -19,8 +19,13 @@ import { createClient } from "@supabase/supabase-js";
 export const config = { maxDuration: 60 };
 
 const BASE = "https://vinska-karta.hotelmilka.si";
-const FETCH_TIMEOUT_MS = 12000;
-const RETRY_ATTEMPTS = 3;
+// Per-page budget: 2 attempts × 10 s + 1 s back-off = worst case 21 s per page.
+// All 15 pages run in parallel, so the network phase is bounded by the slowest
+// page (~21 s) and leaves ample headroom under the 60 s function cap for
+// Supabase deletes + batched inserts. Previously 3 × 12 s = 38 s, which could
+// blow past 60 s when the source WordPress site responded slowly.
+const FETCH_TIMEOUT_MS = 10000;
+const RETRY_ATTEMPTS = 2;
 
 // Use a realistic browser UA so the site's WAF/CDN doesn't reject the request.
 // The hotel's wine-card site (WordPress) returns 403 to obvious bot UAs.
