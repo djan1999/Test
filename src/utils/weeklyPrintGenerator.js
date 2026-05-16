@@ -338,6 +338,25 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
 // pre-printed quantities for main courses, blank rows for optional extras,
 // summary block at the bottom with restrictions pre-filled.
 
+// Returns the kitchen's pre-prepped quantity for an optional extra given the
+// guest count, or null if the extra has no scaling rule.
+function optExtraPresetQty(key, name, guests) {
+  const g = Math.max(0, Number(guests) || 0);
+  if (g <= 0) return null;
+  const hay = `${String(key || "")} ${String(name || "")}`.toLowerCase();
+  // Brioche & buhtelj: 1 portion per 2 guests (1-2: 1x, 3-4: 2x, 5-6: 3x, …)
+  if (hay.includes("brioche") || hay.includes("buhtelj")) {
+    return Math.ceil(g / 2);
+  }
+  // Pear: 1-3 → 1x, 4-5 → 2x, 6-9 → 3x (capped at 3 for typical table sizes)
+  if (hay.includes("pear")) {
+    if (g <= 3) return 1;
+    if (g <= 5) return 2;
+    return 3;
+  }
+  return null;
+}
+
 export function generateKitchenTicketsHTML(reservations, menuCourses, restrictionDefs = []) {
   if (!reservations || reservations.length === 0) {
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Kitchen Tickets</title>${ROBOTO_LINK}</head><body style="font-family:'Roboto Mono',monospace;padding:40pt;text-align:center;">No reservations</body></html>`;
@@ -396,7 +415,7 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           const k = normFlag(c?.optional_flag || "");
           if (k && !seenOptKeys.has(k)) {
             seenOptKeys.add(k);
-            optExtras.push(c.menu?.name || k);
+            optExtras.push({ key: k, name: c.menu?.name || k });
           }
         });
 
@@ -485,10 +504,16 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
       });
       html += `</div>`; // .courses
 
-      // Summary block — always present, staff fills in quantities during service
+      // Summary block — always present, staff fills in quantities during service.
+      // Pre-fill quantities for known extras that scale with guest count.
       html += `<div class="summary">`;
-      optExtras.forEach(name => {
-        html += `<div class="srow"><span class="slbl">${esc(name)}:</span></div>`;
+      optExtras.forEach(({ key, name }) => {
+        const qty = optExtraPresetQty(key, name, guests);
+        if (qty != null) {
+          html += `<div class="srow"><span class="slbl">${esc(name)}:</span><span class="sval">${qty}&#215;</span></div>`;
+        } else {
+          html += `<div class="srow"><span class="slbl">${esc(name)}:</span></div>`;
+        }
       });
       if (d.birthday) {
         const cakeExtra = d.cakeNote ? ` ${esc(d.cakeNote)}` : "";
@@ -530,6 +555,7 @@ body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;background:#ff
 .srow-notes{min-height:20pt;border-bottom:none;}
 .srow:last-child{border-bottom:none;}
 .slbl{flex-shrink:0;}
+.sval{margin-left:4pt;font-weight:700;}
 .srestr-val{font-weight:400;margin-left:3pt;}
 `;
 
