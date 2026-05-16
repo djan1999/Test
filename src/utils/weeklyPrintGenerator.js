@@ -495,7 +495,9 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           }
           html += `</div>`;
         } else {
-          html += `<div class="cr"><span class="qty">${guests}</span><span class="cname">${esc(displayName)}</span>`;
+          const presetQty = optExtraPresetQty(course?.optional_flag || key, displayName, guests);
+          const qty = presetQty != null ? presetQty : guests;
+          html += `<div class="cr"><span class="qty">${qty}</span><span class="cname">${esc(displayName)}</span>`;
           if (modLines.length) {
             html += `<span class="cmods">&nbsp;&middot;&nbsp; ${modLines.join(" &middot;&nbsp; ")}</span>`;
           }
