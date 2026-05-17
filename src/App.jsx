@@ -32,7 +32,14 @@ import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useOfflineQueue } from "./hooks/useOfflineQueue.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
 import { AdminLayout } from "./components/admin/index.js";
-import { DIETARY_KEYS, RESTRICTIONS, restrLabel, restrCompact } from "./constants/dietary.js";
+import {
+  DIETARY_KEYS,
+  RESTRICTIONS,
+  DEFAULT_RESTRICTIONS,
+  setRestrictionsCache,
+  restrLabel,
+  restrCompact,
+} from "./constants/dietary.js";
 import { WATER_OPTS, waterStyle, PAIRINGS, pairingStyle, extraPairingForSeat } from "./constants/pairings.js";
 import { BEV_TYPES } from "./constants/beverageTypes.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES } from "./lib/supabaseClient.js";
@@ -1888,6 +1895,11 @@ export default function App() {
   const [menuRulesSaved, setMenuRulesSaved] = useState(false);
   const menuRulesRef = useRef(menuRules);
   menuRulesRef.current = menuRules;
+  // Restrictions — admin-editable list, mirrors hardcoded defaults on first
+  // boot. Live values are mirrored into the dietary.js cache so existing
+  // importers see the same list without prop drilling.
+  const [restrictionsList, setRestrictionsList] = useState(() => DEFAULT_RESTRICTIONS.map(r => ({ ...r })));
+  const [courseQuickNotes, setCourseQuickNotes] = useState({});
   // Quick Access items (data-driven, replaces hardcoded APERITIF_OPTIONS)
   const [quickAccessItems, setQuickAccessItems] = useState(() => {
     try {
@@ -2876,6 +2888,54 @@ export default function App() {
   }, [menuCourses, profilesState.profiles.length, updateProfiles]);
 
 
+  // ── Restrictions + per-course quick notes ────────────────────────────────
+  // Both ride on the generic service_settings table (id-keyed key/value).
+  // setRestrictionsCache mirrors the live list into the dietary.js module so
+  // every existing importer (RESTRICTIONS / DIETARY_KEYS / restrLabel) sees
+  // the current values without prop drilling.
+  useEffect(() => {
+    if (!supabase) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ data: rData }, { data: nData }] = await Promise.all([
+          supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "restrictions").maybeSingle(),
+          supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "course_quick_notes").maybeSingle(),
+        ]);
+        if (cancelled) return;
+        const stored = rData?.state?.restrictions;
+        if (Array.isArray(stored) && stored.length > 0) {
+          setRestrictionsList(stored);
+          setRestrictionsCache(stored);
+        }
+        const notes = nData?.state;
+        if (notes && typeof notes === "object") setCourseQuickNotes(notes);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const saveRestrictions = useCallback(async (next) => {
+    const list = Array.isArray(next) ? next : [];
+    setRestrictionsList(list);
+    setRestrictionsCache(list);
+    if (!supabase) return { ok: true };
+    const { error } = await supabase.from(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "restrictions", state: { restrictions: list } });
+    if (error) { console.error("Restrictions save failed:", error); return { ok: false, error }; }
+    return { ok: true };
+  }, []);
+
+  const saveCourseQuickNotes = useCallback(async (next) => {
+    const map = next && typeof next === "object" ? next : {};
+    setCourseQuickNotes(map);
+    if (!supabase) return { ok: true };
+    const { error } = await supabase.from(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "course_quick_notes", state: map });
+    if (error) { console.error("Quick notes save failed:", error); return { ok: false, error }; }
+    return { ok: true };
+  }, []);
+
   // ── Menu template v2 (row-based canvas editor) ───────────────────────────
   const [templateSaving, setTemplateSaving] = useState(false);
   const [templateSaved,  setTemplateSaved]  = useState(false);
@@ -3374,6 +3434,7 @@ export default function App() {
       serviceDate={serviceDate}
       onSetServiceDate={persistServiceDate}
       onOpenArchive={() => setArchiveOpen(true)}
+      courseQuickNotes={courseQuickNotes}
     />
     {archiveOpen && (
       <ArchiveModal
@@ -3492,6 +3553,10 @@ export default function App() {
         quickAccessItems={quickAccessItems}
         onUpdateQuickAccess={updateQuickAccess}
         aperitifOptions={aperitifOptions}
+        restrictionsList={restrictionsList}
+        onSaveRestrictions={saveRestrictions}
+        courseQuickNotes={courseQuickNotes}
+        onSaveCourseQuickNotes={saveCourseQuickNotes}
         onExit={() => changeMode(null)}
       />
     </div>
@@ -3645,6 +3710,8 @@ export default function App() {
             tables={tables}
             reservations={reservations}
             excludeId={null}
+            menuCourses={activeMenuCourses}
+            courseQuickNotes={courseQuickNotes}
             onSave={async (row) => { const r = await upsertReservation(row); if (r?.ok) setAddResOpen(false); }}
             onCancel={() => setAddResOpen(false)}
           />

@@ -189,7 +189,7 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Allergy Sheet</title>${ALLERGY_ROBOTO}<style>${css}</style></head><body>${body}</body></html>`;
 }
 
-export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onExit, serviceDate, onSetServiceDate, onOpenArchive }) {
+export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onExit, serviceDate, onSetServiceDate, onOpenArchive, courseQuickNotes = {} }) {
   const [weekOffset,  setWeekOffset]  = useState(0);
   const [selectedDay, setSelectedDay] = useState(null);   // "YYYY-MM-DD" or null (week view)
   const [editingId,   setEditingId]   = useState(null);   // reservation id being edited, or "new"
@@ -332,7 +332,8 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 tables={tables}
                 reservations={reservations}
                 excludeId={null}
-
+                menuCourses={menuCourses}
+                courseQuickNotes={courseQuickNotes}
                 onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) { setEditingId(null); setDraftFromReservation(null); } }}
                 onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
               />
@@ -428,7 +429,8 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       tables={tables}
                       reservations={reservations}
                       excludeId={r.id}
-
+                      menuCourses={menuCourses}
+                      courseQuickNotes={courseQuickNotes}
                       onSave={async (row) => { await onUpsert(row); setEditingId(null); setDraftFromReservation(null); }}
                       onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
                     />

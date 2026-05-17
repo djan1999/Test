@@ -4,6 +4,8 @@ import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { FONT } from "./adminStyles.js";
 import MenuLayoutPanel from "./MenuLayoutPanel.jsx";
 import CourseEditorPanel from "./CourseEditorPanel.jsx";
+import RestrictionsPanel from "./RestrictionsPanel.jsx";
+import QuickNotesPanel from "./QuickNotesPanel.jsx";
 import DrinksPanel from "./DrinksPanel.jsx";
 import InventoryPanel from "./InventoryPanel.jsx";
 import SystemPanel from "./SystemPanel.jsx";
@@ -80,11 +82,18 @@ export default function AdminLayout({
   quickAccessItems,
   onUpdateQuickAccess,
   aperitifOptions = [],
+  // Restrictions + Quick Notes (per-dish presets)
+  restrictionsList = [],
+  onSaveRestrictions,
+  courseQuickNotes = {},
+  onSaveCourseQuickNotes,
   // Navigation
   onExit,
 }) {
   const [activeSection, setActiveSection] = useState("menu");
   const [dishesCoursesOpen, setDishesCoursesOpen] = useState(true);
+  const [dishesRestrictionsOpen, setDishesRestrictionsOpen] = useState(false);
+  const [dishesQuickNotesOpen, setDishesQuickNotesOpen] = useState(false);
   // Pin sidebar open by default on coarse-pointer devices (touchscreens) so
   // staff don't have to rely on a hover that touch input can't deliver.
   const [navPinned, setNavPinned] = useState(() => {
@@ -340,6 +349,69 @@ export default function AdminLayout({
                         menuCourses={menuCourses}
                         onUpdateCourses={onUpdateMenuCourses}
                         onSaveCourses={onSaveMenuCourses}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
+                  <button
+                    onClick={() => setDishesRestrictionsOpen(v => !v)}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "10px 14px",
+                      border: "none",
+                      background: tokens.ink.bg,
+                      cursor: "pointer",
+                      fontFamily: FONT,
+                    }}
+                    title={dishesRestrictionsOpen ? "Collapse" : "Expand"}
+                  >
+                    <span style={{ fontSize: 9, letterSpacing: 2, color: tokens.charcoal.default, textTransform: "uppercase", fontWeight: 700 }}>
+                      ◈ Restrictions
+                    </span>
+                    <span style={{ fontSize: 12, color: tokens.ink[3] }}>{dishesRestrictionsOpen ? "▾" : "▸"}</span>
+                  </button>
+                  {dishesRestrictionsOpen && (
+                    <div style={{ padding: "14px 14px 16px" }}>
+                      <RestrictionsPanel
+                        restrictions={restrictionsList}
+                        onSave={onSaveRestrictions}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
+                  <button
+                    onClick={() => setDishesQuickNotesOpen(v => !v)}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "10px 14px",
+                      border: "none",
+                      background: tokens.ink.bg,
+                      cursor: "pointer",
+                      fontFamily: FONT,
+                    }}
+                    title={dishesQuickNotesOpen ? "Collapse" : "Expand"}
+                  >
+                    <span style={{ fontSize: 9, letterSpacing: 2, color: tokens.charcoal.default, textTransform: "uppercase", fontWeight: 700 }}>
+                      ◈ Quick Notes
+                    </span>
+                    <span style={{ fontSize: 12, color: tokens.ink[3] }}>{dishesQuickNotesOpen ? "▾" : "▸"}</span>
+                  </button>
+                  {dishesQuickNotesOpen && (
+                    <div style={{ padding: "14px 14px 16px" }}>
+                      <QuickNotesPanel
+                        menuCourses={menuCourses}
+                        quickNotes={courseQuickNotes}
+                        onSave={onSaveCourseQuickNotes}
                       />
                     </div>
                   )}

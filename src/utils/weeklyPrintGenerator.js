@@ -461,9 +461,8 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
 
         // kcNote.note rendered as a mod (same style as restriction mods, no brackets)
         let modLines = kcNote.note ? [esc(kcNote.note)] : [];
+        const modCounts = {};
         if (!isCelebration && restrictions.length > 0) {
-          const modCounts = {};
-
           const seatGroups = new Map();
           const unassignedGroups = [];
           restrictions.forEach(r => {
@@ -481,11 +480,18 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
             const mod = getCourseMod(course, restrKeys);
             if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
           });
-
-          if (Object.keys(modCounts).length > 0) {
-            modLines.push(...Object.entries(modCounts)
-              .map(([name, count]) => `${count}&#215; ${esc(name.toLowerCase())}`));
-          }
+        }
+        // Merge per-course quick-note presets (saved in ResvForm). They render
+        // alongside restriction-derived mods using the same Nx format.
+        if (kcNote.presets && typeof kcNote.presets === "object") {
+          Object.entries(kcNote.presets).forEach(([label, count]) => {
+            const n = Number(count) || 0;
+            if (n > 0) modCounts[label] = (modCounts[label] || 0) + n;
+          });
+        }
+        if (Object.keys(modCounts).length > 0) {
+          modLines.push(...Object.entries(modCounts)
+            .map(([name, count]) => `${count}&#215; ${esc(name.toLowerCase())}`));
         }
 
         if (isOpt) {
