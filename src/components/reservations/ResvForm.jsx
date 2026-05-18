@@ -51,6 +51,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
   const [birthday, setBirthday] = useState(!!initial?.data?.birthday);
   const [cakeNote, setCakeNote] = useState(initial?.data?.cakeNote || "");
   const [restrictions, setRestrictions] = useState(initial?.data?.restrictions || []);
+  const [restrictionNote, setRestrictionNote] = useState(initial?.data?.restrictionNote || "");
   const [notes, setNotes] = useState(initial?.data?.notes || "");
   const [saving, setSaving] = useState(false);
 
@@ -82,7 +83,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
       service_session: serviceSession, resName: name, resTime: time, menuType, lang, guests, guestType,
       room: sortedRooms[0] || "",
       rooms: sortedRooms,
-      birthday, cakeNote: birthday ? cakeNote : "", restrictions, notes,
+      birthday, cakeNote: birthday ? cakeNote : "", restrictions, restrictionNote, notes,
       tableGroup: sortedGroup,
       courseOverrides: initial?.data?.courseOverrides || {},
       kitchenCourseNotes: initial?.data?.kitchenCourseNotes || {},
@@ -302,6 +303,17 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             })}
           </div>
         )}
+      </div>
+
+      <div style={{ marginBottom: 10 }}>
+        <div style={fieldLabel}>Restriction note</div>
+        <input
+          type="text"
+          value={restrictionNote}
+          onChange={(e) => setRestrictionNote(e.target.value)}
+          placeholder="e.g. no rabbit or pork (lard, spread, stocks ok)"
+          style={{ ...baseInp, fontSize: MOBILE_SAFE_INPUT_SIZE, padding: "6px 8px" }}
+        />
       </div>
 
       <div style={{ marginBottom: 14 }}>

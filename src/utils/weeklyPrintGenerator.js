@@ -160,7 +160,9 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
       }
       resv.forEach(r => {
         const d = r.data || {};
-        const restr = restrText(d.restrictions);
+        const restrParts = [restrText(d.restrictions)];
+        if (d.restrictionNote?.trim()) restrParts.push(d.restrictionNote.trim());
+        const restr = restrParts.filter(Boolean).join("\n");
         body += `<tr>`;
         body += `<td></td>`;
         body += `<td class="center">${d.guests || 2}</td>`;
@@ -258,6 +260,7 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
       const label = def ? def.label.toLowerCase() : key;
       return `${count}x ${label}`;
     });
+    if (d.restrictionNote?.trim()) restrLines.push(d.restrictionNote.trim());
     body += `<td class="center" style="line-height:1.3;">${esc(mt)}<br>${esc(restrLines.join(", "))}</td>`;
   });
   body += `</tr>`;

@@ -75,13 +75,15 @@ function bulletsForReservation(r) {
     cakeChunks.push(`1x ${note}`);
   }
 
-  if (grouped.length === 0 && cakeChunks.length === 0) {
+  const restrictionNote = d.restrictionNote?.trim() || "";
+  if (grouped.length === 0 && cakeChunks.length === 0 && !restrictionNote) {
     out.push("No dietaries or SO");
   } else {
     const parts = [];
     if (grouped.length > 0) parts.push(grouped.join(", "));
-    else parts.push("No dietaries");
+    else if (!restrictionNote) parts.push("No dietaries");
     if (cakeChunks.length > 0) parts.push(cakeChunks.join(", "));
+    if (restrictionNote) parts.push(restrictionNote);
     out.push(parts.join(", "));
   }
 
