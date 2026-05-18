@@ -477,7 +477,8 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
           style={{
             columnCount: 2,
             columnGap: "14mm",
-            columnFill: "balance",
+            columnFill: "auto",
+            height: "186mm",
           }}
         >
           {/* Header — inside column flow so it sits left in column 1 above slots */}
@@ -725,7 +726,8 @@ function PrintStyles() {
         .service-breakdown-print-area {
           column-count: 2;
           column-gap: 14mm;
-          column-fill: balance;
+          column-fill: auto;
+          height: 186mm;
         }
         .header-block {
           break-after: avoid;
