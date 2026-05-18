@@ -684,11 +684,20 @@ function PrintStyles() {
         .service-breakdown-overlay * { visibility: visible !important; }
         .service-breakdown-overlay {
           position: absolute !important;
-          inset: 0 !important;
+          top: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          bottom: auto !important;
+          height: auto !important;
           background: ${tokens.neutral[0]} !important;
           padding: 0 !important;
           display: block !important;
           overflow: visible !important;
+        }
+        html, body {
+          height: auto !important;
+          margin: 0 !important;
+          padding: 0 !important;
         }
         .sb-sheet {
           box-shadow: none !important;

@@ -55,10 +55,17 @@ function buildWeeklyRows(reservations, weekDays, restrictionDefs = []) {
   const restrTxt = rs => {
     if (!rs?.length) return "";
     const c = {};
-    rs.forEach(r => { c[r.note] = (c[r.note]||0)+1; });
+    const dt = {};
+    rs.forEach(r => {
+      c[r.note] = (c[r.note]||0)+1;
+      if (r.detail && !dt[r.note]) dt[r.note] = String(r.detail).trim();
+    });
     return Object.entries(c).map(([k,n]) => {
       const def = restrictionDefs.find(d => d.key===k);
-      return `${n}x ${def ? def.label : k}`;
+      const label = def ? def.label : k;
+      const detail = !def ? (dt[k] || "") : "";
+      const base = `${n}x ${label}`;
+      return detail ? `${base} (${detail})` : base;
     }).join("\n");
   };
   const rows = [];
@@ -171,8 +178,18 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
     const d = r.data || {};
     const mt = d.menuType === "short" ? "SHORT MENU" : "LONG MENU";
     const rc = {};
-    (d.restrictions || []).forEach(rs => { rc[rs.note] = (rc[rs.note] || 0) + 1; });
-    const rLines = Object.entries(rc).map(([k, n]) => { const def = restrictionDefs.find(x => x.key === k); return `${n}x ${def ? def.label.toLowerCase() : k}`; });
+    const rd = {};
+    (d.restrictions || []).forEach(rs => {
+      rc[rs.note] = (rc[rs.note] || 0) + 1;
+      if (rs.detail && !rd[rs.note]) rd[rs.note] = String(rs.detail).trim();
+    });
+    const rLines = Object.entries(rc).map(([k, n]) => {
+      const def = restrictionDefs.find(x => x.key === k);
+      const label = def ? def.label.toLowerCase() : k;
+      const detail = !def ? (rd[k] || "") : "";
+      const base = `${n}x ${label}`;
+      return detail ? `${base} (${detail})` : base;
+    });
     const val = allergyEdits[`restr-${r.id}`] ?? `${mt}\n${rLines.join(", ")}`;
     body += `<td style="text-align:center;white-space:pre-line;">${escH(val)}</td>`;
   });
@@ -743,8 +760,18 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                           const d = r.data || {};
                           const mt = d.menuType === "short" ? "SHORT MENU" : "LONG MENU";
                           const rc = {};
-                          (d.restrictions || []).forEach(rs => { rc[rs.note] = (rc[rs.note] || 0) + 1; });
-                          const rLines = Object.entries(rc).map(([k, n]) => { const def = RESTRICTIONS.find(x => x.key === k); return `${n}x ${def ? def.label.toLowerCase() : k}`; });
+                          const rd = {};
+                          (d.restrictions || []).forEach(rs => {
+                            rc[rs.note] = (rc[rs.note] || 0) + 1;
+                            if (rs.detail && !rd[rs.note]) rd[rs.note] = String(rs.detail).trim();
+                          });
+                          const rLines = Object.entries(rc).map(([k, n]) => {
+                            const def = RESTRICTIONS.find(x => x.key === k);
+                            const label = def ? def.label.toLowerCase() : k;
+                            const detail = !def ? (rd[k] || "") : "";
+                            const base = `${n}x ${label}`;
+                            return detail ? `${base} (${detail})` : base;
+                          });
                           const base = `${mt}\n${rLines.join(", ")}`;
                           return (
                             <td key={r.id} style={{ ...rColSt }}>
