@@ -466,7 +466,6 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
           fontSize: "10pt",
           lineHeight: 1.45,
           width: "297mm",
-          minHeight: "210mm",
           margin: "0 auto",
           padding: "12mm 14mm",
           boxSizing: "border-box",
@@ -582,14 +581,14 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
             );
           })}
 
-          {/* Bottom section — spans both columns so it always sits below the reservation list */}
+          {/* Bottom section — sits at the end of the column flow (right column) */}
           <div
             className="bottom-section"
             style={{
               marginTop: "12pt",
               paddingTop: "5pt",
               borderTop: `1px solid ${tokens.neutral[900]}`,
-              columnSpan: "all",
+              breakInside: "avoid",
             }}
           >
             <div
@@ -759,7 +758,8 @@ function PrintStyles() {
           margin-top: 0 !important;
         }
         .bottom-section {
-          column-span: all !important;
+          break-inside: avoid;
+          page-break-inside: avoid;
           margin-top: 12pt !important;
           padding-top: 5pt !important;
         }
