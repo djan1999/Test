@@ -51,8 +51,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
   const [birthday, setBirthday] = useState(!!initial?.data?.birthday);
   const [cakeNote, setCakeNote] = useState(initial?.data?.cakeNote || "");
   const [restrictions, setRestrictions] = useState(initial?.data?.restrictions || []);
-  const [restrictionNote, setRestrictionNote] = useState(initial?.data?.restrictionNote || "");
   const [notes, setNotes] = useState(initial?.data?.notes || "");
+  const [customLabel, setCustomLabel] = useState("");
+  const [customDetail, setCustomDetail] = useState("");
+  const [showCustomInput, setShowCustomInput] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const sortedGroup = [...tableIds].sort((a, b) => a - b);
@@ -83,7 +85,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
       service_session: serviceSession, resName: name, resTime: time, menuType, lang, guests, guestType,
       room: sortedRooms[0] || "",
       rooms: sortedRooms,
-      birthday, cakeNote: birthday ? cakeNote : "", restrictions, restrictionNote, notes,
+      birthday, cakeNote: birthday ? cakeNote : "", restrictions, notes,
       tableGroup: sortedGroup,
       courseOverrides: initial?.data?.courseOverrides || {},
       kitchenCourseNotes: initial?.data?.kitchenCourseNotes || {},
@@ -289,31 +291,74 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             </div>
           );
         })}
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[4], textTransform: "uppercase", marginBottom: 5 }}>Custom</div>
+          {!showCustomInput ? (
+            <button onClick={() => setShowCustomInput(true)} style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "10px 12px",
+              borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
+              border: `1px dashed ${tokens.ink[4]}`,
+              background: tokens.neutral[0],
+              color: tokens.text.muted,
+            }}>
+              + Custom restriction
+            </button>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 8, border: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[50] }}>
+              <input
+                type="text"
+                value={customLabel}
+                onChange={(e) => setCustomLabel(e.target.value)}
+                placeholder="Short label (e.g. NO RABBIT)"
+                style={{ ...baseInp, fontSize: MOBILE_SAFE_INPUT_SIZE, padding: "6px 8px" }}
+              />
+              <input
+                type="text"
+                value={customDetail}
+                onChange={(e) => setCustomDetail(e.target.value)}
+                placeholder="Details (optional, e.g. lard, spread, stocks ok)"
+                style={{ ...baseInp, fontSize: MOBILE_SAFE_INPUT_SIZE, padding: "6px 8px" }}
+              />
+              <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                <button onClick={() => { setShowCustomInput(false); setCustomLabel(""); setCustomDetail(""); }} style={{
+                  fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
+                  padding: "6px 12px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0,
+                  cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3],
+                }}>Cancel</button>
+                <button onClick={() => {
+                  const label = customLabel.trim();
+                  if (!label) return;
+                  setRestrictions((rs) => [...rs, { pos: null, note: label, detail: customDetail.trim() }]);
+                  setCustomLabel(""); setCustomDetail(""); setShowCustomInput(false);
+                }} disabled={!customLabel.trim()} style={{
+                  fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
+                  padding: "6px 14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0,
+                  cursor: customLabel.trim() ? "pointer" : "not-allowed",
+                  background: tokens.charcoal.default, color: tokens.neutral[0],
+                  fontWeight: 600, opacity: customLabel.trim() ? 1 : 0.5,
+                }}>Add</button>
+              </div>
+            </div>
+          )}
+        </div>
         {restrictions.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 10 }}>
             {restrictions.map((r, i) => {
               const def = RESTRICTIONS.find((x) => x.key === r.note);
               const label = def ? `${def.emoji} ${def.label}` : r.note;
+              const detail = !def && r.detail ? r.detail : "";
               return (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, borderRadius: 0 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text }}>{label}</span>
+                  <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text }}>
+                    {label}
+                    {detail && <span style={{ opacity: 0.75, marginLeft: 4 }}>({detail})</span>}
+                  </span>
                   <button onClick={() => setRestrictions((rs) => rs.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: tokens.red.border, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0, width: 28, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation", flexShrink: 0 }}>×</button>
                 </div>
               );
             })}
           </div>
         )}
-      </div>
-
-      <div style={{ marginBottom: 10 }}>
-        <div style={fieldLabel}>Restriction note</div>
-        <input
-          type="text"
-          value={restrictionNote}
-          onChange={(e) => setRestrictionNote(e.target.value)}
-          placeholder="e.g. no rabbit or pork (lard, spread, stocks ok)"
-          style={{ ...baseInp, fontSize: MOBILE_SAFE_INPUT_SIZE, padding: "6px 8px" }}
-        />
       </div>
 
       <div style={{ marginBottom: 14 }}>

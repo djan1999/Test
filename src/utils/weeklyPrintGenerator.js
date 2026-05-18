@@ -114,17 +114,22 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
     return parts.join("<br>");
   };
 
-  // Build restriction text
+  // Build restriction text. Custom entries (note not in restrictionDefs)
+  // include their optional detail in parens.
   const restrText = (restrictions) => {
     if (!restrictions?.length) return "";
     const counts = {};
+    const details = {};
     restrictions.forEach(r => {
       counts[r.note] = (counts[r.note] || 0) + 1;
+      if (r.detail && !details[r.note]) details[r.note] = String(r.detail).trim();
     });
     return Object.entries(counts).map(([key, count]) => {
       const def = restrictionDefs.find(d => d.key === key);
       const label = def ? def.label.toLowerCase() : key;
-      return `${count}x ${label}`;
+      const detail = !def ? (details[key] || "") : "";
+      const base = `${count}x ${label}`;
+      return detail ? `${base} (${detail})` : base;
     }).join("\n");
   };
 
@@ -160,9 +165,7 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
       }
       resv.forEach(r => {
         const d = r.data || {};
-        const restrParts = [restrText(d.restrictions)];
-        if (d.restrictionNote?.trim()) restrParts.push(d.restrictionNote.trim());
-        const restr = restrParts.filter(Boolean).join("\n");
+        const restr = restrText(d.restrictions);
         body += `<tr>`;
         body += `<td></td>`;
         body += `<td class="center">${d.guests || 2}</td>`;
@@ -252,15 +255,18 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     const d = r.data || {};
     const mt = d.menuType === "short" ? "SHORT MENU" : "LONG MENU";
     const restrCounts = {};
+    const restrDetails = {};
     (d.restrictions || []).forEach(rs => {
       restrCounts[rs.note] = (restrCounts[rs.note] || 0) + 1;
+      if (rs.detail && !restrDetails[rs.note]) restrDetails[rs.note] = String(rs.detail).trim();
     });
     const restrLines = Object.entries(restrCounts).map(([key, count]) => {
       const def = restrictionDefs.find(x => x.key === key);
       const label = def ? def.label.toLowerCase() : key;
-      return `${count}x ${label}`;
+      const detail = !def ? (restrDetails[key] || "") : "";
+      const base = `${count}x ${label}`;
+      return detail ? `${base} (${detail})` : base;
     });
-    if (d.restrictionNote?.trim()) restrLines.push(d.restrictionNote.trim());
     body += `<td class="center" style="line-height:1.3;">${esc(mt)}<br>${esc(restrLines.join(", "))}</td>`;
   });
   body += `</tr>`;
@@ -422,11 +428,23 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           }
         });
 
-      // Restrictions summary: all restrictions, no positions, deduplicated with counts
+      // Restrictions summary: all restrictions, no positions, deduplicated with counts.
+      // Custom entries (note not in restrictionDefs) carry an optional detail.
       const restrCounts = {};
-      restrictions.forEach(r => { if (r.note) restrCounts[r.note] = (restrCounts[r.note] || 0) + 1; });
+      const restrDetails = {};
+      restrictions.forEach(r => {
+        if (!r.note) return;
+        restrCounts[r.note] = (restrCounts[r.note] || 0) + 1;
+        if (r.detail && !restrDetails[r.note]) restrDetails[r.note] = String(r.detail).trim();
+      });
       const restrSummary = Object.entries(restrCounts)
-        .map(([key, count]) => count > 1 ? `${count}x ${restrLabel(key)}` : restrLabel(key))
+        .map(([key, count]) => {
+          const def = restrictionDefs.find(x => x.key === key);
+          const label = def ? restrLabel(key) : key;
+          const detail = !def ? (restrDetails[key] || "") : "";
+          const base = count > 1 ? `${count}x ${label}` : label;
+          return detail ? `${base} (${detail})` : base;
+        })
         .join(", ");
 
       // ── Build HTML ────────────────────────────────────────────────────────────────────

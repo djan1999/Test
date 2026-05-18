@@ -36,15 +36,18 @@ function tableLabel(r) {
 // then singletons, alphabetical within each group.
 function groupRestrictions(restrictions) {
   const counts = new Map();
+  const details = new Map();
   for (const r of restrictions || []) {
     const key = (r && (r.note || r.key)) || "";
     if (!key) continue;
     counts.set(key, (counts.get(key) || 0) + 1);
+    if (r.detail && !details.has(key)) details.set(key, String(r.detail).trim());
   }
   const entries = [...counts.entries()].map(([key, count]) => {
     const def = RESTRICTIONS.find((x) => x.key === key);
     const label = def ? def.label : key;
-    return { key, label, count };
+    const detail = !def ? (details.get(key) || "") : "";
+    return { key, label, count, detail };
   });
   entries.sort((a, b) => {
     const aGrouped = a.count > 1;
@@ -52,7 +55,10 @@ function groupRestrictions(restrictions) {
     if (aGrouped !== bGrouped) return aGrouped ? -1 : 1;
     return a.label.localeCompare(b.label);
   });
-  return entries.map((e) => `${e.count}x ${e.label}`);
+  return entries.map((e) => {
+    const base = `${e.count}x ${e.label}`;
+    return e.detail ? `${base} (${e.detail})` : base;
+  });
 }
 
 // Build the auto-seeded bullet lines for a reservation.
@@ -75,15 +81,13 @@ function bulletsForReservation(r) {
     cakeChunks.push(`1x ${note}`);
   }
 
-  const restrictionNote = d.restrictionNote?.trim() || "";
-  if (grouped.length === 0 && cakeChunks.length === 0 && !restrictionNote) {
+  if (grouped.length === 0 && cakeChunks.length === 0) {
     out.push("No dietaries or SO");
   } else {
     const parts = [];
     if (grouped.length > 0) parts.push(grouped.join(", "));
-    else if (!restrictionNote) parts.push("No dietaries");
+    else parts.push("No dietaries");
     if (cakeChunks.length > 0) parts.push(cakeChunks.join(", "));
-    if (restrictionNote) parts.push(restrictionNote);
     out.push(parts.join(", "));
   }
 
