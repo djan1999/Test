@@ -332,8 +332,6 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 tables={tables}
                 reservations={reservations}
                 excludeId={null}
-                menuCourses={menuCourses}
-                courseQuickNotes={courseQuickNotes}
                 onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) { setEditingId(null); setDraftFromReservation(null); } }}
                 onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
               />
@@ -429,8 +427,6 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       tables={tables}
                       reservations={reservations}
                       excludeId={r.id}
-                      menuCourses={menuCourses}
-                      courseQuickNotes={courseQuickNotes}
                       onSave={async (row) => { await onUpsert(row); setEditingId(null); setDraftFromReservation(null); }}
                       onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
                     />
@@ -441,7 +437,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 {showTicket && ticketVirtualTable && (
                   <CenteredModal onClose={() => setTicketId(null)} label={`[TICKET PREVIEW · ${tLabel}]`}>
                     <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
-                      <KitchenTicket table={ticketVirtualTable} menuCourses={menuCourses} upd={updForTicket} />
+                      <KitchenTicket table={ticketVirtualTable} menuCourses={menuCourses} upd={updForTicket} editable quickNotes={courseQuickNotes} />
                     </div>
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
                       <button onClick={() => setTicketId(null)}

@@ -10,12 +10,74 @@ import { extraPairingLabel, extraPairingForSeat } from "../../constants/pairings
 
 const FONT = tokens.font;
 
-export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {} }) {
+export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, editable = false, quickNotes = {} }) {
   const seats = table.seats || [];
   const restrictions = table.restrictions || [];
   const log = table.kitchenLog || {};
   const [assigningRestrIdx, setAssigningRestrIdx] = useState(null);
   const kitchenCourseNotes = table.kitchenCourseNotes || {};
+  // Edit mode (only when `editable` prop set — i.e. ticket preview in reservations).
+  // Per-course edits stage into draftNotes and commit explicitly via the Save button,
+  // so the user can review changes before persisting them to the reservation row.
+  const [showEdit, setShowEdit] = useState(false);
+  const [pickingRestr, setPickingRestr] = useState(null);
+  const [customNote, setCustomNote] = useState("");
+  const [draftNotes, setDraftNotes] = useState(kitchenCourseNotes);
+
+  useEffect(() => {
+    if (!showEdit) setDraftNotes(kitchenCourseNotes);
+  }, [showEdit, kitchenCourseNotes]);
+
+  const addKitchenRestr = (note, seatId) => {
+    if (!note?.trim()) return;
+    const next = [...restrictions, { note: note.trim(), pos: (seatId ?? null), kitchenAdded: true }];
+    upd(table.id, "restrictions", next);
+    setPickingRestr(null);
+    setCustomNote("");
+  };
+  const removeKitchenRestr = (origIdx) => {
+    const next = restrictions.filter((_, i) => i !== origIdx);
+    upd(table.id, "restrictions", next);
+  };
+  const updateDraftEntry = (key, patch) => {
+    setDraftNotes((prev) => {
+      const current = prev[key] || {};
+      const next = { ...current, ...patch };
+      if (!next.name) delete next.name;
+      if (!next.note) delete next.note;
+      if (next.presets && Object.keys(next.presets).length === 0) delete next.presets;
+      const out = { ...prev };
+      if (!next.name && !next.note && !next.presets) delete out[key];
+      else out[key] = next;
+      return out;
+    });
+  };
+  const bumpDraftPreset = (key, text) => {
+    const current = draftNotes[key]?.presets || {};
+    updateDraftEntry(key, { presets: { ...current, [text]: (current[text] || 0) + 1 } });
+  };
+  const clearDraftPreset = (key, text) => {
+    const current = { ...(draftNotes[key]?.presets || {}) };
+    delete current[text];
+    updateDraftEntry(key, { presets: current });
+  };
+  const clearDraftEntry = (key) => {
+    setDraftNotes((prev) => {
+      const out = { ...prev };
+      delete out[key];
+      return out;
+    });
+  };
+  const saveDraftNotes = () => {
+    upd(table.id, "kitchenCourseNotes", draftNotes);
+    setShowEdit(false);
+  };
+  const cancelDraftNotes = () => {
+    setDraftNotes(kitchenCourseNotes);
+    setShowEdit(false);
+    setPickingRestr(null);
+    setCustomNote("");
+  };
 
   const fire = (courseKey) => {
     const now = fmt(new Date());
@@ -171,6 +233,19 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
           <div style={{ fontFamily: FONT, fontSize: "14px", fontWeight: 700, color: allDone ? tokens.green.border : tokens.ink[0], lineHeight: 1 }}>{firedCount}<span style={{ fontSize: "9px", color: tokens.ink[3], fontWeight: 400 }}>/{totalCourses}</span></div>
           {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: "8px", color: tokens.green.border }}>{durationMins} min</div>}
+          {editable && (
+            <button
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); if (showEdit) cancelDraftNotes(); else setShowEdit(true); }}
+              style={{
+                fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "8px 7px",
+                border: `1px solid ${showEdit ? tokens.charcoal.default : tokens.ink[4]}`,
+                borderRadius: 0, cursor: "pointer",
+                background: showEdit ? tokens.tint.parchment : tokens.neutral[0],
+                color: showEdit ? tokens.ink[0] : tokens.ink[3],
+                touchAction: "manipulation",
+              }}>{showEdit ? "✕ CANCEL" : "✏ EDIT"}</button>
+          )}
         </div>
       </div>
 
@@ -179,6 +254,83 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         <div style={{ background: tokens.tint.parchment, borderBottom: `1px solid ${tokens.ink[4]}`, padding: "5px 10px", display: "flex", gap: 6, alignItems: "flex-start" }}>
           <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], flexShrink: 0, lineHeight: 1.4 }}>📋</span>
           <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[2], lineHeight: 1.35, fontStyle: "italic" }}>{table.notes}</span>
+        </div>
+      )}
+
+      {/* ── Ad-hoc restriction editor (ticket-preview only) ── */}
+      {editable && showEdit && (
+        <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: "8px 10px", background: tokens.neutral[0] }}>
+          {restrictions.map((r, i) => r.kitchenAdded ? (
+            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+              <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>
+                {restrLabel(r.note)}{r.pos ? ` → P${r.pos}` : " → All"}
+              </span>
+              <button
+                onPointerDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); removeKitchenRestr(i); }}
+                aria-label={`Remove restriction ${restrLabel(r.note)}`}
+                style={{ fontFamily: FONT, fontSize: "10px", padding: 0, width: 32, height: 32, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation", flexShrink: 0 }}>✕</button>
+            </div>
+          ) : null)}
+          {!pickingRestr && (
+            <>
+              <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], marginBottom: 6 }}>ADD RESTRICTION</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {RESTRICTIONS.map(r => (
+                  <button key={r.key}
+                    onPointerDown={e => e.stopPropagation()}
+                    onClick={e => { e.stopPropagation(); setPickingRestr(r.key); }}
+                    style={{ fontFamily: FONT, fontSize: "9px", padding: "8px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[2], touchAction: "manipulation" }}>
+                    {r.emoji} {r.label}
+                  </button>
+                ))}
+                <button
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); setPickingRestr("custom"); }}
+                  style={{ fontFamily: FONT, fontSize: "9px", padding: "8px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3], touchAction: "manipulation" }}>
+                  + Custom
+                </button>
+              </div>
+            </>
+          )}
+          {pickingRestr && pickingRestr !== "custom" && (
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[2], marginBottom: 6 }}>
+                {restrLabel(pickingRestr)} → assign to:
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, null); }}
+                  style={{ fontFamily: FONT, fontSize: "9px", padding: "8px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                {seats.map(s => (
+                  <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(pickingRestr, s.id); }}
+                    style={{ fontFamily: FONT, fontSize: "9px", padding: "8px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
+                ))}
+                <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPickingRestr(null); }}
+                  style={{ fontFamily: FONT, fontSize: "9px", padding: "8px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3], touchAction: "manipulation" }}>cancel</button>
+              </div>
+            </div>
+          )}
+          {pickingRestr === "custom" && (
+            <div>
+              <input
+                value={customNote}
+                onChange={e => setCustomNote(e.target.value)}
+                placeholder="e.g. No Ricotta"
+                onPointerDown={e => e.stopPropagation()}
+                style={{ fontFamily: FONT, fontSize: "10px", padding: "5px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, width: "100%", marginBottom: 6, boxSizing: "border-box" }}
+              />
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, null); }}
+                  style={{ fontFamily: FONT, fontSize: "9px", padding: "8px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 700, touchAction: "manipulation" }}>All</button>
+                {seats.map(s => (
+                  <button key={s.id} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); addKitchenRestr(customNote, s.id); }}
+                    style={{ fontFamily: FONT, fontSize: "9px", padding: "8px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, fontWeight: 700, touchAction: "manipulation" }}>P{s.id}</button>
+                ))}
+                <button onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setPickingRestr(null); setCustomNote(""); }}
+                  style={{ fontFamily: FONT, fontSize: "9px", padding: "8px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3], touchAction: "manipulation" }}>cancel</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -345,6 +497,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
           const kcNote = kcNotePreview;
           const displayName = kcNote.name || baseName;
+          const draftEntry = draftNotes[key] || {};
+          const draftPresets = draftEntry.presets || {};
+          const chips = (editable && showEdit) ? (quickNotes[key] || []) : [];
+          const draftHasAny = draftEntry.name || draftEntry.note || Object.keys(draftPresets).length > 0;
 
           return (
             <div key={key} style={{
@@ -353,8 +509,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               borderLeft: fired ? `4px solid ${tokens.green.border}` : kcNote.name || kcNote.note ? `4px solid ${tokens.red.text}` : "4px solid transparent",
             }}>
               <div
-                onClick={() => (fired ? unfire(key) : fire(key))}
-                style={{ display: "flex", alignItems: "center", padding: "7px 10px 7px 8px", gap: 7, cursor: "pointer" }}>
+                onClick={() => { if (editable && showEdit) return; fired ? unfire(key) : fire(key); }}
+                style={{ display: "flex", alignItems: "center", padding: "7px 10px 7px 8px", gap: 7, cursor: editable && showEdit ? "default" : "pointer" }}>
                 <span style={{ fontFamily: FONT, fontSize: "12px", color: fired ? tokens.green.border : tokens.ink[4], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
@@ -379,10 +535,82 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                 </div>
                 {firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.border, fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
               </div>
+              {editable && showEdit && (
+                <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} style={{ padding: "0 10px 8px 28px", display: "flex", flexDirection: "column", gap: 5, background: draftHasAny ? tokens.red.bg : "transparent" }}>
+                  <input
+                    value={draftEntry.name || ""}
+                    onChange={e => updateDraftEntry(key, { name: e.target.value })}
+                    placeholder={`Rename "${baseName}"…`}
+                    style={{ fontFamily: FONT, fontSize: "10px", padding: "8px 7px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
+                  />
+                  <input
+                    value={draftEntry.note || ""}
+                    onChange={e => updateDraftEntry(key, { note: e.target.value })}
+                    placeholder="Note (e.g. No Ricotta)…"
+                    style={{ fontFamily: FONT, fontSize: "10px", padding: "8px 7px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
+                  />
+                  {chips.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      {chips.map(chip => {
+                        const count = draftPresets[chip] || 0;
+                        const active = count > 0;
+                        return (
+                          <button key={chip}
+                            onPointerDown={e => e.stopPropagation()}
+                            onClick={e => { e.stopPropagation(); bumpDraftPreset(key, chip); }}
+                            onContextMenu={e => { e.preventDefault(); if (active) clearDraftPreset(key, chip); }}
+                            title={active ? "Click to add another, right-click × to clear" : "Click to apply"}
+                            style={{
+                              fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "6px 9px",
+                              border: `1px solid ${active ? tokens.red.border : tokens.ink[4]}`,
+                              borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
+                              background: active ? tokens.red.bg : tokens.neutral[0],
+                              color: active ? tokens.red.text : tokens.ink[2],
+                              fontWeight: active ? 600 : 400,
+                            }}>
+                            {active && <span style={{ marginRight: 4, fontWeight: 700 }}>{count}×</span>}
+                            {chip}
+                            {active && (
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={e => { e.stopPropagation(); clearDraftPreset(key, chip); }}
+                                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); e.preventDefault(); clearDraftPreset(key, chip); } }}
+                                aria-label={`Clear ${chip}`}
+                                style={{ marginLeft: 4, color: tokens.red.border, cursor: "pointer", fontSize: 12, lineHeight: 1, display: "inline-block" }}
+                              >×</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {draftHasAny && (
+                    <button
+                      onPointerDown={e => e.stopPropagation()}
+                      onClick={e => { e.stopPropagation(); clearDraftEntry(key); }}
+                      style={{ fontFamily: FONT, fontSize: 9, padding: "6px 8px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, alignSelf: "flex-start", touchAction: "manipulation" }}>Clear this course</button>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
+
+      {/* ── Save / cancel bar (ticket-preview only) ── */}
+      {editable && showEdit && (
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, padding: "10px 10px 12px", borderTop: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0] }}>
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); cancelDraftNotes(); }}
+            style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 16px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3], touchAction: "manipulation" }}>CANCEL</button>
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); saveDraftNotes(); }}
+            style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 20px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 600, touchAction: "manipulation" }}>SAVE</button>
+        </div>
+      )}
 
       {/* ── Done footer ── */}
       {allDone && (() => {

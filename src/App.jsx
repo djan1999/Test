@@ -3710,8 +3710,6 @@ export default function App() {
             tables={tables}
             reservations={reservations}
             excludeId={null}
-            menuCourses={activeMenuCourses}
-            courseQuickNotes={courseQuickNotes}
             onSave={async (row) => { const r = await upsertReservation(row); if (r?.ok) setAddResOpen(false); }}
             onCancel={() => setAddResOpen(false)}
           />

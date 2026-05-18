@@ -26,35 +26,7 @@ const parseSittingTimes = () => {
 const SITTING_TIMES = parseSittingTimes();
 const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
 
-const courseKeyOf = (course) => course.course_key || course.menu?.name || course.position || "";
-const courseLabelOf = (course) => course.menu?.name || course.course_key || `Course ${course.position ?? ""}`;
-
-function sanitizeKitchenCourseNotes(map) {
-  if (!map || typeof map !== "object") return {};
-  const out = {};
-  Object.entries(map).forEach(([key, entry]) => {
-    if (!entry || typeof entry !== "object") return;
-    const name = String(entry.name || "").trim();
-    const note = String(entry.note || "").trim();
-    const presets = {};
-    if (entry.presets && typeof entry.presets === "object") {
-      Object.entries(entry.presets).forEach(([label, count]) => {
-        const n = Number(count) || 0;
-        if (n > 0) presets[label] = n;
-      });
-    }
-    const hasPresets = Object.keys(presets).length > 0;
-    if (!name && !note && !hasPresets) return;
-    const clean = {};
-    if (name) clean.name = name;
-    if (note) clean.note = note;
-    if (hasPresets) clean.presets = presets;
-    out[key] = clean;
-  });
-  return out;
-}
-
-export default function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel, menuCourses = [], courseQuickNotes = {} }) {
+export default function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }) {
   const isMobile = useIsMobile(560);
   const [tableIds, setTableIds] = useState(
     initial?.data?.tableGroup?.length > 1 ? initial.data.tableGroup.map(Number)
@@ -76,7 +48,6 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
   const [cakeNote, setCakeNote] = useState(initial?.data?.cakeNote || "");
   const [restrictions, setRestrictions] = useState(initial?.data?.restrictions || []);
   const [notes, setNotes] = useState(initial?.data?.notes || "");
-  const [kitchenCourseNotes, setKitchenCourseNotes] = useState(initial?.data?.kitchenCourseNotes || {});
   const [saving, setSaving] = useState(false);
 
   const sortedGroup = [...tableIds].sort((a, b) => a - b);
@@ -100,7 +71,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
       birthday, cakeNote: birthday ? cakeNote : "", restrictions, notes,
       tableGroup: sortedGroup,
       courseOverrides: initial?.data?.courseOverrides || {},
-      kitchenCourseNotes: sanitizeKitchenCourseNotes(kitchenCourseNotes),
+      kitchenCourseNotes: initial?.data?.kitchenCourseNotes || {},
     };
     await onSave({ id: initial?.id, date: initial?.date, table_id: primaryId, data });
     setSaving(false);
@@ -298,121 +269,6 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
           </div>
         )}
       </div>
-
-      {menuCourses.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ ...fieldLabel, marginBottom: 8 }}>Kitchen course notes</div>
-          <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], marginBottom: 8, lineHeight: 1.4 }}>
-            Rename a course for this table, leave an ad-hoc note, or click a preset chip to stack a 1×/2× modifier on the kitchen ticket.
-          </div>
-          {menuCourses.map((c) => {
-            const key = courseKeyOf(c);
-            if (!key) return null;
-            const entry = kitchenCourseNotes[key] || {};
-            const presets = entry.presets || {};
-            const chips = courseQuickNotes[key] || [];
-            const label = courseLabelOf(c);
-            const hasAny = entry.name || entry.note || Object.keys(presets).length > 0;
-            const updateEntry = (patch) => {
-              setKitchenCourseNotes((prev) => {
-                const current = prev[key] || {};
-                const next = { ...current, ...patch };
-                if (!next.name) delete next.name;
-                if (!next.note) delete next.note;
-                if (next.presets && Object.keys(next.presets).length === 0) delete next.presets;
-                const out = { ...prev };
-                if (!next.name && !next.note && !next.presets) delete out[key];
-                else out[key] = next;
-                return out;
-              });
-            };
-            const bumpPreset = (text) => {
-              const current = entry.presets || {};
-              updateEntry({ presets: { ...current, [text]: (current[text] || 0) + 1 } });
-            };
-            const clearPreset = (text) => {
-              const current = { ...(entry.presets || {}) };
-              delete current[text];
-              updateEntry({ presets: current });
-            };
-            const clearAll = () => {
-              setKitchenCourseNotes((prev) => {
-                const out = { ...prev };
-                delete out[key];
-                return out;
-              });
-            };
-            return (
-              <div key={key} style={{
-                border: `1px solid ${hasAny ? tokens.red.border : tokens.ink[4]}`, borderRadius: 0,
-                padding: "8px 10px", marginBottom: 6, background: hasAny ? tokens.red.bg : tokens.neutral[0],
-              }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5, gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: tokens.ink[1], letterSpacing: 0.4 }}>{label}</span>
-                  {hasAny && (
-                    <button onClick={clearAll} style={{
-                      fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "4px 8px",
-                      border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer",
-                      background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation",
-                    }}>Clear</button>
-                  )}
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 6, marginBottom: chips.length > 0 ? 8 : 0 }}>
-                  <input
-                    value={entry.name || ""}
-                    onChange={(e) => updateEntry({ name: e.target.value })}
-                    placeholder={`Rename "${label}"…`}
-                    style={{ ...baseInp, fontSize: 10, padding: "7px 8px" }}
-                  />
-                  <input
-                    value={entry.note || ""}
-                    onChange={(e) => updateEntry({ note: e.target.value })}
-                    placeholder="Note (e.g. allergic to mustard)"
-                    style={{ ...baseInp, fontSize: 10, padding: "7px 8px" }}
-                  />
-                </div>
-                {chips.length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {chips.map((chip) => {
-                      const count = presets[chip] || 0;
-                      const active = count > 0;
-                      return (
-                        <button
-                          key={chip}
-                          onClick={() => bumpPreset(chip)}
-                          onContextMenu={(e) => { e.preventDefault(); if (active) clearPreset(chip); }}
-                          title={active ? "Click to add another, right-click to clear" : "Click to apply"}
-                          style={{
-                            fontFamily: FONT, fontSize: 9, letterSpacing: 0.3, padding: "6px 9px",
-                            border: `1px solid ${active ? tokens.red.border : tokens.neutral[200]}`,
-                            borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
-                            background: active ? tokens.red.bg : tokens.neutral[50],
-                            color: active ? tokens.red.text : tokens.text.muted,
-                            fontWeight: active ? 600 : 400,
-                          }}
-                        >
-                          {active && <span style={{ marginRight: 4, fontWeight: 700 }}>{count}×</span>}
-                          {chip}
-                          {active && (
-                            <span
-                              role="button"
-                              tabIndex={0}
-                              onClick={(e) => { e.stopPropagation(); clearPreset(chip); }}
-                              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); e.preventDefault(); clearPreset(chip); } }}
-                              aria-label={`Clear ${chip}`}
-                              style={{ marginLeft: 4, color: tokens.red.border, cursor: "pointer", fontSize: 12, lineHeight: 1, touchAction: "manipulation", display: "inline-block" }}
-                            >×</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       <div style={{ marginBottom: 14 }}>
         <div style={fieldLabel}>Notes</div>
