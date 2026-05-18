@@ -65,7 +65,7 @@ function buildWeeklyRows(reservations, weekDays, restrictionDefs = []) {
   for (const ds of sorted) {
     const dr = byDate[ds];
     const dg = dr.reduce((a,r) => a+(r.data?.guests||2), 0);
-    rows.push({ id:`D${ds}`, type:"date", cells:[fmtS(ds), `Total\nguest:\n${dg}`, "", "", "", "", ""] });
+    rows.push({ id:`D${ds}`, type:"date", cells:[fmtS(ds), String(dg), "", "", "", "", ""] });
     const getSession = r => {
       const sess = r.data?.service_session;
       if (sess === "lunch" || sess === "dinner") return sess;
@@ -101,9 +101,9 @@ function weeklyRowsToHTML(rows, edits, totalGuests, dateRange) {
   for (const row of rows) {
     const c = row.cells.map((_,ci) => gc(row.id, ci));
     if (row.type==="date")
-      body += `<tr class="date-row"><td>${e(c[0])}</td><td style="white-space:pre-line;">${e(c[1])}</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+      body += `<tr class="date-row"><td style="text-align:left;">${e(c[0])}</td><td colspan="6" style="text-align:left;padding-left:8pt;white-space:nowrap;">Total: ${e(c[1])} guests</td></tr>`;
     else if (row.type==="sub")
-      body += `<tr><td>${e(c[0])}</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
+      body += `<tr class="date-row"><td colspan="7" style="text-align:left;padding-left:14pt;font-weight:700;letter-spacing:0.08em;">${e(c[0])}</td></tr>`;
     else
       body += `<tr><td></td><td>${e(c[1])}</td><td>${e(c[2])}</td><td>${e(c[3])}</td><td><u>${e(c[4])}</u></td><td style="white-space:pre-line;">${e(c[5])}</td><td style="white-space:pre-line;">${e(c[6])}</td></tr>`;
   }
