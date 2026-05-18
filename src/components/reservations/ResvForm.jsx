@@ -57,12 +57,15 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
   const sortedGroup = [...tableIds].sort((a, b) => a - b);
   const primaryId = sortedGroup[0] ?? null;
 
-  const isConflict = (tid) => reservations.some((r) =>
-    r.id !== excludeId &&
-    r.date === initial?.date &&
-    (r.table_id === tid || (r.data?.tableGroup || []).map(Number).includes(tid)) &&
-    !tableIds.includes(tid)
-  );
+  const isConflict = (tid) => reservations.some((r) => {
+    if (r.id === excludeId) return false;
+    if (r.date !== initial?.date) return false;
+    if (tableIds.includes(tid)) return false;
+    // A dinner reservation never blocks a lunch table and vice versa.
+    const existingSession = r.data?.service_session || "dinner";
+    if (existingSession !== serviceSession) return false;
+    return r.table_id === tid || (r.data?.tableGroup || []).map(Number).includes(tid);
+  });
 
   const handleSessionChange = (s) => {
     setServiceSession(s);
