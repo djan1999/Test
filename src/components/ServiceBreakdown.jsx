@@ -671,7 +671,7 @@ function PrintStyles() {
       @media print {
         @page {
           size: A4 landscape;
-          margin: 10mm 12mm;
+          margin: 0;
         }
         html, body { background: ${tokens.neutral[0]} !important; }
         body * { visibility: hidden !important; }
@@ -687,10 +687,11 @@ function PrintStyles() {
         }
         .sb-sheet {
           box-shadow: none !important;
-          padding: 0 !important;
+          padding: 12mm 14mm !important;
           max-width: 100% !important;
           width: 100% !important;
           margin: 0 !important;
+          box-sizing: border-box !important;
         }
         .no-print,
         .sb-topbar {
@@ -727,7 +728,7 @@ function PrintStyles() {
         }
         .service-breakdown-print-area {
           column-count: 2;
-          column-gap: 12mm;
+          column-gap: 14mm;
           column-fill: balance;
         }
         .header-block {
@@ -745,31 +746,33 @@ function PrintStyles() {
           page-break-inside: avoid;
         }
 
-        /* Aggressive compaction so a typical daily briefing fits
-           within at most two A4-landscape pages. */
         .sb-sheet {
-          font-size: 9pt !important;
-          line-height: 1.2 !important;
+          font-size: 10pt !important;
+          line-height: 1.45 !important;
         }
         .sb-sheet input,
         .sb-sheet textarea {
-          line-height: 1.2 !important;
+          line-height: 1.45 !important;
+        }
+        .header-block {
+          margin-bottom: 12pt !important;
         }
         .slot-block {
-          margin-bottom: 4pt !important;
+          margin-bottom: 10pt !important;
         }
         .reservation-block {
-          margin-bottom: 4pt !important;
+          margin-bottom: 6pt !important;
         }
         .reservation-block + .reservation-block {
           margin-top: 0 !important;
         }
         .bottom-section {
-          margin-top: 6pt !important;
-          padding-top: 3pt !important;
+          margin-top: 12pt !important;
+          padding-top: 5pt !important;
         }
-        .header-block {
-          margin-bottom: 4pt !important;
+        .section-header-block {
+          margin-top: 14pt !important;
+          margin-bottom: 8pt !important;
         }
       }
     `}</style>
