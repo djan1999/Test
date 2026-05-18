@@ -2618,9 +2618,12 @@ export default function App() {
     reconcileBoardWithReservations(reservations.filter(r => {
       if (r.date !== serviceDate) return false;
       const sess = r.data?.service_session;
-      // Reservations without a session field predate this feature and are
-      // treated as dinner for backwards compatibility.
-      return sess ? sess === activeServiceSession : activeServiceSession === "dinner";
+      // Legacy reservations without an explicit session fall back to a
+      // time heuristic so they still surface in the matching service.
+      const resolved = (sess === "lunch" || sess === "dinner")
+        ? sess
+        : ((r.data?.resTime || "") && r.data.resTime < "15:00" ? "lunch" : "dinner");
+      return resolved === activeServiceSession;
     }));
   }, [reservations, serviceDate, mode, hydrated, reservationsLoaded, boardSyncTick, activeServiceSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
