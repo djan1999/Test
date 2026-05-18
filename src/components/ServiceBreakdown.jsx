@@ -278,7 +278,7 @@ function AutoTextarea({ value, onChange, style, minRows = 1, placeholder, autoBu
         ...plainInputStyle,
         resize: "none",
         overflow: "hidden",
-        lineHeight: 1.35,
+        lineHeight: 1.45,
         ...style,
       }}
     />
@@ -456,44 +456,44 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
         </button>
       </div>
 
-      {/* Print sheet */}
+      {/* Print sheet — fixed at A4 landscape so on-screen layout matches print exactly */}
       <div
         className="sb-sheet"
         style={{
           background: tokens.neutral[0],
           color: tokens.neutral[900],
           fontFamily: FONT,
-          fontSize: 11,
-          lineHeight: 1.35,
-          maxWidth: 1100,
-          width: "100%",
+          fontSize: "10pt",
+          lineHeight: 1.45,
+          width: "297mm",
+          minHeight: "210mm",
           margin: "0 auto",
-          padding: "20px 28px",
+          padding: "12mm 14mm",
+          boxSizing: "border-box",
           boxShadow: `0 0 0 1px ${tokens.neutral[300]}`,
-          borderRadius: 0,
         }}
       >
         <div
           className="service-breakdown-print-area sb-columns"
           style={{
             columnCount: 2,
-            columnGap: 24,
+            columnGap: "14mm",
             columnFill: "balance",
           }}
         >
           {/* Header — inside column flow so it sits left in column 1 above slots */}
-          <div className="header-block" style={{ marginBottom: 8 }}>
+          <div className="header-block" style={{ marginBottom: "12pt" }}>
             <PlainInput
               value={doc.headerText}
               onChange={updateHeader}
               bold
-              style={{ fontSize: 12 }}
+              style={{ fontSize: "12pt" }}
               focusBind={chain.bind("doc-header")}
             />
             <PlainInput
               value={doc.summaryText}
               onChange={updateSummary}
-              style={{ fontSize: 11, marginTop: 2 }}
+              style={{ fontSize: "10pt", marginTop: "2pt" }}
               focusBind={chain.bind("doc-summary")}
             />
           </div>
@@ -502,13 +502,13 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
             // Section header sentinel — rendered as a bold label divider, not a time-slot.
             if (slot.type === "section") {
               return (
-                <div key={slot.key} className="slot-block section-header-block" style={{ marginBottom: 6, marginTop: si === 0 ? 0 : 10 }}>
-                  <div style={{ borderBottom: `2px solid ${tokens.neutral[900]}`, paddingBottom: 2, marginBottom: 4 }}>
+                <div key={slot.key} className="slot-block section-header-block" style={{ marginBottom: "8pt", marginTop: si === 0 ? 0 : "14pt" }}>
+                  <div style={{ borderBottom: `2px solid ${tokens.neutral[900]}`, paddingBottom: "2pt", marginBottom: "4pt" }}>
                     <PlainInput
                       value={slot.label}
                       onChange={(v) => updateSlotLabel(si, v)}
                       bold
-                      style={{ fontSize: 12, letterSpacing: "0.04em" }}
+                      style={{ fontSize: "12pt", letterSpacing: "0.04em" }}
                       focusBind={chain.bind(`slot-${si}`)}
                     />
                   </div>
@@ -516,19 +516,19 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
               );
             }
             return (
-            <div key={slot.key} className="slot-block" style={{ marginBottom: 10 }}>
+            <div key={slot.key} className="slot-block" style={{ marginBottom: "10pt" }}>
               <div
                 style={{
                   borderBottom: `1px solid ${tokens.neutral[900]}`,
-                  paddingBottom: 1,
-                  marginBottom: 4,
+                  paddingBottom: "1pt",
+                  marginBottom: "4pt",
                 }}
               >
                 <PlainInput
                   value={slot.label}
                   onChange={(v) => updateSlotLabel(si, v)}
                   bold
-                  style={{ fontSize: 11 }}
+                  style={{ fontSize: "10pt" }}
                   focusBind={chain.bind(`slot-${si}`)}
                 />
               </div>
@@ -536,7 +536,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                 <div
                   key={r.id}
                   className="reservation-block"
-                  style={{ marginBottom: 8 }}
+                  style={{ marginBottom: "6pt" }}
                 >
                   <PlainInput
                     value={r.headerText}
@@ -544,7 +544,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                     bold
                     focusBind={chain.bind(`header-${si}-${ri}`)}
                   />
-                  <div style={{ padding: "0 0 0 8px", marginTop: 1 }}>
+                  <div style={{ padding: "0 0 0 8pt", marginTop: "1pt" }}>
                     {r.bullets.map((b, bi) => {
                       const bulletBind = chain.bind(`bullet-${si}-${ri}-${bi}`, (e) => {
                         const el = e.currentTarget;
@@ -563,7 +563,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                       return (
                         <div
                           key={bi}
-                          style={{ display: "flex", alignItems: "flex-start", gap: 4 }}
+                          style={{ display: "flex", alignItems: "flex-start", gap: "4pt" }}
                         >
                           <span style={{ flexShrink: 0 }}>-</span>
                           <AutoTextarea
@@ -586,8 +586,8 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
           <div
             className="bottom-section"
             style={{
-              marginTop: 12,
-              paddingTop: 6,
+              marginTop: "12pt",
+              paddingTop: "5pt",
               borderTop: `1px solid ${tokens.neutral[900]}`,
               breakInside: "avoid",
             }}
@@ -596,8 +596,8 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 8,
-                marginBottom: 4,
+                gap: "8pt",
+                marginBottom: "4pt",
               }}
             >
               <span style={{ fontWeight: 700, flexShrink: 0 }}>
@@ -619,21 +619,21 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                   borderBottom: `1px solid ${tokens.neutral[900]}`,
                   background: "transparent",
                   outline: "none",
-                  padding: "2px 4px",
+                  padding: "2pt 4pt",
                 }}
               />
             </div>
 
-            <div style={{ fontWeight: 700, marginBottom: 2 }}>
+            <div style={{ fontWeight: 700, marginBottom: "2pt" }}>
               Service Announcements:
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "2pt" }}>
               {doc.announcements.map((v, i) => {
                 const ab = chain.bind(`announce-${i}`);
                 return (
                   <div
                     key={i}
-                    style={{ display: "flex", alignItems: "flex-start", gap: 6 }}
+                    style={{ display: "flex", alignItems: "flex-start", gap: "6pt" }}
                   >
                     <span>-</span>
                     <div style={{ flex: 1 }}>
@@ -646,7 +646,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                         style={{
                           border: `1px dashed ${tokens.neutral[400]}`,
                           background: tokens.neutral[100],
-                          padding: "1px 4px",
+                          padding: "1pt 4pt",
                         }}
                       />
                     </div>
@@ -687,11 +687,8 @@ function PrintStyles() {
         }
         .sb-sheet {
           box-shadow: none !important;
-          padding: 12mm 14mm !important;
-          max-width: 100% !important;
           width: 100% !important;
           margin: 0 !important;
-          box-sizing: border-box !important;
         }
         .no-print,
         .sb-topbar {
