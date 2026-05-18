@@ -582,14 +582,14 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
             );
           })}
 
-          {/* Bottom section — flows as last item in column layout */}
+          {/* Bottom section — spans both columns so it always sits below the reservation list */}
           <div
             className="bottom-section"
             style={{
               marginTop: "12pt",
               paddingTop: "5pt",
               borderTop: `1px solid ${tokens.neutral[900]}`,
-              breakInside: "avoid",
+              columnSpan: "all",
             }}
           >
             <div
@@ -738,11 +738,6 @@ function PrintStyles() {
         .slot-block {
           break-inside: avoid-column;
         }
-        .bottom-section {
-          break-inside: avoid;
-          page-break-inside: avoid;
-        }
-
         .sb-sheet {
           font-size: 10pt !important;
           line-height: 1.45 !important;
@@ -764,6 +759,7 @@ function PrintStyles() {
           margin-top: 0 !important;
         }
         .bottom-section {
+          column-span: all !important;
           margin-top: 12pt !important;
           padding-top: 5pt !important;
         }
