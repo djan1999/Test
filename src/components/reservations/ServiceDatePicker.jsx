@@ -8,9 +8,10 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
   `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
-export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, reservations = [], appName = "MILKA" }) {
+export default function ServiceDatePicker({ defaultDate, defaultSession, onConfirm, onCancel, reservations = [], appName = "MILKA" }) {
   const todayStr = toLocalDateISO();
   const [selected, setSelected] = useState(defaultDate || todayStr);
+  const [session, setSession] = useState(defaultSession || "dinner");
   const [weekOffset, setWeekOffset] = useState(0);
 
   const weekDays = useMemo(() => {
@@ -156,8 +157,32 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
             );
           })()}
 
+        {/* Session selector */}
+        <div style={{ padding: "0 14px 16px" }}>
+          <div style={{
+            fontFamily: FONT, fontSize: "7px", letterSpacing: "0.14em",
+            textTransform: "uppercase", color: ink[3], marginBottom: 6, paddingLeft: 2,
+          }}>SERVICE SESSION</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[["lunch", "LUNCH"], ["dinner", "DINNER"]].map(([v, l]) => (
+              <button
+                key={v}
+                onClick={() => setSession(v)}
+                style={{
+                  fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em",
+                  textTransform: "uppercase", padding: "11px 0", flex: 1,
+                  border: `${rule.hairline} solid ${session === v ? charcoal.default : ink[4]}`,
+                  borderRadius: 0, cursor: "pointer",
+                  background: session === v ? tint.parchment : neutral[0],
+                  color: session === v ? ink[0] : ink[3], fontWeight: session === v ? 600 : 400,
+                }}
+              >{l}</button>
+            ))}
+          </div>
+        </div>
+
         {/* Footer actions */}
-        <div style={{ display: "flex", gap: 0, borderTop: `${rule.hairline} solid ${ink[4]}`, marginTop: 14 }}>
+        <div style={{ display: "flex", gap: 0, borderTop: `${rule.hairline} solid ${ink[4]}` }}>
           <button
             onClick={onCancel}
             style={{
@@ -168,7 +193,7 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
             }}
           >CANCEL</button>
           <button
-            onClick={() => selected && onConfirm(selected)}
+            onClick={() => selected && onConfirm(selected, session)}
             disabled={!selected}
             style={{
               fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em",
@@ -177,7 +202,7 @@ export default function ServiceDatePicker({ defaultDate, onConfirm, onCancel, re
               background: selected ? charcoal.default : neutral[50],
               color: selected ? neutral[0] : ink[4], fontWeight: 600, opacity: 1,
             }}
-          >START SERVICE ›</button>
+          >START {session.toUpperCase()} ›</button>
         </div>
       </div>
     </div>

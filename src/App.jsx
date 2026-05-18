@@ -1933,6 +1933,9 @@ export default function App() {
   });
   const [showServiceDatePicker,  setShowServiceDatePicker]  = useState(false);
   const [pendingModeAfterDate,   setPendingModeAfterDate]   = useState(null);
+  const [activeServiceSession, setActiveServiceSession] = useState(() => {
+    try { return localStorage.getItem("milka_service_session") || "dinner"; } catch { return "dinner"; }
+  });
   // Hydration: render immediately from localStorage, sync Supabase in background
   const [hydrated,     setHydrated]     = useState(() => {
     if (!hasSupabaseConfig) return true;
@@ -2330,12 +2333,13 @@ export default function App() {
     // day) lands under the wrong date.
     const archiveDate = serviceDate || toLocalDateISO();
     const dateStr = new Date(archiveDate + "T00:00:00").toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const archiveLabel = `${dateStr} – ${activeServiceSession.toUpperCase()}`;
     const activeTables = snap.tables.filter(t => t.active || t.arrivedAt || t.resName || t.resTime);
     if (supabase) {
       const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).insert({
         date: archiveDate,
-        label: dateStr,
-        state: { ...snap, tables: activeTables, menuCourses: menuCourses },
+        label: archiveLabel,
+        state: { ...snap, tables: activeTables, menuCourses, serviceSession: activeServiceSession },
       });
       if (error) {
         window.alert("Archive failed: " + error.message);
@@ -2427,6 +2431,11 @@ export default function App() {
     if (!supabase) return;
     await supabase.from(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "service_date", state: date ? { date } : {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
+  };
+
+  const persistServiceSession = (session) => {
+    setActiveServiceSession(session);
+    try { localStorage.setItem("milka_service_session", session); } catch {}
   };
 
   // ── Reservations CRUD ─────────────────────────────────────────────────────
@@ -2606,8 +2615,14 @@ export default function App() {
   useEffect(() => {
     if (!hydrated || !reservationsLoaded) return;
     if ((mode !== "service" && mode !== "display") || !serviceDate) return;
-    reconcileBoardWithReservations(reservations.filter(r => r.date === serviceDate));
-  }, [reservations, serviceDate, mode, hydrated, reservationsLoaded, boardSyncTick]); // eslint-disable-line react-hooks/exhaustive-deps
+    reconcileBoardWithReservations(reservations.filter(r => {
+      if (r.date !== serviceDate) return false;
+      const sess = r.data?.service_session;
+      // Reservations without a session field predate this feature and are
+      // treated as dinner for backwards compatibility.
+      return sess ? sess === activeServiceSession : activeServiceSession === "dinner";
+    }));
+  }, [reservations, serviceDate, mode, hydrated, reservationsLoaded, boardSyncTick, activeServiceSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const switchMode = () => { changeMode(null); setSel(null); };
 
@@ -3403,8 +3418,10 @@ export default function App() {
   const serviceDatePickerEl = showServiceDatePicker ? (
     <ServiceDatePicker
       defaultDate={toLocalDateISO()}
+      defaultSession={activeServiceSession}
       reservations={reservations}
-      onConfirm={async (date) => {
+      onConfirm={async (date, session = "dinner") => {
+        persistServiceSession(session);
         await persistServiceDate(date);
         setShowServiceDatePicker(false);
         const target = pendingModeAfterDate;
@@ -3412,8 +3429,8 @@ export default function App() {
         if (target) {
           setMode(target);
           try { localStorage.setItem("milka_mode", target); } catch {}
-          // The reconciliation effect (watches `mode` + `serviceDate`) fills
-          // the board from reservations for the chosen date.
+          // The reconciliation effect (watches `mode` + `serviceDate` + `activeServiceSession`)
+          // fills the board from reservations for the chosen date and session.
         }
       }}
       onCancel={() => { setShowServiceDatePicker(false); setPendingModeAfterDate(null); }}
@@ -3602,7 +3619,7 @@ export default function App() {
 
               {serviceDate && (
                 <span
-                  title="Click to change service date"
+                  title="Click to change service date / session"
                   onClick={() => { setPendingModeAfterDate(mode); setShowServiceDatePicker(true); }}
                   style={{
                     fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em",
@@ -3612,6 +3629,11 @@ export default function App() {
                   {new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}
                 </span>
               )}
+              <span style={{
+                fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em",
+                textTransform: "uppercase", color: tokens.ink[2], fontWeight: 600,
+                border: `1px solid ${tokens.ink[4]}`, padding: "2px 7px", borderRadius: 0,
+              }}>{activeServiceSession.toUpperCase()}</span>
               {(() => {
                 const seatedNow = tables.filter(t => t.active).filter(isPrimary).length;
                 const guestsNow = tables.filter(t => t.active).filter(isPrimary).reduce((a, t) => a + (t.guests || 0), 0);
@@ -3706,7 +3728,7 @@ export default function App() {
           label={`[NEW RESERVATION · ${new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }).toUpperCase()}]`}
         >
           <ResvForm
-            initial={{ date: serviceDate, table_id: null, data: {} }}
+            initial={{ date: serviceDate, table_id: null, data: { service_session: activeServiceSession } }}
             tables={tables}
             reservations={reservations}
             excludeId={null}

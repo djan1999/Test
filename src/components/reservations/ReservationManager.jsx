@@ -66,8 +66,14 @@ function buildWeeklyRows(reservations, weekDays, restrictionDefs = []) {
     const dr = byDate[ds];
     const dg = dr.reduce((a,r) => a+(r.data?.guests||2), 0);
     rows.push({ id:`D${ds}`, type:"date", cells:[fmtS(ds), `Total\nguest:\n${dg}`, "", "", "", "", ""] });
-    const lr = dr.filter(r => (r.data?.resTime||"") < "15:00");
-    const nr = dr.filter(r => (r.data?.resTime||"") >= "15:00");
+    const getSession = r => {
+      const sess = r.data?.service_session;
+      if (sess === "lunch" || sess === "dinner") return sess;
+      const t = r.data?.resTime || "";
+      return t && t < "15:00" ? "lunch" : "dinner";
+    };
+    const lr = dr.filter(r => getSession(r) === "lunch");
+    const nr = dr.filter(r => getSession(r) === "dinner");
     const split = lr.length > 0 && nr.length > 0;
     const addRows = (list, sub) => {
       if (sub) rows.push({ id:`S${ds}${sub}`, type:"sub", cells:[sub,"","","","","",""] });
@@ -377,6 +383,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                     <div style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.06em", color: tokens.ink[3], marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       {d.resTime && <span>{d.resTime}</span>}
                       <span>{d.guests || 2} guests</span>
+                      {d.service_session && <span style={{ color: d.service_session === "lunch" ? tokens.ink[2] : tokens.ink[3], textTransform: "uppercase", letterSpacing: "0.10em", fontSize: "8px", fontWeight: 600 }}>{d.service_session}</span>}
                       {d.menuType && <span style={{ color: tokens.ink[2], textTransform: "uppercase", letterSpacing: "0.08em" }}>{d.menuType}</span>}
                       {d.lang === "si" && <span style={{ color: tokens.ink[3] }}>SLO</span>}
                       {d.birthday && <span>🎂{d.cakeNote ? ` ${d.cakeNote}` : ""}</span>}

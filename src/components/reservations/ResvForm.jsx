@@ -15,15 +15,18 @@ const DEFAULT_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS ||
   .map((s) => s.trim())
   .filter(Boolean);
 
-const parseSittingTimes = () => {
-  const raw = String(import.meta.env.VITE_DEFAULT_SITTING_TIMES || "18:00,18:30,19:00,19:15")
+const parseSittingTimes = (envKey, fallback) => {
+  const raw = String(import.meta.env[envKey] || fallback)
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  return raw.length > 0 ? raw : ["18:00", "18:30", "19:00", "19:15"];
+  return raw.length > 0 ? raw : fallback.split(",").map(s => s.trim());
 };
 
-const SITTING_TIMES = parseSittingTimes();
+const DINNER_TIMES = parseSittingTimes("VITE_DEFAULT_SITTING_TIMES", "18:00,18:30,19:00,19:15");
+const LUNCH_TIMES  = parseSittingTimes("VITE_DEFAULT_LUNCH_TIMES",   "12:00,12:30,13:00");
+// Legacy alias — keeps any external references to SITTING_TIMES intact
+const SITTING_TIMES = DINNER_TIMES;
 const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
 
 export default function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }) {
@@ -35,6 +38,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
   );
   const [name, setName] = useState(initial?.data?.resName || "");
   const [time, setTime] = useState(initial?.data?.resTime || "");
+  const [serviceSession, setServiceSession] = useState(initial?.data?.service_session || "dinner");
   const [menuType, setMenuType] = useState(initial?.data?.menuType || "");
   const [lang, setLang] = useState(initial?.data?.lang || "en");
   const [guests, setGuests] = useState(initial?.data?.guests || 2);
@@ -60,12 +64,19 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
     !tableIds.includes(tid)
   );
 
+  const handleSessionChange = (s) => {
+    setServiceSession(s);
+    // Lunch always defaults to short menu; dinner clears the auto-selection only
+    // if the current value was auto-set from a previous lunch selection.
+    if (s === "lunch" && !menuType) setMenuType("short");
+  };
+
   const handleSave = async () => {
     if (!primaryId) return;
     setSaving(true);
     const sortedRooms = guestType === "hotel" ? [...rooms].sort((a, b) => String(a).localeCompare(String(b))) : [];
     const data = {
-      resName: name, resTime: time, menuType, lang, guests, guestType,
+      service_session: serviceSession, resName: name, resTime: time, menuType, lang, guests, guestType,
       room: sortedRooms[0] || "",
       rooms: sortedRooms,
       birthday, cakeNote: birthday ? cakeNote : "", restrictions, notes,
@@ -113,6 +124,21 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
         {tableIds.length === 0 && <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 4 }}>Select at least one table</div>}
       </div>
 
+      <div style={{ marginBottom: 10 }}>
+        <div style={fieldLabel}>Service</div>
+        <div style={{ display: "flex", gap: 5 }}>
+          {[["lunch", "Lunch"], ["dinner", "Dinner"]].map(([v, l]) => (
+            <button key={v} onClick={() => handleSessionChange(v)} style={{
+              fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "8px 0", flex: 1,
+              border: "1px solid", borderColor: serviceSession === v ? tokens.charcoal.default : tokens.ink[4],
+              borderRadius: 0, cursor: "pointer",
+              background: serviceSession === v ? tokens.tint.parchment : tokens.neutral[0],
+              color: serviceSession === v ? tokens.ink[1] : tokens.ink[3],
+            }}>{l}</button>
+          ))}
+        </div>
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10, marginBottom: 10 }}>
         <div>
           <div style={fieldLabel}>Name</div>
@@ -120,8 +146,11 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
         </div>
         <div>
           <div style={fieldLabel}>Sitting</div>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? `repeat(${SITTING_TIMES.length}, 1fr)` : "repeat(2, 1fr)", gap: 5 }}>
-            {SITTING_TIMES.map((t) => (
+          {(() => {
+            const sessionTimes = serviceSession === "lunch" ? LUNCH_TIMES : DINNER_TIMES;
+            return (
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? `repeat(${sessionTimes.length}, 1fr)` : "repeat(2, 1fr)", gap: 5 }}>
+            {sessionTimes.map((t) => (
               <button key={t} onClick={() => setTime(t === time ? "" : t)} style={{
                 fontFamily: FONT, fontSize: 11, letterSpacing: 0.5, padding: "10px 0",
                 border: "1px solid", borderColor: time === t ? tokens.charcoal.default : tokens.ink[4],
@@ -131,6 +160,8 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               }}>{t}</button>
             ))}
           </div>
+            );
+          })()}
         </div>
       </div>
 

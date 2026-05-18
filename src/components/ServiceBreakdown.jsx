@@ -107,6 +107,15 @@ function bulletsForReservation(r) {
   return out;
 }
 
+// Resolve the service session for a reservation. Respects the explicit field,
+// falls back to a time heuristic for reservations predating this feature.
+function getResvSession(r) {
+  const sess = r.data?.service_session;
+  if (sess === "lunch" || sess === "dinner") return sess;
+  const t = r.data?.resTime || "";
+  return t && t < "15:00" ? "lunch" : "dinner";
+}
+
 // Group reservations by time slot, sorted ascending, stable order within.
 function groupByTimeSlot(reservations) {
   const map = new Map();
@@ -122,33 +131,75 @@ function groupByTimeSlot(reservations) {
   return slots;
 }
 
+function buildTimeSlotEntries(list) {
+  return groupByTimeSlot(list).map(([time, resvList]) => ({
+    key: time,
+    type: "slot",
+    label: `${time} - ${resvList.length} table${resvList.length !== 1 ? "s" : ""}`,
+    reservations: resvList.map((r) => {
+      const d = r.data || {};
+      const name = (d.resName || "—").trim();
+      const pax = d.guests || 2;
+      return {
+        id: r.id,
+        headerText: `${tableLabel(r)}: ${name} [${pax} pax]`,
+        bullets: bulletsForReservation(r),
+        intel: "",
+      };
+    }),
+  }));
+}
+
 // Build the initial editable document state by pre-filling from reservations.
+// Reservations are grouped into LUNCH and DINNER sections if both exist.
 function buildInitialState(dateStr, reservations) {
-  const total = (reservations || []).length;
-  const totalGuests = (reservations || []).reduce(
-    (a, r) => a + (r.data?.guests || 2),
-    0
-  );
-  const slots = groupByTimeSlot(reservations || []);
+  const all = reservations || [];
+  const lunch = all.filter(r => getResvSession(r) === "lunch");
+  const dinner = all.filter(r => getResvSession(r) === "dinner");
+  const totalGuests = all.reduce((a, r) => a + (r.data?.guests || 2), 0);
+  const lunchGuests = lunch.reduce((a, r) => a + (r.data?.guests || 2), 0);
+  const dinnerGuests = dinner.reduce((a, r) => a + (r.data?.guests || 2), 0);
+
+  // Build the flat slot list with optional section-header sentinels.
+  // A sentinel has type "section" and is rendered as a bold divider line.
+  const hasBothSessions = lunch.length > 0 && dinner.length > 0;
+  const slots = [];
+
+  if (lunch.length > 0) {
+    if (hasBothSessions) {
+      slots.push({
+        key: "__section_lunch",
+        type: "section",
+        label: `LUNCH · ${lunch.length} table${lunch.length !== 1 ? "s" : ""} · ${lunchGuests} guest${lunchGuests !== 1 ? "s" : ""}`,
+        reservations: [],
+      });
+    }
+    buildTimeSlotEntries(lunch).forEach(s => slots.push(s));
+  }
+
+  if (dinner.length > 0) {
+    if (hasBothSessions) {
+      slots.push({
+        key: "__section_dinner",
+        type: "section",
+        label: `DINNER · ${dinner.length} table${dinner.length !== 1 ? "s" : ""} · ${dinnerGuests} guest${dinnerGuests !== 1 ? "s" : ""}`,
+        reservations: [],
+      });
+    }
+    buildTimeSlotEntries(dinner).forEach(s => slots.push(s));
+  }
+
+  const summaryParts = [];
+  if (lunch.length > 0) summaryParts.push(`${lunch.length} lunch / ${lunchGuests} pax`);
+  if (dinner.length > 0) summaryParts.push(`${dinner.length} dinner / ${dinnerGuests} pax`);
+  const summaryText = summaryParts.length > 1
+    ? `${summaryParts.join("  +  ")}  =  ${all.length} tables, ${totalGuests} guests`
+    : `${all.length} table${all.length !== 1 ? "s" : ""}, ${totalGuests} guest${totalGuests !== 1 ? "s" : ""}`;
 
   return {
     headerText: formatDateHeader(dateStr),
-    summaryText: `${total} table${total !== 1 ? "s" : ""}, ${totalGuests} guest${totalGuests !== 1 ? "s" : ""}`,
-    slots: slots.map(([time, list]) => ({
-      key: time,
-      label: `${time} - ${list.length} table${list.length !== 1 ? "s" : ""}`,
-      reservations: list.map((r) => {
-        const d = r.data || {};
-        const name = (d.resName || "—").trim();
-        const pax = d.guests || 2;
-        return {
-          id: r.id,
-          headerText: `${tableLabel(r)}: ${name} [${pax} pax]`,
-          bullets: bulletsForReservation(r),
-          intel: "",
-        };
-      }),
-    })),
+    summaryText,
+    slots,
     bread: "",
     announcements: ["", "", "", ""],
   };
@@ -447,7 +498,24 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
             />
           </div>
 
-          {doc.slots.map((slot, si) => (
+          {doc.slots.map((slot, si) => {
+            // Section header sentinel — rendered as a bold label divider, not a time-slot.
+            if (slot.type === "section") {
+              return (
+                <div key={slot.key} className="slot-block section-header-block" style={{ marginBottom: 6, marginTop: si === 0 ? 0 : 10 }}>
+                  <div style={{ borderBottom: `2px solid ${tokens.neutral[900]}`, paddingBottom: 2, marginBottom: 4 }}>
+                    <PlainInput
+                      value={slot.label}
+                      onChange={(v) => updateSlotLabel(si, v)}
+                      bold
+                      style={{ fontSize: 12, letterSpacing: "0.04em" }}
+                      focusBind={chain.bind(`slot-${si}`)}
+                    />
+                  </div>
+                </div>
+              );
+            }
+            return (
             <div key={slot.key} className="slot-block" style={{ marginBottom: 10 }}>
               <div
                 style={{
@@ -511,7 +579,8 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                 </div>
               ))}
             </div>
-          ))}
+            );
+          })}
 
           {/* Bottom section — flows as last item in column layout */}
           <div
