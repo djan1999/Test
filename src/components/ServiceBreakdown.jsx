@@ -463,7 +463,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
           background: tokens.neutral[0],
           color: tokens.neutral[900],
           fontFamily: FONT,
-          fontSize: "10pt",
+          fontSize: "11pt",
           lineHeight: 1.45,
           width: "297mm",
           margin: "0 auto",
@@ -477,8 +477,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
           style={{
             columnCount: 2,
             columnGap: "14mm",
-            columnFill: "auto",
-            height: "186mm",
+            columnFill: "balance",
           }}
         >
           {/* Header — inside column flow so it sits left in column 1 above slots */}
@@ -493,7 +492,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
             <PlainInput
               value={doc.summaryText}
               onChange={updateSummary}
-              style={{ fontSize: "10pt", marginTop: "2pt" }}
+              style={{ fontSize: "11pt", marginTop: "2pt" }}
               focusBind={chain.bind("doc-summary")}
             />
           </div>
@@ -528,7 +527,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                   value={slot.label}
                   onChange={(v) => updateSlotLabel(si, v)}
                   bold
-                  style={{ fontSize: "10pt" }}
+                  style={{ fontSize: "11pt" }}
                   focusBind={chain.bind(`slot-${si}`)}
                 />
               </div>
@@ -726,8 +725,7 @@ function PrintStyles() {
         .service-breakdown-print-area {
           column-count: 2;
           column-gap: 14mm;
-          column-fill: auto;
-          height: 186mm;
+          column-fill: balance;
         }
         .header-block {
           break-after: avoid;
@@ -736,11 +734,8 @@ function PrintStyles() {
           break-inside: avoid;
           page-break-inside: avoid;
         }
-        .slot-block {
-          break-inside: avoid-column;
-        }
         .sb-sheet {
-          font-size: 10pt !important;
+          font-size: 11pt !important;
           line-height: 1.45 !important;
         }
         .sb-sheet input,
