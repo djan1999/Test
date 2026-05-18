@@ -13,9 +13,8 @@ const resvHtmlShell = (title, bodyHtml) => `<!DOCTYPE html>
 ${ROBOTO_LINK}
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-@page{size:A4 portrait;margin:12mm 10mm;}
-@media print{body{margin:0;}}
+body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:12mm 10mm;}
+@page{size:A4 portrait;margin:0;}
 table{width:100%;border-collapse:collapse;}
 tr{page-break-inside:avoid;}
 th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:center;font-size:8.5pt;color:#000;font-weight:700;}
@@ -39,9 +38,8 @@ const allergyHtmlShell = (title, bodyHtml, resvCount) => {
 ${ROBOTO_LINK}
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Roboto Mono',monospace;font-size:${baseFontPt}pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-@page{size:A4 landscape;margin:5mm 5mm;}
-@media print{body{margin:0;}}
+body{font-family:'Roboto Mono',monospace;font-size:${baseFontPt}pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:5mm 5mm;}
+@page{size:A4 landscape;margin:0;}
 table{border-collapse:collapse;${tableLayout}}
 th,td{border:1px solid #aaa;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;color:#000;font-weight:700;overflow:hidden;word-wrap:break-word;line-height:1.15;}
 th{text-align:center;}
@@ -562,8 +560,7 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
   const css = `
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:4mm;}
-@page{size:A4 portrait;margin:4mm 4mm;}
-@media print{body{padding:0;}}
+@page{size:A4 portrait;margin:0;}
 .page{display:grid;grid-template-columns:repeat(2,1fr);gap:4mm;align-items:start;page-break-after:always;break-after:page;}
 .page:last-child{page-break-after:auto;break-after:auto;}
 .ticket{border:1.5pt solid #000;width:100%;font-family:'Roboto Mono',monospace;page-break-inside:avoid;break-inside:avoid;}
