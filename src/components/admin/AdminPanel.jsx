@@ -99,7 +99,7 @@ export default function AdminPanel({
       position: "fixed", inset: 0, background: tokens.ink.bg,
       zIndex: 500,
       display: "flex", alignItems: "stretch", justifyContent: "center",
-    }} onClick={onClose}>
+    }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{
         background: tokens.neutral[0], borderTop: `1px solid ${tokens.ink[4]}`,
         width: "100%", maxWidth: 900,

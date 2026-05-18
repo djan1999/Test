@@ -10,7 +10,7 @@ const FONT = tokens.font;
 export default function CenteredModal({ children, onClose, label, maxWidth = 560 }) {
   return (
     <div
-      onClick={onClose}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position: "fixed", inset: 0, zIndex: 600,
         background: "rgba(0,0,0,0.45)",

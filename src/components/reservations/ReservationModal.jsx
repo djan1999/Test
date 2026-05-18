@@ -50,7 +50,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
       backdropFilter: "blur(4px)", zIndex: 500,
       display: "flex", alignItems: "flex-end",
       justifyContent: "center",
-    }} onClick={onClose}>
+    }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{
         background: tokens.neutral[0], borderTop: `1px solid ${tokens.neutral[200]}`,
         borderRadius: 0,

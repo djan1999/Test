@@ -328,7 +328,7 @@ function BlockPickerModal({ onPick, onClose, menuCourses, blockMeta = BLOCK_META
         background: "rgba(0,0,0,0.35)",
         display: "flex", alignItems: "center", justifyContent: "center",
       }}
-      onClick={onClose}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
         style={{
