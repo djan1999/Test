@@ -10,6 +10,17 @@ import { extraPairingLabel, extraPairingForSeat } from "../../constants/pairings
 
 const FONT = tokens.font;
 
+// Resolve course list template from the guest menu profile — same logic as the
+// print generator — so both live board and ticket preview show the same courses.
+function resolveGuestTemplate(table, profiles, assignments) {
+  const guestId = assignments?.longMenuProfileId;
+  if (!guestId || !Array.isArray(profiles)) return null;
+  const p = profiles.find(pr => pr.id === guestId);
+  if (!p) return null;
+  const isShort = String(table?.menuType || "").toLowerCase() === "short";
+  return isShort ? (p.shortMenuTemplate || p.menuTemplate) : p.menuTemplate;
+}
+
 export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {} }) {
   const seats = table.seats || [];
   const restrictions = table.restrictions || [];
@@ -169,7 +180,9 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const visibleCoursesForTable = getVisibleCoursesForTable(
     table,
     menuCourses || [],
-    kitchenTemplate ? { kitchenTemplate } : { profiles, assignments }
+    kitchenTemplate
+      ? { kitchenTemplate }
+      : { kitchenTemplate: resolveGuestTemplate(table, profiles, assignments) }
   );
   const kitchenItemByCourseKey = visibleCoursesForTable.reduce((acc, vc) => {
     if (vc.kitchenItem) acc[vc.key] = vc.kitchenItem;
