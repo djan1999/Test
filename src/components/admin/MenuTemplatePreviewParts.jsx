@@ -216,7 +216,7 @@ export function PreviewDataPanel({
           ))}
           {/* Menu type toggle */}
           <span style={{ fontFamily: FONT, fontSize: 7.5, color: tokens.ink[3], marginLeft: 4 }}>MENU</span>
-          <button onClick={() => onMenuTypeChange("")}      style={btnStyle(menuType === "")}>FULL</button>
+          <button onClick={() => onMenuTypeChange("")}      style={btnStyle(menuType === "")}>LONG</button>
           <button onClick={() => onMenuTypeChange("short")} style={btnStyle(menuType === "short")}>SHORT</button>
         </div>
       </div>

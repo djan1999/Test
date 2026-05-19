@@ -720,12 +720,10 @@ export default function MenuTemplateEditor({
   aperitifOptions = [],
   profileLabel = "",
   menuCoursesForRebuild = null,
-  // Quick-switch between Long and Short menu profiles via the FULL/SHORT toggle
-  // in the preview data panel.
-  longMenuProfileId = null,
-  shortMenuProfileId = null,
-  activeProfileId = null,
-  onSelectProfile = null,
+  // Short menu template — lives inside the same profile as menuTemplate.
+  // LONG/SHORT toggle switches between editing these two without switching profiles.
+  shortMenuTemplate = null,
+  onUpdateShortMenuTemplate = null,
   // Kitchen mode
   profileTarget = "guest_menu",
   ticketTemplate = null,
@@ -755,6 +753,8 @@ export default function MenuTemplateEditor({
   const [previewBottles,  setPreviewBottles]    = useState([]);
   const [previewLang,     setPreviewLang]       = useState("en");
   const [previewMenuType, setPreviewMenuType]   = useState("");
+  // Which template is being edited: false = LONG (menuTemplate), true = SHORT (shortMenuTemplate).
+  const [editingShort,    setEditingShort]      = useState(false);
 
   // ── Menu title / thank-you note / team names — shared localStorage with MenuGenerator ──
   const [menuTitle,    setMenuTitle]    = useState(() => readMenuTitle("en"));
@@ -828,7 +828,9 @@ export default function MenuTemplateEditor({
     setPreviewSeats(prev => prev.map((s, i) => i === idx ? { ...s, ...patch } : s));
   };
 
-  const template = menuTemplate || { version: 2, rows: [] };
+  const template = editingShort
+    ? (shortMenuTemplate || { version: 2, rows: [] })
+    : (menuTemplate || { version: 2, rows: [] });
   const rows = Array.isArray(template.rows) ? template.rows : [];
 
   // ── Kitchen mode — active rows/update switch ──────────────────────────────
@@ -930,18 +932,6 @@ export default function MenuTemplateEditor({
 
   // menuTitle and thankYouNote come from state (shared localStorage with MenuGenerator)
 
-  // Keep the previewMenuType ("" = FULL, "short" = SHORT) in sync with whichever
-  // profile is active, so the FULL/SHORT toggle and preview label always reflect
-  // the menu currently being edited.
-  useEffect(() => {
-    if (!activeProfileId) return;
-    if (activeProfileId === shortMenuProfileId && previewMenuType !== "short") {
-      setPreviewMenuType("short");
-    } else if (activeProfileId === longMenuProfileId && previewMenuType !== "") {
-      setPreviewMenuType("");
-    }
-  }, [activeProfileId, longMenuProfileId, shortMenuProfileId]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // ── Keyboard: Escape deselects / closes picker ──
   useEffect(() => {
     const handler = (e) => {
@@ -1006,8 +996,12 @@ export default function MenuTemplateEditor({
   }, [isKitchen, template, rows, ticketTemplate, menuCourses, logoDataUri, layoutStyles, menuRules, previewSeats, previewSeatIdx, previewBottles, previewLang, previewMenuType, menuTitle, thankYouNote, teamNames]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = useCallback(newRows => {
-    onUpdateTemplate({ ...template, rows: newRows });
-  }, [template, onUpdateTemplate]);
+    if (editingShort) {
+      onUpdateShortMenuTemplate?.({ ...template, rows: newRows });
+    } else {
+      onUpdateTemplate({ ...template, rows: newRows });
+    }
+  }, [editingShort, template, onUpdateTemplate, onUpdateShortMenuTemplate]);
 
   const updateTicketRows = useCallback((newRows) => {
     const base = ticketTemplate && typeof ticketTemplate === "object" ? ticketTemplate : { version: 1, rows: [] };
@@ -1142,12 +1136,7 @@ export default function MenuTemplateEditor({
           lang={previewLang}         onLangChange={handleLangChange}
           menuType={previewMenuType} onMenuTypeChange={(nextType) => {
             setPreviewMenuType(nextType);
-            if (!onSelectProfile) return;
-            if (nextType === "short" && shortMenuProfileId && shortMenuProfileId !== activeProfileId) {
-              onSelectProfile(shortMenuProfileId);
-            } else if (nextType === "" && longMenuProfileId && longMenuProfileId !== activeProfileId) {
-              onSelectProfile(longMenuProfileId);
-            }
+            setEditingShort(nextType === "short");
           }}
           open={previewDataOpen}     onToggle={() => setPreviewDataOpen(v => !v)}
         />

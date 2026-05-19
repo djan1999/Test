@@ -12,10 +12,8 @@ import MenuTemplateEditor from "./MenuTemplateEditor.jsx";
 const FONT = tokens.font;
 
 const ASSIGNMENT_ROWS = [
-  { slot: "longMenuProfileId",     label: "Long Menu uses",     target: "guest_menu" },
-  { slot: "shortMenuProfileId",    label: "Short Menu uses",    target: "guest_menu" },
-  { slot: "longKitchenProfileId",  label: "Long Kitchen uses",  target: "kitchen_flow" },
-  { slot: "shortKitchenProfileId", label: "Short Kitchen uses", target: "kitchen_flow" },
+  { slot: "longMenuProfileId",    label: "Menu Profile",    target: "guest_menu" },
+  { slot: "longKitchenProfileId", label: "Kitchen Profile", target: "kitchen_flow" },
 ];
 
 const TARGET_LABEL = { guest_menu: "Guest Menu", kitchen_flow: "Kitchen Flow" };
@@ -64,10 +62,8 @@ const Badge = ({ text }) => (
 );
 
 const SLOT_BADGE = {
-  longMenuProfileId:     "Long Menu",
-  shortMenuProfileId:    "Short Menu",
-  longKitchenProfileId:  "Long Kitchen",
-  shortKitchenProfileId: "Short Kitchen",
+  longMenuProfileId:    "Menu",
+  longKitchenProfileId: "Kitchen",
 };
 
 /**
@@ -117,9 +113,10 @@ export default function MenuLayoutPanel({
   onSetProfileTarget,
   layoutAssignments = {},
   onSetProfileAssignment,
-  // Short menu sync — rebuild short profile templates from show_on_short flags
-  onSyncShortGuestTemplate = null,
-  onSyncShortKitchenTemplate = null,
+  // Short menu template — embedded in same profile as menuTemplate.
+  // LONG/SHORT toggle in the editor switches between editing these two.
+  shortMenuTemplate = null,
+  onUpdateShortMenuTemplate = null,
 }) {
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
@@ -149,32 +146,15 @@ export default function MenuLayoutPanel({
     return `Editing: ${active.name}`;
   }, [active, activeSlots]);
 
-  const isShortGuestActive  = activeSlots.includes("shortMenuProfileId");
-  const isShortKitchenActive = activeSlots.includes("shortKitchenProfileId");
-  const isAnyShortActive = isShortGuestActive || isShortKitchenActive;
-
-  // When editing the short guest menu profile, pre-filter the courses available
-  // for template rebuild to only show_on_short flagged ones. Falls back to all
-  // courses if none are flagged so the rebuild is never empty.
-  const menuCoursesForRebuild = useMemo(() => {
-    if (!isShortGuestActive) return menuCourses;
-    const shortCourses = (menuCourses || []).filter(c => {
-      const v = String(c.show_on_short ?? "").trim().toLowerCase();
-      return v === "true" || v === "1" || v === "yes" || v === "y" || v === "x" || v === "wahr";
-    });
-    return shortCourses.length > 0 ? shortCourses : menuCourses;
-  }, [isShortGuestActive, menuCourses]);
-
   const handleSyncShort = async () => {
-    if (syncing) return;
+    if (syncing || !active || !onUpdateShortMenuTemplate) return;
     setSyncing(true); setSyncDone(false);
-    if (isShortGuestActive && onSyncShortGuestTemplate) {
-      const tpl = buildShortMenuTemplateFromCourses(menuCourses || []);
-      await onSyncShortGuestTemplate(tpl);
-    }
-    if (isShortKitchenActive && onSyncShortKitchenTemplate) {
+    if (active.target === "kitchen_flow") {
       const tpl = buildShortKitchenTemplateFromCourses(menuCourses || []);
-      await onSyncShortKitchenTemplate(tpl);
+      onUpdateShortMenuTemplate(tpl);
+    } else {
+      const tpl = buildShortMenuTemplateFromCourses(menuCourses || []);
+      onUpdateShortMenuTemplate(tpl);
     }
     setSyncing(false); setSyncDone(true);
     setTimeout(() => setSyncDone(false), 2500);
@@ -333,26 +313,26 @@ export default function MenuLayoutPanel({
           </div>
         )}
 
-        {/* Short menu sync banner — visible when the active profile serves a short slot */}
-        {isAnyShortActive && (
+        {/* Short template sync — rebuild shortMenuTemplate from show_on_short course flags */}
+        {onUpdateShortMenuTemplate && (
           <div style={{
             marginBottom: 14, padding: "10px 12px",
-            border: `1px solid ${tokens.charcoal.default}`,
-            background: tokens.tint.parchment,
+            border: `1px solid ${tokens.ink[4]}`,
+            background: tokens.ink.bg,
             display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap",
           }}>
             <div>
               <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[2], fontWeight: 700, marginBottom: 3 }}>
-                Short Menu Profile
+                Short Template (this profile)
               </div>
               <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], lineHeight: 1.5 }}>
-                Rebuild this profile&apos;s course list from the <strong>Include in Short Menu</strong> flags set in Courses.
-                This overwrites the current template rows with the flagged courses in their short-order.
+                Rebuild the Short template from <strong>Include in Short Menu</strong> flags in Courses.
+                Use the <strong>SHORT</strong> toggle above to edit it manually.
               </div>
             </div>
             <button
               onClick={handleSyncShort}
-              disabled={syncing || (!onSyncShortGuestTemplate && !onSyncShortKitchenTemplate)}
+              disabled={syncing}
               style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase",
                 padding: "8px 14px", borderRadius: 0, cursor: syncing ? "default" : "pointer",
@@ -374,10 +354,6 @@ export default function MenuLayoutPanel({
         }}>
           {ASSIGNMENT_ROWS.map(({ slot, label, target }) => {
             const optionsForTarget = layoutProfiles.filter(p => (p.target || "guest_menu") === target);
-            const isShortSlot = slot === "shortMenuProfileId" || slot === "shortKitchenProfileId";
-            const longSlot = slot === "shortMenuProfileId" ? "longMenuProfileId" : "longKitchenProfileId";
-            const longProfileId = layoutAssignments?.[longSlot];
-            const isUnassigned = !layoutAssignments?.[slot];
             return (
               <div key={slot}>
                 <label style={lbl}>{label}</label>
@@ -393,21 +369,6 @@ export default function MenuLayoutPanel({
                   <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 4 }}>
                     No {TARGET_LABEL[target]} profiles yet — create one above.
                   </div>
-                )}
-                {isShortSlot && isUnassigned && longProfileId && onDuplicateAndAssignProfile && (
-                  <button
-                    onClick={() => onDuplicateAndAssignProfile(longProfileId,
-                      slot === "shortMenuProfileId" ? "Default Short Menu" : "Default Short Kitchen",
-                      slot)}
-                    style={{
-                      marginTop: 6, fontFamily: FONT, fontSize: 9, letterSpacing: "0.10em",
-                      textTransform: "uppercase", padding: "5px 10px",
-                      border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0,
-                      cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[0], width: "100%",
-                    }}
-                  >
-                    + Duplicate from {slot === "shortMenuProfileId" ? "Long Menu" : "Long Kitchen"}
-                  </button>
                 )}
               </div>
             );
@@ -432,7 +393,6 @@ export default function MenuLayoutPanel({
           menuRulesSaving={menuRulesSaving}
           menuRulesSaved={menuRulesSaved}
           menuCourses={menuCourses}
-          menuCoursesForRebuild={menuCoursesForRebuild}
           logoDataUri={logoDataUri}
           layoutStyles={layoutStyles}
           wines={wines}
@@ -441,10 +401,8 @@ export default function MenuLayoutPanel({
           beers={beers}
           aperitifOptions={aperitifOptions}
           profileLabel={profileLabel}
-          longMenuProfileId={layoutAssignments?.longMenuProfileId || null}
-          shortMenuProfileId={layoutAssignments?.shortMenuProfileId || null}
-          activeProfileId={active?.id || null}
-          onSelectProfile={onSelectLayoutProfile}
+          shortMenuTemplate={shortMenuTemplate}
+          onUpdateShortMenuTemplate={onUpdateShortMenuTemplate}
           profileTarget={active?.target || "guest_menu"}
           ticketTemplate={ticketTemplate}
           onUpdateTicketTemplate={onUpdateTicketTemplate}

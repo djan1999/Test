@@ -64,12 +64,13 @@ const cloneTemplate = (tpl) => {
   return { ...tpl, version: tpl.version || 2, rows };
 };
 
-export function makeProfile({ name, target = "guest_menu", menuTemplate = null, layoutStyles = {} } = {}) {
+export function makeProfile({ name, target = "guest_menu", menuTemplate = null, shortMenuTemplate = null, layoutStyles = {} } = {}) {
   return {
     id: makeProfileId(),
     name: String(name || "Untitled Profile"),
     target: normalizeTarget(target),
     menuTemplate: menuTemplate || null,
+    shortMenuTemplate: shortMenuTemplate || null,
     layoutStyles: layoutStyles && typeof layoutStyles === "object" ? layoutStyles : {},
   };
 }
@@ -135,46 +136,33 @@ export function createDefaultProfiles(menuCourses = []) {
     return (Number(a.position) || 0) - (Number(b.position) || 0);
   });
 
-  const longGuest = makeProfile({
-    name: "Default Long Menu",
+  const guestProfile = makeProfile({
+    name: "Default Menu",
     target: "guest_menu",
     menuTemplate: buildDefaultTemplate(longSorted),
+    shortMenuTemplate: buildDefaultTemplate(shortSorted),
     layoutStyles: {},
   });
-  const shortGuest = makeProfile({
-    name: "Default Short Menu",
-    target: "guest_menu",
-    menuTemplate: buildDefaultTemplate(shortSorted),
-    layoutStyles: {},
-  });
-  const longKitchen = {
+  const kitchenProfile = {
     ...makeProfile({
-      name: "Default Long Kitchen",
+      name: "Default Kitchen",
       target: "kitchen_flow",
       menuTemplate: buildKitchenTemplate(longSorted),
-      layoutStyles: {},
-    }),
-    ticketTemplate: buildDefaultTicketTemplate(),
-  };
-  const shortKitchen = {
-    ...makeProfile({
-      name: "Default Short Kitchen",
-      target: "kitchen_flow",
-      menuTemplate: buildKitchenTemplate(shortSorted),
+      shortMenuTemplate: buildKitchenTemplate(shortSorted),
       layoutStyles: {},
     }),
     ticketTemplate: buildDefaultTicketTemplate(),
   };
 
   return {
-    profiles: [longGuest, shortGuest, longKitchen, shortKitchen],
+    profiles: [guestProfile, kitchenProfile],
     assignments: {
-      longMenuProfileId:    longGuest.id,
-      shortMenuProfileId:   shortGuest.id,
-      longKitchenProfileId: longKitchen.id,
-      shortKitchenProfileId:shortKitchen.id,
+      longMenuProfileId:    guestProfile.id,
+      shortMenuProfileId:   null,
+      longKitchenProfileId: kitchenProfile.id,
+      shortKitchenProfileId:null,
     },
-    activeProfileId: longGuest.id,
+    activeProfileId: guestProfile.id,
   };
 }
 
@@ -203,6 +191,7 @@ export function sanitizeProfilesPayload(raw) {
       name: String(p.name || `Profile ${idx + 1}`),
       target: normalizeTarget(p.target),
       menuTemplate: p.menuTemplate && typeof p.menuTemplate === "object" ? p.menuTemplate : null,
+      shortMenuTemplate: p.shortMenuTemplate && typeof p.shortMenuTemplate === "object" ? p.shortMenuTemplate : null,
       layoutStyles: p.layoutStyles && typeof p.layoutStyles === "object" ? p.layoutStyles : {},
       ticketTemplate: p.ticketTemplate && typeof p.ticketTemplate === "object" ? p.ticketTemplate : null,
     }));
@@ -307,6 +296,7 @@ export function duplicateProfile(profile, nextName) {
     name: nextName || `${profile.name || "Profile"} (copy)`,
     target: normalizeTarget(profile.target),
     menuTemplate: cloneTemplate(profile.menuTemplate),
+    shortMenuTemplate: profile.shortMenuTemplate ? cloneTemplate(profile.shortMenuTemplate) : null,
     layoutStyles: profile.layoutStyles ? { ...profile.layoutStyles } : {},
     ticketTemplate: profile.ticketTemplate ? cloneTemplate(profile.ticketTemplate) : null,
   };

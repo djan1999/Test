@@ -35,15 +35,16 @@ const PAIRING_MAP = { "Wine": "wp", "Non-Alc": "na", "Our Story": "os", "Premium
 
 
 export default function MenuGenerator({ table, menuCourses = [], upd, onClose, profiles = [], assignments = {}, logoDataUri = "", wines: winesCatalog = [], cocktails: cocktailsCatalog = [], spirits: spiritsCatalog = [], beers: beersCatalog = [], aperitifOptions = [], menuRules = DEFAULT_MENU_RULES }) {
-  // Resolve the guest profile assigned to this table's menuType. The
-  // resolved profile decides BOTH the row-based menuTemplate and the
-  // layoutStyles passed into generateMenuHTML, so Long and Short menus are
-  // truly separate templates rather than a filtered view of the same one.
+  // Resolve the guest profile (always via the long slot — short template lives
+  // inside the profile as shortMenuTemplate). Pick the right template based on menuType.
   const assignedProfile = useMemo(
-    () => getAssignedGuestProfile(table?.menuType || "", profiles, assignments),
-    [table?.menuType, profiles, assignments]
+    () => getAssignedGuestProfile("", profiles, assignments),
+    [profiles, assignments]
   );
-  const menuTemplate = assignedProfile?.menuTemplate || null;
+  const isShortMenu = String(table?.menuType || "").trim().toLowerCase() === "short";
+  const menuTemplate = isShortMenu
+    ? (assignedProfile?.shortMenuTemplate || assignedProfile?.menuTemplate || null)
+    : (assignedProfile?.menuTemplate || null);
   const defaultLayoutStyles = assignedProfile?.layoutStyles || {};
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState(() => readMenuTitle(table.lang || "en"));

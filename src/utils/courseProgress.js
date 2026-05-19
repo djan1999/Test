@@ -52,12 +52,24 @@ function pickKitchenTemplate(table, options) {
   const assignments = options.assignments;
   if (Array.isArray(profiles) && assignments) {
     const menuType = table?.menuType || "";
-    const kitchenProfile = getAssignedKitchenProfile(menuType, profiles, assignments);
-    if (kitchenProfile?.menuTemplate) return kitchenProfile.menuTemplate;
+    const isShortType = String(menuType).trim().toLowerCase() === "short";
+    // Always resolve via the long slot — short template lives inside the profile.
+    const kitchenProfile = getAssignedKitchenProfile("", profiles, assignments);
+    if (kitchenProfile) {
+      const tpl = isShortType
+        ? (kitchenProfile.shortMenuTemplate || kitchenProfile.menuTemplate)
+        : kitchenProfile.menuTemplate;
+      if (tpl?.rows) return tpl;
+    }
     // No kitchen profile assigned — fall back to the guest profile so the
-    // Short Menu guest template drives the kitchen board/SheetView automatically.
-    const guestProfile = getAssignedGuestProfile(menuType, profiles, assignments);
-    if (guestProfile?.menuTemplate) return guestProfile.menuTemplate;
+    // short/long guest template drives the kitchen board automatically.
+    const guestProfile = getAssignedGuestProfile("", profiles, assignments);
+    if (guestProfile) {
+      const tpl = isShortType
+        ? (guestProfile.shortMenuTemplate || guestProfile.menuTemplate)
+        : guestProfile.menuTemplate;
+      if (tpl?.rows) return tpl;
+    }
   }
   return null;
 }

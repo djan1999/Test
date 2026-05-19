@@ -1879,9 +1879,10 @@ export default function App() {
     () => profilesState.profiles.find(p => p.id === profilesState.activeProfileId) || profilesState.profiles[0] || null,
     [profilesState.profiles, profilesState.activeProfileId]
   );
-  const menuTemplate   = activeProfile?.menuTemplate   || null;
-  const ticketTemplate = activeProfile?.ticketTemplate || null;
-  const globalLayout   = activeProfile?.layoutStyles   || {};
+  const menuTemplate      = activeProfile?.menuTemplate      || null;
+  const shortMenuTemplate = activeProfile?.shortMenuTemplate || null;
+  const ticketTemplate    = activeProfile?.ticketTemplate    || null;
+  const globalLayout      = activeProfile?.layoutStyles      || {};
   const [layoutSaving, setLayoutSaving] = useState(false);
   const [layoutSaved,  setLayoutSaved]  = useState(false);
 
@@ -2824,30 +2825,6 @@ export default function App() {
     });
   }, [updateProfiles]);
 
-  // Sync the short guest menu profile's template from show_on_short course flags.
-  // Updates the profile identified by assignments.shortMenuProfileId in place,
-  // then persists. If no profile is assigned the call is a no-op.
-  const syncShortGuestTemplate = useCallback(async (builtTemplate) => {
-    if (!builtTemplate) return;
-    const profileId = profilesStateRef.current?.assignments?.shortMenuProfileId;
-    if (!profileId) return;
-    updateProfiles(prev => ({
-      ...prev,
-      profiles: prev.profiles.map(p => p.id === profileId ? { ...p, menuTemplate: builtTemplate } : p),
-    }));
-  }, [updateProfiles]);
-
-  // Sync the short kitchen profile's template from show_on_short course flags.
-  const syncShortKitchenTemplate = useCallback(async (builtTemplate) => {
-    if (!builtTemplate) return;
-    const profileId = profilesStateRef.current?.assignments?.shortKitchenProfileId;
-    if (!profileId) return;
-    updateProfiles(prev => ({
-      ...prev,
-      profiles: prev.profiles.map(p => p.id === profileId ? { ...p, menuTemplate: builtTemplate } : p),
-    }));
-  }, [updateProfiles]);
-
   // Edit hooks for the Admin template editor — they target the currently
   // active profile and merge changes back into profilesState immediately.
   const setMenuTemplate = useCallback((next) => {
@@ -2860,6 +2837,20 @@ export default function App() {
       return {
         ...prev,
         profiles: prev.profiles.map(p => p.id === activeId ? { ...p, menuTemplate: value || null } : p),
+      };
+    });
+  }, []);
+
+  const setShortMenuTemplate = useCallback((next) => {
+    setProfilesState(prev => {
+      const activeId = prev.activeProfileId;
+      if (!activeId) return prev;
+      const value = typeof next === "function"
+        ? next(prev.profiles.find(p => p.id === activeId)?.shortMenuTemplate || null)
+        : next;
+      return {
+        ...prev,
+        profiles: prev.profiles.map(p => p.id === activeId ? { ...p, shortMenuTemplate: value || null } : p),
       };
     });
   }, []);
@@ -3613,8 +3604,8 @@ export default function App() {
         onSetProfileTarget={setProfileTargetById}
         layoutAssignments={profilesState.assignments}
         onSetProfileAssignment={setProfileAssignment}
-        onSyncShortGuestTemplate={syncShortGuestTemplate}
-        onSyncShortKitchenTemplate={syncShortKitchenTemplate}
+        shortMenuTemplate={shortMenuTemplate}
+        onUpdateShortMenuTemplate={setShortMenuTemplate}
         wineSyncConfig={wineSyncConfig}
         onUpdateWineSyncConfig={setWineSyncConfig}
         onSaveWineSyncConfig={saveWineSyncConfig}
