@@ -373,6 +373,10 @@ export default function MenuLayoutPanel({
         }}>
           {ASSIGNMENT_ROWS.map(({ slot, label, target }) => {
             const optionsForTarget = layoutProfiles.filter(p => (p.target || "guest_menu") === target);
+            const isShortSlot = slot === "shortMenuProfileId" || slot === "shortKitchenProfileId";
+            const longSlot = slot === "shortMenuProfileId" ? "longMenuProfileId" : "longKitchenProfileId";
+            const longProfileId = layoutAssignments?.[longSlot];
+            const isUnassigned = !layoutAssignments?.[slot];
             return (
               <div key={slot}>
                 <label style={lbl}>{label}</label>
@@ -388,6 +392,23 @@ export default function MenuLayoutPanel({
                   <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 4 }}>
                     No {TARGET_LABEL[target]} profiles yet — create one above.
                   </div>
+                )}
+                {isShortSlot && isUnassigned && longProfileId && onDuplicateLayoutProfile && onSetProfileAssignment && (
+                  <button
+                    onClick={() => {
+                      const newId = onDuplicateLayoutProfile(longProfileId,
+                        slot === "shortMenuProfileId" ? "Default Short Menu" : "Default Short Kitchen");
+                      if (newId) onSetProfileAssignment(slot, newId);
+                    }}
+                    style={{
+                      marginTop: 6, fontFamily: FONT, fontSize: 9, letterSpacing: "0.10em",
+                      textTransform: "uppercase", padding: "5px 10px",
+                      border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0,
+                      cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[0], width: "100%",
+                    }}
+                  >
+                    + Duplicate from {slot === "shortMenuProfileId" ? "Long Menu" : "Long Kitchen"}
+                  </button>
                 )}
               </div>
             );

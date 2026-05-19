@@ -216,15 +216,23 @@ export function sanitizeProfilesPayload(raw) {
     }
     const matching = profiles.filter(p => p.target === target);
     // Use position-based index without collapsing to [0] for secondary slots
-    // so long and short slots never end up pointing at the same profile.
+    // so long and short slots never silently end up pointing at the same profile.
     return matching[idx]?.id ?? null;
   };
 
+  const longMenuId     = pickValid(a.longMenuProfileId,     "guest_menu",   0);
+  const shortMenuId    = pickValid(a.shortMenuProfileId,    "guest_menu",   1);
+  const longKitchenId  = pickValid(a.longKitchenProfileId,  "kitchen_flow", 0);
+  const shortKitchenId = pickValid(a.shortKitchenProfileId, "kitchen_flow", 1);
+
+  // If long and short resolved to the same profile (e.g. from legacy single-profile
+  // migration or stale stored data), clear the short slot so the user must assign
+  // a distinct profile rather than unknowingly editing both at once.
   const assignments = {
-    longMenuProfileId:     pickValid(a.longMenuProfileId,     "guest_menu",   0),
-    shortMenuProfileId:    pickValid(a.shortMenuProfileId,    "guest_menu",   1),
-    longKitchenProfileId:  pickValid(a.longKitchenProfileId,  "kitchen_flow", 0),
-    shortKitchenProfileId: pickValid(a.shortKitchenProfileId, "kitchen_flow", 1),
+    longMenuProfileId:     longMenuId,
+    shortMenuProfileId:    (shortMenuId && shortMenuId !== longMenuId) ? shortMenuId : null,
+    longKitchenProfileId:  longKitchenId,
+    shortKitchenProfileId: (shortKitchenId && shortKitchenId !== longKitchenId) ? shortKitchenId : null,
   };
 
   const activeProfileId = (() => {
