@@ -3,6 +3,8 @@ import {
   applyCourseRestriction,
   applyMenuOverride,
   mergeDishes,
+  getCourseMod,
+  resolveSeatRestrictionKeys,
 } from "../utils/menuUtils.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -27,16 +29,25 @@ describe("applyCourseRestriction", () => {
     expect(applyCourseRestriction({ restrictions: {} }, ["veg"])).toBeNull();
   });
 
-  it("substitutes sub-only when restriction cell has no pipe (name is kept)", () => {
+  it("replaces dish name when restriction has Alt name only (sub kept)", () => {
     const course = makeCourse("Lamb", "Rosemary jus", {
-      veg: { name: "Beetroot variation", sub: "" },
+      veg: { name: "Mushroom Dumpling", sub: "" },
+    });
+    const result = applyCourseRestriction(course, ["veg"]);
+    expect(result.name).toBe("Mushroom Dumpling");
+    expect(result.sub).toBe("Rosemary jus");
+  });
+
+  it("replaces sub only when restriction has Alt desc only (name kept)", () => {
+    const course = makeCourse("Lamb", "Rosemary jus", {
+      veg: { name: "", sub: "no jus" },
     });
     const result = applyCourseRestriction(course, ["veg"]);
     expect(result.name).toBe("Lamb");
-    expect(result.sub).toBe("Beetroot variation");
+    expect(result.sub).toBe("no jus");
   });
 
-  it("substitutes both name and sub when restriction cell has pipe separator", () => {
+  it("substitutes both name and sub when restriction provides both", () => {
     const course = makeCourse("Lamb", "Rosemary jus", {
       veg: { name: "Mushroom", sub: "Truffle sauce" },
     });
@@ -59,10 +70,9 @@ describe("applyCourseRestriction", () => {
       vegan: { name: "Tofu", sub: "" },
       gluten_free: { name: "Gluten-free beef", sub: "" },
     });
-    // vegan is earlier in priority list
+    // vegan is earlier in priority list, so gluten variant is ignored
     const result = applyCourseRestriction(course, ["vegan", "gluten"]);
-    expect(result.name).toBe("Beef");
-    expect(result.sub).toBe("Tofu");
+    expect(result.name).toBe("Tofu");
   });
 
   it("does not substitute if active restriction has no corresponding restriction data", () => {
@@ -77,7 +87,7 @@ describe("applyCourseRestriction", () => {
       veg_si: { name: "Gobe", sub: "" },
     });
     const result = applyCourseRestriction(course, ["veg"], "si");
-    expect(result.sub).toBe("Gobe");
+    expect(result.name).toBe("Gobe");
   });
 
   it("falls back to EN restriction when lang=si but no SI variant exists", () => {
@@ -85,7 +95,7 @@ describe("applyCourseRestriction", () => {
       veg: { name: "Mushroom", sub: "" },
     });
     const result = applyCourseRestriction(course, ["veg"], "si");
-    expect(result.sub).toBe("Mushroom");
+    expect(result.name).toBe("Mushroom");
   });
 
   it("handles gluten restriction mapped to gluten_free column", () => {
@@ -93,7 +103,7 @@ describe("applyCourseRestriction", () => {
       gluten_free: { name: "Gluten-free bread", sub: "" },
     });
     const result = applyCourseRestriction(course, ["gluten"]);
-    expect(result.sub).toBe("Gluten-free bread");
+    expect(result.name).toBe("Gluten-free bread");
   });
 });
 
@@ -209,5 +219,88 @@ describe("mergeDishes", () => {
   it("handles null/undefined input gracefully", () => {
     expect(mergeDishes(null)).toHaveLength(3);
     expect(mergeDishes(undefined)).toHaveLength(3);
+  });
+});
+
+// ── getCourseMod ───────────────────────────────────────────────────────────────
+
+describe("getCourseMod", () => {
+  const baseCourse = (restrictions = {}) => ({
+    course_key: "main",
+    menu: { name: "Chicken", sub: "Jus" },
+    restrictions,
+  });
+
+  it("returns null when no restriction keys", () => {
+    expect(getCourseMod(baseCourse(), [])).toBeNull();
+    expect(getCourseMod(baseCourse(), null)).toBeNull();
+  });
+
+  it("reads mapped flat note (gluten_free_note)", () => {
+    const course = baseCourse({ gluten_free_note: "GF bread" });
+    expect(getCourseMod(course, ["gluten"])).toBe("GF BREAD");
+  });
+
+  it("reads raw-key flat note (gluten_note) — previously missed", () => {
+    const course = baseCourse({ gluten_note: "GF version" });
+    expect(getCourseMod(course, ["gluten"])).toBe("GF VERSION");
+  });
+
+  it("reads nested kitchen_note on mapped variant (gluten_free.kitchen_note) — previously missed", () => {
+    const course = baseCourse({ gluten_free: { kitchen_note: "No flour sauce" } });
+    expect(getCourseMod(course, ["gluten"])).toBe("NO FLOUR SAUCE");
+  });
+
+  it("reads nested kitchen_note on raw-key variant (gluten.kitchen_note) — previously missed", () => {
+    const course = baseCourse({ gluten: { kitchen_note: "Rice noodles" } });
+    expect(getCourseMod(course, ["gluten"])).toBe("RICE NOODLES");
+  });
+
+  it("falls back to substitution name when no note", () => {
+    const course = baseCourse({ gluten_free: { name: "GF Pasta", sub: "Olive oil" } });
+    expect(getCourseMod(course, ["gluten"])).toBe("GF Pasta");
+  });
+
+  it("returns null when dish is unchanged for the restriction", () => {
+    expect(getCourseMod(baseCourse(), ["gluten"])).toBeNull();
+  });
+});
+
+// ── resolveSeatRestrictionKeys ────────────────────────────────────────────────
+
+describe("resolveSeatRestrictionKeys", () => {
+  it("returns restrictions assigned to the seat", () => {
+    const restrictions = [
+      { pos: 1, note: "veg" },
+      { pos: 2, note: "gluten" },
+    ];
+    expect(resolveSeatRestrictionKeys(restrictions, 1)).toEqual(["veg"]);
+  });
+
+  it("includes unassigned (pos: null) restrictions for every seat", () => {
+    const restrictions = [
+      { pos: null, note: "veg" },
+      { pos: 1, note: "gluten" },
+    ];
+    expect(resolveSeatRestrictionKeys(restrictions, 1).sort()).toEqual(["gluten", "veg"]);
+    expect(resolveSeatRestrictionKeys(restrictions, 2)).toEqual(["veg"]);
+  });
+
+  it("treats missing pos field as unassigned", () => {
+    const restrictions = [{ note: "vegan" }];
+    expect(resolveSeatRestrictionKeys(restrictions, 1)).toEqual(["vegan"]);
+    expect(resolveSeatRestrictionKeys(restrictions, 5)).toEqual(["vegan"]);
+  });
+
+  it("does not surface restrictions assigned to a different seat", () => {
+    const restrictions = [{ pos: 2, note: "veg" }];
+    expect(resolveSeatRestrictionKeys(restrictions, 1)).toEqual([]);
+  });
+
+  it("handles missing or empty input gracefully", () => {
+    expect(resolveSeatRestrictionKeys(null, 1)).toEqual([]);
+    expect(resolveSeatRestrictionKeys(undefined, 1)).toEqual([]);
+    expect(resolveSeatRestrictionKeys([], 1)).toEqual([]);
+    expect(resolveSeatRestrictionKeys([{ pos: null, note: "" }], 1)).toEqual([]);
   });
 });

@@ -34,6 +34,27 @@ from generate_series(1, 10) as gs
 on conflict (table_id) do nothing;
 
 -- ── service_settings ────────────────────────────────────────
+-- Generic key/value JSON store. Notable rows used by the app:
+--   id = "menu_layout_profiles_v2" → unified layout profiles. Shape:
+--     { profiles: [{ id, name, target: "guest_menu"|"kitchen_flow",
+--                    menuTemplate, layoutStyles }],
+--       assignments: { longMenuProfileId, shortMenuProfileId,
+--                      longKitchenProfileId, shortKitchenProfileId },
+--       activeProfileId }
+--     This is the single source of truth for menu layouts. Long Menu / Short
+--     Menu / Long Kitchen / Short Kitchen each pick a profile by id.
+--   id = "menu_layout_profiles_v1" → legacy multi-profile wrapper (auto-migrated to v2)
+--   id = "menu_layout_v2"          → legacy single-profile menuTemplate (auto-migrated to v2)
+--   id = "menu_layout_global"      → legacy single-profile layoutStyles (auto-migrated to v2)
+--   id = "menu_gen_rules"          → generator behaviour flags
+--   id = "menu_gen_team"           → team names
+--   id = "menu_gen_title"          → menu title (per-language)
+--   id = "menu_gen_thankyou"       → thank-you note (per-language)
+--   id = "quick_access"            → quick-access items
+--
+-- The flat `menu_layouts_v1` row from a previous design pass is intentionally
+-- not read by the current app. It can be left in place; the row-based
+-- menuTemplate is the only guest layout system.
 create table if not exists public.service_settings (
   id text primary key,
   state jsonb not null default '{}'::jsonb,
@@ -56,6 +77,13 @@ create policy "service_settings_update" on public.service_settings
 
 insert into public.service_settings (id, state)
 values ('main', '{}'::jsonb)
+on conflict (id) do nothing;
+
+-- Seed empty Menu Layout Profiles payload so the app has a row to read on first load.
+-- The app populates default Long/Short Menu and Long/Short Kitchen profiles
+-- from menuCourses on first run.
+insert into public.service_settings (id, state)
+values ('menu_layout_profiles_v2', '{"profiles":[],"assignments":{"longMenuProfileId":null,"shortMenuProfileId":null,"longKitchenProfileId":null,"shortKitchenProfileId":null},"activeProfileId":null}'::jsonb)
 on conflict (id) do nothing;
 
 -- ── service_archive ─────────────────────────────────────────
@@ -91,49 +119,69 @@ create policy "service_archive_delete" on public.service_archive
   for delete to anon, authenticated using (true);
 
 -- ── menu_courses ─────────────────────────────────────────────
+-- This is the authoritative source for all menu data.
+-- Courses are managed directly via the Admin panel (no external sync).
 create table if not exists public.menu_courses (
   position integer primary key,
-  menu jsonb,
+  menu jsonb,                              -- {name, sub} EN dish
+  menu_si jsonb,                           -- {name, sub} SI dish
+  -- Dietary restriction substitutes (each is {name, sub} or null)
   veg jsonb,
-  hazards jsonb,
-  na jsonb,
-  wp jsonb,
-  os jsonb,
-  premium jsonb,
-  is_snack boolean not null default false,
+  vegan jsonb,
+  pescetarian jsonb,
   gluten_free jsonb,
   dairy_free jsonb,
   nut_free jsonb,
-  pescetarian jsonb,
+  shellfish_free jsonb,
   no_red_meat jsonb,
   no_pork jsonb,
   no_game jsonb,
   no_offal jsonb,
   egg_free jsonb,
-  -- Slovenian dish name (for SLO menu generator)
-  menu_si jsonb,
-  -- Slovenian pairing drink variants (line 2 of bilingual sheet cells)
-  wp_si jsonb,
-  na_si jsonb,
-  os_si jsonb,
-  premium_si jsonb,
-  -- Slovenian restriction substitutes (keyed by restriction name, e.g. {"veg": {name, sub}})
+  no_alcohol jsonb,
+  no_garlic_onion jsonb,
+  halal jsonb,
+  low_fodmap jsonb,
+  -- SI restriction substitutes + notes (keyed JSON blob)
   restrictions_si jsonb,
-  -- Kitchen / display metadata
-  course_key text not null default '',
-  optional_flag text not null default '',
-  section_gap_before boolean not null default false,
-  show_on_short boolean not null default false,
-  short_order integer,
+  -- Pairings (each is {name, sub} or null)
+  wp jsonb,                                -- Wine pairing
+  wp_si jsonb,
+  na jsonb,                                -- Non-alcoholic pairing
+  na_si jsonb,
+  os jsonb,                                -- Our Story pairing
+  os_si jsonb,
+  premium jsonb,                           -- Premium pairing
+  premium_si jsonb,
+  -- Legacy forced pairing override (deprecated; replaced by optional_pairing block config)
   force_pairing_title text not null default '',
   force_pairing_sub text not null default '',
   force_pairing_title_si text not null default '',
   force_pairing_sub_si text not null default '',
+  -- Metadata
+  hazards jsonb,
+  is_snack boolean not null default false,
+  course_key text not null default '',
+  course_category text not null default 'main',
+  optional_flag text not null default '',
+  optional_pairing_flag text not null default '',
+  optional_pairing_label text not null default '',
+  optional_pairing_enabled boolean not null default false,
+  optional_pairing_default_on boolean not null default true,
+  optional_pairing_alco jsonb,
+  optional_pairing_alco_si jsonb,
+  optional_pairing_na jsonb,
+  optional_pairing_na_si jsonb,
+  section_gap_before boolean not null default false,
+  show_on_short boolean not null default false,
+  short_order integer,
   kitchen_note text not null default '',
+  aperitif_btn text,
+  is_active boolean not null default true,
   updated_at timestamptz not null default now()
 );
 
--- Migration: add new columns if upgrading an existing table
+-- Migration: add columns if upgrading an existing table
 alter table public.menu_courses
   add column if not exists menu_si jsonb,
   add column if not exists wp_si jsonb,
@@ -142,7 +190,16 @@ alter table public.menu_courses
   add column if not exists premium_si jsonb,
   add column if not exists restrictions_si jsonb,
   add column if not exists course_key text not null default '',
+  add column if not exists course_category text not null default 'main',
   add column if not exists optional_flag text not null default '',
+  add column if not exists optional_pairing_flag text not null default '',
+  add column if not exists optional_pairing_label text not null default '',
+  add column if not exists optional_pairing_enabled boolean not null default false,
+  add column if not exists optional_pairing_default_on boolean not null default true,
+  add column if not exists optional_pairing_alco jsonb,
+  add column if not exists optional_pairing_alco_si jsonb,
+  add column if not exists optional_pairing_na jsonb,
+  add column if not exists optional_pairing_na_si jsonb,
   add column if not exists section_gap_before boolean not null default false,
   add column if not exists show_on_short boolean not null default false,
   add column if not exists short_order integer,
@@ -150,7 +207,15 @@ alter table public.menu_courses
   add column if not exists force_pairing_sub text not null default '',
   add column if not exists force_pairing_title_si text not null default '',
   add column if not exists force_pairing_sub_si text not null default '',
-  add column if not exists kitchen_note text not null default '';
+  add column if not exists kitchen_note text not null default '',
+  add column if not exists vegan jsonb,
+  add column if not exists shellfish_free jsonb,
+  add column if not exists no_alcohol jsonb,
+  add column if not exists no_garlic_onion jsonb,
+  add column if not exists halal jsonb,
+  add column if not exists low_fodmap jsonb,
+  add column if not exists aperitif_btn text,
+  add column if not exists is_active boolean not null default true;
 
 alter table public.menu_courses enable row level security;
 
@@ -180,8 +245,16 @@ create table if not exists public.wines (
   region text,
   country text,
   by_glass boolean not null default false,
+  source text not null default 'sync',
   updated_at timestamptz not null default now()
 );
+
+-- Migration: add source column if upgrading an existing table
+alter table public.wines
+  add column if not exists source text not null default 'sync';
+
+create index if not exists wines_source_country_idx
+  on public.wines(source, country);
 
 alter table public.wines enable row level security;
 
@@ -208,8 +281,16 @@ create table if not exists public.beverages (
   name text not null,
   notes text not null default '',
   position integer not null default 0,
+  source text not null default 'manual',
   updated_at timestamptz not null default now()
 );
+
+-- Migration: add source column if upgrading an existing table
+alter table public.beverages
+  add column if not exists source text not null default 'manual';
+
+create index if not exists beverages_source_category_idx
+  on public.beverages(source, category);
 
 alter table public.beverages enable row level security;
 
@@ -229,6 +310,33 @@ drop policy if exists "beverages_delete" on public.beverages;
 create policy "beverages_delete" on public.beverages
   for delete to anon, authenticated using (true);
 
+-- ── reservations ─────────────────────────────────────────────
+create table if not exists public.reservations (
+  id uuid primary key default gen_random_uuid(),
+  date date not null,
+  table_id integer not null,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.reservations enable row level security;
+
+drop policy if exists "reservations_read" on public.reservations;
+create policy "reservations_read" on public.reservations
+  for select to anon, authenticated using (true);
+
+drop policy if exists "reservations_write" on public.reservations;
+create policy "reservations_write" on public.reservations
+  for insert to anon, authenticated with check (true);
+
+drop policy if exists "reservations_update" on public.reservations;
+create policy "reservations_update" on public.reservations
+  for update to anon, authenticated using (true) with check (true);
+
+drop policy if exists "reservations_delete" on public.reservations;
+create policy "reservations_delete" on public.reservations
+  for delete to anon, authenticated using (true);
+
 -- ── Realtime ─────────────────────────────────────────────────
 do $$
 declare
@@ -239,7 +347,8 @@ begin
     'public.service_settings',
     'public.menu_courses',
     'public.wines',
-    'public.beverages'
+    'public.beverages',
+    'public.reservations'
   ] loop
     if not exists (
       select 1 from pg_publication_tables

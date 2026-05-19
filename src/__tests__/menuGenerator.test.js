@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateMenuHTML } from "../utils/menuGenerator.js";
+import { generateMenuHTML, normalizeMenuRules } from "../utils/menuGenerator.js";
 
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -8,16 +8,25 @@ function makeSeat(overrides = {}) {
 }
 
 function makeTable(overrides = {}) {
-  return { menuType: "", restrictions: [], bottleWines: [], birthday: false, ...overrides };
+  return { menuType: "", restrictions: [], bottleWines: [], ...overrides };
 }
 
 function makeCourse(name, sub = "", opts = {}) {
   return {
     course_key: name.toLowerCase().replace(/\s+/g, "_"),
+    course_category: opts.course_category || "main",
     menu: { name, sub },
     menu_si: opts.menu_si || null,
     position: opts.position ?? 1,
     optional_flag: opts.optional_flag || "",
+    optional_pairing_flag: opts.optional_pairing_flag || "",
+    optional_pairing_label: opts.optional_pairing_label || "",
+    optional_pairing_enabled: opts.optional_pairing_enabled ?? false,
+    optional_pairing_default_on: opts.optional_pairing_default_on ?? true,
+    optional_pairing_alco: opts.optional_pairing_alco || null,
+    optional_pairing_alco_si: opts.optional_pairing_alco_si || null,
+    optional_pairing_na: opts.optional_pairing_na || null,
+    optional_pairing_na_si: opts.optional_pairing_na_si || null,
     show_on_short: opts.show_on_short || false,
     short_order: opts.short_order || null,
     section_gap_before: false,
@@ -43,6 +52,32 @@ function render(seatOpts = {}, tableOpts = {}, courses = [], genOpts = {}) {
     ...genOpts,
   });
 }
+
+/** Minimal template that includes a pairing_label block for pairing-label tests */
+function makePairingTemplate(courses = []) {
+  return {
+    version: 2,
+    rows: [
+      { id: "hdr", left: { type: "title", text: "" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
+      { id: "pl",  left: null, right: { type: "pairing_label", text: "", align: "right" }, widthPreset: "55/45", gap: 0 },
+      ...courses.map((c, i) => ({
+        id: `c_${i}`,
+        left:  { type: "course", courseKey: c.course_key },
+        right: { type: "pairing" },
+        widthPreset: "55/45",
+        gap: 0,
+      })),
+    ],
+  };
+}
+
+describe("normalizeMenuRules", () => {
+  it("keeps overwrite title/thank-you flag configurable", () => {
+    const rules = normalizeMenuRules({ overwriteTitleAndThankYouOnLanguageSwitch: false });
+    expect(rules.overwriteTitleAndThankYouOnLanguageSwitch).toBe(false);
+  });
+
+});
 
 // ── Basic structure ────────────────────────────────────────────────────────────
 
@@ -113,6 +148,29 @@ describe("generateMenuHTML — course rendering", () => {
     expect(soupIdx).toBeLessThan(mainIdx);
     expect(mainIdx).toBeLessThan(dessertIdx);
   });
+
+  it("applies section_gap_before from course data when template lacks spacer row", () => {
+    const venison = makeCourse("VENISON", "", { position: 1 });
+    const sheepCheese = makeCourse("SHEEP CHEESE", "", { position: 2 });
+    sheepCheese.section_gap_before = true;
+    const template = {
+      version: 2,
+      rows: [
+        { id: "c1", left: { type: "course", courseKey: venison.course_key }, right: { type: "pairing" }, widthPreset: "55/45", gap: 0 },
+        { id: "c2", left: { type: "course", courseKey: sheepCheese.course_key }, right: { type: "pairing" }, widthPreset: "55/45", gap: 0 },
+      ],
+    };
+    const rows = generateMenuHTML({
+      seat: makeSeat({ pairing: "—" }),
+      table: makeTable(),
+      menuCourses: [venison, sheepCheese],
+      menuTemplate: template,
+      _rowsOnly: true,
+    });
+    const courseRows = rows.filter(r => r.type === "course");
+    // section_gap_before legacy spacing is no longer used; gaps should be explicit in the template.
+    expect(courseRows[1].gap).toBe(0);
+  });
 });
 
 // ── Dietary restriction application ───────────────────────────────────────────
@@ -123,7 +181,7 @@ describe("generateMenuHTML — restriction substitutions", () => {
       restrictions: { veg: { name: "MUSHROOM", sub: "truffle" } },
     })];
     const tableWithRestriction = makeTable({
-      restrictions: [{ note: "veg" }],
+      restrictions: [{ note: "veg", pos: 1 }],
     });
     const html = generateMenuHTML({
       seat: makeSeat({ id: 1 }),
@@ -172,14 +230,27 @@ describe("generateMenuHTML — restriction substitutions", () => {
     });
     expect(htmlSeat1).toContain("TOFU");
   });
+
+  it("applies unassigned restriction (pos: null) to every seat menu", () => {
+    const courses = [makeCourse("CHICKEN GIZZARD", "with mushroom and chestnut", {
+      restrictions: { veg: { name: "MUSHROOM DUMPLING", sub: "" } },
+    })];
+    const table = makeTable({ restrictions: [{ note: "veg", pos: null }] });
+    const html1 = generateMenuHTML({ seat: makeSeat({ id: 1 }), table, menuCourses: courses });
+    const html2 = generateMenuHTML({ seat: makeSeat({ id: 2 }), table, menuCourses: courses });
+    expect(html1).toContain("MUSHROOM DUMPLING");
+    expect(html1).not.toContain("CHICKEN GIZZARD");
+    expect(html2).toContain("MUSHROOM DUMPLING");
+    expect(html2).not.toContain("CHICKEN GIZZARD");
+  });
 });
 
 // ── Extras filtering (beetroot / cheese / cake) ───────────────────────────────
 
 describe("generateMenuHTML — extras filtering", () => {
-  const beetrootCourse = makeCourse("BEETROOT", "bear fat", { optional_flag: "beetroot" });
-  const cheeseCourse   = makeCourse("CHEESE", "condiments", { optional_flag: "cheese" });
-  const cakeCourse     = makeCourse("PEAR", "walnut", { optional_flag: "cake" });
+  const beetrootCourse = makeCourse("BEETROOT", "bear fat", { course_category: "optional", optional_flag: "beetroot" });
+  const cheeseCourse   = makeCourse("CHEESE", "condiments", { course_category: "optional", optional_flag: "cheese" });
+  const cakeCourse     = makeCourse("PEAR", "walnut", { course_category: "celebration", optional_flag: "cake" });
   const mainCourse     = makeCourse("LAMB", "rosemary");
 
   it("hides beetroot course when seat has not ordered beetroot", () => {
@@ -189,7 +260,7 @@ describe("generateMenuHTML — extras filtering", () => {
   });
 
   it("shows beetroot course when seat has ordered beetroot", () => {
-    const html = render({ extras: { 1: { ordered: true } } }, {}, [mainCourse, beetrootCourse]);
+    const html = render({ extras: { beetroot: { ordered: true } } }, {}, [mainCourse, beetrootCourse]);
     expect(html).toContain("BEETROOT");
   });
 
@@ -199,18 +270,47 @@ describe("generateMenuHTML — extras filtering", () => {
   });
 
   it("shows cheese course when ordered", () => {
-    const html = render({ extras: { 2: { ordered: true } } }, {}, [mainCourse, cheeseCourse]);
+    const html = render({ extras: { cheese: { ordered: true } } }, {}, [mainCourse, cheeseCourse]);
     expect(html).toContain("CHEESE");
   });
 
-  it("shows cake course when table has birthday flag", () => {
-    const html = render({}, { birthday: true }, [mainCourse, cakeCourse]);
+  it("shows cake course when seat has ordered cake optional", () => {
+    const html = render({ extras: { cake: { ordered: true } } }, {}, [mainCourse, cakeCourse]);
     expect(html).toContain("PEAR");
   });
 
   it("hides cake course when no birthday and not ordered", () => {
     const html = render({}, {}, [mainCourse, cakeCourse]);
     expect(html).not.toContain("PEAR");
+  });
+
+  it("gap before hidden optional course is applied to the next visible course", () => {
+    const venison   = makeCourse("VENISON", "truffle");
+    const sheep     = makeCourse("SHEEP_CHEESE", "juniper", { course_category: "optional", optional_flag: "cheese" });
+    const sunchoke  = makeCourse("SUNCHOKE", "rosehip");
+    const template = {
+      version: 2,
+      rows: [
+        { id: "v",   left: { type: "course", courseKey: venison.course_key  }, right: null, widthPreset: "55/45", gap: 0 },
+        { id: "gap", left: null, right: null, widthPreset: "55/45", gap: 14 },
+        { id: "sc",  left: { type: "course", courseKey: sheep.course_key    }, right: null, widthPreset: "55/45", gap: 0 },
+        { id: "su",  left: { type: "course", courseKey: sunchoke.course_key }, right: null, widthPreset: "55/45", gap: 0 },
+      ],
+    };
+
+    // When cheese is ordered the gap appears before SHEEP_CHEESE
+    const htmlWith = render(
+      { extras: { cheese: { ordered: true } } }, {}, [venison, sheep, sunchoke],
+      { menuTemplate: template }
+    );
+    const cheeseSectionIdx = htmlWith.indexOf("SHEEP_CHEESE");
+    expect(htmlWith.slice(0, cheeseSectionIdx)).toContain("margin-top:14pt");
+
+    // When cheese is NOT ordered the gap must carry forward to SUNCHOKE
+    const htmlWithout = render({}, {}, [venison, sheep, sunchoke], { menuTemplate: template });
+    expect(htmlWithout).not.toContain("SHEEP_CHEESE");
+    const sunchokeSectionIdx = htmlWithout.indexOf("SUNCHOKE");
+    expect(htmlWithout.slice(0, sunchokeSectionIdx)).toContain("margin-top:14pt");
   });
 });
 
@@ -262,21 +362,106 @@ describe("generateMenuHTML — pairing", () => {
     expect(html).not.toContain("WINE PAIRING");
   });
 
+  it("keeps section spacing row when pairing label exists but seat has no pairing", () => {
+    const html = render({ pairing: "—" }, {}, courses, { menuTemplate: makePairingTemplate(courses) });
+    expect(html).toContain('class="menu-section-label"');
+    expect(html).toContain("visibility:hidden");
+    expect(html).not.toContain("WINE PAIRING");
+  });
+
   it("shows WINE PAIRING section header when seat has Wine pairing", () => {
-    const html = render({ pairing: "Wine" }, {}, courses);
+    const html = render({ pairing: "Wine" }, {}, courses, { menuTemplate: makePairingTemplate(courses) });
     expect(html).toContain("WINE PAIRING");
   });
 
   it("shows NON-ALCO PAIRING section header for Non-Alc pairing", () => {
     const naEntry = { name: "Elderflower", sub: "sparkling" };
     const naCourses = [makeCourse("TROUT", "", { na: naEntry })];
-    const html = render({ pairing: "Non-Alc" }, {}, naCourses);
+    const html = render({ pairing: "Non-Alc" }, {}, naCourses, { menuTemplate: makePairingTemplate(naCourses) });
     expect(html).toContain("NON-ALCO PAIRING");
   });
 
   it("includes wine name in right column when pairing active", () => {
     const html = render({ pairing: "Wine" }, {}, courses);
     expect(html).toContain("Klinec Mora");
+  });
+
+  it("does not force crayfish drink when forced-pairing block has no product", () => {
+    const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
+    const html = render({ pairing: "—" }, {}, [crayfish]);
+    expect(html).not.toContain("KITCHEN MARTINI");
+  });
+
+  it("does not inject fallback text from rules without forced-pairing product", () => {
+    const crayfish = makeCourse("CRAYFISH", "", { position: 1 });
+    const html = render({ pairing: "—" }, {}, [crayfish], {
+      menuRules: { crayfishFallbackTitleEn: "CHEF MARTINI" },
+    });
+    expect(html).not.toContain("CHEF MARTINI");
+  });
+
+  it("renders optional pairing from course data based on seat pairing type", () => {
+    const crayfish = makeCourse("CRAYFISH", "", {
+      position: 1,
+      optional_pairing_flag: "crayfish_pairing",
+      wp: { name: "Kitchen Martini", sub: "aquavit" },
+      na: { name: "Garden Sour", sub: "apple" },
+    });
+    const template = {
+      version: 2,
+      rows: [
+        { id: "hdr", left: { type: "title" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
+        {
+          id: "c1",
+          left: { type: "course", courseKey: crayfish.course_key },
+          right: { type: "drinks", drinkSource: "optional_pairing" },
+          widthPreset: "55/45",
+          gap: 0,
+        },
+      ],
+    };
+    const htmlAlco = render({ pairing: "Wine", optionalPairings: { crayfish_pairing: { ordered: true } } }, {}, [crayfish], { menuTemplate: template });
+    const htmlNa = render({ pairing: "Non-Alc", optionalPairings: { crayfish_pairing: { ordered: true } } }, {}, [crayfish], { menuTemplate: template });
+    expect(htmlAlco).toContain("Kitchen Martini");
+    expect(htmlNa).toContain("Garden Sour");
+  });
+
+  it("defaults optional pairing to ALCO mode when seat pairing is unset", () => {
+    const course = makeCourse("CRAYFISH", "", {
+      position: 1,
+      optional_pairing_flag: "crayfish_pairing",
+      wp: { name: "Kitchen Martini", sub: "aquavit" },
+      na: { name: "Garden Sour", sub: "apple" },
+    });
+    const template = {
+      version: 2,
+      rows: [
+        { id: "hdr", left: { type: "title" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
+        {
+          id: "c1",
+          left: { type: "course", courseKey: course.course_key },
+          right: { type: "drinks", drinkSource: "optional_pairing" },
+          widthPreset: "55/45",
+          gap: 0,
+        },
+      ],
+    };
+    const html = render(
+      { pairing: "—", optionalPairings: { crayfish_pairing: { ordered: true } } },
+      {},
+      [course],
+      { menuTemplate: template }
+    );
+    expect(html).toContain("Kitchen Martini");
+    expect(html).not.toContain("Garden Sour");
+  });
+
+  it("does not auto-force custom keys from menu rules without forced-pairing products", () => {
+    const venison = makeCourse("VENISON", "", { position: 1 });
+    const html = render({ pairing: "—" }, {}, [venison], {
+      menuRules: { forcePairingCourseKeys: ["venison"], crayfishFallbackTitleEn: "HOUSE PAIRING" },
+    });
+    expect(html).not.toContain("HOUSE PAIRING");
   });
 });
 
@@ -300,8 +485,8 @@ describe("generateMenuHTML — SI language", () => {
 
   it("shows Slovenian pairing label when lang=si", () => {
     const wineEntry = { name: "Klinec", sub: "" };
-    const courses = [makeCourse("LAMB", "", { wp: wineEntry })];
-    const html = render({ pairing: "Wine" }, {}, courses, { lang: "si" });
+    const siCourses = [makeCourse("LAMB", "", { wp: wineEntry })];
+    const html = render({ pairing: "Wine" }, {}, siCourses, { lang: "si", menuTemplate: makePairingTemplate(siCourses) });
     expect(html).toContain("VINSKA SPREMLJAVA");
     expect(html).not.toContain("WINE PAIRING");
   });
