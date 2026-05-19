@@ -1724,7 +1724,13 @@ function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd,
 
   const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
   const visible = effectiveTables.filter(t => t.active || t.resTime || t.resName).filter(isPrimary);
-  const rowsData = SITTING_TIMES.map(time => ({
+  // Include all times that appear on visible tables, not just the predefined
+  // SITTING_TIMES — otherwise lunch (or any non-standard) times show nothing.
+  const extraTimes = [...new Set(
+    visible.map(t => t.resTime).filter(t => t && !SITTING_TIMES.includes(t))
+  )].sort();
+  const allTimes = [...SITTING_TIMES, ...extraTimes];
+  const rowsData = allTimes.map(time => ({
     time,
     tables: visible
       .filter(t => t.resTime === time)
