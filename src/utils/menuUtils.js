@@ -185,11 +185,10 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
     if (!variant) continue;
 
     const next = (siMapped && courseRestrictions[siMapped]) ? courseRestrictions[siMapped] : variant;
-    if (next?.sub) {
-      dish = { name: String(next.name || dish.name).trim(), sub: String(next.sub).trim() };
-    } else if (next?.name) {
-      dish = { name: dish.name, sub: String(next.name).trim() };
-    }
+    const altName = String(next?.name || "").trim();
+    const altSub  = String(next?.sub  || "").trim();
+    if (altName) dish = { ...dish, name: altName };
+    if (altSub)  dish = { ...dish, sub:  altSub  };
     break;
   }
 

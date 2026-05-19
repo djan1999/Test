@@ -28,16 +28,25 @@ describe("applyCourseRestriction", () => {
     expect(applyCourseRestriction({ restrictions: {} }, ["veg"])).toBeNull();
   });
 
-  it("substitutes sub-only when restriction cell has no pipe (name is kept)", () => {
+  it("replaces dish name when restriction has Alt name only (sub kept)", () => {
     const course = makeCourse("Lamb", "Rosemary jus", {
-      veg: { name: "Beetroot variation", sub: "" },
+      veg: { name: "Mushroom Dumpling", sub: "" },
+    });
+    const result = applyCourseRestriction(course, ["veg"]);
+    expect(result.name).toBe("Mushroom Dumpling");
+    expect(result.sub).toBe("Rosemary jus");
+  });
+
+  it("replaces sub only when restriction has Alt desc only (name kept)", () => {
+    const course = makeCourse("Lamb", "Rosemary jus", {
+      veg: { name: "", sub: "no jus" },
     });
     const result = applyCourseRestriction(course, ["veg"]);
     expect(result.name).toBe("Lamb");
-    expect(result.sub).toBe("Beetroot variation");
+    expect(result.sub).toBe("no jus");
   });
 
-  it("substitutes both name and sub when restriction cell has pipe separator", () => {
+  it("substitutes both name and sub when restriction provides both", () => {
     const course = makeCourse("Lamb", "Rosemary jus", {
       veg: { name: "Mushroom", sub: "Truffle sauce" },
     });
@@ -60,10 +69,9 @@ describe("applyCourseRestriction", () => {
       vegan: { name: "Tofu", sub: "" },
       gluten_free: { name: "Gluten-free beef", sub: "" },
     });
-    // vegan is earlier in priority list
+    // vegan is earlier in priority list, so gluten variant is ignored
     const result = applyCourseRestriction(course, ["vegan", "gluten"]);
-    expect(result.name).toBe("Beef");
-    expect(result.sub).toBe("Tofu");
+    expect(result.name).toBe("Tofu");
   });
 
   it("does not substitute if active restriction has no corresponding restriction data", () => {
@@ -78,7 +86,7 @@ describe("applyCourseRestriction", () => {
       veg_si: { name: "Gobe", sub: "" },
     });
     const result = applyCourseRestriction(course, ["veg"], "si");
-    expect(result.sub).toBe("Gobe");
+    expect(result.name).toBe("Gobe");
   });
 
   it("falls back to EN restriction when lang=si but no SI variant exists", () => {
@@ -86,7 +94,7 @@ describe("applyCourseRestriction", () => {
       veg: { name: "Mushroom", sub: "" },
     });
     const result = applyCourseRestriction(course, ["veg"], "si");
-    expect(result.sub).toBe("Mushroom");
+    expect(result.name).toBe("Mushroom");
   });
 
   it("handles gluten restriction mapped to gluten_free column", () => {
@@ -94,7 +102,7 @@ describe("applyCourseRestriction", () => {
       gluten_free: { name: "Gluten-free bread", sub: "" },
     });
     const result = applyCourseRestriction(course, ["gluten"]);
-    expect(result.sub).toBe("Gluten-free bread");
+    expect(result.name).toBe("Gluten-free bread");
   });
 });
 
