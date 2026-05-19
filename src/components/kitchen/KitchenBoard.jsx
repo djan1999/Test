@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
-import { getCourseMod, optionalPairingsFromCourses } from "../../utils/menuUtils.js";
+import { getCourseMod, optionalPairingsFromCourses, resolveSeatRestrictionKeys } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
@@ -99,10 +99,9 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     setAssigningRestrIdx(null);
   };
 
-  const seatRestrKeys = (seat) =>
-    (restrictions || [])
-      .filter(r => r.pos === seat.id)
-      .map(r => r.note);
+  // Unassigned restrictions (pos: null) apply to every seat so their course mods
+  // surface on the kitchen board until staff pick a position from the UNASSIGNED bar.
+  const seatRestrKeys = (seat) => resolveSeatRestrictionKeys(restrictions, seat.id);
 
   const pairingColor = { Wine: tokens.ink[2], "Non-Alc": tokens.ink[2], Premium: tokens.ink[2], "Our Story": tokens.ink[2] };
   const pairingBg   = { Wine: tokens.neutral[0], "Non-Alc": tokens.neutral[0], Premium: tokens.neutral[0], "Our Story": tokens.neutral[0] };

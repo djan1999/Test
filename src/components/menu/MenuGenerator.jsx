@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 import { getAssignedGuestProfile } from "../../utils/menuLayoutProfiles.js";
 import { writeTeamNames, readTeamNames, writeMenuTitle, readMenuTitle, writeThankYouNote, readThankYouNote } from "../../utils/storage.js";
-import { applyCourseRestriction, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, optionalExtrasFromCourses, optionalPairingsFromCourses, normalizeOptionalKey } from "../../utils/menuUtils.js";
+import { applyCourseRestriction, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, optionalExtrasFromCourses, optionalPairingsFromCourses, normalizeOptionalKey, resolveSeatRestrictionKeys } from "../../utils/menuUtils.js";
 import { TABLES, supabase } from "../../lib/supabaseClient.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
@@ -152,7 +152,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, p
   const tableBottles = table.bottleWines  || [];
 
   const getSeatDish = (course, seatId) => {
-    const seatRestrKeys = restrictions.filter(r => r.pos === seatId).map(r => r.note);
+    const seatRestrKeys = resolveSeatRestrictionKeys(restrictions, seatId);
     const resolved = lang === "si" && course.menu_si?.name ? { ...course, menu: course.menu_si } : course;
     return applyCourseRestriction(resolved, seatRestrKeys, lang) || { name: course.menu?.name || "", sub: course.menu?.sub || "" };
   };
@@ -308,7 +308,9 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, p
         <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase", marginBottom: 10 }}>[SEATS]</div>
 
         {seats.map(s => {
-          const seatRestr  = restrictions.filter(r => r.pos === s.id);
+          // Include unassigned (pos: null) restrictions so the user can see they will
+          // apply to this seat's printed menu even when the position hasn't been picked yet.
+          const seatRestr  = restrictions.filter(r => r.pos === s.id || r.pos == null);
           const printable  = isPrintable(s);
           const orderedExtras = optionalExtras.filter(d => !!(s.extras?.[d.key] || s.extras?.[d.id])?.ordered);
           const glasses    = s.glasses || [];
@@ -343,12 +345,15 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, p
 
                 {seatRestr.map((r, i) => {
                   const isDietary = ["veg","vegan","pescetarian"].includes(r.note);
+                  const isUnassigned = r.pos == null;
                   return (
-                    <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 0,
+                    <span key={i} title={isUnassigned ? "Unassigned — applies to every seat until a position is set" : undefined}
+                      style={{ fontFamily: FONT, fontSize: 9, padding: "2px 7px", borderRadius: 0,
                       background: isDietary ? tokens.green.bg : tokens.red.bg,
                       color: isDietary ? tokens.green.text : tokens.red.text,
-                      border: `1px solid ${isDietary ? tokens.green.border : tokens.red.border}` }}>
-                      {isDietary ? restrLabel(r.note) : `⚠ ${restrLabel(r.note)}`}
+                      border: `1px ${isUnassigned ? "dashed" : "solid"} ${isDietary ? tokens.green.border : tokens.red.border}`,
+                      opacity: isUnassigned ? 0.85 : 1 }}>
+                      {isDietary ? restrLabel(r.note) : `⚠ ${restrLabel(r.note)}`}{isUnassigned ? " · unassigned" : ""}
                     </span>
                   );
                 })}

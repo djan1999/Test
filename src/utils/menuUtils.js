@@ -273,6 +273,20 @@ export function getCourseMod(course, restrKeys) {
 
 export const RESTRICTION_KEYS = DIETARY_KEYS;
 
+// Restriction entries with no `pos` (null/undefined) are treated as table-wide:
+// they apply to every seat's menu and kitchen ticket output until someone assigns
+// them to a specific position in the seat-assignment UI. This lets staff capture
+// "table has a vegetarian" up front and decide which seat it belongs to later
+// without losing the variant on the printed menu.
+export const isSeatRestriction = (r, seatId) =>
+  r != null && (r.pos === seatId || r.pos == null);
+
+export const resolveSeatRestrictionKeys = (tableRestrictions, seatId) =>
+  (tableRestrictions || [])
+    .filter(r => isSeatRestriction(r, seatId))
+    .map(r => r.note)
+    .filter(Boolean);
+
 /**
  * Parse a single row object into the canonical menu-course shape.
  * This function is kept for data migration and import utilities.

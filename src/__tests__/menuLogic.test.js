@@ -4,6 +4,7 @@ import {
   applyMenuOverride,
   mergeDishes,
   getCourseMod,
+  resolveSeatRestrictionKeys,
 } from "../utils/menuUtils.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -262,5 +263,44 @@ describe("getCourseMod", () => {
 
   it("returns null when dish is unchanged for the restriction", () => {
     expect(getCourseMod(baseCourse(), ["gluten"])).toBeNull();
+  });
+});
+
+// ── resolveSeatRestrictionKeys ────────────────────────────────────────────────
+
+describe("resolveSeatRestrictionKeys", () => {
+  it("returns restrictions assigned to the seat", () => {
+    const restrictions = [
+      { pos: 1, note: "veg" },
+      { pos: 2, note: "gluten" },
+    ];
+    expect(resolveSeatRestrictionKeys(restrictions, 1)).toEqual(["veg"]);
+  });
+
+  it("includes unassigned (pos: null) restrictions for every seat", () => {
+    const restrictions = [
+      { pos: null, note: "veg" },
+      { pos: 1, note: "gluten" },
+    ];
+    expect(resolveSeatRestrictionKeys(restrictions, 1).sort()).toEqual(["gluten", "veg"]);
+    expect(resolveSeatRestrictionKeys(restrictions, 2)).toEqual(["veg"]);
+  });
+
+  it("treats missing pos field as unassigned", () => {
+    const restrictions = [{ note: "vegan" }];
+    expect(resolveSeatRestrictionKeys(restrictions, 1)).toEqual(["vegan"]);
+    expect(resolveSeatRestrictionKeys(restrictions, 5)).toEqual(["vegan"]);
+  });
+
+  it("does not surface restrictions assigned to a different seat", () => {
+    const restrictions = [{ pos: 2, note: "veg" }];
+    expect(resolveSeatRestrictionKeys(restrictions, 1)).toEqual([]);
+  });
+
+  it("handles missing or empty input gracefully", () => {
+    expect(resolveSeatRestrictionKeys(null, 1)).toEqual([]);
+    expect(resolveSeatRestrictionKeys(undefined, 1)).toEqual([]);
+    expect(resolveSeatRestrictionKeys([], 1)).toEqual([]);
+    expect(resolveSeatRestrictionKeys([{ pos: null, note: "" }], 1)).toEqual([]);
   });
 });

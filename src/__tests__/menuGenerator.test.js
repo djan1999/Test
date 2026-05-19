@@ -230,6 +230,19 @@ describe("generateMenuHTML — restriction substitutions", () => {
     });
     expect(htmlSeat1).toContain("TOFU");
   });
+
+  it("applies unassigned restriction (pos: null) to every seat menu", () => {
+    const courses = [makeCourse("CHICKEN GIZZARD", "with mushroom and chestnut", {
+      restrictions: { veg: { name: "MUSHROOM DUMPLING", sub: "" } },
+    })];
+    const table = makeTable({ restrictions: [{ note: "veg", pos: null }] });
+    const html1 = generateMenuHTML({ seat: makeSeat({ id: 1 }), table, menuCourses: courses });
+    const html2 = generateMenuHTML({ seat: makeSeat({ id: 2 }), table, menuCourses: courses });
+    expect(html1).toContain("MUSHROOM DUMPLING");
+    expect(html1).not.toContain("CHICKEN GIZZARD");
+    expect(html2).toContain("MUSHROOM DUMPLING");
+    expect(html2).not.toContain("CHICKEN GIZZARD");
+  });
 });
 
 // ── Extras filtering (beetroot / cheese / cake) ───────────────────────────────

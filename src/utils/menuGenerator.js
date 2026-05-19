@@ -9,7 +9,7 @@
  * the menu_layout_v2 template structure.
  */
 
-import { applyCourseRestriction } from "./menuUtils.js";
+import { applyCourseRestriction, resolveSeatRestrictionKeys } from "./menuUtils.js";
 import { buildDefaultTemplate, parseWidthPreset } from "./menuTemplateSchema.js";
 
 export const DEFAULT_MENU_RULES = {
@@ -148,8 +148,9 @@ export function generateMenuHTML({
   const pairingLabel = seat.pairing === "—" ? "" : (seat.pairing || "");
   const pkey = PAIRING_MAP[pairingLabel] || null;
 
-  // Restrictions are seat-specific. `pos: null` entries are considered unassigned (apply to none).
-  const restrictions = (table.restrictions || []).filter(r => r.pos === seatId).map(r => r.note);
+  // Restrictions assigned to this seat plus any unassigned (pos: null) entries,
+  // which act as table-wide until a position is picked. See resolveSeatRestrictionKeys.
+  const restrictions = resolveSeatRestrictionKeys(table.restrictions, seatId);
 
   const extras = seat.extras || {};
   const getExtra = (key) => extras[key] || null;
