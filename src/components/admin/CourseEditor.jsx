@@ -129,7 +129,6 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
           <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
             {[
               { key: "is_snack", label: "Snack" },
-              { key: "show_on_short", label: "Show on Short" },
             ].map(({ key, label }) => (
               <label key={key} style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2], display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
                 <input type="checkbox" checked={!!course[key]} onChange={e => upd(key, e.target.checked)} />
