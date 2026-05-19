@@ -112,6 +112,7 @@ export default function MenuLayoutPanel({
   onCreateLayoutProfile,
   onRenameLayoutProfile,
   onDuplicateLayoutProfile,
+  onDuplicateAndAssignProfile,
   onDeleteLayoutProfile,
   onSetProfileTarget,
   layoutAssignments = {},
@@ -393,13 +394,11 @@ export default function MenuLayoutPanel({
                     No {TARGET_LABEL[target]} profiles yet — create one above.
                   </div>
                 )}
-                {isShortSlot && isUnassigned && longProfileId && onDuplicateLayoutProfile && onSetProfileAssignment && (
+                {isShortSlot && isUnassigned && longProfileId && onDuplicateAndAssignProfile && (
                   <button
-                    onClick={() => {
-                      const newId = onDuplicateLayoutProfile(longProfileId,
-                        slot === "shortMenuProfileId" ? "Default Short Menu" : "Default Short Kitchen");
-                      if (newId) onSetProfileAssignment(slot, newId);
-                    }}
+                    onClick={() => onDuplicateAndAssignProfile(longProfileId,
+                      slot === "shortMenuProfileId" ? "Default Short Menu" : "Default Short Kitchen",
+                      slot)}
                     style={{
                       marginTop: 6, fontFamily: FONT, fontSize: 9, letterSpacing: "0.10em",
                       textTransform: "uppercase", padding: "5px 10px",

@@ -72,6 +72,7 @@ export default function AdminLayout({
   onDeleteLayoutProfile,
   onRenameLayoutProfile,
   onDuplicateLayoutProfile,
+  onDuplicateAndAssignProfile,
   onSetProfileTarget,
   layoutAssignments = {},
   onSetProfileAssignment,
@@ -312,6 +313,7 @@ export default function AdminLayout({
                 onCreateLayoutProfile={onCreateLayoutProfile}
                 onRenameLayoutProfile={onRenameLayoutProfile}
                 onDuplicateLayoutProfile={onDuplicateLayoutProfile}
+                onDuplicateAndAssignProfile={onDuplicateAndAssignProfile}
                 onDeleteLayoutProfile={onDeleteLayoutProfile}
                 onSetProfileTarget={onSetProfileTarget}
                 layoutAssignments={layoutAssignments}

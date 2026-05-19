@@ -2807,6 +2807,23 @@ export default function App() {
     }));
   }, [updateProfiles]);
 
+  // Duplicate a profile AND immediately assign it to a slot in one atomic update.
+  // Used by the "Duplicate from Long Menu" button so the short slot is wired up
+  // without relying on the async return value of duplicateProfileById.
+  const duplicateAndAssignProfile = useCallback((sourceProfileId, newName, slot) => {
+    updateProfiles(prev => {
+      const source = prev.profiles.find(p => p.id === sourceProfileId);
+      if (!source) return prev;
+      const copy = duplicateProfile(source, newName);
+      return {
+        ...prev,
+        profiles: [...prev.profiles, copy],
+        activeProfileId: copy.id,
+        assignments: { ...prev.assignments, [slot]: copy.id },
+      };
+    });
+  }, [updateProfiles]);
+
   // Sync the short guest menu profile's template from show_on_short course flags.
   // Updates the profile identified by assignments.shortMenuProfileId in place,
   // then persists. If no profile is assigned the call is a no-op.
@@ -3592,6 +3609,7 @@ export default function App() {
         onDeleteLayoutProfile={deleteProfileById}
         onRenameLayoutProfile={renameProfileById}
         onDuplicateLayoutProfile={duplicateProfileById}
+        onDuplicateAndAssignProfile={duplicateAndAssignProfile}
         onSetProfileTarget={setProfileTargetById}
         layoutAssignments={profilesState.assignments}
         onSetProfileAssignment={setProfileAssignment}
