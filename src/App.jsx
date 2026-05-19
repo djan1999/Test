@@ -193,10 +193,16 @@ const fromSyncConfigEditor = (editor) => {
 // Convert a Supabase menu_courses row to the internal shape used throughout the app.
 function supabaseRowToCourse(r) {
   const restrictions = {};
-  DIETARY_KEYS.forEach(k => { restrictions[k] = r[RESTRICTION_COLUMN_MAP[k] || k] ?? null; });
+  DIETARY_KEYS.forEach(k => {
+    const dbKey = RESTRICTION_COLUMN_MAP[k];
+    restrictions[k] = dbKey ? (r[dbKey] ?? null) : null;
+  });
   const rSi = r.restrictions_si || {};
   Object.entries(rSi).forEach(([k, v]) => {
-    if (k.endsWith("__note")) {
+    if (k.startsWith("__en_")) {
+      // Custom restriction EN variant stored during write
+      if (v) restrictions[k.slice("__en_".length)] = v;
+    } else if (k.endsWith("__note")) {
       if (v) restrictions[k.slice(0, -"__note".length) + "_note"] = v;
     } else {
       if (v) restrictions[`${k}_si`] = v;
@@ -254,12 +260,17 @@ function supabaseRowToCourse(r) {
 function courseToSupabaseRow(course) {
   const restrictionColsSi = {};
   const restrictionNotes = {};
+  const customEn = {};
   RESTRICTION_KEYS.forEach(k => {
     if (course.restrictions?.[`${k}_si`]) restrictionColsSi[k] = course.restrictions[`${k}_si`];
     if (course.restrictions?.[`${k}_note`]) restrictionNotes[k] = course.restrictions[`${k}_note`];
+    // Custom keys (no DB column) — stash EN variant in restrictions_si under __en_ prefix.
+    if (!RESTRICTION_COLUMN_MAP[k] && course.restrictions?.[k] != null) {
+      customEn[`__en_${k}`] = course.restrictions[k];
+    }
   });
   const restrictions_si = (() => {
-    const combined = { ...restrictionColsSi };
+    const combined = { ...restrictionColsSi, ...customEn };
     Object.entries(restrictionNotes).forEach(([k, v]) => { combined[`${k}__note`] = v; });
     return Object.keys(combined).length ? combined : null;
   })();
@@ -301,7 +312,11 @@ function courseToSupabaseRow(course) {
     is_active: course.is_active !== false,
     restrictions_si,
   };
-  DIETARY_KEYS.forEach(k => { row[RESTRICTION_COLUMN_MAP[k] || k] = course.restrictions?.[k] ?? null; });
+  // Only write known DB columns; custom keys are stored in restrictions_si above.
+  DIETARY_KEYS.forEach(k => {
+    const dbKey = RESTRICTION_COLUMN_MAP[k];
+    if (dbKey) row[dbKey] = course.restrictions?.[k] ?? null;
+  });
   return row;
 }
 
