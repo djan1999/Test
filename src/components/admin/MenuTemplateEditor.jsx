@@ -28,7 +28,6 @@ import { FONT, baseInp } from "./adminStyles.js";
 import { tokens } from "../../styles/tokens.js";
 import {
   BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
-  WIDTH_PRESETS,
 } from "../../utils/menuTemplateSchema.js";
 import { KT_BLOCK_META, KT_BLOCK_GROUPS, makeKtBlock, makeKtRow, buildDefaultTicketTemplate } from "../../utils/kitchenTicketSchema.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
@@ -152,67 +151,6 @@ function BlockChip({ block, rowId, side, isSelected, onSelect, onRemove, onAdd, 
   );
 }
 
-// ── Row settings ─────────────────────────────────────────────────────────────
-
-const PRESET_ICONS = {
-  "100/0":  "██░",
-  "70/30":  "▊▌░",
-  "55/45":  "▊░░",
-  "50/50":  "▌▌░",
-  "30/70":  "░▌▊",
-  "0/100":  "░██",
-};
-
-function RowSettings({ row, onUpdate }) {
-  const preset = row.widthPreset || "55/45";
-  const gap    = Number(row.gap || 0);
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 6,
-      padding: "2px 4px 2px 28px",
-      background: tokens.ink[5],
-      borderTop: `1px solid ${tokens.ink[5]}`,
-    }}>
-      {/* Width preset */}
-      <div style={{ display: "flex", gap: 1 }}>
-        {WIDTH_PRESETS.map(p => (
-          <button
-            key={p}
-            title={p}
-            onClick={() => onUpdate({ ...row, widthPreset: p })}
-            style={{
-              fontFamily: "monospace", fontSize: 9, padding: "1px 4px",
-              border: `1px solid ${p === preset ? tokens.charcoal.default : tokens.ink[4]}`,
-              borderRadius: 0, cursor: "pointer", lineHeight: 1.4,
-              background: p === preset ? tokens.ink[4] : tokens.neutral[0],
-              color: p === preset ? tokens.charcoal.default : tokens.ink[3],
-              letterSpacing: -1,
-            }}
-          >{PRESET_ICONS[p] || p}</button>
-        ))}
-      </div>
-      {/* Gap */}
-      <div style={{ display: "flex", alignItems: "center", gap: 3, marginLeft: 6 }}>
-        <span style={{ fontFamily: FONT, fontSize: 7, color: tokens.ink[4], letterSpacing: 1, textTransform: "uppercase" }}>gap</span>
-        <input
-          type="number"
-          value={gap}
-          step={0.5}
-          min={0}
-          onClick={e => e.stopPropagation()}
-          onChange={e => onUpdate({ ...row, gap: parseFloat(e.target.value) || 0 })}
-          style={{
-            fontFamily: FONT, fontSize: 9, padding: "1px 4px",
-            border: `1px solid ${tokens.ink[4]}`, borderRadius: 0,
-            width: 40, textAlign: "center", background: tokens.neutral[0],
-          }}
-        />
-        <span style={{ fontFamily: FONT, fontSize: 7, color: tokens.ink[4] }}>pt</span>
-      </div>
-    </div>
-  );
-}
-
 // ── Sortable row (in left panel) ──────────────────────────────────────────────
 
 function SortableRow({
@@ -322,7 +260,6 @@ function SortableRow({
               <RowActionBtn title="Delete row" onClick={() => onRemoveRow(row.id)} danger>⊗</RowActionBtn>
             </div>
           </div>
-          <RowSettings row={row} onUpdate={onUpdateRow} />
         </>
       )}
     </div>
