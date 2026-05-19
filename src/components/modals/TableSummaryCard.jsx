@@ -9,12 +9,13 @@ const FONT = tokens.font;
 const PAIRING_COLOR = { Wine: tokens.text.body, "Non-Alc": tokens.neutral[500], Premium: tokens.neutral[500], "Our Story": tokens.green.text };
 const PAIRING_BG = { Wine: tokens.tint.parchment, "Non-Alc": tokens.neutral[50], Premium: tokens.neutral[50], "Our Story": tokens.green.bg };
 
-export default function TableSummaryCard({ table: t, optionalExtras = [], optionalPairings = [] }) {
+export default function TableSummaryCard({ table: t, groupLabel, optionalExtras = [], optionalPairings = [] }) {
   const isMobile = useIsMobile(640);
+  const label = groupLabel || String(t.id).padStart(2, "0");
   return (
     <div style={{ border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, overflow: "hidden", marginBottom: 12 }}>
       <div style={{ padding: isMobile ? "10px 12px" : "12px 16px", background: tokens.neutral[50], borderBottom: `1px solid ${tokens.neutral[200]}`, display: "flex", gap: isMobile ? 10 : 14, alignItems: "center", flexWrap: "wrap" }}>
-        <span style={{ fontFamily: FONT, fontSize: isMobile ? 18 : 22, fontWeight: 300, color: tokens.neutral[900], letterSpacing: 1, lineHeight: 1 }}>{String(t.id).padStart(2, "0")}</span>
+        <span style={{ fontFamily: FONT, fontSize: isMobile ? 18 : 22, fontWeight: 300, color: tokens.neutral[900], letterSpacing: 1, lineHeight: 1 }}>{label}</span>
         {t.resName && <span style={{ fontFamily: FONT, fontSize: isMobile ? 13 : 14, fontWeight: 500, color: tokens.neutral[900] }}>{t.resName}</span>}
         {t.arrivedAt && <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.green.text, fontWeight: 500 }}>arr. {t.arrivedAt}</span>}
         {t.menuType && <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "3px 8px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, color: tokens.neutral[600], background: tokens.neutral[0] }}>{t.menuType}</span>}

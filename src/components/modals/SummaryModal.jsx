@@ -4,13 +4,44 @@ import { tokens } from "../../styles/tokens.js";
 
 const FONT = tokens.font;
 
+function buildGroupMap(tables) {
+  const byKey = new Map();
+  tables.forEach(t => {
+    if (t.tableGroup?.length) return;
+    const n = (t.resName || "").trim();
+    const r = (t.resTime || "").trim();
+    if (!n || !r) return;
+    const k = `${n}|${r}`;
+    byKey.set(k, [...(byKey.get(k) || []), t.id]);
+  });
+  const m = new Map();
+  byKey.forEach(ids => {
+    if (ids.length < 2) return;
+    const sorted = [...ids].sort((a, b) => a - b);
+    sorted.forEach(id => m.set(id, sorted));
+  });
+  return m;
+}
+
+function groupLabel(t) {
+  const group = t.tableGroup?.length > 1 ? [...t.tableGroup].sort((a, b) => a - b) : null;
+  return group ? group.map(id => String(id).padStart(2, "0")).join("-") : String(t.id).padStart(2, "0");
+}
+
 export default function SummaryModal({ tables, optionalExtras = [], optionalPairings = [], onClose }) {
-  const active = tables.filter((t) => t.active || t.arrivedAt);
+  const autoGroupMap = buildGroupMap(tables);
+  const effectiveTables = tables.map(t => {
+    const eg = autoGroupMap.get(t.id);
+    return eg ? { ...t, tableGroup: eg } : t;
+  });
+  const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
+  const active = effectiveTables.filter(t => t.active || t.arrivedAt).filter(isPrimary);
 
   const copyText = () => {
     const lines = [];
     active.forEach((t) => {
-      lines.push(`TABLE ${String(t.id).padStart(2, "0")}${t.resName ? " · " + t.resName : ""}${t.arrivedAt ? " [arr. " + t.arrivedAt + "]" : ""}`);
+      const label = groupLabel(t);
+      lines.push(`TABLE ${label}${t.resName ? " · " + t.resName : ""}${t.arrivedAt ? " [arr. " + t.arrivedAt + "]" : ""}`);
       if (t.menuType) lines.push(`  Menu: ${t.menuType}`);
       t.seats.forEach((s) => {
         const parts = [`P${s.id}`];
@@ -50,7 +81,7 @@ export default function SummaryModal({ tables, optionalExtras = [], optionalPair
       <div style={{ maxWidth: 800, margin: "0 auto" }}>
         {active.length === 0 && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[400], textAlign: "center", padding: "80px 0" }}>No active tables</div>}
         {active.map((t) => (
-          <TableSummaryCard key={t.id} table={t} optionalExtras={optionalExtras} optionalPairings={optionalPairings} />
+          <TableSummaryCard key={t.id} table={t} groupLabel={groupLabel(t)} optionalExtras={optionalExtras} optionalPairings={optionalPairings} />
         ))}
       </div>
     </FullModal>
