@@ -398,6 +398,7 @@ export default function MenuLayoutPanel({
       {/* ── Existing row-based template editor for the active profile ─── */}
       {active ? (
         <MenuTemplateEditor
+          key={active.id}
           menuTemplate={menuTemplate}
           onUpdateTemplate={onUpdateTemplate}
           onSaveTemplate={onSaveTemplate}

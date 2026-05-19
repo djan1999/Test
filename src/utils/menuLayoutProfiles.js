@@ -215,8 +215,9 @@ export function sanitizeProfilesPayload(raw) {
       if (found && found.target === target) return slotId;
     }
     const matching = profiles.filter(p => p.target === target);
-    if (matching.length === 0) return null;
-    return matching[idx]?.id || matching[0].id;
+    // Use position-based index without collapsing to [0] for secondary slots
+    // so long and short slots never end up pointing at the same profile.
+    return matching[idx]?.id ?? null;
   };
 
   const assignments = {
