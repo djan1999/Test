@@ -3,15 +3,15 @@
  *
  * A profile wraps the existing MenuTemplateEditor row-based menuTemplate
  * (header / aperitif / course / drink / pairing-label / divider / spacer /
- * goodbye / team rows) with metadata: a name, a `target` ("guest_menu" or
- * "kitchen_flow"), and the matching layoutStyles.
+ * goodbye / team rows) with metadata: a name, a `target` ("guest_menu"),
+ * and the matching layoutStyles.
  *
  * Profile shape (single source of truth — no separate flat layout system):
  *
  *   {
  *     id,
  *     name,
- *     target: "guest_menu" | "kitchen_flow",
+ *     target: "guest_menu",
  *     menuTemplate: { version: 2, rows: [...] },
  *     layoutStyles: { ... },
  *   }
@@ -23,22 +23,17 @@
  *     assignments: {
  *       longMenuProfileId,
  *       shortMenuProfileId,
- *       longKitchenProfileId,
- *       shortKitchenProfileId,
  *     },
  *     activeProfileId,
  *   }
  *
- * Long Menu / Short Menu / Long Kitchen / Short Kitchen each pick a profile;
- * the print path reads `profile.menuTemplate` + `profile.layoutStyles`,
- * the kitchen path reads course keys from `profile.menuTemplate` via
- * `deriveCourseKeysFromTemplate`.
+ * Long Menu / Short Menu each pick a profile; the print path reads
+ * `profile.menuTemplate` + `profile.layoutStyles`.
  */
 
 import { buildDefaultTemplate } from "./menuTemplateSchema.js";
-import { buildDefaultTicketTemplate } from "./kitchenTicketSchema.js";
 
-export const PROFILE_TARGETS = ["guest_menu", "kitchen_flow"];
+export const PROFILE_TARGETS = ["guest_menu"];
 
 const isTruthyShortFlag = (value) => {
   const v = String(value ?? "").trim().toLowerCase();
@@ -76,46 +71,13 @@ export function makeProfile({ name, target = "guest_menu", menuTemplate = null, 
 }
 
 /**
- * Build a kitchen-flow template that contains only course rows for the given
- * courses. Header / drinks / pairing-label / goodbye / team rows are dropped
- * because the kitchen flow doesn't need them — KitchenBoard / SheetView only
- * read course keys from rows.
+ * Seed the two default profiles and matching assignments from menuCourses.
  *
- * Each course row sets the kitchen-side overlay defaults so per-course
- * kitchenDisplayName / showRestrictions / showPairingAlert / showSeatNotes /
- * showCourseNotes can be overridden in the editor.
- */
-function buildKitchenTemplate(menuCourses = []) {
-  const sorted = [...menuCourses].sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0));
-  const rows = sorted.map((c, i) => ({
-    id: `row_kitchen_${c.course_key || i}_${++_seq}`,
-    left: {
-      type: "course",
-      courseKey: c.course_key || "",
-      showPairing: false,
-      kitchenDisplayName: "",
-      showRestrictions: true,
-      showPairingAlert: true,
-      showSeatNotes: true,
-      showCourseNotes: true,
-    },
-    right: null,
-    widthPreset: "100/0",
-    gap: 0,
-  }));
-  return { version: 2, rows };
-}
-
-/**
- * Seed the four default profiles and matching assignments from menuCourses.
- *
- * Long guest:    full active course list via buildDefaultTemplate.
- * Short guest:   active courses with show_on_short truthy (legacy migration only),
- *                ordered by short_order falling back to position; if no course
- *                is flagged we duplicate the long template so the short slot
- *                isn't empty.
- * Long kitchen:  course-only rows for every active course in position order.
- * Short kitchen: course-only rows for the same short-flagged courses.
+ * Long guest:  full active course list via buildDefaultTemplate.
+ * Short guest: active courses with show_on_short truthy (legacy migration only),
+ *              ordered by short_order falling back to position; if no course
+ *              is flagged we duplicate the long template so the short slot
+ *              isn't empty.
  *
  * After this seeds the profile list, the user is expected to edit/rename
  * profiles in Admin — `show_on_short` / `short_order` are only consulted on
@@ -143,25 +105,12 @@ export function createDefaultProfiles(menuCourses = []) {
     shortMenuTemplate: buildDefaultTemplate(shortSorted),
     layoutStyles: {},
   });
-  const kitchenProfile = {
-    ...makeProfile({
-      name: "Default Kitchen",
-      target: "kitchen_flow",
-      menuTemplate: buildKitchenTemplate(longSorted),
-      shortMenuTemplate: buildKitchenTemplate(shortSorted),
-      layoutStyles: {},
-    }),
-    ticketTemplate: buildDefaultTicketTemplate(),
-    shortTicketTemplate: buildDefaultTicketTemplate(),
-  };
 
   return {
-    profiles: [guestProfile, kitchenProfile],
+    profiles: [guestProfile],
     assignments: {
-      longMenuProfileId:    guestProfile.id,
-      shortMenuProfileId:   null,
-      longKitchenProfileId: kitchenProfile.id,
-      shortKitchenProfileId:null,
+      longMenuProfileId:  guestProfile.id,
+      shortMenuProfileId: null,
     },
     activeProfileId: guestProfile.id,
   };
@@ -170,8 +119,6 @@ export function createDefaultProfiles(menuCourses = []) {
 const ASSIGNMENT_SLOTS = [
   "longMenuProfileId",
   "shortMenuProfileId",
-  "longKitchenProfileId",
-  "shortKitchenProfileId",
 ];
 
 /**
@@ -194,8 +141,6 @@ export function sanitizeProfilesPayload(raw) {
       menuTemplate: p.menuTemplate && typeof p.menuTemplate === "object" ? p.menuTemplate : null,
       shortMenuTemplate: p.shortMenuTemplate && typeof p.shortMenuTemplate === "object" ? p.shortMenuTemplate : null,
       layoutStyles: p.layoutStyles && typeof p.layoutStyles === "object" ? p.layoutStyles : {},
-      ticketTemplate: p.ticketTemplate && typeof p.ticketTemplate === "object" ? p.ticketTemplate : null,
-      shortTicketTemplate: p.shortTicketTemplate && typeof p.shortTicketTemplate === "object" ? p.shortTicketTemplate : null,
     }));
 
   const a = raw?.assignments || {};
@@ -211,19 +156,15 @@ export function sanitizeProfilesPayload(raw) {
     return matching[idx]?.id ?? null;
   };
 
-  const longMenuId     = pickValid(a.longMenuProfileId,     "guest_menu",   0);
-  const shortMenuId    = pickValid(a.shortMenuProfileId,    "guest_menu",   1);
-  const longKitchenId  = pickValid(a.longKitchenProfileId,  "kitchen_flow", 0);
-  const shortKitchenId = pickValid(a.shortKitchenProfileId, "kitchen_flow", 1);
+  const longMenuId  = pickValid(a.longMenuProfileId,  "guest_menu", 0);
+  const shortMenuId = pickValid(a.shortMenuProfileId, "guest_menu", 1);
 
   // If long and short resolved to the same profile (e.g. from legacy single-profile
   // migration or stale stored data), clear the short slot so the user must assign
   // a distinct profile rather than unknowingly editing both at once.
   const assignments = {
-    longMenuProfileId:     longMenuId,
-    shortMenuProfileId:    (shortMenuId && shortMenuId !== longMenuId) ? shortMenuId : null,
-    longKitchenProfileId:  longKitchenId,
-    shortKitchenProfileId: (shortKitchenId && shortKitchenId !== longKitchenId) ? shortKitchenId : null,
+    longMenuProfileId:  longMenuId,
+    shortMenuProfileId: (shortMenuId && shortMenuId !== longMenuId) ? shortMenuId : null,
   };
 
   const activeProfileId = (() => {
@@ -266,28 +207,22 @@ export function migrateLegacySingleLayout(legacyLayout, legacyTemplate) {
 // ── Lookup helpers ────────────────────────────────────────────────────────────
 
 /**
- * Pick the profile assigned to a given menu type & target.
+ * Pick the guest_menu profile assigned to a given menu type.
  *   menuType: "short" → short slot, anything else → long slot
- *   target:   "guest_menu" (default) | "kitchen_flow"
  */
 export function getAssignedProfile(menuType, profiles = [], assignments = {}, target = "guest_menu") {
   const list = Array.isArray(profiles) ? profiles : [];
   if (list.length === 0) return null;
   const isShort = String(menuType || "").trim().toLowerCase() === "short";
-  const slot = (() => {
-    if (target === "kitchen_flow") return isShort ? "shortKitchenProfileId" : "longKitchenProfileId";
-    return isShort ? "shortMenuProfileId" : "longMenuProfileId";
-  })();
+  const slot = isShort ? "shortMenuProfileId" : "longMenuProfileId";
   const id = assignments?.[slot];
   const found = list.find(p => p.id === id);
   if (!found || found.target !== target) return null;
   return found;
 }
 
-export const getAssignedGuestProfile   = (menuType, profiles, assignments) =>
+export const getAssignedGuestProfile = (menuType, profiles, assignments) =>
   getAssignedProfile(menuType, profiles, assignments, "guest_menu");
-export const getAssignedKitchenProfile = (menuType, profiles, assignments) =>
-  getAssignedProfile(menuType, profiles, assignments, "kitchen_flow");
 
 // ── Profile management ────────────────────────────────────────────────────────
 
@@ -300,8 +235,6 @@ export function duplicateProfile(profile, nextName) {
     menuTemplate: cloneTemplate(profile.menuTemplate),
     shortMenuTemplate: profile.shortMenuTemplate ? cloneTemplate(profile.shortMenuTemplate) : null,
     layoutStyles: profile.layoutStyles ? { ...profile.layoutStyles } : {},
-    ticketTemplate: profile.ticketTemplate ? cloneTemplate(profile.ticketTemplate) : null,
-    shortTicketTemplate: profile.shortTicketTemplate ? cloneTemplate(profile.shortTicketTemplate) : null,
   };
 }
 
@@ -360,27 +293,6 @@ export function buildShortMenuTemplateFromCourses(menuCourses = []) {
     return (Number(a.position) || 0) - (Number(b.position) || 0);
   });
   return buildDefaultTemplate(sorted);
-}
-
-/**
- * Build a kitchen-flow template seeded from courses flagged show_on_short.
- * Mirrors buildShortMenuTemplateFromCourses but produces course-only rows
- * suitable for KitchenBoard / SheetView.
- */
-export function buildShortKitchenTemplateFromCourses(menuCourses = []) {
-  const courses = Array.isArray(menuCourses) ? menuCourses : [];
-  const active = courses.filter(c => c?.is_active !== false && !c?.is_snack && c?.course_key);
-  const shortFlagged = active.filter(c => isTruthyShortFlag(c.show_on_short));
-  const base = shortFlagged.length > 0 ? shortFlagged : active;
-  const sorted = [...base].sort((a, b) => {
-    const aOrd = Number(a.short_order);
-    const bOrd = Number(b.short_order);
-    const aKey = Number.isFinite(aOrd) ? aOrd : 9999;
-    const bKey = Number.isFinite(bOrd) ? bOrd : 9999;
-    if (aKey !== bKey) return aKey - bKey;
-    return (Number(a.position) || 0) - (Number(b.position) || 0);
-  });
-  return buildKitchenTemplate(sorted);
 }
 
 /**
