@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML, generateKitchenTicketsHTML } from "../../utils/weeklyPrintGenerator.js";
+import { deriveCourseKeysFromTemplate } from "../../utils/menuLayoutProfiles.js";
 import { blankTable, makeSeats } from "../../utils/tableHelpers.js";
 import { getCourseMod } from "../../utils/menuUtils.js";
 import { RESTRICTIONS } from "../../constants/dietary.js";
@@ -15,6 +16,18 @@ import { useFocusChain } from "../../hooks/useFocusChain.js";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
 
 const FONT = tokens.font;
+
+function resolveShortCourseKeys(profiles, assignments) {
+  if (!Array.isArray(profiles) || !assignments) return null;
+  for (const slot of ["shortKitchenProfileId", "shortMenuProfileId"]) {
+    const id = assignments[slot];
+    if (!id) continue;
+    const p = profiles.find(pr => pr.id === id);
+    const keys = p?.menuTemplate ? deriveCourseKeysFromTemplate(p.menuTemplate) : null;
+    if (keys && keys.length > 0) return keys;
+  }
+  return null;
+}
 const baseInp = { ...baseInput };
 const fieldLabel = { ...fieldLabelMixin };
 const circBtnSm = { ...circleButton };
@@ -152,7 +165,7 @@ function allergyBaseCell(course, resv) {
 
 const ALLERGY_ROBOTO = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">`;
 
-function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdits, restrictionDefs) {
+function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdits, restrictionDefs, shortCourseKeySet = null) {
   const resvCount = weekResv.length;
   if (!resvCount) return `<!DOCTYPE html><html><body style="font-family:monospace;padding:40pt;text-align:center;">No restrictions or edits this week</body></html>`;
   const escH = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -198,7 +211,7 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   allergyTableCourses.forEach(course => {
     const key = course.course_key || "";
     const isOpt = String(course.course_category || "main") !== "main";
-    const courseOnShort = isTruthyShortLocal(course.show_on_short);
+    const courseOnShort = shortCourseKeySet ? shortCourseKeySet.has(key) : isTruthyShortLocal(course.show_on_short);
     const baseName = course.menu?.name || key;
     const baseSub = course.menu?.sub || "";
     body += `<tr${isOpt ? ` class="opt-row"` : ""}><td style="padding-left:6pt;"><span class="course-name">${escH(baseName)}${isOpt ? ` <span style="font-weight:400;font-size:smaller;color:#999;">(opt)</span>` : ""}${courseOnShort ? ` <span style="font-weight:400;font-size:smaller;color:#3d6b4f;">[S]</span>` : ""}</span>${baseSub ? `<br><span class="course-sub">${escH(baseSub)}</span>` : ""}</td>`;
@@ -220,7 +233,7 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Allergy Sheet</title>${ALLERGY_ROBOTO}<style>${css}</style></head><body>${body}</body></html>`;
 }
 
-export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onExit, serviceDate, onSetServiceDate, onOpenArchive, courseQuickNotes = {} }) {
+export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onExit, serviceDate, onSetServiceDate, onOpenArchive, courseQuickNotes = {}, profiles = [], assignments = {} }) {
   const [weekOffset,  setWeekOffset]  = useState(0);
   const [selectedDay, setSelectedDay] = useState(null);   // "YYYY-MM-DD" or null (week view)
   const [editingId,   setEditingId]   = useState(null);   // reservation id being edited, or "new"
@@ -317,7 +330,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
               disabled={dayResv.length === 0}
               onClick={() => {
                 try {
-                  const html = generateKitchenTicketsHTML(dayResv, menuCourses, RESTRICTIONS);
+                  const html = generateKitchenTicketsHTML(dayResv, menuCourses, RESTRICTIONS, profiles, assignments);
                   const blob = new Blob([html], { type: "text/html" });
                   const url = URL.createObjectURL(blob);
                   const iframe = document.createElement("iframe");
@@ -540,6 +553,8 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
           .filter(r => { const d = r.data || {}; return (d.restrictions?.length > 0) || (d.kitchenCourseNotes && Object.keys(d.kitchenCourseNotes).length > 0); })
           .sort((a, b) => a.date.localeCompare(b.date) || (a.data?.resTime || "99").localeCompare(b.data?.resTime || "99"))
           : null;
+        const shortCourseKeys = !isResv ? resolveShortCourseKeys(profiles, assignments) : null;
+        const shortCourseKeySet = shortCourseKeys ? new Set(shortCourseKeys) : null;
         const allergyTableCourses = !isResv
           ? menuCourses.filter(c => !c.is_snack).sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
           : null;
@@ -575,7 +590,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
         const onPrint = () => {
           const printHtml = isResv
             ? weeklyRowsToHTML(weeklyData.rows, weeklyEdits, weeklyData.totalGuests, weeklyData.dateRange)
-            : generateAllergyHTMLWithEdits(allergyWeekResv, allergyTableCourses, allergyEdits, RESTRICTIONS);
+            : generateAllergyHTMLWithEdits(allergyWeekResv, allergyTableCourses, allergyEdits, RESTRICTIONS, shortCourseKeySet);
           const w = window.open("", "_blank", "width=900,height=700");
           if (!w) { alert("Pop-up blocked"); return; }
           w.document.write(printHtml);
@@ -791,7 +806,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       {allergyTableCourses.map(course => {
                         const key = course.course_key || "";
                         const isOpt = String(course.course_category || "main") !== "main";
-                        const courseOnShort = (() => { const v = String(course.show_on_short ?? "").trim().toLowerCase(); return v === "true" || v === "1" || v === "yes" || v === "y" || v === "x" || v === "wahr"; })();
+                        const courseOnShort = shortCourseKeySet ? shortCourseKeySet.has(course.course_key || "") : (() => { const v = String(course.show_on_short ?? "").trim().toLowerCase(); return v === "true" || v === "1" || v === "yes" || v === "y" || v === "x" || v === "wahr"; })();
                         const baseName = course.menu?.name || key;
                         const baseSub = course.menu?.sub || "";
                         return (

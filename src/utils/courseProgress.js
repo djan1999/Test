@@ -15,6 +15,7 @@
 
 import {
   getAssignedKitchenProfile,
+  getAssignedGuestProfile,
   deriveCourseKeysFromTemplate,
   deriveKitchenItemsFromTemplate,
 } from "./menuLayoutProfiles.js";
@@ -50,8 +51,13 @@ function pickKitchenTemplate(table, options) {
   const profiles = options.profiles;
   const assignments = options.assignments;
   if (Array.isArray(profiles) && assignments) {
-    const profile = getAssignedKitchenProfile(table?.menuType || "", profiles, assignments);
-    return profile?.menuTemplate || null;
+    const menuType = table?.menuType || "";
+    const kitchenProfile = getAssignedKitchenProfile(menuType, profiles, assignments);
+    if (kitchenProfile?.menuTemplate) return kitchenProfile.menuTemplate;
+    // No kitchen profile assigned — fall back to the guest profile so the
+    // Short Menu guest template drives the kitchen board/SheetView automatically.
+    const guestProfile = getAssignedGuestProfile(menuType, profiles, assignments);
+    if (guestProfile?.menuTemplate) return guestProfile.menuTemplate;
   }
   return null;
 }

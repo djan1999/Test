@@ -3,6 +3,7 @@
  * Produces two HTML documents: reservations sheet and allergy/restriction sheet.
  */
 import { getCourseMod } from "./menuUtils.js";
+import { deriveCourseKeysFromTemplate } from "./menuLayoutProfiles.js";
 
 const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -66,6 +67,26 @@ const fmtDateFull = ds => {
 
 const toDateStr = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+// ── Profile helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Given profiles + assignments, return an ordered array of course keys for the
+ * short menu. Checks short kitchen profile first, then short guest profile as
+ * fallback (matches the courseProgress.js runtime fallback). Returns null when
+ * no profile is configured so callers can fall back to show_on_short.
+ */
+function resolveShortCourseKeys(profiles, assignments) {
+  if (!Array.isArray(profiles) || !assignments) return null;
+  for (const slot of ["shortKitchenProfileId", "shortMenuProfileId"]) {
+    const id = assignments[slot];
+    if (!id) continue;
+    const p = profiles.find(pr => pr.id === id);
+    const keys = p?.menuTemplate ? deriveCourseKeysFromTemplate(p.menuTemplate) : null;
+    if (keys && keys.length > 0) return keys;
+  }
+  return null;
+}
 
 // ── PDF 1: Weekly Reservations Sheet ──────────────────────────────────────────────────────
 
@@ -190,10 +211,14 @@ export function generateWeeklyReservationsHTML(reservations, weekDays, restricti
 
 // ── PDF 2: Weekly Allergy/Restriction Sheet ───────────────────────────────────────────────
 
-export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, restrictionDefs = []) {
+export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, restrictionDefs = [], profiles = [], assignments = {}) {
   const weekStart = toDateStr(weekDays[0]);
   const weekEnd   = toDateStr(weekDays[6]);
   const dateRange = `${fmtDateShort(weekStart)}-${fmtDateShort(weekEnd)}`;
+  // Ordered course keys for the short menu — derived from the assigned profile
+  // template (kitchen first, guest fallback). Null → use legacy show_on_short.
+  const shortCourseKeys = resolveShortCourseKeys(profiles, assignments);
+  const shortCourseKeySet = shortCourseKeys ? new Set(shortCourseKeys) : null;
 
   // Filter to week, then to only reservations with restrictions or manual edits
   const weekResv = reservations
@@ -215,10 +240,23 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr";
   };
 
-  // Courses: all non-snack courses in position order
-  const courses = menuCourses
+  // Courses: all non-snack courses. When a short menu profile is configured,
+  // sort the courses in profile template order so the rows match kitchen order.
+  // Courses not in the short template still appear but are greyed for short reservations.
+  const allCoursesSorted = menuCourses
     .filter(c => !c.is_snack)
-    .sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
+    .sort((a, b) => {
+      if (shortCourseKeys) {
+        const ai = shortCourseKeys.indexOf(a.course_key);
+        const bi = shortCourseKeys.indexOf(b.course_key);
+        // Profile-ordered courses first, remaining courses appended by position
+        if (ai !== -1 && bi !== -1) return ai - bi;
+        if (ai !== -1) return -1;
+        if (bi !== -1) return 1;
+      }
+      return (a.position ?? 999) - (b.position ?? 999);
+    });
+  const courses = allCoursesSorted;
 
   let body = "";
   body += `<table>`;
@@ -290,9 +328,12 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     weekResv.forEach(r => {
       const d = r.data || {};
       const isShortResv = String(d.menuType || "").trim().toLowerCase() === "short";
-      const courseOnShort = isTruthyShortLocal(course.show_on_short);
+      // Use profile template key set first; fall back to legacy show_on_short flag
+      const courseOnShort = shortCourseKeySet
+        ? shortCourseKeySet.has(key)
+        : isTruthyShortLocal(course.show_on_short);
 
-      // For short menu reservations, grey out courses not on their menu
+      // Grey out courses not on this reservation's menu
       if (isShortResv && !courseOnShort) {
         body += `<td class="resv-cell" style="background:#f0f0f0;color:#bbb;text-align:center;font-size:7pt;">—</td>`;
         return;
@@ -373,7 +414,7 @@ function optExtraPresetQty(key, name, guests) {
   return null;
 }
 
-export function generateKitchenTicketsHTML(reservations, menuCourses, restrictionDefs = []) {
+export function generateKitchenTicketsHTML(reservations, menuCourses, restrictionDefs = [], profiles = [], assignments = {}) {
   if (!reservations || reservations.length === 0) {
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Kitchen Tickets</title>${ROBOTO_LINK}</head><body style="font-family:'Roboto Mono',monospace;padding:40pt;text-align:center;">No reservations</body></html>`;
   }
@@ -385,6 +426,9 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
     return normFlag(course?.optional_flag) ? "optional" : "main";
   };
   const isTruthyShort = v => { const s = String(v ?? "").trim().toLowerCase(); return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr"; };
+  // Profile-derived short menu course list (ordered). Null → legacy fallback.
+  const shortCourseKeys = resolveShortCourseKeys(profiles, assignments);
+  const shortCourseKeySet = shortCourseKeys ? new Set(shortCourseKeys) : null;
 
   const restrLabel = (key) => {
     const def = restrictionDefs.find(r => r.key === key);
@@ -406,18 +450,26 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
 
       const allCourses = menuCourses || [];
 
-      // All non-snack courses in order. Optional extras always included.
-      // Celebration (cake) only when birthday is on.
+      // Courses for this ticket. When a short menu profile is configured, use
+      // its course order; otherwise fall back to legacy show_on_short / position.
       const courses = allCourses
         .filter(c => {
           if (c.is_snack) return false;
           const category = normCategory(c);
           if (category === "celebration") return !!d.birthday;
-          if (isShort && !isTruthyShort(c.show_on_short)) return false;
+          if (isShort) {
+            return shortCourseKeySet
+              ? shortCourseKeySet.has(c.course_key)
+              : isTruthyShort(c.show_on_short);
+          }
           return true;
         })
         .sort((a, b) => {
-          if (isShort) return ((Number(a.short_order) || 9999) - (Number(b.short_order) || 9999));
+          if (isShort && shortCourseKeys) {
+            const ai = shortCourseKeys.indexOf(a.course_key);
+            const bi = shortCourseKeys.indexOf(b.course_key);
+            return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+          }
           return (Number(a.position) || 0) - (Number(b.position) || 0);
         });
 

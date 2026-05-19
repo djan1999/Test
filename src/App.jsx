@@ -3481,6 +3481,8 @@ export default function App() {
       onSetServiceDate={persistServiceDate}
       onOpenArchive={() => setArchiveOpen(true)}
       courseQuickNotes={courseQuickNotes}
+      profiles={profilesState.profiles}
+      assignments={profilesState.assignments}
     />
     {archiveOpen && (
       <ArchiveModal

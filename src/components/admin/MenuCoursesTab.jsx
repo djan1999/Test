@@ -24,7 +24,7 @@ function ShortMenuOverview({ menuCourses, onUpdateCourses }) {
   const Row = ({ course, included }) => (
     <div style={{
       display: "grid",
-      gridTemplateColumns: "24px 1fr auto 60px",
+      gridTemplateColumns: "24px 1fr auto",
       alignItems: "center",
       gap: 8,
       padding: "5px 8px",
@@ -48,21 +48,6 @@ function ShortMenuOverview({ menuCourses, onUpdateCourses }) {
         />
         Short Menu
       </label>
-      <input
-        type="number"
-        value={course.short_order ?? ""}
-        onChange={e => onUpdateCourses(menuCourses.map(c =>
-          c.position === course.position ? { ...c, short_order: e.target.value ? Number(e.target.value) : null } : c
-        ))}
-        disabled={!included}
-        placeholder="order"
-        style={{
-          fontFamily: FONT, fontSize: 10, padding: "3px 6px",
-          border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, outline: "none",
-          background: included ? tokens.neutral[0] : tokens.ink[5],
-          color: tokens.ink[0], width: "100%", boxSizing: "border-box",
-        }}
-      />
     </div>
   );
 
@@ -90,14 +75,13 @@ function ShortMenuOverview({ menuCourses, onUpdateCourses }) {
       </div>
       {/* Header row */}
       <div style={{
-        display: "grid", gridTemplateColumns: "24px 1fr auto 60px",
+        display: "grid", gridTemplateColumns: "24px 1fr auto",
         gap: 8, padding: "4px 8px",
         background: tokens.ink.bg, borderBottom: `1px solid ${tokens.ink[4]}`,
       }}>
         <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3] }}>#</span>
         <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3], letterSpacing: "0.10em", textTransform: "uppercase" }}>Course</span>
         <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3], letterSpacing: "0.10em", textTransform: "uppercase" }}>Inclusion</span>
-        <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3], letterSpacing: "0.10em", textTransform: "uppercase" }}>Order</span>
       </div>
       {active.length === 0 && (
         <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[4], padding: "16px 10px" }}>No active courses.</div>

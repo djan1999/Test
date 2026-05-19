@@ -225,17 +225,6 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
               <input type="checkbox" checked={!!course.show_on_short} onChange={e => upd("show_on_short", e.target.checked)} />
               Include in Short Menu
             </label>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], textTransform: "uppercase", letterSpacing: "0.10em" }}>Short order:</span>
-              <input
-                type="number"
-                value={course.short_order ?? ""}
-                onChange={e => upd("short_order", e.target.value ? Number(e.target.value) : null)}
-                style={{ ...inpSm, width: 60 }}
-                placeholder="—"
-                disabled={!course.show_on_short}
-              />
-            </div>
             <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[4] }}>
               {course.show_on_short ? "Use Sync in Menu Layout to apply changes to profiles." : "Not on short menu."}
             </span>

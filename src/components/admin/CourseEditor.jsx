@@ -136,10 +136,6 @@ export default function CourseEditor({ course, onUpdate, onDelete, onMoveUp, onM
                 {label}
               </label>
             ))}
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2] }}>Short order:</span>
-              <input type="number" value={course.short_order ?? ""} onChange={e => upd("short_order", e.target.value ? Number(e.target.value) : null)} style={{ ...inpSm, width: 60 }} />
-            </div>
           </div>
 
           {/* ── Pairings ── */}
