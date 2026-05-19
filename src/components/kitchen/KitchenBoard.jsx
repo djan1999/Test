@@ -10,7 +10,7 @@ import { extraPairingLabel, extraPairingForSeat } from "../../constants/pairings
 
 const FONT = tokens.font;
 
-export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, editable = false, quickNotes = {} }) {
+export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {} }) {
   const seats = table.seats || [];
   const restrictions = table.restrictions || [];
   const log = table.kitchenLog || {};
@@ -169,7 +169,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const visibleCoursesForTable = getVisibleCoursesForTable(
     table,
     menuCourses || [],
-    { profiles, assignments }
+    kitchenTemplate ? { kitchenTemplate } : { profiles, assignments }
   );
   const kitchenItemByCourseKey = visibleCoursesForTable.reduce((acc, vc) => {
     if (vc.kitchenItem) acc[vc.key] = vc.kitchenItem;
