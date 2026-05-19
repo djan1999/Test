@@ -96,6 +96,8 @@ export default function MenuLayoutPanel({
   onSaveLayoutStyles,
   ticketTemplate = null,
   onUpdateTicketTemplate = null,
+  shortTicketTemplate = null,
+  onUpdateShortTicketTemplate = null,
   wines = [],
   cocktails = [],
   spirits = [],
@@ -406,6 +408,8 @@ export default function MenuLayoutPanel({
           profileTarget={active?.target || "guest_menu"}
           ticketTemplate={ticketTemplate}
           onUpdateTicketTemplate={onUpdateTicketTemplate}
+          shortTicketTemplate={shortTicketTemplate}
+          onUpdateShortTicketTemplate={onUpdateShortTicketTemplate}
         />
       ) : (
         <div style={{

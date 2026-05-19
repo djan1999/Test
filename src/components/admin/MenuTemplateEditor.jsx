@@ -728,6 +728,8 @@ export default function MenuTemplateEditor({
   profileTarget = "guest_menu",
   ticketTemplate = null,
   onUpdateTicketTemplate = null,
+  shortTicketTemplate = null,
+  onUpdateShortTicketTemplate = null,
 }) {
   const [selectedCell, setSelectedCell] = useState(null); // { rowId, side }
   const [pickerTarget, setPickerTarget] = useState(null); // { rowId, side }
@@ -836,7 +838,10 @@ export default function MenuTemplateEditor({
   // ── Kitchen mode — active rows/update switch ──────────────────────────────
   const isKitchen = profileTarget === "kitchen_flow";
   const editingTicketLayout = isKitchen && kitchenTab === "ticket";
-  const ticketRows = Array.isArray(ticketTemplate?.rows) ? ticketTemplate.rows : [];
+  const activeTicketTemplate = (isKitchen && editingShort)
+    ? (shortTicketTemplate || { version: 1, rows: [] })
+    : (ticketTemplate || { version: 1, rows: [] });
+  const ticketRows = Array.isArray(activeTicketTemplate.rows) ? activeTicketTemplate.rows : [];
 
   // ── One-time migration: convert any old spacer-block rows to gap rows ──────
   // Old templates stored gaps as { left: { type: "spacer", height: N } } rows.
@@ -961,7 +966,7 @@ export default function MenuTemplateEditor({
               const found = menuCourses.find(c => c.course_key === b.courseKey);
               return found || { course_key: b.courseKey, menu: { name: b.courseKey } };
             });
-          const html = generateKitchenTicketHTML(kitchenCourses, ticketTemplate);
+          const html = generateKitchenTicketHTML(kitchenCourses, activeTicketTemplate);
           setPreviewHtml(html);
         } else {
           const seat = previewSeats[previewSeatIdx] || makePreviewSeat(previewSeatIdx + 1);
@@ -1004,9 +1009,14 @@ export default function MenuTemplateEditor({
   }, [editingShort, template, onUpdateTemplate, onUpdateShortMenuTemplate]);
 
   const updateTicketRows = useCallback((newRows) => {
-    const base = ticketTemplate && typeof ticketTemplate === "object" ? ticketTemplate : { version: 1, rows: [] };
-    onUpdateTicketTemplate?.({ ...base, rows: newRows });
-  }, [ticketTemplate, onUpdateTicketTemplate]);
+    if (editingShort) {
+      const base = shortTicketTemplate && typeof shortTicketTemplate === "object" ? shortTicketTemplate : { version: 1, rows: [] };
+      onUpdateShortTicketTemplate?.({ ...base, rows: newRows });
+    } else {
+      const base = ticketTemplate && typeof ticketTemplate === "object" ? ticketTemplate : { version: 1, rows: [] };
+      onUpdateTicketTemplate?.({ ...base, rows: newRows });
+    }
+  }, [editingShort, ticketTemplate, onUpdateTicketTemplate, shortTicketTemplate, onUpdateShortTicketTemplate]);
 
   // Active rows and update function switch based on kitchen tab
   const activeRows = editingTicketLayout ? ticketRows : rows;
@@ -1110,7 +1120,11 @@ export default function MenuTemplateEditor({
 
   const rebuild = () => {
     if (editingTicketLayout) {
-      onUpdateTicketTemplate?.(buildDefaultTicketTemplate());
+      if (editingShort) {
+        onUpdateShortTicketTemplate?.(buildDefaultTicketTemplate());
+      } else {
+        onUpdateTicketTemplate?.(buildDefaultTicketTemplate());
+      }
     } else {
       onUpdateTemplate(buildDefaultTemplate(menuCoursesForRebuild || menuCourses));
     }

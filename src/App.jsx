@@ -1879,10 +1879,11 @@ export default function App() {
     () => profilesState.profiles.find(p => p.id === profilesState.activeProfileId) || profilesState.profiles[0] || null,
     [profilesState.profiles, profilesState.activeProfileId]
   );
-  const menuTemplate      = activeProfile?.menuTemplate      || null;
-  const shortMenuTemplate = activeProfile?.shortMenuTemplate || null;
-  const ticketTemplate    = activeProfile?.ticketTemplate    || null;
-  const globalLayout      = activeProfile?.layoutStyles      || {};
+  const menuTemplate       = activeProfile?.menuTemplate       || null;
+  const shortMenuTemplate  = activeProfile?.shortMenuTemplate  || null;
+  const ticketTemplate     = activeProfile?.ticketTemplate     || null;
+  const shortTicketTemplate = activeProfile?.shortTicketTemplate || null;
+  const globalLayout       = activeProfile?.layoutStyles       || {};
   const [layoutSaving, setLayoutSaving] = useState(false);
   const [layoutSaved,  setLayoutSaved]  = useState(false);
 
@@ -2869,6 +2870,20 @@ export default function App() {
     });
   }, []);
 
+  const setShortTicketTemplate = useCallback((next) => {
+    setProfilesState(prev => {
+      const activeId = prev.activeProfileId;
+      if (!activeId) return prev;
+      const value = typeof next === "function"
+        ? next(prev.profiles.find(p => p.id === activeId)?.shortTicketTemplate || null)
+        : next;
+      return {
+        ...prev,
+        profiles: prev.profiles.map(p => p.id === activeId ? { ...p, shortTicketTemplate: value || null } : p),
+      };
+    });
+  }, []);
+
   const setGlobalLayout = useCallback((next) => {
     setProfilesState(prev => {
       const activeId = prev.activeProfileId;
@@ -3570,6 +3585,8 @@ export default function App() {
         onSaveTemplate={saveMenuTemplate}
         ticketTemplate={ticketTemplate}
         onUpdateTicketTemplate={setTicketTemplate}
+        shortTicketTemplate={shortTicketTemplate}
+        onUpdateShortTicketTemplate={setShortTicketTemplate}
         templateSaving={templateSaving}
         templateSaved={templateSaved}
         menuRules={menuRules}

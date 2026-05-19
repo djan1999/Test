@@ -152,6 +152,7 @@ export function createDefaultProfiles(menuCourses = []) {
       layoutStyles: {},
     }),
     ticketTemplate: buildDefaultTicketTemplate(),
+    shortTicketTemplate: buildDefaultTicketTemplate(),
   };
 
   return {
@@ -194,6 +195,7 @@ export function sanitizeProfilesPayload(raw) {
       shortMenuTemplate: p.shortMenuTemplate && typeof p.shortMenuTemplate === "object" ? p.shortMenuTemplate : null,
       layoutStyles: p.layoutStyles && typeof p.layoutStyles === "object" ? p.layoutStyles : {},
       ticketTemplate: p.ticketTemplate && typeof p.ticketTemplate === "object" ? p.ticketTemplate : null,
+      shortTicketTemplate: p.shortTicketTemplate && typeof p.shortTicketTemplate === "object" ? p.shortTicketTemplate : null,
     }));
 
   const a = raw?.assignments || {};
@@ -299,6 +301,7 @@ export function duplicateProfile(profile, nextName) {
     shortMenuTemplate: profile.shortMenuTemplate ? cloneTemplate(profile.shortMenuTemplate) : null,
     layoutStyles: profile.layoutStyles ? { ...profile.layoutStyles } : {},
     ticketTemplate: profile.ticketTemplate ? cloneTemplate(profile.ticketTemplate) : null,
+    shortTicketTemplate: profile.shortTicketTemplate ? cloneTemplate(profile.shortTicketTemplate) : null,
   };
 }
 
