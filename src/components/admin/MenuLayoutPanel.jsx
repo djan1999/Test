@@ -4,8 +4,6 @@ import {
   isProfileAssigned,
   canDeleteProfile,
   PROFILE_TARGETS,
-  buildShortMenuTemplateFromCourses,
-  buildShortKitchenTemplateFromCourses,
 } from "../../utils/menuLayoutProfiles.js";
 import MenuTemplateEditor from "./MenuTemplateEditor.jsx";
 
@@ -123,9 +121,6 @@ export default function MenuLayoutPanel({
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
   const [createTarget, setCreateTarget] = useState("guest_menu");
-  const [syncing, setSyncing] = useState(false);
-  const [syncDone, setSyncDone] = useState(false);
-
   const active = useMemo(
     () => layoutProfiles.find(p => p.id === activeLayoutProfileId) || layoutProfiles[0] || null,
     [layoutProfiles, activeLayoutProfileId]
@@ -147,20 +142,6 @@ export default function MenuLayoutPanel({
     if (slotNames.length > 0) return `Editing: ${active.name} — ${slotNames.join(", ")}`;
     return `Editing: ${active.name}`;
   }, [active, activeSlots]);
-
-  const handleSyncShort = async () => {
-    if (syncing || !active || !onUpdateShortMenuTemplate) return;
-    setSyncing(true); setSyncDone(false);
-    if (active.target === "kitchen_flow") {
-      const tpl = buildShortKitchenTemplateFromCourses(menuCourses || []);
-      onUpdateShortMenuTemplate(tpl);
-    } else {
-      const tpl = buildShortMenuTemplateFromCourses(menuCourses || []);
-      onUpdateShortMenuTemplate(tpl);
-    }
-    setSyncing(false); setSyncDone(true);
-    setTimeout(() => setSyncDone(false), 2500);
-  };
 
   const handleCreate = () => {
     onCreateLayoutProfile?.({
@@ -312,40 +293,6 @@ export default function MenuLayoutPanel({
                 >Delete</button>
               </>
             )}
-          </div>
-        )}
-
-        {/* Short template sync — rebuild shortMenuTemplate from show_on_short course flags */}
-        {onUpdateShortMenuTemplate && (
-          <div style={{
-            marginBottom: 14, padding: "10px 12px",
-            border: `1px solid ${tokens.ink[4]}`,
-            background: tokens.ink.bg,
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap",
-          }}>
-            <div>
-              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[2], fontWeight: 700, marginBottom: 3 }}>
-                Short Template (this profile)
-              </div>
-              <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], lineHeight: 1.5 }}>
-                Rebuild the Short template from <strong>Include in Short Menu</strong> flags in Courses.
-                Use the <strong>SHORT</strong> toggle above to edit it manually.
-              </div>
-            </div>
-            <button
-              onClick={handleSyncShort}
-              disabled={syncing}
-              style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase",
-                padding: "8px 14px", borderRadius: 0, cursor: syncing ? "default" : "pointer",
-                border: `1px solid ${syncDone ? tokens.green.border : tokens.charcoal.default}`,
-                background: syncDone ? tokens.green.bg : tokens.neutral[0],
-                color: syncDone ? tokens.green.text : tokens.ink[0],
-                flexShrink: 0,
-              }}
-            >
-              {syncing ? "Syncing…" : syncDone ? "Synced ✓" : "Sync from Course Flags"}
-            </button>
           </div>
         )}
 
