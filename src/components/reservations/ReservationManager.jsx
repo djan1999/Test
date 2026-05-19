@@ -169,7 +169,6 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   const resvCount = weekResv.length;
   if (!resvCount) return `<!DOCTYPE html><html><body style="font-family:monospace;padding:40pt;text-align:center;">No restrictions or edits this week</body></html>`;
   const escH = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  const isTruthyShortLocal = v => { const s = String(v ?? "").trim().toLowerCase(); return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr"; };
   const fmtS = ds => { const d = new Date(ds+"T00:00:00"); return `${d.getDate()}.${String(d.getMonth()+1).padStart(2,"0")}.`; };
   const dates = [...new Set(weekResv.map(r => r.date))].sort();
   const dateRange = dates.length ? `${fmtS(dates[0])}-${fmtS(dates[dates.length-1])}` : "";
@@ -211,7 +210,7 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   allergyTableCourses.forEach(course => {
     const key = course.course_key || "";
     const isOpt = String(course.course_category || "main") !== "main";
-    const courseOnShort = shortCourseKeySet ? shortCourseKeySet.has(key) : isTruthyShortLocal(course.show_on_short);
+    const courseOnShort = shortCourseKeySet ? shortCourseKeySet.has(key) : true;
     const baseName = course.menu?.name || key;
     const baseSub = course.menu?.sub || "";
     body += `<tr${isOpt ? ` class="opt-row"` : ""}><td style="padding-left:6pt;"><span class="course-name">${escH(baseName)}${isOpt ? ` <span style="font-weight:400;font-size:smaller;color:#999;">(opt)</span>` : ""}${courseOnShort ? ` <span style="font-weight:400;font-size:smaller;color:#3d6b4f;">[S]</span>` : ""}</span>${baseSub ? `<br><span class="course-sub">${escH(baseSub)}</span>` : ""}</td>`;
@@ -815,7 +814,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       {allergyTableCourses.map(course => {
                         const key = course.course_key || "";
                         const isOpt = String(course.course_category || "main") !== "main";
-                        const courseOnShort = shortCourseKeySet ? shortCourseKeySet.has(course.course_key || "") : (() => { const v = String(course.show_on_short ?? "").trim().toLowerCase(); return v === "true" || v === "1" || v === "yes" || v === "y" || v === "x" || v === "wahr"; })();
+                        const courseOnShort = shortCourseKeySet ? shortCourseKeySet.has(course.course_key || "") : true;
                         const baseName = course.menu?.name || key;
                         const baseSub = course.menu?.sub || "";
                         return (

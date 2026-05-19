@@ -255,11 +255,6 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     return allergyHtmlShell("Weekly Allergy Sheet", `<h1 style="margin-top:40pt;font-family:Arial,Helvetica,sans-serif;">No restrictions or edits for ${esc(dateRange)}</h1>`, 0);
   }
 
-  const isTruthyShortLocal = v => {
-    const s = String(v ?? "").trim().toLowerCase();
-    return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr";
-  };
-
   // Courses: all non-snack courses, sorted by long template order (profile canonical order).
   // Courses not in the long template appear appended by position. Courses only in shortMenuTemplate
   // are included (they may appear for short reservations) but sorted last if not in long template.
@@ -348,10 +343,7 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     weekResv.forEach(r => {
       const d = r.data || {};
       const isShortResv = String(d.menuType || "").trim().toLowerCase() === "short";
-      // Use profile template key set first; fall back to legacy show_on_short flag
-      const courseOnShort = shortCourseKeySet
-        ? shortCourseKeySet.has(key)
-        : isTruthyShortLocal(course.show_on_short);
+      const courseOnShort = shortCourseKeySet ? shortCourseKeySet.has(key) : true;
 
       // Grey out courses not on this reservation's menu
       if (isShortResv && !courseOnShort) {
@@ -445,8 +437,7 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
     if (raw === "main" || raw === "optional" || raw === "celebration") return raw;
     return normFlag(course?.optional_flag) ? "optional" : "main";
   };
-  const isTruthyShort = v => { const s = String(v ?? "").trim().toLowerCase(); return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr"; };
-  // Profile-derived course lists (ordered). Null → legacy fallback.
+  // Profile-derived course lists (ordered). Null → no template configured.
   const shortCourseKeys = resolveShortCourseKeys(profiles, assignments);
   const shortCourseKeySet = shortCourseKeys ? new Set(shortCourseKeys) : null;
   const longCourseKeys = resolveLongCourseKeys(profiles, assignments);
@@ -472,8 +463,7 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
 
       const allCourses = menuCourses || [];
 
-      // Courses for this ticket. When a short menu profile is configured, use
-      // its course order; otherwise fall back to legacy show_on_short / position.
+      // Courses for this ticket — visibility driven entirely by the menu layout template.
       const courseKeys = isShort ? shortCourseKeys : longCourseKeys;
       const courseKeySet = isShort ? shortCourseKeySet : longCourseKeySet;
       const courses = allCourses
@@ -481,12 +471,6 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           if (c.is_snack) return false;
           const category = normCategory(c);
           if (category === "celebration") return !!d.birthday;
-          if (isShort) {
-            return courseKeySet
-              ? courseKeySet.has(c.course_key)
-              : isTruthyShort(c.show_on_short);
-          }
-          // Long menu: restrict to template-defined courses when a template is set.
           if (courseKeySet) return courseKeySet.has(c.course_key);
           return true;
         })

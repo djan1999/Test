@@ -150,12 +150,11 @@ function visibleFromTemplate(template, table, menuCourses) {
  * or a kitchen template, the kitchen profile's menuTemplate decides
  * visibility and order via `deriveCourseKeysFromTemplate`.
  *
- * Legacy fallback path:
+ * Legacy fallback path (no template configured):
  *   - Skips inactive (is_active === false) and snack courses
  *   - Celebration courses auto-include all seats when table.birthday is on
  *   - Optional/celebration courses hidden unless at least one seat ordered them
- *   - Short menu: only courses with show_on_short truthy, sorted by short_order
- *   - Long menu: sorted by position
+ *   - All active courses sorted by position
  *
  * Each returned object: { index, key, name, firedAt, rawCourse, kitchenItem? }
  */
@@ -163,11 +162,10 @@ export function getVisibleCoursesForTable(table, menuCourses, options) {
   const template = pickKitchenTemplate(table, options);
   if (template) return visibleFromTemplate(template, table || {}, menuCourses || []);
 
-  // ── Legacy path (unchanged) ────────────────────────────────────────────────
+  // ── Legacy path (no template configured) ──────────────────────────────────
   const log       = table?.kitchenLog        || {};
   const overrides = table?.kitchenCourseNotes || {};
   const seats     = table?.seats             || [];
-  const isShort   = String(table?.menuType || "").trim().toLowerCase() === "short";
 
   const orderedSeatsForFlag = (menuCourses || []).reduce((acc, course) => {
     const flag = normFlag(course?.optional_flag);
@@ -196,15 +194,9 @@ export function getVisibleCoursesForTable(table, menuCourses, options) {
         if ((orderedSeatsForFlag[flag] || []).length === 0) return false;
       }
 
-      if (isShort && !isTruthyShort(c.show_on_short)) return false;
-
       return true;
     })
-    .sort((a, b) =>
-      isShort
-        ? (Number(a.short_order) || 9999) - (Number(b.short_order) || 9999)
-        : (Number(a.position)    || 0)    - (Number(b.position)    || 0)
-    );
+    .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0));
 
   return filtered.map((c, i) => ({
     index:     i + 1,
