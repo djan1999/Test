@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
-  RESTRICTION_KEYS, normalizeCourseCategory,
+  RESTRICTION_KEYS, RESTRICTION_COLUMN_MAP, normalizeCourseCategory,
   normalizeOptionalKey, optionalPairingsFromCourses,
 } from "./utils/menuUtils.js";
 import { DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
@@ -193,7 +193,7 @@ const fromSyncConfigEditor = (editor) => {
 // Convert a Supabase menu_courses row to the internal shape used throughout the app.
 function supabaseRowToCourse(r) {
   const restrictions = {};
-  DIETARY_KEYS.forEach(k => { restrictions[k] = r[k] ?? null; });
+  DIETARY_KEYS.forEach(k => { restrictions[k] = r[RESTRICTION_COLUMN_MAP[k] || k] ?? null; });
   const rSi = r.restrictions_si || {};
   Object.entries(rSi).forEach(([k, v]) => {
     if (k.endsWith("__note")) {
@@ -301,7 +301,7 @@ function courseToSupabaseRow(course) {
     is_active: course.is_active !== false,
     restrictions_si,
   };
-  DIETARY_KEYS.forEach(k => { row[k] = course.restrictions?.[k] ?? null; });
+  DIETARY_KEYS.forEach(k => { row[RESTRICTION_COLUMN_MAP[k] || k] = course.restrictions?.[k] ?? null; });
   return row;
 }
 
