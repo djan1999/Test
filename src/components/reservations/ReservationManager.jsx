@@ -482,7 +482,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 {showTicket && ticketVirtualTable && (
                   <CenteredModal onClose={() => setTicketId(null)} label={`[TICKET PREVIEW · ${tLabel}]`}>
                     <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
-                      <KitchenTicket table={ticketVirtualTable} menuCourses={menuCourses} upd={updForTicket} editable quickNotes={courseQuickNotes} />
+                      <KitchenTicket table={ticketVirtualTable} menuCourses={menuCourses} upd={updForTicket} editable quickNotes={courseQuickNotes} profiles={profiles} assignments={assignments} />
                     </div>
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
                       <button onClick={() => setTicketId(null)}
