@@ -337,6 +337,70 @@ export function canDeleteProfile(id, profiles = [], assignments = {}) {
   return true;
 }
 
+// ── Short menu template builders ─────────────────────────────────────────────
+
+/**
+ * Build a guest-menu template seeded from courses flagged show_on_short.
+ * Used by the Admin "Sync" button and initial profile creation.
+ * Falls back to all active courses when no course is flagged.
+ */
+export function buildShortMenuTemplateFromCourses(menuCourses = []) {
+  const courses = Array.isArray(menuCourses) ? menuCourses : [];
+  const active = courses.filter(c => c?.is_active !== false && !c?.is_snack && c?.course_key);
+  const shortFlagged = active.filter(c => isTruthyShortFlag(c.show_on_short));
+  const base = shortFlagged.length > 0 ? shortFlagged : active;
+  const sorted = [...base].sort((a, b) => {
+    const aOrd = Number(a.short_order);
+    const bOrd = Number(b.short_order);
+    const aKey = Number.isFinite(aOrd) ? aOrd : 9999;
+    const bKey = Number.isFinite(bOrd) ? bOrd : 9999;
+    if (aKey !== bKey) return aKey - bKey;
+    return (Number(a.position) || 0) - (Number(b.position) || 0);
+  });
+  return buildDefaultTemplate(sorted);
+}
+
+/**
+ * Build a kitchen-flow template seeded from courses flagged show_on_short.
+ * Mirrors buildShortMenuTemplateFromCourses but produces course-only rows
+ * suitable for KitchenBoard / SheetView.
+ */
+export function buildShortKitchenTemplateFromCourses(menuCourses = []) {
+  const courses = Array.isArray(menuCourses) ? menuCourses : [];
+  const active = courses.filter(c => c?.is_active !== false && !c?.is_snack && c?.course_key);
+  const shortFlagged = active.filter(c => isTruthyShortFlag(c.show_on_short));
+  const base = shortFlagged.length > 0 ? shortFlagged : active;
+  const sorted = [...base].sort((a, b) => {
+    const aOrd = Number(a.short_order);
+    const bOrd = Number(b.short_order);
+    const aKey = Number.isFinite(aOrd) ? aOrd : 9999;
+    const bKey = Number.isFinite(bOrd) ? bOrd : 9999;
+    if (aKey !== bKey) return aKey - bKey;
+    return (Number(a.position) || 0) - (Number(b.position) || 0);
+  });
+  return buildKitchenTemplate(sorted);
+}
+
+/**
+ * Return the sorted course list that would be used for the short menu.
+ * Useful for previewing which courses will appear on the short menu profile
+ * before committing a sync.
+ */
+export function getShortMenuCourseList(menuCourses = []) {
+  const courses = Array.isArray(menuCourses) ? menuCourses : [];
+  const active = courses.filter(c => c?.is_active !== false && !c?.is_snack && c?.course_key);
+  const shortFlagged = active.filter(c => isTruthyShortFlag(c.show_on_short));
+  const base = shortFlagged.length > 0 ? shortFlagged : active;
+  return [...base].sort((a, b) => {
+    const aOrd = Number(a.short_order);
+    const bOrd = Number(b.short_order);
+    const aKey = Number.isFinite(aOrd) ? aOrd : 9999;
+    const bKey = Number.isFinite(bOrd) ? bOrd : 9999;
+    if (aKey !== bKey) return aKey - bKey;
+    return (Number(a.position) || 0) - (Number(b.position) || 0);
+  });
+}
+
 // ── Kitchen flow translation ──────────────────────────────────────────────────
 
 /**

@@ -108,6 +108,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
         </div>
         {!isActive && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[1], background: tokens.ink[4], border: `1px solid ${tokens.ink[3]}`, borderRadius: 0, padding: "2px 6px" }}>ARCHIVED</span>}
         {isOptional && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[1], background: tokens.tint.parchment, border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "2px 6px" }}>OPTIONAL · {course.optional_flag}</span>}
+        {!!course.show_on_short && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[1], background: tokens.neutral[0], border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, padding: "2px 6px" }}>SHORT</span>}
         {activeRestrictions.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.red.text, border: `1px solid ${tokens.red.border}`, borderRadius: 0, padding: "2px 6px" }}>{activeRestrictions.length}R</span>}
         {activePairings.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.charcoal.default, border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "2px 6px" }}>{activePairings.length}P</span>}
         <button
@@ -186,12 +187,6 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
             </div>
           </div>
 
-          {/* Toggles — only the active fields. The legacy layout fields
-              (show_on_short, short_order, position) live below in a collapsed
-              "Legacy layout fields" section because the row-based Menu Layout
-              profiles are now the single source of truth for printed-menu /
-              kitchen visibility and order. They remain editable for migration
-              and fallback when a profile isn't assigned. */}
           <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
             {isOptional && (
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -218,32 +213,33 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
             </div>
           </div>
 
-          {/* Legacy layout fields — collapsed by default. */}
-          <details style={{ marginBottom: 14, border: `1px solid ${tokens.ink[5]}`, borderRadius: 0, background: tokens.ink.bg }}>
-            <summary style={{
-              cursor: "pointer", padding: "6px 10px",
-              fontFamily: FONT, fontSize: 9, letterSpacing: "0.12em",
-              color: tokens.ink[3], textTransform: "uppercase",
-            }}>
-              Legacy layout fields
-            </summary>
-            <div style={{ padding: "8px 10px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], lineHeight: 1.4 }}>
-                Normal guest-menu layout and kitchen order are controlled from <strong>Menu Layouts</strong>.
-                These fields remain only for migration, default seeding, and fallback when no profile is assigned.
-              </div>
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-                <label style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2], display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
-                  <input type="checkbox" checked={!!course.show_on_short} onChange={e => upd("show_on_short", e.target.checked)} />
-                  Show on Short
-                </label>
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2] }}>Short order:</span>
-                  <input type="number" value={course.short_order ?? ""} onChange={e => upd("short_order", e.target.value ? Number(e.target.value) : null)} style={{ ...inpSm, width: 60 }} />
-                </div>
-              </div>
+          {/* Short Menu — controls which courses appear on the short menu profile */}
+          <div style={{
+            marginBottom: 14, padding: "8px 10px",
+            border: `1px solid ${course.show_on_short ? tokens.charcoal.default : tokens.ink[5]}`,
+            borderRadius: 0,
+            background: course.show_on_short ? tokens.tint.parchment : tokens.ink.bg,
+            display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",
+          }}>
+            <label style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[0], display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontWeight: course.show_on_short ? 600 : 400 }}>
+              <input type="checkbox" checked={!!course.show_on_short} onChange={e => upd("show_on_short", e.target.checked)} />
+              Include in Short Menu
+            </label>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], textTransform: "uppercase", letterSpacing: "0.10em" }}>Short order:</span>
+              <input
+                type="number"
+                value={course.short_order ?? ""}
+                onChange={e => upd("short_order", e.target.value ? Number(e.target.value) : null)}
+                style={{ ...inpSm, width: 60 }}
+                placeholder="—"
+                disabled={!course.show_on_short}
+              />
             </div>
-          </details>
+            <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[4] }}>
+              {course.show_on_short ? "Use Sync in Menu Layout to apply changes to profiles." : "Not on short menu."}
+            </span>
+          </div>
           {optionalPairingEnabled && (
             <div style={{ marginBottom: 12, padding: "8px 10px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, background: tokens.red.bg }}>
               <div style={{ ...labelSm, marginBottom: 6, color: tokens.red.text }}>Optional Pairing Text (course-owned)</div>

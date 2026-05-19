@@ -156,6 +156,7 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   const resvCount = weekResv.length;
   if (!resvCount) return `<!DOCTYPE html><html><body style="font-family:monospace;padding:40pt;text-align:center;">No restrictions or edits this week</body></html>`;
   const escH = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const isTruthyShortLocal = v => { const s = String(v ?? "").trim().toLowerCase(); return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr"; };
   const fmtS = ds => { const d = new Date(ds+"T00:00:00"); return `${d.getDate()}.${String(d.getMonth()+1).padStart(2,"0")}.`; };
   const dates = [...new Set(weekResv.map(r => r.date))].sort();
   const dateRange = dates.length ? `${fmtS(dates[0])}-${fmtS(dates[dates.length-1])}` : "";
@@ -197,10 +198,17 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   allergyTableCourses.forEach(course => {
     const key = course.course_key || "";
     const isOpt = String(course.course_category || "main") !== "main";
+    const courseOnShort = isTruthyShortLocal(course.show_on_short);
     const baseName = course.menu?.name || key;
     const baseSub = course.menu?.sub || "";
-    body += `<tr${isOpt ? ` class="opt-row"` : ""}><td style="padding-left:6pt;"><span class="course-name">${escH(baseName)}${isOpt ? ` <span style="font-weight:400;font-size:smaller;color:#999;">(opt)</span>` : ""}</span>${baseSub ? `<br><span class="course-sub">${escH(baseSub)}</span>` : ""}</td>`;
+    body += `<tr${isOpt ? ` class="opt-row"` : ""}><td style="padding-left:6pt;"><span class="course-name">${escH(baseName)}${isOpt ? ` <span style="font-weight:400;font-size:smaller;color:#999;">(opt)</span>` : ""}${courseOnShort ? ` <span style="font-weight:400;font-size:smaller;color:#3d6b4f;">[S]</span>` : ""}</span>${baseSub ? `<br><span class="course-sub">${escH(baseSub)}</span>` : ""}</td>`;
     weekResv.forEach(r => {
+      const isShortResv = String(r.data?.menuType || "").trim().toLowerCase() === "short";
+      // Grey out courses not on the short menu for short-menu reservations
+      if (isShortResv && !courseOnShort) {
+        body += `<td class="resv-cell" style="background:#f0f0f0;color:#bbb;text-align:center;font-size:7pt;">—</td>`;
+        return;
+      }
       const ck = `${key}-${r.id}`;
       const base = allergyBaseCell(course, r);
       const val = allergyEdits[ck] ?? base;
@@ -783,6 +791,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       {allergyTableCourses.map(course => {
                         const key = course.course_key || "";
                         const isOpt = String(course.course_category || "main") !== "main";
+                        const courseOnShort = (() => { const v = String(course.show_on_short ?? "").trim().toLowerCase(); return v === "true" || v === "1" || v === "yes" || v === "y" || v === "x" || v === "wahr"; })();
                         const baseName = course.menu?.name || key;
                         const baseSub = course.menu?.sub || "";
                         return (
@@ -790,9 +799,16 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                             <td style={{ ...cColSt }}>
                               <span style={{ textTransform: "uppercase", fontWeight: 700, fontSize: "8pt" }}>{baseName}</span>
                               {isOpt && <span style={{ fontWeight: 400, fontSize: "6.5pt", color: "#999" }}> (opt)</span>}
+                              {courseOnShort && <span style={{ fontWeight: 400, fontSize: "6.5pt", color: "#3d6b4f" }}> [S]</span>}
                               {baseSub && <><br /><span style={{ fontWeight: 400, fontSize: "6.5pt", color: "#555" }}>{baseSub}</span></>}
                             </td>
                             {allergyWeekResv.map(r => {
+                              const isShortResv = String(r.data?.menuType || "").trim().toLowerCase() === "short";
+                              if (isShortResv && !courseOnShort) {
+                                return (
+                                  <td key={r.id} style={{ ...rColSt, background: "#f0f0f0", color: "#bbb", textAlign: "center", fontSize: "7pt" }}>—</td>
+                                );
+                              }
                               const ck = `${key}-${r.id}`;
                               const base = allergyBaseCell(course, r);
                               const val = aCellVal(ck, base);

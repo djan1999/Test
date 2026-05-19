@@ -4,6 +4,8 @@ import {
   isProfileAssigned,
   canDeleteProfile,
   PROFILE_TARGETS,
+  buildShortMenuTemplateFromCourses,
+  buildShortKitchenTemplateFromCourses,
 } from "../../utils/menuLayoutProfiles.js";
 import MenuTemplateEditor from "./MenuTemplateEditor.jsx";
 
@@ -114,10 +116,15 @@ export default function MenuLayoutPanel({
   onSetProfileTarget,
   layoutAssignments = {},
   onSetProfileAssignment,
+  // Short menu sync — rebuild short profile templates from show_on_short flags
+  onSyncShortGuestTemplate = null,
+  onSyncShortKitchenTemplate = null,
 }) {
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
   const [createTarget, setCreateTarget] = useState("guest_menu");
+  const [syncing, setSyncing] = useState(false);
+  const [syncDone, setSyncDone] = useState(false);
 
   const active = useMemo(
     () => layoutProfiles.find(p => p.id === activeLayoutProfileId) || layoutProfiles[0] || null,
@@ -141,12 +148,36 @@ export default function MenuLayoutPanel({
     return `Editing: ${active.name}`;
   }, [active, activeSlots]);
 
-  const isShortMenuAssigned = activeSlots.includes("shortMenuProfileId");
+  const isShortGuestActive  = activeSlots.includes("shortMenuProfileId");
+  const isShortKitchenActive = activeSlots.includes("shortKitchenProfileId");
+  const isAnyShortActive = isShortGuestActive || isShortKitchenActive;
+
+  // When editing the short guest menu profile, pre-filter the courses available
+  // for template rebuild to only show_on_short flagged ones. Falls back to all
+  // courses if none are flagged so the rebuild is never empty.
   const menuCoursesForRebuild = useMemo(() => {
-    if (!isShortMenuAssigned) return menuCourses;
-    const shortCourses = menuCourses.filter(c => c.show_on_short);
+    if (!isShortGuestActive) return menuCourses;
+    const shortCourses = (menuCourses || []).filter(c => {
+      const v = String(c.show_on_short ?? "").trim().toLowerCase();
+      return v === "true" || v === "1" || v === "yes" || v === "y" || v === "x" || v === "wahr";
+    });
     return shortCourses.length > 0 ? shortCourses : menuCourses;
-  }, [isShortMenuAssigned, menuCourses]);
+  }, [isShortGuestActive, menuCourses]);
+
+  const handleSyncShort = async () => {
+    if (syncing) return;
+    setSyncing(true); setSyncDone(false);
+    if (isShortGuestActive && onSyncShortGuestTemplate) {
+      const tpl = buildShortMenuTemplateFromCourses(menuCourses || []);
+      await onSyncShortGuestTemplate(tpl);
+    }
+    if (isShortKitchenActive && onSyncShortKitchenTemplate) {
+      const tpl = buildShortKitchenTemplateFromCourses(menuCourses || []);
+      await onSyncShortKitchenTemplate(tpl);
+    }
+    setSyncing(false); setSyncDone(true);
+    setTimeout(() => setSyncDone(false), 2500);
+  };
 
   const handleCreate = () => {
     onCreateLayoutProfile?.({
@@ -298,6 +329,40 @@ export default function MenuLayoutPanel({
                 >Delete</button>
               </>
             )}
+          </div>
+        )}
+
+        {/* Short menu sync banner — visible when the active profile serves a short slot */}
+        {isAnyShortActive && (
+          <div style={{
+            marginBottom: 14, padding: "10px 12px",
+            border: `1px solid ${tokens.charcoal.default}`,
+            background: tokens.tint.parchment,
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap",
+          }}>
+            <div>
+              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[2], fontWeight: 700, marginBottom: 3 }}>
+                Short Menu Profile
+              </div>
+              <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], lineHeight: 1.5 }}>
+                Rebuild this profile&apos;s course list from the <strong>Include in Short Menu</strong> flags set in Courses.
+                This overwrites the current template rows with the flagged courses in their short-order.
+              </div>
+            </div>
+            <button
+              onClick={handleSyncShort}
+              disabled={syncing || (!onSyncShortGuestTemplate && !onSyncShortKitchenTemplate)}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase",
+                padding: "8px 14px", borderRadius: 0, cursor: syncing ? "default" : "pointer",
+                border: `1px solid ${syncDone ? tokens.green.border : tokens.charcoal.default}`,
+                background: syncDone ? tokens.green.bg : tokens.neutral[0],
+                color: syncDone ? tokens.green.text : tokens.ink[0],
+                flexShrink: 0,
+              }}
+            >
+              {syncing ? "Syncing…" : syncDone ? "Synced ✓" : "Sync from Course Flags"}
+            </button>
           </div>
         )}
 

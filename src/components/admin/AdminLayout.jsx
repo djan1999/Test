@@ -75,6 +75,8 @@ export default function AdminLayout({
   onSetProfileTarget,
   layoutAssignments = {},
   onSetProfileAssignment,
+  onSyncShortGuestTemplate = null,
+  onSyncShortKitchenTemplate = null,
   wineSyncConfig,
   onUpdateWineSyncConfig,
   onSaveWineSyncConfig,
@@ -314,6 +316,8 @@ export default function AdminLayout({
                 onSetProfileTarget={onSetProfileTarget}
                 layoutAssignments={layoutAssignments}
                 onSetProfileAssignment={onSetProfileAssignment}
+                onSyncShortGuestTemplate={onSyncShortGuestTemplate}
+                onSyncShortKitchenTemplate={onSyncShortKitchenTemplate}
               />
             </div>
           )}

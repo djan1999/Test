@@ -210,7 +210,12 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     return allergyHtmlShell("Weekly Allergy Sheet", `<h1 style="margin-top:40pt;font-family:Arial,Helvetica,sans-serif;">No restrictions or edits for ${esc(dateRange)}</h1>`, 0);
   }
 
-  // Courses: all non-snack courses in order (main + optional)
+  const isTruthyShortLocal = v => {
+    const s = String(v ?? "").trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes" || s === "y" || s === "x" || s === "wahr";
+  };
+
+  // Courses: all non-snack courses in position order
   const courses = menuCourses
     .filter(c => !c.is_snack)
     .sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
@@ -284,6 +289,15 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
     // Per-reservation columns
     weekResv.forEach(r => {
       const d = r.data || {};
+      const isShortResv = String(d.menuType || "").trim().toLowerCase() === "short";
+      const courseOnShort = isTruthyShortLocal(course.show_on_short);
+
+      // For short menu reservations, grey out courses not on their menu
+      if (isShortResv && !courseOnShort) {
+        body += `<td class="resv-cell" style="background:#f0f0f0;color:#bbb;text-align:center;font-size:7pt;">—</td>`;
+        return;
+      }
+
       const kcNote = d.kitchenCourseNotes?.[key];
       const restrictions = d.restrictions || [];
 
@@ -296,12 +310,7 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
         return;
       }
 
-      // Priority 2: Restriction-based modifications.
-      // Each restriction entry represents one guest. Restrictions assigned to
-      // the same seat (pos > 0) are grouped so the resolver picks a combined
-      // substitute. Unassigned entries (pos null) each count as one guest —
-      // counts must reflect how many guests actually have the restriction,
-      // not the table size.
+      // Priority 2: Restriction-based modifications
       if (restrictions.length > 0) {
         const modCounts = {};
         const seatGroups = new Map();
