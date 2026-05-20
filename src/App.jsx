@@ -416,7 +416,7 @@ function optionalExtrasFromCourses(menuCourses = []) {
 
 const circBtnSm = { ...mixinCircleButton };
 // ── Detail View ───────────────────────────────────────────────────────────────
-function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages }) {
+function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages, onClearTable }) {
   const isMobile = useIsMobile(860);
   const isNarrow = useIsMobile(520);
   const row1 = isNarrow ? "30px 1fr 28px" : isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
@@ -496,6 +496,19 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
               textTransform: "uppercase", touchAction: "manipulation",
             }}
           >CLEAR DRINKS</button>
+          {mode === "service" && onClearTable && (table.active || table.arrivedAt || table.resName || table.resTime) && (
+            <button
+              onClick={() => onClearTable(table.id)}
+              style={{
+                fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em",
+                padding: isMobile ? "10px 10px" : "6px 10px",
+                border: `1px solid ${tokens.red.border}`, borderRadius: 0,
+                cursor: "pointer",
+                background: tokens.red.text, color: tokens.neutral[0],
+                textTransform: "uppercase", touchAction: "manipulation",
+              }}
+            >CLEAR TABLE</button>
+          )}
         </div>
       </div>
 
@@ -3784,6 +3797,7 @@ export default function App() {
           swapSeats={(aId, bId) => swapSeats(sel, aId, bId)}
           onApplySeatToAll={(tableId, sourceSeatId) => applySeatTemplateToAll(tableId, sourceSeatId)}
           onClearBeverages={tableId => clearSeatBeverages(tableId)}
+          onClearTable={tableId => clear(tableId)}
         />
       )}
 
