@@ -406,6 +406,53 @@ describe("generateMenuHTML with assigned profile (row-based path)", () => {
   });
 });
 
+describe("aperitif block sharing a course row", () => {
+  const aperitifSeat = (aps) => ({ id: 1, pairing: "", aperitifs: aps, glasses: [], cocktails: [], beers: [] });
+  const dataCk = (k) => `data-ck="${k}"`;
+
+  it("keeps the course and renders the aperitif in its right column", () => {
+    const html = generateMenuHTML({
+      seat: aperitifSeat([{ name: "Krug Grande Cuvée", __type: "wine" }]),
+      table: { menuType: "long", restrictions: [], bottleWines: [] },
+      menuCourses: sample,
+      menuTemplate: {
+        version: 2,
+        rows: [
+          { id: "r_amuse", left: { type: "course", courseKey: "amuse" }, right: { type: "aperitif" }, widthPreset: "55/45", gap: 0 },
+        ],
+      },
+      menuTitle: "TEST",
+    });
+    // Course block must NOT be deleted, and the aperitif must show alongside it.
+    expect(html).toContain(dataCk("amuse"));
+    expect(html).toContain("Krug Grande Cuvée");
+  });
+
+  it("renders the first aperitif in the assigned course row and overflows the rest downward", () => {
+    const rows = generateMenuHTML({
+      seat: aperitifSeat([
+        { name: "Krug", __type: "wine" },
+        { name: "Bollinger", __type: "wine" },
+      ]),
+      table: { menuType: "long", restrictions: [], bottleWines: [] },
+      menuCourses: sample,
+      menuTemplate: {
+        version: 2,
+        rows: [
+          { id: "r_amuse", left: { type: "course", courseKey: "amuse" }, right: { type: "aperitif" }, widthPreset: "55/45", gap: 0 },
+          { id: "r_linzer", left: { type: "course", courseKey: "linzer_eye" }, right: { type: "drinks" }, widthPreset: "55/45", gap: 0 },
+        ],
+      },
+      _rowsOnly: true,
+    });
+    const amuse = rows.find(r => r.courseKey === "amuse");
+    const linzer = rows.find(r => r.courseKey === "linzer_eye");
+    expect(amuse?.right?.title).toBe("Krug");
+    // Second aperitif overflows into the next pre-Danube course right column.
+    expect(linzer?.right?.title).toBe("Bollinger");
+  });
+});
+
 describe("PROFILE_TARGETS", () => {
   it("exposes both targets", () => {
     expect(PROFILE_TARGETS).toEqual(expect.arrayContaining(["guest_menu", "kitchen_flow"]));
