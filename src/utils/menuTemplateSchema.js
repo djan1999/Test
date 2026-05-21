@@ -63,7 +63,7 @@ export const BLOCK_META = {
   },
   drinks: {
     label: "Drinks",        group: "content", color: "#c8a06e", bg: "#fdf5ec", icon: "◎",
-    desc: "Configurable drink column — select source: pairing, optional pairing, by-the-glass, or bottle. Data comes from course editor.",
+    desc: "Configurable drink column — select source: pairing, optional pairing, by-the-glass, bottle, or aperitif. Data comes from course editor.",
     fields: [],
     defaults: {
       drinkSource: "pairing",
@@ -83,11 +83,15 @@ export const BLOCK_META = {
     ],
     defaults: { text: "", align: "right", reserveWhenNoPairing: null, reserveHeightPt: null, spacing: 6 },
   },
+  // Legacy standalone aperitif block. No longer offered in the picker — aperitif
+  // is now a source on the Drinks block — but kept so existing saved templates
+  // (and the generator path keyed on type "aperitif") still resolve correctly.
   aperitif: {
     label: "Aperitif",      group: "content", color: "#7a6e9e", bg: "#f4f0fa", icon: "◇",
     desc: "Consumes next aperitif from the seat's aperitif queue",
     fields: [],
     defaults: {},
+    hidden: true,
   },
 
   // ── Layout blocks ─────────────────────────────────────────────────────────
@@ -215,11 +219,11 @@ export function buildDefaultTemplate(menuCourses = []) {
     gap: 0,
   });
 
-  // Aperitif row above the first course
+  // Aperitif row above the first course (drinks block sourced from the aperitif queue)
   rows.push({
     id: "aperitif_row",
     left:  null,
-    right: makeBlock("aperitif"),
+    right: { ...makeBlock("drinks"), drinkSource: "aperitif" },
     widthPreset: "55/45",
     gap: 0,
   });

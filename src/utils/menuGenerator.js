@@ -331,6 +331,9 @@ export function generateMenuHTML({
     if (b.type === "bottle") return "bottle";
     return null;
   };
+  // A standalone aperitif block, or a drinks block whose source is "aperitif",
+  // both consume from the aperitif queue.
+  const isAperitif = (b) => b?.type === "aperitif" || normDrinkSource(b) === "aperitif";
   const _courseLeft = Math.min(99, Math.max(1, Math.round(Number(s("courseColSplit", 55)) || 55)));
 
   for (const tRow of effectiveTemplateRows) {
@@ -455,7 +458,7 @@ export function generateMenuHTML({
     // Use course-type (rowSpacing) rather than wine-only (wineRowSpacing) so the
     // dedicated aperitif row has the same margin-bottom as the overflow aperitif
     // rows that fill course right-columns, keeping all aperitifs evenly spaced.
-    if ((lb?.type === "aperitif" || rb?.type === "aperitif") && lb?.type !== "course" && rb?.type !== "course") {
+    if ((isAperitif(lb) || isAperitif(rb)) && lb?.type !== "course" && rb?.type !== "course") {
       if (aQ.length > 0) rows.push({ type: "course", courseKey: null, left: null, right: fmtDrinkParts(aQ.shift()), rowClass: "", widthPreset: drinkRowWp, gap: consumeGap() });
       continue;
     }
@@ -516,7 +519,7 @@ export function generateMenuHTML({
       // Aperitif assigned to this course's right column: show the next queued
       // aperitif here. The pairing resolution below is guarded so it won't
       // overwrite it, and the dish on the left still renders normally.
-      if (rb?.type === "aperitif") {
+      if (isAperitif(rb)) {
         if (aQ.length > 0) { const d = fmtDrinkParts(aQ.shift()); drink = { name: d.title || "", sub: d.sub || "" }; }
       }
 
@@ -530,7 +533,7 @@ export function generateMenuHTML({
 
       if (lb.showPairing === false && !optionalPairingDrink && rbSource !== "optional_pairing" && rbSource !== "by_the_glass" && rbSource !== "bottle") {
         // showPairing toggle off — don't resolve any drink for this course row
-      } else if ((rbSource === "pairing" || rbSource === "optional_pairing" || optionalPairingDrink || drink) && rb?.type !== "aperitif") {
+      } else if ((rbSource === "pairing" || rbSource === "optional_pairing" || optionalPairingDrink || drink) && !isAperitif(rb)) {
         if (pkey) {
           drink = optionalPairingDrink || (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]);
 

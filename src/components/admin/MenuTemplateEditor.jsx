@@ -314,9 +314,10 @@ function BlockPickerModal({ onPick, onClose, menuCourses, blockMeta = BLOCK_META
 
   const filtered = filter.trim()
     ? Object.entries(blockMeta).filter(([t, m]) =>
-        m.label.toLowerCase().includes(filter.toLowerCase()) ||
-        m.desc.toLowerCase().includes(filter.toLowerCase()) ||
-        t.includes(filter.toLowerCase()))
+        !m.hidden && (
+          m.label.toLowerCase().includes(filter.toLowerCase()) ||
+          m.desc.toLowerCase().includes(filter.toLowerCase()) ||
+          t.includes(filter.toLowerCase())))
     : null;
 
   return (
@@ -355,7 +356,7 @@ function BlockPickerModal({ onPick, onClose, menuCourses, blockMeta = BLOCK_META
         {(filtered ? [{ id: "search", label: "Results", desc: "" }] : blockGroups).map(group => {
           const entries = filtered
             ? filtered
-            : Object.entries(blockMeta).filter(([, m]) => m.group === group.id);
+            : Object.entries(blockMeta).filter(([, m]) => m.group === group.id && !m.hidden);
           if (entries.length === 0) return null;
           return (
             <div key={group.id} style={{ marginBottom: 16 }}>
@@ -475,6 +476,7 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
             <option value="optional_pairing">Optional Pairing (course-owned)</option>
             <option value="by_the_glass">By the Glass</option>
             <option value="bottle">Bottle Wine</option>
+            <option value="aperitif">Aperitif</option>
           </select>
 
           {drinkSource === "pairing" && (<>
@@ -497,6 +499,12 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
           {(drinkSource === "by_the_glass" || drinkSource === "bottle") && (
             <div style={{ fontFamily: FONT, fontSize: 8.5, color: tokens.ink[3], lineHeight: 1.5 }}>
               Consumes next {drinkSource === "by_the_glass" ? "by-the-glass wine" : "bottle wine"} from the seat/table queue.
+            </div>
+          )}
+
+          {drinkSource === "aperitif" && (
+            <div style={{ fontFamily: FONT, fontSize: 8.5, color: tokens.ink[3], lineHeight: 1.5 }}>
+              Consumes next aperitif from the seat's aperitif queue.
             </div>
           )}
         </div>
