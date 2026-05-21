@@ -98,44 +98,31 @@ describe("getVisibleCoursesForTable — basic filtering", () => {
   });
 });
 
-// ── Short menu ────────────────────────────────────────────────────────────────
+// ── Legacy path: menuType no longer filters (show_on_short removed) ─────────────
 
-describe("getVisibleCoursesForTable — short menu", () => {
-  it("includes only show_on_short courses when menuType is 'short'", () => {
+describe("getVisibleCoursesForTable — menuType in the legacy path", () => {
+  it("does not filter by show_on_short when menuType is 'short'", () => {
     const table = makeTable({ menuType: "short" });
     const courses = [
-      makeCourse({ course_key: "on_short",  show_on_short: true,  short_order: 1 }),
-      makeCourse({ course_key: "off_short", show_on_short: false, short_order: 2 }),
+      makeCourse({ course_key: "on_short",  show_on_short: true,  position: 1 }),
+      makeCourse({ course_key: "off_short", show_on_short: false, position: 2 }),
     ];
     const visible = getVisibleCoursesForTable(table, courses);
-    expect(visible).toHaveLength(1);
-    expect(visible[0].key).toBe("on_short");
+    expect(visible.map(c => c.key)).toEqual(["on_short", "off_short"]);
   });
 
-  it("sorts short menu by short_order", () => {
+  it("sorts by position regardless of menuType", () => {
     const table = makeTable({ menuType: "short" });
     const courses = [
-      makeCourse({ course_key: "b", show_on_short: true, short_order: 2 }),
-      makeCourse({ course_key: "a", show_on_short: true, short_order: 1 }),
-      makeCourse({ course_key: "c", show_on_short: true, short_order: 3 }),
-    ];
-    const visible = getVisibleCoursesForTable(table, courses);
-    expect(visible.map(c => c.key)).toEqual(["a", "b", "c"]);
-  });
-
-  it("treats truthy variants for show_on_short ('1', 'yes', 'x')", () => {
-    const table = makeTable({ menuType: "short" });
-    const courses = [
-      makeCourse({ course_key: "a", show_on_short: "1",   short_order: 1 }),
-      makeCourse({ course_key: "b", show_on_short: "yes", short_order: 2 }),
-      makeCourse({ course_key: "c", show_on_short: "x",   short_order: 3 }),
-      makeCourse({ course_key: "d", show_on_short: "no",  short_order: 4 }),
+      makeCourse({ course_key: "b", position: 2 }),
+      makeCourse({ course_key: "a", position: 1 }),
+      makeCourse({ course_key: "c", position: 3 }),
     ];
     const visible = getVisibleCoursesForTable(table, courses);
     expect(visible.map(c => c.key)).toEqual(["a", "b", "c"]);
   });
 
-  it("does not apply short filter when menuType is 'long'", () => {
+  it("does not apply any short filter when menuType is 'long'", () => {
     const table = makeTable({ menuType: "long" });
     const courses = [
       makeCourse({ course_key: "a", show_on_short: false, position: 1 }),
@@ -176,7 +163,7 @@ describe("getVisibleCoursesForTable — optional courses", () => {
     expect(visible[0].key).toBe("cheese");
   });
 
-  it("optional courses on short menu still filtered by show_on_short", () => {
+  it("optional course on short menu shows when ordered (show_on_short no longer filters)", () => {
     const table = makeTable({
       menuType: "short",
       seats: [{ id: 1, extras: { cheese: { ordered: true } } }],
@@ -191,7 +178,8 @@ describe("getVisibleCoursesForTable — optional courses", () => {
       }),
     ];
     const visible = getVisibleCoursesForTable(table, courses);
-    expect(visible).toHaveLength(0);
+    expect(visible).toHaveLength(1);
+    expect(visible[0].key).toBe("cheese");
   });
 });
 
@@ -331,66 +319,61 @@ describe("getCourseProgressState", () => {
   });
 });
 
-// ── Layout-driven path (assigned kitchen profile drives course flow) ────────
+// ── Layout-driven path (assigned guest profile drives the kitchen board) ────────
 
-describe("getVisibleCoursesForTable — assigned kitchen profile (row-based)", () => {
-  // Build a row-based kitchen profile from a list of course keys.
-  const makeKitchenProfile = (id, courseKeys, blockOverrides = {}) => ({
+describe("getVisibleCoursesForTable — assigned guest profile (row-based)", () => {
+  // Build a guest profile with row-based long + short templates from course keys.
+  const rowsFrom = (id, keys, blockOverrides = {}) => keys.map((k, i) => ({
+    id: `row_${id}_${i}`,
+    left: { type: "course", courseKey: k, ...(blockOverrides[k] || {}) },
+    right: null,
+    widthPreset: "100/0",
+    gap: 0,
+  }));
+  const makeGuestProfile = (id, longKeys, shortKeys = null, blockOverrides = {}) => ({
     ...makeProfile({
-      name: `Kitchen ${id}`,
-      target: "kitchen_flow",
-      menuTemplate: {
-        version: 2,
-        rows: courseKeys.map((k, i) => ({
-          id: `row_${i}`,
-          left: { type: "course", courseKey: k, ...(blockOverrides[k] || {}) },
-          right: null,
-          widthPreset: "100/0",
-          gap: 0,
-        })),
-      },
+      name: `Guest ${id}`,
+      target: "guest_menu",
+      menuTemplate: { version: 2, rows: rowsFrom(id, longKeys, blockOverrides) },
+      shortMenuTemplate: shortKeys ? { version: 2, rows: rowsFrom(`${id}s`, shortKeys, blockOverrides) } : null,
       layoutStyles: {},
     }),
     id,
   });
 
-  it("long table uses the assigned long kitchen profile (not show_on_short)", () => {
-    const longProfile  = makeKitchenProfile("LK", ["a", "b", "c"]);
-    const shortProfile = makeKitchenProfile("SK", ["b"]);
-    const profiles = [longProfile, shortProfile];
-    const assignments = { longKitchenProfileId: "LK", shortKitchenProfileId: "SK" };
+  it("long table uses the long template from the assigned guest profile", () => {
+    const profile = makeGuestProfile("G", ["a", "b", "c"], ["b"]);
+    const profiles = [profile];
+    const assignments = { longMenuProfileId: "G", shortMenuProfileId: "G" };
     const table = makeTable({ menuType: "long" });
     const courses = [
-      makeCourse({ course_key: "a", position: 3, show_on_short: false }),
-      makeCourse({ course_key: "b", position: 1, show_on_short: true,  short_order: 1 }),
-      makeCourse({ course_key: "c", position: 2, show_on_short: false }),
+      makeCourse({ course_key: "a", position: 3 }),
+      makeCourse({ course_key: "b", position: 1 }),
+      makeCourse({ course_key: "c", position: 2 }),
     ];
     const visible = getVisibleCoursesForTable(table, courses, { profiles, assignments });
-    // Profile order, not position order
+    // Template row order, not position order
     expect(visible.map(c => c.key)).toEqual(["a", "b", "c"]);
   });
 
-  it("short table uses the assigned short kitchen profile, ignoring show_on_short", () => {
-    // Short profile deliberately includes a course where show_on_short=false
-    // and excludes one where show_on_short=true.
-    const longProfile  = makeKitchenProfile("LK", ["a", "b", "c"]);
-    const shortProfile = makeKitchenProfile("SK", ["c", "a"]);
-    const profiles = [longProfile, shortProfile];
-    const assignments = { longKitchenProfileId: "LK", shortKitchenProfileId: "SK" };
+  it("short table uses the profile's short template", () => {
+    const profile = makeGuestProfile("G", ["a", "b", "c"], ["c", "a"]);
+    const profiles = [profile];
+    const assignments = { longMenuProfileId: "G", shortMenuProfileId: "G" };
     const table = makeTable({ menuType: "short" });
     const courses = [
-      makeCourse({ course_key: "a", position: 1, show_on_short: false }),
-      makeCourse({ course_key: "b", position: 2, show_on_short: true, short_order: 1 }),
-      makeCourse({ course_key: "c", position: 3, show_on_short: false }),
+      makeCourse({ course_key: "a", position: 1 }),
+      makeCourse({ course_key: "b", position: 2 }),
+      makeCourse({ course_key: "c", position: 3 }),
     ];
     const visible = getVisibleCoursesForTable(table, courses, { profiles, assignments });
     expect(visible.map(c => c.key)).toEqual(["c", "a"]);
   });
 
-  it("excludes inactive courses even if listed in the kitchen profile", () => {
-    const profile = makeKitchenProfile("LK", ["a", "b"]);
+  it("excludes inactive courses even if listed in the template", () => {
+    const profile = makeGuestProfile("G", ["a", "b"]);
     const profiles = [profile];
-    const assignments = { longKitchenProfileId: "LK" };
+    const assignments = { longMenuProfileId: "G" };
     const table = makeTable({ menuType: "long" });
     const courses = [
       makeCourse({ course_key: "a", is_active: true }),
@@ -401,9 +384,9 @@ describe("getVisibleCoursesForTable — assigned kitchen profile (row-based)", (
   });
 
   it("hides optional course unless at least one seat ordered it", () => {
-    const profile = makeKitchenProfile("LK", ["main", "cheese"]);
+    const profile = makeGuestProfile("G", ["main", "cheese"]);
     const profiles = [profile];
-    const assignments = { longKitchenProfileId: "LK" };
+    const assignments = { longMenuProfileId: "G" };
     const courses = [
       makeCourse({ course_key: "main", course_category: "main" }),
       makeCourse({ course_key: "cheese", course_category: "optional", optional_flag: "cheese" }),
@@ -419,9 +402,9 @@ describe("getVisibleCoursesForTable — assigned kitchen profile (row-based)", (
   });
 
   it("celebration course shown when birthday is on", () => {
-    const profile = makeKitchenProfile("LK", ["main", "cake"]);
+    const profile = makeGuestProfile("G", ["main", "cake"]);
     const profiles = [profile];
-    const assignments = { longKitchenProfileId: "LK" };
+    const assignments = { longMenuProfileId: "G" };
     const courses = [
       makeCourse({ course_key: "main" }),
       makeCourse({ course_key: "cake", course_category: "celebration", optional_flag: "cake" }),
@@ -435,9 +418,9 @@ describe("getVisibleCoursesForTable — assigned kitchen profile (row-based)", (
   });
 
   it("preserves firedAt state from table.kitchenLog", () => {
-    const profile = makeKitchenProfile("LK", ["a", "b"]);
+    const profile = makeGuestProfile("G", ["a", "b"]);
     const profiles = [profile];
-    const assignments = { longKitchenProfileId: "LK" };
+    const assignments = { longMenuProfileId: "G" };
     const courses = [makeCourse({ course_key: "a" }), makeCourse({ course_key: "b" })];
     const table = makeTable({ menuType: "long", kitchenLog: { a: { firedAt: "20:15" } } });
     const visible = getVisibleCoursesForTable(table, courses, { profiles, assignments });
@@ -445,10 +428,10 @@ describe("getVisibleCoursesForTable — assigned kitchen profile (row-based)", (
     expect(visible[1].firedAt).toBeNull();
   });
 
-  it("nextFire follows the kitchen profile row order, not position/short_order", () => {
-    const profile = makeKitchenProfile("LK", ["c", "a", "b"]);
+  it("nextFire follows the template row order, not position", () => {
+    const profile = makeGuestProfile("G", ["c", "a", "b"]);
     const profiles = [profile];
-    const assignments = { longKitchenProfileId: "LK" };
+    const assignments = { longMenuProfileId: "G" };
     const courses = [
       makeCourse({ course_key: "a", position: 1 }),
       makeCourse({ course_key: "b", position: 2 }),
@@ -464,34 +447,34 @@ describe("getVisibleCoursesForTable — assigned kitchen profile (row-based)", (
     expect(getCourseProgressState(tableAfter, visibleAfter).nextFire?.key).toBe("a");
   });
 
-  it("falls back to legacy show_on_short when no kitchen profile is assigned", () => {
+  it("falls back to legacy (position order) when no profile is assigned", () => {
     const table = makeTable({ menuType: "short" });
     const courses = [
-      makeCourse({ course_key: "on",  show_on_short: true,  short_order: 1 }),
-      makeCourse({ course_key: "off", show_on_short: false, short_order: 2 }),
+      makeCourse({ course_key: "first",  position: 1 }),
+      makeCourse({ course_key: "second", position: 2 }),
     ];
     const visible = getVisibleCoursesForTable(table, courses, { profiles: [], assignments: {} });
-    expect(visible.map(c => c.key)).toEqual(["on"]);
+    expect(visible.map(c => c.key)).toEqual(["first", "second"]);
   });
 
-  it("falls back to legacy when only guest assignments are populated", () => {
+  it("falls back to legacy when assignments point at missing profiles", () => {
     const courses = [
       makeCourse({ course_key: "a", position: 2 }),
       makeCourse({ course_key: "b", position: 1 }),
     ];
     const table = makeTable({ menuType: "long" });
     const profiles = [];
-    const assignments = { longMenuProfileId: "x", shortMenuProfileId: "y", longKitchenProfileId: null, shortKitchenProfileId: null };
+    const assignments = { longMenuProfileId: "x", shortMenuProfileId: "y" };
     const visible = getVisibleCoursesForTable(table, courses, { profiles, assignments });
     expect(visible.map(c => c.key)).toEqual(["b", "a"]);
   });
 
   it("reads kitchenItem flags from the matching course block in the template", () => {
-    const profile = makeKitchenProfile("LK", ["a"], {
+    const profile = makeGuestProfile("G", ["a"], null, {
       a: { showRestrictions: false, kitchenDisplayName: "Plate A" },
     });
     const profiles = [profile];
-    const assignments = { longKitchenProfileId: "LK" };
+    const assignments = { longMenuProfileId: "G" };
     const courses = [makeCourse({ course_key: "a" })];
     const visible = getVisibleCoursesForTable(makeTable(), courses, { profiles, assignments });
     expect(visible[0].kitchenItem).toBeDefined();

@@ -314,17 +314,18 @@ describe("generateMenuHTML — extras filtering", () => {
   });
 });
 
-// ── Short menu filtering ───────────────────────────────────────────────────────
+// ── menuType no longer filters courses (show_on_short filtering removed; ───────
+//    short vs. long is now driven entirely by the supplied layout template) ─────
 
-describe("generateMenuHTML — short menu", () => {
+describe("generateMenuHTML — menuType does not filter courses", () => {
   const courses = [
-    makeCourse("SOUP",     "", { position: 1, show_on_short: true,  short_order: 1 }),
-    makeCourse("SALAD",    "", { position: 2, show_on_short: false, short_order: 2 }),
-    makeCourse("MAIN",     "", { position: 3, show_on_short: true,  short_order: 2 }),
-    makeCourse("DESSERT",  "", { position: 4, show_on_short: false, short_order: 3 }),
+    makeCourse("SOUP",     "", { position: 1 }),
+    makeCourse("SALAD",    "", { position: 2 }),
+    makeCourse("MAIN",     "", { position: 3 }),
+    makeCourse("DESSERT",  "", { position: 4 }),
   ];
 
-  it("shows all courses when menuType is not 'short'", () => {
+  it("renders all courses when menuType is not 'short'", () => {
     const html = render({}, { menuType: "" }, courses);
     expect(html).toContain("SOUP");
     expect(html).toContain("SALAD");
@@ -332,19 +333,17 @@ describe("generateMenuHTML — short menu", () => {
     expect(html).toContain("DESSERT");
   });
 
-  it("only shows courses flagged show_on_short when menuType is 'short'", () => {
+  it("still renders all courses when menuType is 'short' (content is template-driven)", () => {
     const html = render({}, { menuType: "short" }, courses);
     expect(html).toContain("SOUP");
+    expect(html).toContain("SALAD");
     expect(html).toContain("MAIN");
-    expect(html).not.toContain("SALAD");
-    expect(html).not.toContain("DESSERT");
+    expect(html).toContain("DESSERT");
   });
 
-  it("orders short menu courses by short_order", () => {
+  it("renders courses in template/position order", () => {
     const html = render({}, { menuType: "short" }, courses);
-    const soupIdx = html.indexOf("SOUP");
-    const mainIdx = html.indexOf("MAIN");
-    expect(soupIdx).toBeLessThan(mainIdx);
+    expect(html.indexOf("SOUP")).toBeLessThan(html.indexOf("MAIN"));
   });
 });
 

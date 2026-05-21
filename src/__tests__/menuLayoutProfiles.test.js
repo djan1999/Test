@@ -13,7 +13,6 @@ import {
   canDeleteProfile,
   getAssignedProfile,
   getAssignedGuestProfile,
-  getAssignedKitchenProfile,
   deriveCourseKeysFromTemplate,
   deriveKitchenItemsFromTemplate,
 } from "../utils/menuLayoutProfiles.js";
@@ -44,16 +43,15 @@ const sample = [
 // ── createDefaultProfiles ────────────────────────────────────────────────────
 
 describe("createDefaultProfiles", () => {
-  it("creates four profiles: Long/Short guest + Long/Short kitchen", () => {
+  it("creates a single guest profile with long + short templates", () => {
     const { profiles, assignments } = createDefaultProfiles(sample);
-    expect(profiles).toHaveLength(4);
-    const targets = profiles.map(p => p.target);
-    expect(targets.filter(t => t === "guest_menu")).toHaveLength(2);
-    expect(targets.filter(t => t === "kitchen_flow")).toHaveLength(2);
-    expect(assignments.longMenuProfileId).toBeTruthy();
-    expect(assignments.shortMenuProfileId).toBeTruthy();
-    expect(assignments.longKitchenProfileId).toBeTruthy();
-    expect(assignments.shortKitchenProfileId).toBeTruthy();
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0].target).toBe("guest_menu");
+    expect(profiles[0].menuTemplate).toBeTruthy();
+    expect(profiles[0].shortMenuTemplate).toBeTruthy();
+    expect(assignments.longMenuProfileId).toBe(profiles[0].id);
+    // Short slot starts empty so the user assigns a distinct profile if wanted.
+    expect(assignments.shortMenuProfileId).toBeNull();
   });
 
   it("guest Long profile.menuTemplate has rows derived from buildDefaultTemplate", () => {
@@ -66,30 +64,10 @@ describe("createDefaultProfiles", () => {
     expect(keys).toEqual(["amuse", "linzer_eye", "trout_belly", "danube_salmon", "venison", "dessert"]);
   });
 
-  it("guest Short profile.menuTemplate is filtered by show_on_short and ordered by short_order", () => {
-    const { profiles, assignments } = createDefaultProfiles(sample);
-    const shortGuest = profiles.find(p => p.id === assignments.shortMenuProfileId);
-    const keys = deriveCourseKeysFromTemplate(shortGuest.menuTemplate);
+  it("guest profile's shortMenuTemplate is seeded from show_on_short / short_order", () => {
+    const { profiles } = createDefaultProfiles(sample);
+    const keys = deriveCourseKeysFromTemplate(profiles[0].shortMenuTemplate);
     expect(keys).toEqual(["linzer_eye", "trout_belly", "venison"]);
-  });
-
-  it("kitchen profiles are course-only (no title/team/goodbye/drinks)", () => {
-    const { profiles, assignments } = createDefaultProfiles(sample);
-    const longKitchen = profiles.find(p => p.id === assignments.longKitchenProfileId);
-    const types = longKitchen.menuTemplate.rows.flatMap(r => [r.left?.type, r.right?.type]).filter(Boolean);
-    expect(types.every(t => t === "course")).toBe(true);
-  });
-
-  it("kitchen course rows seed kitchen-overlay defaults", () => {
-    const { profiles, assignments } = createDefaultProfiles(sample);
-    const longKitchen = profiles.find(p => p.id === assignments.longKitchenProfileId);
-    const items = deriveKitchenItemsFromTemplate(longKitchen.menuTemplate);
-    const item = items[Object.keys(items)[0]];
-    expect(item.showRestrictions).toBe(true);
-    expect(item.showPairingAlert).toBe(true);
-    expect(item.showSeatNotes).toBe(true);
-    expect(item.showCourseNotes).toBe(true);
-    expect(item.kitchenDisplayName).toBe("");
   });
 });
 
@@ -100,7 +78,7 @@ describe("sanitizeProfilesPayload", () => {
     const s = sanitizeProfilesPayload(null);
     expect(s.profiles).toEqual([]);
     expect(s.assignments.longMenuProfileId).toBeNull();
-    expect(s.assignments.longKitchenProfileId).toBeNull();
+    expect(s.assignments.shortMenuProfileId).toBeNull();
   });
 
   it("defaults missing target to guest_menu (legacy v1 upgrade)", () => {
@@ -110,25 +88,23 @@ describe("sanitizeProfilesPayload", () => {
     };
     const s = sanitizeProfilesPayload(raw);
     expect(s.profiles[0].target).toBe("guest_menu");
-    // Guest assignments default to the only matching profile; kitchen stays null
+    // Long slot defaults to the only matching profile; the short slot stays
+    // null rather than collapsing onto the same profile as the long slot.
     expect(s.assignments.longMenuProfileId).toBe("p1");
-    expect(s.assignments.shortMenuProfileId).toBe("p1");
-    expect(s.assignments.longKitchenProfileId).toBeNull();
-    expect(s.assignments.shortKitchenProfileId).toBeNull();
+    expect(s.assignments.shortMenuProfileId).toBeNull();
   });
 
-  it("repoints assignment slots that target the wrong category", () => {
+  it("defaults assignment slots to matching guest profiles when the stored id is missing", () => {
     const raw = {
       profiles: [
-        { id: "g1", name: "G", target: "guest_menu",   menuTemplate: { rows: [] }, layoutStyles: {} },
-        { id: "k1", name: "K", target: "kitchen_flow", menuTemplate: { rows: [] }, layoutStyles: {} },
+        { id: "g1", name: "G1", target: "guest_menu", menuTemplate: { rows: [] }, layoutStyles: {} },
+        { id: "g2", name: "G2", target: "guest_menu", menuTemplate: { rows: [] }, layoutStyles: {} },
       ],
-      // longKitchenProfileId points at a guest profile — must be repointed
-      assignments: { longKitchenProfileId: "g1", shortKitchenProfileId: "k1" },
+      assignments: { longMenuProfileId: "nope" },
     };
     const s = sanitizeProfilesPayload(raw);
-    expect(s.assignments.longKitchenProfileId).toBe("k1");
-    expect(s.assignments.shortKitchenProfileId).toBe("k1");
+    expect(s.assignments.longMenuProfileId).toBe("g1");
+    expect(s.assignments.shortMenuProfileId).toBe("g2");
   });
 
   it("honors activeProfileId when valid; falls back to first profile otherwise", () => {
@@ -178,34 +154,26 @@ describe("migrateLegacySingleLayout", () => {
 
 // ── Assignment helpers ───────────────────────────────────────────────────────
 
-describe("getAssignedGuestProfile / getAssignedKitchenProfile", () => {
-  it("guest helper picks long/short guest profile only", () => {
-    const { profiles, assignments } = createDefaultProfiles(sample);
-    const longGuest  = getAssignedGuestProfile("long",  profiles, assignments);
-    const shortGuest = getAssignedGuestProfile("short", profiles, assignments);
-    expect(longGuest.target).toBe("guest_menu");
-    expect(shortGuest.target).toBe("guest_menu");
-    expect(longGuest.id).not.toBe(shortGuest.id);
+describe("getAssignedGuestProfile / getAssignedProfile", () => {
+  it("guest helper resolves the long and short slots", () => {
+    const { profiles } = createDefaultProfiles(sample);
+    const id = profiles[0].id;
+    const assignments = { longMenuProfileId: id, shortMenuProfileId: id };
+    expect(getAssignedGuestProfile("long",  profiles, assignments).id).toBe(id);
+    expect(getAssignedGuestProfile("short", profiles, assignments).id).toBe(id);
   });
 
-  it("kitchen helper picks long/short kitchen profile only", () => {
-    const { profiles, assignments } = createDefaultProfiles(sample);
-    const longKitchen  = getAssignedKitchenProfile("long",  profiles, assignments);
-    const shortKitchen = getAssignedKitchenProfile("short", profiles, assignments);
-    expect(longKitchen.target).toBe("kitchen_flow");
-    expect(shortKitchen.target).toBe("kitchen_flow");
+  it("returns null when the slot points at a missing profile", () => {
+    const { profiles } = createDefaultProfiles(sample);
+    expect(getAssignedGuestProfile("long", profiles, { longMenuProfileId: "missing" })).toBeNull();
   });
 
-  it("returns null if assignment points at a wrong-target profile", () => {
-    const { profiles, assignments } = createDefaultProfiles(sample);
-    const wrong = { ...assignments, longKitchenProfileId: assignments.longMenuProfileId };
-    expect(getAssignedKitchenProfile("long", profiles, wrong)).toBeNull();
-  });
-
-  it("explicit target argument also works on getAssignedProfile", () => {
-    const { profiles, assignments } = createDefaultProfiles(sample);
-    expect(getAssignedProfile("long",  profiles, assignments, "guest_menu").target).toBe("guest_menu");
-    expect(getAssignedProfile("short", profiles, assignments, "kitchen_flow").target).toBe("kitchen_flow");
+  it("returns null when the resolved profile is not the requested target", () => {
+    const { profiles } = createDefaultProfiles(sample);
+    const id = profiles[0].id;
+    const assignments = { longMenuProfileId: id };
+    expect(getAssignedProfile("long", profiles, assignments, "guest_menu").target).toBe("guest_menu");
+    expect(getAssignedProfile("long", profiles, assignments, "kitchen_flow")).toBeNull();
   });
 });
 
@@ -214,14 +182,14 @@ describe("getAssignedGuestProfile / getAssignedKitchenProfile", () => {
 describe("duplicateProfile", () => {
   it("creates a deep copy with new id and preserves target", () => {
     const original = makeProfile({
-      name: "Long 2026", target: "kitchen_flow",
+      name: "Long 2026", target: "guest_menu",
       menuTemplate: { version: 2, rows: [{ id: "r1", left: { type: "course", courseKey: "venison" }, right: null, gap: 0, widthPreset: "100/0" }] },
       layoutStyles: { foo: 1 },
     });
     const copy = duplicateProfile(original, "Long 2026 (copy)");
     expect(copy.id).not.toBe(original.id);
     expect(copy.name).toBe("Long 2026 (copy)");
-    expect(copy.target).toBe("kitchen_flow");
+    expect(copy.target).toBe("guest_menu");
     expect(copy.menuTemplate.rows[0].left.courseKey).toBe("venison");
     // Mutating copy must not affect original
     copy.menuTemplate.rows.push({});
@@ -243,10 +211,10 @@ describe("renameProfile / setProfileTarget", () => {
     expect(next[1].name).toBe("B");
   });
 
-  it("setProfileTarget switches a profile's target", () => {
+  it("setProfileTarget normalizes any unsupported target to guest_menu", () => {
     const a = makeProfile({ name: "A", target: "guest_menu" });
     const next = setProfileTarget([a], a.id, "kitchen_flow");
-    expect(next[0].target).toBe("kitchen_flow");
+    expect(next[0].target).toBe("guest_menu");
   });
 });
 
@@ -255,27 +223,20 @@ describe("canDeleteProfile / isProfileAssigned", () => {
     const a = makeProfile({ name: "A", target: "guest_menu" });
     const b = makeProfile({ name: "B", target: "guest_menu" });
     const c = makeProfile({ name: "C", target: "guest_menu" });
-    const k = makeProfile({ name: "K", target: "kitchen_flow" });
-    const profiles = [a, b, c, k];
+    const profiles = [a, b, c];
     const assignments = {
-      longMenuProfileId:    a.id,
-      shortMenuProfileId:   b.id,
-      longKitchenProfileId: k.id,
-      shortKitchenProfileId:k.id,
+      longMenuProfileId:  a.id,
+      shortMenuProfileId: b.id,
     };
     expect(isProfileAssigned(a.id, assignments)).toBe(true);
     expect(canDeleteProfile(a.id, profiles, assignments)).toBe(false);
-    expect(canDeleteProfile(k.id, profiles, assignments)).toBe(false);
+    expect(canDeleteProfile(b.id, profiles, assignments)).toBe(false);
     expect(canDeleteProfile(c.id, profiles, assignments)).toBe(true);
   });
 
-  it("blocks deletion that would leave a target with zero profiles", () => {
+  it("blocks deletion of the last remaining profile", () => {
     const g1 = makeProfile({ name: "G1", target: "guest_menu" });
-    const g2 = makeProfile({ name: "G2", target: "guest_menu" });
-    const k1 = makeProfile({ name: "K1", target: "kitchen_flow" });
-    // k1 is the only kitchen profile — even if unassigned, deletion would
-    // leave the kitchen target empty
-    expect(canDeleteProfile(k1.id, [g1, g2, k1], {})).toBe(false);
+    expect(canDeleteProfile(g1.id, [g1], {})).toBe(false);
   });
 });
 
@@ -454,7 +415,7 @@ describe("aperitif block sharing a course row", () => {
 });
 
 describe("PROFILE_TARGETS", () => {
-  it("exposes both targets", () => {
-    expect(PROFILE_TARGETS).toEqual(expect.arrayContaining(["guest_menu", "kitchen_flow"]));
+  it("exposes the guest_menu target", () => {
+    expect(PROFILE_TARGETS).toEqual(["guest_menu"]);
   });
 });
