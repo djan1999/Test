@@ -14,7 +14,6 @@
  */
 
 import {
-  getAssignedKitchenProfile,
   getAssignedGuestProfile,
   deriveCourseKeysFromTemplate,
   deriveKitchenItemsFromTemplate,
@@ -53,15 +52,7 @@ function pickKitchenTemplate(table, options) {
   if (Array.isArray(profiles) && assignments) {
     const menuType = table?.menuType || "";
     const isShortType = String(menuType).trim().toLowerCase() === "short";
-    // Always resolve via the long slot — short template lives inside the profile.
-    const kitchenProfile = getAssignedKitchenProfile("", profiles, assignments);
-    if (kitchenProfile) {
-      const tpl = isShortType
-        ? (kitchenProfile.shortMenuTemplate || kitchenProfile.menuTemplate)
-        : kitchenProfile.menuTemplate;
-      if (tpl?.rows) return tpl;
-    }
-    // No kitchen profile assigned — fall back to the guest profile so the
+    // kitchen_flow was removed — resolve via the guest profile so the
     // short/long guest template drives the kitchen board automatically.
     const guestProfile = getAssignedGuestProfile("", profiles, assignments);
     if (guestProfile) {

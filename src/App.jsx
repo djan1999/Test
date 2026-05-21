@@ -17,7 +17,6 @@ import {
   isProfileAssigned,
   makeProfile,
   buildShortMenuTemplateFromCourses,
-  buildShortKitchenTemplateFromCourses,
 } from "./utils/menuLayoutProfiles.js";
 import {
   readLocalBeverages, writeLocalBeverages,
