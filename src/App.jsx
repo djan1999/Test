@@ -414,8 +414,96 @@ function optionalExtrasFromCourses(menuCourses = []) {
 }
 
 const circBtnSm = { ...mixinCircleButton };
+
+// ── Move Table Picker ─────────────────────────────────────────────────────────
+// Modal that lets a service-mode operator move the current table's live state
+// to another table id. Tables that are active/started or hold a reservation are
+// shown as occupied — the operator must free them first (via Reservations) before
+// they can be used as destinations.
+function MoveTablePicker({ currentTable, tables = [], reservationOnTable, onCancel, onPick }) {
+  const isMobile = useIsMobile(560);
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 200, padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: tokens.neutral[0], border: `1px solid ${tokens.ink[3]}`,
+          maxWidth: 460, width: "100%", padding: 20, fontFamily: FONT,
+        }}
+      >
+        <div style={{ fontSize: "9px", letterSpacing: "0.16em", textTransform: "uppercase", color: tokens.ink[3], marginBottom: 6 }}>
+          [MOVE TABLE]
+        </div>
+        <div style={{ fontSize: "13px", color: tokens.ink[0], marginBottom: 12, lineHeight: 1.5 }}>
+          Move <strong>T{String(currentTable.id).padStart(2, "0")}</strong>
+          {currentTable.resName ? ` (${currentTable.resName})` : ""} to a different table.
+          All orders, kitchen progress, and arrived time will follow.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(5, 1fr)" : "repeat(5, 1fr)", gap: 6, marginBottom: 14 }}>
+          {Array.from({ length: 10 }, (_, i) => i + 1).map((tid) => {
+            const isSelf = tid === currentTable.id;
+            const dst = tables.find(t => t.id === tid);
+            const dstStarted = dst && (dst.active || dst.arrivedAt
+              || (dst.kitchenLog && Object.keys(dst.kitchenLog).length > 0)
+              || dst.kitchenArchived);
+            const ownerResv = typeof reservationOnTable === "function" ? reservationOnTable(tid) : null;
+            const occupied = !!(dstStarted || dst?.resName || dst?.resTime || ownerResv);
+            const disabled = isSelf || occupied;
+            const subLabel = isSelf
+              ? "current"
+              : dstStarted
+                ? "active"
+                : (dst?.resName ? dst.resName.slice(0, 8) : (ownerResv?.data?.resName ? ownerResv.data.resName.slice(0, 8) : ""));
+            return (
+              <button
+                key={tid}
+                onClick={() => !disabled && onPick(tid)}
+                disabled={disabled}
+                style={{
+                  fontFamily: FONT, padding: "12px 0",
+                  border: `1px solid ${isSelf ? tokens.charcoal.default : occupied ? tokens.red.border : tokens.ink[4]}`,
+                  borderRadius: 0,
+                  background: isSelf ? tokens.tint.parchment : occupied ? tokens.red.bg : tokens.neutral[0],
+                  color: isSelf ? tokens.ink[0] : occupied ? tokens.red.text : tokens.ink[1],
+                  cursor: disabled ? "not-allowed" : "pointer",
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                  touchAction: "manipulation",
+                }}
+              >
+                <span style={{ fontSize: 13, fontWeight: 700 }}>T{String(tid).padStart(2, "0")}</span>
+                {subLabel && (
+                  <span style={{ fontSize: 8, letterSpacing: "0.10em", textTransform: "uppercase", opacity: 0.7 }}>
+                    {subLabel}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button
+            onClick={onCancel}
+            style={{
+              fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
+              padding: "8px 16px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0,
+              cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3],
+            }}
+          >CANCEL</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Detail View ───────────────────────────────────────────────────────────────
-function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages, onClearTable }) {
+function Detail({ table, tables = [], optionalExtras = [], optionalPairings = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages, onClearTable, onMoveTable, reservationOnTable }) {
   const isMobile = useIsMobile(860);
   const isNarrow = useIsMobile(520);
   const row1 = isNarrow ? "30px 1fr 28px" : isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
@@ -429,6 +517,10 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
     (s.beers?.length || 0) > 0 ||
     (s.pairing && s.pairing !== "—")
   );
+  const [showMoveTable, setShowMoveTable] = useState(false);
+  useModalEscape(() => setShowMoveTable(false), showMoveTable);
+  const canMoveTable = mode === "service" && typeof onMoveTable === "function"
+    && (table.active || table.arrivedAt || table.resName || table.resTime);
   return (
     <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "0 0 28px" : "0 0 40px", overflowX: "hidden" }}>
       {/* [TABLE] header bar */}
@@ -495,6 +587,20 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
               textTransform: "uppercase", touchAction: "manipulation",
             }}
           >CLEAR DRINKS</button>
+          {canMoveTable && (
+            <button
+              onClick={() => setShowMoveTable(true)}
+              style={{
+                fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em",
+                padding: isMobile ? "10px 10px" : "6px 10px",
+                border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0,
+                cursor: "pointer",
+                background: tokens.neutral[0], color: tokens.ink[0],
+                fontWeight: 600,
+                textTransform: "uppercase", touchAction: "manipulation",
+              }}
+            >CHANGE TABLE</button>
+          )}
           {mode === "service" && onClearTable && (table.active || table.arrivedAt || table.resName || table.resTime) && (
             <button
               onClick={() => onClearTable(table.id)}
@@ -510,6 +616,22 @@ function Detail({ table, optionalExtras = [], optionalPairings = [], wines = [],
           )}
         </div>
       </div>
+
+      {showMoveTable && (
+        <MoveTablePicker
+          currentTable={table}
+          tables={tables}
+          reservationOnTable={reservationOnTable}
+          onCancel={() => setShowMoveTable(false)}
+          onPick={(toId) => {
+            const r = onMoveTable(table.id, toId);
+            if (r?.ok) setShowMoveTable(false);
+            else if (r?.reason === "destination-occupied") {
+              window.alert(`T${String(toId).padStart(2, "0")} is occupied. Move that reservation to another table first (Reservations → edit), then try again.`);
+            }
+          }}
+        />
+      )}
 
       {/* [GUEST DOSSIER] strip */}
       {(table.resName || table.resTime || table.arrivedAt || table.menuType) && (
@@ -2203,6 +2325,50 @@ export default function App() {
     setSel(null);
   };
 
+  // Returns the active reservation (if any) whose primary or grouped table matches `tableId`
+  // for the currently active service date + session. Used by table-change UI to surface
+  // who currently owns a destination table.
+  const reservationOnTable = (tableId) => {
+    if (!serviceDate || !tableId) return null;
+    return reservations.find(r => {
+      if (r.date !== serviceDate) return false;
+      const sess = r.data?.service_session;
+      const resolved = (sess === "lunch" || sess === "dinner")
+        ? sess
+        : ((r.data?.resTime || "") && r.data.resTime < "15:00" ? "lunch" : "dinner");
+      if (resolved !== activeServiceSession) return false;
+      if (Number(r.table_id) === Number(tableId)) return true;
+      const grp = Array.isArray(r.data?.tableGroup) ? r.data.tableGroup.map(Number) : [];
+      return grp.includes(Number(tableId));
+    }) || null;
+  };
+
+  // Move the live service state (active, arrivedAt, seats, kitchenLog, etc.)
+  // from one table id to another, leaving the source blank. Used when moving a
+  // reservation mid-service so kitchen progress and seat orders follow the guests.
+  // Reservation data fields (resName, resTime, guests, …) are also carried over,
+  // but the `id` always stays as the destination's id. Returns { ok, reason }.
+  const moveTableState = (fromId, toId) => {
+    if (!fromId || !toId) return { ok: false, reason: "missing-id" };
+    if (Number(fromId) === Number(toId)) return { ok: true };
+    const src = tablesRef.current?.find(t => t.id === Number(fromId));
+    const dst = tablesRef.current?.find(t => t.id === Number(toId));
+    if (!src || !dst) return { ok: false, reason: "not-found" };
+    const dstStarted = dst.active || dst.arrivedAt
+      || (dst.kitchenLog && Object.keys(dst.kitchenLog).length > 0)
+      || dst.kitchenArchived;
+    const dstHasReservation = !!(dst.resName || dst.resTime);
+    if (dstStarted || dstHasReservation) return { ok: false, reason: "destination-occupied" };
+    bumpLocalTableFresh(fromId);
+    bumpLocalTableFresh(toId);
+    setTables(prev => prev.map(t => {
+      if (t.id === Number(fromId)) return blankTable(t.id);
+      if (t.id === Number(toId))   return { ...src, id: t.id };
+      return t;
+    }));
+    return { ok: true };
+  };
+
   const syncWines = async () => {
     // Client-side budget. Vercel function caps at 60 s (see sync-wines.js);
     // give it 30 s of slack for headers + DB writes + return trip then hard-abort
@@ -2479,6 +2645,22 @@ export default function App() {
   const upsertReservation = async ({ id, date, table_id, data: rData }) => {
     const dbRow = { date, table_id, data: rData };
     if (id) {
+      // If an existing reservation's primary table_id changes and the previous
+      // table has active service, carry the live state over to the new table so
+      // kitchen progress / orders / arrived time follow the guests. The
+      // reconcile effect would otherwise leave the source as an orphaned ghost
+      // and let the destination overwrite its untouched (blank) row only.
+      const prevResv = reservations.find(r => r.id === id);
+      const prevTableId = prevResv ? Number(prevResv.table_id) : null;
+      const nextTableId = Number(table_id);
+      if (prevTableId && nextTableId && prevTableId !== nextTableId
+          && date === serviceDate && (mode === "service" || mode === "display")) {
+        const src = tablesRef.current?.find(t => t.id === prevTableId);
+        const srcStarted = src && (src.active || src.arrivedAt
+          || (src.kitchenLog && Object.keys(src.kitchenLog).length > 0)
+          || src.kitchenArchived);
+        if (srcStarted) moveTableState(prevTableId, nextTableId);
+      }
       if (supabase) {
         const result = await enqueueMutation({
           job: {
@@ -3534,6 +3716,7 @@ export default function App() {
       onUpdReservation={updTableFromReservation}
       onExit={() => changeMode(null)}
       serviceDate={serviceDate}
+      activeServiceSession={activeServiceSession}
       onSetServiceDate={persistServiceDate}
       onOpenArchive={() => setArchiveOpen(true)}
       courseQuickNotes={courseQuickNotes}
@@ -3780,6 +3963,7 @@ export default function App() {
       ) : (
         <Detail
           table={selTable}
+          tables={tables}
           optionalExtras={dishes}
           optionalPairings={pairings}
           wines={wines}
@@ -3797,6 +3981,24 @@ export default function App() {
           onApplySeatToAll={(tableId, sourceSeatId) => applySeatTemplateToAll(tableId, sourceSeatId)}
           onClearBeverages={tableId => clearSeatBeverages(tableId)}
           onClearTable={tableId => clear(tableId)}
+          onMoveTable={(fromId, toId) => {
+            const result = moveTableState(fromId, toId);
+            if (result.ok) {
+              setSel(toId);
+              const linkedResv = reservations.find(r =>
+                r.date === serviceDate && Number(r.table_id) === Number(fromId));
+              if (linkedResv) {
+                upsertReservation({
+                  id: linkedResv.id,
+                  date: linkedResv.date,
+                  table_id: Number(toId),
+                  data: linkedResv.data,
+                });
+              }
+            }
+            return result;
+          }}
+          reservationOnTable={reservationOnTable}
         />
       )}
 

@@ -496,9 +496,16 @@ export function generateMenuHTML({
         const pairingFlag = normalizeCourseToken(course.optional_pairing_flag || "");
         if (!pairingFlag) return null;
         const pairingState = seat.optionalPairings?.[pairingFlag];
+        // When the linked extra is shared from another seat (sharedWith != null),
+        // the pairing belongs to the source seat — this seat shouldn't inherit
+        // the default-on fallback. Without this, half-shared beetroot would
+        // randomly add an optional pairing to the partner who never selected one.
+        const linkedExtraKey = normalizeCourseToken(course.optional_flag || "");
+        const linkedExtra = linkedExtraKey ? getExtra(linkedExtraKey) : null;
+        const isSharedHere = (linkedExtra?.sharedWith ?? null) !== null;
         const isOrdered = pairingState?.ordered !== undefined
           ? !!pairingState.ordered
-          : course.optional_pairing_default_on !== false;
+          : (isSharedHere ? false : course.optional_pairing_default_on !== false);
         if (!isOrdered) return null;
         const pairingOverride = pairingState?.mode;
         const isNonAlc = pairingOverride

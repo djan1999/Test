@@ -29,13 +29,15 @@ const LUNCH_TIMES  = parseSittingTimes("VITE_DEFAULT_LUNCH_TIMES",   "12:00,12:3
 const SITTING_TIMES = DINNER_TIMES;
 const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
 
-export default function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel }) {
+export default function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel, onResolveConflict }) {
   const isMobile = useIsMobile(560);
   const [tableIds, setTableIds] = useState(
     initial?.data?.tableGroup?.length > 1 ? initial.data.tableGroup.map(Number)
       : initial?.table_id ? [Number(initial.table_id)]
       : []
   );
+  const [conflictPrompt, setConflictPrompt] = useState(null); // { tid, conflictResv }
+  const [conflictResolveMode, setConflictResolveMode] = useState(false); // showing table picker for displaced resv
   const [name, setName] = useState(initial?.data?.resName || "");
   const [time, setTime] = useState(initial?.data?.resTime || "");
   const [serviceSession, setServiceSession] = useState(initial?.data?.service_session || "dinner");
@@ -60,7 +62,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
   const sortedGroup = [...tableIds].sort((a, b) => a - b);
   const primaryId = sortedGroup[0] ?? null;
 
-  const isConflict = (tid) => reservations.some((r) => {
+  const findConflict = (tid) => reservations.find((r) => {
     if (r.id === excludeId) return false;
     if (r.date !== initial?.date) return false;
     if (tableIds.includes(tid)) return false;
@@ -68,7 +70,8 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
     const existingSession = r.data?.service_session || "dinner";
     if (existingSession !== serviceSession) return false;
     return r.table_id === tid || (r.data?.tableGroup || []).map(Number).includes(tid);
-  });
+  }) || null;
+  const isConflict = (tid) => !!findConflict(tid);
 
   const handleSessionChange = (s) => {
     setServiceSession(s);
@@ -104,22 +107,27 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
           {Array.from({ length: 10 }, (_, i) => i + 1).map((tid) => {
             const isSel = tableIds.includes(tid);
-            const conflict = isConflict(tid);
+            const conflictResv = findConflict(tid);
+            const conflict = !!conflictResv;
             return (
               <button
                 key={tid}
                 onClick={() => {
-                  if (conflict) return;
+                  if (conflict) {
+                    setConflictPrompt({ tid, conflictResv });
+                    setConflictResolveMode(false);
+                    return;
+                  }
                   setTableIds((prev) => prev.includes(tid) ? (prev.length > 1 ? prev.filter((x) => x !== tid) : prev) : [...prev, tid]);
                 }}
                 style={{
                   fontFamily: FONT, fontSize: 11, padding: "9px 0",
                   border: "1px solid",
-                  borderColor: isSel ? tokens.charcoal.default : conflict ? tokens.ink[4] : tokens.ink[4],
+                  borderColor: isSel ? tokens.charcoal.default : conflict ? tokens.red.border : tokens.ink[4],
                   borderRadius: 0,
-                  background: isSel ? tokens.tint.parchment : conflict ? tokens.neutral[50] : tokens.neutral[0],
-                  color: isSel ? tokens.ink[1] : conflict ? tokens.ink[4] : tokens.ink[2],
-                  cursor: conflict ? "not-allowed" : "pointer",
+                  background: isSel ? tokens.tint.parchment : conflict ? tokens.red.bg : tokens.neutral[0],
+                  color: isSel ? tokens.ink[1] : conflict ? tokens.red.text : tokens.ink[2],
+                  cursor: "pointer",
                 }}
               >
                 T{String(tid).padStart(2, "0")}
@@ -129,6 +137,132 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
         </div>
         {tableIds.length === 0 && <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 4 }}>Select at least one table</div>}
       </div>
+
+      {conflictPrompt && (() => {
+        const { tid, conflictResv } = conflictPrompt;
+        const cd = conflictResv.data || {};
+        const otherTables = Array.from({ length: 10 }, (_, i) => i + 1)
+          // Can't park the displaced resv on the table being freed for *this*
+          // resv (the user wants tid for the current edit) or on a table this
+          // form is already using.
+          .filter(t => t !== tid && !tableIds.includes(t))
+          .map(t => {
+            const owner = reservations.find(r => {
+              if (r.id === excludeId) return false;
+              if (r.id === conflictResv.id) return false;
+              if (r.date !== initial?.date) return false;
+              const sess = r.data?.service_session || "dinner";
+              if (sess !== serviceSession) return false;
+              return r.table_id === t || (r.data?.tableGroup || []).map(Number).includes(t);
+            });
+            return { id: t, owner };
+          });
+        return (
+          <div
+            onClick={() => { setConflictPrompt(null); setConflictResolveMode(false); }}
+            style={{
+              position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              zIndex: 300, padding: 16,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: tokens.neutral[0], border: `1px solid ${tokens.ink[3]}`,
+                maxWidth: 460, width: "100%", padding: 18, fontFamily: FONT,
+              }}
+            >
+              <div style={{ fontSize: "9px", letterSpacing: "0.16em", textTransform: "uppercase", color: tokens.red.text, marginBottom: 6 }}>
+                [TABLE OCCUPIED]
+              </div>
+              <div style={{ fontSize: "12px", color: tokens.ink[0], marginBottom: 12, lineHeight: 1.5 }}>
+                <strong>T{String(tid).padStart(2, "0")}</strong> is held by <strong>{cd.resName || "(unnamed)"}</strong>
+                {cd.resTime ? ` at ${cd.resTime}` : ""}{cd.guests ? ` · ${cd.guests} pax` : ""}.
+              </div>
+              {!conflictResolveMode ? (
+                <>
+                  <div style={{ fontSize: 11, color: tokens.ink[2], marginBottom: 14, lineHeight: 1.4 }}>
+                    To take this table, move the existing reservation to another table first.
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                    <button
+                      onClick={() => { setConflictPrompt(null); }}
+                      style={{
+                        fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
+                        padding: "8px 16px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0,
+                        cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3],
+                      }}
+                    >CANCEL</button>
+                    <button
+                      onClick={() => setConflictResolveMode(true)}
+                      disabled={typeof onResolveConflict !== "function"}
+                      style={{
+                        fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
+                        padding: "8px 16px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0,
+                        cursor: typeof onResolveConflict === "function" ? "pointer" : "not-allowed",
+                        background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 600,
+                        opacity: typeof onResolveConflict === "function" ? 1 : 0.5,
+                      }}
+                    >MOVE {cd.resName ? cd.resName.split(/\s+/)[0].toUpperCase() : "IT"} TO…</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 11, color: tokens.ink[2], marginBottom: 10, lineHeight: 1.4 }}>
+                    Pick a free table for <strong>{cd.resName || "(unnamed)"}</strong>:
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5, marginBottom: 12 }}>
+                    {otherTables.map(({ id, owner }) => {
+                      const disabled = !!owner;
+                      return (
+                        <button
+                          key={id}
+                          onClick={async () => {
+                            if (disabled) return;
+                            await onResolveConflict(conflictResv.id, id);
+                            // Now claim the freed table for this form
+                            setTableIds((prev) => prev.includes(tid) ? prev : [...prev, tid]);
+                            setConflictPrompt(null);
+                            setConflictResolveMode(false);
+                          }}
+                          disabled={disabled}
+                          style={{
+                            fontFamily: FONT, fontSize: 11, padding: "10px 0",
+                            border: `1px solid ${disabled ? tokens.red.border : tokens.ink[4]}`,
+                            borderRadius: 0,
+                            background: disabled ? tokens.red.bg : tokens.neutral[0],
+                            color: disabled ? tokens.red.text : tokens.ink[1],
+                            cursor: disabled ? "not-allowed" : "pointer",
+                            display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+                          }}
+                        >
+                          <span style={{ fontWeight: 700 }}>T{String(id).padStart(2, "0")}</span>
+                          {owner && (
+                            <span style={{ fontSize: 8, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.7 }}>
+                              {(owner.data?.resName || "held").slice(0, 8)}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                    <button
+                      onClick={() => setConflictResolveMode(false)}
+                      style={{
+                        fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
+                        padding: "8px 16px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0,
+                        cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3],
+                      }}
+                    >BACK</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{ marginBottom: 10 }}>
         <div style={fieldLabel}>Service</div>

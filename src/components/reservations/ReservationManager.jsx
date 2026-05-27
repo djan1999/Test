@@ -386,6 +386,16 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 excludeId={null}
                 onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) { setEditingId(null); setDraftFromReservation(null); } }}
                 onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
+                onResolveConflict={async (resvId, newTableId) => {
+                  const target = reservations.find(r => r.id === resvId);
+                  if (!target) return;
+                  const oldGroup = Array.isArray(target.data?.tableGroup) ? target.data.tableGroup.map(Number) : [];
+                  const nextData = {
+                    ...(target.data || {}),
+                    tableGroup: oldGroup.length > 1 ? oldGroup.filter(t => t !== target.table_id).concat(newTableId).sort((a, b) => a - b) : [],
+                  };
+                  await onUpsert({ id: resvId, date: target.date, table_id: newTableId, data: nextData });
+                }}
               />
             </CenteredModal>
           )}
@@ -482,6 +492,16 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       excludeId={r.id}
                       onSave={async (row) => { await onUpsert(row); setEditingId(null); setDraftFromReservation(null); }}
                       onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
+                      onResolveConflict={async (resvId, newTableId) => {
+                        const target = reservations.find(rr => rr.id === resvId);
+                        if (!target) return;
+                        const oldGroup = Array.isArray(target.data?.tableGroup) ? target.data.tableGroup.map(Number) : [];
+                        const nextData = {
+                          ...(target.data || {}),
+                          tableGroup: oldGroup.length > 1 ? oldGroup.filter(t => t !== target.table_id).concat(newTableId).sort((a, b) => a - b) : [],
+                        };
+                        await onUpsert({ id: resvId, date: target.date, table_id: newTableId, data: nextData });
+                      }}
                     />
                   </CenteredModal>
                 )}

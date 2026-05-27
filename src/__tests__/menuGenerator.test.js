@@ -462,6 +462,76 @@ describe("generateMenuHTML — pairing", () => {
     });
     expect(html).not.toContain("HOUSE PAIRING");
   });
+
+  it("does not apply default-on optional pairing when the linked extra is shared from another seat", () => {
+    // Reproduces the "shared beetroot accidentally adds pairing to the partner"
+    // bug: seat B has beetroot only because seat A shared it (sharedWith=1),
+    // and never selected its own optional pairing. The pairing must stay off.
+    const beetroot = makeCourse("BEETROOT", "bear fat", {
+      position: 1,
+      course_category: "optional",
+      optional_flag: "beetroot",
+      optional_pairing_flag: "beet_pairing",
+      optional_pairing_default_on: true,
+      wp: { name: "Champagne Brut", sub: "" },
+      na: { name: "Sea Buckthorn Soda", sub: "" },
+    });
+    const template = {
+      version: 2,
+      rows: [
+        { id: "hdr", left: { type: "title" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
+        {
+          id: "c1",
+          left: { type: "course", courseKey: beetroot.course_key },
+          right: { type: "drinks", drinkSource: "optional_pairing" },
+          widthPreset: "55/45",
+          gap: 0,
+        },
+      ],
+    };
+    const html = render(
+      { id: 2, pairing: "Wine", extras: { beetroot: { ordered: true, sharedWith: 1 } } },
+      {},
+      [beetroot],
+      { menuTemplate: template }
+    );
+    expect(html).toContain("BEETROOT");
+    expect(html).not.toContain("Champagne Brut");
+    expect(html).not.toContain("Sea Buckthorn Soda");
+  });
+
+  it("still applies optional pairing on the source seat when sharing", () => {
+    // Sanity check: seat A (the source — sharedWith is null) still gets the
+    // default-on pairing as before.
+    const beetroot = makeCourse("BEETROOT", "bear fat", {
+      position: 1,
+      course_category: "optional",
+      optional_flag: "beetroot",
+      optional_pairing_flag: "beet_pairing",
+      optional_pairing_default_on: true,
+      wp: { name: "Champagne Brut", sub: "" },
+    });
+    const template = {
+      version: 2,
+      rows: [
+        { id: "hdr", left: { type: "title" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
+        {
+          id: "c1",
+          left: { type: "course", courseKey: beetroot.course_key },
+          right: { type: "drinks", drinkSource: "optional_pairing" },
+          widthPreset: "55/45",
+          gap: 0,
+        },
+      ],
+    };
+    const html = render(
+      { id: 1, pairing: "Wine", extras: { beetroot: { ordered: true, sharedWith: null } } },
+      {},
+      [beetroot],
+      { menuTemplate: template }
+    );
+    expect(html).toContain("Champagne Brut");
+  });
 });
 
 // ── SI language ───────────────────────────────────────────────────────────────
