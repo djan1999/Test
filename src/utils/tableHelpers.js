@@ -146,13 +146,18 @@ export const mergeTableGroups = (tables = []) => {
     const members = byPrimary.get(primary).map(id => tableById.get(id)).filter(Boolean);
     let nextSeatId = 1;
     const mergedSeats = [];
-    let totalGuests = 0;
+    let contentSeatCount = 0;
     for (const m of members) {
       const memberSeats = (m.seats || []).filter(seatHasContent);
-      const memberCount = memberSeats.length > 0 ? memberSeats.length : (Number(m.guests) || 0);
-      totalGuests += memberCount;
+      contentSeatCount += memberSeats.length;
       memberSeats.forEach(s => { mergedSeats.push({ ...s, id: nextSeatId++ }); });
     }
+    // The reconcile pass sets `guests` to the full reservation count on every
+    // member of the group, so summing across members would double-count
+    // (e.g. T02+T03 with 4 guests would report 8). Use the primary's value
+    // directly and fall back to actual content-seat count only if it's missing.
+    const primaryTable = tableById.get(primary);
+    const reservationGuests = Number(primaryTable?.guests) || 0;
     const mergedKitchenLog = Object.assign({}, ...members.map(m => m.kitchenLog || {}));
     const mergedBottles = members.flatMap(m => m.bottleWines || []);
     const mergedRestrictions = members.flatMap(m => m.restrictions || []);
@@ -163,7 +168,7 @@ export const mergeTableGroups = (tables = []) => {
       kitchenLog: mergedKitchenLog,
       bottleWines: mergedBottles,
       restrictions: mergedRestrictions,
-      _groupGuests: totalGuests || t.guests || 0,
+      _groupGuests: reservationGuests || contentSeatCount || 0,
     });
   }
   return out;

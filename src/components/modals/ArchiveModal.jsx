@@ -303,7 +303,7 @@ export default function ArchiveModal({
 
 // Aggregate per-seat drink selections across every table in an archived service.
 function archiveDrinkSummary(tables) {
-  const s = { aperitifs: 0, glasses: 0, bottles: 0, cocktails: 0, spirits: 0, beers: 0 };
+  const s = { aperitifs: 0, glasses: 0, bottles: 0, cocktails: 0, spirits: 0, beers: 0, pairings: 0 };
   for (const t of tables || []) {
     for (const seat of t.seats || []) {
       s.aperitifs += (seat.aperitifs || []).filter(Boolean).length;
@@ -311,10 +311,20 @@ function archiveDrinkSummary(tables) {
       s.cocktails += (seat.cocktails || []).filter(Boolean).length;
       s.spirits   += (seat.spirits   || []).filter(Boolean).length;
       s.beers     += (seat.beers     || []).filter(Boolean).length;
+      // Pairing tags (Wine / Non-Alc / Premium / Our Story) and linked
+      // optional pairings are kitchen-driven drink decisions, not just
+      // labels — count them so a wine-pairing-heavy lunch doesn't look
+      // like "0 drinks" when every guest actually ordered a pairing.
+      const p = String(seat.pairing || "").trim();
+      if (p && p !== "—") s.pairings += 1;
+      const op = seat.optionalPairings || {};
+      for (const k of Object.keys(op)) {
+        if (op[k]?.ordered) s.pairings += 1;
+      }
     }
     s.bottles += (t.bottleWines || []).length;
   }
-  s.total = s.aperitifs + s.glasses + s.bottles + s.cocktails + s.spirits + s.beers;
+  s.total = s.aperitifs + s.glasses + s.bottles + s.cocktails + s.spirits + s.beers + s.pairings;
   return s;
 }
 
@@ -332,6 +342,7 @@ function SummaryBadge({ label, value }) {
 
 function ArchiveSummary({ tableCount, totalGuests, drinks }) {
   const breakdown = [
+    ["Pairings", drinks.pairings],
     ["Aperitifs", drinks.aperitifs],
     ["Glasses", drinks.glasses],
     ["Bottles", drinks.bottles],

@@ -174,6 +174,29 @@ describe("mergeTableGroups", () => {
     expect(merged[0].seats).toHaveLength(2);
   });
 
+  it("does not double-count guests across group members (reconcile sets the same count on each)", () => {
+    // Regression: the service-board reconcile assigns the full reservation
+    // guest count to every member of a multi-table group. A previous version
+    // of mergeTableGroups summed `m.guests` across members, so a 4-guest
+    // T02+T03 reservation was reported as 8 in the archive summary.
+    const tables = [
+      makeTbl(2, { resName: "S", resTime: "18:30", tableGroup: [2, 3], guests: 4, seats: [seatWith(1), seatWith(2), seatWith(3), seatWith(4)] }),
+      makeTbl(3, { resName: "S", resTime: "18:30", tableGroup: [2, 3], guests: 4, seats: makeSeats(4) }),
+    ];
+    const merged = mergeTableGroups(tables);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]._groupGuests).toBe(4);
+  });
+
+  it("falls back to content-seat count when the primary has no guests value", () => {
+    const tables = [
+      makeTbl(2, { resName: "S", resTime: "18:30", tableGroup: [2, 3], guests: 0, seats: [seatWith(1), seatWith(2)] }),
+      makeTbl(3, { resName: "S", resTime: "18:30", tableGroup: [2, 3], guests: 0, seats: [seatWith(1)] }),
+    ];
+    const merged = mergeTableGroups(tables);
+    expect(merged[0]._groupGuests).toBe(3);
+  });
+
   it("auto-groups tables that share resName + resTime when tableGroup is missing", () => {
     const tables = [
       makeTbl(2, { resName: "Stasik", resTime: "18:30", seats: [seatWith(1)] }),
