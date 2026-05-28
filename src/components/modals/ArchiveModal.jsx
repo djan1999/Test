@@ -3,7 +3,7 @@ import FullModal from "../ui/FullModal.jsx";
 import TableSummaryCard from "./TableSummaryCard.jsx";
 import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
-import { parseHHMM } from "../../utils/tableHelpers.js";
+import { parseHHMM, mergeTableGroups, tableGroupLabel } from "../../utils/tableHelpers.js";
 import { optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
@@ -103,7 +103,7 @@ export default function ArchiveModal({
     setDeleting(null);
   };
 
-  const activeTables = tables.filter((t) => t.active || t.arrivedAt || t.resName || t.resTime);
+  const activeTables = mergeTableGroups(tables.filter((t) => t.active || t.arrivedAt || t.resName || t.resTime));
 
   const archiveActions = (
     <div style={{ display: "flex", gap: isMobile ? 6 : 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -118,7 +118,10 @@ export default function ArchiveModal({
     </div>
   );
 
-  const archivedTickets = (tables || []).filter((t) => t.kitchenArchived);
+  // Merge multi-table reservations (T02 + T03 → "T02-03" with all seats combined)
+  // so the archive view doesn't show ghost rows for the secondary tables that
+  // only carry empty placeholder seats.
+  const archivedTickets = mergeTableGroups((tables || []).filter((t) => t.kitchenArchived));
   const [expandedTicket, setExpandedTicket] = useState(null);
   const fmtDuration = (mins) => {
     if (mins == null) return null;
@@ -142,6 +145,8 @@ export default function ArchiveModal({
                 const durMins = (start != null && end != null) ? (end >= start ? end - start : end - start + 1440) : null;
                 const timeRange = t.arrivedAt && lastFiredAt ? `${t.arrivedAt}–${lastFiredAt}` : null;
                 const isOpen = expandedTicket === t.id;
+                const label = tableGroupLabel(t);
+                const guestCount = t._groupGuests || t.guests;
                 return (
                   <div key={t.id} style={{ border: `1px solid ${tokens.green.border}`, borderRadius: 0, overflow: "hidden", background: tokens.green.bg }}>
                     <div
@@ -149,15 +154,24 @@ export default function ArchiveModal({
                       style={{ padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", cursor: "pointer" }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                        <span style={{ fontFamily: FONT, fontSize: 18, fontWeight: 300, color: tokens.green.text, letterSpacing: 1 }}>{String(t.id).padStart(2, "0")}</span>
+                        <span style={{ fontFamily: FONT, fontSize: 18, fontWeight: 300, color: tokens.green.text, letterSpacing: 1 }}>{label}</span>
                         {t.resName && <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: tokens.neutral[900] }}>{t.resName}</span>}
-                        <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.green.border }}>{t.guests} guests</span>
+                        <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.green.border }}>{guestCount} guests</span>
                         {durMins != null && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.green.text, fontWeight: 600 }}>{fmtDuration(durMins)}</span>}
                         {timeRange && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.border }}>{timeRange}</span>}
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <button
-                          onClick={(e) => { e.stopPropagation(); onRestoreTicket && onRestoreTicket(t.id); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!onRestoreTicket) return;
+                            // Restore covers every table in the group, not just the primary,
+                            // so secondaries stop showing as "archived" in service mode.
+                            const ids = Array.isArray(t.tableGroup) && t.tableGroup.length > 1
+                              ? t.tableGroup
+                              : [t.id];
+                            ids.forEach(id => onRestoreTicket(id));
+                          }}
                           style={{
                             fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, padding: "4px 12px",
                             border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer",
@@ -174,7 +188,7 @@ export default function ArchiveModal({
                             <KitchenTicket table={t} menuCourses={menuCourses} upd={null} />
                           </div>
                           <div style={{ flex: 1, minWidth: 220 }}>
-                            <TableSummaryCard table={t} optionalExtras={optionalExtras} optionalPairings={optionalPairings} />
+                            <TableSummaryCard table={t} groupLabel={label} optionalExtras={optionalExtras} optionalPairings={optionalPairings} />
                           </div>
                         </div>
                       </div>
@@ -200,10 +214,16 @@ export default function ArchiveModal({
         )}
         {entries.map((entry) => {
           const isExp = expanded === entry.id;
-          const entryTables = entry.state?.tables || [];
+          // Merge tableGroup members so a past T02-03 reservation collapses to
+          // one row across both the summary count and the per-table cards.
+          const rawTables = entry.state?.tables || [];
+          const entryTables = mergeTableGroups(rawTables);
           const entryMenuCourses = entry.state?.menuCourses || [];
           const entryOptionalPairings = optionalPairingsFromCourses(entryMenuCourses);
-          const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
+          const totalGuests = entryTables.reduce((a, t) => a + (t._groupGuests || t.guests || 0), 0);
+          // Drink summary still walks the merged list — bottles, glasses, etc.
+          // have already been concatenated by mergeTableGroups, so this matches
+          // what the user sees in the per-table cards below.
           const drinks = archiveDrinkSummary(entryTables);
           return (
             <div key={entry.id} style={{ border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, marginBottom: 8, overflow: "hidden" }}>
@@ -255,8 +275,8 @@ export default function ArchiveModal({
             {showTrash && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {deleted.map((entry) => {
-                  const entryTables = entry.state?.tables || [];
-                  const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
+                  const entryTables = mergeTableGroups(entry.state?.tables || []);
+                  const totalGuests = entryTables.reduce((a, t) => a + (t._groupGuests || t.guests || 0), 0);
                   const deletedDate = entry.deleted_at ? new Date(entry.deleted_at).toLocaleDateString() : "";
                   return (
                     <div key={entry.id} style={{ border: `1px solid ${tokens.red.bg}`, borderRadius: 0, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", background: tokens.red.bg, opacity: 0.8 }}>
@@ -342,7 +362,7 @@ function ArchivedTableRow({ table, optionalExtras, optionalPairings = [], menuCo
   const [showTicket, setShowTicket] = useState(false);
   return (
     <div style={{ marginBottom: 12 }}>
-      <TableSummaryCard table={table} optionalExtras={optionalExtras} optionalPairings={optionalPairings} />
+      <TableSummaryCard table={table} groupLabel={tableGroupLabel(table)} optionalExtras={optionalExtras} optionalPairings={optionalPairings} />
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -8, marginBottom: 4 }}>
         <button
           onClick={() => setShowTicket((v) => !v)}

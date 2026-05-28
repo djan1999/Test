@@ -422,6 +422,7 @@ const circBtnSm = { ...mixinCircleButton };
 // they can be used as destinations.
 function MoveTablePicker({ currentTable, tables = [], reservationOnTable, onCancel, onPick }) {
   const isMobile = useIsMobile(560);
+  const [swapConfirm, setSwapConfirm] = useState(null); // { tid, ownerLabel }
   return (
     <div
       onClick={onCancel}
@@ -444,7 +445,7 @@ function MoveTablePicker({ currentTable, tables = [], reservationOnTable, onCanc
         <div style={{ fontSize: "13px", color: tokens.ink[0], marginBottom: 12, lineHeight: 1.5 }}>
           Move <strong>T{String(currentTable.id).padStart(2, "0")}</strong>
           {currentTable.resName ? ` (${currentTable.resName})` : ""} to a different table.
-          All orders, kitchen progress, and arrived time will follow.
+          Free tables move; <span style={{ color: tokens.red.text }}>occupied</span> tables swap.
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(5, 1fr)" : "repeat(5, 1fr)", gap: 6, marginBottom: 14 }}>
           {Array.from({ length: 10 }, (_, i) => i + 1).map((tid) => {
@@ -455,7 +456,6 @@ function MoveTablePicker({ currentTable, tables = [], reservationOnTable, onCanc
               || dst.kitchenArchived);
             const ownerResv = typeof reservationOnTable === "function" ? reservationOnTable(tid) : null;
             const occupied = !!(dstStarted || dst?.resName || dst?.resTime || ownerResv);
-            const disabled = isSelf || occupied;
             const subLabel = isSelf
               ? "current"
               : dstStarted
@@ -464,15 +464,23 @@ function MoveTablePicker({ currentTable, tables = [], reservationOnTable, onCanc
             return (
               <button
                 key={tid}
-                onClick={() => !disabled && onPick(tid)}
-                disabled={disabled}
+                onClick={() => {
+                  if (isSelf) return;
+                  if (occupied) {
+                    const ownerLabel = dst?.resName || ownerResv?.data?.resName || (dstStarted ? "active service" : "another reservation");
+                    setSwapConfirm({ tid, ownerLabel });
+                  } else {
+                    onPick(tid, "move");
+                  }
+                }}
+                disabled={isSelf}
                 style={{
                   fontFamily: FONT, padding: "12px 0",
                   border: `1px solid ${isSelf ? tokens.charcoal.default : occupied ? tokens.red.border : tokens.ink[4]}`,
                   borderRadius: 0,
                   background: isSelf ? tokens.tint.parchment : occupied ? tokens.red.bg : tokens.neutral[0],
                   color: isSelf ? tokens.ink[0] : occupied ? tokens.red.text : tokens.ink[1],
-                  cursor: disabled ? "not-allowed" : "pointer",
+                  cursor: isSelf ? "not-allowed" : "pointer",
                   display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
                   touchAction: "manipulation",
                 }}
@@ -498,6 +506,50 @@ function MoveTablePicker({ currentTable, tables = [], reservationOnTable, onCanc
           >CANCEL</button>
         </div>
       </div>
+      {swapConfirm && (
+        <div
+          onClick={() => setSwapConfirm(null)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 250, padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: tokens.neutral[0], border: `1px solid ${tokens.ink[3]}`,
+              maxWidth: 380, width: "100%", padding: 18, fontFamily: FONT,
+            }}
+          >
+            <div style={{ fontSize: "9px", letterSpacing: "0.16em", textTransform: "uppercase", color: tokens.red.text, marginBottom: 6 }}>
+              [TABLE OCCUPIED]
+            </div>
+            <div style={{ fontSize: "12px", color: tokens.ink[0], marginBottom: 14, lineHeight: 1.5 }}>
+              <strong>T{String(swapConfirm.tid).padStart(2, "0")}</strong> is held by <strong>{swapConfirm.ownerLabel}</strong>.
+              Swap will move everything on T{String(currentTable.id).padStart(2, "0")} ↔ T{String(swapConfirm.tid).padStart(2, "0")} — orders, kitchen log, arrived time, and reservation tags.
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                onClick={() => setSwapConfirm(null)}
+                style={{
+                  fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
+                  padding: "8px 16px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0,
+                  cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3],
+                }}
+              >CANCEL</button>
+              <button
+                onClick={() => { onPick(swapConfirm.tid, "swap"); setSwapConfirm(null); }}
+                style={{
+                  fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
+                  padding: "8px 16px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0,
+                  cursor: "pointer", background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 600,
+                }}
+              >SWAP</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -623,12 +675,9 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
           tables={tables}
           reservationOnTable={reservationOnTable}
           onCancel={() => setShowMoveTable(false)}
-          onPick={(toId) => {
-            const r = onMoveTable(table.id, toId);
+          onPick={(toId, mode) => {
+            const r = onMoveTable(table.id, toId, mode);
             if (r?.ok) setShowMoveTable(false);
-            else if (r?.reason === "destination-occupied") {
-              window.alert(`T${String(toId).padStart(2, "0")} is occupied. Move that reservation to another table first (Reservations → edit), then try again.`);
-            }
           }}
         />
       )}
@@ -1531,17 +1580,29 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                           if (!upd) return;
                           const ordered = extraNextState !== "off";
                           const newSharedWith = typeof extraNextState === "number" ? extraNextState : null;
+                          // When the partner inherits a shared dish, also zero out
+                          // their linked optional-pairing slot so the data model is
+                          // unambiguous (otherwise default-on fallbacks can leak in).
+                          const clearLinkedPairing = (seat) => {
+                            if (!linked?.key) return seat;
+                            const cur = seat.optionalPairings?.[linked.key];
+                            if (!cur && cur !== 0) return seat;
+                            const { [linked.key]: _drop, ...rest } = seat.optionalPairings || {};
+                            return { ...seat, optionalPairings: { ...rest, [linked.key]: { ordered: false, mode: null } } };
+                          };
                           upd(t.id, "seats", prev => prev.map(seat => {
                             if (seat.id === s.id) {
                               return { ...seat, extras: { ...seat.extras, [dish.key]: { ...extra, ordered, sharedWith: newSharedWith } } };
                             }
                             if (seat.id === curSharedWith && curSharedWith !== null && curSharedWith !== newSharedWith) {
                               const oldEx = seat.extras?.[dish.key] || {};
-                              return { ...seat, extras: { ...seat.extras, [dish.key]: { ...oldEx, ordered: false, sharedWith: null } } };
+                              const cleared = clearLinkedPairing(seat);
+                              return { ...cleared, extras: { ...cleared.extras, [dish.key]: { ...oldEx, ordered: false, sharedWith: null } } };
                             }
                             if (seat.id === newSharedWith && newSharedWith !== null) {
                               const tEx = seat.extras?.[dish.key] || { ordered: false, pairing: extra.pairing };
-                              return { ...seat, extras: { ...seat.extras, [dish.key]: { ...tEx, ordered: true, sharedWith: s.id } } };
+                              const cleared = clearLinkedPairing(seat);
+                              return { ...cleared, extras: { ...cleared.extras, [dish.key]: { ...tEx, ordered: true, sharedWith: s.id } } };
                             }
                             return seat;
                           }));
@@ -2366,6 +2427,58 @@ export default function App() {
       if (t.id === Number(toId))   return { ...src, id: t.id };
       return t;
     }));
+    return { ok: true };
+  };
+
+  // Atomically swap the live state between two tables. Same intent as
+  // moveTableState but for the case where both sides have content — instead of
+  // refusing, exchange them so the operator can flip two reservations in one go.
+  const swapTableState = (aId, bId) => {
+    if (!aId || !bId) return { ok: false, reason: "missing-id" };
+    if (Number(aId) === Number(bId)) return { ok: true };
+    const a = tablesRef.current?.find(t => t.id === Number(aId));
+    const b = tablesRef.current?.find(t => t.id === Number(bId));
+    if (!a || !b) return { ok: false, reason: "not-found" };
+    bumpLocalTableFresh(aId);
+    bumpLocalTableFresh(bId);
+    setTables(prev => prev.map(t => {
+      if (t.id === Number(aId)) return { ...b, id: t.id };
+      if (t.id === Number(bId)) return { ...a, id: t.id };
+      return t;
+    }));
+    return { ok: true };
+  };
+
+  // Swap two reservations' primary table_ids. Also swaps live table state when
+  // they overlap with active service so kitchen progress and seat orders follow
+  // the guests. Called from ResvForm's "SWAP" button — keeps the data model
+  // consistent (reservations + tables) in a single operation.
+  const swapReservations = async (r1Id, r2Id) => {
+    const r1 = reservations.find(r => r.id === r1Id);
+    const r2 = reservations.find(r => r.id === r2Id);
+    if (!r1 || !r2) return { ok: false, reason: "not-found" };
+    const t1 = Number(r1.table_id);
+    const t2 = Number(r2.table_id);
+    if (!t1 || !t2 || t1 === t2) return { ok: false, reason: "same-table" };
+    if (r1.date === serviceDate && (mode === "service" || mode === "display")) {
+      swapTableState(t1, t2);
+    }
+    // Update r1's local state synchronously so the second upsert sees the new
+    // table_id and skips the auto-move (avoids a redundant moveTableState call
+    // that would fail-noop now that the swap above already happened).
+    setReservations(prev => prev.map(r =>
+      r.id === r1Id ? { ...r, table_id: t2 }
+        : r.id === r2Id ? { ...r, table_id: t1 }
+        : r
+    ));
+    if (supabase) {
+      // Persist both rows; ignore the auto-move guards inside upsertReservation
+      // by going straight to the DB.
+      await Promise.all([
+        supabase.from(TABLES.RESERVATIONS).update({ table_id: t2 }).eq("id", r1Id),
+        supabase.from(TABLES.RESERVATIONS).update({ table_id: t1 }).eq("id", r2Id),
+      ]);
+    }
     return { ok: true };
   };
 
@@ -3714,6 +3827,7 @@ export default function App() {
       onUpsert={upsertReservation}
       onDelete={deleteReservation}
       onUpdReservation={updTableFromReservation}
+      onSwapReservations={swapReservations}
       onExit={() => changeMode(null)}
       serviceDate={serviceDate}
       activeServiceSession={activeServiceSession}
@@ -3981,22 +4095,36 @@ export default function App() {
           onApplySeatToAll={(tableId, sourceSeatId) => applySeatTemplateToAll(tableId, sourceSeatId)}
           onClearBeverages={tableId => clearSeatBeverages(tableId)}
           onClearTable={tableId => clear(tableId)}
-          onMoveTable={(fromId, toId) => {
-            const result = moveTableState(fromId, toId);
-            if (result.ok) {
-              setSel(toId);
-              const linkedResv = reservations.find(r =>
-                r.date === serviceDate && Number(r.table_id) === Number(fromId));
-              if (linkedResv) {
-                upsertReservation({
-                  id: linkedResv.id,
-                  date: linkedResv.date,
-                  table_id: Number(toId),
-                  data: linkedResv.data,
-                });
-              }
+          onMoveTable={(fromId, toId, mode = "auto") => {
+            const dst = tablesRef.current?.find(t => t.id === Number(toId));
+            const dstStarted = dst && (dst.active || dst.arrivedAt
+              || (dst.kitchenLog && Object.keys(dst.kitchenLog).length > 0)
+              || dst.kitchenArchived);
+            const dstHasReservation = !!(dst?.resName || dst?.resTime);
+            const dstOccupied = !!(dstStarted || dstHasReservation);
+            const useSwap = mode === "swap" || (mode === "auto" && dstOccupied);
+            const result = useSwap ? swapTableState(fromId, toId) : moveTableState(fromId, toId);
+            if (!result.ok) return result;
+            setSel(toId);
+            const srcResv = reservations.find(r =>
+              r.date === serviceDate && Number(r.table_id) === Number(fromId));
+            const dstResv = useSwap
+              ? reservations.find(r =>
+                  r.date === serviceDate && Number(r.table_id) === Number(toId))
+              : null;
+            if (srcResv) {
+              upsertReservation({
+                id: srcResv.id, date: srcResv.date,
+                table_id: Number(toId), data: srcResv.data,
+              });
             }
-            return result;
+            if (dstResv) {
+              upsertReservation({
+                id: dstResv.id, date: dstResv.date,
+                table_id: Number(fromId), data: dstResv.data,
+              });
+            }
+            return { ...result, swapped: useSwap };
           }}
           reservationOnTable={reservationOnTable}
         />

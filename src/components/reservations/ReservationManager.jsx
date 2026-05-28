@@ -232,7 +232,7 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Allergy Sheet</title>${ALLERGY_ROBOTO}<style>${css}</style></head><body>${body}</body></html>`;
 }
 
-export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onExit, serviceDate, onSetServiceDate, onOpenArchive, courseQuickNotes = {}, profiles = [], assignments = {} }) {
+export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onSwapReservations, onExit, serviceDate, activeServiceSession = "dinner", onSetServiceDate, onOpenArchive, courseQuickNotes = {}, profiles = [], assignments = {} }) {
   const [weekOffset,  setWeekOffset]  = useState(0);
   const [selectedDay, setSelectedDay] = useState(null);   // "YYYY-MM-DD" or null (week view)
   const [editingId,   setEditingId]   = useState(null);   // reservation id being edited, or "new"
@@ -242,6 +242,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
   const [allergyEdits,  setAllergyEdits]  = useState({});
   const [draftFromReservation, setDraftFromReservation] = useState(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const weeklyChain = useFocusChain();
   // Escape = back at every sub-level. useModalEscape stacks handlers so the
@@ -396,6 +397,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                   };
                   await onUpsert({ id: resvId, date: target.date, table_id: newTableId, data: nextData });
                 }}
+                onSwapReservations={onSwapReservations}
               />
             </CenteredModal>
           )}
@@ -502,6 +504,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                         };
                         await onUpsert({ id: resvId, date: target.date, table_id: newTableId, data: nextData });
                       }}
+                      onSwapReservations={onSwapReservations}
                     />
                   </CenteredModal>
                 )}
@@ -558,17 +561,27 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
             <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.green.text, fontWeight: 600 }}>
               ● SERVICE: {new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}
             </span>
-            <button onClick={() => { const nd = window.prompt("Change service date (YYYY-MM-DD):", serviceDate); if (nd && /^\d{4}-\d{2}-\d{2}$/.test(nd)) onSetServiceDate(nd); }}
+            <button onClick={() => setShowDatePicker(true)}
               style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", color: tokens.ink[3], background: "none", border: "none", cursor: "pointer", touchAction: "manipulation", padding: "8px 4px" }}>CHANGE</button>
           </>
         ) : (
           <>
             <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[4] }}>NO ACTIVE SERVICE DATE</span>
-            <button onClick={() => { const nd = window.prompt("Set service date (YYYY-MM-DD):", todayStr); if (nd && /^\d{4}-\d{2}-\d{2}$/.test(nd)) onSetServiceDate(nd); }}
+            <button onClick={() => setShowDatePicker(true)}
               style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", textTransform: "uppercase", color: tokens.ink[2], background: "none", border: `1px solid ${tokens.ink[4]}`, cursor: "pointer", borderRadius: 0, padding: "7px 10px", touchAction: "manipulation" }}>SET DATE</button>
           </>
         )}
       </div>
+
+      {showDatePicker && (
+        <ServiceDatePicker
+          defaultDate={serviceDate || todayStr}
+          defaultSession={activeServiceSession}
+          reservations={reservations}
+          onConfirm={(date) => { onSetServiceDate(date); setShowDatePicker(false); }}
+          onCancel={() => setShowDatePicker(false)}
+        />
+      )}
 
       {/* Weekly overview modal */}
       {weeklyPreview && (() => {

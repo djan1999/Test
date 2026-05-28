@@ -29,7 +29,7 @@ const LUNCH_TIMES  = parseSittingTimes("VITE_DEFAULT_LUNCH_TIMES",   "12:00,12:3
 const SITTING_TIMES = DINNER_TIMES;
 const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
 
-export default function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel, onResolveConflict }) {
+export default function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel, onResolveConflict, onSwapReservations }) {
   const isMobile = useIsMobile(560);
   const [tableIds, setTableIds] = useState(
     initial?.data?.tableGroup?.length > 1 ? initial.data.tableGroup.map(Number)
@@ -183,9 +183,11 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               {!conflictResolveMode ? (
                 <>
                   <div style={{ fontSize: 11, color: tokens.ink[2], marginBottom: 14, lineHeight: 1.4 }}>
-                    To take this table, move the existing reservation to another table first.
+                    {tableIds.length === 1 && excludeId && typeof onSwapReservations === "function"
+                      ? <>Swap tables with this reservation, or move it to a different free table.</>
+                      : <>To take this table, move the existing reservation to another table first.</>}
                   </div>
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
                     <button
                       onClick={() => { setConflictPrompt(null); }}
                       style={{
@@ -194,6 +196,20 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                         cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3],
                       }}
                     >CANCEL</button>
+                    {tableIds.length === 1 && excludeId && typeof onSwapReservations === "function" && (
+                      <button
+                        onClick={async () => {
+                          await onSwapReservations(excludeId, conflictResv.id);
+                          setTableIds([tid]);
+                          setConflictPrompt(null);
+                        }}
+                        style={{
+                          fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
+                          padding: "8px 16px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0,
+                          cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[0], fontWeight: 600,
+                        }}
+                      >SWAP T{String(tableIds[0]).padStart(2, "0")} ↔ T{String(tid).padStart(2, "0")}</button>
+                    )}
                     <button
                       onClick={() => setConflictResolveMode(true)}
                       disabled={typeof onResolveConflict !== "function"}
@@ -359,7 +375,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             ))}
           </div>
         </div>
-        {guestType === "hotel" ? (
+        {guestType === "hotel" && (
           <div>
             <div style={fieldLabel}>
               Rooms
@@ -381,21 +397,13 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               })}
             </div>
           </div>
-        ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 22, flexWrap: "wrap" }}>
-            <input type="checkbox" id={`resvbd-${initial?.id || "new"}`} checked={birthday} onChange={(e) => setBirthday(e.target.checked)} style={{ width: 14, height: 14, cursor: "pointer" }} />
-            <label htmlFor={`resvbd-${initial?.id || "new"}`} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>Cake</label>
-            {birthday && <input value={cakeNote} onChange={(e) => setCakeNote(e.target.value)} placeholder="occasion (e.g. Mrs Bday)" style={{ ...baseInp, flex: 1, minWidth: 100, fontSize: MOBILE_SAFE_INPUT_SIZE, padding: "4px 8px" }} />}
-          </div>
         )}
       </div>
-      {guestType === "hotel" && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-          <input type="checkbox" id={`resvbd2-${initial?.id || "new"}`} checked={birthday} onChange={(e) => setBirthday(e.target.checked)} style={{ width: 14, height: 14, cursor: "pointer" }} />
-          <label htmlFor={`resvbd2-${initial?.id || "new"}`} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>Cake</label>
-          {birthday && <input value={cakeNote} onChange={(e) => setCakeNote(e.target.value)} placeholder="occasion (e.g. Mrs Bday)" style={{ ...baseInp, flex: 1, minWidth: 100, fontSize: MOBILE_SAFE_INPUT_SIZE, padding: "4px 8px" }} />}
-        </div>
-      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <input type="checkbox" id={`resvbd-${initial?.id || "new"}`} checked={birthday} onChange={(e) => setBirthday(e.target.checked)} style={{ width: 14, height: 14, cursor: "pointer" }} />
+        <label htmlFor={`resvbd-${initial?.id || "new"}`} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, cursor: "pointer" }}>Cake</label>
+        {birthday && <input value={cakeNote} onChange={(e) => setCakeNote(e.target.value)} placeholder="occasion (e.g. Mrs Bday)" style={{ ...baseInp, flex: 1, minWidth: 100, fontSize: MOBILE_SAFE_INPUT_SIZE, padding: "4px 8px" }} />}
+      </div>
 
       <div style={{ marginBottom: 10 }}>
         <div style={{ ...fieldLabel, marginBottom: 8 }}>Dietary restrictions</div>

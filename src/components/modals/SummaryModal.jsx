@@ -1,41 +1,15 @@
 import FullModal from "../ui/FullModal.jsx";
 import TableSummaryCard from "./TableSummaryCard.jsx";
 import { tokens } from "../../styles/tokens.js";
+import { mergeTableGroups, tableGroupLabel } from "../../utils/tableHelpers.js";
 
 const FONT = tokens.font;
 
-function buildGroupMap(tables) {
-  const byKey = new Map();
-  tables.forEach(t => {
-    if (t.tableGroup?.length) return;
-    const n = (t.resName || "").trim();
-    const r = (t.resTime || "").trim();
-    if (!n || !r) return;
-    const k = `${n}|${r}`;
-    byKey.set(k, [...(byKey.get(k) || []), t.id]);
-  });
-  const m = new Map();
-  byKey.forEach(ids => {
-    if (ids.length < 2) return;
-    const sorted = [...ids].sort((a, b) => a - b);
-    sorted.forEach(id => m.set(id, sorted));
-  });
-  return m;
-}
-
-function groupLabel(t) {
-  const group = t.tableGroup?.length > 1 ? [...t.tableGroup].sort((a, b) => a - b) : null;
-  return group ? group.map(id => String(id).padStart(2, "0")).join("-") : String(t.id).padStart(2, "0");
-}
-
 export default function SummaryModal({ tables, optionalExtras = [], optionalPairings = [], onClose }) {
-  const autoGroupMap = buildGroupMap(tables);
-  const effectiveTables = tables.map(t => {
-    const eg = autoGroupMap.get(t.id);
-    return eg ? { ...t, tableGroup: eg } : t;
-  });
-  const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
-  const active = effectiveTables.filter(t => t.active || t.arrivedAt).filter(isPrimary);
+  // Collapse multi-table reservations into one virtual row so a party
+  // spanning T02-T03 shows up once with all seats merged.
+  const active = mergeTableGroups(tables).filter(t => t.active || t.arrivedAt);
+  const groupLabel = tableGroupLabel;
 
   const copyText = () => {
     const lines = [];

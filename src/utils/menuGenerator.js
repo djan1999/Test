@@ -112,7 +112,6 @@ export function generateMenuHTML({
   _fontReg = "",
   _logo = "",
   _rowsOnly = false,
-  _debugSpacing = false,
 }) {
   const s = (key, def) => key in layoutStyles ? layoutStyles[key] : def;
   const rules = normalizeMenuRules(menuRules);
@@ -684,19 +683,13 @@ export function generateMenuHTML({
     const gapPt = Number(row.gap || 0) || 0;
     const gapStyle = gapPt ? `margin-top:${gapPt}pt;` : "";
     const pin = row.pinToBottom;
-    const dbgAttrs = _debugSpacing
-      ? ` data-gappt="${esc(gapPt)}"`
-      : "";
 
     if (row.type === "_divider") {
       const t  = row.thickness ?? 0.5;
       const c  = row.color     ?? "#cccccc";
       const mt = (row.marginTop    ?? 3) + (row.gap || 0);
       const mb = row.marginBottom  ?? 3;
-      const hrDbg = _debugSpacing
-        ? ` data-kind="divider" data-mtpt="${esc(mt)}" data-mbpt="${esc(mb)}"`
-        : "";
-      return `<hr${hrDbg} style="border:none;border-top:${t}pt solid ${esc(c)};margin:${mt}pt 0 ${mb}pt;">`;
+      return `<hr style="border:none;border-top:${t}pt solid ${esc(c)};margin:${mt}pt 0 ${mb}pt;">`;
     }
     if (row.type === "section") {
       const ta = row.align && row.align !== "left" ? `text-align:${row.align};` : "";
@@ -711,13 +704,10 @@ export function generateMenuHTML({
       const rightHtml = row.side === "right" ? labelHtml : emptyDiv;
       const reservePt = Number(row.reservePt ?? 0) || 0;
       const reserveStyle = reserveHeight && reservePt > 0 ? `min-height:${reservePt}pt;` : "";
-      const secDbg = _debugSpacing
-        ? ` data-kind="pairing-label" data-mbpt="${esc(mbPt)}" data-reservept="${esc(reserveHeight ? reservePt : 0)}"`
-        : "";
-      return `<div class="menu-row"${dbgAttrs}${secDbg} style="${gapStyle}${reserveStyle}margin-bottom:${mbPt}pt;${gridCols(row.widthPreset)}">${leftHtml}${rightHtml}</div>`;
+      return `<div class="menu-row" style="${gapStyle}${reserveStyle}margin-bottom:${mbPt}pt;${gridCols(row.widthPreset)}">${leftHtml}${rightHtml}</div>`;
     }
     if (row.type === "wine-only") {
-      return `<div class="menu-row wine-only"${dbgAttrs} style="${gapStyle}${gridCols(row.widthPreset)}">${renderBlock(null, "left")}${renderBlock(row.right, "right")}</div>`;
+      return `<div class="menu-row wine-only" style="${gapStyle}${gridCols(row.widthPreset)}">${renderBlock(null, "left")}${renderBlock(row.right, "right")}</div>`;
     }
     if (row.type === "_header") {
       const hasTitle = !!row.titleBlock;
@@ -728,103 +718,28 @@ export function generateMenuHTML({
       const logoHtml = hasLogo
         ? `<div id="logo"><img src="${_logo}" alt="Logo"></div>`
         : "";
-      const hdrDbg = _debugSpacing ? ` data-kind="header"` : "";
-      return `<div class="menu-header-row"${hdrDbg}${dbgAttrs} style="${gapStyle}">${titleHtml}${logoHtml}</div>`;
+      return `<div class="menu-header-row" style="${gapStyle}">${titleHtml}${logoHtml}</div>`;
     }
     if (row.type === "_team") {
       const tmB = row.block || {};
       const spacing = tmB.spacing ?? 1.4;
       const names = teamNames;
       const taStyle = (tmB.align && tmB.align !== "left") ? `text-align:${tmB.align};` : "";
-      const teamDbg = _debugSpacing ? ` data-kind="team" data-labelmbpt="${esc(spacing)}"` : "";
-      return `<div id="team"${teamDbg} class="${pin ? "pin-bottom" : ""}" style="${pin ? "" : gapStyle}${taStyle}"><div class="menu-main" style="margin-bottom:${spacing}pt">TEAM:</div><div>${esc(names)}</div></div>`;
+      return `<div id="team" class="${pin ? "pin-bottom" : ""}" style="${pin ? "" : gapStyle}${taStyle}"><div class="menu-main" style="margin-bottom:${spacing}pt">TEAM:</div><div>${esc(names)}</div></div>`;
     }
     if (row.type === "thankyou") {
       const fs = row.fontSize ? `font-size:${row.fontSize}pt;` : "";
       const ta = (row.align && row.align !== "left") ? `text-align:${row.align};` : "";
-      const tyDbg = _debugSpacing ? ` data-kind="thankyou"` : "";
-      return `<div class="menu-thankyou ${pin ? "pin-bottom" : ""}"${tyDbg}${dbgAttrs} style="${pin ? "" : gapStyle}${fs}${ta}">${esc(row._text)}</div>`;
+      return `<div class="menu-thankyou ${pin ? "pin-bottom" : ""}" style="${pin ? "" : gapStyle}${fs}${ta}">${esc(row._text)}</div>`;
     }
     // course / text rows
     const ckAttr = row.courseKey ? ` data-ck="${esc(row.courseKey)}"` : "";
-    const kindDbg = _debugSpacing ? ` data-kind="row"` : "";
-    return `<div class="menu-row ${row.rowClass || ""}${pin ? " pin-bottom" : ""}"${dbgAttrs}${kindDbg} style="${pin ? "" : gapStyle}${gridCols(row.widthPreset)}"${ckAttr}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
+    return `<div class="menu-row ${row.rowClass || ""}${pin ? " pin-bottom" : ""}" style="${pin ? "" : gapStyle}${gridCols(row.widthPreset)}"${ckAttr}>${renderBlock(row.left, "left")}${renderBlock(row.right, "right")}</div>`;
   }).join("");
 
   // ── HTML output ───────────────────────────────────────────────────────────
   // Single unified rendering path — same CSS and structure used in both the
   // live editor preview and the final print window.
-  const spacingDebugHtml = _debugSpacing ? `
-<style id="__spacing_debug_css">
-  .__dbg-outline{outline:1px dashed rgba(210,70,70,0.38);outline-offset:-1px;position:relative;}
-  .__dbg-badge{
-    position:absolute;left:0;top:0;transform:translateY(-100%);
-    font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size:9px;line-height:1;
-    background:rgba(255,255,255,0.92);
-    border:1px solid rgba(210,70,70,0.55);
-    color:#b04040;
-    padding:2px 4px;border-radius:0;
-    white-space:nowrap;
-    pointer-events:none;
-  }
-  .__dbg-badge.__right{left:auto;right:0;}
-</style>
-<script id="__spacing_debug_js">
-  (function(){
-    function toNumPx(v){
-      if (!v) return 0;
-      const n = parseFloat(String(v).replace('px',''));
-      return Number.isFinite(n) ? n : 0;
-    }
-    function pxToPt(px){ return px / (96 / 72); }
-    function fmtPt(pt){
-      const p = Math.round(pt * 10) / 10;
-      return (p === 0 ? "0" : String(p)) + "pt";
-    }
-    function annotate(el, label, right){
-      if (!el || el.querySelector(':scope > .__dbg-badge')) return;
-      el.classList.add('__dbg-outline');
-      const b = document.createElement('div');
-      b.className = '__dbg-badge' + (right ? ' __right' : '');
-      b.textContent = label;
-      el.appendChild(b);
-    }
-    function run(){
-      const root = document.getElementById('menu');
-      if (!root) return;
-      const kids = Array.from(root.children || []);
-      kids.forEach((el) => {
-        const ds = el.dataset || {};
-        const gapPt = parseFloat(ds.gappt || "0") || 0;
-        const mbPt = parseFloat(ds.mbpt || "0") || 0;
-        const reservePt = parseFloat(ds.reservept || "0") || 0;
-        const mtPtFromCss = pxToPt(toNumPx(getComputedStyle(el).marginTop));
-        const mbPtFromCss = pxToPt(toNumPx(getComputedStyle(el).marginBottom));
-        const mtPt = gapPt || (Math.round(mtPtFromCss * 10) / 10);
-        const mbPt2 = mbPt || (Math.round(mbPtFromCss * 10) / 10);
-        if (mtPt === 0 && mbPt2 === 0 && reservePt === 0) return;
-        const tag = el.tagName.toLowerCase();
-        const cls = (el.className || '').toString();
-        const kind = ds.kind ||
-          (tag === 'hr' ? 'divider' :
-          cls.includes('menu-header-row') ? 'header' :
-          cls.includes('menu-thankyou') ? 'thankyou' :
-          cls.includes('pin-bottom') ? 'pin' :
-          cls.includes('menu-row') ? 'row' :
-          el.id ? el.id : tag);
-        const parts = [];
-        if (mtPt) parts.push('gap ' + fmtPt(mtPt));
-        if (reservePt) parts.push('reserve ' + fmtPt(reservePt));
-        if (mbPt2) parts.push('below ' + fmtPt(mbPt2));
-        annotate(el, kind + ' · ' + parts.join(' · '), false);
-      });
-    }
-    window.addEventListener('load', function(){ setTimeout(run, 60); });
-    window.addEventListener('resize', function(){ setTimeout(run, 60); });
-  })();
-</script>
-` : "";
 
   return `<!DOCTYPE html>
 <html>
@@ -873,7 +788,6 @@ body{position:relative;}
 <div id="sheet"><div id="frame"><div id="scaleTarget">
 <div id="menu">${menuRowsHtml}</div>
 </div></div></div>
-${spacingDebugHtml}
 <script>
 (function(){
   const MIN_SCALE = ${s("minScale", 0.58)};

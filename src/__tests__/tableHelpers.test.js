@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeSeats, blankTable, sanitizeTable, fmt, parseHHMM } from "../utils/tableHelpers.js";
+import { makeSeats, blankTable, sanitizeTable, fmt, parseHHMM, mergeTableGroups, tableGroupLabel } from "../utils/tableHelpers.js";
 
 describe("makeSeats", () => {
   it("creates n seats with default values", () => {
@@ -129,5 +129,101 @@ describe("parseHHMM", () => {
 
   it("handles midnight", () => {
     expect(parseHHMM("00:00")).toBe(0);
+  });
+});
+
+describe("mergeTableGroups", () => {
+  const makeTbl = (id, overrides = {}) => ({
+    ...blankTable(id),
+    ...overrides,
+  });
+  const seatWith = (id, pairing = "Wine") => ({
+    id, gender: null, pairingSharedWith: null, water: "—",
+    aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [],
+    pairing, extras: {}, optionalPairings: {},
+  });
+
+  it("returns a single row per explicit tableGroup, with the primary id only", () => {
+    const tables = [
+      makeTbl(2, { resName: "Stasik", resTime: "18:30", tableGroup: [2, 3], seats: [seatWith(1), seatWith(2)] }),
+      makeTbl(3, { resName: "Stasik", resTime: "18:30", tableGroup: [2, 3], seats: makeSeats(4) }),
+      makeTbl(5, { resName: "Other", resTime: "19:00", seats: [seatWith(1)] }),
+    ];
+    const merged = mergeTableGroups(tables);
+    expect(merged.map(t => t.id)).toEqual([2, 5]);
+    expect(merged[0].tableGroup).toEqual([2, 3]);
+  });
+
+  it("renumbers seats sequentially when merging across group members", () => {
+    const tables = [
+      makeTbl(2, { resName: "S", resTime: "18:30", tableGroup: [2, 3], seats: [seatWith(1, "Wine"), seatWith(2, "Non-Alc")] }),
+      makeTbl(3, { resName: "S", resTime: "18:30", tableGroup: [2, 3], seats: [seatWith(1, "Premium")] }),
+    ];
+    const merged = mergeTableGroups(tables);
+    expect(merged[0].seats.map(s => s.id)).toEqual([1, 2, 3]);
+    expect(merged[0].seats.map(s => s.pairing)).toEqual(["Wine", "Non-Alc", "Premium"]);
+  });
+
+  it("drops empty placeholder seats from secondaries", () => {
+    const tables = [
+      makeTbl(2, { resName: "S", resTime: "18:30", tableGroup: [2, 3], seats: [seatWith(1, "Wine"), seatWith(2, "Wine")] }),
+      makeTbl(3, { resName: "S", resTime: "18:30", tableGroup: [2, 3], seats: makeSeats(4) }), // all blank
+    ];
+    const merged = mergeTableGroups(tables);
+    // The four blank placeholders on T03 must not become rows on the merged view.
+    expect(merged[0].seats).toHaveLength(2);
+  });
+
+  it("auto-groups tables that share resName + resTime when tableGroup is missing", () => {
+    const tables = [
+      makeTbl(2, { resName: "Stasik", resTime: "18:30", seats: [seatWith(1)] }),
+      makeTbl(3, { resName: "Stasik", resTime: "18:30", seats: [] }),
+    ];
+    const merged = mergeTableGroups(tables);
+    expect(merged.map(t => t.id)).toEqual([2]);
+    expect(merged[0].tableGroup).toEqual([2, 3]);
+  });
+
+  it("leaves single-table rows unchanged", () => {
+    const tables = [makeTbl(4, { resName: "X", resTime: "19:00", seats: [seatWith(1)] })];
+    const merged = mergeTableGroups(tables);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe(4);
+    expect(merged[0].tableGroup).toEqual([]);
+  });
+
+  it("concatenates kitchen logs, bottle wines and restrictions across the group", () => {
+    const tables = [
+      makeTbl(2, {
+        resName: "S", resTime: "18:30", tableGroup: [2, 3],
+        seats: [seatWith(1)],
+        kitchenLog: { course_a: { firedAt: "18:40" } },
+        bottleWines: [{ name: "Bottle A" }],
+        restrictions: [{ pos: 1, note: "veg" }],
+      }),
+      makeTbl(3, {
+        resName: "S", resTime: "18:30", tableGroup: [2, 3],
+        seats: [seatWith(1)],
+        kitchenLog: { course_b: { firedAt: "18:50" } },
+        bottleWines: [{ name: "Bottle B" }],
+        restrictions: [{ pos: 1, note: "glut" }],
+      }),
+    ];
+    const merged = mergeTableGroups(tables);
+    expect(Object.keys(merged[0].kitchenLog)).toEqual(expect.arrayContaining(["course_a", "course_b"]));
+    expect(merged[0].bottleWines.map(b => b.name)).toEqual(["Bottle A", "Bottle B"]);
+    expect(merged[0].restrictions).toHaveLength(2);
+  });
+});
+
+describe("tableGroupLabel", () => {
+  it("returns padded single-table id when no group", () => {
+    expect(tableGroupLabel({ id: 4 })).toBe("04");
+  });
+  it("returns hyphen-joined group ids when in a group", () => {
+    expect(tableGroupLabel({ id: 2, tableGroup: [2, 3] })).toBe("02-03");
+  });
+  it("sorts group ids ascending regardless of input order", () => {
+    expect(tableGroupLabel({ id: 5, tableGroup: [5, 2] })).toBe("02-05");
   });
 });
