@@ -232,7 +232,7 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Allergy Sheet</title>${ALLERGY_ROBOTO}<style>${css}</style></head><body>${body}</body></html>`;
 }
 
-export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onSwapReservations, onExit, serviceDate, activeServiceSession = "dinner", onSetServiceDate, onOpenArchive, courseQuickNotes = {}, profiles = [], assignments = {} }) {
+export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onSwapReservations, onExit, serviceDate, activeServiceSession = "dinner", onSetServiceDate, onSetServiceSession, onOpenArchive, courseQuickNotes = {}, profiles = [], assignments = {} }) {
   const [weekOffset,  setWeekOffset]  = useState(0);
   const [selectedDay, setSelectedDay] = useState(null);   // "YYYY-MM-DD" or null (week view)
   const [editingId,   setEditingId]   = useState(null);   // reservation id being edited, or "new"
@@ -578,7 +578,14 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
           defaultDate={serviceDate || todayStr}
           defaultSession={activeServiceSession}
           reservations={reservations}
-          onConfirm={(date) => { onSetServiceDate(date); setShowDatePicker(false); }}
+          onConfirm={(date, session) => {
+            // Persist BOTH the date and the chosen session. Dropping the session
+            // here previously left lunch/dinner mismatched, so the board
+            // reconciled against the wrong session's reservations.
+            if (session && typeof onSetServiceSession === "function") onSetServiceSession(session);
+            onSetServiceDate(date);
+            setShowDatePicker(false);
+          }}
           onCancel={() => setShowDatePicker(false)}
         />
       )}

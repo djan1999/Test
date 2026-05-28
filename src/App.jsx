@@ -1580,29 +1580,23 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                           if (!upd) return;
                           const ordered = extraNextState !== "off";
                           const newSharedWith = typeof extraNextState === "number" ? extraNextState : null;
-                          // When the partner inherits a shared dish, also zero out
-                          // their linked optional-pairing slot so the data model is
-                          // unambiguous (otherwise default-on fallbacks can leak in).
-                          const clearLinkedPairing = (seat) => {
-                            if (!linked?.key) return seat;
-                            const cur = seat.optionalPairings?.[linked.key];
-                            if (!cur && cur !== 0) return seat;
-                            const { [linked.key]: _drop, ...rest } = seat.optionalPairings || {};
-                            return { ...seat, optionalPairings: { ...rest, [linked.key]: { ordered: false, mode: null } } };
-                          };
+                          // Only mutate the `extras.sharedWith` linkage here. Do NOT
+                          // touch the partner seat's optionalPairings — a previous
+                          // version cleared it, which silently wiped a pairing the
+                          // partner had selected independently (the "beetroot pairing
+                          // disappears when I touch share" bug). The generator already
+                          // guards the shared case via the seat's own sharedWith flag.
                           upd(t.id, "seats", prev => prev.map(seat => {
                             if (seat.id === s.id) {
                               return { ...seat, extras: { ...seat.extras, [dish.key]: { ...extra, ordered, sharedWith: newSharedWith } } };
                             }
                             if (seat.id === curSharedWith && curSharedWith !== null && curSharedWith !== newSharedWith) {
                               const oldEx = seat.extras?.[dish.key] || {};
-                              const cleared = clearLinkedPairing(seat);
-                              return { ...cleared, extras: { ...cleared.extras, [dish.key]: { ...oldEx, ordered: false, sharedWith: null } } };
+                              return { ...seat, extras: { ...seat.extras, [dish.key]: { ...oldEx, ordered: false, sharedWith: null } } };
                             }
                             if (seat.id === newSharedWith && newSharedWith !== null) {
                               const tEx = seat.extras?.[dish.key] || { ordered: false, pairing: extra.pairing };
-                              const cleared = clearLinkedPairing(seat);
-                              return { ...cleared, extras: { ...cleared.extras, [dish.key]: { ...tEx, ordered: true, sharedWith: s.id } } };
+                              return { ...seat, extras: { ...seat.extras, [dish.key]: { ...tEx, ordered: true, sharedWith: s.id } } };
                             }
                             return seat;
                           }));
@@ -2087,6 +2081,11 @@ export default function App() {
   const profilesStateRef = useRef(profilesState);
   profilesStateRef.current = profilesState;
   const profilesLoaded = useRef(false);
+  // "loading" until the remote profile read resolves. Only "ready" (a read that
+  // definitively succeeded — including the genuinely-empty case) permits the
+  // default-seeding effect to run and PERSIST. "error" keeps seeding OFF so a
+  // transient read failure can never overwrite the saved layout with defaults.
+  const [profilesReadStatus, setProfilesReadStatus] = useState("loading");
 
   // Active profile + its derived menuTemplate / layoutStyles. The Admin
   // template editor edits the active profile in place; persistence flushes
@@ -2755,7 +2754,7 @@ export default function App() {
   };
 
   // ── Reservations CRUD ─────────────────────────────────────────────────────
-  const upsertReservation = async ({ id, date, table_id, data: rData }) => {
+  const upsertReservation = async ({ id, date, table_id, data: rData, _skipAutoMove = false }) => {
     const dbRow = { date, table_id, data: rData };
     if (id) {
       // If an existing reservation's primary table_id changes and the previous
@@ -2763,10 +2762,13 @@ export default function App() {
       // kitchen progress / orders / arrived time follow the guests. The
       // reconcile effect would otherwise leave the source as an orphaned ghost
       // and let the destination overwrite its untouched (blank) row only.
+      // `_skipAutoMove` is set by callers that already moved/swapped the table
+      // state themselves (the Detail CHANGE TABLE / swap flow) — without it,
+      // this guard re-runs moveTableState against a stale tablesRef snapshot.
       const prevResv = reservations.find(r => r.id === id);
       const prevTableId = prevResv ? Number(prevResv.table_id) : null;
       const nextTableId = Number(table_id);
-      if (prevTableId && nextTableId && prevTableId !== nextTableId
+      if (!_skipAutoMove && prevTableId && nextTableId && prevTableId !== nextTableId
           && date === serviceDate && (mode === "service" || mode === "display")) {
         const src = tablesRef.current?.find(t => t.id === prevTableId);
         const srcStarted = src && (src.active || src.arrivedAt
@@ -3237,50 +3239,84 @@ export default function App() {
   // legacy single-layout pair. The bad flat menu_layouts_v1 payload is
   // never read here — the row-based menuTemplate is the only system.
   useEffect(() => {
-    if (!supabase) { profilesLoaded.current = true; return; }
+    if (!supabase) { profilesLoaded.current = true; setProfilesReadStatus("ready"); return; }
+    let cancelled = false;
     (async () => {
       try {
-        const { data: v2Data } = await supabase.from(TABLES.SERVICE_SETTINGS)
+        // Throw on Supabase errors so a transient/permission failure lands in
+        // catch and is treated as "error" — NOT as "empty". maybeSingle()
+        // returns {data:null,error:null} for a genuinely empty row, so the
+        // empty path below only runs when the read truly succeeded.
+        const { data: v2Data, error: v2Err } = await supabase.from(TABLES.SERVICE_SETTINGS)
           .select("state").eq("id", "menu_layout_profiles_v2").maybeSingle();
+        if (v2Err) throw v2Err;
         const v2 = v2Data?.state;
         if (v2 && Array.isArray(v2.profiles) && v2.profiles.length > 0) {
+          if (cancelled) return;
           setProfilesState(sanitizeProfilesPayload(v2));
           profilesLoaded.current = true;
+          setProfilesReadStatus("ready");
           return;
         }
-        const { data: v1Data } = await supabase.from(TABLES.SERVICE_SETTINGS)
+        const { data: v1Data, error: v1Err } = await supabase.from(TABLES.SERVICE_SETTINGS)
           .select("state").eq("id", "menu_layout_profiles_v1").maybeSingle();
+        if (v1Err) throw v1Err;
         if (v1Data?.state?.profiles?.length) {
+          if (cancelled) return;
           const migrated = sanitizeProfilesPayload(migrateV1ToV2(v1Data.state));
           setProfilesState(migrated);
           persistProfilesPayload(migrated);
           profilesLoaded.current = true;
+          setProfilesReadStatus("ready");
           return;
         }
         const [legacyLayoutRes, legacyTemplateRes] = await Promise.all([
           supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_global").maybeSingle(),
           supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_v2").maybeSingle(),
         ]);
+        if (legacyLayoutRes?.error) throw legacyLayoutRes.error;
+        if (legacyTemplateRes?.error) throw legacyTemplateRes.error;
         const legacyLayout = (legacyLayoutRes?.data?.state && typeof legacyLayoutRes.data.state === "object") ? legacyLayoutRes.data.state : {};
         const legacyTemplate = (legacyTemplateRes?.data?.state?.version === 2 && Array.isArray(legacyTemplateRes.data.state.rows)) ? legacyTemplateRes.data.state : null;
         if (legacyTemplate || Object.keys(legacyLayout).length > 0) {
+          if (cancelled) return;
           const migrated = sanitizeProfilesPayload(migrateLegacySingleLayout(legacyLayout, legacyTemplate));
           setProfilesState(migrated);
           persistProfilesPayload(migrated);
+          profilesLoaded.current = true;
+          setProfilesReadStatus("ready");
+          return;
         }
-      } catch {}
-      profilesLoaded.current = true;
+        // Every read succeeded and returned nothing — genuinely first run.
+        // Safe to seed defaults (handled by the effect below).
+        if (cancelled) return;
+        profilesLoaded.current = true;
+        setProfilesReadStatus("ready");
+      } catch (e) {
+        // Remote read failed. Do NOT unlock seeding — seeding+persisting
+        // defaults here is what previously clobbered a saved layout when the
+        // read merely hiccupped. Keep any localStorage-hydrated profiles in
+        // memory and leave persistence untouched until a later successful read.
+        if (cancelled) return;
+        setProfilesReadStatus("error");
+        // eslint-disable-next-line no-console
+        console.error("Profile load failed — skipping default seeding so the saved layout is not overwritten:", e);
+      }
     })();
+    return () => { cancelled = true; };
   }, [persistProfilesPayload]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Seed defaults once menuCourses are loaded and no profiles exist yet.
-  // Never overwrites existing profiles — only fills the empty case.
+  // Gated on a *successful* remote read ("ready"): never seeds on "loading" or
+  // "error", so a flaky read can't overwrite the saved layout with defaults.
+  // The profiles.length guard means a returning user (with profiles) never
+  // re-seeds either.
   useEffect(() => {
-    if (!profilesLoaded.current) return;
+    if (profilesReadStatus !== "ready") return;
     if (profilesState.profiles.length > 0) return;
     if (!Array.isArray(menuCourses) || menuCourses.length === 0) return;
     updateProfiles(() => createDefaultProfiles(menuCourses));
-  }, [menuCourses, profilesState.profiles.length, updateProfiles]);
+  }, [menuCourses, profilesState.profiles.length, updateProfiles, profilesReadStatus]);
 
 
   // ── Restrictions + per-course quick notes ────────────────────────────────
@@ -3832,6 +3868,7 @@ export default function App() {
       serviceDate={serviceDate}
       activeServiceSession={activeServiceSession}
       onSetServiceDate={persistServiceDate}
+      onSetServiceSession={persistServiceSession}
       onOpenArchive={() => setArchiveOpen(true)}
       courseQuickNotes={courseQuickNotes}
       profiles={profilesState.profiles}
@@ -4112,16 +4149,18 @@ export default function App() {
               ? reservations.find(r =>
                   r.date === serviceDate && Number(r.table_id) === Number(toId))
               : null;
+            // State already moved/swapped above — skip the internal auto-move
+            // so it doesn't re-run against a stale tablesRef snapshot.
             if (srcResv) {
               upsertReservation({
                 id: srcResv.id, date: srcResv.date,
-                table_id: Number(toId), data: srcResv.data,
+                table_id: Number(toId), data: srcResv.data, _skipAutoMove: true,
               });
             }
             if (dstResv) {
               upsertReservation({
                 id: dstResv.id, date: dstResv.date,
-                table_id: Number(fromId), data: dstResv.data,
+                table_id: Number(fromId), data: dstResv.data, _skipAutoMove: true,
               });
             }
             return { ...result, swapped: useSwap };

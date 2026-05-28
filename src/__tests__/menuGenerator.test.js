@@ -532,6 +532,62 @@ describe("generateMenuHTML — pairing", () => {
     );
     expect(html).toContain("Champagne Brut");
   });
+
+  it("renders an optional pairing on a course whose template row is authored as plain 'pairing'", () => {
+    // Real-world beetroot config: optional_pairing_* fields only (no wp/na/os),
+    // but the template row's right block is `drinkSource: "pairing"` rather than
+    // "optional_pairing". The drink must still render — otherwise beetroot shows
+    // no pairing at all even when the guest selected it.
+    const beetroot = makeCourse("BEETROOT", "bear fat", {
+      position: 1,
+      course_category: "optional",
+      optional_flag: "beetroot",
+      optional_pairing_flag: "beet_pairing",
+      optional_pairing_default_on: true,
+      optional_pairing_alco: { name: "Champagne Brut", sub: "" },
+      optional_pairing_na: { name: "Sea Buckthorn Soda", sub: "" },
+    });
+    const template = {
+      version: 2,
+      rows: [
+        { id: "hdr", left: { type: "title" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
+        {
+          id: "c1",
+          left: { type: "course", courseKey: beetroot.course_key },
+          right: { type: "drinks", drinkSource: "pairing" }, // authored as plain pairing
+          widthPreset: "55/45",
+          gap: 0,
+        },
+      ],
+    };
+    const htmlAlco = render(
+      { id: 1, pairing: "Wine", extras: { beetroot: { ordered: true } }, optionalPairings: { beet_pairing: { ordered: true, mode: "alco" } } },
+      {}, [beetroot], { menuTemplate: template }
+    );
+    expect(htmlAlco).toContain("Champagne Brut");
+
+    const htmlNa = render(
+      { id: 1, pairing: "Wine", extras: { beetroot: { ordered: true } }, optionalPairings: { beet_pairing: { ordered: true, mode: "nonalc" } } },
+      {}, [beetroot], { menuTemplate: template }
+    );
+    expect(htmlNa).toContain("Sea Buckthorn Soda");
+  });
+
+  it("does not add an optional pairing for a normal pairing course without a pairing flag", () => {
+    // Guard: relaxing the optional-pairing resolver to also accept `pairing`
+    // rows must NOT change behavior for ordinary courses (no optional_pairing_flag).
+    const lamb = makeCourse("LAMB", "rosemary", { position: 1, wp: { name: "Syrah", sub: "" } });
+    const template = {
+      version: 2,
+      rows: [
+        { id: "hdr", left: { type: "title" }, right: { type: "logo" }, widthPreset: "55/45", gap: 0 },
+        { id: "c1", left: { type: "course", courseKey: lamb.course_key }, right: { type: "drinks", drinkSource: "pairing" }, widthPreset: "55/45", gap: 0 },
+      ],
+    };
+    const html = render({ id: 1, pairing: "Wine" }, {}, [lamb], { menuTemplate: template });
+    // Normal pairing package still resolves the regular wp drink.
+    expect(html).toContain("Syrah");
+  });
 });
 
 // ── SI language ───────────────────────────────────────────────────────────────

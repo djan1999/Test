@@ -491,7 +491,14 @@ export function generateMenuHTML({
       const rbSource = normDrinkSource(rb);
 
       const optionalPairingDrink = (() => {
-        if (rbSource !== "optional_pairing") return null;
+        // Resolve an optional-pairing drink for BOTH an explicit `optional_pairing`
+        // row AND a plain `pairing` row whose course is optional-pairing-enabled.
+        // Beetroot's template row is authored as `pairing`, but its drink data
+        // lives only in optional_pairing_alco/na — without handling the `pairing`
+        // case here it renders no drink at all. Courses without an
+        // optional_pairing_flag fall through to null below, so normal pairing
+        // courses are unaffected.
+        if (rbSource !== "optional_pairing" && rbSource !== "pairing") return null;
         const pairingFlag = normalizeCourseToken(course.optional_pairing_flag || "");
         if (!pairingFlag) return null;
         const pairingState = seat.optionalPairings?.[pairingFlag];

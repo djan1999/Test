@@ -141,6 +141,12 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
       {conflictPrompt && (() => {
         const { tid, conflictResv } = conflictPrompt;
         const cd = conflictResv.data || {};
+        // Swap is only safe when BOTH reservations are single-table. If the
+        // partner spans a group, a plain table_id swap would leave its
+        // data.tableGroup pointing at the old table — corrupting the group.
+        const partnerIsGroup = Array.isArray(cd.tableGroup) && cd.tableGroup.length > 1;
+        const canSwap = tableIds.length === 1 && !!excludeId
+          && typeof onSwapReservations === "function" && !partnerIsGroup;
         const otherTables = Array.from({ length: 10 }, (_, i) => i + 1)
           // Can't park the displaced resv on the table being freed for *this*
           // resv (the user wants tid for the current edit) or on a table this
@@ -183,7 +189,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               {!conflictResolveMode ? (
                 <>
                   <div style={{ fontSize: 11, color: tokens.ink[2], marginBottom: 14, lineHeight: 1.4 }}>
-                    {tableIds.length === 1 && excludeId && typeof onSwapReservations === "function"
+                    {canSwap
                       ? <>Swap tables with this reservation, or move it to a different free table.</>
                       : <>To take this table, move the existing reservation to another table first.</>}
                   </div>
@@ -196,7 +202,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                         cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3],
                       }}
                     >CANCEL</button>
-                    {tableIds.length === 1 && excludeId && typeof onSwapReservations === "function" && (
+                    {canSwap && (
                       <button
                         onClick={async () => {
                           await onSwapReservations(excludeId, conflictResv.id);
