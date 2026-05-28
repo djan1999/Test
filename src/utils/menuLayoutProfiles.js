@@ -140,6 +140,12 @@ export function sanitizeProfilesPayload(raw) {
       target: normalizeTarget(p.target),
       menuTemplate: p.menuTemplate && typeof p.menuTemplate === "object" ? p.menuTemplate : null,
       shortMenuTemplate: p.shortMenuTemplate && typeof p.shortMenuTemplate === "object" ? p.shortMenuTemplate : null,
+      // Kitchen ticket layouts live alongside the guest-menu templates on the
+      // same profile. Both have to be preserved here — sanitize runs on every
+      // profile-level admin action AND on every load, so anything not copied
+      // is silently destroyed the next time the user touches profile manager.
+      ticketTemplate: p.ticketTemplate && typeof p.ticketTemplate === "object" ? p.ticketTemplate : null,
+      shortTicketTemplate: p.shortTicketTemplate && typeof p.shortTicketTemplate === "object" ? p.shortTicketTemplate : null,
       layoutStyles: p.layoutStyles && typeof p.layoutStyles === "object" ? p.layoutStyles : {},
     }));
 
@@ -234,6 +240,11 @@ export function duplicateProfile(profile, nextName) {
     target: normalizeTarget(profile.target),
     menuTemplate: cloneTemplate(profile.menuTemplate),
     shortMenuTemplate: profile.shortMenuTemplate ? cloneTemplate(profile.shortMenuTemplate) : null,
+    // Kitchen ticket layouts must be cloned too — otherwise duplicating a
+    // profile silently drops its ticket layouts, matching the same data-loss
+    // pattern that wiped them via sanitize.
+    ticketTemplate: profile.ticketTemplate ? cloneTemplate(profile.ticketTemplate) : null,
+    shortTicketTemplate: profile.shortTicketTemplate ? cloneTemplate(profile.shortTicketTemplate) : null,
     layoutStyles: profile.layoutStyles ? { ...profile.layoutStyles } : {},
   };
 }

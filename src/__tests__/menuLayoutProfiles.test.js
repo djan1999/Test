@@ -419,3 +419,121 @@ describe("PROFILE_TARGETS", () => {
     expect(PROFILE_TARGETS).toEqual(["guest_menu"]);
   });
 });
+
+// ── Regression: sanitize must preserve every field the editor saves ──────────
+//
+// The editor mutates four template fields on a profile:
+//   menuTemplate         (long guest menu)
+//   shortMenuTemplate    (short guest menu)
+//   ticketTemplate       (long kitchen ticket)
+//   shortTicketTemplate  (short kitchen ticket)
+//
+// sanitizeProfilesPayload runs inside updateProfiles() (every profile-level
+// admin action: rename, create, duplicate, delete, set-target, set-assignment,
+// select-active) AND on every load from Supabase. Anything it drops is gone
+// the next time the user touches profile management. This regression was
+// silently destroying kitchen ticket layouts — including "Spring 2026".
+describe("sanitizeProfilesPayload — preserves editor-managed fields", () => {
+  const fullProfile = {
+    id: "spring_2026",
+    name: "Spring 2026",
+    target: "guest_menu",
+    menuTemplate: { version: 2, rows: [{ id: "r1", left: { type: "course", courseKey: "lamb" }, right: null }] },
+    shortMenuTemplate: { version: 2, rows: [{ id: "rs1", left: { type: "course", courseKey: "lamb" }, right: null }] },
+    ticketTemplate: { version: 1, rows: [{ id: "kt1", type: "course", courseKey: "lamb" }] },
+    shortTicketTemplate: { version: 1, rows: [{ id: "kst1", type: "course", courseKey: "lamb" }] },
+    layoutStyles: { padTop: 8 },
+  };
+
+  it("keeps menuTemplate", () => {
+    const out = sanitizeProfilesPayload({ profiles: [fullProfile], assignments: {}, activeProfileId: fullProfile.id });
+    expect(out.profiles[0].menuTemplate).toEqual(fullProfile.menuTemplate);
+  });
+
+  it("keeps shortMenuTemplate", () => {
+    const out = sanitizeProfilesPayload({ profiles: [fullProfile], assignments: {}, activeProfileId: fullProfile.id });
+    expect(out.profiles[0].shortMenuTemplate).toEqual(fullProfile.shortMenuTemplate);
+  });
+
+  // The data-loss bug:
+  it("keeps ticketTemplate (kitchen ticket layout)", () => {
+    const out = sanitizeProfilesPayload({ profiles: [fullProfile], assignments: {}, activeProfileId: fullProfile.id });
+    expect(out.profiles[0].ticketTemplate).toEqual(fullProfile.ticketTemplate);
+  });
+
+  it("keeps shortTicketTemplate (short kitchen ticket layout)", () => {
+    const out = sanitizeProfilesPayload({ profiles: [fullProfile], assignments: {}, activeProfileId: fullProfile.id });
+    expect(out.profiles[0].shortTicketTemplate).toEqual(fullProfile.shortTicketTemplate);
+  });
+
+  it("keeps layoutStyles", () => {
+    const out = sanitizeProfilesPayload({ profiles: [fullProfile], assignments: {}, activeProfileId: fullProfile.id });
+    expect(out.profiles[0].layoutStyles).toEqual(fullProfile.layoutStyles);
+  });
+
+  it("survives a round-trip without losing any editor-managed field", () => {
+    // Simulates: load → rename → save (each step goes through sanitize).
+    const renamed = renameProfile([fullProfile], "spring_2026", "Spring 2026 v2");
+    const out = sanitizeProfilesPayload({
+      profiles: renamed,
+      assignments: { longMenuProfileId: "spring_2026" },
+      activeProfileId: "spring_2026",
+    });
+    const p = out.profiles[0];
+    expect(p.name).toBe("Spring 2026 v2");
+    expect(p.menuTemplate).toEqual(fullProfile.menuTemplate);
+    expect(p.shortMenuTemplate).toEqual(fullProfile.shortMenuTemplate);
+    expect(p.ticketTemplate).toEqual(fullProfile.ticketTemplate);
+    expect(p.shortTicketTemplate).toEqual(fullProfile.shortTicketTemplate);
+    expect(p.layoutStyles).toEqual(fullProfile.layoutStyles);
+  });
+
+  it("normalizes a profile that lacks ticket fields without erroring", () => {
+    // A profile saved before kitchen-ticket layouts existed should still load
+    // cleanly: missing fields stay missing (or become null), never throw.
+    const legacy = {
+      id: "old", name: "Old", target: "guest_menu",
+      menuTemplate: { version: 2, rows: [] },
+      layoutStyles: {},
+    };
+    const out = sanitizeProfilesPayload({ profiles: [legacy], assignments: {}, activeProfileId: legacy.id });
+    expect(out.profiles[0].ticketTemplate ?? null).toBeNull();
+    expect(out.profiles[0].shortTicketTemplate ?? null).toBeNull();
+  });
+});
+
+// ── Duplicating a profile must clone every editor-managed field too ──────────
+//
+// `duplicateProfile` is what powers the Admin → "Duplicate" button. If it
+// drops a field, the duplicate is born already missing data the original had.
+describe("duplicateProfile — copies every editor-managed field", () => {
+  const fullProfile = {
+    id: "spring_2026",
+    name: "Spring 2026",
+    target: "guest_menu",
+    menuTemplate: { version: 2, rows: [{ id: "r1", left: { type: "course", courseKey: "lamb" }, right: null }] },
+    shortMenuTemplate: { version: 2, rows: [{ id: "rs1", left: { type: "course", courseKey: "trout" }, right: null }] },
+    ticketTemplate: { version: 1, rows: [{ id: "kt1", type: "course", courseKey: "lamb" }] },
+    shortTicketTemplate: { version: 1, rows: [{ id: "kst1", type: "course", courseKey: "trout" }] },
+    layoutStyles: { padTop: 8 },
+  };
+
+  it("includes ticketTemplate on the clone (deep-copied)", () => {
+    const copy = duplicateProfile(fullProfile, "Spring 2026 (copy)");
+    expect(copy.ticketTemplate).toBeTruthy();
+    expect(copy.ticketTemplate).not.toBe(fullProfile.ticketTemplate);
+  });
+
+  it("includes shortTicketTemplate on the clone (deep-copied)", () => {
+    const copy = duplicateProfile(fullProfile, "Spring 2026 (copy)");
+    expect(copy.shortTicketTemplate).toBeTruthy();
+    expect(copy.shortTicketTemplate).not.toBe(fullProfile.shortTicketTemplate);
+  });
+
+  it("does not mutate the source profile's ticket templates when the clone is edited", () => {
+    const copy = duplicateProfile(fullProfile, "Spring 2026 (copy)");
+    // simulate an edit on the clone
+    copy.ticketTemplate.rows.push({ id: "new", type: "course", courseKey: "added" });
+    expect(fullProfile.ticketTemplate.rows).toHaveLength(1);
+  });
+});
