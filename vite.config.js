@@ -6,7 +6,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // Let main.jsx call registerSW() explicitly so we have full control.
       registerType: 'autoUpdate',
+      injectRegister: null,
+
       includeAssets: ['icon.svg', 'logo.svg'],
       manifest: {
         name: 'Milka Service Board',
@@ -27,9 +30,12 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // App shell — precached with cache-first (revision-stamped filenames).
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         navigateFallback: '/',
+
         runtimeCaching: [
+          // Fonts — rarely change, cache aggressively.
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',
@@ -45,6 +51,39 @@ export default defineConfig({
             options: {
               cacheName: 'gstatic-fonts-cache',
               expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+
+          // Supabase REST + Auth APIs — network-first so live updates come
+          // through when online; falls back to the last cached response when
+          // WiFi drops mid-service so the board stays readable.
+          {
+            urlPattern: /^https:\/\/[^/]+\.supabase\.co\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'supabase-api',
+              // Give up waiting for the network after 5 s and serve stale.
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+
+          // Sync endpoint — long-running scrape, never cache, no SW timeout.
+          {
+            urlPattern: /\/api\/sync-wines.*/i,
+            handler: 'NetworkOnly',
+          },
+
+          // Local serverless API routes (/api/*) — network-first with fallback.
+          {
+            urlPattern: /\/api\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'local-api',
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
@@ -65,5 +104,8 @@ export default defineConfig({
   preview: {
     host: true,
     port: 4173,
+  },
+  build: {
+    chunkSizeWarningLimit: 1500,
   },
 });
