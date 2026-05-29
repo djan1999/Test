@@ -12,7 +12,6 @@ import {
   migrateLegacySingleLayout,
   duplicateProfile,
   renameProfile,
-  setProfileTarget,
   canDeleteProfile,
   isProfileAssigned,
   makeProfile,
@@ -2099,8 +2098,6 @@ export default function App() {
   const ticketTemplate     = activeProfile?.ticketTemplate     || null;
   const shortTicketTemplate = activeProfile?.shortTicketTemplate || null;
   const globalLayout       = activeProfile?.layoutStyles       || {};
-  const [layoutSaving, setLayoutSaving] = useState(false);
-  const [layoutSaved,  setLayoutSaved]  = useState(false);
 
   const [menuRules, setMenuRules] = useState(() => {
     try {
@@ -3082,7 +3079,7 @@ export default function App() {
   // Create a new profile for the given target. Optionally seed the template
   // by cloning the currently-active profile so the user has a starting point.
   const createProfile = useCallback(({ name, target = "guest_menu", cloneFromActive = false } = {}) => {
-    const fallbackName = target === "kitchen_flow" ? "New Kitchen Layout" : "New Menu Layout";
+    const fallbackName = "New Menu Layout";
     let createdId = null;
     updateProfiles(prev => {
       const seed = cloneFromActive
@@ -3128,10 +3125,6 @@ export default function App() {
     });
   }, [updateProfiles]);
 
-  const setProfileTargetById = useCallback((profileId, target) => {
-    updateProfiles(prev => ({ ...prev, profiles: setProfileTarget(prev.profiles, profileId, target) }));
-  }, [updateProfiles]);
-
   const setProfileAssignment = useCallback((slot, profileId) => {
     updateProfiles(prev => ({
       ...prev,
@@ -3156,84 +3149,33 @@ export default function App() {
     });
   }, [updateProfiles]);
 
-  // Edit hooks for the Admin template editor — they target the currently
-  // active profile and merge changes back into profilesState immediately.
-  const setMenuTemplate = useCallback((next) => {
-    setProfilesState(prev => {
+  // Per-field setter factory for the active profile. Goes through
+  // `updateProfiles` so writes are sanitized AND auto-persisted to Supabase —
+  // no manual save button needed, no chance of an editor edit getting stripped
+  // by a later admin action's sanitize pass.
+  //
+  // `fallback` is what the editor sees if the field is missing — kept here
+  // (not in the editor) so we don't drift between fields.
+  const editProfileField = useCallback((field, fallback) => (next) => {
+    updateProfiles(prev => {
       const activeId = prev.activeProfileId;
       if (!activeId) return prev;
       const value = typeof next === "function"
-        ? next(prev.profiles.find(p => p.id === activeId)?.menuTemplate || null)
+        ? next(prev.profiles.find(p => p.id === activeId)?.[field] ?? fallback)
         : next;
+      const normalized = value == null ? (typeof fallback === "object" ? fallback : null) : value;
       return {
         ...prev,
-        profiles: prev.profiles.map(p => p.id === activeId ? { ...p, menuTemplate: value || null } : p),
+        profiles: prev.profiles.map(p => p.id === activeId ? { ...p, [field]: normalized } : p),
       };
     });
-  }, []);
+  }, [updateProfiles]);
 
-  const setShortMenuTemplate = useCallback((next) => {
-    setProfilesState(prev => {
-      const activeId = prev.activeProfileId;
-      if (!activeId) return prev;
-      const value = typeof next === "function"
-        ? next(prev.profiles.find(p => p.id === activeId)?.shortMenuTemplate || null)
-        : next;
-      return {
-        ...prev,
-        profiles: prev.profiles.map(p => p.id === activeId ? { ...p, shortMenuTemplate: value || null } : p),
-      };
-    });
-  }, []);
-
-  const setTicketTemplate = useCallback((next) => {
-    setProfilesState(prev => {
-      const activeId = prev.activeProfileId;
-      if (!activeId) return prev;
-      const value = typeof next === "function"
-        ? next(prev.profiles.find(p => p.id === activeId)?.ticketTemplate || null)
-        : next;
-      return {
-        ...prev,
-        profiles: prev.profiles.map(p => p.id === activeId ? { ...p, ticketTemplate: value || null } : p),
-      };
-    });
-  }, []);
-
-  const setShortTicketTemplate = useCallback((next) => {
-    setProfilesState(prev => {
-      const activeId = prev.activeProfileId;
-      if (!activeId) return prev;
-      const value = typeof next === "function"
-        ? next(prev.profiles.find(p => p.id === activeId)?.shortTicketTemplate || null)
-        : next;
-      return {
-        ...prev,
-        profiles: prev.profiles.map(p => p.id === activeId ? { ...p, shortTicketTemplate: value || null } : p),
-      };
-    });
-  }, []);
-
-  const setGlobalLayout = useCallback((next) => {
-    setProfilesState(prev => {
-      const activeId = prev.activeProfileId;
-      if (!activeId) return prev;
-      const value = typeof next === "function"
-        ? next(prev.profiles.find(p => p.id === activeId)?.layoutStyles || {})
-        : next;
-      return {
-        ...prev,
-        profiles: prev.profiles.map(p => p.id === activeId ? { ...p, layoutStyles: value || {} } : p),
-      };
-    });
-  }, []);
-
-  const saveGlobalLayout = async () => {
-    setLayoutSaving(true); setLayoutSaved(false);
-    await persistProfilesPayload(profilesStateRef.current);
-    setLayoutSaving(false); setLayoutSaved(true);
-    setTimeout(() => setLayoutSaved(false), 2500);
-  };
+  const setMenuTemplate       = useMemo(() => editProfileField("menuTemplate",       null), [editProfileField]);
+  const setShortMenuTemplate  = useMemo(() => editProfileField("shortMenuTemplate",  null), [editProfileField]);
+  const setTicketTemplate     = useMemo(() => editProfileField("ticketTemplate",     null), [editProfileField]);
+  const setShortTicketTemplate= useMemo(() => editProfileField("shortTicketTemplate",null), [editProfileField]);
+  const setGlobalLayout       = useMemo(() => editProfileField("layoutStyles",       {}),   [editProfileField]);
 
   // Initial load from Supabase: prefer v2, fall back to v1, then to the
   // legacy single-layout pair. The bad flat menu_layouts_v1 payload is
@@ -3241,6 +3183,15 @@ export default function App() {
   useEffect(() => {
     if (!supabase) { profilesLoaded.current = true; setProfilesReadStatus("ready"); return; }
     let cancelled = false;
+    // Snapshot what the localStorage-hydrated state looked like at mount.
+    // If the user starts editing before this remote read returns, the JSON
+    // will diverge and we leave their edits alone instead of overwriting.
+    const mountSnapshot = JSON.stringify(profilesStateRef.current);
+    const adoptRemote = (next) => {
+      const current = JSON.stringify(profilesStateRef.current);
+      if (current !== mountSnapshot) return; // user has edited since mount; don't clobber
+      setProfilesState(next);
+    };
     (async () => {
       try {
         // Throw on Supabase errors so a transient/permission failure lands in
@@ -3253,7 +3204,7 @@ export default function App() {
         const v2 = v2Data?.state;
         if (v2 && Array.isArray(v2.profiles) && v2.profiles.length > 0) {
           if (cancelled) return;
-          setProfilesState(sanitizeProfilesPayload(v2));
+          adoptRemote(sanitizeProfilesPayload(v2));
           profilesLoaded.current = true;
           setProfilesReadStatus("ready");
           return;
@@ -3264,7 +3215,7 @@ export default function App() {
         if (v1Data?.state?.profiles?.length) {
           if (cancelled) return;
           const migrated = sanitizeProfilesPayload(migrateV1ToV2(v1Data.state));
-          setProfilesState(migrated);
+          adoptRemote(migrated);
           persistProfilesPayload(migrated);
           profilesLoaded.current = true;
           setProfilesReadStatus("ready");
@@ -3281,7 +3232,7 @@ export default function App() {
         if (legacyTemplate || Object.keys(legacyLayout).length > 0) {
           if (cancelled) return;
           const migrated = sanitizeProfilesPayload(migrateLegacySingleLayout(legacyLayout, legacyTemplate));
-          setProfilesState(migrated);
+          adoptRemote(migrated);
           persistProfilesPayload(migrated);
           profilesLoaded.current = true;
           setProfilesReadStatus("ready");
@@ -3367,15 +3318,8 @@ export default function App() {
     return { ok: true };
   }, []);
 
-  // ── Menu template v2 (row-based canvas editor) ───────────────────────────
-  const [templateSaving, setTemplateSaving] = useState(false);
-  const [templateSaved,  setTemplateSaved]  = useState(false);
-  const saveMenuTemplate = async () => {
-    setTemplateSaving(true); setTemplateSaved(false);
-    await persistProfilesPayload(profilesStateRef.current);
-    setTemplateSaving(false); setTemplateSaved(true);
-    setTimeout(() => setTemplateSaved(false), 2500);
-  };
+  // (Template & layout edits auto-persist through updateProfiles — no manual
+  // save button or save-state needed.)
 
   // ── Menu generation rules (layout behavior) ───────────────────────────────
   useEffect(() => {
@@ -3734,13 +3678,12 @@ export default function App() {
         const courses = await fetchMenuCourses();
         if (!mounted || !courses) return;
         setMenuCourses(courses);
-        // Compatibility/safety: if template is blank but courses exist, synthesize default rows
-        // so the editor isn't an empty screen.
-        setMenuTemplate((prev) => {
-          if (prev?.version === 2 && Array.isArray(prev.rows) && prev.rows.length > 0) return prev;
-          if (!courses.length) return prev;
-          return buildDefaultTemplate(courses);
-        });
+        // Note: previously this also wrote a default template into the active
+        // profile if the profile's template was empty. That overwrote
+        // in-memory state, raced the profile load + seed effects, and
+        // persisted nothing. The generator already falls back to a default
+        // template when rendering an empty profile (menuGenerator.js
+        // buildDefaultTemplate call), so the safety net isn't needed here.
       } catch (error) {
         console.warn("Menu courses fetch failed:", error);
       }
@@ -3949,13 +3892,10 @@ export default function App() {
         onSaveMenuCourses={saveMenuCourses}
         menuTemplate={menuTemplate}
         onUpdateTemplate={setMenuTemplate}
-        onSaveTemplate={saveMenuTemplate}
         ticketTemplate={ticketTemplate}
         onUpdateTicketTemplate={setTicketTemplate}
         shortTicketTemplate={shortTicketTemplate}
         onUpdateShortTicketTemplate={setShortTicketTemplate}
-        templateSaving={templateSaving}
-        templateSaved={templateSaved}
         menuRules={menuRules}
         onUpdateMenuRules={updateMenuRules}
         onSaveMenuRules={saveMenuRules}
@@ -3976,7 +3916,6 @@ export default function App() {
         onSaveLogo={saveLogo}
         layoutStyles={globalLayout}
         onUpdateLayoutStyles={setGlobalLayout}
-        onSaveLayoutStyles={saveGlobalLayout}
         layoutProfiles={profilesState.profiles}
         activeLayoutProfileId={profilesState.activeProfileId}
         onSelectLayoutProfile={selectProfile}
@@ -3985,7 +3924,6 @@ export default function App() {
         onRenameLayoutProfile={renameProfileById}
         onDuplicateLayoutProfile={duplicateProfileById}
         onDuplicateAndAssignProfile={duplicateAndAssignProfile}
-        onSetProfileTarget={setProfileTargetById}
         layoutAssignments={profilesState.assignments}
         onSetProfileAssignment={setProfileAssignment}
         shortMenuTemplate={shortMenuTemplate}

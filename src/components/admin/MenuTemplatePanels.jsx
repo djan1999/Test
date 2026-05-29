@@ -105,26 +105,17 @@ function StyleInput({ label, lkey, def, step, unit, min, layoutStyles, onUpdateL
   );
 }
 
-export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, onSaveLayoutStyles, open, onToggle }) {
+export function LayoutStylesPanel({ layoutStyles, onUpdateLayoutStyles, open, onToggle }) {
   const si = (props) => <StyleInput layoutStyles={layoutStyles} onUpdateLayoutStyles={onUpdateLayoutStyles} {...props} />;
   return (
     <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0], flexShrink: 0 }}>
-      {/* Header */}
+      {/* Header — no Save button: page-setup edits auto-persist via the
+          updateProfiles path. */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderBottom: open ? `1px solid ${tokens.ink[4]}` : "none" }}>
         <button
           onClick={onToggle}
           style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.ink[4], background: "none", border: "none", cursor: "pointer", padding: 0, textTransform: "uppercase" }}
         >{open ? "▾ PAGE SETUP" : "▸ PAGE SETUP"}</button>
-        {onSaveLayoutStyles && (
-          <button
-            onClick={onSaveLayoutStyles}
-            style={{
-              marginLeft: "auto", fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.2,
-              padding: "3px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
-              background: tokens.neutral[0], color: tokens.ink[3], textTransform: "uppercase",
-            }}
-          >Save</button>
-        )}
       </div>
 
       {open && (

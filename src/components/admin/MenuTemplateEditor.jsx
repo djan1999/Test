@@ -706,11 +706,7 @@ function TicketPreview({ previewHtml, loading }) {
 export default function MenuTemplateEditor({
   menuTemplate,
   onUpdateTemplate,
-  onSaveTemplate,
   onUpdateLayoutStyles,
-  onSaveLayoutStyles,
-  saving  = false,
-  saved   = false,
   menuRules = DEFAULT_MENU_RULES,
   onUpdateMenuRules,
   onSaveMenuRules,
@@ -1260,17 +1256,8 @@ export default function MenuTemplateEditor({
             </div>
           </div>
 
-          {/* Save button */}
-          {leftOpen && <button
-            onClick={onSaveTemplate}
-            disabled={saving}
-            style={{
-              width: "100%", fontFamily: FONT, fontSize: 8, letterSpacing: 2,
-              padding: "7px 0", border: "none", borderRadius: 0, cursor: saving ? "wait" : "pointer",
-              background: saved ? tokens.green.border : GOLD, color: tokens.neutral[0],
-              textTransform: "uppercase", marginBottom: 6,
-            }}
-          >{saving ? "SAVING…" : saved ? "✓ SAVED" : "SAVE TEMPLATE"}</button>}
+          {/* "Save" button intentionally removed — edits auto-persist via
+              updateProfiles → sanitize → Supabase upsert. */}
 
           {/* Rebuild button */}
           {leftOpen && (
@@ -1455,7 +1442,6 @@ export default function MenuTemplateEditor({
             <LayoutStylesPanel
               layoutStyles={layoutStyles}
               onUpdateLayoutStyles={onUpdateLayoutStyles}
-              onSaveLayoutStyles={onSaveLayoutStyles}
               open={layoutStylesOpen}
               onToggle={() => setLayoutStylesOpen(v => !v)}
             />

@@ -537,3 +537,60 @@ describe("duplicateProfile — copies every editor-managed field", () => {
     expect(fullProfile.ticketTemplate.rows).toHaveLength(1);
   });
 });
+
+// ── Single allowed target — the kitchen-flow slot was a ghost ────────────────
+//
+// MenuLayoutPanel used to expose an unused "Kitchen Profile" assignment row
+// and a target dropdown with "guest_menu" + "kitchen_flow". Nothing
+// downstream consumed kitchen_flow profiles, sanitize dropped the slot, and
+// the Kitchen target was a one-way trap that silently destroyed data on next
+// save. After cleanup, only "guest_menu" should be a recognized target.
+describe("PROFILE_TARGETS — only guest_menu is wired through", () => {
+  it("lists exactly one target", () => {
+    expect(PROFILE_TARGETS).toEqual(["guest_menu"]);
+  });
+
+  it("sanitize normalizes any unrecognized target back to guest_menu", () => {
+    const out = sanitizeProfilesPayload({
+      profiles: [{ id: "x", name: "X", target: "kitchen_flow", menuTemplate: { version: 2, rows: [] }, layoutStyles: {} }],
+      activeProfileId: "x",
+    });
+    expect(out.profiles[0].target).toBe("guest_menu");
+  });
+});
+
+// ── End-to-end persistence shape: anything the editor mutates must round-trip
+// through sanitize → upsert → load → sanitize without drift. Drift here was
+// the exact mechanism that destroyed "Spring 2026"'s kitchen-ticket layouts.
+describe("Editor → Supabase → editor round-trip", () => {
+  const editorProfile = {
+    id: "p1", name: "Spring", target: "guest_menu",
+    menuTemplate:        { version: 2, rows: [{ id: "r1", left: { type: "course", courseKey: "lamb" }, right: null }] },
+    shortMenuTemplate:   { version: 2, rows: [{ id: "rs1", left: { type: "course", courseKey: "lamb" }, right: null }] },
+    ticketTemplate:      { version: 1, rows: [{ id: "kt1", type: "course", courseKey: "lamb" }] },
+    shortTicketTemplate: { version: 1, rows: [{ id: "kst1", type: "course", courseKey: "lamb" }] },
+    layoutStyles: { padTop: 8 },
+  };
+
+  it("two sanitize passes (= save → reload) is idempotent", () => {
+    const once  = sanitizeProfilesPayload({ profiles: [editorProfile], activeProfileId: "p1" });
+    const twice = sanitizeProfilesPayload(once);
+    expect(twice).toEqual(once);
+  });
+
+  it("a no-op admin action (e.g. select-active) does not change any field", () => {
+    const after = sanitizeProfilesPayload({
+      profiles: [editorProfile],
+      activeProfileId: "p1",
+      assignments: { longMenuProfileId: "p1" },
+    });
+    expect(after.profiles[0]).toEqual({
+      id: "p1", name: "Spring", target: "guest_menu",
+      menuTemplate:        editorProfile.menuTemplate,
+      shortMenuTemplate:   editorProfile.shortMenuTemplate,
+      ticketTemplate:      editorProfile.ticketTemplate,
+      shortTicketTemplate: editorProfile.shortTicketTemplate,
+      layoutStyles:        editorProfile.layoutStyles,
+    });
+  });
+});

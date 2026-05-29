@@ -75,7 +75,6 @@ export default function AdminLayout({
   onRenameLayoutProfile,
   onDuplicateLayoutProfile,
   onDuplicateAndAssignProfile,
-  onSetProfileTarget,
   layoutAssignments = {},
   onSetProfileAssignment,
   shortMenuTemplate = null,
@@ -319,7 +318,6 @@ export default function AdminLayout({
                 onDuplicateLayoutProfile={onDuplicateLayoutProfile}
                 onDuplicateAndAssignProfile={onDuplicateAndAssignProfile}
                 onDeleteLayoutProfile={onDeleteLayoutProfile}
-                onSetProfileTarget={onSetProfileTarget}
                 layoutAssignments={layoutAssignments}
                 onSetProfileAssignment={onSetProfileAssignment}
                 shortMenuTemplate={shortMenuTemplate}

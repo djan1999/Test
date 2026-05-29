@@ -3,18 +3,20 @@ import { tokens } from "../../styles/tokens.js";
 import {
   isProfileAssigned,
   canDeleteProfile,
-  PROFILE_TARGETS,
 } from "../../utils/menuLayoutProfiles.js";
 import MenuTemplateEditor from "./MenuTemplateEditor.jsx";
 
 const FONT = tokens.font;
 
+// Only guest-menu profiles are actually wired through sanitize + render.
+// A previous version included a "Kitchen Profile" slot here, but the
+// kitchen target was never recognized — anything assigned to it was
+// silently stripped on the next save. Removed to stop offering a
+// dropdown that destroys whatever you put in it.
 const ASSIGNMENT_ROWS = [
-  { slot: "longMenuProfileId",    label: "Menu Profile",    target: "guest_menu" },
-  { slot: "longKitchenProfileId", label: "Kitchen Profile", target: "kitchen_flow" },
+  { slot: "longMenuProfileId",  label: "Long Menu",  target: "guest_menu" },
+  { slot: "shortMenuProfileId", label: "Short Menu", target: "guest_menu" },
 ];
-
-const TARGET_LABEL = { guest_menu: "Guest Menu", kitchen_flow: "Kitchen Flow" };
 
 const btn = (active = false) => ({
   fontFamily: FONT,
@@ -60,8 +62,8 @@ const Badge = ({ text }) => (
 );
 
 const SLOT_BADGE = {
-  longMenuProfileId:    "Menu",
-  longKitchenProfileId: "Kitchen",
+  longMenuProfileId:  "Long",
+  shortMenuProfileId: "Short",
 };
 
 /**
@@ -110,7 +112,6 @@ export default function MenuLayoutPanel({
   onDuplicateLayoutProfile,
   onDuplicateAndAssignProfile,
   onDeleteLayoutProfile,
-  onSetProfileTarget,
   layoutAssignments = {},
   onSetProfileAssignment,
   // Short menu template — embedded in same profile as menuTemplate.
@@ -120,14 +121,12 @@ export default function MenuLayoutPanel({
 }) {
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
-  const [createTarget, setCreateTarget] = useState("guest_menu");
   const active = useMemo(
     () => layoutProfiles.find(p => p.id === activeLayoutProfileId) || layoutProfiles[0] || null,
     [layoutProfiles, activeLayoutProfileId]
   );
 
-  const guestProfiles   = layoutProfiles.filter(p => (p.target || "guest_menu") === "guest_menu");
-  const kitchenProfiles = layoutProfiles.filter(p => p.target === "kitchen_flow");
+  const guestProfiles = layoutProfiles.filter(p => (p.target || "guest_menu") === "guest_menu");
 
   const activeSlots = useMemo(() => {
     if (!active) return [];
@@ -145,8 +144,8 @@ export default function MenuLayoutPanel({
 
   const handleCreate = () => {
     onCreateLayoutProfile?.({
-      name: createTarget === "kitchen_flow" ? "New Kitchen Layout" : "New Menu Layout",
-      target: createTarget,
+      name: "New Menu Layout",
+      target: "guest_menu",
       cloneFromActive: !!active,
     });
   };
@@ -168,19 +167,14 @@ export default function MenuLayoutPanel({
       // eslint-disable-next-line no-alert
       alert(
         isProfileAssigned(active.id, layoutAssignments)
-          ? "Reassign Long/Short Menu and Long/Short Kitchen first — this profile is currently in use."
-          : "At least one profile per category must remain."
+          ? "Reassign Long Menu / Short Menu first — this profile is currently in use."
+          : "At least one profile must remain."
       );
       return;
     }
     // eslint-disable-next-line no-alert
     if (!confirm(`Delete profile "${active.name}"?`)) return;
     onDeleteLayoutProfile?.(active.id);
-  };
-
-  const handleTargetChange = (target) => {
-    if (!active) return;
-    onSetProfileTarget?.(active.id, target);
   };
 
   return (
@@ -199,50 +193,30 @@ export default function MenuLayoutPanel({
               ▨ Menu Layout Profiles
             </div>
             <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginTop: 4, lineHeight: 1.5 }}>
-              Each profile wraps the row-based template editor below with a name and target.
-              Long Menu / Short Menu pick a guest profile; Long Kitchen / Short Kitchen pick a kitchen profile.
-              Course content stays in Courses — these profiles only control layout, structure, and order.
+              Each profile is a row-based template — Long Menu / Short Menu pick which one prints.
+              Course content stays in Courses; these profiles only control layout, structure, and order.
+              Edits auto-save.
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <select value={createTarget} onChange={e => setCreateTarget(e.target.value)} style={{ ...inp, fontSize: 10 }}>
-              {PROFILE_TARGETS.map(t => <option key={t} value={t}>{TARGET_LABEL[t]}</option>)}
-            </select>
             <button onClick={handleCreate} style={btn(false)}>+ New Profile</button>
           </div>
         </div>
 
-        {/* Profile selector — list with badges */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-          <div>
-            <div style={lbl}>Guest Menu Profiles ({guestProfiles.length})</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {guestProfiles.length === 0 && (
-                <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], padding: 6 }}>None yet.</div>
-              )}
-              {guestProfiles.map(p => (
-                <ProfileButton
-                  key={p.id} profile={p} active={active?.id === p.id}
-                  assignments={layoutAssignments}
-                  onClick={() => onSelectLayoutProfile?.(p.id)}
-                />
-              ))}
-            </div>
-          </div>
-          <div>
-            <div style={lbl}>Kitchen Flow Profiles ({kitchenProfiles.length})</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {kitchenProfiles.length === 0 && (
-                <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], padding: 6 }}>None yet.</div>
-              )}
-              {kitchenProfiles.map(p => (
-                <ProfileButton
-                  key={p.id} profile={p} active={active?.id === p.id}
-                  assignments={layoutAssignments}
-                  onClick={() => onSelectLayoutProfile?.(p.id)}
-                />
-              ))}
-            </div>
+        {/* Profile selector */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={lbl}>Menu Layout Profiles ({guestProfiles.length})</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {guestProfiles.length === 0 && (
+              <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], padding: 6 }}>None yet.</div>
+            )}
+            {guestProfiles.map(p => (
+              <ProfileButton
+                key={p.id} profile={p} active={active?.id === p.id}
+                assignments={layoutAssignments}
+                onClick={() => onSelectLayoutProfile?.(p.id)}
+              />
+            ))}
           </div>
         </div>
 
@@ -266,14 +240,6 @@ export default function MenuLayoutPanel({
             ) : (
               <>
                 <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: tokens.ink[0], flex: 1 }}>{active.name}</span>
-                <select
-                  value={active.target || "guest_menu"}
-                  onChange={e => handleTargetChange(e.target.value)}
-                  title="Change target — guest profiles drive printed menus, kitchen profiles drive KitchenBoard / SheetView"
-                  style={{ ...inp, fontSize: 10 }}
-                >
-                  {PROFILE_TARGETS.map(t => <option key={t} value={t}>{TARGET_LABEL[t]}</option>)}
-                </select>
                 <button onClick={() => { setRenameDraft(active.name); setRenaming(true); }} style={btn(false)}>Rename</button>
                 <button onClick={handleDuplicate} style={btn(false)}>Duplicate</button>
                 <button
@@ -281,7 +247,7 @@ export default function MenuLayoutPanel({
                   disabled={!canDeleteProfile(active.id, layoutProfiles, layoutAssignments)}
                   title={
                     isProfileAssigned(active.id, layoutAssignments)
-                      ? "Reassign Long/Short Menu or Kitchen before deleting"
+                      ? "Reassign Long/Short Menu before deleting"
                       : "Delete this profile"
                   }
                   style={{
@@ -316,7 +282,7 @@ export default function MenuLayoutPanel({
                 </select>
                 {optionsForTarget.length === 0 && (
                   <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 4 }}>
-                    No {TARGET_LABEL[target]} profiles yet — create one above.
+                    No profiles yet — create one above.
                   </div>
                 )}
               </div>
