@@ -2685,6 +2685,67 @@ export default function App() {
     await archiveAndClearAll();
   };
 
+  // Guards the rollover auto-end so the boot check and the interval tick can't
+  // archive the same service twice. Reset when a fresh service starts.
+  const autoEndingRef = useRef(false);
+
+  // A service that has rolled past the service-day cutoff (see currentServiceDay)
+  // is over. ARCHIVE whatever is still on the board first — preserving the
+  // record of what each guest ate and drank — and only THEN clear it. This
+  // replaces the old behaviour that silently blanked the tables, destroying the
+  // night's drinks/seat input. If archiving fails we leave the service intact
+  // rather than risk losing it.
+  const autoEndStaleService = async (staleDate) => {
+    if (!supabase || !staleDate || autoEndingRef.current) return;
+    autoEndingRef.current = true;
+    try {
+      // Read the night's state from the source of truth: local board state may
+      // not have hydrated yet on a fresh load (or be blank on this device).
+      const { data: rows, error: readErr } = await supabase.from(TABLES.SERVICE_TABLES).select("*");
+      if (readErr) throw readErr;
+      const activeTables = (rows || [])
+        .map(r => sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) }))
+        .filter(t => t.active || t.arrivedAt || t.resName || t.resTime)
+        .sort((a, b) => a.id - b.id);
+
+      if (activeTables.length > 0) {
+        const dateStr = new Date(staleDate + "T00:00:00").toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
+        const label = `${dateStr} – ${(activeServiceSession || "dinner").toUpperCase()}`;
+        // Don't double-file if another device already archived this service.
+        const { data: existing } = await supabase.from(TABLES.SERVICE_ARCHIVE)
+          .select("id").eq("date", staleDate).eq("label", label).is("deleted_at", null).limit(1);
+        if (!existing || existing.length === 0) {
+          let courses = menuCourses;
+          if (!courses || courses.length === 0) { try { courses = await fetchMenuCourses(); } catch { courses = []; } }
+          const { error: insErr } = await supabase.from(TABLES.SERVICE_ARCHIVE).insert({
+            date: staleDate,
+            label,
+            state: { tables: activeTables, cocktails, spirits, beers, menuCourses: courses || [], serviceSession: activeServiceSession || "dinner", autoEnded: true },
+          });
+          if (insErr) throw insErr;
+        }
+      }
+    } catch (e) {
+      // Archiving failed — do NOT clear, so the data is never lost. We retry on
+      // the next load or interval tick.
+      console.error("Auto-end archive failed; leaving service intact:", e);
+      autoEndingRef.current = false;
+      return;
+    }
+
+    // Archived (or nothing to archive) — safe to clear local + remote for the new day.
+    tableLocalFreshRef.current = new Map();
+    setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
+    setSel(null);
+    setServiceDate(null);
+    try { localStorage.removeItem("milka_service_date"); } catch {}
+    await supabase.from(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "service_date", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
+    const blankRows = Array.from({ length: 10 }, (_, i) => ({ table_id: i + 1, data: {} }));
+    await supabase.from(TABLES.SERVICE_TABLES).upsert(blankRows, { onConflict: "table_id" });
+    changeMode(null);
+  };
+
   const swapSeats = (tid, aId, bId) => {
     bumpLocalTableFresh(tid);
     setTables(p => p.map(t => {
@@ -2740,6 +2801,9 @@ export default function App() {
   // ── Service date ──────────────────────────────────────────────────────────
   const persistServiceDate = async (date) => {
     const previousDate = serviceDate;
+    // A fresh service starting clears the auto-end guard so this new service can
+    // itself be auto-ended once it later rolls past the cutoff.
+    if (date) autoEndingRef.current = false;
     setServiceDate(date);
     try {
       if (date) localStorage.setItem("milka_service_date", date);
@@ -3625,24 +3689,17 @@ export default function App() {
     if (!supabase) return;
     let mounted = true;
 
-    // Restore service date saved by a previous session — but if it has
-    // rolled over (yesterday or earlier), drop it and clear remote table
-    // state so today's "Start Service" prompts for a fresh date and
-    // pre-populates today's reservations on blank tables.
+    // Restore service date saved by a previous session — but if it has rolled
+    // past the service-day cutoff, the service is over: auto-end it (archiving
+    // the night's data before clearing) so "Start Service" prompts for a fresh
+    // date and pre-populates today's reservations on blank tables.
     supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "service_date").single()
       .then(async ({ data }) => {
         if (!mounted) return;
         const persisted = data?.state?.date;
         if (!persisted) return;
         if (isStaleServiceDate(persisted)) {
-          try { localStorage.removeItem("milka_service_date"); } catch {}
-          setServiceDate(null);
-          tableLocalFreshRef.current = new Map();
-          setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
-          await supabase.from(TABLES.SERVICE_SETTINGS)
-            .upsert({ id: "service_date", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
-          const blankRows = Array.from({ length: 10 }, (_, i) => ({ table_id: i + 1, data: {} }));
-          await supabase.from(TABLES.SERVICE_TABLES).upsert(blankRows, { onConflict: "table_id" });
+          await autoEndStaleService(persisted);
           return;
         }
         setServiceDate(d => d || persisted); // local state wins if already set
@@ -3664,6 +3721,18 @@ export default function App() {
 
     return () => { mounted = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // While the app is left open (e.g. overnight), automatically end a service
+  // once it rolls past the service-day cutoff. The auto-end archives first, so
+  // this never loses the night's data — it just files it and clears the board.
+  useEffect(() => {
+    if (!supabase || !serviceDate) return;
+    if (mode !== "service" && mode !== "display") return;
+    const tick = () => { if (isStaleServiceDate(serviceDate)) autoEndStaleService(serviceDate); };
+    tick();
+    const id = setInterval(tick, 60 * 1000);
+    return () => clearInterval(id);
+  }, [supabase, serviceDate, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useRealtimeTable({
     supabase,
