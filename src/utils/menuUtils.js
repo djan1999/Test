@@ -179,12 +179,21 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
   for (const key of RESTRICTION_PRIORITY_KEYS) {
     if (!(activeRestrictions || []).includes(key)) continue;
     const mapped = RESTRICTION_COLUMN_MAP[key] || key;
-    const siMapped = lang === "si" ? `${mapped}_si` : null;
 
-    const variant = courseRestrictions[mapped] || null;
+    // Runtime courses (from supabaseRowToCourse / parseMenuRow / CourseEditor)
+    // key their restriction variants by the UI key, e.g. "gluten". The mapped
+    // DB column name, e.g. "gluten_free", is only seen on a raw imported row,
+    // so it is just a fallback. Looking up only the mapped key meant gluten /
+    // dairy / nut / shellfish variants silently never matched once
+    // setRestrictionsCache() switched DIETARY_KEYS to UI keys — leaving
+    // restricted guests on the original dish and absent from the allergy sheet.
+    const variant = courseRestrictions[key] || courseRestrictions[mapped] || null;
     if (!variant) continue;
 
-    const next = (siMapped && courseRestrictions[siMapped]) ? courseRestrictions[siMapped] : variant;
+    const siVariant = lang === "si"
+      ? (courseRestrictions[`${key}_si`] || courseRestrictions[`${mapped}_si`] || null)
+      : null;
+    const next = siVariant || variant;
     const altName = String(next?.name || "").trim();
     const altSub  = String(next?.sub  || "").trim();
     if (altName) dish = { ...dish, name: altName };

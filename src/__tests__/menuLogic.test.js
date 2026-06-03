@@ -105,6 +105,36 @@ describe("applyCourseRestriction", () => {
     const result = applyCourseRestriction(course, ["gluten"]);
     expect(result.name).toBe("Gluten-free bread");
   });
+
+  // Runtime courses key variants by the UI key ("gluten"), not the DB column
+  // ("gluten_free"). This is the shape supabaseRowToCourse / CourseEditor produce
+  // once custom restrictions are configured — it must resolve, or gluten/dairy/
+  // nut/shellfish guests get the original dish and vanish from the allergy sheet.
+  it("applies gluten variant keyed by the UI key (runtime shape)", () => {
+    const course = makeCourse("Bread", "wheat flour", {
+      gluten: { name: "Gluten-free bread", sub: "" },
+    });
+    const result = applyCourseRestriction(course, ["gluten"]);
+    expect(result.name).toBe("Gluten-free bread");
+  });
+
+  it("applies dairy UI-key variant sub override", () => {
+    const course = makeCourse("Risotto", "parmesan, butter", {
+      dairy: { name: "", sub: "olive oil, no parmesan" },
+    });
+    const result = applyCourseRestriction(course, ["dairy"]);
+    expect(result.name).toBe("Risotto");
+    expect(result.sub).toBe("olive oil, no parmesan");
+  });
+
+  it("uses SI variant keyed by the UI key (gluten_si)", () => {
+    const course = makeCourse("Bread", "", {
+      gluten: { name: "GF bread", sub: "" },
+      gluten_si: { name: "Brezglutenski kruh", sub: "" },
+    });
+    const result = applyCourseRestriction(course, ["gluten"], "si");
+    expect(result.name).toBe("Brezglutenski kruh");
+  });
 });
 
 // ── applyMenuOverride ──────────────────────────────────────────────────────────
@@ -258,6 +288,11 @@ describe("getCourseMod", () => {
 
   it("falls back to substitution name when no note", () => {
     const course = baseCourse({ gluten_free: { name: "GF Pasta", sub: "Olive oil" } });
+    expect(getCourseMod(course, ["gluten"])).toBe("GF Pasta");
+  });
+
+  it("derives mod from a UI-key variant (gluten) for the allergy sheet", () => {
+    const course = baseCourse({ gluten: { name: "GF Pasta", sub: "Olive oil" } });
     expect(getCourseMod(course, ["gluten"])).toBe("GF Pasta");
   });
 

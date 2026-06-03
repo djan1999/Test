@@ -70,8 +70,21 @@ import TableCard from "./components/TableCard/TableCard.jsx";
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
   `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+
+// A dinner service legitimately runs past midnight, so the service "day" must
+// NOT roll over at 00:00 — it rolls over in the early morning once service is
+// truly over (default 06:00, override with VITE_SERVICE_DAY_ROLLOVER_HOUR).
+// Until that hour the active service day is still the previous calendar date,
+// so a service that crossed midnight is preserved instead of being treated as
+// stale and wiped (which previously destroyed the night's drinks/seat input).
+const SERVICE_DAY_ROLLOVER_HOUR = (() => {
+  const raw = Number(import.meta.env.VITE_SERVICE_DAY_ROLLOVER_HOUR);
+  return Number.isFinite(raw) && raw >= 0 && raw <= 23 ? raw : 6;
+})();
+const currentServiceDay = (now = new Date()) =>
+  toLocalDateISO(new Date(now.getTime() - SERVICE_DAY_ROLLOVER_HOUR * 3600 * 1000));
 // ISO YYYY-MM-DD strings sort lexicographically by calendar date.
-const isStaleServiceDate = (date, today = toLocalDateISO()) =>
+const isStaleServiceDate = (date, today = currentServiceDay()) =>
   Boolean(date) && String(date) < today;
 
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
