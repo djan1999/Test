@@ -299,6 +299,22 @@ describe("getCourseMod", () => {
   it("returns null when dish is unchanged for the restriction", () => {
     expect(getCourseMod(baseCourse(), ["gluten"])).toBeNull();
   });
+
+  // Regression: a stray trailing space in the base sub must not make an
+  // unmodified dish surface its whole sub as a fake mod for restricted guests.
+  it("ignores leading/trailing whitespace in the base sub (no fake mod)", () => {
+    const course = { course_key: "salmon", menu: { name: "DANUBE SALMON", sub: "kholrabi, pine " }, restrictions: { veg: { name: "CUCUMBER", sub: "" } } };
+    expect(getCourseMod(course, ["gluten"])).toBeNull();
+    expect(getCourseMod(course, ["pescetarian"])).toBeNull();
+    expect(getCourseMod(course, ["nut"])).toBeNull();
+    // The real veg variant still resolves.
+    expect(getCourseMod(course, ["veg"])).toBe("CUCUMBER");
+  });
+
+  it("returns null when a substitute has the same ingredient set (reordered)", () => {
+    const course = { course_key: "c", menu: { name: "Dish", sub: "jus, cream" }, restrictions: { veg: { name: "", sub: "cream, jus" } } };
+    expect(getCourseMod(course, ["veg"])).toBeNull();
+  });
 });
 
 // ── resolveSeatRestrictionKeys ────────────────────────────────────────────────

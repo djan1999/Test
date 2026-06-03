@@ -249,8 +249,12 @@ export function deriveKitchenNote(course, restrKey, baseName = "", baseSub = "")
  */
 export function getCourseMod(course, restrKeys) {
   if (!restrKeys || !restrKeys.length) return null;
-  const baseName = course?.menu?.name || "";
-  const baseSub  = course?.menu?.sub  || "";
+  // Trim to match applyCourseRestriction, which returns a trimmed name/sub.
+  // Without this, a stray leading/trailing space in the stored dish makes an
+  // UNCHANGED dish compare as "modified", and the fallback below then prints
+  // the whole sub as a bogus modification for every restricted guest.
+  const baseName = String(course?.menu?.name || "").trim();
+  const baseSub  = String(course?.menu?.sub  || "").trim();
 
   // Priority 1: restriction notes — check all storage patterns (flat _note,
   // raw-key _note, and nested kitchen_note inside the variant object)
@@ -271,9 +275,16 @@ export function getCourseMod(course, restrKeys) {
     if (modified.name !== baseName) return modified.name;
     if (modified.sub !== baseSub) {
       const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
-      const modTokens = modified.sub.split(/[,·]+/).map(s => s.trim()).filter(Boolean);
-      const newOnes = modTokens.filter(t => !baseTokens.has(t.toLowerCase()));
-      return (newOnes.length > 0 ? newOnes[0] : modified.sub).toUpperCase();
+      const modList = modified.sub.split(/[,·]+/).map(s => s.trim()).filter(Boolean);
+      const newOnes = modList.filter(t => !baseTokens.has(t.toLowerCase()));
+      if (newOnes.length > 0) return newOnes[0].toUpperCase();
+      // No genuinely new ingredient. If the substitute carries the same
+      // ingredient set as the base (just reordered/respaced), it is not a real
+      // modification — don't surface the whole sub as a fake mod.
+      const modSet = new Set(modList.map(t => t.toLowerCase()));
+      const sameSet = modSet.size === baseTokens.size && [...modSet].every(t => baseTokens.has(t));
+      if (sameSet) return null;
+      return modified.sub.toUpperCase();
     }
   }
 
