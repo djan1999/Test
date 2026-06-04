@@ -2513,7 +2513,11 @@ export default function App() {
         if (r.status === 401) return { ok: false, error: `${base} — VITE_SYNC_SECRET on the frontend doesn't match CRON_SECRET / SYNC_SECRET on the backend. Update the values in Vercel so they match, then redeploy.` };
         return { ok: false, error: base };
       }
-      await loadWines();
+      // Refresh both catalogs the sync writes to. Wines have always been
+      // reloaded here; beverages (cocktails/spirits/beers) previously relied
+      // solely on a realtime event landing, so a successful sync could leave
+      // the cocktail list stale. Reload them explicitly too.
+      await Promise.all([loadWines(), loadBeverages()]);
       return {
         ok: true,
         partial: Boolean(json.partial),
@@ -3591,65 +3595,43 @@ export default function App() {
   });
 
   // ── Beverages: load from Supabase + realtime ─────────────────────────────────
-  useEffect(() => {
+  // Reusable loader so the cocktail/spirit/beer lists can be refreshed on demand
+  // (initial mount, realtime change, and immediately after a website sync — see
+  // syncWines, which mirrors loadWines). Without the explicit post-sync refresh
+  // the synced cocktails only appeared if/when a realtime event happened to land,
+  // so a sync could report "N cocktails" yet leave the UI showing the old list.
+  const loadBeverages = useCallback(async () => {
     if (!supabase) return;
-    let mounted = true;
-
-    const pickRowsForCategory = (data, cat) => {
+    const { data, error } = await supabase
+      .from(TABLES.BEVERAGES)
+      .select("id, category, name, notes, position, source")
+      .order("position", { ascending: true });
+    if (error || !data) return;
+    const pickRowsForCategory = (cat) => {
       const rows = data.filter(r => r.category === cat);
       const manual = rows.filter(r => r.source === "manual").sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
       const chosen = manual.length > 0 ? manual : rows.filter(r => r.source === "sync").sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
       return chosen.map((r, i) => ({ id: r.id, name: r.name, notes: r.notes || "", position: r.position ?? i }));
     };
-
-    const loadBevs = async () => {
-      const { data, error } = await supabase
-        .from(TABLES.BEVERAGES)
-        .select("id, category, name, notes, position, source")
-        .order("position", { ascending: true });
-      if (!mounted || error || !data) return;
-      const c = pickRowsForCategory(data, "cocktail");
-      const s = pickRowsForCategory(data, "spirit");
-      const b = pickRowsForCategory(data, "beer");
-      setCocktails(c);
-      setSpirits(s);
-      setBeers(b);
-      writeLocalBeverages({ cocktails: c, spirits: s, beers: b });
-    };
-
-    loadBevs();
-
-    return () => { mounted = false; };
+    const c = pickRowsForCategory("cocktail");
+    const s = pickRowsForCategory("spirit");
+    const b = pickRowsForCategory("beer");
+    setCocktails(c);
+    setSpirits(s);
+    setBeers(b);
+    writeLocalBeverages({ cocktails: c, spirits: s, beers: b });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!supabase) return;
+    loadBeverages();
+  }, [loadBeverages]);
 
   useRealtimeTable({
     supabase,
     channelName: "milka-beverages",
     table: TABLES.BEVERAGES,
-    onChange: () => {
-      if (supabase) {
-        supabase
-          .from(TABLES.BEVERAGES)
-          .select("id, category, name, notes, position, source")
-          .order("position", { ascending: true })
-          .then(({ data, error }) => {
-            if (error || !data) return;
-            const pickRowsForCategory = (rows, cat) => {
-              const all = rows.filter(r => r.category === cat);
-              const manual = all.filter(r => r.source === "manual").sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-              const chosen = manual.length > 0 ? manual : all.filter(r => r.source === "sync").sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-              return chosen.map((r, i) => ({ id: r.id, name: r.name, notes: r.notes || "", position: r.position ?? i }));
-            };
-            const c = pickRowsForCategory(data, "cocktail");
-            const s = pickRowsForCategory(data, "spirit");
-            const b = pickRowsForCategory(data, "beer");
-            setCocktails(c);
-            setSpirits(s);
-            setBeers(b);
-            writeLocalBeverages({ cocktails: c, spirits: s, beers: b });
-          });
-      }
-    },
+    onChange: () => { loadBeverages(); },
     enabled: Boolean(supabase),
   });
 
