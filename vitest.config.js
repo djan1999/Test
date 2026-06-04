@@ -15,8 +15,5 @@ export default defineConfig({
       exclude: ["api/__tests__/**"],
     },
   },
-  define: {
-    "import.meta.env.VITE_MENU_SHEET_ID": JSON.stringify(""),
-    "import.meta.env.VITE_MENU_SHEET_TAB": JSON.stringify(""),
-  },
+  define: {},
 });

@@ -1,6 +1,7 @@
 /**
  * Menu data utility functions shared across the application.
  */
+import { DIETARY_KEYS } from "../constants/dietary.js";
 
 export const firstFilled = (...vals) => vals.find(v => String(v ?? "").trim()) ?? "";
 
@@ -21,6 +22,83 @@ export const splitMainSubCell = (title, sub = "") => {
     };
   }
   return { name: rawTitle, sub: rawSub };
+};
+
+export const COURSE_CATEGORIES = ["main", "optional", "celebration"];
+
+export const normalizeCourseCategory = (value, optionalFlag = "") => {
+  const raw = String(value || "").trim().toLowerCase();
+  if (COURSE_CATEGORIES.includes(raw)) return raw;
+  return String(optionalFlag || "").trim() ? "optional" : "main";
+};
+
+export const normalizeOptionalKey = (value) =>
+  String(value ?? "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || null;
+
+/** Optional extra keys we never surface in service UI or menus (product decision). */
+const isPearOptionalKey = (key) => {
+  if (!key) return false;
+  const k = String(key).toLowerCase();
+  return k === "pear" || k.startsWith("pear_") || k.endsWith("_pear") || k.includes("_pear_");
+};
+
+export const optionalPairingsFromCourses = (menuCourses = []) => {
+  const byKey = new Map();
+  (menuCourses || []).forEach((c) => {
+    const key = normalizeOptionalKey(c?.optional_pairing_flag);
+    if (!key) return;
+    const label = String(c?.optional_pairing_label || c?.menu?.name || key).trim() || key;
+    const hasAlco = !!(
+      c?.optional_pairing_alco?.name || c?.optional_pairing_alco?.sub ||
+      c?.optional_pairing_alco_si?.name || c?.optional_pairing_alco_si?.sub ||
+      c?.wp?.name || c?.wp?.sub || c?.os?.name || c?.os?.sub || c?.premium?.name || c?.premium?.sub
+    );
+    const hasNonAlco = !!(
+      c?.optional_pairing_na?.name || c?.optional_pairing_na?.sub ||
+      c?.optional_pairing_na_si?.name || c?.optional_pairing_na_si?.sub ||
+      c?.na?.name || c?.na?.sub
+    );
+    if (!hasAlco && !hasNonAlco) return;
+    const alcoName = (c?.optional_pairing_alco?.name || c?.optional_pairing_alco?.sub || "").trim();
+    const nonAlcoName = (c?.optional_pairing_na?.name || c?.optional_pairing_na?.sub || "").trim();
+    const extraKey = normalizeOptionalKey(c?.optional_flag) || null;
+    if (isPearOptionalKey(extraKey)) return;
+    byKey.set(key, {
+      key,
+      label,
+      hasAlco,
+      hasNonAlco,
+      alcoName,
+      nonAlcoName,
+      extraKey,
+      defaultOn: c?.optional_pairing_default_on !== false,
+    });
+  });
+  return [...byKey.values()];
+};
+
+export const optionalExtrasFromCourses = (menuCourses = []) => {
+  const byKey = new Map();
+  (menuCourses || []).forEach((c) => {
+    const key = normalizeOptionalKey(c?.optional_flag);
+    if (!key || isPearOptionalKey(key)) return;
+    const existing = byKey.get(key) || null;
+    const label = String(c?.menu?.name || existing?.name || key).trim() || key;
+    const pairings = [
+      "—",
+      c?.wp ? "Wine" : null,
+      c?.na ? "Non-Alc" : null,
+      c?.premium ? "Premium" : null,
+      c?.os ? "Our Story" : null,
+    ].filter(Boolean);
+    byKey.set(key, {
+      id: key,
+      key,
+      name: label,
+      pairings,
+    });
+  });
+  return [...byKey.values()];
 };
 
 // Parse a bilingual cell with optional kitchen note:
@@ -101,21 +179,212 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
   for (const key of RESTRICTION_PRIORITY_KEYS) {
     if (!(activeRestrictions || []).includes(key)) continue;
     const mapped = RESTRICTION_COLUMN_MAP[key] || key;
-    const siMapped = lang === "si" ? `${mapped}_si` : null;
 
-    const variant = courseRestrictions[mapped] || null;
+    // Runtime courses (from supabaseRowToCourse / parseMenuRow / CourseEditor)
+    // key their restriction variants by the UI key, e.g. "gluten". The mapped
+    // DB column name, e.g. "gluten_free", is only seen on a raw imported row,
+    // so it is just a fallback. Looking up only the mapped key meant gluten /
+    // dairy / nut / shellfish variants silently never matched once
+    // setRestrictionsCache() switched DIETARY_KEYS to UI keys — leaving
+    // restricted guests on the original dish and absent from the allergy sheet.
+    const variant = courseRestrictions[key] || courseRestrictions[mapped] || null;
     if (!variant) continue;
 
-    const next = (siMapped && courseRestrictions[siMapped]) ? courseRestrictions[siMapped] : variant;
-    if (next?.sub) {
-      dish = { name: String(next.name || dish.name).trim(), sub: String(next.sub).trim() };
-    } else if (next?.name) {
-      dish = { name: dish.name, sub: String(next.name).trim() };
-    }
+    const siVariant = lang === "si"
+      ? (courseRestrictions[`${key}_si`] || courseRestrictions[`${mapped}_si`] || null)
+      : null;
+    const next = siVariant || variant;
+    const altName = String(next?.name || "").trim();
+    const altSub  = String(next?.sub  || "").trim();
+    if (altName) dish = { ...dish, name: altName };
+    if (altSub)  dish = { ...dish, sub:  altSub  };
     break;
   }
 
   return dish;
+}
+
+/**
+ * Derive the kitchen note for a single restriction key on a course.
+ * Checks explicit stored notes first (handling the short→long key mapping for
+ * allergy keys), then auto-derives from the restriction variant:
+ *   - name changed → use the new name
+ *   - sub changed  → use the first new/different sub token
+ * Returns null when the dish is standard and no note applies.
+ */
+export function deriveKitchenNote(course, restrKey, baseName = "", baseSub = "") {
+  const mapped = RESTRICTION_COLUMN_MAP[restrKey] || restrKey;
+
+  // Explicit note — check both the mapped and raw key forms
+  const explicit =
+    course.restrictions?.[`${mapped}_note`] ||
+    course.restrictions?.[`${restrKey}_note`] ||
+    course.restrictions?.[mapped]?.kitchen_note ||
+    course.restrictions?.[restrKey]?.kitchen_note;
+  if (typeof explicit === "string" && explicit.trim()) return explicit.trim();
+
+  // Auto-derive from restriction variant
+  const variant = course.restrictions?.[mapped] || course.restrictions?.[restrKey];
+  if (!variant) return null;
+
+  if (variant.name && variant.name !== baseName) return variant.name;
+
+  if (variant.sub && variant.sub !== baseSub) {
+    const baseTokens = new Set(
+      String(baseSub || "").split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean)
+    );
+    const modTokens = String(variant.sub).split(/[,·]+/).map(s => s.trim()).filter(Boolean);
+    const newOnes = modTokens.filter(t => !baseTokens.has(t.toLowerCase()));
+    const note = newOnes.length > 0 ? newOnes[0] : variant.sub;
+    return note || null;
+  }
+
+  return null;
+}
+
+/**
+ * Get the modification string for a course given restriction keys,
+ * matching exactly what the kitchen ticket displays.
+ * Returns null if the dish is unchanged (standard).
+ */
+export function getCourseMod(course, restrKeys) {
+  if (!restrKeys || !restrKeys.length) return null;
+  // Trim to match applyCourseRestriction, which returns a trimmed name/sub.
+  // Without this, a stray leading/trailing space in the stored dish makes an
+  // UNCHANGED dish compare as "modified", and the fallback below then prints
+  // the whole sub as a bogus modification for every restricted guest.
+  const baseName = String(course?.menu?.name || "").trim();
+  const baseSub  = String(course?.menu?.sub  || "").trim();
+
+  // Priority 1: restriction notes — check all storage patterns (flat _note,
+  // raw-key _note, and nested kitchen_note inside the variant object)
+  for (const key of RESTRICTION_PRIORITY_KEYS) {
+    if (!restrKeys.includes(key)) continue;
+    const mapped = RESTRICTION_COLUMN_MAP[key] || key;
+    const note =
+      course.restrictions?.[`${mapped}_note`] ||
+      course.restrictions?.[`${key}_note`] ||
+      course.restrictions?.[mapped]?.kitchen_note ||
+      course.restrictions?.[key]?.kitchen_note;
+    if (note) return String(note).toUpperCase();
+  }
+
+  // Priority 2: full substitution
+  const modified = applyCourseRestriction(course, restrKeys);
+  if (modified) {
+    if (modified.name !== baseName) return modified.name;
+    if (modified.sub !== baseSub) {
+      const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
+      const modList = modified.sub.split(/[,·]+/).map(s => s.trim()).filter(Boolean);
+      const newOnes = modList.filter(t => !baseTokens.has(t.toLowerCase()));
+      if (newOnes.length > 0) return newOnes[0].toUpperCase();
+      // No genuinely new ingredient. If the substitute carries the same
+      // ingredient set as the base (just reordered/respaced), it is not a real
+      // modification — don't surface the whole sub as a fake mod.
+      const modSet = new Set(modList.map(t => t.toLowerCase()));
+      const sameSet = modSet.size === baseTokens.size && [...modSet].every(t => baseTokens.has(t));
+      if (sameSet) return null;
+      return modified.sub.toUpperCase();
+    }
+  }
+
+  return null;
+}
+
+export const RESTRICTION_KEYS = DIETARY_KEYS;
+
+// Restriction entries with no `pos` (null/undefined) are treated as table-wide:
+// they apply to every seat's menu and kitchen ticket output until someone assigns
+// them to a specific position in the seat-assignment UI. This lets staff capture
+// "table has a vegetarian" up front and decide which seat it belongs to later
+// without losing the variant on the printed menu.
+export const isSeatRestriction = (r, seatId) =>
+  r != null && (r.pos === seatId || r.pos == null);
+
+export const resolveSeatRestrictionKeys = (tableRestrictions, seatId) =>
+  (tableRestrictions || [])
+    .filter(r => isSeatRestriction(r, seatId))
+    .map(r => r.note)
+    .filter(Boolean);
+
+/**
+ * Parse a single row object into the canonical menu-course shape.
+ * This function is kept for data migration and import utilities.
+ *
+ * Returns null when the row has no dish name.
+ */
+export function parseMenuRow(row) {
+  const dishLines = String(row.dish ?? "").split("\n").map(s => s.trim());
+  const descLines = String(row.description ?? "").split("\n").map(s => s.trim());
+  const dishEnRaw = dishLines[0] || "";
+  const descEnRaw = descLines[0] || "";
+  const dishSiRaw = String(row.dish_si ?? "").trim() || dishLines[1] || "";
+  const descSiRaw = String(row.dish_si_sub ?? "").trim() || descLines[1] || "";
+  const kitchenNoteFallback = dishLines[2] || "";
+
+  const menu = splitMainSubCell(dishEnRaw, descEnRaw);
+  if (!menu?.name) return null;
+
+  const courseKey = String(firstFilled(row.course_key, row.key, dishEnRaw) || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  const restrictions = {};
+  RESTRICTION_KEYS.forEach((key) => {
+    const { en, si, note: cellNote } = parseBilingual(row[key], row[`${key}_sub`]);
+    restrictions[key] = en;
+    if (si) restrictions[`${key}_si`] = si;
+    const note = String(firstFilled(row[`${key}_note`], cellNote) || "").trim();
+    if (note) restrictions[`${key}_note`] = note;
+  });
+
+  const menuSi = splitMainSubCell(dishSiRaw, descSiRaw);
+  const wpBi   = parseBilingual(row.wp_drink,  row.wp_sub);
+  const naBi   = parseBilingual(row.na_drink,  row.na_sub);
+  const osBi   = parseBilingual(row.os_drink,  row.os_sub);
+  const premBi = parseBilingual(row.premium,   row.premium_sub);
+
+  const fpRaw = String(firstFilled(row.force_pairing_title)).trim();
+  const [fpEnLine, fpSiLine] = fpRaw.split("\n").map(l => l.trim());
+  const fpEn = splitMainSubCell(fpEnLine, String(firstFilled(row.force_pairing_sub)).trim());
+  const fpSi = fpSiLine ? splitMainSubCell(fpSiLine) : null;
+
+  return {
+    position: Number(firstFilled(row["#"], row.position, row.order_index)) || 0,
+    is_snack: truthyCell(firstFilled(row["snack?"], row.snack)),
+    menu,
+    menu_si: menuSi?.name ? menuSi : null,
+    wp: wpBi.en,
+    wp_si: wpBi.si || null,
+    na: naBi.en,
+    na_si: naBi.si || null,
+    os: osBi.en,
+    os_si: osBi.si || null,
+    premium: premBi.en,
+    premium_si: premBi.si || null,
+    course_key: courseKey,
+    course_category: normalizeCourseCategory(firstFilled(row.course_category), firstFilled(row.optional_flag)),
+    optional_flag: String(firstFilled(row.optional_flag)).trim().toLowerCase(),
+    optional_pairing_flag: String(firstFilled(row.optional_pairing_flag)).trim().toLowerCase(),
+    optional_pairing_label: String(firstFilled(row.optional_pairing_label)).trim(),
+    optional_pairing_enabled: truthyCell(firstFilled(row.optional_pairing_enabled, true)),
+    optional_pairing_default_on: truthyCell(firstFilled(row.optional_pairing_default_on, true)),
+    ...(() => { const { en, si } = parseBilingual(row.optional_pairing_alco, row.optional_pairing_alco_sub); return { optional_pairing_alco: en, optional_pairing_alco_si: si }; })(),
+    ...(() => { const { en, si } = parseBilingual(row.optional_pairing_na, row.optional_pairing_na_sub); return { optional_pairing_na: en, optional_pairing_na_si: si }; })(),
+    section_gap_before: truthyCell(firstFilled(row.section_gap_before)),
+    show_on_short: truthyCell(firstFilled(row.show_on_short)),
+    short_order: Number(firstFilled(row.short_order)) || null,
+    force_pairing_title: fpEn?.name || "",
+    force_pairing_sub: fpEn?.sub || "",
+    force_pairing_title_si: fpSi?.name || "",
+    force_pairing_sub_si: fpSi?.sub || "",
+    kitchen_note: String(firstFilled(row.kitchen_note, kitchenNoteFallback)).trim(),
+    aperitif_btn: String(firstFilled(row.aperitif_btn, row.aperitif) || "").trim() || null,
+    restrictions,
+  };
 }
 
 export const initDishes = [
