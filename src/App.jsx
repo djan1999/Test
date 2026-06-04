@@ -23,6 +23,7 @@ import {
   STORAGE_KEY,
 } from "./utils/storage.js";
 import { makeSeats, blankTable, sanitizeTable, initTables, fmt } from "./utils/tableHelpers.js";
+import { pickBeveragesForCategory } from "./utils/beverages.js";
 import {
   resolveAperitifFromQuickAccessOption,
   aperitifMatchesQuickAccessOption,
@@ -3607,15 +3608,9 @@ export default function App() {
       .select("id, category, name, notes, position, source")
       .order("position", { ascending: true });
     if (error || !data) return;
-    const pickRowsForCategory = (cat) => {
-      const rows = data.filter(r => r.category === cat);
-      const manual = rows.filter(r => r.source === "manual").sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-      const chosen = manual.length > 0 ? manual : rows.filter(r => r.source === "sync").sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-      return chosen.map((r, i) => ({ id: r.id, name: r.name, notes: r.notes || "", position: r.position ?? i }));
-    };
-    const c = pickRowsForCategory("cocktail");
-    const s = pickRowsForCategory("spirit");
-    const b = pickRowsForCategory("beer");
+    const c = pickBeveragesForCategory(data, "cocktail");
+    const s = pickBeveragesForCategory(data, "spirit");
+    const b = pickBeveragesForCategory(data, "beer");
     setCocktails(c);
     setSpirits(s);
     setBeers(b);
