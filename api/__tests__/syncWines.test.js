@@ -1,4 +1,51 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// ── Supabase mock ────────────────────────────────────────────────────────────
+// A chain-recording, awaitable PostgREST builder (same shape as the real
+// supabase-js fluent client). Every method records its call and returns the
+// builder so chains keep flowing; awaiting the builder (or calling a terminal
+// like .single()/.maybeSingle()) resolves to a per-table configured result.
+const sb = vi.hoisted(() => {
+  const builders = [];
+  // Terminal results keyed by table. Defaults to { data: null, error: null }.
+  let resultsByTable = {};
+  const VERBS = [
+    "select", "insert", "upsert", "update", "delete",
+    "eq", "match", "not", "is", "in", "order", "single", "maybeSingle", "gte", "lte",
+  ];
+  const makeBuilder = (table) => {
+    const result = () =>
+      Object.prototype.hasOwnProperty.call(resultsByTable, table)
+        ? resultsByTable[table]
+        : { data: null, error: null };
+    const b = { _table: table, _calls: [] };
+    VERBS.forEach((m) => {
+      b[m] = (...args) => {
+        b._calls.push([m, ...args]);
+        return b;
+      };
+    });
+    // Make the builder awaitable so `await supabase.from(t).insert(...)` works.
+    b.then = (onFulfilled, onRejected) => Promise.resolve(result()).then(onFulfilled, onRejected);
+    builders.push(b);
+    return b;
+  };
+  return {
+    builders,
+    reset(results = {}) {
+      builders.length = 0;
+      resultsByTable = results;
+    },
+    from: (table) => makeBuilder(table),
+    // Helper: all recorded builders for a given table.
+    forTable: (table) => builders.filter((b) => b._table === table),
+  };
+});
+
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: () => ({ from: (t) => sb.from(t) }),
+}));
+
 import {
   extractCells,
   parseWinesFromHtml,
@@ -422,6 +469,10 @@ describe("sync-wines handler — all-wine-pages-failed returns 502", () => {
     delete process.env.VITE_SUPABASE_URL;
     delete process.env.VITE_SUPABASE_ANON_KEY;
 
+    // Workspace resolves fine; the 502 must come from the failed scrape, not
+    // from the workspace lookup. service_settings falls back to defaults (null).
+    sb.reset({ workspaces: { data: { id: "milka-ws" }, error: null } });
+
     // Patch global fetch so every page request fails with 403 immediately.
     const realFetch = globalThis.fetch;
     globalThis.fetch = vi.fn().mockResolvedValue({
@@ -440,6 +491,117 @@ describe("sync-wines handler — all-wine-pages-failed returns 502", () => {
       expect(res.statusCode).toBe(502);
       expect(res.payload.ok).toBe(false);
       expect(res.payload.error).toMatch(/source site/i);
+    } finally {
+      globalThis.fetch = realFetch;
+      if (prevCron === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = prevCron;
+      if (prevSync === undefined) delete process.env.SYNC_SECRET; else process.env.SYNC_SECRET = prevSync;
+      if (prevUrl  === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = prevUrl;
+      if (prevKey  === undefined) delete process.env.SUPABASE_SERVICE_KEY; else process.env.SUPABASE_SERVICE_KEY = prevKey;
+      if (prevVUrl === undefined) delete process.env.VITE_SUPABASE_URL; else process.env.VITE_SUPABASE_URL = prevVUrl;
+      if (prevVKey === undefined) delete process.env.VITE_SUPABASE_ANON_KEY; else process.env.VITE_SUPABASE_ANON_KEY = prevVKey;
+    }
+  });
+});
+
+describe("sync-wines handler — workspace scoping (Milka)", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  // Wine table: producer | name | vintage | region | volume | price.
+  const WINE_HTML = `<table>
+    <tr><td>Movia</td><td>Lunar</td><td>2019</td><td>Brda</td><td>0,75L</td><td>38€</td></tr>
+  </table>`;
+  // Two-column table parses as a beverage row for whatever category the page declares.
+  const BEV_HTML = `<table>
+    <tr><td>Negroni</td><td>Classic cocktail</td></tr>
+  </table>`;
+
+  it("stamps inserted wine & beverage rows with the Milka workspace_id and scopes deletes by it", async () => {
+    const req = {
+      url: `http://localhost/api/sync-wines?secret=s&dry=false`,
+      headers: { authorization: undefined },
+    };
+    const res = {
+      statusCode: 200,
+      payload: null,
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.payload = body; return this; },
+    };
+
+    const prevCron = process.env.CRON_SECRET;
+    const prevSync = process.env.SYNC_SECRET;
+    const prevUrl  = process.env.SUPABASE_URL;
+    const prevKey  = process.env.SUPABASE_SERVICE_KEY;
+    const prevVUrl = process.env.VITE_SUPABASE_URL;
+    const prevVKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+    process.env.CRON_SECRET = "s";
+    delete process.env.SYNC_SECRET;
+    process.env.SUPABASE_URL = "https://fake.supabase.co";
+    process.env.SUPABASE_SERVICE_KEY = "fake-key";
+    delete process.env.VITE_SUPABASE_URL;
+    delete process.env.VITE_SUPABASE_ANON_KEY;
+
+    // workspaces lookup resolves to a fake Milka id; service_settings has no row
+    // (state: null) so the handler falls back to the default sync config, which
+    // enables every wine country and beverage page.
+    sb.reset({ workspaces: { data: { id: "milka-ws" }, error: null } });
+
+    // Every scrape succeeds: wine pages return a wine table, beverage pages a
+    // 2-column table that parses for that page's declared category.
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation((url) => Promise.resolve({
+      ok: true,
+      status: 200,
+      text: async () => (String(url).includes("/category/vino/") ? WINE_HTML : BEV_HTML),
+    }));
+
+    try {
+      const handlerPromise = handler(req, res);
+      // Network phase is parallel; no retries fire on success, but advance timers
+      // anyway in case any back-off is scheduled.
+      await vi.advanceTimersByTimeAsync(2000);
+      await handlerPromise;
+
+      expect(res.statusCode).toBe(200);
+      expect(res.payload.ok).toBe(true);
+
+      // ── wines: insert rows stamped, delete scoped to workspace ──────────────
+      const wineInserts = sb.forTable("wines")
+        .flatMap((b) => b._calls.filter((c) => c[0] === "insert"));
+      expect(wineInserts.length).toBeGreaterThan(0);
+      const insertedWineRows = wineInserts.flatMap((c) => c[1]);
+      expect(insertedWineRows.length).toBeGreaterThan(0);
+      expect(insertedWineRows.every((r) => r.workspace_id === "milka-ws")).toBe(true);
+
+      const wineDeletes = sb.forTable("wines").filter((b) =>
+        b._calls.some((c) => c[0] === "delete"));
+      expect(wineDeletes.length).toBeGreaterThan(0);
+      expect(wineDeletes.every((b) =>
+        b._calls.some((c) => c[0] === "eq" && c[1] === "workspace_id" && c[2] === "milka-ws")
+      )).toBe(true);
+
+      // ── beverages: insert rows stamped, delete scoped to workspace ──────────
+      const bevInserts = sb.forTable("beverages")
+        .flatMap((b) => b._calls.filter((c) => c[0] === "insert"));
+      expect(bevInserts.length).toBeGreaterThan(0);
+      const insertedBevRows = bevInserts.flatMap((c) => c[1]);
+      expect(insertedBevRows.length).toBeGreaterThan(0);
+      expect(insertedBevRows.every((r) => r.workspace_id === "milka-ws")).toBe(true);
+
+      const bevDeletes = sb.forTable("beverages").filter((b) =>
+        b._calls.some((c) => c[0] === "delete"));
+      expect(bevDeletes.length).toBeGreaterThan(0);
+      expect(bevDeletes.every((b) =>
+        b._calls.some((c) => c[0] === "eq" && c[1] === "workspace_id" && c[2] === "milka-ws")
+      )).toBe(true);
+
+      // ── service_settings read is scoped to the workspace too ────────────────
+      const settingsReads = sb.forTable("service_settings");
+      expect(settingsReads.length).toBeGreaterThan(0);
+      expect(settingsReads.every((b) =>
+        b._calls.some((c) => c[0] === "eq" && c[1] === "workspace_id" && c[2] === "milka-ws")
+      )).toBe(true);
     } finally {
       globalThis.fetch = realFetch;
       if (prevCron === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = prevCron;

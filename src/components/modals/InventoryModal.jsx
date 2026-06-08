@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { TABLES, supabase } from "../../lib/supabaseClient.js";
+import { TABLES, supabase, getWorkspaceId } from "../../lib/supabaseClient.js";
+import { scopedFrom } from "../../lib/scopedDb.js";
 import { COUNTRY_NAMES, stripCountryFromRegion, inferCountryFromRegion } from "../../constants/countries.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput } from "../../styles/mixins.js";
@@ -67,9 +68,8 @@ export default function InventoryModal({ wines, onClose }) {
 
   const flushToSupabase = async (state) => {
     if (!supabase || !navigator.onLine) { setSyncSt("offline"); return; }
-    const { error } = await supabase.from(TABLES.SERVICE_SETTINGS).upsert(
+    const { error } = await scopedFrom(TABLES.SERVICE_SETTINGS).upsert(
       { id: INV_SETTINGS_ID, state, updated_at: new Date().toISOString() },
-      { onConflict: "id" },
     );
     setSyncSt(error ? "error" : "synced");
   };
@@ -117,7 +117,7 @@ export default function InventoryModal({ wines, onClose }) {
 
   useEffect(() => {
     if (!supabase) { setSyncSt(navigator.onLine ? "synced" : "offline"); return; }
-    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", INV_SETTINGS_ID).single()
+    scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", INV_SETTINGS_ID).single()
       .then(({ data, error }) => {
         const remoteD = (!error && data?.state?.d) ? data.state.d : {};
         const myRemote = remoteD[myId.current];
@@ -153,13 +153,14 @@ export default function InventoryModal({ wines, onClose }) {
 
   useEffect(() => {
     if (!supabase) return;
-    const ch = supabase.channel("milka-inventory")
+    const ch = supabase.channel(`milka-inventory-${getWorkspaceId()}`)
       .on("postgres_changes", {
         event: "UPDATE",
         schema: "public",
         table: TABLES.SERVICE_SETTINGS,
-        filter: `id=eq.${INV_SETTINGS_ID}`,
+        filter: `workspace_id=eq.${getWorkspaceId()}`,
       }, (payload) => {
+        if (payload.new?.id !== INV_SETTINGS_ID) return;
         const remoteD = payload.new?.state?.d;
         if (!remoteD) return;
         setFullState((prev) => ({ d: { ...remoteD, [myId.current]: prev.d[myId.current] } }));

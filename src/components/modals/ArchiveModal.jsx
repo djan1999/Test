@@ -3,6 +3,7 @@ import FullModal from "../ui/FullModal.jsx";
 import TableSummaryCard from "./TableSummaryCard.jsx";
 import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
+import { scopedFrom } from "../../lib/scopedDb.js";
 import { parseHHMM, mergeTableGroups, tableGroupLabel } from "../../utils/tableHelpers.js";
 import { optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 import { tokens } from "../../styles/tokens.js";
@@ -35,8 +36,8 @@ export default function ArchiveModal({
     }
     setLoading(true);
     Promise.all([
-      supabase.from(TABLES.SERVICE_ARCHIVE).select("*").is("deleted_at", null).order("created_at", { ascending: false }).limit(60),
-      supabase.from(TABLES.SERVICE_ARCHIVE).select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(30),
+      scopedFrom(TABLES.SERVICE_ARCHIVE).select("*").is("deleted_at", null).order("created_at", { ascending: false }).limit(60),
+      scopedFrom(TABLES.SERVICE_ARCHIVE).select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(30),
     ]).then(([active, trash]) => {
       setEntries(active.error ? [] : (active.data || []));
       setDeleted(trash.error ? [] : (trash.data || []));
@@ -48,7 +49,7 @@ export default function ArchiveModal({
   const deleteEntry = async (id) => {
     if (!supabase) return;
     setDeleting(id);
-    const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).update({ deleted_at: new Date().toISOString() }).eq("id", id);
+    const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).update({ deleted_at: new Date().toISOString() }).eq("id", id);
     if (error) {
       alert("Delete failed: " + error.message + "\n\nYou may need to enable UPDATE on the service_archive table in Supabase (Policies → anon → UPDATE).");
     } else {
@@ -65,7 +66,7 @@ export default function ArchiveModal({
     if (!window.confirm("Move ALL archive entries to trash? You can restore them from Recently Deleted.")) return;
     setDeleting("all");
     const now = new Date().toISOString();
-    const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).update({ deleted_at: now }).is("deleted_at", null);
+    const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).update({ deleted_at: now }).is("deleted_at", null);
     if (error) {
       alert("Delete failed: " + error.message + "\n\nYou may need to enable UPDATE on the service_archive table in Supabase (Policies → anon → UPDATE).");
     } else {
@@ -79,7 +80,7 @@ export default function ArchiveModal({
   const restoreEntry = async (id) => {
     if (!supabase) return;
     setDeleting(id);
-    const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).update({ deleted_at: null }).eq("id", id);
+    const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).update({ deleted_at: null }).eq("id", id);
     if (error) {
       alert("Restore failed: " + error.message);
     } else {
@@ -94,7 +95,7 @@ export default function ArchiveModal({
     if (!supabase) return;
     if (!window.confirm("Permanently delete all trashed entries? This cannot be undone.")) return;
     setDeleting("trash");
-    const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).delete().not("deleted_at", "is", null);
+    const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).delete().not("deleted_at", "is", null);
     if (error) {
       alert("Empty trash failed: " + error.message);
     } else {

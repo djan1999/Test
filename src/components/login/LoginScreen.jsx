@@ -12,7 +12,7 @@ const PINS = {
   menu:  String(import.meta.env.VITE_PIN_MENU  || "").trim(),
 };
 
-export default function LoginScreen({ onEnter, onSyncAll }) {
+export default function LoginScreen({ onEnter, onSyncAll, workspaceName = "", canSwitchProfile = false, onSwitchProfile, onSignOut }) {
   const MODES = [
     { id: "display",     label: "Kitchen",      sub: "fire courses · KDS",  pin: false },
     { id: "service",     label: "Service",      sub: "full service access", pin: false },
@@ -175,6 +175,31 @@ export default function LoginScreen({ onEnter, onSyncAll }) {
                 fontWeight:    400,
               }}
             >{syncText}</button>
+          )}
+
+          {/* Current restaurant + switch / sign out */}
+          {(workspaceName || onSignOut) && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 8 }}>
+              {workspaceName && (
+                <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.18em", textTransform: "uppercase", color: ink[3] }}>
+                  {workspaceName}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 16 }}>
+                {canSwitchProfile && onSwitchProfile && (
+                  <button onClick={onSwitchProfile} style={{
+                    fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", textTransform: "uppercase",
+                    color: ink[2], background: "none", border: "none", cursor: "pointer", padding: 4,
+                  }}>switch restaurant</button>
+                )}
+                {onSignOut && (
+                  <button onClick={onSignOut} style={{
+                    fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", textTransform: "uppercase",
+                    color: ink[3], background: "none", border: "none", cursor: "pointer", padding: 4,
+                  }}>sign out</button>
+                )}
+              </div>
+            </div>
           )}
         </div>
 

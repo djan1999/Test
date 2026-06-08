@@ -4,6 +4,7 @@ import { getAssignedGuestProfile } from "../../utils/menuLayoutProfiles.js";
 import { writeTeamNames, readTeamNames, writeMenuTitle, readMenuTitle, writeThankYouNote, readThankYouNote } from "../../utils/storage.js";
 import { applyCourseRestriction, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, optionalExtrasFromCourses, optionalPairingsFromCourses, normalizeOptionalKey, resolveSeatRestrictionKeys } from "../../utils/menuUtils.js";
 import { TABLES, supabase } from "../../lib/supabaseClient.js";
+import { scopedFrom } from "../../lib/scopedDb.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
 import { restrLabel } from "../../constants/dietary.js";
@@ -83,9 +84,9 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, p
     if (!supabase) { genLoaded.current = true; return; }
     const currentLang = lang;
     Promise.all([
-      supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_team").single(),
-      supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_title").single(),
-      supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_thankyou").single(),
+      scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_team").single(),
+      scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_title").single(),
+      scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_thankyou").single(),
     ]).then(([teamRes, titleRes, thankYouRes]) => {
       if (teamRes.data?.state?.value) setTeamNames(teamRes.data.state.value);
 
@@ -124,8 +125,8 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, p
   useEffect(() => {
     writeTeamNames(teamNames);
     if (!genLoaded.current || !supabase) return;
-    supabase.from(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "menu_gen_team", state: { value: teamNames }, updated_at: new Date().toISOString() }, { onConflict: "id" })
+    scopedFrom(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "menu_gen_team", state: { value: teamNames }, updated_at: new Date().toISOString() })
       .then(() => {});
   }, [teamNames]);
 
@@ -135,16 +136,16 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, p
   // (not here) to avoid a React batching race where lang changes before menuTitle.
   useEffect(() => {
     if (!genLoaded.current || !supabase) return;
-    supabase.from(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "menu_gen_title", state: { en: readMenuTitle("en"), si: readMenuTitle("si") }, updated_at: new Date().toISOString() }, { onConflict: "id" })
+    scopedFrom(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "menu_gen_title", state: { en: readMenuTitle("en"), si: readMenuTitle("si") }, updated_at: new Date().toISOString() })
       .then(() => {});
   }, [menuTitle]);
 
   // Save thank-you note to Supabase when changed — same multi-lang approach.
   useEffect(() => {
     if (!genLoaded.current || !supabase) return;
-    supabase.from(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "menu_gen_thankyou", state: { en: readThankYouNote("en"), si: readThankYouNote("si") }, updated_at: new Date().toISOString() }, { onConflict: "id" })
+    scopedFrom(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "menu_gen_thankyou", state: { en: readThankYouNote("en"), si: readThankYouNote("si") }, updated_at: new Date().toISOString() })
       .then(() => {});
   }, [thankYouNote]);
 

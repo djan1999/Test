@@ -287,10 +287,24 @@ export default async function handler(req, res) {
     if (!supabaseUrl || !supabaseKey) throw new Error("Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_KEY)");
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // The cron uses a service-role client which bypasses row-level security, so
+    // every read/write below must be explicitly scoped to the real Milka
+    // workspace. The Demo/sandbox copy is intentionally left frozen.
+    const { data: milkaWs, error: wsErr } = await supabase
+      .from("workspaces")
+      .select("id")
+      .eq("slug", "milka")
+      .single();
+    if (wsErr || !milkaWs) {
+      throw new Error(`Could not resolve Milka workspace: ${wsErr?.message || "not found"}`);
+    }
+    const WORKSPACE_ID = milkaWs.id;
+
     const { data: syncSettingsRow } = await supabase
       .from("service_settings")
       .select("state")
       .eq("id", "wine_sync_config")
+      .eq("workspace_id", WORKSPACE_ID)
       .maybeSingle();
     const configFromQuery = parseSyncConfigFromRequestUrl(req.url);
     const syncConfig = normalizeSyncConfig(
@@ -359,16 +373,18 @@ export default async function handler(req, res) {
       const { error: deleteError } = await supabase
         .from("wines")
         .delete()
+        .eq("workspace_id", WORKSPACE_ID)
         .eq("source", "sync")
         .in("country", syncedCountryLabels);
       if (deleteError) console.warn("[sync] wines delete error:", deleteError.message);
 
-      // Insert all fresh wines in batches.
+      // Insert all fresh wines in batches, stamping each row with the workspace.
       const BATCH = 200;
       for (let i = 0; i < uniqueWines.length; i += BATCH) {
-        const { error } = await supabase.from("wines").insert(uniqueWines.slice(i, i + BATCH));
+        const batch = uniqueWines.slice(i, i + BATCH).map(w => ({ ...w, workspace_id: WORKSPACE_ID }));
+        const { error } = await supabase.from("wines").insert(batch);
         if (error) throw error;
-        winesUpserted += uniqueWines.slice(i, i + BATCH).length;
+        winesUpserted += batch.length;
       }
     }
 
@@ -393,10 +409,10 @@ export default async function handler(req, res) {
         for (const cat of categoriesToWrite) {
           let position = 0;
           for (const b of allBeverages.filter(x => x.category === cat)) {
-            rowsToWrite.push({ category: cat, name: b.name, notes: b.notes || "", position: position++, source: "sync" });
+            rowsToWrite.push({ category: cat, name: b.name, notes: b.notes || "", position: position++, source: "sync", workspace_id: WORKSPACE_ID });
           }
         }
-        await supabase.from("beverages").delete().eq("source", "sync").in("category", categoriesToWrite);
+        await supabase.from("beverages").delete().eq("workspace_id", WORKSPACE_ID).eq("source", "sync").in("category", categoriesToWrite);
         if (rowsToWrite.length > 0) {
           const BATCH = 200;
           for (let i = 0; i < rowsToWrite.length; i += BATCH) {

@@ -34,6 +34,7 @@ import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../
 import { generateKitchenTicketHTML } from "../../utils/kitchenTicketGenerator.js";
 import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote, readTeamNames, writeTeamNames } from "../../utils/storage.js";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
+import { scopedFrom } from "../../lib/scopedDb.js";
 import { LayoutStylesPanel } from "./MenuTemplatePanels.jsx";
 import { PreviewDataPanel } from "./MenuTemplatePreviewParts.jsx";
 
@@ -769,14 +770,14 @@ export default function MenuTemplateEditor({
   // the admin's latest edits and doesn't overwrite them with a stale value.
   const syncTitleToSupabase = () => {
     if (!supabase) return;
-    supabase.from(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "menu_gen_title", state: { en: readMenuTitle("en"), si: readMenuTitle("si") }, updated_at: new Date().toISOString() }, { onConflict: "id" })
+    scopedFrom(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "menu_gen_title", state: { en: readMenuTitle("en"), si: readMenuTitle("si") }, updated_at: new Date().toISOString() })
       .then(() => {});
   };
   const syncThankYouToSupabase = () => {
     if (!supabase) return;
-    supabase.from(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "menu_gen_thankyou", state: { en: readThankYouNote("en"), si: readThankYouNote("si") }, updated_at: new Date().toISOString() }, { onConflict: "id" })
+    scopedFrom(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "menu_gen_thankyou", state: { en: readThankYouNote("en"), si: readThankYouNote("si") }, updated_at: new Date().toISOString() })
       .then(() => {});
   };
 
@@ -787,9 +788,9 @@ export default function MenuTemplateEditor({
   useEffect(() => {
     if (!supabase) return;
     Promise.all([
-      supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_title").single(),
-      supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_thankyou").single(),
-      supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_team").single(),
+      scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_title").single(),
+      scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_thankyou").single(),
+      scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_team").single(),
     ]).then(([titleRes, thankYouRes, teamRes]) => {
       const titleState = titleRes.data?.state;
       if (titleState && (typeof titleState.en === "string" || typeof titleState.si === "string")) {

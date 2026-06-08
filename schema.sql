@@ -1,7 +1,86 @@
 -- ============================================================
 -- Milka Service Board — Supabase Schema
 -- Run this in the Supabase SQL editor to set up all tables.
+--
+-- MULTI-TENANT: every restaurant is an isolated "workspace". Each data table
+-- below carries a `workspace_id`, and the live database additionally enforces
+-- composite primary keys on the natural-key tables (service_tables,
+-- service_settings, menu_courses, wines) plus per-workspace membership policies.
+-- Those incremental changes are applied to the live project via tracked Supabase
+-- migrations; this file documents the tenancy foundation (the new tables and
+-- helper functions) so a fresh project can be bootstrapped.
 -- ============================================================
+
+-- ── workspaces / members / platform admins ──────────────────
+-- A workspace = one restaurant (kind 'restaurant') or a test/demo copy
+-- (kind 'sandbox'). Membership grants access; a platform admin (the master
+-- "Demo" account) can reach every workspace.
+create table if not exists public.workspaces (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  slug text not null unique,
+  kind text not null default 'restaurant' check (kind in ('restaurant','sandbox')),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.workspace_members (
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  role text not null default 'owner' check (role in ('owner','staff')),
+  created_at timestamptz not null default now(),
+  primary key (workspace_id, user_id)
+);
+create index if not exists workspace_members_user_idx on public.workspace_members(user_id);
+
+create table if not exists public.platform_admins (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+-- Security-definer helpers so RLS policies that call them don't recurse through
+-- the RLS of the tables they read.
+create or replace function public.is_platform_admin()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.platform_admins a where a.user_id = auth.uid());
+$$;
+
+create or replace function public.is_workspace_member(ws uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.workspace_members m
+    where m.workspace_id = ws and m.user_id = auth.uid()
+  );
+$$;
+
+revoke execute on function public.is_platform_admin()       from anon, public;
+revoke execute on function public.is_workspace_member(uuid) from anon, public;
+grant  execute on function public.is_platform_admin()       to authenticated;
+grant  execute on function public.is_workspace_member(uuid) to authenticated;
+
+alter table public.workspaces        enable row level security;
+alter table public.workspace_members enable row level security;
+alter table public.platform_admins   enable row level security;
+
+drop policy if exists "workspaces_read" on public.workspaces;
+create policy "workspaces_read" on public.workspaces
+  for select to authenticated
+  using (public.is_platform_admin() or public.is_workspace_member(id));
+
+drop policy if exists "members_self_read" on public.workspace_members;
+create policy "members_self_read" on public.workspace_members
+  for select to authenticated
+  using (user_id = auth.uid() or public.is_platform_admin());
+
+drop policy if exists "platform_admins_self_read" on public.platform_admins;
+create policy "platform_admins_self_read" on public.platform_admins
+  for select to authenticated
+  using (user_id = auth.uid());
+
+-- Each data table below also has a per-workspace policy of the form:
+--   create policy "<table>_member_all" on public.<table>
+--     for all to authenticated
+--     using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
+--     with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
 
 -- ── service_tables ──────────────────────────────────────────
 create table if not exists public.service_tables (

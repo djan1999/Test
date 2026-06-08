@@ -43,7 +43,8 @@ import {
 } from "./constants/dietary.js";
 import { WATER_OPTS, waterStyle, PAIRINGS, pairingStyle, extraPairingForSeat } from "./constants/pairings.js";
 import { BEV_TYPES } from "./constants/beverageTypes.js";
-import { supabase, hasSupabaseConfig, supabaseUrl, TABLES } from "./lib/supabaseClient.js";
+import { supabase, hasSupabaseConfig, supabaseUrl, TABLES, getWorkspaceId, setWorkspaceId } from "./lib/supabaseClient.js";
+import { scopedFrom, scopeJob } from "./lib/scopedDb.js";
 import { tokens } from "./styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, chip as mixinChip, circleButton as mixinCircleButton } from "./styles/mixins.js";
 import WaterPicker from "./components/service/WaterPicker.jsx";
@@ -60,6 +61,8 @@ import Header from "./components/ui/Header.jsx";
 import GlobalStyle from "./components/ui/GlobalStyle.jsx";
 import GateScreen from "./components/gate/GateScreen.jsx";
 import LoginScreen from "./components/login/LoginScreen.jsx";
+import AuthScreen from "./components/auth/AuthScreen.jsx";
+import ProfilePicker from "./components/auth/ProfilePicker.jsx";
 import MenuPage from "./components/menu/MenuPage.jsx";
 import MenuGenerator from "./components/menu/MenuGenerator.jsx";
 import WineSearch from "./components/service/WineSearch.jsx";
@@ -333,9 +336,8 @@ function courseToSupabaseRow(course) {
 }
 
 async function fetchMenuCourses() {
-  if (!supabase) return null;
-  const { data, error } = await supabase
-    .from(TABLES.MENU_COURSES)
+  if (!supabase || !getWorkspaceId()) return null;
+  const { data, error } = await scopedFrom(TABLES.MENU_COURSES)
     .select("*")
     .order("position", { ascending: true });
   if (error) throw error;
@@ -2025,6 +2027,16 @@ const writeAccess = () => {
   try { localStorage.setItem(ACCESS_KEY, JSON.stringify({ ts: Date.now() })); } catch {}
 };
 
+// ── Workspace (tenant) selection ────────────────────────────────────────────
+// Which restaurant's data this device is currently working in. Persisted so a
+// reload returns to the same workspace, and seeded into the module singleton
+// synchronously at load so the first queries + namespaced caches are correct.
+const WORKSPACE_KEY = "milka_workspace";
+const readPersistedWorkspace = () => {
+  try { return localStorage.getItem(WORKSPACE_KEY) || null; } catch { return null; }
+};
+if (supabase) setWorkspaceId(readPersistedWorkspace());
+
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
   const localSnapshot = readLocalBoardState();
@@ -2052,6 +2064,82 @@ export default function App() {
       return storedMode;
     } catch { return null; }
   });
+  // ── Auth + workspace (multi-tenant) ─────────────────────────────────────────
+  // When Supabase is configured the app requires a login, then a workspace
+  // (restaurant) selection. Each workspace is a fully isolated data set.
+  const [session, setSession]               = useState(null);
+  const [sessionChecked, setSessionChecked] = useState(!supabase);
+  const [workspaceId, setWorkspaceIdState]  = useState(() => (supabase ? readPersistedWorkspace() : null));
+  const [myWorkspaces, setMyWorkspaces]     = useState([]);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+
+  const applyWorkspace = useCallback((id) => {
+    setWorkspaceId(id);        // module singleton — used by scopedFrom() everywhere
+    setWorkspaceIdState(id);   // React state — drives data-load effects + realtime
+    try {
+      if (id) localStorage.setItem(WORKSPACE_KEY, id);
+      else localStorage.removeItem(WORKSPACE_KEY);
+    } catch {}
+  }, []);
+
+  // Switching restaurants clears the saved pick and reloads — the cleanest way
+  // to re-bootstrap every data loader and realtime channel for the next
+  // workspace with zero risk of stale in-memory data bleeding across profiles.
+  // After the reload the picker reappears (or auto-selects for single-restaurant
+  // logins) and a fresh selection loads cleanly.
+  const openProfilePicker = useCallback(() => {
+    try { localStorage.removeItem(WORKSPACE_KEY); } catch {}
+    window.location.reload();
+  }, []);
+
+  const signOut = useCallback(async () => {
+    try { await supabase?.auth.signOut(); } catch {}
+    try { localStorage.removeItem(WORKSPACE_KEY); } catch {}
+    setWorkspaceId(null);
+    window.location.reload();
+  }, []);
+
+  // Bootstrap the Supabase auth session and keep it in sync.
+  useEffect(() => {
+    if (!supabase) { setSessionChecked(true); return; }
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setSession(data?.session || null);
+      setSessionChecked(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      if (active) setSession(s || null);
+    });
+    return () => { active = false; sub?.subscription?.unsubscribe?.(); };
+  }, []);
+
+  // Once signed in, resolve which workspaces this user can reach (RLS returns
+  // just their restaurant, or all restaurants for the master/super-admin) and
+  // settle on the active one (restore the saved pick, or auto-pick when there's
+  // only one, else fall through to the picker).
+  useEffect(() => {
+    if (!supabase || !session) { setMyWorkspaces([]); setIsPlatformAdmin(false); return; }
+    let active = true;
+    (async () => {
+      const uid = session.user?.id;
+      const [{ data: adminRow }, { data: wsRows }] = await Promise.all([
+        supabase.from("platform_admins").select("user_id").eq("user_id", uid).maybeSingle(),
+        supabase.from("workspaces").select("id, name, kind, slug")
+          .order("kind", { ascending: true }).order("name", { ascending: true }),
+      ]);
+      if (!active) return;
+      const list = wsRows || [];
+      setIsPlatformAdmin(!!adminRow);
+      setMyWorkspaces(list);
+      const persisted = readPersistedWorkspace();
+      if (persisted && list.some(w => w.id === persisted)) applyWorkspace(persisted);
+      else if (list.length === 1) applyWorkspace(list[0].id);
+      else applyWorkspace(null);
+    })();
+    return () => { active = false; };
+  }, [session, applyWorkspace]);
+
   const [sel,          setSel]          = useState(null);
   // Which table (if any) is currently expanded into Quick Access on the board.
   // Clicking a reservation name toggles this; the rest of the board stays compact.
@@ -2205,17 +2293,17 @@ export default function App() {
     };
 
     if (!navigator.onLine) {
-      await offlineQueue.enqueue(job);
+      await offlineQueue.enqueue(scopeJob(job));
       setSyncStatus("local-only");
       return { ok: true, queued: true };
     }
 
     try {
-      const { error } = await supabase.from(TABLES.SERVICE_TABLES).upsert(payloadRows, { onConflict: "table_id" });
+      const { error } = await scopedFrom(TABLES.SERVICE_TABLES).upsert(payloadRows, { onConflict: "table_id" });
       if (error) throw error;
       return { ok: true, queued: false };
     } catch (error) {
-      await offlineQueue.enqueue(job);
+      await offlineQueue.enqueue(scopeJob(job));
       setSyncStatus("sync-error");
       return { ok: false, queued: true, error };
     }
@@ -2228,7 +2316,7 @@ export default function App() {
     if (!supabase) return { ok: false, queued: false };
 
     if (!navigator.onLine) {
-      await offlineQueue.enqueue(job);
+      await offlineQueue.enqueue(scopeJob(job));
       setSyncStatus("local-only");
       return { ok: true, queued: true };
     }
@@ -2237,7 +2325,7 @@ export default function App() {
       await run();
       return { ok: true, queued: false };
     } catch (error) {
-      await offlineQueue.enqueue(job);
+      await offlineQueue.enqueue(scopeJob(job));
       setSyncStatus("sync-error");
       return { ok: false, queued: true, error };
     }
@@ -2485,8 +2573,8 @@ export default function App() {
       // Persist both rows; ignore the auto-move guards inside upsertReservation
       // by going straight to the DB.
       await Promise.all([
-        supabase.from(TABLES.RESERVATIONS).update({ table_id: t2 }).eq("id", r1Id),
-        supabase.from(TABLES.RESERVATIONS).update({ table_id: t1 }).eq("id", r2Id),
+        scopedFrom(TABLES.RESERVATIONS).update({ table_id: t2 }).eq("id", r1Id),
+        scopedFrom(TABLES.RESERVATIONS).update({ table_id: t1 }).eq("id", r2Id),
       ]);
     }
     return { ok: true };
@@ -2577,7 +2665,7 @@ export default function App() {
     // Remove courses that no longer exist
     const positions = withKeys.map(c => c.position);
     if (positions.length > 0) {
-      await supabase.from(TABLES.MENU_COURSES).delete().not("position", "in", `(${positions.join(",")})`);
+      await scopedFrom(TABLES.MENU_COURSES).delete().not("position", "in", `(${positions.join(",")})`);
     }
     return { ok: true, isActiveSkipped };
   };
@@ -2602,7 +2690,7 @@ export default function App() {
       };
     });
     for (let i = 0; i < rows.length; i += BATCH) {
-      const { error } = await supabase.from(TABLES.WINES).upsert(rows.slice(i, i + BATCH), { onConflict: "key" });
+      const { error } = await scopedFrom(TABLES.WINES).upsert(rows.slice(i, i + BATCH), { onConflict: "key" });
       if (error) {
         console.error("Wine save error:", error);
         return { ok: false, error: error.message };
@@ -2612,7 +2700,7 @@ export default function App() {
     const originalKeys = wines.map(w => (typeof w.id === "string" ? w.id : null)).filter(Boolean);
     const deletedKeys = originalKeys.filter(k => !savedKeys.has(k));
     if (deletedKeys.length > 0) {
-      const { error: delErr } = await supabase.from(TABLES.WINES).delete().in("key", deletedKeys);
+      const { error: delErr } = await scopedFrom(TABLES.WINES).delete().in("key", deletedKeys);
       if (delErr) {
         console.error("Wine delete error:", delErr);
         return { ok: false, error: delErr.message };
@@ -2632,13 +2720,13 @@ export default function App() {
       ...newS.map((item, i) => ({ category: "spirit",   name: item.name, notes: item.notes || "", position: i, source: "manual" })),
       ...newB.map((item, i) => ({ category: "beer",     name: item.name, notes: item.notes || "", position: i, source: "manual" })),
     ];
-    const { error: delErr } = await supabase.from(TABLES.BEVERAGES).delete().eq("source", "manual").in("category", ["cocktail", "spirit", "beer"]);
+    const { error: delErr } = await scopedFrom(TABLES.BEVERAGES).delete().eq("source", "manual").in("category", ["cocktail", "spirit", "beer"]);
     if (delErr) {
       console.error("Beverage delete error:", delErr);
       return { ok: false, error: delErr.message };
     }
     if (rows.length > 0) {
-      const { error: insErr } = await supabase.from(TABLES.BEVERAGES).insert(rows);
+      const { error: insErr } = await scopedFrom(TABLES.BEVERAGES).insert(rows);
       if (insErr) {
         console.error("Beverage insert error:", insErr);
         return { ok: false, error: insErr.message };
@@ -2666,7 +2754,7 @@ export default function App() {
     const archiveLabel = `${dateStr} – ${activeServiceSession.toUpperCase()}`;
     const activeTables = snap.tables.filter(t => t.active || t.arrivedAt || t.resName || t.resTime);
     if (supabase) {
-      const { error } = await supabase.from(TABLES.SERVICE_ARCHIVE).insert({
+      const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert({
         date: archiveDate,
         label: archiveLabel,
         state: { ...snap, tables: activeTables, menuCourses, serviceSession: activeServiceSession },
@@ -2706,7 +2794,7 @@ export default function App() {
     try {
       // Read the night's state from the source of truth: local board state may
       // not have hydrated yet on a fresh load (or be blank on this device).
-      const { data: rows, error: readErr } = await supabase.from(TABLES.SERVICE_TABLES).select("*");
+      const { data: rows, error: readErr } = await scopedFrom(TABLES.SERVICE_TABLES).select("*");
       if (readErr) throw readErr;
       const activeTables = (rows || [])
         .map(r => sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) }))
@@ -2717,12 +2805,12 @@ export default function App() {
         const dateStr = new Date(staleDate + "T00:00:00").toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
         const label = `${dateStr} – ${(activeServiceSession || "dinner").toUpperCase()}`;
         // Don't double-file if another device already archived this service.
-        const { data: existing } = await supabase.from(TABLES.SERVICE_ARCHIVE)
+        const { data: existing } = await scopedFrom(TABLES.SERVICE_ARCHIVE)
           .select("id").eq("date", staleDate).eq("label", label).is("deleted_at", null).limit(1);
         if (!existing || existing.length === 0) {
           let courses = menuCourses;
           if (!courses || courses.length === 0) { try { courses = await fetchMenuCourses(); } catch { courses = []; } }
-          const { error: insErr } = await supabase.from(TABLES.SERVICE_ARCHIVE).insert({
+          const { error: insErr } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert({
             date: staleDate,
             label,
             state: { tables: activeTables, cocktails, spirits, beers, menuCourses: courses || [], serviceSession: activeServiceSession || "dinner", autoEnded: true },
@@ -2744,10 +2832,10 @@ export default function App() {
     setSel(null);
     setServiceDate(null);
     try { localStorage.removeItem("milka_service_date"); } catch {}
-    await supabase.from(TABLES.SERVICE_SETTINGS)
+    await scopedFrom(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "service_date", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
     const blankRows = Array.from({ length: 10 }, (_, i) => ({ table_id: i + 1, data: {} }));
-    await supabase.from(TABLES.SERVICE_TABLES).upsert(blankRows, { onConflict: "table_id" });
+    await scopedFrom(TABLES.SERVICE_TABLES).upsert(blankRows, { onConflict: "table_id" });
     changeMode(null);
   };
 
@@ -2823,7 +2911,7 @@ export default function App() {
       setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     }
     if (!supabase) return;
-    await supabase.from(TABLES.SERVICE_SETTINGS)
+    await scopedFrom(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "service_date", state: date ? { date } : {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
   };
 
@@ -2864,7 +2952,7 @@ export default function App() {
             match: { id },
           },
           run: async () => {
-            const { error } = await supabase.from(TABLES.RESERVATIONS).update(dbRow).eq("id", id);
+            const { error } = await scopedFrom(TABLES.RESERVATIONS).update(dbRow).eq("id", id);
             if (error) throw error;
           },
         });
@@ -2883,7 +2971,7 @@ export default function App() {
           payload: dbRow,
         },
         run: async () => {
-          const { data, error } = await supabase.from(TABLES.RESERVATIONS).insert(dbRow).select().single();
+          const { data, error } = await scopedFrom(TABLES.RESERVATIONS).insert(dbRow).select().single();
           if (error) throw error;
           inserted = data;
         },
@@ -2906,7 +2994,7 @@ export default function App() {
         match: { id },
       },
       run: async () => {
-        const { error } = await supabase.from(TABLES.RESERVATIONS).delete().eq("id", id);
+        const { error } = await scopedFrom(TABLES.RESERVATIONS).delete().eq("id", id);
         if (error) throw error;
       },
     });
@@ -2994,7 +3082,7 @@ export default function App() {
     setReservations(prev => prev.map(r => {
       if (r.id !== resvId) return r;
       const newData = { ...(r.data || {}), [field]: value };
-      supabase?.from("reservations").update({ data: newData }).eq("id", resvId).then(() => {});
+      if (supabase && getWorkspaceId()) scopedFrom(TABLES.RESERVATIONS).update({ data: newData }).eq("id", resvId).then(() => {});
       return { ...r, data: newData };
     }));
     // Only push to service_tables when that table already carries reservation data
@@ -3089,14 +3177,14 @@ export default function App() {
         .then(svg => setLogoDataUri(`data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`))
         .catch(() => {});
     if (!supabase) { loadDefault(); return; }
-    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_logo").single()
+    scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_logo").single()
       .then(({ data }) => { data?.state?.dataUri ? setLogoDataUri(data.state.dataUri) : loadDefault(); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveLogo = async (dataUri) => {
     setLogoDataUri(dataUri);
     if (!supabase) return;
-    await supabase.from(TABLES.SERVICE_SETTINGS)
+    await scopedFrom(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "menu_logo", state: { dataUri }, updated_at: new Date().toISOString() }, { onConflict: "id" });
   };
 
@@ -3106,7 +3194,7 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) return;
-    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "wine_sync_config").maybeSingle()
+    scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "wine_sync_config").maybeSingle()
       .then(({ data }) => {
         if (data?.state) setWineSyncConfig(normalizeSyncConfig(data.state));
       });
@@ -3116,7 +3204,7 @@ export default function App() {
     const next = normalizeSyncConfig(wineSyncConfig);
     setWineSyncConfig(next);
     if (!supabase) return;
-    await supabase.from(TABLES.SERVICE_SETTINGS)
+    await scopedFrom(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "wine_sync_config", state: next, updated_at: new Date().toISOString() }, { onConflict: "id" });
   };
 
@@ -3132,7 +3220,7 @@ export default function App() {
 
   const persistProfilesPayload = useCallback(async (payload) => {
     if (!supabase) return;
-    await supabase.from(TABLES.SERVICE_SETTINGS)
+    await scopedFrom(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "menu_layout_profiles_v2", state: payload, updated_at: new Date().toISOString() }, { onConflict: "id" });
   }, []);
 
@@ -3280,7 +3368,7 @@ export default function App() {
         // catch and is treated as "error" — NOT as "empty". maybeSingle()
         // returns {data:null,error:null} for a genuinely empty row, so the
         // empty path below only runs when the read truly succeeded.
-        const { data: v2Data, error: v2Err } = await supabase.from(TABLES.SERVICE_SETTINGS)
+        const { data: v2Data, error: v2Err } = await scopedFrom(TABLES.SERVICE_SETTINGS)
           .select("state").eq("id", "menu_layout_profiles_v2").maybeSingle();
         if (v2Err) throw v2Err;
         const v2 = v2Data?.state;
@@ -3291,7 +3379,7 @@ export default function App() {
           setProfilesReadStatus("ready");
           return;
         }
-        const { data: v1Data, error: v1Err } = await supabase.from(TABLES.SERVICE_SETTINGS)
+        const { data: v1Data, error: v1Err } = await scopedFrom(TABLES.SERVICE_SETTINGS)
           .select("state").eq("id", "menu_layout_profiles_v1").maybeSingle();
         if (v1Err) throw v1Err;
         if (v1Data?.state?.profiles?.length) {
@@ -3304,8 +3392,8 @@ export default function App() {
           return;
         }
         const [legacyLayoutRes, legacyTemplateRes] = await Promise.all([
-          supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_global").maybeSingle(),
-          supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_v2").maybeSingle(),
+          scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_global").maybeSingle(),
+          scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_layout_v2").maybeSingle(),
         ]);
         if (legacyLayoutRes?.error) throw legacyLayoutRes.error;
         if (legacyTemplateRes?.error) throw legacyTemplateRes.error;
@@ -3363,8 +3451,8 @@ export default function App() {
     (async () => {
       try {
         const [{ data: rData }, { data: nData }] = await Promise.all([
-          supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "restrictions").maybeSingle(),
-          supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "course_quick_notes").maybeSingle(),
+          scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "restrictions").maybeSingle(),
+          scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "course_quick_notes").maybeSingle(),
         ]);
         if (cancelled) return;
         const stored = rData?.state?.restrictions;
@@ -3384,7 +3472,7 @@ export default function App() {
     setRestrictionsList(list);
     setRestrictionsCache(list);
     if (!supabase) return { ok: true };
-    const { error } = await supabase.from(TABLES.SERVICE_SETTINGS)
+    const { error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "restrictions", state: { restrictions: list } });
     if (error) { console.error("Restrictions save failed:", error); return { ok: false, error }; }
     return { ok: true };
@@ -3394,7 +3482,7 @@ export default function App() {
     const map = next && typeof next === "object" ? next : {};
     setCourseQuickNotes(map);
     if (!supabase) return { ok: true };
-    const { error } = await supabase.from(TABLES.SERVICE_SETTINGS)
+    const { error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "course_quick_notes", state: map });
     if (error) { console.error("Quick notes save failed:", error); return { ok: false, error }; }
     return { ok: true };
@@ -3410,7 +3498,7 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) return;
-    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_rules").maybeSingle()
+    scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_rules").maybeSingle()
       .then(({ data }) => {
         if (data?.state && typeof data.state === "object") {
           setMenuRules(normalizeMenuRules(data.state));
@@ -3431,7 +3519,7 @@ export default function App() {
     setMenuRulesSaving(true);
     setMenuRulesSaved(false);
     if (supabase) {
-      const { error } = await supabase.from(TABLES.SERVICE_SETTINGS)
+      const { error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
         .upsert({ id: "menu_gen_rules", state: menuRulesRef.current, updated_at: new Date().toISOString() }, { onConflict: "id" });
       if (error) {
         console.error("Menu rules save failed:", error);
@@ -3452,7 +3540,7 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) return;
-    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "quick_access").maybeSingle()
+    scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "quick_access").maybeSingle()
       .then(({ data }) => {
         if (data?.state?.items?.length) setQuickAccessItems(data.state.items);
       });
@@ -3461,7 +3549,7 @@ export default function App() {
   const updateQuickAccess = (items) => {
     setQuickAccessItems(items);
     if (supabase) {
-      supabase.from(TABLES.SERVICE_SETTINGS)
+      scopedFrom(TABLES.SERVICE_SETTINGS)
         .upsert({ id: "quick_access", state: { items }, updated_at: new Date().toISOString() }, { onConflict: "id" })
         .then(() => {});
     }
@@ -3510,16 +3598,19 @@ export default function App() {
       }));
   }, [quickAccessItems, activeMenuCourses]);
 
+  // Realtime filter that scopes every channel to the active workspace, so a
+  // restaurant only receives its own changes.
+  const wsFilter = workspaceId ? `workspace_id=eq.${workspaceId}` : undefined;
+
   // ── Load service tables from Supabase + subscribe realtime ────────────────
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase || !workspaceId) return;
     let isMounted = true;
 
     const gateTimeout = setTimeout(() => { if (isMounted) setHydrated(true); }, 1000);
 
     const loadRemoteTables = async () => {
-      const { data, error } = await supabase
-        .from(TABLES.SERVICE_TABLES)
+      const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
         .select("table_id, data, updated_at")
         .order("table_id", { ascending: true });
 
@@ -3567,11 +3658,12 @@ export default function App() {
       clearInterval(pollInterval);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useRealtimeTable({
     supabase,
-    channelName: "milka-service-tables-realtime",
+    channelName: `milka-service-tables-${workspaceId}`,
+    filter: wsFilter,
     table: TABLES.SERVICE_TABLES,
     onChange: (payload) => {
       if (payload.eventType === "DELETE") {
@@ -3592,7 +3684,7 @@ export default function App() {
       }
       setSyncStatus("live");
     },
-    enabled: Boolean(supabase),
+    enabled: Boolean(supabase && workspaceId),
   });
 
   // ── Beverages: load from Supabase + realtime ─────────────────────────────────
@@ -3602,9 +3694,8 @@ export default function App() {
   // the synced cocktails only appeared if/when a realtime event happened to land,
   // so a sync could report "N cocktails" yet leave the UI showing the old list.
   const loadBeverages = useCallback(async () => {
-    if (!supabase) return;
-    const { data, error } = await supabase
-      .from(TABLES.BEVERAGES)
+    if (!supabase || !getWorkspaceId()) return;
+    const { data, error } = await scopedFrom(TABLES.BEVERAGES)
       .select("id, category, name, notes, position, source")
       .order("position", { ascending: true });
     if (error || !data) return;
@@ -3618,23 +3709,23 @@ export default function App() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase || !workspaceId) return;
     loadBeverages();
-  }, [loadBeverages]);
+  }, [loadBeverages, workspaceId]);
 
   useRealtimeTable({
     supabase,
-    channelName: "milka-beverages",
+    channelName: `milka-beverages-${workspaceId}`,
+    filter: wsFilter,
     table: TABLES.BEVERAGES,
     onChange: () => { loadBeverages(); },
-    enabled: Boolean(supabase),
+    enabled: Boolean(supabase && workspaceId),
   });
 
   // ── Wines: load from Supabase wines table + realtime ─────────────────────────
   const loadWines = useCallback(async () => {
-    if (!supabase) return;
-    const { data, error } = await supabase
-      .from(TABLES.WINES)
+    if (!supabase || !getWorkspaceId()) return;
+    const { data, error } = await scopedFrom(TABLES.WINES)
       .select("key, name, wine_name, producer, vintage, region, country, by_glass, source")
       .order("name", { ascending: true });
     if (error || !data) return;
@@ -3648,29 +3739,30 @@ export default function App() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase || !workspaceId) return;
     loadWines();
     return undefined;
-  }, [loadWines]);
+  }, [loadWines, workspaceId]);
 
   useRealtimeTable({
     supabase,
-    channelName: "milka-wines",
+    channelName: `milka-wines-${workspaceId}`,
+    filter: wsFilter,
     table: TABLES.WINES,
     onChange: () => { loadWines(); },
-    enabled: Boolean(supabase),
+    enabled: Boolean(supabase && workspaceId),
   });
 
   // ── Service date + reservations: load from Supabase + realtime ──────────────
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase || !workspaceId) return;
     let mounted = true;
 
     // Restore service date saved by a previous session — but if it has rolled
     // past the service-day cutoff, the service is over: auto-end it (archiving
     // the night's data before clearing) so "Start Service" prompts for a fresh
     // date and pre-populates today's reservations on blank tables.
-    supabase.from(TABLES.SERVICE_SETTINGS).select("state").eq("id", "service_date").single()
+    scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "service_date").single()
       .then(async ({ data }) => {
         if (!mounted) return;
         const persisted = data?.state?.date;
@@ -3686,7 +3778,7 @@ export default function App() {
     // Load reservations for -7 days … +30 days so the planner is pre-populated
     const past   = new Date(); past.setDate(past.getDate() - 7);
     const future = new Date(); future.setDate(future.getDate() + 30);
-    supabase.from(TABLES.RESERVATIONS).select("*")
+    scopedFrom(TABLES.RESERVATIONS).select("*")
       .gte("date", toLocalDateISO(past))
       .lte("date", toLocalDateISO(future))
       .order("date").order("created_at")
@@ -3697,7 +3789,7 @@ export default function App() {
       });
 
     return () => { mounted = false; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // While the app is left open (e.g. overnight), automatically end a service
   // once it rolls past the service-day cutoff. The auto-end archives first, so
@@ -3713,7 +3805,8 @@ export default function App() {
 
   useRealtimeTable({
     supabase,
-    channelName: "milka-reservations",
+    channelName: `milka-reservations-${workspaceId}`,
+    filter: wsFilter,
     table: TABLES.RESERVATIONS,
     onChange: (payload) => {
       if (payload.eventType === "DELETE") {
@@ -3725,7 +3818,7 @@ export default function App() {
         });
       }
     },
-    enabled: Boolean(supabase),
+    enabled: Boolean(supabase && workspaceId),
   });
 
   // ── Menu courses: load from Supabase (app is the source of truth) ───────────
@@ -3752,14 +3845,15 @@ export default function App() {
     loadCourses();
 
     return () => { mounted = false; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useRealtimeTable({
     supabase,
-    channelName: "milka-menu-courses",
+    channelName: `milka-menu-courses-${workspaceId}`,
+    filter: wsFilter,
     table: TABLES.MENU_COURSES,
     onChange: () => { loadMenuCoursesRef.current?.(); },
-    enabled: Boolean(supabase),
+    enabled: Boolean(supabase && workspaceId),
   });
 
   // Only count primary tables in groups (secondaries have same guest count stamped on them)
@@ -3806,8 +3900,34 @@ export default function App() {
     </div>
   );
 
-  // Gate 1: password wall
-  if (!authed) return <GateScreen onPass={() => setAuthed(true)} />;
+  // Gate 0: Supabase login + restaurant (workspace) selection.
+  // When Supabase is configured, a real login replaces the legacy shared-password
+  // gate. The GateScreen below is only used in local-only mode (no Supabase).
+  if (supabase) {
+    if (!sessionChecked) return (
+      <div style={{
+        minHeight: "100vh", background: tokens.surface.card, display: "flex",
+        flexDirection: "column", alignItems: "center", justifyContent: "center",
+        fontFamily: FONT, gap: 16,
+      }}>
+        <GlobalStyle />
+        <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: 6, color: tokens.text.primary }}>{APP_NAME}</div>
+        <div style={{ fontSize: 9, letterSpacing: 4, color: tokens.text.disabled }}>…</div>
+      </div>
+    );
+    if (!session) return <AuthScreen />;
+    if (!workspaceId) return (
+      <ProfilePicker
+        workspaces={myWorkspaces}
+        isAdmin={isPlatformAdmin}
+        onPick={applyWorkspace}
+        onSignOut={signOut}
+      />
+    );
+  } else if (!authed) {
+    // Local-only fallback (no Supabase): keep the legacy password gate.
+    return <GateScreen onPass={() => setAuthed(true)} />;
+  }
 
   // Gate 2: hydration — wait for Supabase state before rendering
   if (!hydrated) return (
@@ -3855,7 +3975,14 @@ export default function App() {
     />
   ) : null;
 
-  if (!mode) return <>{serviceDatePickerEl}<LoginScreen onEnter={m => { changeMode(m); setSel(null); }} onSyncAll={syncWines} /></>;
+  if (!mode) return <>{serviceDatePickerEl}<LoginScreen
+      onEnter={m => { changeMode(m); setSel(null); }}
+      onSyncAll={syncWines}
+      workspaceName={myWorkspaces.find(w => w.id === workspaceId)?.name || ""}
+      canSwitchProfile={Boolean(supabase) && (isPlatformAdmin || myWorkspaces.length > 1)}
+      onSwitchProfile={openProfilePicker}
+      onSignOut={supabase ? signOut : undefined}
+    /></>;
 
   // Reservation Manager mode
   if (mode === "reservation") return (<>{serviceDatePickerEl}<ReservationManager
