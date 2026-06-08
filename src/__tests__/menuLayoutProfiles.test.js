@@ -94,7 +94,7 @@ describe("sanitizeProfilesPayload", () => {
     expect(s.assignments.shortMenuProfileId).toBeNull();
   });
 
-  it("defaults assignment slots to matching guest profiles when the stored id is missing", () => {
+  it("defaults the active slot to the first guest profile when the stored id is missing; the short slot is retired (null)", () => {
     const raw = {
       profiles: [
         { id: "g1", name: "G1", target: "guest_menu", menuTemplate: { rows: [] }, layoutStyles: {} },
@@ -104,7 +104,50 @@ describe("sanitizeProfilesPayload", () => {
     };
     const s = sanitizeProfilesPayload(raw);
     expect(s.assignments.longMenuProfileId).toBe("g1");
-    expect(s.assignments.shortMenuProfileId).toBe("g2");
+    // No more auto-assigning a second profile to "short" — each profile owns its
+    // own short version internally, so the legacy short slot stays null.
+    expect(s.assignments.shortMenuProfileId).toBeNull();
+  });
+
+  it("folds a legacy short-assigned profile's template into the active profile's shortMenuTemplate, then retires the slot (idempotent)", () => {
+    const raw = {
+      profiles: [
+        { id: "long", name: "Long", target: "guest_menu",
+          menuTemplate: { version: 2, rows: [{ id: "l1", left: { type: "course", courseKey: "amuse" }, right: null }] },
+          layoutStyles: {} },
+        { id: "short", name: "Short", target: "guest_menu",
+          menuTemplate: { version: 2, rows: [{ id: "s1", left: { type: "course", courseKey: "venison" }, right: null }] },
+          layoutStyles: {} },
+      ],
+      assignments: { longMenuProfileId: "long", shortMenuProfileId: "short" },
+    };
+    const s = sanitizeProfilesPayload(raw);
+    expect(s.assignments.longMenuProfileId).toBe("long");
+    expect(s.assignments.shortMenuProfileId).toBeNull();
+    const longP = s.profiles.find(p => p.id === "long");
+    expect(deriveCourseKeysFromTemplate(longP.shortMenuTemplate)).toEqual(["venison"]);
+    // Second pass (= reload) changes nothing.
+    expect(sanitizeProfilesPayload(s)).toEqual(s);
+  });
+
+  it("never clobbers an existing shortMenuTemplate when a legacy short slot is present", () => {
+    const raw = {
+      profiles: [
+        { id: "long", name: "Long", target: "guest_menu",
+          menuTemplate:      { version: 2, rows: [{ id: "l1",  left: { type: "course", courseKey: "amuse" },       right: null }] },
+          shortMenuTemplate: { version: 2, rows: [{ id: "ls1", left: { type: "course", courseKey: "trout_belly" }, right: null }] },
+          layoutStyles: {} },
+        { id: "short", name: "Short", target: "guest_menu",
+          menuTemplate: { version: 2, rows: [{ id: "s1", left: { type: "course", courseKey: "venison" }, right: null }] },
+          layoutStyles: {} },
+      ],
+      assignments: { longMenuProfileId: "long", shortMenuProfileId: "short" },
+    };
+    const s = sanitizeProfilesPayload(raw);
+    const longP = s.profiles.find(p => p.id === "long");
+    // The real short layout (trout_belly) is preserved, not overwritten by venison.
+    expect(deriveCourseKeysFromTemplate(longP.shortMenuTemplate)).toEqual(["trout_belly"]);
+    expect(s.assignments.shortMenuProfileId).toBeNull();
   });
 
   it("honors activeProfileId when valid; falls back to first profile otherwise", () => {

@@ -30,6 +30,7 @@ import {
   BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
 } from "../../utils/menuTemplateSchema.js";
 import { KT_BLOCK_META, KT_BLOCK_GROUPS, makeKtBlock, makeKtRow, buildDefaultTicketTemplate } from "../../utils/kitchenTicketSchema.js";
+import { buildShortMenuTemplateFromCourses } from "../../utils/menuLayoutProfiles.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 import { generateKitchenTicketHTML } from "../../utils/kitchenTicketGenerator.js";
 import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote, readTeamNames, writeTeamNames } from "../../utils/storage.js";
@@ -1128,6 +1129,11 @@ export default function MenuTemplateEditor({
       } else {
         onUpdateTicketTemplate?.(buildDefaultTicketTemplate());
       }
+    } else if (editingShort) {
+      // Rebuild ONLY the short template — must never touch the long menu.
+      // Seeds from show_on_short / short_order (falling back to all active
+      // courses) so the short menu starts from a sensible subset.
+      onUpdateShortMenuTemplate?.(buildShortMenuTemplateFromCourses(menuCoursesForRebuild || menuCourses));
     } else {
       onUpdateTemplate(buildDefaultTemplate(menuCoursesForRebuild || menuCourses));
     }
@@ -1233,8 +1239,22 @@ export default function MenuTemplateEditor({
           )}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: leftOpen ? 8 : 0 }}>
             {leftOpen && (
-              <span style={{ fontSize: 7.5, letterSpacing: 3, color: tokens.ink[4], textTransform: "uppercase" }}>
-                {isKitchen ? (editingTicketLayout ? "TICKET LAYOUT" : "COURSE ORDER") : "LAYOUT EDITOR"}
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 7.5, letterSpacing: 3, color: tokens.ink[4], textTransform: "uppercase" }}>
+                  {isKitchen ? (editingTicketLayout ? "TICKET LAYOUT" : "COURSE ORDER") : "LAYOUT EDITOR"}
+                </span>
+                {!isKitchen && (
+                  <span
+                    title="You are editing the LONG / SHORT version of this profile. Use the MENU toggle in Preview Data to switch."
+                    style={{
+                      fontFamily: FONT, fontSize: 7.5, letterSpacing: 1.5, fontWeight: 700,
+                      padding: "1px 6px", borderRadius: 0, textTransform: "uppercase",
+                      border: `1px solid ${editingShort ? tokens.charcoal.default : tokens.ink[4]}`,
+                      background: editingShort ? tokens.charcoal.default : tokens.neutral[0],
+                      color: editingShort ? tokens.neutral[0] : tokens.ink[2],
+                    }}
+                  >{editingShort ? "SHORT" : "LONG"}</span>
+                )}
               </span>
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: leftOpen ? 0 : "auto", marginRight: leftOpen ? 0 : "auto" }}>
@@ -1270,8 +1290,12 @@ export default function MenuTemplateEditor({
               cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3],
               textTransform: "uppercase",
             }}
-            title={editingTicketLayout ? "Reset ticket layout to default" : "Rebuild template from current courses"}
-          >↺ {editingTicketLayout ? "RESET TICKET LAYOUT" : "REBUILD FROM COURSES"}</button>
+            title={editingTicketLayout
+              ? "Reset ticket layout to default"
+              : (editingShort
+                  ? "Rebuild the SHORT menu from current courses (leaves the Long menu untouched)"
+                  : "Rebuild the LONG menu from current courses (leaves the Short menu untouched)")}
+          >↺ {editingTicketLayout ? "RESET TICKET LAYOUT" : (editingShort ? "REBUILD SHORT FROM COURSES" : "REBUILD LONG FROM COURSES")}</button>
           )}
 
           {/* Spacing settings moved to the SPACING SETTINGS panel above the 3-panel area */}

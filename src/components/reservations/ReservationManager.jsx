@@ -19,6 +19,18 @@ const FONT = tokens.font;
 
 function resolveShortCourseKeys(profiles, assignments) {
   if (!Array.isArray(profiles) || !assignments) return null;
+  // New arch: the short menu lives inside the active (long-slot) profile as
+  // shortMenuTemplate. Check it first, mirroring weeklyPrintGenerator and
+  // courseProgress so every short-menu path resolves the same way.
+  const longGuestId = assignments.longMenuProfileId;
+  if (longGuestId) {
+    const p = profiles.find(pr => pr.id === longGuestId);
+    if (p?.shortMenuTemplate) {
+      const keys = deriveCourseKeysFromTemplate(p.shortMenuTemplate);
+      if (keys && keys.length > 0) return keys;
+    }
+  }
+  // Legacy fallback: separate short profile slots (retired, usually empty now).
   for (const slot of ["shortKitchenProfileId", "shortMenuProfileId"]) {
     const id = assignments[slot];
     if (!id) continue;

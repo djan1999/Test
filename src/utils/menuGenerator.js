@@ -305,10 +305,10 @@ export function generateMenuHTML({
     : buildDefaultTemplate(menuCourses);
 
   // ── Effective template rows ───────────────────────────────────────────────
-  // The caller (MenuGenerator) resolves the assigned profile and passes its
-  // menuTemplate in directly. Since Long Menu and Short Menu now use SEPARATE
-  // assigned profiles, there is no longer any short-menu reordering here — the
-  // template is rendered exactly as authored.
+  // The caller (MenuGenerator) resolves the active profile and passes in the
+  // matching template directly — `menuTemplate` (long) or `shortMenuTemplate`
+  // (short), chosen by the table's menuType. Rendered exactly as authored; no
+  // short-menu reordering happens here.
   const effectiveTemplateRows = template.rows;
 
   // ── Walk template rows → internal row list ────────────────────────────────

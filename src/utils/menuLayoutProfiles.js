@@ -21,14 +21,15 @@
  *   {
  *     profiles: [profile, ...],
  *     assignments: {
- *       longMenuProfileId,
- *       shortMenuProfileId,
+ *       longMenuProfileId,   // the single "active / printed" guest profile
+ *       shortMenuProfileId,  // retired — always null (kept for shape/back-compat)
  *     },
  *     activeProfileId,
  *   }
  *
- * Long Menu / Short Menu each pick a profile; the print path reads
- * `profile.menuTemplate` + `profile.layoutStyles`.
+ * `longMenuProfileId` selects the live profile. Each profile owns BOTH its long
+ * (`menuTemplate`) and short (`shortMenuTemplate`) version; the print path reads
+ * whichever matches the table's menuType, plus `profile.layoutStyles`.
  */
 
 import { buildDefaultTemplate } from "./menuTemplateSchema.js";
@@ -151,26 +152,47 @@ export function sanitizeProfilesPayload(raw) {
 
   const a = raw?.assignments || {};
 
-  const pickValid = (slotId, target, idx) => {
-    if (slotId) {
-      const found = profiles.find(p => p.id === slotId);
-      if (found && found.target === target) return slotId;
+  // Long slot = the single "active / printed" guest profile. Each profile owns
+  // BOTH its long (`menuTemplate`) and short (`shortMenuTemplate`) versions, so
+  // one slot is all that's needed. Falls back to the first guest profile when
+  // unset/invalid so there is always a live menu.
+  const matchingGuest = profiles.filter(p => p.target === "guest_menu");
+  const longMenuId = (() => {
+    if (a.longMenuProfileId) {
+      const found = matchingGuest.find(p => p.id === a.longMenuProfileId);
+      if (found) return found.id;
     }
-    const matching = profiles.filter(p => p.target === target);
-    // Use position-based index without collapsing to [0] for secondary slots
-    // so long and short slots never silently end up pointing at the same profile.
-    return matching[idx]?.id ?? null;
-  };
+    return matchingGuest[0]?.id ?? null;
+  })();
 
-  const longMenuId  = pickValid(a.longMenuProfileId,  "guest_menu", 0);
-  const shortMenuId = pickValid(a.shortMenuProfileId, "guest_menu", 1);
+  // ── Retire the separate short-menu profile slot ──────────────────────────
+  // The short menu now lives INSIDE the active profile as `shortMenuTemplate`,
+  // edited via the LONG/SHORT toggle. If an older payload still points the
+  // short slot at a DISTINCT profile, fold that profile's template into the
+  // active profile's shortMenuTemplate — but only when that slot is empty, so a
+  // real short layout is never clobbered — then drop the assignment so the dead
+  // slot can't resurface. This is idempotent: once migrated, the short slot is
+  // null and the active short template is non-empty, so it never runs again.
+  const isEmptyTemplate = (t) => !t || !Array.isArray(t.rows) || t.rows.length === 0;
+  const legacyShortId = a.shortMenuProfileId;
+  if (legacyShortId && legacyShortId !== longMenuId) {
+    const longProfile = profiles.find(p => p.id === longMenuId);
+    const shortProfile = profiles.find(p => p.id === legacyShortId && p.target === "guest_menu");
+    if (longProfile && shortProfile && isEmptyTemplate(longProfile.shortMenuTemplate)) {
+      const source = !isEmptyTemplate(shortProfile.shortMenuTemplate)
+        ? shortProfile.shortMenuTemplate
+        : shortProfile.menuTemplate;
+      if (!isEmptyTemplate(source)) {
+        longProfile.shortMenuTemplate = cloneTemplate(source);
+      }
+    }
+  }
 
-  // If long and short resolved to the same profile (e.g. from legacy single-profile
-  // migration or stale stored data), clear the short slot so the user must assign
-  // a distinct profile rather than unknowingly editing both at once.
   const assignments = {
     longMenuProfileId:  longMenuId,
-    shortMenuProfileId: (shortMenuId && shortMenuId !== longMenuId) ? shortMenuId : null,
+    // Retired — always null now. Kept in the shape for backward-compat with the
+    // assignment helpers and any stored payloads that still carry the key.
+    shortMenuProfileId: null,
   };
 
   const activeProfileId = (() => {

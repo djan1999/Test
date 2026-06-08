@@ -8,14 +8,15 @@ import MenuTemplateEditor from "./MenuTemplateEditor.jsx";
 
 const FONT = tokens.font;
 
-// Only guest-menu profiles are actually wired through sanitize + render.
-// A previous version included a "Kitchen Profile" slot here, but the
-// kitchen target was never recognized — anything assigned to it was
-// silently stripped on the next save. Removed to stop offering a
-// dropdown that destroys whatever you put in it.
+// A single slot: which guest profile is currently live (printed for guests).
+// Each profile carries BOTH its Long and Short version internally (switched by
+// the LONG/SHORT toggle in the editor), so a separate "Short Menu" profile
+// assignment is no longer needed — it was dead (nothing read it) and only
+// caused edits to bleed between the two. A previous version also included a
+// "Kitchen Profile" slot whose target was never recognized; both have been
+// removed to stop offering dropdowns that don't drive anything.
 const ASSIGNMENT_ROWS = [
-  { slot: "longMenuProfileId",  label: "Long Menu",  target: "guest_menu" },
-  { slot: "shortMenuProfileId", label: "Short Menu", target: "guest_menu" },
+  { slot: "longMenuProfileId", label: "Active Menu Profile", target: "guest_menu" },
 ];
 
 const btn = (active = false) => ({
@@ -62,8 +63,7 @@ const Badge = ({ text }) => (
 );
 
 const SLOT_BADGE = {
-  longMenuProfileId:  "Long",
-  shortMenuProfileId: "Short",
+  longMenuProfileId: "Live",
 };
 
 /**
@@ -167,7 +167,7 @@ export default function MenuLayoutPanel({
       // eslint-disable-next-line no-alert
       alert(
         isProfileAssigned(active.id, layoutAssignments)
-          ? "Reassign Long Menu / Short Menu first — this profile is currently in use."
+          ? "Make a different profile the Active Menu Profile first — this one is currently live."
           : "At least one profile must remain."
       );
       return;
@@ -193,9 +193,10 @@ export default function MenuLayoutPanel({
               ▨ Menu Layout Profiles
             </div>
             <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginTop: 4, lineHeight: 1.5 }}>
-              Each profile is a row-based template — Long Menu / Short Menu pick which one prints.
-              Course content stays in Courses; these profiles only control layout, structure, and order.
-              Edits auto-save.
+              Each profile holds its own Long and Short version — switch between them with the
+              LONG / SHORT toggle in the editor below. Pick which profile is currently live
+              (printed for guests) here. Course content stays in Courses; profiles only control
+              layout, structure, and order. Edits auto-save.
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -247,7 +248,7 @@ export default function MenuLayoutPanel({
                   disabled={!canDeleteProfile(active.id, layoutProfiles, layoutAssignments)}
                   title={
                     isProfileAssigned(active.id, layoutAssignments)
-                      ? "Reassign Long/Short Menu before deleting"
+                      ? "Make a different profile the Active Menu Profile before deleting"
                       : "Delete this profile"
                   }
                   style={{
@@ -262,7 +263,7 @@ export default function MenuLayoutPanel({
           </div>
         )}
 
-        {/* Assignment dropdowns — Long/Short Menu + Long/Short Kitchen */}
+        {/* Active menu profile selector — which profile is live (printed for guests) */}
         <div style={{
           display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
           gap: 12, padding: 12, background: tokens.ink.bg, border: `1px solid ${tokens.ink[5]}`,
