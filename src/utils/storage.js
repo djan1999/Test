@@ -15,6 +15,22 @@ const wsKey = (base) => {
   return ws ? `${base}:${ws}` : base;
 };
 
+// Exported so callers with their own bespoke localStorage keys (e.g. the menu
+// layout profiles machine in App.jsx) can namespace them per workspace too.
+export const workspaceKey = wsKey;
+
+// Generic per-workspace JSON cache helpers — back the "load instantly from the
+// device, refresh in the background" boot path for the remaining datasets.
+function readJsonCache(base) {
+  try {
+    const raw = localStorage.getItem(wsKey(base));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function writeJsonCache(base, value) {
+  try { localStorage.setItem(wsKey(base), JSON.stringify(value)); } catch {}
+}
+
 export const BEV_STORAGE_KEY = "milka-beverages-v1";
 const DEFAULT_TEAM_NAMES_FROM_ENV = String(import.meta.env.VITE_DEFAULT_TEAM_NAMES || "").trim();
 
@@ -159,4 +175,41 @@ export function writeLocalLogo(dataUri) {
     if (dataUri) localStorage.setItem(wsKey(MENU_LOGO_KEY), dataUri);
     else localStorage.removeItem(wsKey(MENU_LOGO_KEY));
   } catch {}
+}
+
+// ── Reservations cache ────────────────────────────────────────────────────────
+// The planner window (-7…+30 days) was reloaded from the network every launch.
+// Caching it per workspace lets the planner paint instantly; realtime + the
+// background reload keep it fresh.
+export const RESERVATIONS_KEY = "milka-reservations-v1";
+
+export function readLocalReservations() {
+  const v = readJsonCache(RESERVATIONS_KEY);
+  return Array.isArray(v) ? v : null;
+}
+export function writeLocalReservations(reservations) {
+  writeJsonCache(RESERVATIONS_KEY, Array.isArray(reservations) ? reservations : []);
+}
+
+// ── Restrictions + per-course quick notes cache ───────────────────────────────
+// Both ride on service_settings and previously started from defaults/empty
+// until the network read landed.
+export const RESTRICTIONS_KEY = "milka-restrictions-v1";
+
+export function readLocalRestrictions() {
+  const v = readJsonCache(RESTRICTIONS_KEY);
+  return Array.isArray(v) ? v : null;
+}
+export function writeLocalRestrictions(list) {
+  writeJsonCache(RESTRICTIONS_KEY, Array.isArray(list) ? list : []);
+}
+
+export const COURSE_NOTES_KEY = "milka-course-quick-notes-v1";
+
+export function readLocalCourseNotes() {
+  const v = readJsonCache(COURSE_NOTES_KEY);
+  return v && typeof v === "object" && !Array.isArray(v) ? v : null;
+}
+export function writeLocalCourseNotes(map) {
+  writeJsonCache(COURSE_NOTES_KEY, map && typeof map === "object" ? map : {});
 }

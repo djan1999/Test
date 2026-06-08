@@ -23,6 +23,10 @@ import {
   readLocalMenuCourses, writeLocalMenuCourses,
   readLocalWines, writeLocalWines,
   readLocalLogo, writeLocalLogo,
+  readLocalReservations, writeLocalReservations,
+  readLocalRestrictions, writeLocalRestrictions,
+  readLocalCourseNotes, writeLocalCourseNotes,
+  workspaceKey,
   STORAGE_KEY,
 } from "./utils/storage.js";
 import { makeSeats, blankTable, sanitizeTable, initTables, fmt } from "./utils/tableHelpers.js";
@@ -2185,16 +2189,24 @@ export default function App() {
   // older menu_layout_profiles_v1 payload and the legacy single-layout pair
   // (menu_layout_global + menu_layout_v2) are migrated on first read.
   const [profilesState, setProfilesState] = useState(() => {
+    // Prefer the per-workspace key; fall back to the legacy un-namespaced key
+    // so existing single-restaurant installs keep their instant-paint cache.
+    const readKey = (base) => {
+      try {
+        const wsVal = localStorage.getItem(workspaceKey(base));
+        return wsVal != null ? wsVal : localStorage.getItem(base);
+      } catch { return null; }
+    };
     try {
-      const v2 = JSON.parse(localStorage.getItem(MENU_LAYOUT_PROFILES_V2_KEY) || "null");
+      const v2 = JSON.parse(readKey(MENU_LAYOUT_PROFILES_V2_KEY) || "null");
       if (v2 && Array.isArray(v2.profiles) && v2.profiles.length > 0) {
         return sanitizeProfilesPayload(v2);
       }
     } catch {}
     try {
-      const v1Raw = JSON.parse(localStorage.getItem(MENU_LAYOUT_PROFILES_V1_KEY) || "null");
+      const v1Raw = JSON.parse(readKey(MENU_LAYOUT_PROFILES_V1_KEY) || "null");
       if (Array.isArray(v1Raw) && v1Raw.length > 0) {
-        const activeId = (() => { try { return localStorage.getItem(MENU_ACTIVE_LAYOUT_PROFILE_KEY) || ""; } catch { return ""; } })();
+        const activeId = (() => { try { return readKey(MENU_ACTIVE_LAYOUT_PROFILE_KEY) || ""; } catch { return ""; } })();
         return sanitizeProfilesPayload(migrateV1ToV2({ profiles: v1Raw, activeId }));
       }
     } catch {}
@@ -2237,8 +2249,8 @@ export default function App() {
   // Restrictions — admin-editable list, mirrors hardcoded defaults on first
   // boot. Live values are mirrored into the dietary.js cache so existing
   // importers see the same list without prop drilling.
-  const [restrictionsList, setRestrictionsList] = useState(() => DEFAULT_RESTRICTIONS.map(r => ({ ...r })));
-  const [courseQuickNotes, setCourseQuickNotes] = useState({});
+  const [restrictionsList, setRestrictionsList] = useState(() => readLocalRestrictions() || DEFAULT_RESTRICTIONS.map(r => ({ ...r })));
+  const [courseQuickNotes, setCourseQuickNotes] = useState(() => readLocalCourseNotes() || {});
   // Quick Access items (data-driven, replaces hardcoded APERITIF_OPTIONS)
   const [quickAccessItems, setQuickAccessItems] = useState(() => {
     try {
@@ -2249,8 +2261,8 @@ export default function App() {
   });
   // Access gate: checked once at init against 12h TTL
   const [authed,       setAuthed]       = useState(() => readAccess());
-  // Reservations & service date
-  const [reservations, setReservations] = useState([]);
+  // Reservations & service date — hydrate the planner instantly from cache.
+  const [reservations, setReservations] = useState(() => readLocalReservations() || []);
   // Gates the board↔reservations reconciliation effect: it must not run (and
   // especially must not clear ghost tables) until both reservations and the
   // remote service-table state have actually loaded.
@@ -3236,10 +3248,14 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) return;
-    scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "wine_sync_config").maybeSingle()
-      .then(({ data }) => {
-        if (data?.state) setWineSyncConfig(normalizeSyncConfig(data.state));
-      });
+    withRetry(async () => {
+      const { data, error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
+        .select("state").eq("id", "wine_sync_config").maybeSingle();
+      if (error) throw error;
+      return data;
+    })
+      .then(data => { if (data?.state) setWineSyncConfig(normalizeSyncConfig(data.state)); })
+      .catch(() => {}); // localStorage-hydrated config stays in place
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveWineSyncConfig = async () => {
@@ -3252,10 +3268,10 @@ export default function App() {
 
   // ── Profile persistence (localStorage + Supabase v2) ─────────────────────
   useEffect(() => {
-    try { localStorage.setItem(MENU_LAYOUT_PROFILES_V2_KEY, JSON.stringify(profilesState)); } catch {}
+    try { localStorage.setItem(workspaceKey(MENU_LAYOUT_PROFILES_V2_KEY), JSON.stringify(profilesState)); } catch {}
     try {
       if (profilesState.activeProfileId) {
-        localStorage.setItem(MENU_ACTIVE_LAYOUT_PROFILE_KEY, profilesState.activeProfileId);
+        localStorage.setItem(workspaceKey(MENU_ACTIVE_LAYOUT_PROFILE_KEY), profilesState.activeProfileId);
       }
     } catch {}
   }, [profilesState]);
@@ -3493,31 +3509,51 @@ export default function App() {
   // every existing importer (RESTRICTIONS / DIETARY_KEYS / restrLabel) sees
   // the current values without prop drilling.
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase || !workspaceId) return;
     let cancelled = false;
+
+    // Instant paint from cache + mirror restrictions into the dietary module so
+    // every importer sees the cached values immediately.
+    const cachedR = readLocalRestrictions();
+    if (cachedR && cachedR.length) { setRestrictionsList(cachedR); setRestrictionsCache(cachedR); }
+    const cachedN = readLocalCourseNotes();
+    if (cachedN) setCourseQuickNotes(cachedN);
+
     (async () => {
       try {
-        const [{ data: rData }, { data: nData }] = await Promise.all([
-          scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "restrictions").maybeSingle(),
-          scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "course_quick_notes").maybeSingle(),
-        ]);
+        const [rState, nState] = await withRetry(async () => {
+          const [{ data: rData, error: rErr }, { data: nData, error: nErr }] = await Promise.all([
+            scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "restrictions").maybeSingle(),
+            scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "course_quick_notes").maybeSingle(),
+          ]);
+          if (rErr) throw rErr;
+          if (nErr) throw nErr;
+          return [rData?.state, nData?.state];
+        });
         if (cancelled) return;
-        const stored = rData?.state?.restrictions;
+        const stored = rState?.restrictions;
         if (Array.isArray(stored) && stored.length > 0) {
           setRestrictionsList(stored);
           setRestrictionsCache(stored);
+          writeLocalRestrictions(stored);
         }
-        const notes = nData?.state;
-        if (notes && typeof notes === "object") setCourseQuickNotes(notes);
-      } catch {}
+        if (nState && typeof nState === "object") {
+          setCourseQuickNotes(nState);
+          writeLocalCourseNotes(nState);
+        }
+      } catch (e) {
+        // Keep the cached restrictions/notes already on screen.
+        console.warn("Restrictions/notes load failed — keeping cached values:", e);
+      }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [workspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveRestrictions = useCallback(async (next) => {
     const list = Array.isArray(next) ? next : [];
     setRestrictionsList(list);
     setRestrictionsCache(list);
+    writeLocalRestrictions(list);
     if (!supabase) return { ok: true };
     const { error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "restrictions", state: { restrictions: list } });
@@ -3528,6 +3564,7 @@ export default function App() {
   const saveCourseQuickNotes = useCallback(async (next) => {
     const map = next && typeof next === "object" ? next : {};
     setCourseQuickNotes(map);
+    writeLocalCourseNotes(map);
     if (!supabase) return { ok: true };
     const { error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "course_quick_notes", state: map });
@@ -3545,13 +3582,19 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) return;
-    scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_rules").maybeSingle()
-      .then(({ data }) => {
+    withRetry(async () => {
+      const { data, error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
+        .select("state").eq("id", "menu_gen_rules").maybeSingle();
+      if (error) throw error;
+      return data;
+    })
+      .then(data => {
         if (data?.state && typeof data.state === "object") {
           setMenuRules(normalizeMenuRules(data.state));
           try { localStorage.setItem("milka_menu_rules", JSON.stringify(data.state)); } catch {}
         }
-      });
+      })
+      .catch(() => {}); // localStorage-hydrated rules stay in place
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateMenuRules = (nextRules) => {
@@ -3587,10 +3630,14 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) return;
-    scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "quick_access").maybeSingle()
-      .then(({ data }) => {
-        if (data?.state?.items?.length) setQuickAccessItems(data.state.items);
-      });
+    withRetry(async () => {
+      const { data, error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
+        .select("state").eq("id", "quick_access").maybeSingle();
+      if (error) throw error;
+      return data;
+    })
+      .then(data => { if (data?.state?.items?.length) setQuickAccessItems(data.state.items); })
+      .catch(() => {}); // localStorage-hydrated quick access stays in place
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateQuickAccess = (items) => {
@@ -3828,16 +3875,21 @@ export default function App() {
     enabled: Boolean(supabase && workspaceId),
   });
 
-  // ── Service date + reservations: load from Supabase + realtime ──────────────
+  // ── Service date + reservations: cache paints instantly; Supabase refreshes ──
   useEffect(() => {
     if (!supabase || !workspaceId) return;
     let mounted = true;
 
+    // Instant paint of the planner from this workspace's cache.
+    const cachedResv = readLocalReservations();
+    if (cachedResv && cachedResv.length) setReservations(cachedResv);
+
     // Restore service date saved by a previous session — but if it has rolled
     // past the service-day cutoff, the service is over: auto-end it (archiving
     // the night's data before clearing) so "Start Service" prompts for a fresh
-    // date and pre-populates today's reservations on blank tables.
-    scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "service_date").single()
+    // date and pre-populates today's reservations on blank tables. maybeSingle()
+    // so the common "no service yet" row doesn't throw.
+    scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "service_date").maybeSingle()
       .then(async ({ data }) => {
         if (!mounted) return;
         const persisted = data?.state?.date;
@@ -3848,23 +3900,31 @@ export default function App() {
         }
         setServiceDate(d => d || persisted); // local state wins if already set
         try { localStorage.setItem("milka_service_date", persisted); } catch {}
-      });
+      })
+      .catch(() => {}); // keep whatever local service date we already have
 
-    // Load reservations for -7 days … +30 days so the planner is pre-populated
+    // Load reservations for -7 days … +30 days so the planner is pre-populated.
+    // Retried with backoff; on failure the cached planner stays on screen.
     const past   = new Date(); past.setDate(past.getDate() - 7);
     const future = new Date(); future.setDate(future.getDate() + 30);
-    scopedFrom(TABLES.RESERVATIONS).select("*")
-      .gte("date", toLocalDateISO(past))
-      .lte("date", toLocalDateISO(future))
-      .order("date").order("created_at")
-      .then(({ data, error }) => {
-        if (!mounted) return;
-        if (!error && data) setReservations(data);
-        setReservationsLoaded(true);
-      });
+    withRetry(async () => {
+      const { data, error } = await scopedFrom(TABLES.RESERVATIONS).select("*")
+        .gte("date", toLocalDateISO(past))
+        .lte("date", toLocalDateISO(future))
+        .order("date").order("created_at");
+      if (error) throw error;
+      return data || [];
+    })
+      .then(data => { if (mounted) setReservations(data); })
+      .catch(e => { console.warn("Reservations load failed — keeping cached list:", e); })
+      .finally(() => { if (mounted) setReservationsLoaded(true); });
 
     return () => { mounted = false; };
   }, [workspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep the reservations cache in step with live state (initial load, realtime
+  // pushes, and local edits) so the planner paints instantly next launch.
+  useEffect(() => { writeLocalReservations(reservations); }, [reservations]);
 
   // While the app is left open (e.g. overnight), automatically end a service
   // once it rolls past the service-day cutoff. The auto-end archives first, so
