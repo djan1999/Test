@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput } from "../../styles/mixins.js";
-import { supabase } from "../../lib/supabaseClient.js";
+import { supabase, setRememberMe, getRememberMe } from "../../lib/supabaseClient.js";
 import GlobalStyle from "../ui/GlobalStyle.jsx";
 
 const FONT = tokens.font;
@@ -18,6 +18,7 @@ export default function AuthScreen() {
   const [busy, setBusy]     = useState(false);
   const [err, setErr]       = useState("");
   const [shake, setShake]   = useState(false);
+  const [remember, setRemember] = useState(() => getRememberMe());
 
   const submit = async () => {
     if (busy) return;
@@ -25,6 +26,9 @@ export default function AuthScreen() {
     if (!e || !pw) { setErr("Enter your email and password."); return; }
     setBusy(true);
     setErr("");
+    // Apply the preference BEFORE signing in so the new session is written to the
+    // right store (localStorage when remembered, sessionStorage when not).
+    setRememberMe(remember);
     try {
       const { error } = await supabase.auth.signInWithPassword({ email: e, password: pw });
       if (error) {
@@ -97,6 +101,21 @@ export default function AuthScreen() {
         {err ? (
           <div style={{ fontSize: 11, color: tokens.red.text, marginBottom: 12, lineHeight: 1.4 }}>{err}</div>
         ) : null}
+
+        <label style={{
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          marginBottom: 8, cursor: "pointer", userSelect: "none",
+        }}>
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={e => setRemember(e.target.checked)}
+            style={{ accentColor: tokens.charcoal.default, width: 15, height: 15, cursor: "pointer" }}
+          />
+          <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 2, color: tokens.text.secondary, textTransform: "uppercase" }}>
+            Keep me signed in
+          </span>
+        </label>
 
         <button onClick={submit} disabled={busy} style={{
           width: "100%", fontFamily: FONT, fontSize: 11, letterSpacing: 3,

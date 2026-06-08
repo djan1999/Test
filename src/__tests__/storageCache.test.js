@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { setWorkspaceId } from "../lib/supabaseClient.js";
+import { setWorkspaceId, getRememberMe, setRememberMe } from "../lib/supabaseClient.js";
 import {
   readLocalMenuCourses, writeLocalMenuCourses,
   readLocalWines, writeLocalWines,
@@ -90,5 +90,28 @@ describe("local-first device caches", () => {
     setWorkspaceId("restA");
     expect(readLocalMenuCourses()).toEqual([{ course_key: "a_only", position: 1 }]);
     expect(readLocalLogo()).toBe("logoA");
+  });
+});
+
+// "Keep me signed in" preference — must default ON so the device auto-logs in.
+describe("remember-me preference", () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  it("defaults to true when never set (auto-login by default)", () => {
+    expect(getRememberMe()).toBe(true);
+  });
+
+  it("round-trips false → true", () => {
+    setRememberMe(false);
+    expect(getRememberMe()).toBe(false);
+    setRememberMe(true);
+    expect(getRememberMe()).toBe(true);
+  });
+
+  it("is device-global (not workspace-namespaced)", () => {
+    setRememberMe(false);
+    setWorkspaceId("restX");
+    expect(getRememberMe()).toBe(false); // same answer regardless of workspace
+    setWorkspaceId(null);
   });
 });

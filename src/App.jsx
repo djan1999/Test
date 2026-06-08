@@ -2097,6 +2097,10 @@ export default function App() {
   const [workspaceId, setWorkspaceIdState]  = useState(() => (supabase ? readPersistedWorkspace() : null));
   const [myWorkspaces, setMyWorkspaces]     = useState([]);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  // False until the post-login workspace query actually resolves. Gates the
+  // ProfilePicker so its "no restaurant linked" empty state can't flash while
+  // the list is still loading.
+  const [workspacesResolved, setWorkspacesResolved] = useState(false);
 
   const applyWorkspace = useCallback((id) => {
     setWorkspaceId(id);        // module singleton — used by scopedFrom() everywhere
@@ -2144,23 +2148,35 @@ export default function App() {
   // settle on the active one (restore the saved pick, or auto-pick when there's
   // only one, else fall through to the picker).
   useEffect(() => {
-    if (!supabase || !session) { setMyWorkspaces([]); setIsPlatformAdmin(false); return; }
+    if (!supabase || !session) {
+      setMyWorkspaces([]); setIsPlatformAdmin(false); setWorkspacesResolved(false);
+      return;
+    }
     let active = true;
+    setWorkspacesResolved(false);
     (async () => {
-      const uid = session.user?.id;
-      const [{ data: adminRow }, { data: wsRows }] = await Promise.all([
-        supabase.from("platform_admins").select("user_id").eq("user_id", uid).maybeSingle(),
-        supabase.from("workspaces").select("id, name, kind, slug")
-          .order("kind", { ascending: true }).order("name", { ascending: true }),
-      ]);
-      if (!active) return;
-      const list = wsRows || [];
-      setIsPlatformAdmin(!!adminRow);
-      setMyWorkspaces(list);
-      const persisted = readPersistedWorkspace();
-      if (persisted && list.some(w => w.id === persisted)) applyWorkspace(persisted);
-      else if (list.length === 1) applyWorkspace(list[0].id);
-      else applyWorkspace(null);
+      try {
+        const uid = session.user?.id;
+        const [{ data: adminRow }, { data: wsRows }] = await withRetry(() => Promise.all([
+          supabase.from("platform_admins").select("user_id").eq("user_id", uid).maybeSingle(),
+          supabase.from("workspaces").select("id, name, kind, slug")
+            .order("kind", { ascending: true }).order("name", { ascending: true }),
+        ]));
+        if (!active) return;
+        const list = wsRows || [];
+        setIsPlatformAdmin(!!adminRow);
+        setMyWorkspaces(list);
+        const persisted = readPersistedWorkspace();
+        if (persisted && list.some(w => w.id === persisted)) applyWorkspace(persisted);
+        else if (list.length === 1) applyWorkspace(list[0].id);
+        else applyWorkspace(null);
+      } catch (e) {
+        if (active) console.warn("Workspace resolution failed:", e);
+      } finally {
+        // Always lift the gate so we never hang on the splash — on failure the
+        // picker shows (empty), which the user can retry from.
+        if (active) setWorkspacesResolved(true);
+      }
     })();
     return () => { active = false; };
   }, [session, applyWorkspace]);
@@ -4041,7 +4057,7 @@ export default function App() {
   // When Supabase is configured, a real login replaces the legacy shared-password
   // gate. The GateScreen below is only used in local-only mode (no Supabase).
   if (supabase) {
-    if (!sessionChecked) return (
+    const splash = (
       <div style={{
         minHeight: "100vh", background: tokens.surface.card, display: "flex",
         flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -4052,15 +4068,18 @@ export default function App() {
         <div style={{ fontSize: 9, letterSpacing: 4, color: tokens.text.disabled }}>…</div>
       </div>
     );
+    if (!sessionChecked) return splash;
     if (!session) return <AuthScreen />;
-    if (!workspaceId) return (
+    // Wait for the workspace query before deciding picker-vs-board, so the
+    // "no restaurant linked" empty state never flashes mid-resolution.
+    if (!workspaceId) return workspacesResolved ? (
       <ProfilePicker
         workspaces={myWorkspaces}
         isAdmin={isPlatformAdmin}
         onPick={applyWorkspace}
         onSignOut={signOut}
       />
-    );
+    ) : splash;
   } else if (!authed) {
     // Local-only fallback (no Supabase): keep the legacy password gate.
     return <GateScreen onPass={() => setAuthed(true)} />;
