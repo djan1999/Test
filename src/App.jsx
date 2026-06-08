@@ -20,6 +20,9 @@ import {
 import {
   readLocalBeverages, writeLocalBeverages,
   readLocalBoardState, writeLocalBoardState,
+  readLocalMenuCourses, writeLocalMenuCourses,
+  readLocalWines, writeLocalWines,
+  readLocalLogo, writeLocalLogo,
   STORAGE_KEY,
 } from "./utils/storage.js";
 import { makeSeats, blankTable, sanitizeTable, initTables, fmt } from "./utils/tableHelpers.js";
@@ -333,6 +336,22 @@ function courseToSupabaseRow(course) {
     if (dbKey) row[dbKey] = course.restrictions?.[k] ?? null;
   });
   return row;
+}
+
+// Retry a promise-returning fn with exponential backoff. Used for the initial
+// background data syncs so a transient network hiccup self-heals instead of
+// leaving the device on its cached/empty state until a manual refresh. The UI
+// keeps showing the local cache the whole time; this only refreshes it.
+async function withRetry(fn, { attempts = 4, baseMs = 600 } = {}) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); }
+    catch (e) {
+      lastErr = e;
+      if (i < attempts - 1) await new Promise(r => setTimeout(r, baseMs * 2 ** i));
+    }
+  }
+  throw lastErr;
 }
 
 async function fetchMenuCourses() {
@@ -2047,8 +2066,10 @@ export default function App() {
   const appIsMobile = useIsMobile(BP.md);
 
   const [tables,    setTables]    = useState(initialState.tables);
-  const [menuCourses, setMenuCourses] = useState([]); // live from Supabase
-  const [wines,     setWines]     = useState(initialState.wines);
+  // Hydrate from the per-workspace device cache so the menu/board paint
+  // instantly on launch; the background sync below refreshes them.
+  const [menuCourses, setMenuCourses] = useState(() => readLocalMenuCourses() || []);
+  const [wines,     setWines]     = useState(() => readLocalWines() || initialState.wines || []);
   const [cocktails, setCocktails] = useState(localBev?.cocktails ?? initialState.cocktails ?? initCocktails);
   const [spirits,   setSpirits]   = useState(localBev?.spirits   ?? initialState.spirits   ?? initSpirits);
   const [beers,     setBeers]     = useState(localBev?.beers      ?? initialState.beers     ?? initBeers);
@@ -2149,7 +2170,7 @@ export default function App() {
   const [inventoryOpen,  setInventoryOpen]  = useState(false);
   const [addResOpen,     setAddResOpen]     = useState(false);
   const [syncStatus,   setSyncStatus]   = useState(hasSupabaseConfig ? "connecting" : "local-only");
-  const [logoDataUri,  setLogoDataUri]  = useState("");
+  const [logoDataUri,  setLogoDataUri]  = useState(() => readLocalLogo() || "");
   const [wineSyncConfig, setWineSyncConfig] = useState(() => {
     try { return normalizeSyncConfig(JSON.parse(localStorage.getItem(SYNC_CONFIG_KEY) || "null")); } catch { return DEFAULT_SYNC_CONFIG; }
   });
@@ -3170,19 +3191,40 @@ export default function App() {
   }, [tablesJson, hydrated]);
 
 
-  // ── Load logo on startup (Supabase → fallback to /logo.svg) ─────────────────
+  // ── Load logo (cached device copy paints instantly; Supabase refreshes) ─────
+  // The real logo is hydrated synchronously from the per-workspace cache above,
+  // so we no longer flash the bundled /logo.svg while the network read is in
+  // flight. We only fall back to the bundled default when there is genuinely no
+  // cached AND no saved logo. Runs per workspace (the logo is workspace-scoped).
   useEffect(() => {
-    const loadDefault = () =>
+    let cancelled = false;
+    const loadDefault = () => {
+      if (readLocalLogo()) return; // a cached logo is already showing — don't override
       fetch("/logo.svg").then(r => r.text())
-        .then(svg => setLogoDataUri(`data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`))
+        .then(svg => { if (!cancelled) setLogoDataUri(`data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`); })
         .catch(() => {});
-    if (!supabase) { loadDefault(); return; }
-    scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_logo").single()
-      .then(({ data }) => { data?.state?.dataUri ? setLogoDataUri(data.state.dataUri) : loadDefault(); });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    };
+    if (!supabase) { loadDefault(); return () => { cancelled = true; }; }
+    if (!workspaceId) return () => { cancelled = true; }; // wait for the workspace to resolve
+    withRetry(async () => {
+      const { data, error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
+        .select("state").eq("id", "menu_logo").maybeSingle();
+      if (error) throw error;
+      return data;
+    })
+      .then(data => {
+        if (cancelled) return;
+        const uri = data?.state?.dataUri;
+        if (uri) { setLogoDataUri(uri); writeLocalLogo(uri); }
+        else loadDefault();
+      })
+      .catch(() => loadDefault()); // keep the cached logo on failure
+    return () => { cancelled = true; };
+  }, [workspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveLogo = async (dataUri) => {
     setLogoDataUri(dataUri);
+    writeLocalLogo(dataUri); // keep the device cache in step so it paints instantly next launch
     if (!supabase) return;
     await scopedFrom(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "menu_logo", state: { dataUri }, updated_at: new Date().toISOString() }, { onConflict: "id" });
@@ -3367,10 +3409,15 @@ export default function App() {
         // Throw on Supabase errors so a transient/permission failure lands in
         // catch and is treated as "error" — NOT as "empty". maybeSingle()
         // returns {data:null,error:null} for a genuinely empty row, so the
-        // empty path below only runs when the read truly succeeded.
-        const { data: v2Data, error: v2Err } = await scopedFrom(TABLES.SERVICE_SETTINGS)
-          .select("state").eq("id", "menu_layout_profiles_v2").maybeSingle();
-        if (v2Err) throw v2Err;
+        // empty path below only runs when the read truly succeeded. Retried with
+        // backoff so a flaky network self-heals instead of needing a manual
+        // refresh to pull the saved menu layouts.
+        const v2Data = await withRetry(async () => {
+          const { data, error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
+            .select("state").eq("id", "menu_layout_profiles_v2").maybeSingle();
+          if (error) throw error;
+          return data;
+        });
         const v2 = v2Data?.state;
         if (v2 && Array.isArray(v2.profiles) && v2.profiles.length > 0) {
           if (cancelled) return;
@@ -3695,21 +3742,36 @@ export default function App() {
   // so a sync could report "N cocktails" yet leave the UI showing the old list.
   const loadBeverages = useCallback(async () => {
     if (!supabase || !getWorkspaceId()) return;
-    const { data, error } = await scopedFrom(TABLES.BEVERAGES)
-      .select("id, category, name, notes, position, source")
-      .order("position", { ascending: true });
-    if (error || !data) return;
-    const c = pickBeveragesForCategory(data, "cocktail");
-    const s = pickBeveragesForCategory(data, "spirit");
-    const b = pickBeveragesForCategory(data, "beer");
-    setCocktails(c);
-    setSpirits(s);
-    setBeers(b);
-    writeLocalBeverages({ cocktails: c, spirits: s, beers: b });
+    try {
+      const data = await withRetry(async () => {
+        const { data, error } = await scopedFrom(TABLES.BEVERAGES)
+          .select("id, category, name, notes, position, source")
+          .order("position", { ascending: true });
+        if (error) throw error;
+        return data || [];
+      });
+      const c = pickBeveragesForCategory(data, "cocktail");
+      const s = pickBeveragesForCategory(data, "spirit");
+      const b = pickBeveragesForCategory(data, "beer");
+      setCocktails(c);
+      setSpirits(s);
+      setBeers(b);
+      writeLocalBeverages({ cocktails: c, spirits: s, beers: b });
+    } catch (e) {
+      // Keep the cached beverages already on screen rather than blanking them.
+      console.warn("Beverages load failed — keeping cached list:", e);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!supabase || !workspaceId) return;
+    // Instant paint from this workspace's cache, then refresh in the background.
+    const cached = readLocalBeverages();
+    if (cached) {
+      if (Array.isArray(cached.cocktails)) setCocktails(cached.cocktails);
+      if (Array.isArray(cached.spirits))   setSpirits(cached.spirits);
+      if (Array.isArray(cached.beers))     setBeers(cached.beers);
+    }
     loadBeverages();
   }, [loadBeverages, workspaceId]);
 
@@ -3725,21 +3787,34 @@ export default function App() {
   // ── Wines: load from Supabase wines table + realtime ─────────────────────────
   const loadWines = useCallback(async () => {
     if (!supabase || !getWorkspaceId()) return;
-    const { data, error } = await scopedFrom(TABLES.WINES)
-      .select("key, name, wine_name, producer, vintage, region, country, by_glass, source")
-      .order("name", { ascending: true });
-    if (error || !data) return;
-    setWines(data.map(r => ({
-      id: r.key, name: r.wine_name || r.name,
-      producer: r.producer || "", vintage: r.vintage || "",
-      region: r.region || "", country: r.country || "",
-      byGlass: r.by_glass ?? false,
-      source: r.source || "sync",
-    })));
+    try {
+      const data = await withRetry(async () => {
+        const { data, error } = await scopedFrom(TABLES.WINES)
+          .select("key, name, wine_name, producer, vintage, region, country, by_glass, source")
+          .order("name", { ascending: true });
+        if (error) throw error;
+        return data || [];
+      });
+      const mapped = data.map(r => ({
+        id: r.key, name: r.wine_name || r.name,
+        producer: r.producer || "", vintage: r.vintage || "",
+        region: r.region || "", country: r.country || "",
+        byGlass: r.by_glass ?? false,
+        source: r.source || "sync",
+      }));
+      setWines(mapped);
+      writeLocalWines(mapped);
+    } catch (e) {
+      // Keep the cached wines already on screen rather than blanking them.
+      console.warn("Wines load failed — keeping cached list:", e);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!supabase || !workspaceId) return;
+    // Instant paint from this workspace's cache, then refresh in the background.
+    const cachedWines = readLocalWines();
+    if (cachedWines && cachedWines.length) setWines(cachedWines);
     loadWines();
     return undefined;
   }, [loadWines, workspaceId]);
@@ -3821,23 +3896,25 @@ export default function App() {
     enabled: Boolean(supabase && workspaceId),
   });
 
-  // ── Menu courses: load from Supabase (app is the source of truth) ───────────
+  // ── Menu courses: cached device copy paints instantly; Supabase refreshes ───
   useEffect(() => {
     let mounted = true;
 
+    // Instant paint from this workspace's cache (covers the case where the
+    // workspace resolves asynchronously after mount, so the init-time hydration
+    // read the wrong/empty namespace).
+    const cached = readLocalMenuCourses();
+    if (cached && cached.length) setMenuCourses(cached);
+
     const loadCourses = async () => {
       try {
-        const courses = await fetchMenuCourses();
+        const courses = await withRetry(() => fetchMenuCourses());
         if (!mounted || !courses) return;
         setMenuCourses(courses);
-        // Note: previously this also wrote a default template into the active
-        // profile if the profile's template was empty. That overwrote
-        // in-memory state, raced the profile load + seed effects, and
-        // persisted nothing. The generator already falls back to a default
-        // template when rendering an empty profile (menuGenerator.js
-        // buildDefaultTemplate call), so the safety net isn't needed here.
+        writeLocalMenuCourses(courses); // keep the device cache warm for next launch
       } catch (error) {
-        console.warn("Menu courses fetch failed:", error);
+        // Keep the cached courses on screen rather than blanking the menu/board.
+        console.warn("Menu courses fetch failed — keeping cached list:", error);
       }
     };
 

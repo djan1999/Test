@@ -101,3 +101,62 @@ export const writeLocalBoardState = state => {
     window.localStorage.setItem(wsKey(STORAGE_KEY), JSON.stringify(state));
   } catch {}
 };
+
+// ── Menu courses cache ────────────────────────────────────────────────────────
+// Courses are the spine of the menu/board, but were never cached — so every
+// launch started with an empty list and blocked on the network. Caching them
+// per workspace lets the device paint instantly from its last-known courses and
+// refresh in the background (or on a realtime change).
+export const MENU_COURSES_KEY = "milka-menu-courses-v1";
+
+export function readLocalMenuCourses() {
+  try {
+    const raw = localStorage.getItem(wsKey(MENU_COURSES_KEY));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch { return null; }
+}
+
+export function writeLocalMenuCourses(courses) {
+  try {
+    localStorage.setItem(wsKey(MENU_COURSES_KEY), JSON.stringify(Array.isArray(courses) ? courses : []));
+  } catch {}
+}
+
+// ── Wines cache ───────────────────────────────────────────────────────────────
+// Wines live in their own table (website sync is the source of truth) and were
+// not part of the board-state cache, so they also started empty each launch.
+export const WINES_KEY = "milka-wines-v1";
+
+export function readLocalWines() {
+  try {
+    const raw = localStorage.getItem(wsKey(WINES_KEY));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch { return null; }
+}
+
+export function writeLocalWines(wines) {
+  try {
+    localStorage.setItem(wsKey(WINES_KEY), JSON.stringify(Array.isArray(wines) ? wines : []));
+  } catch {}
+}
+
+// ── Logo cache ────────────────────────────────────────────────────────────────
+// The brand logo is a (potentially large) data URI in service_settings. Caching
+// it per workspace lets the real logo paint instantly instead of flashing the
+// bundled default while the network read is in flight.
+export const MENU_LOGO_KEY = "milka-menu-logo-v1";
+
+export function readLocalLogo() {
+  try { return localStorage.getItem(wsKey(MENU_LOGO_KEY)) || ""; } catch { return ""; }
+}
+
+export function writeLocalLogo(dataUri) {
+  try {
+    if (dataUri) localStorage.setItem(wsKey(MENU_LOGO_KEY), dataUri);
+    else localStorage.removeItem(wsKey(MENU_LOGO_KEY));
+  } catch {}
+}
