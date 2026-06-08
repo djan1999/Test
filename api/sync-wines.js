@@ -283,8 +283,21 @@ export default async function handler(req, res) {
 
   try {
     const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
-    const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseKey) throw new Error("Supabase env vars not configured (SUPABASE_URL / SUPABASE_SERVICE_KEY)");
+    // Accept the service-role key under its documented name and common aliases,
+    // including Supabase's newer secret-key format (sb_secret_...). The anon key
+    // is only a last resort — it can READ public data, but every insert/delete
+    // below needs the service role to bypass RLS.
+    const serviceKey =
+      process.env.SUPABASE_SERVICE_KEY ||
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.SUPABASE_SECRET_KEY;
+    const supabaseKey = serviceKey || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error("Supabase not configured: set SUPABASE_URL and SUPABASE_SERVICE_KEY in the deployment environment.");
+    }
+    if (!serviceKey) {
+      console.warn("[sync] No service key (SUPABASE_SERVICE_KEY) found — falling back to the anon key; inserts/deletes will fail under RLS.");
+    }
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // The cron uses a service-role client which bypasses row-level security, so
@@ -296,7 +309,16 @@ export default async function handler(req, res) {
       .eq("slug", "milka")
       .single();
     if (wsErr || !milkaWs) {
-      throw new Error(`Could not resolve Milka workspace: ${wsErr?.message || "not found"}`);
+      const msg = wsErr?.message || "not found";
+      // An "Invalid API key" / JWT error means the SERVER key is wrong, not that
+      // the workspace is missing — surface a fix-it message instead of the
+      // misleading "workspace" wording so the admin knows exactly what to do.
+      if (/invalid api key|jwt|api ?key/i.test(msg)) {
+        throw new Error(
+          `Supabase rejected the server key ("${msg}"). Set SUPABASE_SERVICE_KEY to the current service_role / secret key for the project at SUPABASE_URL (${supabaseUrl}) and redeploy. A stale key — or a URL and key that belong to different projects — is the usual cause.`
+        );
+      }
+      throw new Error(`Could not resolve Milka workspace: ${msg}`);
     }
     const WORKSPACE_ID = milkaWs.id;
 
