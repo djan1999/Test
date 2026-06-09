@@ -23,6 +23,14 @@ export function enqueue(item) {
   return next;
 }
 
+export function updateAt(index, item) {
+  const items = readQueue();
+  if (index < 0 || index >= items.length) return items;
+  const next = items.map((it, i) => (i === index ? item : it));
+  writeQueue(next);
+  return next;
+}
+
 export function removeAt(index) {
   const items = readQueue();
   if (index < 0 || index >= items.length) return items;

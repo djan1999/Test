@@ -357,10 +357,15 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                   const iframe = document.createElement("iframe");
                   iframe.style.cssText = "position:fixed;width:0;height:0;border:0;top:0;left:0;";
                   document.body.appendChild(iframe);
+                  const cleanup = () => {
+                    if (iframe.parentNode) document.body.removeChild(iframe);
+                    URL.revokeObjectURL(url);
+                  };
                   iframe.onload = () => {
                     try { iframe.contentWindow.print(); } catch(e) { window.open(url, "_blank"); }
-                    setTimeout(() => { document.body.removeChild(iframe); URL.revokeObjectURL(url); }, 5000);
+                    setTimeout(cleanup, 5000);
                   };
+                  iframe.onerror = cleanup;
                   iframe.src = url;
                 } catch(e) { alert("Print failed: " + e.message); }
               }}

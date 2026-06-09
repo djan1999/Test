@@ -136,6 +136,9 @@ export default function InventoryModal({ wines, onClose }) {
       });
   }, []);
 
+  // Don't let a pending debounced save fire after the modal unmounts.
+  useEffect(() => () => clearTimeout(saveTimer.current), []);
+
   useEffect(() => {
     const goOnline = () => {
       setSyncSt("saving");

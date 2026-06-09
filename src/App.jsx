@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
 import {
   RESTRICTION_KEYS, RESTRICTION_COLUMN_MAP, normalizeCourseCategory,
   normalizeOptionalKey, optionalPairingsFromCourses,
@@ -39,7 +39,6 @@ import { useIsMobile, BP } from "./hooks/useIsMobile.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useOfflineQueue } from "./hooks/useOfflineQueue.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
-import { AdminLayout } from "./components/admin/index.js";
 import {
   DIETARY_KEYS,
   RESTRICTIONS,
@@ -56,25 +55,29 @@ import { tokens } from "./styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, chip as mixinChip, circleButton as mixinCircleButton } from "./styles/mixins.js";
 import WaterPicker from "./components/service/WaterPicker.jsx";
 import SwapPicker from "./components/service/SwapPicker.jsx";
-import KitchenBoard from "./components/kitchen/KitchenBoard.jsx";
 import ServiceDatePicker from "./components/reservations/ServiceDatePicker.jsx";
-import ReservationManager from "./components/reservations/ReservationManager.jsx";
 import ResvForm from "./components/reservations/ResvForm.jsx";
 import CenteredModal from "./components/ui/CenteredModal.jsx";
-import SummaryModal from "./components/modals/SummaryModal.jsx";
-import ArchiveModal from "./components/modals/ArchiveModal.jsx";
-import InventoryModal from "./components/modals/InventoryModal.jsx";
 import Header from "./components/ui/Header.jsx";
 import GlobalStyle from "./components/ui/GlobalStyle.jsx";
 import GateScreen from "./components/gate/GateScreen.jsx";
 import LoginScreen from "./components/login/LoginScreen.jsx";
 import AuthScreen from "./components/auth/AuthScreen.jsx";
 import ProfilePicker from "./components/auth/ProfilePicker.jsx";
-import MenuPage from "./components/menu/MenuPage.jsx";
-import MenuGenerator from "./components/menu/MenuGenerator.jsx";
 import WineSearch from "./components/service/WineSearch.jsx";
 import BeverageSearch from "./components/service/BeverageSearch.jsx";
 import TableCard from "./components/TableCard/TableCard.jsx";
+
+// Heavy mode-level views and modals are lazy-loaded so the service board (the
+// critical path) ships in a small initial bundle. The PWA precaches every
+// generated chunk, so these still open offline once the app is installed.
+const AdminLayout = lazy(() => import("./components/admin/AdminLayout.jsx"));
+const KitchenBoard = lazy(() => import("./components/kitchen/KitchenBoard.jsx"));
+const ReservationManager = lazy(() => import("./components/reservations/ReservationManager.jsx"));
+const MenuPage = lazy(() => import("./components/menu/MenuPage.jsx"));
+const SummaryModal = lazy(() => import("./components/modals/SummaryModal.jsx"));
+const ArchiveModal = lazy(() => import("./components/modals/ArchiveModal.jsx"));
+const InventoryModal = lazy(() => import("./components/modals/InventoryModal.jsx"));
 // SHEET view temporarily disabled — combined into the Board/Quick Access view.
 // import SheetView from "./components/service/SheetView.jsx";
 
@@ -369,6 +372,14 @@ async function fetchMenuCourses() {
 
 
 const FONT = tokens.font;
+
+// Shared fallback while a lazy-loaded view chunk is fetched (instant from the
+// PWA precache after first load, so this rarely shows for more than a frame).
+const lazyViewFallback = (
+  <div style={{ minHeight: "40vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "#999" }}>
+    Loading…
+  </div>
+);
 
 // ── Wine DB ───────────────────────────────────────────────────────────────────
 const initWines = [];
@@ -2391,6 +2402,12 @@ export default function App() {
   const activeMenuCourses = useMemo(() => menuCourses.filter(c => c.is_active !== false), [menuCourses]);
   const dishes = useMemo(() => optionalExtrasFromCourses(activeMenuCourses), [activeMenuCourses]);
   const pairings = useMemo(() => optionalPairingsFromCourses(activeMenuCourses), [activeMenuCourses]);
+  // Celebration-category dish keys, synced with the reservation birthday flag
+  // (shared by saveRes and reconcileBoardWithReservations).
+  const celebrationKeys = useMemo(() => (activeMenuCourses || [])
+    .filter(c => normalizeCourseCategory(c?.course_category, c?.optional_flag) === "celebration")
+    .map(c => normalizeOptionalKey(c?.optional_flag))
+    .filter(Boolean), [activeMenuCourses]);
 
   const mergeRemoteTables = rows => {
     const arr = Array.isArray(rows) ? rows : [];
@@ -2401,7 +2418,7 @@ export default function App() {
       const remoteTs = parseRemoteUpdatedAt(row.updated_at);
       const localTs = tableLocalFreshRef.current.get(base.id) || 0;
       if (remoteTs > 0 && localTs > 0 && remoteTs < localTs) {
-        const cur = tablesRef.current.find(t => t.id === base.id);
+        const cur = tablesRef.current?.find(t => t.id === base.id);
         return cur ? { ...cur } : base;
       }
       return sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) });
@@ -2894,6 +2911,8 @@ export default function App() {
       if (t.id !== tid) return t;
       const sA = t.seats.find(s => s.id === aId);
       const sB = t.seats.find(s => s.id === bId);
+      // Spreading an undefined seat would wipe the other seat's data.
+      if (!sA || !sB) return t;
       return {
         ...t,
         seats: t.seats.map(s => {
@@ -2910,11 +2929,6 @@ export default function App() {
     const sortedGroup = [...group].sort((a, b) => a - b);
     // Find old group to clear tables that are no longer part of it
     const oldGroup = tables.find(t => t.id === id)?.tableGroup || [id];
-    // Celebration-category dish keys to sync with the birthday flag
-    const celebrationKeys = (activeMenuCourses || [])
-      .filter(c => normalizeCourseCategory(c?.course_category, c?.optional_flag) === "celebration")
-      .map(c => normalizeOptionalKey(c?.optional_flag))
-      .filter(Boolean);
     [...new Set([...oldGroup, ...sortedGroup])].forEach(tid => bumpLocalTableFresh(tid));
     setTables(p => p.map(t => {
       // Clear tables that were in the old group but aren't in the new group
@@ -3084,17 +3098,13 @@ export default function App() {
         }
         const { d, group } = owner;
         const rawSeats = makeSeats(d.guests || 2, t.seats);
-        const reconcileCelebrationKeys = (activeMenuCourses || [])
-          .filter(c => normalizeCourseCategory(c?.course_category, c?.optional_flag) === "celebration")
-          .map(c => normalizeOptionalKey(c?.optional_flag))
-          .filter(Boolean);
-        const reconciledSeats = reconcileCelebrationKeys.length > 0
+        const reconciledSeats = celebrationKeys.length > 0
           ? rawSeats.map(s => ({
               ...s,
               extras: {
                 ...s.extras,
                 ...Object.fromEntries(
-                  reconcileCelebrationKeys.map(k => [k, { ordered: !!d.birthday, pairing: s.extras?.[k]?.pairing || "—" }])
+                  celebrationKeys.map(k => [k, { ordered: !!d.birthday, pairing: s.extras?.[k]?.pairing || "—" }])
                 ),
               },
             }))
@@ -3130,10 +3140,16 @@ export default function App() {
   const updTableFromReservation = (resvId, tableId, field, value) => {
     setReservations(prev => prev.map(r => {
       if (r.id !== resvId) return r;
-      const newData = { ...(r.data || {}), [field]: value };
-      if (supabase && getWorkspaceId()) scopedFrom(TABLES.RESERVATIONS).update({ data: newData }).eq("id", resvId).then(() => {});
-      return { ...r, data: newData };
+      return { ...r, data: { ...(r.data || {}), [field]: value } };
     }));
+    // Persist outside the state updater: updaters must stay pure (StrictMode
+    // runs them twice, which double-fired this write before).
+    const target = reservations.find(r => r.id === resvId);
+    if (target && supabase && getWorkspaceId()) {
+      const newData = { ...(target.data || {}), [field]: value };
+      scopedFrom(TABLES.RESERVATIONS).update({ data: newData }).eq("id", resvId)
+        .then(({ error }) => { if (error) console.warn("Reservation field sync failed:", error); });
+    }
     // Only push to service_tables when that table already carries reservation data
     // (avoids polluting blank table rows before service starts).
     const serviceTable = tablesRef.current?.find(t => t.id === tableId);
@@ -4141,7 +4157,7 @@ export default function App() {
     /></>;
 
   // Reservation Manager mode
-  if (mode === "reservation") return (<>{serviceDatePickerEl}<ReservationManager
+  if (mode === "reservation") return (<>{serviceDatePickerEl}<Suspense fallback={lazyViewFallback}><ReservationManager
       reservations={reservations}
       menuCourses={activeMenuCourses}
       tables={tables}
@@ -4169,7 +4185,7 @@ export default function App() {
         menuCourses={menuCourses}
       />
     )}
-    </>);
+    </Suspense></>);
 
   // Kitchen mode (legacy id "display") — KDS board for firing courses.
   // Mutation handlers `upd` / `updMany` are intentionally passed: kitchen
@@ -4180,33 +4196,37 @@ export default function App() {
       <GlobalStyle />
       <Header modeLabel="KITCHEN" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
       <div style={{ padding: appIsMobile ? "12px 10px" : "20px 24px" }}>
-        <KitchenBoard
-          tables={tables}
-          menuCourses={activeMenuCourses}
-          upd={upd}
-          updMany={updMany}
-          profiles={profilesState.profiles}
-          assignments={profilesState.assignments}
-        />
+        <Suspense fallback={lazyViewFallback}>
+          <KitchenBoard
+            tables={tables}
+            menuCourses={activeMenuCourses}
+            upd={upd}
+            updMany={updMany}
+            profiles={profilesState.profiles}
+            assignments={profilesState.assignments}
+          />
+        </Suspense>
       </div>
       {archiveOpen && (
-        <ArchiveModal
-          tables={tables} optionalExtras={dishes}
-          onArchiveAndClear={archiveAndClearAll}
-          onClearAll={clearAll}
+        <Suspense fallback={null}>
+          <ArchiveModal
+            tables={tables} optionalExtras={dishes}
+            onArchiveAndClear={archiveAndClearAll}
+            onClearAll={clearAll}
             onClose={() => setArchiveOpen(false)}
-          onRestoreTicket={id => upd(id, "kitchenArchived", false)}
-          menuCourses={menuCourses}
-        />
+            onRestoreTicket={id => upd(id, "kitchenArchived", false)}
+            menuCourses={menuCourses}
+          />
+        </Suspense>
       )}
-      {inventoryOpen && <InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} />}
+      {inventoryOpen && <Suspense fallback={null}><InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} /></Suspense>}
     </div>
   </>);
 
   if (mode === "menu") return (
     <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
-      <MenuPage
+      <Suspense fallback={lazyViewFallback}><MenuPage
         tables={tables}
         menuCourses={activeMenuCourses}
         upd={upd}
@@ -4220,7 +4240,7 @@ export default function App() {
         profiles={profilesState.profiles}
         assignments={profilesState.assignments}
         onExit={() => changeMode(null)}
-      />
+      /></Suspense>
     </div>
   );
 
@@ -4228,7 +4248,7 @@ export default function App() {
   if (mode === "admin") return (
     <div style={{ minHeight: "100vh", background: tokens.neutral[0], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
-      <AdminLayout
+      <Suspense fallback={lazyViewFallback}><AdminLayout
         menuCourses={menuCourses}
         onUpdateMenuCourses={setMenuCourses}
         onSaveMenuCourses={saveMenuCourses}
@@ -4281,7 +4301,7 @@ export default function App() {
         courseQuickNotes={courseQuickNotes}
         onSaveCourseQuickNotes={saveCourseQuickNotes}
         onExit={() => changeMode(null)}
-      />
+      /></Suspense>
     </div>
   );
 
@@ -4450,19 +4470,23 @@ export default function App() {
       )}
 
       {summaryOpen && (
-        <SummaryModal tables={tables} optionalExtras={dishes} optionalPairings={pairings} onClose={() => setSummaryOpen(false)} />
+        <Suspense fallback={null}>
+          <SummaryModal tables={tables} optionalExtras={dishes} optionalPairings={pairings} onClose={() => setSummaryOpen(false)} />
+        </Suspense>
       )}
       {archiveOpen && (
-        <ArchiveModal
-          tables={tables} optionalExtras={dishes} optionalPairings={pairings}
-          onArchiveAndClear={archiveAndClearAll}
-          onClearAll={clearAll}
+        <Suspense fallback={null}>
+          <ArchiveModal
+            tables={tables} optionalExtras={dishes} optionalPairings={pairings}
+            onArchiveAndClear={archiveAndClearAll}
+            onClearAll={clearAll}
             onClose={() => setArchiveOpen(false)}
-          onRestoreTicket={id => upd(id, "kitchenArchived", false)}
-          menuCourses={menuCourses}
-        />
+            onRestoreTicket={id => upd(id, "kitchenArchived", false)}
+            menuCourses={menuCourses}
+          />
+        </Suspense>
       )}
-      {inventoryOpen && <InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} />}
+      {inventoryOpen && <Suspense fallback={null}><InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} /></Suspense>}
 
       {addResOpen && serviceDate && (
         <CenteredModal

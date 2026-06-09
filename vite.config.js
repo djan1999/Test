@@ -107,5 +107,15 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        // Stable vendor chunks: app code changes don't invalidate the cached
+        // (and PWA-precached) React/Supabase bundles on every deploy.
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+        },
+      },
+    },
   },
 });
