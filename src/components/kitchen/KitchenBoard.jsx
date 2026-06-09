@@ -7,6 +7,12 @@ import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
 import { extraPairingLabel, extraPairingForSeat } from "../../constants/pairings.js";
+import { useIsMobile } from "../../hooks/useIsMobile.js";
+
+// Viewport width from which the board uses the dense large-display layout
+// (5-up grid + compact tickets). A 32" 1280×720 kitchen panel lands above it;
+// tablets and phones stay on the roomy layout.
+const LARGE_BOARD_BP = 1100;
 
 const FONT = tokens.font;
 
@@ -21,7 +27,24 @@ function resolveGuestTemplate(table, profiles, assignments) {
   return isShort ? (p.shortMenuTemplate || p.menuTemplate) : p.menuTemplate;
 }
 
-export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {} }) {
+export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false }) {
+  // Density. Compact tightens the vertical rhythm so two full rows of tickets
+  // fit a 720px-tall kitchen display (32" 1280×720 → 5 columns × 2 rows = 10
+  // tickets). Gated to large boards by the caller; the physical pixels on such
+  // panels are big, so the tighter type stays readable and tappable.
+  const dz = compact ? {
+    headerPad: "3px 8px", tNum: "15px", tNumGroup: "12px", nameFont: "9.5px", nameWrap: "nowrap",
+    counterFont: "12px", badgePad: "0 3px", showGrip: false,
+    rowPad: "2px 8px", paceBtnPad: "3px 7px", seatChipPad: "1px 4px",
+    coursePad: "1px 8px 1px 6px", courseFont: "9px", courseLH: 1.15, courseGap: 5, courseGlyph: "10px",
+    footerPad: "4px 10px",
+  } : {
+    headerPad: "7px 10px", tNum: "20px", tNumGroup: "15px", nameFont: "11px", nameWrap: "wrap",
+    counterFont: "14px", badgePad: "1px 5px", showGrip: true,
+    rowPad: "5px 10px", paceBtnPad: "9px 10px", seatChipPad: "2px 5px",
+    coursePad: "7px 10px 7px 8px", courseFont: "11px", courseLH: 1.25, courseGap: 7, courseGlyph: "12px",
+    footerPad: "7px 12px",
+  };
   const seats = table.seats || [];
   const restrictions = table.restrictions || [];
   const log = table.kitchenLog || {};
@@ -213,23 +236,23 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         {...dragListeners}
         role={dragListeners ? "button" : undefined}
         aria-label={dragListeners ? "Drag to reorder ticket" : undefined}
-        style={{ background: tokens.neutral[0], borderBottom: `1px solid ${tokens.ink[4]}`, padding: "7px 10px", display: "flex", alignItems: "flex-start", gap: 8, cursor: dragListeners ? "grab" : undefined, touchAction: "none" }}
+        style={{ background: tokens.neutral[0], borderBottom: `1px solid ${tokens.ink[4]}`, padding: dz.headerPad, display: "flex", alignItems: "flex-start", gap: 8, cursor: dragListeners ? "grab" : undefined, touchAction: "none" }}
       >
-        {dragListeners && (
+        {dragListeners && dz.showGrip && (
           <span aria-hidden="true" title="Drag to reorder" style={{
             fontFamily: FONT, fontSize: 14, color: tokens.ink[4],
             lineHeight: 1, flexShrink: 0, alignSelf: "center", letterSpacing: -2,
             userSelect: "none",
           }}>⋮⋮</span>
         )}
-        <span style={{ fontFamily: FONT, fontSize: table.tableGroup?.length > 1 ? "15px" : "20px", fontWeight: 800, color: tokens.ink[0], lineHeight: 1, letterSpacing: "-0.02em", flexShrink: 0 }}>
+        <span style={{ fontFamily: FONT, fontSize: table.tableGroup?.length > 1 ? dz.tNumGroup : dz.tNum, fontWeight: 800, color: tokens.ink[0], lineHeight: 1, letterSpacing: "-0.02em", flexShrink: 0 }}>
           {table.tableGroup?.length > 1 ? `T${table.tableGroup.join("-")}` : `T${table.id}`}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
-            {table.resName && <span style={{ fontFamily: FONT, fontSize: "11px", fontWeight: 700, color: tokens.ink[0], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{table.resName}</span>}
-            {table.menuType && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 600, letterSpacing: "0.08em", padding: "1px 5px", borderRadius: 0, background: tokens.ink[5], color: tokens.ink[3] }}>{isShort ? "SHORT" : "LONG"}</span>}
-            <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 600, letterSpacing: "0.08em", padding: "1px 5px", borderRadius: 0, background: table.lang === "si" ? tokens.red.bg : tokens.green.bg, color: table.lang === "si" ? tokens.red.text : tokens.green.text, border: "1px solid", borderColor: table.lang === "si" ? tokens.red.border : tokens.green.border }}>{table.lang === "si" ? "SI" : "EN"}</span>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: dz.nameWrap, overflow: "hidden" }}>
+            {table.resName && <span style={{ fontFamily: FONT, fontSize: dz.nameFont, fontWeight: 700, color: tokens.ink[0], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{table.resName}</span>}
+            {table.menuType && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 600, letterSpacing: "0.08em", padding: dz.badgePad, borderRadius: 0, background: tokens.ink[5], color: tokens.ink[3], flexShrink: 0 }}>{isShort ? "SHORT" : "LONG"}</span>}
+            <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 600, letterSpacing: "0.08em", padding: dz.badgePad, borderRadius: 0, background: table.lang === "si" ? tokens.red.bg : tokens.green.bg, color: table.lang === "si" ? tokens.red.text : tokens.green.text, border: "1px solid", borderColor: table.lang === "si" ? tokens.red.border : tokens.green.border, flexShrink: 0 }}>{table.lang === "si" ? "SI" : "EN"}</span>
             {table.birthday && <span style={{ fontSize: "10px" }}>🎂</span>}
             {table.guestType === "hotel" && (() => {
               const rs = Array.isArray(table.rooms) && table.rooms.length ? table.rooms.filter(Boolean) : (table.room ? [table.room] : []);
@@ -243,7 +266,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-          <div style={{ fontFamily: FONT, fontSize: "14px", fontWeight: 700, color: allDone ? tokens.green.border : tokens.ink[0], lineHeight: 1 }}>{firedCount}<span style={{ fontSize: "9px", color: tokens.ink[3], fontWeight: 400 }}>/{totalCourses}</span></div>
+          <div style={{ fontFamily: FONT, fontSize: dz.counterFont, fontWeight: 700, color: allDone ? tokens.green.border : tokens.ink[0], lineHeight: 1 }}>{firedCount}<span style={{ fontSize: "9px", color: tokens.ink[3], fontWeight: 400 }}>/{totalCourses}</span></div>
           {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: "8px", color: tokens.green.border }}>{durationMins} min</div>}
           {editable && (
             <button
@@ -263,7 +286,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
       {/* ── Notes banner ── */}
       {table.notes && (
-        <div style={{ background: tokens.tint.parchment, borderBottom: `1px solid ${tokens.ink[4]}`, padding: "5px 10px", display: "flex", gap: 6, alignItems: "flex-start" }}>
+        <div style={{ background: tokens.tint.parchment, borderBottom: `1px solid ${tokens.ink[4]}`, padding: dz.rowPad, display: "flex", gap: 6, alignItems: "flex-start" }}>
           <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], flexShrink: 0, lineHeight: 1.4 }}>📋</span>
           <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[2], lineHeight: 1.35, fontStyle: "italic" }}>{table.notes}</span>
         </div>
@@ -347,7 +370,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       )}
 
       {/* ── Pace ── */}
-      <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: "5px 10px", display: "flex", alignItems: "center", gap: 6 }}>
+      <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: dz.rowPad, display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase", flexShrink: 0 }}>PACE</span>
         {["Slow", "Fast"].map(p => {
           const colors = { Slow: { on: tokens.ink[0], bg: tokens.neutral[0], border: tokens.charcoal.default }, Fast: { on: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } };
@@ -355,7 +378,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const col = colors[p];
           return (
             <button key={p} onClick={() => upd && upd(table.id, "pace", active ? "" : p)} style={{
-              fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "9px 10px",
+              fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: dz.paceBtnPad,
               border: `1px solid ${active ? col.border : tokens.ink[4]}`,
               borderRadius: 0, cursor: upd ? "pointer" : "default",
               background: active ? col.bg : tokens.neutral[0], color: active ? col.on : tokens.ink[3],
@@ -366,7 +389,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       </div>
 
       {/* ── Seats ── */}
-      <div style={{ background: tokens.neutral[0], borderBottom: `1px solid ${tokens.ink[4]}`, padding: "5px 10px" }}>
+      <div style={{ background: tokens.neutral[0], borderBottom: `1px solid ${tokens.ink[4]}`, padding: dz.rowPad }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 6px" }}>
         {seats.map(s => {
             const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
@@ -376,7 +399,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             return (
               <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 3 }}>
                 <span style={{
-                  fontFamily: FONT, fontSize: "8px", fontWeight: 700, padding: "2px 5px", borderRadius: 0,
+                  fontFamily: FONT, fontSize: "8px", fontWeight: 700, padding: dz.seatChipPad, borderRadius: 0,
                   background: p ? (pairingBg[p] || tokens.ink[5]) : tokens.ink[5],
                   color: p ? (pairingColor[p] || tokens.ink[2]) : tokens.ink[2],
                   border: `1px solid ${tokens.ink[4]}`,
@@ -522,11 +545,11 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             }}>
               <div
                 onClick={() => { if (editable && showEdit) return; fired ? unfire(key) : fire(key); }}
-                style={{ display: "flex", alignItems: "center", padding: "7px 10px 7px 8px", gap: 7, cursor: editable && showEdit ? "default" : "pointer" }}>
-                <span style={{ fontFamily: FONT, fontSize: "12px", color: fired ? tokens.green.border : tokens.ink[4], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
+                style={{ display: "flex", alignItems: "center", padding: dz.coursePad, gap: dz.courseGap, cursor: editable && showEdit ? "default" : "pointer" }}>
+                <span style={{ fontFamily: FONT, fontSize: dz.courseGlyph, color: fired ? tokens.green.border : tokens.ink[4], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
-                    fontFamily: FONT, fontSize: "11px", fontWeight: 700, lineHeight: 1.25,
+                    fontFamily: FONT, fontSize: dz.courseFont, fontWeight: 700, lineHeight: dz.courseLH,
                     color: fired ? tokens.ink[4] : kcNote.name ? tokens.red.text : tokens.ink[0],
                     textDecoration: fired ? "line-through" : "none",
                     letterSpacing: "0.02em",
@@ -634,7 +657,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         const timeRange = table.arrivedAt && lastFiredAt ? `${table.arrivedAt}–${lastFiredAt}` : null;
         const durLabel  = fmtDuration(durationMins);
         return (
-          <div style={{ background: tokens.green.bg, borderTop: `2px solid ${tokens.green.border}`, padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ background: tokens.green.bg, borderTop: `2px solid ${tokens.green.border}`, padding: dz.footerPad, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontFamily: FONT, fontSize: 13, color: tokens.green.border }}>✓</span>
               <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -658,7 +681,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   );
 }
 
-export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {} }) {
+export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
@@ -693,6 +716,7 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
           dragListeners={listeners}
           profiles={profiles}
           assignments={assignments}
+          compact={compact}
         />
       )}
     </div>
@@ -831,6 +855,9 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
   // Width of the dragged ticket, captured at drag start so the floating overlay
   // matches the grid cell it came from (cells are now fluid, not a fixed 248px).
   const [activeWidth, setActiveWidth] = useState(null);
+  // Large display (e.g. 32" 1280×720 panel) → compact tickets + tighter gap so
+  // 5 columns × 2 rows = 10 tickets fit on screen.
+  const compact = !useIsMobile(LARGE_BOARD_BP);
 
   // Keep order in sync when tables are added/removed
   useEffect(() => {
@@ -894,7 +921,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
           {/* Responsive grid: a 1280px-wide display (e.g. a 32" 1280×720 panel)
               fits exactly 5 tickets per row, so 10 show across two rows. Narrower
               screens get fewer columns. */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", alignItems: "start", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", alignItems: "start", gap: compact ? 8 : 12 }}>
             {orderedTables.map(t => (
               <SortableTicket
                 key={t.id}
@@ -905,6 +932,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 anyDragging={activeId !== null}
                 profiles={profiles}
                 assignments={assignments}
+                compact={compact}
               />
             ))}
           </div>
@@ -923,6 +951,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
               upd={upd}
               profiles={profiles}
               assignments={assignments}
+              compact={compact}
             />
           </div>
         )}

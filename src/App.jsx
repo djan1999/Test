@@ -4211,7 +4211,9 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
       <Header modeLabel="KITCHEN" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
-      <div style={{ padding: appIsMobile ? "12px 10px" : "20px 24px" }}>
+      {/* Slim desktop padding: on a 720px-tall kitchen panel every vertical px
+          counts toward fitting two full rows of tickets. */}
+      <div style={{ padding: appIsMobile ? "12px 10px" : "10px 16px" }}>
         <Suspense fallback={lazyViewFallback}>
           <KitchenBoard
             tables={tables}
