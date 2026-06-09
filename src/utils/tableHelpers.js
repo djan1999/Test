@@ -61,6 +61,35 @@ export const blankTable = id => ({
 
 export const initTables = Array.from({ length: 10 }, (_, i) => blankTable(i + 1));
 
+// Descriptive (label-level) table fields derived from a reservation's data
+// blob. These are safe to apply even to a table where service has already
+// started — they never touch seats, orders, kitchen log, or grouping. Used by
+// both the board↔reservations reconcile and the live-table sync that runs when
+// a reservation is edited mid-service (e.g. switching a seated table to the
+// SHORT menu must reach the kitchen board, which reads table.menuType).
+export const reservationDescriptiveFields = (d = {}) => ({
+  resName:            d.resName || "",
+  resTime:            d.resTime || "",
+  menuType:           d.menuType || "",
+  lang:               d.lang || "en",
+  guestType:          d.guestType || "",
+  room:               (Array.isArray(d.rooms) && d.rooms.length ? d.rooms[0] : d.room) || "",
+  rooms:              Array.isArray(d.rooms) && d.rooms.length ? d.rooms.filter(Boolean) : (d.room ? [d.room] : []),
+  birthday:           !!d.birthday,
+  cakeNote:           d.birthday ? (d.cakeNote || "") : "",
+  restrictions:       d.restrictions || [],
+  notes:              d.notes || "",
+  kitchenCourseNotes: d.kitchenCourseNotes || {},
+});
+
+// Which service a reservation belongs to. Explicit session wins; legacy rows
+// without one fall back to the time heuristic (before 15:00 → lunch).
+export const resolveReservationSession = (d = {}) => {
+  const sess = d.service_session;
+  if (sess === "lunch" || sess === "dinner") return sess;
+  return ((d.resTime || "") && d.resTime < "15:00") ? "lunch" : "dinner";
+};
+
 export const sanitizeTable = t => ({
   ...blankTable(t.id ?? 0),
   ...t,

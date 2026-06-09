@@ -1,5 +1,59 @@
 import { describe, it, expect } from "vitest";
-import { makeSeats, blankTable, sanitizeTable, fmt, parseHHMM, mergeTableGroups, tableGroupLabel } from "../utils/tableHelpers.js";
+import {
+  makeSeats, blankTable, sanitizeTable, fmt, parseHHMM, mergeTableGroups, tableGroupLabel,
+  reservationDescriptiveFields, resolveReservationSession,
+} from "../utils/tableHelpers.js";
+
+describe("reservationDescriptiveFields", () => {
+  it("maps reservation data to table label fields (menuType included)", () => {
+    const fields = reservationDescriptiveFields({
+      resName: "Smith", resTime: "12:30", menuType: "short", lang: "si",
+      guestType: "hotel", rooms: ["12", "14"], birthday: true, cakeNote: "40th",
+      restrictions: ["gluten_free"], notes: "window seat",
+      kitchenCourseNotes: { sour_soup: { name: "No chili" } },
+    });
+    expect(fields.menuType).toBe("short");
+    expect(fields.resName).toBe("Smith");
+    expect(fields.room).toBe("12");
+    expect(fields.rooms).toEqual(["12", "14"]);
+    expect(fields.birthday).toBe(true);
+    expect(fields.cakeNote).toBe("40th");
+    expect(fields.kitchenCourseNotes).toEqual({ sour_soup: { name: "No chili" } });
+  });
+
+  it("never includes live-service fields (seats, guests, kitchenLog, tableGroup)", () => {
+    const fields = reservationDescriptiveFields({ menuType: "short", guests: 6, seats: [{ id: 1 }] });
+    expect(fields).not.toHaveProperty("seats");
+    expect(fields).not.toHaveProperty("guests");
+    expect(fields).not.toHaveProperty("kitchenLog");
+    expect(fields).not.toHaveProperty("tableGroup");
+    expect(fields).not.toHaveProperty("arrivedAt");
+    expect(fields).not.toHaveProperty("active");
+  });
+
+  it("clears cakeNote when birthday is off and defaults everything safely", () => {
+    const fields = reservationDescriptiveFields({ cakeNote: "stale", room: "3" });
+    expect(fields.cakeNote).toBe("");
+    expect(fields.menuType).toBe("");
+    expect(fields.lang).toBe("en");
+    expect(fields.rooms).toEqual(["3"]);
+    expect(reservationDescriptiveFields().restrictions).toEqual([]);
+  });
+});
+
+describe("resolveReservationSession", () => {
+  it("uses the explicit session when present", () => {
+    expect(resolveReservationSession({ service_session: "lunch", resTime: "19:00" })).toBe("lunch");
+    expect(resolveReservationSession({ service_session: "dinner", resTime: "12:00" })).toBe("dinner");
+  });
+
+  it("falls back to the time heuristic for legacy rows", () => {
+    expect(resolveReservationSession({ resTime: "12:30" })).toBe("lunch");
+    expect(resolveReservationSession({ resTime: "19:00" })).toBe("dinner");
+    expect(resolveReservationSession({ resTime: "" })).toBe("dinner");
+    expect(resolveReservationSession({})).toBe("dinner");
+  });
+});
 
 describe("makeSeats", () => {
   it("creates n seats with default values", () => {

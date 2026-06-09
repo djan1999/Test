@@ -29,7 +29,10 @@ import {
   workspaceKey,
   STORAGE_KEY,
 } from "./utils/storage.js";
-import { makeSeats, blankTable, sanitizeTable, initTables, fmt } from "./utils/tableHelpers.js";
+import {
+  makeSeats, blankTable, sanitizeTable, initTables, fmt,
+  reservationDescriptiveFields, resolveReservationSession,
+} from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import {
   resolveAperitifFromQuickAccessOption,
@@ -2984,6 +2987,28 @@ export default function App() {
   };
 
   // ── Reservations CRUD ─────────────────────────────────────────────────────
+  // Push descriptive reservation fields (menu type, name, notes…) to tables
+  // where service has ALREADY started. The reconcile effect deliberately skips
+  // started tables to protect live seats/orders/kitchen progress — but that
+  // also froze label-level fields, so e.g. switching a seated table to the
+  // SHORT menu on the reservation sheet never reached the kitchen board (it
+  // derives its course list from table.menuType) and the kitchen kept firing
+  // the long menu. Seats, guest count, grouping and kitchen log stay untouched.
+  const syncStartedTablesFromReservation = (dateStr, rData, tableIdNum) => {
+    if (!dateStr || dateStr !== serviceDate) return;
+    const d = rData || {};
+    if (resolveReservationSession(d) !== activeServiceSession) return;
+    const group = (d.tableGroup?.length > 1 ? d.tableGroup : [tableIdNum]).map(Number);
+    group.forEach(tid => {
+      const t = tablesRef.current?.find(x => x.id === tid);
+      const started = t && (t.active || t.arrivedAt
+        || (t.kitchenLog && Object.keys(t.kitchenLog).length > 0)
+        || t.kitchenArchived);
+      if (!started) return; // not-started tables are owned by the reconcile effect
+      updMany(tid, reservationDescriptiveFields(d));
+    });
+  };
+
   const upsertReservation = async ({ id, date, table_id, data: rData, _skipAutoMove = false }) => {
     const dbRow = { date, table_id, data: rData };
     if (id) {
@@ -3019,10 +3044,14 @@ export default function App() {
             if (error) throw error;
           },
         });
-        if (result.ok) setReservations(prev => prev.map(r => r.id === id ? { ...r, ...dbRow } : r));
+        if (result.ok) {
+          setReservations(prev => prev.map(r => r.id === id ? { ...r, ...dbRow } : r));
+          syncStartedTablesFromReservation(date, rData, Number(table_id));
+        }
         return { ok: result.ok, error: result.error };
       }
       setReservations(prev => prev.map(r => r.id === id ? { ...r, ...dbRow } : r));
+      syncStartedTablesFromReservation(date, rData, Number(table_id));
       return { ok: true };
     }
     if (supabase) {
@@ -3039,11 +3068,15 @@ export default function App() {
           inserted = data;
         },
       });
-      if (result.ok && inserted) setReservations(prev => [...prev, inserted]);
+      if (result.ok && inserted) {
+        setReservations(prev => [...prev, inserted]);
+        syncStartedTablesFromReservation(date, rData, Number(table_id));
+      }
       return { ok: result.ok, error: result.error, data: inserted };
     }
     const local = { ...dbRow, id: crypto.randomUUID(), created_at: new Date().toISOString() };
     setReservations(prev => [...prev, local]);
+    syncStartedTablesFromReservation(date, rData, Number(table_id));
     return { ok: true, data: local };
   };
 
@@ -3111,21 +3144,10 @@ export default function App() {
           : rawSeats;
         const updated = {
           ...t,
-          resName:            d.resName || "",
-          resTime:            d.resTime || "",
-          menuType:           d.menuType || "",
-          lang:               d.lang || "en",
-          guests:             d.guests || 2,
-          guestType:          d.guestType || "",
-          room:               (Array.isArray(d.rooms) && d.rooms.length ? d.rooms[0] : d.room) || "",
-          rooms:              Array.isArray(d.rooms) && d.rooms.length ? d.rooms.filter(Boolean) : (d.room ? [d.room] : []),
-          birthday:           !!d.birthday,
-          cakeNote:           d.birthday ? (d.cakeNote || "") : "",
-          restrictions:       d.restrictions || [],
-          notes:              d.notes || "",
-          tableGroup:         group,
-          kitchenCourseNotes: d.kitchenCourseNotes || {},
-          seats:              reconciledSeats,
+          ...reservationDescriptiveFields(d),
+          guests:     d.guests || 2,
+          tableGroup: group,
+          seats:      reconciledSeats,
         };
         if (JSON.stringify(sanitizeTable(updated)) === JSON.stringify(sanitizeTable(t))) return t;
         changed = true;
@@ -3183,13 +3205,7 @@ export default function App() {
     if ((mode !== "service" && mode !== "display") || !serviceDate) return;
     reconcileBoardWithReservations(reservations.filter(r => {
       if (r.date !== serviceDate) return false;
-      const sess = r.data?.service_session;
-      // Legacy reservations without an explicit session fall back to a
-      // time heuristic so they still surface in the matching service.
-      const resolved = (sess === "lunch" || sess === "dinner")
-        ? sess
-        : ((r.data?.resTime || "") && r.data.resTime < "15:00" ? "lunch" : "dinner");
-      return resolved === activeServiceSession;
+      return resolveReservationSession(r.data) === activeServiceSession;
     }));
   }, [reservations, serviceDate, mode, hydrated, reservationsLoaded, boardSyncTick, activeServiceSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
