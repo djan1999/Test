@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
-import { SCALE_MIN, SCALE_MAX } from "../../hooks/useDisplayScale.js";
 
 const FONT = tokens.font;
 const { ink, rule, neutral, green, red, charcoal, tint } = tokens;
@@ -16,8 +15,6 @@ export default function Header({
   showInventory = false,
   showSync = false,
   showEndService = false,
-  showScale = false,
-  scale = 1,
   syncLabel,
   syncLive,
   activeCount,
@@ -31,9 +28,6 @@ export default function Header({
   onInventory,
   onSyncAll,
   onEndService,
-  onZoomIn,
-  onZoomOut,
-  onResetScale,
 }) {
   const isMobile = useIsMobile(BP.sm);
   const [sSt, setSSt] = useState(null);
@@ -84,25 +78,6 @@ export default function Header({
     touchAction:   "manipulation",
     whiteSpace:    "nowrap",
   };
-
-  // Display-scale stepper — segmented [ − | 100% | + ], hairline-divided.
-  const scaleSeg = {
-    fontFamily:   FONT,
-    fontWeight:   500,
-    lineHeight:   1,
-    display:      "inline-flex",
-    alignItems:   "center",
-    justifyContent: "center",
-    border:       "none",
-    background:   "transparent",
-    color:        ink[1],
-    cursor:       "pointer",
-    minHeight:    isMobile ? 44 : 30,
-    touchAction:  "manipulation",
-    userSelect:   "none",
-  };
-  const atMin = scale <= SCALE_MIN + 1e-6;
-  const atMax = scale >= SCALE_MAX - 1e-6;
 
   // Sync status chip
   const syncBorder = sSt === "ok" ? green.border : sSt === "err" || sSt === "partial" ? red.border : syncLive ? green.border : ink[4];
@@ -196,42 +171,6 @@ export default function Header({
               color:      red.text,
               fontWeight: 600,
             }}>{isMobile ? "END" : "END SERVICE"}</button>
-          )}
-
-          {showScale && (
-            <div
-              role="group"
-              aria-label="Display scale"
-              title="Display scale — shrink to fit more on screen"
-              style={{
-                display:    "inline-flex",
-                alignItems: "stretch",
-                border:     `${rule.hairline} solid ${ink[3]}`,
-                borderRadius: 0,
-                background: neutral[0],
-                flexShrink: 0,
-                overflow:   "hidden",
-              }}
-            >
-              <button
-                onClick={onZoomOut}
-                disabled={atMin}
-                aria-label="Zoom out"
-                style={{ ...scaleSeg, fontSize: isMobile ? "16px" : "14px", padding: isMobile ? "0 15px" : "0 11px", color: atMin ? ink[4] : ink[1], cursor: atMin ? "default" : "pointer", borderRight: `${rule.hairline} solid ${ink[4]}` }}
-              >−</button>
-              <button
-                onClick={onResetScale}
-                aria-label={`Display scale ${Math.round(scale * 100)} percent — tap to reset to 100%`}
-                title="Reset to 100%"
-                style={{ ...scaleSeg, fontSize: isMobile ? "11px" : "9px", letterSpacing: "0.06em", minWidth: isMobile ? 50 : 44, color: ink[2] }}
-              >{Math.round(scale * 100)}%</button>
-              <button
-                onClick={onZoomIn}
-                disabled={atMax}
-                aria-label="Zoom in"
-                style={{ ...scaleSeg, fontSize: isMobile ? "16px" : "14px", padding: isMobile ? "0 15px" : "0 11px", color: atMax ? ink[4] : ink[1], cursor: atMax ? "default" : "pointer", borderLeft: `${rule.hairline} solid ${ink[4]}` }}
-              >+</button>
-            </div>
           )}
 
           <button onClick={onExit} style={btn}>EXIT</button>

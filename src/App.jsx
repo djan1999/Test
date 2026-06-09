@@ -39,7 +39,6 @@ import {
   aperitifMatchesQuickAccessOption,
 } from "./utils/quickAccessResolve.js";
 import { useIsMobile, BP } from "./hooks/useIsMobile.js";
-import { useDisplayScale } from "./hooks/useDisplayScale.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useOfflineQueue } from "./hooks/useOfflineQueue.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
@@ -2083,9 +2082,6 @@ export default function App() {
   const localBev = readLocalBeverages();
   const loadMenuCoursesRef = useRef(null);
   const appIsMobile = useIsMobile(BP.md);
-  // Device-level display scale — lets a large touchscreen (e.g. 32") shrink the
-  // whole app to fit more on screen (e.g. ~10 kitchen tickets per row).
-  const { scale: displayScale, zoomIn: zoomInDisplay, zoomOut: zoomOutDisplay, reset: resetDisplayScale } = useDisplayScale();
 
   const [tables,    setTables]    = useState(initialState.tables);
   // Hydrate from the per-workspace device cache so the menu/board paint
@@ -4063,11 +4059,6 @@ export default function App() {
     onArchive: () => setArchiveOpen(true),
     onInventory: () => setInventoryOpen(true),
     onSyncAll: syncWines,
-    showScale: true,
-    scale: displayScale,
-    onZoomIn: zoomInDisplay,
-    onZoomOut: zoomOutDisplay,
-    onResetScale: resetDisplayScale,
   };
 
   // Preview — visit /#preview to inspect TableCard design without auth
@@ -4351,7 +4342,7 @@ export default function App() {
       />
 
       {sel === null ? (
-        <div style={{ padding: appIsMobile ? "0 0 32px" : "0 0 48px", width: "100%", overflowX: "hidden" }}>
+        <div style={{ padding: appIsMobile ? "0 0 32px" : "0 0 48px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
           {/* [SERVICE READOUT] strip — stats + Quick Access toggle */}
           <div style={{
             borderBottom: `1px solid ${tokens.ink[4]}`,

@@ -7,22 +7,8 @@ import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
 import { extraPairingLabel, extraPairingForSeat } from "../../constants/pairings.js";
-import { useKitchenColumns, AUTO, COLS_MIN, COLS_MAX } from "../../hooks/useKitchenColumns.js";
 
 const FONT = tokens.font;
-
-// Responsive grid sizing. In "auto" mode the board fits as many columns as the
-// screen comfortably allows at this minimum ticket width; an explicit column
-// count overrides it. GAP/PAD are used to estimate the current auto column count
-// (for the +/− control) from the viewport without measuring the DOM.
-const TICKET_MIN_W = 240;
-const TICKET_GAP = 12;
-const BOARD_HPAD = 48; // 24px container padding each side (see Kitchen mode wrapper)
-
-export function estimateAutoCols(viewportWidth) {
-  const vw = viewportWidth ?? (typeof window !== "undefined" ? window.innerWidth : 1280);
-  return Math.min(COLS_MAX, Math.max(COLS_MIN, Math.round((vw - BOARD_HPAD + TICKET_GAP) / (TICKET_MIN_W + TICKET_GAP))));
-}
 
 // Resolve course list template from the guest menu profile — same logic as the
 // print generator — so both live board and ticket preview show the same courses.
@@ -681,8 +667,7 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
       ref={setNodeRef}
       {...attributes}
       style={{
-        // Fill the grid cell so the ticket width tracks the chosen column count
-        // (real pixels — crisp at native resolution, no zoom).
+        // Fill the grid cell so ticket width tracks the column count.
         width: "100%", minWidth: 0,
         // Only apply transform while a drag is active — prevents stale transforms
         // from persisting after drag ends and causing cards to appear displaced.
@@ -843,24 +828,9 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
 
   const [order, setOrder] = useState(() => activeTables.map(t => t.id));
   const [activeId, setActiveId] = useState(null);
-  // Width of the ticket being dragged, captured at drag start so the floating
-  // DragOverlay matches the grid cell it came from (cells are now fluid).
+  // Width of the dragged ticket, captured at drag start so the floating overlay
+  // matches the grid cell it came from (cells are now fluid, not a fixed 248px).
   const [activeWidth, setActiveWidth] = useState(null);
-
-  const { columns, setColumns } = useKitchenColumns();
-  const currentCols = columns === AUTO ? estimateAutoCols() : columns;
-  const fewerCols = () => setColumns(Math.max(COLS_MIN, currentCols - 1));
-  const moreCols  = () => setColumns(Math.min(COLS_MAX, currentCols + 1));
-  const gridTemplateColumns = columns === AUTO
-    ? `repeat(auto-fill, minmax(${TICKET_MIN_W}px, 1fr))`
-    : `repeat(${columns}, minmax(0, 1fr))`;
-  const colBtn = {
-    fontFamily: FONT, fontWeight: 500, lineHeight: 1, fontSize: "15px",
-    padding: "0 14px", minHeight: 40,
-    display: "inline-flex", alignItems: "center", justifyContent: "center",
-    border: "none", background: "transparent", cursor: "pointer",
-    touchAction: "manipulation", userSelect: "none",
-  };
 
   // Keep order in sync when tables are added/removed
   useEffect(() => {
@@ -900,32 +870,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
   return (
     <>
     <KitchenAlertOverlay alerts={pendingAlerts} onConfirm={confirmAlert} />
-
-    {/* Column density — pack more tickets on a large screen (crisp, real px). */}
-    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, paddingBottom: 12 }}>
-      <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3] }}>COLUMNS</span>
-      <div role="group" aria-label="Kitchen columns" style={{ display: "inline-flex", alignItems: "stretch", border: `1px solid ${tokens.ink[3]}`, background: tokens.neutral[0], overflow: "hidden" }}>
-        <button
-          onClick={fewerCols}
-          disabled={currentCols <= COLS_MIN}
-          aria-label="Fewer, larger tickets"
-          style={{ ...colBtn, borderRight: `1px solid ${tokens.ink[4]}`, color: currentCols <= COLS_MIN ? tokens.ink[4] : tokens.ink[1], cursor: currentCols <= COLS_MIN ? "default" : "pointer" }}
-        >−</button>
-        <button
-          onClick={() => setColumns(AUTO)}
-          title="Tap for Auto (fit to screen)"
-          aria-label={columns === AUTO ? `Auto, ${currentCols} columns — tap to keep auto` : `${currentCols} columns — tap for auto`}
-          style={{ ...colBtn, minWidth: 60, fontSize: "9px", letterSpacing: "0.06em", color: columns === AUTO ? tokens.ink[3] : tokens.ink[1], fontWeight: columns === AUTO ? 400 : 600 }}
-        >{columns === AUTO ? `AUTO · ${currentCols}` : currentCols}</button>
-        <button
-          onClick={moreCols}
-          disabled={currentCols >= COLS_MAX}
-          aria-label="More, smaller tickets"
-          style={{ ...colBtn, borderLeft: `1px solid ${tokens.ink[4]}`, color: currentCols >= COLS_MAX ? tokens.ink[4] : tokens.ink[1], cursor: currentCols >= COLS_MAX ? "default" : "pointer" }}
-        >+</button>
-      </div>
-    </div>
-
     <DndContext
       sensors={sensors}
       collisionDetection={rectIntersection}
@@ -947,7 +891,10 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     >
       <SortableContext items={order} strategy={rectSortingStrategy}>
         <div style={{ paddingBottom: 8 }}>
-          <div style={{ display: "grid", gridTemplateColumns, alignItems: "start", gap: TICKET_GAP }}>
+          {/* Responsive grid: a 1280px-wide display (e.g. a 32" 1280×720 panel)
+              fits exactly 5 tickets per row, so 10 show across two rows. Narrower
+              screens get fewer columns. */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", alignItems: "start", gap: 12 }}>
             {orderedTables.map(t => (
               <SortableTicket
                 key={t.id}
@@ -966,7 +913,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
       <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>
         {activeTable && (
           <div style={{
-            width: activeWidth || TICKET_MIN_W, borderRadius: 0,
+            width: activeWidth || 234, borderRadius: 0,
             boxShadow: "0 4px 16px rgba(0,0,0,0.10)",
             opacity: 0.97,
           }}>
