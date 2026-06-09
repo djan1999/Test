@@ -855,9 +855,17 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
   // Width of the dragged ticket, captured at drag start so the floating overlay
   // matches the grid cell it came from (cells are now fluid, not a fixed 248px).
   const [activeWidth, setActiveWidth] = useState(null);
-  // Large display (e.g. 32" 1280×720 panel) → compact tickets + tighter gap so
-  // 5 columns × 2 rows = 10 tickets fit on screen.
-  const compact = !useIsMobile(LARGE_BOARD_BP);
+  // Large display (e.g. 32" 1280×720 panel): adapt to the ticket count instead
+  // of always packing maximum density. A handful of tickets gets big roomy
+  // cards that use the screen; from 6 tickets the board switches to compact
+  // 5-per-row so two full rows (10 tickets) fit on screen at once. Archiving
+  // tickets scales the survivors back up automatically.
+  const largeBoard = !useIsMobile(LARGE_BOARD_BP);
+  const ticketCount = activeTables.length;
+  const compact = largeBoard && ticketCount > 5;
+  // 1-3 tickets share a 3-column width (≈1/3 screen each — any wider reads
+  // like a poster); 4 and 5 get their own column so one row always fills.
+  const largeCols = Math.min(5, Math.max(3, ticketCount));
 
   // Keep order in sync when tables are added/removed
   useEffect(() => {
@@ -918,10 +926,17 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     >
       <SortableContext items={order} strategy={rectSortingStrategy}>
         <div style={{ paddingBottom: 8 }}>
-          {/* Responsive grid: a 1280px-wide display (e.g. a 32" 1280×720 panel)
-              fits exactly 5 tickets per row, so 10 show across two rows. Narrower
-              screens get fewer columns. */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", alignItems: "start", gap: compact ? 8 : 12 }}>
+          {/* Responsive grid. Large boards (≥1100px, e.g. a 32" 1280×720 panel)
+              size columns to the ticket count — capped at 5 per row so 10
+              tickets show as two full rows. Narrower screens auto-fill. */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: largeBoard
+              ? `repeat(${largeCols}, minmax(0, 1fr))`
+              : "repeat(auto-fill, minmax(210px, 1fr))",
+            alignItems: "start",
+            gap: compact ? 8 : 12,
+          }}>
             {orderedTables.map(t => (
               <SortableTicket
                 key={t.id}
