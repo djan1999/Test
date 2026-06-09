@@ -4326,7 +4326,7 @@ export default function App() {
       />
 
       {sel === null ? (
-        <div style={{ padding: appIsMobile ? "0 0 32px" : "0 0 48px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
+        <div style={{ padding: appIsMobile ? "0 0 32px" : "0 0 48px", width: "100%", overflowX: "hidden" }}>
           {/* [SERVICE READOUT] strip — stats + Quick Access toggle */}
           <div style={{
             borderBottom: `1px solid ${tokens.ink[4]}`,
