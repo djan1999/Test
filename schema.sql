@@ -3,12 +3,11 @@
 -- Run this in the Supabase SQL editor to set up all tables.
 --
 -- MULTI-TENANT: every restaurant is an isolated "workspace". Each data table
--- below carries a `workspace_id`, and the live database additionally enforces
--- composite primary keys on the natural-key tables (service_tables,
--- service_settings, menu_courses, wines) plus per-workspace membership policies.
--- Those incremental changes are applied to the live project via tracked Supabase
--- migrations; this file documents the tenancy foundation (the new tables and
--- helper functions) so a fresh project can be bootstrapped.
+-- below carries a `workspace_id` with composite primary keys on the
+-- natural-key tables (service_tables, service_settings, menu_courses, wines)
+-- and per-workspace membership RLS policies — this file matches the live
+-- database (verified against it on 2026-06-09), so a fresh project
+-- bootstrapped from it gets the same tenancy enforcement as production.
 -- ============================================================
 
 -- ── workspaces / members / platform admins ──────────────────
@@ -66,15 +65,17 @@ create policy "workspaces_read" on public.workspaces
   for select to authenticated
   using (public.is_platform_admin() or public.is_workspace_member(id));
 
+-- auth.uid() is wrapped in a scalar subquery so Postgres evaluates it once per
+-- query instead of once per row (Supabase lint 0003_auth_rls_initplan).
 drop policy if exists "members_self_read" on public.workspace_members;
 create policy "members_self_read" on public.workspace_members
   for select to authenticated
-  using (user_id = auth.uid() or public.is_platform_admin());
+  using (user_id = (select auth.uid()) or public.is_platform_admin());
 
 drop policy if exists "platform_admins_self_read" on public.platform_admins;
 create policy "platform_admins_self_read" on public.platform_admins
   for select to authenticated
-  using (user_id = auth.uid());
+  using (user_id = (select auth.uid()));
 
 -- Each data table below also has a per-workspace policy of the form:
 --   create policy "<table>_member_all" on public.<table>
@@ -83,34 +84,29 @@ create policy "platform_admins_self_read" on public.platform_admins
 --     with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
 
 -- ── service_tables ──────────────────────────────────────────
+-- One row per (workspace, table 1-10). The app upserts the ten rows for a
+-- workspace on first use, so no global seed is needed here.
 create table if not exists public.service_tables (
-  table_id integer primary key check (table_id between 1 and 10),
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  table_id integer not null check (table_id between 1 and 10),
   data jsonb not null default '{}'::jsonb,
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  primary key (workspace_id, table_id)
 );
 
 alter table public.service_tables enable row level security;
 
+-- Drop the pre-tenancy open policies if upgrading an old project.
 drop policy if exists "service_tables_read" on public.service_tables;
-create policy "service_tables_read" on public.service_tables
-  for select to anon, authenticated using (true);
-
 drop policy if exists "service_tables_write" on public.service_tables;
-create policy "service_tables_write" on public.service_tables
-  for insert to anon, authenticated with check (true);
-
 drop policy if exists "service_tables_update" on public.service_tables;
-create policy "service_tables_update" on public.service_tables
-  for update to anon, authenticated using (true) with check (true);
-
 drop policy if exists "service_tables_delete" on public.service_tables;
-create policy "service_tables_delete" on public.service_tables
-  for delete to anon, authenticated using (true);
 
-insert into public.service_tables (table_id, data)
-select gs, '{}'::jsonb
-from generate_series(1, 10) as gs
-on conflict (table_id) do nothing;
+drop policy if exists "service_tables_member_all" on public.service_tables;
+create policy "service_tables_member_all" on public.service_tables
+  for all to authenticated
+  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
+  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
 
 -- ── service_settings ────────────────────────────────────────
 -- Generic key/value JSON store. Notable rows used by the app:
@@ -134,40 +130,32 @@ on conflict (table_id) do nothing;
 -- The flat `menu_layouts_v1` row from a previous design pass is intentionally
 -- not read by the current app. It can be left in place; the row-based
 -- menuTemplate is the only guest layout system.
+-- Rows are created per workspace by the app on first use (no global seed).
 create table if not exists public.service_settings (
-  id text primary key,
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  id text not null,
   state jsonb not null default '{}'::jsonb,
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  primary key (workspace_id, id)
 );
 
 alter table public.service_settings enable row level security;
 
+-- Drop the pre-tenancy open policies if upgrading an old project.
 drop policy if exists "service_settings_read" on public.service_settings;
-create policy "service_settings_read" on public.service_settings
-  for select to anon, authenticated using (true);
-
 drop policy if exists "service_settings_write" on public.service_settings;
-create policy "service_settings_write" on public.service_settings
-  for insert to anon, authenticated with check (true);
-
 drop policy if exists "service_settings_update" on public.service_settings;
-create policy "service_settings_update" on public.service_settings
-  for update to anon, authenticated using (true) with check (true);
 
-insert into public.service_settings (id, state)
-values ('main', '{}'::jsonb)
-on conflict (id) do nothing;
-
--- Seed empty Menu Layout Profiles payload so the app has a row to read on first load.
--- The app populates default Long/Short Menu and Long/Short Kitchen profiles
--- from menuCourses on first run.
-insert into public.service_settings (id, state)
-values ('menu_layout_profiles_v2', '{"profiles":[],"assignments":{"longMenuProfileId":null,"shortMenuProfileId":null,"longKitchenProfileId":null,"shortKitchenProfileId":null},"activeProfileId":null}'::jsonb)
-on conflict (id) do nothing;
+drop policy if exists "service_settings_member_all" on public.service_settings;
+create policy "service_settings_member_all" on public.service_settings
+  for all to authenticated
+  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
+  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
 
 -- ── service_archive ─────────────────────────────────────────
 create table if not exists public.service_archive (
   id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
   date date not null,
   label text not null,
   state jsonb not null default '{}'::jsonb,
@@ -181,27 +169,24 @@ alter table public.service_archive
 
 alter table public.service_archive enable row level security;
 
+-- Drop the pre-tenancy open policies if upgrading an old project.
 drop policy if exists "service_archive_read" on public.service_archive;
-create policy "service_archive_read" on public.service_archive
-  for select to anon, authenticated using (true);
-
 drop policy if exists "service_archive_write" on public.service_archive;
-create policy "service_archive_write" on public.service_archive
-  for insert to anon, authenticated with check (true);
-
 drop policy if exists "service_archive_update" on public.service_archive;
-create policy "service_archive_update" on public.service_archive
-  for update to anon, authenticated using (true) with check (true);
-
 drop policy if exists "service_archive_delete" on public.service_archive;
-create policy "service_archive_delete" on public.service_archive
-  for delete to anon, authenticated using (true);
+
+drop policy if exists "service_archive_member_all" on public.service_archive;
+create policy "service_archive_member_all" on public.service_archive
+  for all to authenticated
+  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
+  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
 
 -- ── menu_courses ─────────────────────────────────────────────
 -- This is the authoritative source for all menu data.
 -- Courses are managed directly via the Admin panel (no external sync).
 create table if not exists public.menu_courses (
-  position integer primary key,
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  position integer not null,
   menu jsonb,                              -- {name, sub} EN dish
   menu_si jsonb,                           -- {name, sub} SI dish
   -- Dietary restriction substitutes (each is {name, sub} or null)
@@ -257,7 +242,8 @@ create table if not exists public.menu_courses (
   kitchen_note text not null default '',
   aperitif_btn text,
   is_active boolean not null default true,
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  primary key (workspace_id, position)
 );
 
 -- Migration: add columns if upgrading an existing table
@@ -298,25 +284,22 @@ alter table public.menu_courses
 
 alter table public.menu_courses enable row level security;
 
+-- Drop the pre-tenancy open policies if upgrading an old project.
 drop policy if exists "menu_courses_read" on public.menu_courses;
-create policy "menu_courses_read" on public.menu_courses
-  for select to anon, authenticated using (true);
-
 drop policy if exists "menu_courses_write" on public.menu_courses;
-create policy "menu_courses_write" on public.menu_courses
-  for insert to anon, authenticated with check (true);
-
 drop policy if exists "menu_courses_update" on public.menu_courses;
-create policy "menu_courses_update" on public.menu_courses
-  for update to anon, authenticated using (true) with check (true);
-
 drop policy if exists "menu_courses_delete" on public.menu_courses;
-create policy "menu_courses_delete" on public.menu_courses
-  for delete to anon, authenticated using (true);
+
+drop policy if exists "menu_courses_member_all" on public.menu_courses;
+create policy "menu_courses_member_all" on public.menu_courses
+  for all to authenticated
+  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
+  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
 
 -- ── wines ────────────────────────────────────────────────────
 create table if not exists public.wines (
-  key text primary key,
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  key text not null,
   producer text not null,
   name text not null,
   wine_name text,
@@ -325,7 +308,8 @@ create table if not exists public.wines (
   country text,
   by_glass boolean not null default false,
   source text not null default 'sync',
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  primary key (workspace_id, key)
 );
 
 -- Migration: add source column if upgrading an existing table
@@ -337,25 +321,22 @@ create index if not exists wines_source_country_idx
 
 alter table public.wines enable row level security;
 
+-- Drop the pre-tenancy open policies if upgrading an old project.
 drop policy if exists "wines_read" on public.wines;
-create policy "wines_read" on public.wines
-  for select to anon, authenticated using (true);
-
 drop policy if exists "wines_write" on public.wines;
-create policy "wines_write" on public.wines
-  for insert to anon, authenticated with check (true);
-
 drop policy if exists "wines_update" on public.wines;
-create policy "wines_update" on public.wines
-  for update to anon, authenticated using (true) with check (true);
-
 drop policy if exists "wines_delete" on public.wines;
-create policy "wines_delete" on public.wines
-  for delete to anon, authenticated using (true);
+
+drop policy if exists "wines_member_all" on public.wines;
+create policy "wines_member_all" on public.wines
+  for all to authenticated
+  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
+  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
 
 -- ── beverages ────────────────────────────────────────────────
 create table if not exists public.beverages (
   id bigint generated always as identity primary key,
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
   category text not null,
   name text not null,
   notes text not null default '',
@@ -373,25 +354,22 @@ create index if not exists beverages_source_category_idx
 
 alter table public.beverages enable row level security;
 
+-- Drop the pre-tenancy open policies if upgrading an old project.
 drop policy if exists "beverages_read" on public.beverages;
-create policy "beverages_read" on public.beverages
-  for select to anon, authenticated using (true);
-
 drop policy if exists "beverages_write" on public.beverages;
-create policy "beverages_write" on public.beverages
-  for insert to anon, authenticated with check (true);
-
 drop policy if exists "beverages_update" on public.beverages;
-create policy "beverages_update" on public.beverages
-  for update to anon, authenticated using (true) with check (true);
-
 drop policy if exists "beverages_delete" on public.beverages;
-create policy "beverages_delete" on public.beverages
-  for delete to anon, authenticated using (true);
+
+drop policy if exists "beverages_member_all" on public.beverages;
+create policy "beverages_member_all" on public.beverages
+  for all to authenticated
+  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
+  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
 
 -- ── reservations ─────────────────────────────────────────────
 create table if not exists public.reservations (
   id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
   date date not null,
   table_id integer not null,
   data jsonb not null default '{}'::jsonb,
@@ -400,17 +378,16 @@ create table if not exists public.reservations (
 
 alter table public.reservations enable row level security;
 
+-- Drop the pre-tenancy open policies if upgrading an old project.
 drop policy if exists "reservations_read" on public.reservations;
-create policy "reservations_read" on public.reservations
-  for select to anon, authenticated using (true);
-
 drop policy if exists "reservations_write" on public.reservations;
-create policy "reservations_write" on public.reservations
-  for insert to anon, authenticated with check (true);
-
 drop policy if exists "reservations_update" on public.reservations;
-create policy "reservations_update" on public.reservations
-  for update to anon, authenticated using (true) with check (true);
+
+drop policy if exists "reservations_member_all" on public.reservations;
+create policy "reservations_member_all" on public.reservations
+  for all to authenticated
+  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
+  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
 
 drop policy if exists "reservations_delete" on public.reservations;
 create policy "reservations_delete" on public.reservations
