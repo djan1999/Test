@@ -57,6 +57,9 @@ export const blankTable = id => ({
   kitchenLog: {},
   tableGroup: [],
   kitchenAlert: null,
+  // Snapshot of the orders the kitchen last acknowledged (see utils/kitchenAlerts).
+  // Lets a Send carry only what's new instead of the whole order again.
+  kitchenSent: null,
 });
 
 export const initTables = Array.from({ length: 10 }, (_, i) => blankTable(i + 1));

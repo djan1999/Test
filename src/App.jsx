@@ -51,6 +51,7 @@ import {
   restrCompact,
 } from "./constants/dietary.js";
 import { WATER_OPTS, waterStyle, PAIRINGS, pairingStyle, extraPairingForSeat } from "./constants/pairings.js";
+import { kitchenSnapshot, kitchenDelta } from "./utils/kitchenAlerts.js";
 import { BEV_TYPES } from "./constants/beverageTypes.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES, getWorkspaceId, setWorkspaceId } from "./lib/supabaseClient.js";
 import { scopedFrom, scopeJob } from "./lib/scopedDb.js";
@@ -1282,6 +1283,14 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
     const [justSent, setJustSent] = useState(false);
     const seats = t.seats || [];
 
+    // Service → kitchen "Send" only carries what's new since the kitchen last
+    // acknowledged. Diff the live order against the acknowledged baseline (or
+    // against a still-pending alert, so a second Send doesn't repeat what's
+    // already on the kitchen screen). hasKitchenUpdate drives the button.
+    const kitchenCurrent = kitchenSnapshot(seats, optionalExtras, optionalPairings);
+    const pendingSnap = (t.kitchenAlert && !t.kitchenAlert.confirmed) ? (t.kitchenAlert.snapshot || null) : null;
+    const hasKitchenUpdate = kitchenDelta(kitchenCurrent, pendingSnap || t.kitchenSent || {}).length > 0;
+
     const unassigned = allRestr.map((r, i) => ({ ...r, _i: i })).filter(r => !r.pos);
 
     const assignTo = (seatId) => {
@@ -1877,42 +1886,39 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                 background: tokens.neutral[0], color: tokens.ink[2], textTransform: "uppercase",
               }}>Details</button>
             )}
-            {quickMode && upd && isSeated ? (
+            {quickMode && upd && isSeated ? (() => {
+              const idle = !justSent && !hasKitchenUpdate; // kitchen already has everything
+              return (
               <button
-                disabled={justSent}
+                disabled={justSent || idle}
+                title={idle ? "Kitchen is up to date — nothing new to send" : undefined}
                 onClick={() => {
-                  const seats = t.seats || [];
-                  const alertSeats = seats.map(s => ({
-                    id: s.id,
-                    gender: s.gender || null,
-                    pairing: s.pairing || null,
-                    pairingSharedWith: s.pairingSharedWith || null,
-                    extras: (optionalExtras || [])
-                      .filter(d => !!(s.extras?.[d.key] || s.extras?.[d.id])?.ordered)
-                      .map(d => {
-                        const ex = s.extras?.[d.key] || s.extras?.[d.id];
-                        return { key: d.key, name: d.name, pairing: extraPairingForSeat(s, d, optionalPairings), sharedWith: ex?.sharedWith ?? null };
-                      }),
-                  }));
+                  // Only the new/changed items since the kitchen's acknowledged
+                  // baseline; snapshot rides along so the kitchen can advance the
+                  // baseline when it confirms.
+                  const deltaSeats = kitchenDelta(kitchenCurrent, t.kitchenSent || {});
+                  if (deltaSeats.length === 0) return;
                   upd(t.id, "kitchenAlert", {
                     timestamp: new Date().toISOString(),
                     tableName: t.resName || null,
-                    seats: alertSeats,
+                    seats: deltaSeats,
                     confirmed: false,
+                    snapshot: kitchenCurrent,
                   });
                   setJustSent(true);
                   setTimeout(() => setJustSent(false), 2000);
                 }}
                 style={{
                   fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 16px",
-                  border: `1px solid ${justSent ? tokens.green.border : tokens.charcoal.default}`, borderRadius: 0,
-                  cursor: justSent ? "default" : "pointer",
-                  background: justSent ? tokens.green.bg : tokens.surface.card,
-                  color: justSent ? tokens.green.text : tokens.text.primary,
+                  border: `1px solid ${justSent ? tokens.green.border : idle ? tokens.ink[4] : tokens.charcoal.default}`, borderRadius: 0,
+                  cursor: (justSent || idle) ? "default" : "pointer",
+                  background: justSent ? tokens.green.bg : idle ? tokens.neutral[0] : tokens.surface.card,
+                  color: justSent ? tokens.green.text : idle ? tokens.ink[3] : tokens.text.primary,
                   fontWeight: 700, textTransform: "uppercase",
                   transition: "all 0.15s ease",
-                }}>{justSent ? "✓ Sent" : "Send"}</button>
-            ) : null}
+                }}>{justSent ? "✓ Sent" : idle ? "✓ Up to date" : "Send"}</button>
+              );
+            })() : null}
             </div>
             {quickMode && !isSeated && onSeat ? (
               <button onClick={() => onSeat(t.id)} style={{

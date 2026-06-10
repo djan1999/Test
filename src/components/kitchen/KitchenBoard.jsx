@@ -1055,7 +1055,11 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     .map(t => ({ tableId: t.id, alert: t.kitchenAlert }));
 
   const confirmAlert = (tableId) => {
-    updMany(tableId, { kitchenAlert: null });
+    // Advance the acknowledged baseline to the snapshot this alert carried, so
+    // the next service Send only pings about what's new after it. Older alerts
+    // (pre-snapshot) just clear without touching the baseline.
+    const snap = pendingAlerts.find(a => a.tableId === tableId)?.alert?.snapshot;
+    updMany(tableId, snap ? { kitchenAlert: null, kitchenSent: snap } : { kitchenAlert: null });
   };
 
   if (activeTables.length === 0) return (
