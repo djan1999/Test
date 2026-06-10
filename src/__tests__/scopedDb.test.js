@@ -72,6 +72,22 @@ describe("scopedFrom", () => {
     expect(opts).toEqual({ onConflict: "workspace_id,table_id" });
   });
 
+  it("upserts menu_courses on the composite (workspace_id, position) key", () => {
+    // Regression: saving courses with onConflict:"position" tripped Postgres
+    // 42P10 because the PK is (workspace_id, position), not position alone.
+    scopedFrom("menu_courses").upsert([{ position: 1, course_key: "soup" }]);
+    const b = lastBuilder();
+    const [, body, opts] = b._calls[0];
+    expect(body).toEqual([{ position: 1, course_key: "soup", workspace_id: "ws-1" }]);
+    expect(opts).toEqual({ onConflict: "workspace_id,position" });
+  });
+
+  it("forces the composite key even when a caller passes a single-column onConflict", () => {
+    scopedFrom("menu_courses").upsert([{ position: 2 }], { onConflict: "position" });
+    const [, , opts] = lastBuilder()._calls[0];
+    expect(opts.onConflict).toBe("workspace_id,position");
+  });
+
   it("stamps workspace_id on inserts", () => {
     scopedFrom("reservations").insert({ date: "2026-06-07", table_id: 3, data: {} });
     const b = lastBuilder();

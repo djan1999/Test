@@ -2715,9 +2715,11 @@ export default function App() {
       return generated ? { ...c, course_key: generated } : c;
     });
     const rows = withKeys.map(c => courseToSupabaseRow(c));
-    let { error } = await supabase
-      .from(TABLES.MENU_COURSES)
-      .upsert(rows, { onConflict: "position" });
+    // Go through scopedFrom so the row is workspace-stamped and the upsert targets
+    // the composite PK (workspace_id, position). Hitting supabase.from() directly
+    // with onConflict:"position" trips Postgres 42P10 — there is no unique
+    // constraint on position alone.
+    let { error } = await scopedFrom(TABLES.MENU_COURSES).upsert(rows);
     // Pre-migration fallback: if the is_active column hasn't been added yet,
     // retry without it so the rest of the save still goes through. The toggle
     // won't persist until the schema migration is applied, but new courses,
@@ -2725,9 +2727,7 @@ export default function App() {
     let isActiveSkipped = false;
     if (error && (error.code === "PGRST204" || /is_active/i.test(String(error.message || "")))) {
       const fallbackRows = rows.map(({ is_active, ...rest }) => rest);
-      const retry = await supabase
-        .from(TABLES.MENU_COURSES)
-        .upsert(fallbackRows, { onConflict: "position" });
+      const retry = await scopedFrom(TABLES.MENU_COURSES).upsert(fallbackRows);
       error = retry.error;
       if (!error) {
         isActiveSkipped = true;
