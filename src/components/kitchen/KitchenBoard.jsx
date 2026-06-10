@@ -27,7 +27,7 @@ function resolveGuestTemplate(table, profiles, assignments) {
   return isShort ? (p.shortMenuTemplate || p.menuTemplate) : p.menuTemplate;
 }
 
-export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false }) {
+export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, inlineMods = false }) {
   // Density. Compact tightens the vertical rhythm so two full rows of tickets
   // fit a 720px-tall kitchen display (32" 1280×720 → 5 columns × 2 rows = 10
   // tickets). Gated to large boards by the caller; the physical pixels on such
@@ -35,14 +35,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const dz = compact ? {
     headerPad: "3px 8px", tNum: "15px", tNumGroup: "12px", nameFont: "9.5px", nameWrap: "nowrap",
     counterFont: "12px", badgePad: "0 3px", showGrip: false,
-    rowPad: "2px 8px", paceBtnPad: "3px 7px", seatChipPad: "1px 4px",
-    coursePad: "1px 8px 1px 6px", courseFont: "9px", courseLH: 1.15, courseGap: 5, courseGlyph: "10px",
+    rowPad: "2px 8px", paceBtnPad: "3px 7px", seatChipPad: "1px 4px", seatFont: "7.5px", assignBtnPad: "4px 8px",
+    coursePad: "1px 8px 1px 6px", courseFont: "9px", courseLH: 1.15, courseGap: 5, courseGlyph: "10px", modsFont: "8.5px",
     footerPad: "4px 10px",
   } : {
     headerPad: "7px 10px", tNum: "20px", tNumGroup: "15px", nameFont: "11px", nameWrap: "wrap",
     counterFont: "14px", badgePad: "1px 5px", showGrip: true,
-    rowPad: "5px 10px", paceBtnPad: "9px 10px", seatChipPad: "2px 5px",
-    coursePad: "7px 10px 7px 8px", courseFont: "11px", courseLH: 1.25, courseGap: 7, courseGlyph: "12px",
+    rowPad: "5px 10px", paceBtnPad: "9px 10px", seatChipPad: "2px 5px", seatFont: "8px", assignBtnPad: "9px 10px",
+    coursePad: "7px 10px 7px 8px", courseFont: "11px", courseLH: 1.25, courseGap: 7, courseGlyph: "12px", modsFont: "9px",
     footerPad: "7px 12px",
   };
   const seats = table.seats || [];
@@ -227,6 +227,27 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
   const pLabel = p => p === "Non-Alc" ? "N/A" : p === "Our Story" ? "O.S." : p === "Premium" ? "Prem" : p === "Wine" ? "Wine" : p;
 
+  // Slow/Fast pace toggles. Roomy mode shows them in their own PACE row;
+  // compact moves them into the header to save a row of height. They stop
+  // pointer events so a tap never starts the header drag.
+  const paceButtons = ["Slow", "Fast"].map(p => {
+    const colors = { Slow: { on: tokens.ink[0], bg: tokens.neutral[0], border: tokens.charcoal.default }, Fast: { on: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } };
+    const active = table.pace === p;
+    const col = colors[p];
+    return (
+      <button key={p}
+        onPointerDown={e => e.stopPropagation()}
+        onClick={e => { e.stopPropagation(); upd && upd(table.id, "pace", active ? "" : p); }}
+        style={{
+          fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: dz.paceBtnPad,
+          border: `1px solid ${active ? col.border : tokens.ink[4]}`,
+          borderRadius: 0, cursor: upd ? "pointer" : "default",
+          background: active ? col.bg : tokens.neutral[0], color: active ? col.on : tokens.ink[3],
+          transition: "all 0.1s", touchAction: "manipulation",
+        }}>{p}</button>
+    );
+  });
+
   return (
     <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
 
@@ -259,14 +280,15 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               return <span style={{ fontFamily: FONT, fontSize: "8px", color: tokens.ink[3], letterSpacing: "0.06em" }}>{rs.length ? `#${rs.join(", ")}` : "Hotel"}</span>;
             })()}
           </div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 1, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 1, flexWrap: dz.nameWrap, overflow: "hidden", whiteSpace: compact ? "nowrap" : "normal" }}>
             <span style={{ fontFamily: FONT, fontSize: "10px", fontWeight: 700, color: tokens.ink[0] }}>{seats.length} <span style={{ fontWeight: 400, fontSize: "9px", letterSpacing: "0.06em" }}>PAX</span></span>
             {table.resTime && <span style={{ fontFamily: FONT, fontSize: "10px", fontWeight: 600, color: tokens.ink[2] }}>{table.resTime}</span>}
             {table.arrivedAt && <span style={{ fontFamily: FONT, fontSize: "10px", fontWeight: 600, color: tokens.green.border }}>arr. {table.arrivedAt}</span>}
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-          <div style={{ fontFamily: FONT, fontSize: dz.counterFont, fontWeight: 700, color: allDone ? tokens.green.border : tokens.ink[0], lineHeight: 1 }}>{firedCount}<span style={{ fontSize: "9px", color: tokens.ink[3], fontWeight: 400 }}>/{totalCourses}</span></div>
+        <div style={{ display: "flex", flexDirection: compact ? "row" : "column", alignItems: compact ? "center" : "flex-end", gap: 4, flexShrink: 0 }}>
+          {compact && paceButtons}
+          <div style={{ fontFamily: FONT, fontSize: dz.counterFont, fontWeight: 700, color: allDone ? tokens.green.border : tokens.ink[0], lineHeight: 1, marginLeft: compact ? 2 : 0 }}>{firedCount}<span style={{ fontSize: "9px", color: tokens.ink[3], fontWeight: 400 }}>/{totalCourses}</span></div>
           {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: "8px", color: tokens.green.border }}>{durationMins} min</div>}
           {editable && (
             <button
@@ -369,24 +391,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         </div>
       )}
 
-      {/* ── Pace ── */}
-      <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: dz.rowPad, display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase", flexShrink: 0 }}>PACE</span>
-        {["Slow", "Fast"].map(p => {
-          const colors = { Slow: { on: tokens.ink[0], bg: tokens.neutral[0], border: tokens.charcoal.default }, Fast: { on: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } };
-          const active = table.pace === p;
-          const col = colors[p];
-          return (
-            <button key={p} onClick={() => upd && upd(table.id, "pace", active ? "" : p)} style={{
-              fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: dz.paceBtnPad,
-              border: `1px solid ${active ? col.border : tokens.ink[4]}`,
-              borderRadius: 0, cursor: upd ? "pointer" : "default",
-              background: active ? col.bg : tokens.neutral[0], color: active ? col.on : tokens.ink[3],
-              transition: "all 0.1s",
-            }}>{p}</button>
-          );
-        })}
-      </div>
+      {/* ── Pace ── (compact renders the buttons in the header instead) */}
+      {!compact && (
+        <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: dz.rowPad, display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase", flexShrink: 0 }}>PACE</span>
+          {paceButtons}
+        </div>
+      )}
 
       {/* ── Seats ── */}
       <div style={{ background: tokens.neutral[0], borderBottom: `1px solid ${tokens.ink[4]}`, padding: dz.rowPad }}>
@@ -399,18 +410,19 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             return (
               <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 3 }}>
                 <span style={{
-                  fontFamily: FONT, fontSize: "8px", fontWeight: 700, padding: dz.seatChipPad, borderRadius: 0,
+                  fontFamily: FONT, fontSize: dz.seatFont, fontWeight: 700, padding: dz.seatChipPad, borderRadius: 0,
                   background: p ? (pairingBg[p] || tokens.ink[5]) : tokens.ink[5],
                   color: p ? (pairingColor[p] || tokens.ink[2]) : tokens.ink[2],
                   border: `1px solid ${tokens.ink[4]}`,
-                  display: "inline-flex", alignItems: "center", gap: 4,
+                  display: "inline-flex", alignItems: "center", gap: compact ? 3 : 4,
+                  whiteSpace: "nowrap",
                 }}>
                   P{s.id}
-                  {gs && <span style={{ fontSize: "7px", fontWeight: 700, padding: "0 3px", background: gs.bg, color: gs.text, letterSpacing: 0 }}>{s.gender}</span>}
+                  {gs && <span style={{ fontSize: "7px", fontWeight: 700, padding: "0 3px", background: gs.bg, color: gs.text, letterSpacing: 0 }}>{compact ? (s.gender === "Mr" ? "M" : "F") : s.gender}</span>}
                   {p ? ` · ${pLabel(p)}` : ""}
                 </span>
                 {restrList.length > 0 && (
-                  <span style={{ fontFamily: FONT, fontSize: "8px", color: tokens.red.text, letterSpacing: "0.06em", fontWeight: 600 }}>{restrList.map(restrShort).join(" · ")}</span>
+                  <span style={{ fontFamily: FONT, fontSize: dz.seatFont, color: tokens.red.text, letterSpacing: "0.06em", fontWeight: 600, whiteSpace: "nowrap" }}>{restrList.map(restrShort).join(" · ")}</span>
                 )}
               </div>
             );
@@ -422,15 +434,15 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const unassigned = restrictions.map((r, i) => ({ ...r, _i: i })).filter(r => !r.pos && r.note);
           if (unassigned.length === 0) return null;
           return (
-            <div style={{ marginTop: 7, paddingTop: 7, borderTop: `1px solid ${tokens.ink[4]}` }}>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ marginTop: compact ? 3 : 7, paddingTop: compact ? 3 : 7, borderTop: `1px solid ${tokens.ink[4]}` }}>
+              <div style={{ display: "flex", gap: compact ? 4 : 6, flexWrap: "wrap", alignItems: "center" }}>
                 <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", color: tokens.red.text, textTransform: "uppercase", flexShrink: 0 }}>⚠ UNASSIGNED</span>
                 {unassigned.map(r => (
                   <span
                     key={r._i}
                     onClick={() => setAssigningRestrIdx(assigningRestrIdx === r._i ? null : r._i)}
                     style={{
-                      fontFamily: FONT, fontSize: "8px", padding: "9px 8px", borderRadius: 0,
+                      fontFamily: FONT, fontSize: "8px", padding: dz.assignBtnPad, borderRadius: 0,
                       border: `1px solid ${tokens.red.border}`,
                       background: assigningRestrIdx === r._i ? tokens.red.text : tokens.red.bg,
                       color: assigningRestrIdx === r._i ? tokens.neutral[0] : tokens.red.text,
@@ -444,13 +456,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                   <span style={{ fontFamily: FONT, fontSize: "8px", color: tokens.red.text, flexShrink: 0 }}>ASSIGN TO:</span>
                   {seats.map(s => (
                     <button key={s.id} onClick={() => assignRestrToSeat(s.id)} style={{
-                      fontFamily: FONT, fontSize: "9px", fontWeight: 700, padding: "9px 10px",
+                      fontFamily: FONT, fontSize: "9px", fontWeight: 700, padding: dz.assignBtnPad,
                       border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer",
                       background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation",
                     }}>P{s.id}</button>
                   ))}
                   <button onClick={() => setAssigningRestrIdx(null)} style={{
-                    fontFamily: FONT, fontSize: "9px", padding: "9px 8px",
+                    fontFamily: FONT, fontSize: "9px", padding: dz.assignBtnPad,
                     border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
                     background: tokens.neutral[0], color: tokens.ink[3], touchAction: "manipulation",
                   }}>cancel</button>
@@ -547,27 +559,59 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                 onClick={() => { if (editable && showEdit) return; fired ? unfire(key) : fire(key); }}
                 style={{ display: "flex", alignItems: "center", padding: dz.coursePad, gap: dz.courseGap, cursor: editable && showEdit ? "default" : "pointer" }}>
                 <span style={{ fontFamily: FONT, fontSize: dz.courseGlyph, color: fired ? tokens.green.border : tokens.ink[4], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontFamily: FONT, fontSize: dz.courseFont, fontWeight: 700, lineHeight: dz.courseLH,
-                    color: fired ? tokens.ink[4] : kcNote.name ? tokens.red.text : tokens.ink[0],
-                    textDecoration: fired ? "line-through" : "none",
-                    letterSpacing: "0.02em",
-                  }}>
-                    {displayName}
-                    {kcNote.name && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[3], marginLeft: 5 }}>({baseName})</span>}
-                    {extraLabel && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[4], marginLeft: 6 }}>{extraLabel}</span>}
-                  </div>
-                  {(pairingAlert || mods || (kcNote.note && showCourseNotes)) && !fired && (
-                    <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
-                      {pairingAlert && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], fontWeight: 600 }}>{pairingAlert}</span>}
-                      {mods && Object.entries(mods).map(([mod, count]) => (
-                        <span key={mod} style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>{count}× {mod}</span>
-                      ))}
-                      {kcNote.note && showCourseNotes && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>⚑ {kcNote.note}</span>}
+                {(() => {
+                  const hasSub = (pairingAlert || mods || (kcNote.note && showCourseNotes)) && !fired;
+                  const nameEl = (
+                    <div style={{
+                      fontFamily: FONT, fontSize: dz.courseFont, fontWeight: 700, lineHeight: dz.courseLH,
+                      color: fired ? tokens.ink[4] : kcNote.name ? tokens.red.text : tokens.ink[0],
+                      textDecoration: fired ? "line-through" : "none",
+                      letterSpacing: "0.02em",
+                      ...(inlineMods ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 0, maxWidth: hasSub ? "60%" : "100%" } : {}),
+                    }}>
+                      {displayName}
+                      {kcNote.name && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[3], marginLeft: 5 }}>({baseName})</span>}
+                      {extraLabel && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[4], marginLeft: 6 }}>{extraLabel}</span>}
                     </div>
-                  )}
-                </div>
+                  );
+                  const modSegments = !hasSub ? [] : [
+                    pairingAlert && { text: pairingAlert, color: tokens.ink[3] },
+                    ...(mods ? Object.entries(mods).map(([mod, count]) => ({ text: `${count}× ${mod}`, color: tokens.red.text })) : []),
+                    (kcNote.note && showCourseNotes) ? { text: `⚑ ${kcNote.note}`, color: tokens.red.text } : null,
+                  ].filter(Boolean);
+                  if (inlineMods) {
+                    // One line per course: dietaries/mods sit beside the name and
+                    // ellipsize instead of wrapping to a second row. fontSize and
+                    // lineHeight live on the container so its line box hugs the
+                    // small type instead of inheriting the 16px browser strut.
+                    return (
+                      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 6 }}>
+                        {nameEl}
+                        {modSegments.length > 0 && (
+                          <div style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: FONT, fontSize: dz.modsFont, lineHeight: dz.courseLH }}>
+                            {modSegments.map((seg, i) => (
+                              <span key={i} style={{ color: seg.color, fontWeight: 600 }}>
+                                {i > 0 ? " · " : ""}{seg.text}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {nameEl}
+                      {modSegments.length > 0 && (
+                        <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
+                          {modSegments.map((seg, i) => (
+                            <span key={i} style={{ fontFamily: FONT, fontSize: dz.modsFont, color: seg.color, fontWeight: 600 }}>{seg.text}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {firedAt && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.border, fontWeight: 700, flexShrink: 0 }}>{firedAt}</span>}
               </div>
               {editable && showEdit && (
@@ -681,7 +725,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   );
 }
 
-export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false }) {
+export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, inlineMods = false }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
@@ -717,6 +761,7 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
           profiles={profiles}
           assignments={assignments}
           compact={compact}
+          inlineMods={inlineMods}
         />
       )}
     </div>
@@ -948,6 +993,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 profiles={profiles}
                 assignments={assignments}
                 compact={compact}
+                inlineMods={largeBoard}
               />
             ))}
           </div>
@@ -967,6 +1013,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
               profiles={profiles}
               assignments={assignments}
               compact={compact}
+              inlineMods={largeBoard}
             />
           </div>
         )}
