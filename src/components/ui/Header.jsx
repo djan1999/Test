@@ -143,6 +143,10 @@ export default function Header({
             <button onClick={onInventory} style={btn}>{isMobile ? "INV" : "INVENTORY"}</button>
           )}
 
+          {showArchive && (
+            <button onClick={onArchive} style={btn}>{isMobile ? "ARCH" : "ARCHIVE"}</button>
+          )}
+
           {/* Sync status chip */}
           <span style={{
             fontFamily:    FONT,

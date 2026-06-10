@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
@@ -14,6 +14,15 @@ import { useIsMobile } from "../../hooks/useIsMobile.js";
 // tablets and phones stay on the roomy layout.
 const LARGE_BOARD_BP = 1100;
 
+// In-ticket dividers. Deliberately softer than the grammar hairline (ink[4]):
+// 17 course rows × 5 tickets reads as a glowing grid otherwise. Crucially the
+// dividers are NOT borders — sections/rows are solid blocks separated by 1px
+// flex gaps over this background. Android's forced dark mode lightens border
+// colors (bright grid lines on the panel) but darkens backgrounds, so
+// gap-based dividers stay subtle in both light and dark rendering.
+const RULE_SOFT = tokens.neutral[200];
+const CARD_BORDER = tokens.neutral[300];
+
 const FONT = tokens.font;
 
 // Resolve course list template from the guest menu profile — same logic as the
@@ -27,7 +36,7 @@ function resolveGuestTemplate(table, profiles, assignments) {
   return isShort ? (p.shortMenuTemplate || p.menuTemplate) : p.menuTemplate;
 }
 
-export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, inlineMods = false }) {
+export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, inlineMods = false, quickAccess = false }) {
   // Density. Compact tightens the vertical rhythm so two full rows of tickets
   // fit a 720px-tall kitchen display (32" 1280×720 → 5 columns × 2 rows = 10
   // tickets). Gated to large boards by the caller; the physical pixels on such
@@ -37,13 +46,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     counterFont: "12px", badgePad: "0 3px", showGrip: false,
     rowPad: "2px 8px", paceBtnPad: "3px 7px", seatChipPad: "1px 4px", seatFont: "7.5px", assignBtnPad: "4px 8px",
     coursePad: "1px 8px 1px 6px", courseFont: "9px", courseLH: 1.15, courseGap: 5, courseGlyph: "10px", modsFont: "8.5px",
-    footerPad: "4px 10px",
+    footerPad: "4px 10px", archiveBtnPad: "4px 8px",
   } : {
     headerPad: "7px 10px", tNum: "20px", tNumGroup: "15px", nameFont: "11px", nameWrap: "wrap",
     counterFont: "14px", badgePad: "1px 5px", showGrip: true,
     rowPad: "5px 10px", paceBtnPad: "9px 10px", seatChipPad: "2px 5px", seatFont: "8px", assignBtnPad: "9px 10px",
     coursePad: "7px 10px 7px 8px", courseFont: "11px", courseLH: 1.25, courseGap: 7, courseGlyph: "12px", modsFont: "9px",
-    footerPad: "7px 12px",
+    footerPad: "7px 12px", archiveBtnPad: "9px 10px",
   };
   const seats = table.seats || [];
   const restrictions = table.restrictions || [];
@@ -57,6 +66,31 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const [pickingRestr, setPickingRestr] = useState(null);
   const [customNote, setCustomNote] = useState("");
   const [draftNotes, setDraftNotes] = useState(kitchenCourseNotes);
+
+  // Quick access (live kitchen board only): a TAP on the header opens a drawer
+  // for pace / optional extras / dietaries, while HOLD-and-move still drags the
+  // ticket (dnd-kit's 200-250ms activation delay separates the two gestures).
+  // The pointer guard ignores the synthetic click that can follow a drag.
+  const [showQuick, setShowQuick] = useState(false);
+  const [quickPick, setQuickPick] = useState(null); // { type: "extra"|"diet", key, label }
+  const headTap = useRef(null);
+  const onHeaderPointerDown = (e) => {
+    headTap.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+    dragListeners?.onPointerDown?.(e);
+  };
+  const onHeaderClick = (e) => {
+    if (!quickAccess) return;
+    const h = headTap.current;
+    if (h && (Date.now() - h.t > 500 || Math.abs(e.clientX - h.x) > 12 || Math.abs(e.clientY - h.y) > 12)) return;
+    setShowQuick(v => !v);
+    setQuickPick(null);
+  };
+  const setExtraOrdered = (key, seatId, ordered) => {
+    const next = seats.map(s => (seatId == null || s.id === seatId)
+      ? { ...s, extras: { ...(s.extras || {}), [key]: { ...((s.extras || {})[key] || {}), ordered } } }
+      : s);
+    upd(table.id, "seats", next);
+  };
 
   useEffect(() => {
     if (!showEdit) setDraftNotes(kitchenCourseNotes);
@@ -168,6 +202,16 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const optionalKeyForCourse = (course) => normFlag(course?.optional_flag || "");
   const optionalSeatMap = orderedOptionalSeatsByKey;
 
+  // Optional add-on courses (beetroot, cheese, pear…) offered in the quick
+  // drawer. Celebration courses are excluded — the Cake toggle drives those
+  // via table.birthday.
+  const quickExtraDefs = quickAccess ? (menuCourses || []).reduce((acc, c) => {
+    const flag = normFlag(c?.optional_flag);
+    if (!flag || normCategory(c) === "celebration") return acc;
+    if (!acc.some(d => d.key === flag)) acc.push({ key: flag, label: c?.menu?.name || flag });
+    return acc;
+  }, []) : [];
+
   // Per-seat optional pairing state for courses with optional_pairing_flag
   const optionalPairingAlertByPairingKey = (() => {
     const result = {};
@@ -249,15 +293,17 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   });
 
   return (
-    <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
+    <div style={{ border: `1px solid ${CARD_BORDER}`, borderRadius: 0, overflow: "hidden", background: RULE_SOFT, display: "flex", flexDirection: "column", gap: 1 }}>
 
       {/* ── Header (drag handle) ── */}
       <div
         ref={dragHandleRef}
         {...dragListeners}
+        onPointerDown={onHeaderPointerDown}
+        onClick={onHeaderClick}
         role={dragListeners ? "button" : undefined}
-        aria-label={dragListeners ? "Drag to reorder ticket" : undefined}
-        style={{ background: tokens.neutral[0], borderBottom: `1px solid ${tokens.ink[4]}`, padding: dz.headerPad, display: "flex", alignItems: "flex-start", gap: 8, cursor: dragListeners ? "grab" : undefined, touchAction: "none" }}
+        aria-label={dragListeners ? "Drag to reorder ticket — tap for quick access" : undefined}
+        style={{ background: showQuick ? tokens.neutral[50] : tokens.neutral[0], padding: dz.headerPad, display: "flex", alignItems: "flex-start", gap: 8, cursor: quickAccess ? "pointer" : dragListeners ? "grab" : undefined, touchAction: "none" }}
       >
         {dragListeners && dz.showGrip && (
           <span aria-hidden="true" title="Drag to reorder" style={{
@@ -306,9 +352,90 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         </div>
       </div>
 
+      {/* ── Quick access drawer (live board only) — tap header to toggle ── */}
+      {quickAccess && showQuick && (() => {
+        const qLabel = { fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", textTransform: "uppercase", color: tokens.ink[3], flexShrink: 0, minWidth: 30 };
+        const qBtn = (active, danger) => ({
+          fontFamily: FONT, fontSize: "9px", padding: "5px 8px", borderRadius: 0, cursor: "pointer",
+          border: `1px solid ${active ? (danger ? tokens.red.border : tokens.green.border) : tokens.ink[4]}`,
+          background: active ? (danger ? tokens.red.bg : tokens.green.bg) : tokens.neutral[0],
+          color: active ? (danger ? tokens.red.text : tokens.green.text) : tokens.ink[2],
+          fontWeight: active ? 600 : 400, touchAction: "manipulation",
+        });
+        const allOrdered = (key) => seats.length > 0 && seats.every(s => !!s.extras?.[key]?.ordered);
+        return (
+          <div style={{ background: tokens.neutral[50], padding: "5px 8px 6px", display: "flex", flexDirection: "column", gap: 5 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={qLabel}>PACE</span>
+              {paceButtons}
+              <span style={{ flex: 1 }} />
+              <button onClick={() => { setShowQuick(false); setQuickPick(null); }} aria-label="Close quick access"
+                style={{ ...qBtn(false), padding: "5px 9px", color: tokens.ink[3] }}>✕</button>
+            </div>
+            {quickExtraDefs.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                <span style={qLabel}>ADD</span>
+                {quickExtraDefs.map(d => {
+                  const active = (optionalSeatMap[d.key] || []).length > 0;
+                  const picking = quickPick?.type === "extra" && quickPick.key === d.key;
+                  return (
+                    <button key={d.key}
+                      onClick={() => setQuickPick(picking ? null : { type: "extra", key: d.key, label: d.label })}
+                      style={{ ...qBtn(active), ...(picking ? { border: `1px solid ${tokens.charcoal.default}`, fontWeight: 600 } : {}) }}>
+                      {d.label}{active ? ` · ${(optionalSeatMap[d.key] || []).length}` : ""}
+                    </button>
+                  );
+                })}
+                <button onClick={() => upd(table.id, "birthday", !table.birthday)} style={qBtn(!!table.birthday)}>
+                  🎂 Cake
+                </button>
+              </div>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+              <span style={qLabel}>DIET</span>
+              {RESTRICTIONS.map(r => {
+                const picking = quickPick?.type === "diet" && quickPick.key === r.key;
+                return (
+                  <button key={r.key} title={r.label}
+                    onClick={() => setQuickPick(picking ? null : { type: "diet", key: r.key, label: r.label })}
+                    style={{
+                      fontFamily: FONT, fontSize: "11px", lineHeight: 1, padding: "4px 5px", borderRadius: 0, cursor: "pointer",
+                      border: `1px solid ${picking ? tokens.red.border : "transparent"}`,
+                      background: picking ? tokens.red.bg : "transparent",
+                      touchAction: "manipulation",
+                    }}>{r.emoji}</button>
+                );
+              })}
+            </div>
+            {quickPick && (
+              <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", paddingTop: 2, borderTop: `1px solid ${RULE_SOFT}` }}>
+                <span style={{ ...qLabel, color: tokens.red.text, minWidth: 0 }}>{quickPick.label} →</span>
+                {quickPick.type === "extra" && (<>
+                  <button onClick={() => { setExtraOrdered(quickPick.key, null, !allOrdered(quickPick.key)); }}
+                    style={qBtn(allOrdered(quickPick.key))}>All</button>
+                  {seats.map(s => {
+                    const on = !!s.extras?.[quickPick.key]?.ordered;
+                    return (
+                      <button key={s.id} onClick={() => setExtraOrdered(quickPick.key, s.id, !on)} style={qBtn(on)}>P{s.id}</button>
+                    );
+                  })}
+                </>)}
+                {quickPick.type === "diet" && (<>
+                  <button onClick={() => { addKitchenRestr(quickPick.key, null); setQuickPick(null); }} style={qBtn(false, true)}>All</button>
+                  {seats.map(s => (
+                    <button key={s.id} onClick={() => { addKitchenRestr(quickPick.key, s.id); setQuickPick(null); }} style={qBtn(false, true)}>P{s.id}</button>
+                  ))}
+                </>)}
+                <button onClick={() => setQuickPick(null)} style={{ ...qBtn(false), color: tokens.ink[3] }}>✕</button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ── Notes banner ── */}
       {table.notes && (
-        <div style={{ background: tokens.tint.parchment, borderBottom: `1px solid ${tokens.ink[4]}`, padding: dz.rowPad, display: "flex", gap: 6, alignItems: "flex-start" }}>
+        <div style={{ background: tokens.tint.parchment, padding: dz.rowPad, display: "flex", gap: 6, alignItems: "flex-start" }}>
           <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], flexShrink: 0, lineHeight: 1.4 }}>📋</span>
           <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[2], lineHeight: 1.35, fontStyle: "italic" }}>{table.notes}</span>
         </div>
@@ -316,7 +443,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
       {/* ── Ad-hoc restriction editor (ticket-preview only) ── */}
       {editable && showEdit && (
-        <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: "8px 10px", background: tokens.neutral[0] }}>
+        <div style={{ padding: "8px 10px", background: tokens.neutral[0] }}>
           {restrictions.map((r, i) => r.kitchenAdded ? (
             <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
               <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>
@@ -393,14 +520,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
       {/* ── Pace ── (compact renders the buttons in the header instead) */}
       {!compact && (
-        <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: dz.rowPad, display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ background: tokens.neutral[0], padding: dz.rowPad, display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase", flexShrink: 0 }}>PACE</span>
           {paceButtons}
         </div>
       )}
 
       {/* ── Seats ── */}
-      <div style={{ background: tokens.neutral[0], borderBottom: `1px solid ${tokens.ink[4]}`, padding: dz.rowPad }}>
+      <div style={{ background: tokens.neutral[0], padding: dz.rowPad }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 6px" }}>
         {seats.map(s => {
             const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
@@ -434,7 +561,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const unassigned = restrictions.map((r, i) => ({ ...r, _i: i })).filter(r => !r.pos && r.note);
           if (unassigned.length === 0) return null;
           return (
-            <div style={{ marginTop: compact ? 3 : 7, paddingTop: compact ? 3 : 7, borderTop: `1px solid ${tokens.ink[4]}` }}>
+            <div style={{ marginTop: compact ? 3 : 7, paddingTop: compact ? 3 : 7, borderTop: `1px solid ${RULE_SOFT}` }}>
               <div style={{ display: "flex", gap: compact ? 4 : 6, flexWrap: "wrap", alignItems: "center" }}>
                 <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", color: tokens.red.text, textTransform: "uppercase", flexShrink: 0 }}>⚠ UNASSIGNED</span>
                 {unassigned.map(r => (
@@ -474,7 +601,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       </div>
 
       {/* ── Courses ── */}
-      <div style={{ display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
         {courses.map((course, idx) => {
           const key = course.course_key || `course_${idx}`;
           const fired = !!log[key];
@@ -551,7 +678,6 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
           return (
             <div key={key} style={{
-              borderBottom: `1px solid ${tokens.ink[4]}`,
               background: fired ? tokens.green.bg : tokens.neutral[0],
               borderLeft: fired ? `4px solid ${tokens.green.border}` : kcNote.name || kcNote.note ? `4px solid ${tokens.red.text}` : "4px solid transparent",
             }}>
@@ -679,7 +805,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
       {/* ── Save / cancel bar (ticket-preview only) ── */}
       {editable && showEdit && (
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, padding: "10px 10px 12px", borderTop: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0] }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, padding: "10px 10px 12px", background: tokens.neutral[0] }}>
           <button
             onPointerDown={e => e.stopPropagation()}
             onClick={e => { e.stopPropagation(); cancelDraftNotes(); }}
@@ -713,7 +839,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             <button
               onClick={e => { e.stopPropagation(); upd && upd(table.id, "kitchenArchived", true); }}
               style={{
-                fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "9px 10px",
+                fontFamily: FONT, fontSize: compact ? 8 : 9, letterSpacing: compact ? 1 : 1.5, padding: dz.archiveBtnPad,
                 border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer",
                 background: tokens.neutral[0], color: tokens.green.border, textTransform: "uppercase", touchAction: "manipulation",
               }}
@@ -725,7 +851,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   );
 }
 
-export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, inlineMods = false }) {
+export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, inlineMods = false, quickAccess = false }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
@@ -762,6 +888,7 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
           assignments={assignments}
           compact={compact}
           inlineMods={inlineMods}
+          quickAccess={quickAccess}
         />
       )}
     </div>
@@ -900,17 +1027,13 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
   // Width of the dragged ticket, captured at drag start so the floating overlay
   // matches the grid cell it came from (cells are now fluid, not a fixed 248px).
   const [activeWidth, setActiveWidth] = useState(null);
-  // Large display (e.g. 32" 1280×720 panel): adapt to the ticket count instead
-  // of always packing maximum density. A handful of tickets gets big roomy
-  // cards that use the screen; from 6 tickets the board switches to compact
-  // 5-per-row so two full rows (10 tickets) fit on screen at once. Archiving
-  // tickets scales the survivors back up automatically.
+  // Large display (e.g. 32" 1280×720 panel): always the compact 5-column
+  // layout, regardless of how few tickets are up. Scaling tickets up to fill
+  // the screen at low counts made them sprawl past the fold with real menus
+  // (19 courses + extras), so consistency beats fill: a ticket is always the
+  // same size and a full board is two rows of five.
   const largeBoard = !useIsMobile(LARGE_BOARD_BP);
-  const ticketCount = activeTables.length;
-  const compact = largeBoard && ticketCount > 5;
-  // 1-3 tickets share a 3-column width (≈1/3 screen each — any wider reads
-  // like a poster); 4 and 5 get their own column so one row always fills.
-  const largeCols = Math.min(5, Math.max(3, ticketCount));
+  const compact = largeBoard;
 
   // Keep order in sync when tables are added/removed
   useEffect(() => {
@@ -972,12 +1095,13 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
       <SortableContext items={order} strategy={rectSortingStrategy}>
         <div style={{ paddingBottom: 8 }}>
           {/* Responsive grid. Large boards (≥1100px, e.g. a 32" 1280×720 panel)
-              size columns to the ticket count — capped at 5 per row so 10
-              tickets show as two full rows. Narrower screens auto-fill. */}
+              always run 5 fixed columns so 10 tickets show as two full rows
+              and a sparse board keeps the same ticket size. Narrower screens
+              auto-fill. */}
           <div style={{
             display: "grid",
             gridTemplateColumns: largeBoard
-              ? `repeat(${largeCols}, minmax(0, 1fr))`
+              ? "repeat(5, minmax(0, 1fr))"
               : "repeat(auto-fill, minmax(210px, 1fr))",
             alignItems: "start",
             gap: compact ? 8 : 12,
@@ -994,6 +1118,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 assignments={assignments}
                 compact={compact}
                 inlineMods={largeBoard}
+                quickAccess={!!upd}
               />
             ))}
           </div>
