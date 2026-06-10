@@ -72,7 +72,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   // ticket (dnd-kit's 200-250ms activation delay separates the two gestures).
   // The pointer guard ignores the synthetic click that can follow a drag.
   const [showQuick, setShowQuick] = useState(false);
-  const [quickPick, setQuickPick] = useState(null); // { type: "extra"|"diet", key, label }
+  const [quickPick, setQuickPick] = useState(null); // { type: "extra", key, label }
+  const [showDietList, setShowDietList] = useState(false);
   const headTap = useRef(null);
   const onHeaderPointerDown = (e) => {
     headTap.current = { x: e.clientX, y: e.clientY, t: Date.now() };
@@ -84,6 +85,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     if (h && (Date.now() - h.t > 500 || Math.abs(e.clientX - h.x) > 12 || Math.abs(e.clientY - h.y) > 12)) return;
     setShowQuick(v => !v);
     setQuickPick(null);
+    setShowDietList(false);
   };
   const setExtraOrdered = (key, seatId, ordered) => {
     const next = seats.map(s => (seatId == null || s.id === seatId)
@@ -272,8 +274,9 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const pLabel = p => p === "Non-Alc" ? "N/A" : p === "Our Story" ? "O.S." : p === "Premium" ? "Prem" : p === "Wine" ? "Wine" : p;
 
   // Slow/Fast pace toggles. Roomy mode shows them in their own PACE row;
-  // compact moves them into the header to save a row of height. They stop
-  // pointer events so a tap never starts the header drag.
+  // compact offers them in the quick-access drawer instead, keeping the
+  // header free for the guest name. They stop pointer events so a tap
+  // never starts the header drag.
   const paceButtons = ["Slow", "Fast"].map(p => {
     const colors = { Slow: { on: tokens.ink[0], bg: tokens.neutral[0], border: tokens.charcoal.default }, Fast: { on: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } };
     const active = table.pace === p;
@@ -332,9 +335,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             {table.arrivedAt && <span style={{ fontFamily: FONT, fontSize: "10px", fontWeight: 600, color: tokens.green.border }}>arr. {table.arrivedAt}</span>}
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: compact ? "row" : "column", alignItems: compact ? "center" : "flex-end", gap: 4, flexShrink: 0 }}>
-          {compact && paceButtons}
-          <div style={{ fontFamily: FONT, fontSize: dz.counterFont, fontWeight: 700, color: allDone ? tokens.green.border : tokens.ink[0], lineHeight: 1, marginLeft: compact ? 2 : 0 }}>{firedCount}<span style={{ fontSize: "9px", color: tokens.ink[3], fontWeight: 400 }}>/{totalCourses}</span></div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+          <div style={{ fontFamily: FONT, fontSize: dz.counterFont, fontWeight: 700, color: allDone ? tokens.green.border : tokens.ink[0], lineHeight: 1 }}>{firedCount}<span style={{ fontSize: "9px", color: tokens.ink[3], fontWeight: 400 }}>/{totalCourses}</span></div>
           {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: "8px", color: tokens.green.border }}>{durationMins} min</div>}
           {editable && (
             <button
@@ -369,7 +371,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               <span style={qLabel}>PACE</span>
               {paceButtons}
               <span style={{ flex: 1 }} />
-              <button onClick={() => { setShowQuick(false); setQuickPick(null); }} aria-label="Close quick access"
+              <button onClick={() => { setShowQuick(false); setQuickPick(null); setShowDietList(false); }} aria-label="Close quick access"
                 style={{ ...qBtn(false), padding: "5px 9px", color: tokens.ink[3] }}>✕</button>
             </div>
             {quickExtraDefs.length > 0 && (
@@ -380,7 +382,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                   const picking = quickPick?.type === "extra" && quickPick.key === d.key;
                   return (
                     <button key={d.key}
-                      onClick={() => setQuickPick(picking ? null : { type: "extra", key: d.key, label: d.label })}
+                      onClick={() => { setQuickPick(picking ? null : { type: "extra", key: d.key, label: d.label }); setShowDietList(false); }}
                       style={{ ...qBtn(active), ...(picking ? { border: `1px solid ${tokens.charcoal.default}`, fontWeight: 600 } : {}) }}>
                       {d.label}{active ? ` · ${(optionalSeatMap[d.key] || []).length}` : ""}
                     </button>
@@ -391,41 +393,39 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                 </button>
               </div>
             )}
-            <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
               <span style={qLabel}>DIET</span>
-              {RESTRICTIONS.map(r => {
-                const picking = quickPick?.type === "diet" && quickPick.key === r.key;
-                return (
-                  <button key={r.key} title={r.label}
-                    onClick={() => setQuickPick(picking ? null : { type: "diet", key: r.key, label: r.label })}
-                    style={{
-                      fontFamily: FONT, fontSize: "11px", lineHeight: 1, padding: "4px 5px", borderRadius: 0, cursor: "pointer",
-                      border: `1px solid ${picking ? tokens.red.border : "transparent"}`,
-                      background: picking ? tokens.red.bg : "transparent",
-                      touchAction: "manipulation",
-                    }}>{r.emoji}</button>
-                );
-              })}
+              <button
+                onClick={() => { setShowDietList(v => !v); setQuickPick(null); }}
+                style={{ ...qBtn(showDietList, true), fontWeight: 600 }}>
+                {showDietList ? "✕ Close" : "+ Add restriction"}
+              </button>
             </div>
-            {quickPick && (
+            {showDietList && (
+              <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", paddingTop: 2, borderTop: `1px solid ${RULE_SOFT}` }}>
+                {RESTRICTIONS.map(r => (
+                  // One tap applies to the whole table (unassigned) — course mods
+                  // light up immediately and the ⚠ UNASSIGNED bar lets staff pin
+                  // it to a seat afterwards.
+                  <button key={r.key}
+                    onClick={() => { addKitchenRestr(r.key, null); setShowDietList(false); }}
+                    style={qBtn(false, true)}>
+                    {r.emoji} {r.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {quickPick?.type === "extra" && (
               <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", paddingTop: 2, borderTop: `1px solid ${RULE_SOFT}` }}>
                 <span style={{ ...qLabel, color: tokens.red.text, minWidth: 0 }}>{quickPick.label} →</span>
-                {quickPick.type === "extra" && (<>
-                  <button onClick={() => { setExtraOrdered(quickPick.key, null, !allOrdered(quickPick.key)); }}
-                    style={qBtn(allOrdered(quickPick.key))}>All</button>
-                  {seats.map(s => {
-                    const on = !!s.extras?.[quickPick.key]?.ordered;
-                    return (
-                      <button key={s.id} onClick={() => setExtraOrdered(quickPick.key, s.id, !on)} style={qBtn(on)}>P{s.id}</button>
-                    );
-                  })}
-                </>)}
-                {quickPick.type === "diet" && (<>
-                  <button onClick={() => { addKitchenRestr(quickPick.key, null); setQuickPick(null); }} style={qBtn(false, true)}>All</button>
-                  {seats.map(s => (
-                    <button key={s.id} onClick={() => { addKitchenRestr(quickPick.key, s.id); setQuickPick(null); }} style={qBtn(false, true)}>P{s.id}</button>
-                  ))}
-                </>)}
+                <button onClick={() => { setExtraOrdered(quickPick.key, null, !allOrdered(quickPick.key)); }}
+                  style={qBtn(allOrdered(quickPick.key))}>All</button>
+                {seats.map(s => {
+                  const on = !!s.extras?.[quickPick.key]?.ordered;
+                  return (
+                    <button key={s.id} onClick={() => setExtraOrdered(quickPick.key, s.id, !on)} style={qBtn(on)}>P{s.id}</button>
+                  );
+                })}
                 <button onClick={() => setQuickPick(null)} style={{ ...qBtn(false), color: tokens.ink[3] }}>✕</button>
               </div>
             )}
@@ -518,7 +518,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         </div>
       )}
 
-      {/* ── Pace ── (compact renders the buttons in the header instead) */}
+      {/* ── Pace ── (compact offers pace via the quick-access drawer instead) */}
       {!compact && (
         <div style={{ background: tokens.neutral[0], padding: dz.rowPad, display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase", flexShrink: 0 }}>PACE</span>
