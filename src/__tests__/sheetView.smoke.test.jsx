@@ -73,6 +73,7 @@ describe("SheetView smoke tests", () => {
     renderSheet();
 
     expect(screen.getByText("[TABLES]")).toBeInTheDocument();
+    expect(screen.getByText("[COURSE PROGRESSION]")).toBeInTheDocument();
     expect(screen.getByText("[COURSE STATE]")).toBeInTheDocument();
     expect(screen.getByText("[GUEST MATRIX]")).toBeInTheDocument();
     expect(screen.getByText("[ALERTS · INTELLIGENCE]")).toBeInTheDocument();
@@ -117,6 +118,40 @@ describe("SheetView smoke tests", () => {
 
     fireEvent.click(screen.getByText("EDIT · DETAIL"));
     expect(h.onOpenDetail).toHaveBeenCalledWith(3);
+  });
+
+  it("derives intelligence signals: fire cadence and pace vs the room", () => {
+    setViewport(1280);
+    // Table 3 has fired 1/3 courses; table 5 has fired 2/3 → room avg is
+    // ahead, so table 3 reads BEHIND ROOM by 1 course.
+    renderSheet({
+      tables: [
+        makeTable(),
+        makeTable({
+          id: 5, resName: "Kos",
+          kitchenLog: { course_1: { firedAt: "19:02" }, course_2: { firedAt: "19:20" } },
+        }),
+      ],
+    });
+
+    expect(screen.getByText(/SEATED \d/)).toBeInTheDocument();
+    expect(screen.getByText(/^(LAST FIRE|NO FIRE FOR)/)).toBeInTheDocument();
+    expect(screen.getByText("BEHIND ROOM · 1 COURSE")).toBeInTheDocument();
+  });
+
+  it("shows ALL COURSES OUT when the menu is complete", () => {
+    setViewport(1280);
+    renderSheet({
+      tables: [makeTable({
+        kitchenLog: {
+          course_1: { firedAt: "19:05" },
+          course_2: { firedAt: "19:25" },
+          course_3: { firedAt: "19:50" },
+        },
+      })],
+    });
+
+    expect(screen.getByText("ALL COURSES OUT")).toBeInTheDocument();
   });
 
   it("renders the empty state when no tables exist", () => {

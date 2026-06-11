@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
+import { parseHHMM } from "../../utils/tableHelpers.js";
 import { restrLabel } from "../../constants/dietary.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 
@@ -25,6 +26,19 @@ function SecHead({ label, right }) {
 }
 
 // ── Data helpers ──────────────────────────────────────────────
+// Minutes elapsed since an HH:MM timestamp. Negative values (clock skew, or a
+// service that crossed midnight) are normalised into 0…24h.
+function minutesSince(hhmm, now = new Date()) {
+  const t = parseHHMM(hhmm);
+  if (t == null) return null;
+  let diff = (now.getHours() * 60 + now.getMinutes()) - t;
+  if (diff < 0) diff += 24 * 60;
+  return diff;
+}
+
+const fmtDur = m =>
+  m < 60 ? `${m} MIN` : `${Math.floor(m / 60)}H ${String(m % 60).padStart(2, "0")}M`;
+
 function sortedTableList(tables) {
   return tables
     .filter(t => t.active || t.resName || t.resTime)
@@ -69,41 +83,102 @@ function TableListItem({ t, selected, onClick }) {
 }
 
 // ── Center: identity strip ────────────────────────────────────
+// Big table number anchors the sheet (per the R.I.S design reference);
+// menu type + language sit under it, descriptive cells flow to the right.
 function IdentityStrip({ table, isMobile }) {
   const cells = [
-    ["TABLE",   `T${String(table.id).padStart(2, "0")}`],
     ["NAME",    table.resName || "—"],
     ["PAX",     table.guests || table.seats?.length || "—"],
     ["RESV",    table.resTime || "—"],
     ["ARRIVED", table.arrivedAt || "—", table.arrivedAt ? tokens.green.text : tokens.ink[3]],
-    ["MENU",    table.menuType || "—"],
-    ["LANG",    (table.lang || "en").toUpperCase()],
     ["STATE",   table.active ? "SEATED" : "RESERVED", table.active ? tokens.green.strong : tokens.ink[3]],
   ];
   return (
     <div style={{
-      // Fixed 4-up grid on mobile (flex-wrap left ragged rows that read as
-      // misaligned); free-flowing wrap on wider screens.
-      display: isMobile ? "grid" : "flex",
-      gridTemplateColumns: isMobile ? "repeat(4, minmax(0,1fr))" : undefined,
-      flexWrap: isMobile ? undefined : "wrap",
-      gap: isMobile ? "6px 8px" : 0,
+      display: "flex", alignItems: "flex-end", gap: isMobile ? 14 : 20,
       borderBottom: `1px solid ${tokens.ink[3]}`,
       paddingBottom: 10, marginBottom: 12,
     }}>
-      {cells.map(([label, value, color]) => (
-        <div key={label} style={{ padding: isMobile ? 0 : "4px 14px 4px 0", minWidth: isMobile ? 0 : 72 }}>
-          <div style={{ ...lbl, ...clip }}>{label}</div>
-          <div style={{
-            ...val, ...clip,
-            color: color || tokens.ink[0],
-            fontWeight: label === "TABLE" ? 600 : 400,
-            fontSize: label === "TABLE" ? "16px" : "11px",
-          }}>
-            {value}
-          </div>
+      <div style={{ flexShrink: 0 }}>
+        <div style={{
+          fontFamily: F, fontSize: isMobile ? "32px" : "44px", fontWeight: 600,
+          lineHeight: 1, letterSpacing: "0.01em", color: tokens.ink[0],
+        }}>
+          T{String(table.id).padStart(2, "0")}
         </div>
-      ))}
+        <div style={{ ...lbl, fontSize: "9px", color: tokens.ink[2], marginTop: 3 }}>
+          {(table.menuType || "—")} · {(table.lang || "en")}
+        </div>
+      </div>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: isMobile ? "repeat(3, minmax(0,1fr))" : "repeat(5, minmax(0,auto))",
+        gap: isMobile ? "6px 8px" : "4px 18px",
+        flex: 1, minWidth: 0, paddingBottom: 2,
+      }}>
+        {cells.map(([label, value, color]) => (
+          <div key={label} style={{ minWidth: 0 }}>
+            <div style={{ ...lbl, ...clip }}>{label}</div>
+            <div style={{ ...val, ...clip, color: color || tokens.ink[0] }}>
+              {value}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Center: course progression dots ───────────────────────────
+// The full-service map from the design reference: one numbered dot per
+// course — filled = out, ringed = current (latest out), empty = pending.
+function CourseDots({ courses, isMobile }) {
+  if (courses.length === 0) return null;
+  let currentIdx = -1;
+  for (let i = courses.length - 1; i >= 0; i--) {
+    if (courses[i].firedAt) { currentIdx = i; break; }
+  }
+  const dotSize = isMobile ? 9 : 10;
+  const legend = [
+    ["●", "OUT", tokens.green.text],
+    ["◉", "CURRENT", tokens.ink[0]],
+    ["○", "PENDING", tokens.ink[3]],
+  ];
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <SecHead label="COURSE PROGRESSION" />
+      <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? "8px 7px" : "8px 9px", padding: "6px 0 4px" }}>
+        {courses.map((c, i) => {
+          const fired = !!c.firedAt;
+          const isCur = i === currentIdx;
+          return (
+            <div key={c.key} title={`${String(c.index).padStart(2, "0")} ${c.name}${c.firedAt ? ` · OUT ${c.firedAt}` : ""}`}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, width: isMobile ? 16 : 18 }}>
+              <span style={{
+                fontFamily: F, fontSize: "7px", letterSpacing: "0.06em",
+                color: isCur ? tokens.ink[0] : fired ? tokens.ink[2] : tokens.ink[4],
+                fontWeight: isCur ? 600 : 400,
+              }}>
+                {String(c.index).padStart(2, "0")}
+              </span>
+              <span style={{
+                width: dotSize, height: dotSize, borderRadius: "50%", boxSizing: "border-box",
+                background: fired ? tokens.green.text : "transparent",
+                border: isCur
+                  ? `2px solid ${tokens.ink[0]}`
+                  : `1px solid ${fired ? tokens.green.text : tokens.ink[4]}`,
+              }} />
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 14, paddingTop: 2 }}>
+        {legend.map(([glyph, text, color]) => (
+          <span key={text} style={{ ...lbl, fontSize: "7.5px", color }}>
+            {glyph} {text}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -279,7 +354,9 @@ function ActionStrip({ table, progressState, onFireNext, onUndoFire, onOpenDetai
 }
 
 // ── Right: alerts rail ────────────────────────────────────────
-function AlertsRail({ table }) {
+// `intel` = live computed signals (seated duration, fire cadence, room pace)
+// rendered as plain glyph rows; boxed items are reserved for true alerts.
+function AlertsRail({ table, intel = [] }) {
   const items = [];
   (table.restrictions || []).forEach((r, i) => {
     const desc = r?.pos != null
@@ -294,7 +371,7 @@ function AlertsRail({ table }) {
   return (
     <div style={{ marginBottom: 14, minWidth: 0 }}>
       <SecHead label="ALERTS · INTELLIGENCE" right={String(items.length)} />
-      {items.length === 0
+      {items.length === 0 && intel.length === 0
         ? <div style={{ ...lbl, color: tokens.ink[4], padding: "4px 0" }}>NO ACTIVE ALERTS</div>
         : items.map(it => {
             const { bg, border, color } =
@@ -312,6 +389,26 @@ function AlertsRail({ table }) {
             );
           })
       }
+      {intel.map(sig => {
+        const color = sig.tone === "warn" ? tokens.signal.warn
+          : sig.tone === "ok" ? tokens.green.text
+          : tokens.ink[2];
+        return (
+          <div key={sig.key} style={{
+            display: "grid", gridTemplateColumns: "16px minmax(0,1fr) auto",
+            alignItems: "center", gap: 6, height: 26,
+            borderBottom: `1px solid ${tokens.ink[5]}`, fontFamily: F,
+          }}>
+            <span style={{ fontSize: "10px", color, textAlign: "center" }}>{sig.glyph}</span>
+            <span style={{ ...clip, fontSize: "10px", letterSpacing: "0.06em", textTransform: "uppercase", color: sig.tone === "warn" ? tokens.signal.warn : tokens.ink[1] }}>
+              {sig.text}
+            </span>
+            {sig.detail != null && (
+              <span style={{ fontSize: "9px", letterSpacing: "0.04em", color: tokens.ink[3], flexShrink: 0 }}>{sig.detail}</span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -402,9 +499,65 @@ export default function SheetView({
 
   const progressState = useMemo(() => getCourseProgressState(table, courses), [table, courses]);
 
+  // Live clock — re-derives elapsed-time intelligence every 30s while open.
+  const [clockTick, setClockTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setClockTick(t => t + 1), 30 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // ── Intelligence signals — derived live, no stored state ────
+  //  · SEATED <duration>      — time since arrival
+  //  · LAST FIRE <n> MIN AGO  — fire cadence; warns once the gap drags
+  //  · AHEAD/BEHIND ROOM      — this table's progress vs. other active tables
+  const intel = useMemo(() => {
+    if (!table) return [];
+    const out = [];
+    const { firedCount, total, allComplete } = progressState;
+
+    if (table.active && table.arrivedAt) {
+      const m = minutesSince(table.arrivedAt);
+      if (m != null) out.push({ key: "seated", glyph: "●", tone: "ok", text: `SEATED ${fmtDur(m)}`, detail: table.arrivedAt });
+    }
+
+    if (allComplete && total > 0) {
+      out.push({ key: "complete", glyph: "✓", tone: "ok", text: "ALL COURSES OUT" });
+    } else if (firedCount > 0) {
+      const lastFiredAt = courses.filter(c => c.firedAt).map(c => c.firedAt).sort().pop();
+      const m = minutesSince(lastFiredAt);
+      if (m != null) {
+        out.push({
+          key: "cadence", glyph: m >= 25 ? "!" : "↻",
+          tone: m >= 25 ? "warn" : "info",
+          text: m >= 25 ? `NO FIRE FOR ${fmtDur(m)}` : `LAST FIRE ${fmtDur(m)} AGO`,
+          detail: lastFiredAt,
+        });
+      }
+    }
+
+    if (table.active && total > 0 && !allComplete) {
+      const fracs = tables
+        .filter(t => t.active && t.id !== table.id)
+        .map(t => {
+          const cs = getVisibleCoursesForTable(t, menuCourses, { profiles, assignments });
+          return cs.length ? cs.filter(c => c.firedAt).length / cs.length : null;
+        })
+        .filter(v => v != null);
+      if (fracs.length > 0) {
+        const room = fracs.reduce((a, b) => a + b, 0) / fracs.length;
+        const diff = Math.round((firedCount / total - room) * total);
+        if (diff >= 1)       out.push({ key: "pace", glyph: "↗", tone: "info", text: `AHEAD OF ROOM · ${diff} COURSE${diff > 1 ? "S" : ""}` });
+        else if (diff <= -1) out.push({ key: "pace", glyph: "↘", tone: "warn", text: `BEHIND ROOM · ${-diff} COURSE${diff < -1 ? "S" : ""}` });
+        else                 out.push({ key: "pace", glyph: "→", tone: "ok",   text: "ON PACE WITH ROOM" });
+      }
+    }
+    return out;
+  }, [table, courses, progressState, tables, menuCourses, profiles, assignments, clockTick]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const sheetBody = table && (
     <>
       <IdentityStrip table={table} isMobile={isMobile} />
+      <CourseDots courses={courses} isMobile={isMobile} />
       {isCompact ? (
         <CourseSection progressState={progressState} isMobile={isMobile} />
       ) : (
@@ -429,7 +582,7 @@ export default function SheetView({
 
   const rails = table && (
     <>
-      <AlertsRail table={table} />
+      <AlertsRail table={table} intel={intel} />
       <TimelineRail table={table} courses={courses} />
     </>
   );
