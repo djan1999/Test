@@ -35,6 +35,10 @@ import {
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import {
+  currentServiceDay, isStaleServiceDate, isDeliberatelyPastDate,
+  SERVICE_DATE_CHOSEN_ON_KEY,
+} from "./utils/serviceDay.js";
+import {
   resolveAperitifFromQuickAccessOption,
   aperitifMatchesQuickAccessOption,
 } from "./utils/quickAccessResolve.js";
@@ -87,22 +91,6 @@ const SheetView = lazy(() => import("./components/service/SheetView.jsx"));
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
   `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
-
-// A dinner service legitimately runs past midnight, so the service "day" must
-// NOT roll over at 00:00 — it rolls over in the early morning once service is
-// truly over (default 06:00, override with VITE_SERVICE_DAY_ROLLOVER_HOUR).
-// Until that hour the active service day is still the previous calendar date,
-// so a service that crossed midnight is preserved instead of being treated as
-// stale and wiped (which previously destroyed the night's drinks/seat input).
-const SERVICE_DAY_ROLLOVER_HOUR = (() => {
-  const raw = Number(import.meta.env.VITE_SERVICE_DAY_ROLLOVER_HOUR);
-  return Number.isFinite(raw) && raw >= 0 && raw <= 23 ? raw : 6;
-})();
-const currentServiceDay = (now = new Date()) =>
-  toLocalDateISO(new Date(now.getTime() - SERVICE_DAY_ROLLOVER_HOUR * 3600 * 1000));
-// ISO YYYY-MM-DD strings sort lexicographically by calendar date.
-const isStaleServiceDate = (date, today = currentServiceDay()) =>
-  Boolean(date) && String(date) < today;
 
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
 const APP_SUBTITLE = String(import.meta.env.VITE_APP_SUBTITLE || "SERVICE BOARD").trim() || "SERVICE BOARD";
@@ -2100,9 +2088,13 @@ export default function App() {
     try {
       const storedMode = localStorage.getItem("milka_mode") || null;
       const storedDate = localStorage.getItem("milka_service_date");
+      const chosenOn   = localStorage.getItem(SERVICE_DATE_CHOSEN_ON_KEY);
       // If the saved service date rolled over to yesterday, don't auto-resume
       // service/display — those modes require a date that matches today.
-      if ((storedMode === "service" || storedMode === "display") && isStaleServiceDate(storedDate)) {
+      // A deliberately-past date (demo / reviewing an earlier day) is exempt.
+      if ((storedMode === "service" || storedMode === "display")
+          && isStaleServiceDate(storedDate)
+          && !isDeliberatelyPastDate(storedDate, chosenOn)) {
         return null;
       }
       return storedMode;
@@ -2319,15 +2311,24 @@ export default function App() {
     try {
       const stored = localStorage.getItem("milka_service_date");
       if (!stored) return null;
-      if (isStaleServiceDate(stored)) {
+      const chosenOn = localStorage.getItem(SERVICE_DATE_CHOSEN_ON_KEY);
+      if (isStaleServiceDate(stored) && !isDeliberatelyPastDate(stored, chosenOn)) {
         // Date rolled over since last session — drop the stale value so
         // "Start Service" prompts for today's date instead of silently
         // resuming yesterday's (now empty) service.
-        try { localStorage.removeItem("milka_service_date"); } catch {}
+        try {
+          localStorage.removeItem("milka_service_date");
+          localStorage.removeItem(SERVICE_DATE_CHOSEN_ON_KEY);
+        } catch {}
         return null;
       }
       return stored;
     } catch { return null; }
+  });
+  // Service day at the moment the date was chosen — distinguishes a service
+  // that rolled over (auto-end) from one deliberately started on a past day.
+  const [serviceDateChosenOn, setServiceDateChosenOn] = useState(() => {
+    try { return localStorage.getItem(SERVICE_DATE_CHOSEN_ON_KEY) || null; } catch { return null; }
   });
   const [showServiceDatePicker,  setShowServiceDatePicker]  = useState(false);
   const [pendingModeAfterDate,   setPendingModeAfterDate]   = useState(null);
@@ -2917,7 +2918,11 @@ export default function App() {
     setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     setSel(null);
     setServiceDate(null);
-    try { localStorage.removeItem("milka_service_date"); } catch {}
+    setServiceDateChosenOn(null);
+    try {
+      localStorage.removeItem("milka_service_date");
+      localStorage.removeItem(SERVICE_DATE_CHOSEN_ON_KEY);
+    } catch {}
     await scopedFrom(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "service_date", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
     const blankRows = Array.from({ length: 10 }, (_, i) => ({ table_id: i + 1, data: {} }));
@@ -2980,10 +2985,17 @@ export default function App() {
     // A fresh service starting clears the auto-end guard so this new service can
     // itself be auto-ended once it later rolls past the cutoff.
     if (date) autoEndingRef.current = false;
+    const chosenOn = date ? currentServiceDay() : null;
     setServiceDate(date);
+    setServiceDateChosenOn(chosenOn);
     try {
-      if (date) localStorage.setItem("milka_service_date", date);
-      else      localStorage.removeItem("milka_service_date");
+      if (date) {
+        localStorage.setItem("milka_service_date", date);
+        localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, chosenOn);
+      } else {
+        localStorage.removeItem("milka_service_date");
+        localStorage.removeItem(SERVICE_DATE_CHOSEN_ON_KEY);
+      }
     } catch {}
     // Switching to a *different* day means yesterday's table state is stale —
     // clearing here lets the reconciliation effect rebuild the board from the
@@ -2995,7 +3007,7 @@ export default function App() {
     }
     if (!supabase) return;
     await scopedFrom(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "service_date", state: date ? { date } : {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
+      .upsert({ id: "service_date", state: date ? { date, chosenOn } : {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
   };
 
   const persistServiceSession = (session) => {
@@ -3958,13 +3970,18 @@ export default function App() {
       .then(async ({ data }) => {
         if (!mounted) return;
         const persisted = data?.state?.date;
+        const persistedChosenOn = data?.state?.chosenOn || null;
         if (!persisted) return;
-        if (isStaleServiceDate(persisted)) {
+        if (isStaleServiceDate(persisted) && !isDeliberatelyPastDate(persisted, persistedChosenOn)) {
           await autoEndStaleService(persisted);
           return;
         }
         setServiceDate(d => d || persisted); // local state wins if already set
-        try { localStorage.setItem("milka_service_date", persisted); } catch {}
+        setServiceDateChosenOn(c => c || persistedChosenOn);
+        try {
+          localStorage.setItem("milka_service_date", persisted);
+          if (persistedChosenOn) localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, persistedChosenOn);
+        } catch {}
       })
       .catch(() => {}); // keep whatever local service date we already have
 
@@ -3997,11 +4014,14 @@ export default function App() {
   useEffect(() => {
     if (!supabase || !serviceDate) return;
     if (mode !== "service" && mode !== "display") return;
+    // A date deliberately chosen in the past (demo / reviewing an earlier day)
+    // is exempt — auto-end only applies to a service that rolled over.
+    if (isDeliberatelyPastDate(serviceDate, serviceDateChosenOn)) return;
     const tick = () => { if (isStaleServiceDate(serviceDate)) autoEndStaleService(serviceDate); };
     tick();
     const id = setInterval(tick, 60 * 1000);
     return () => clearInterval(id);
-  }, [supabase, serviceDate, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [supabase, serviceDate, serviceDateChosenOn, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useRealtimeTable({
     supabase,
