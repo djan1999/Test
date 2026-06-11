@@ -82,8 +82,7 @@ const MenuPage = lazy(() => import("./components/menu/MenuPage.jsx"));
 const SummaryModal = lazy(() => import("./components/modals/SummaryModal.jsx"));
 const ArchiveModal = lazy(() => import("./components/modals/ArchiveModal.jsx"));
 const InventoryModal = lazy(() => import("./components/modals/InventoryModal.jsx"));
-// SHEET view temporarily disabled — combined into the Board/Quick Access view.
-// import SheetView from "./components/service/SheetView.jsx";
+const SheetView = lazy(() => import("./components/service/SheetView.jsx"));
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
@@ -2205,6 +2204,18 @@ export default function App() {
   // Which table (if any) is currently expanded into Quick Access on the board.
   // Clicking a reservation name toggles this; the rest of the board stays compact.
   const [quickTableId, setQuickTableId] = useState(null);
+  // Service board presentation: "board" (card grid) or "sheet" (single-table
+  // operational sheet with table index + intelligence rails). Persisted so a
+  // device keeps its preferred working view across reloads.
+  const [serviceView, setServiceView] = useState(() => {
+    try { return localStorage.getItem("milka_service_view") === "sheet" ? "sheet" : "board"; } catch { return "board"; }
+  });
+  const changeServiceView = v => {
+    setServiceView(v);
+    try { localStorage.setItem("milka_service_view", v); } catch {}
+  };
+  // Table currently focused in the sheet view (independent of quickTableId).
+  const [sheetTableId, setSheetTableId] = useState(null);
   const [summaryOpen,    setSummaryOpen]    = useState(false);
   const [archiveOpen,    setArchiveOpen]    = useState(false);
   const [inventoryOpen,  setInventoryOpen]  = useState(false);
@@ -4404,36 +4415,87 @@ export default function App() {
                 );
               })()}
             </div>
-            {/* SHEET tab temporarily disabled; BOARD and QUICK ACCESS are now a
-                single combined view — tap a reservation name to expand its card. */}
+            {/* [VIEW] toggle — BOARD (card grid) / SHEET (single-table sheet) */}
+            <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+              {["board", "sheet"].map(v => {
+                const on = serviceView === v;
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => changeServiceView(v)}
+                    style={{
+                      fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
+                      textTransform: "uppercase", fontWeight: on ? 600 : 400,
+                      padding: appIsMobile ? "8px 12px" : "5px 12px",
+                      border: `1px solid ${on ? tokens.charcoal.default : tokens.ink[4]}`,
+                      marginLeft: -1,
+                      background: on ? tokens.charcoal.default : tokens.neutral[0],
+                      color: on ? tokens.neutral[0] : tokens.ink[2],
+                      borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
+                    }}
+                  >
+                    {v}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Combined Board + per-table Quick Access view */}
-          {(() => {
-            const visibleTables = tables
-              .filter(t => t.active || t.resName || t.resTime)
-              .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
-
-            return (
-              <DisplayBoard
-                tables={visibleTables}
-                optionalExtras={dishes}
-                optionalPairings={pairings}
-                upd={upd}
-                quickTableId={quickTableId}
-                updSeat={updSeat}
-                onCardClick={id => setQuickTableId(prev => (prev === id ? null : id))}
+          {serviceView === "sheet" ? (
+            /* SHEET view — single-table operational sheet (table index +
+               course state + guest matrix + intelligence rails). */
+            <Suspense fallback={lazyViewFallback}>
+              <SheetView
+                tables={tables}
+                menuCourses={activeMenuCourses}
+                selectedId={sheetTableId}
+                onSelect={setSheetTableId}
                 onOpenDetail={id => setSel(id)}
+                onFireNext={(tableId, courseKey) => {
+                  const t = tablesRef.current?.find(x => x.id === tableId);
+                  upd(tableId, "kitchenLog", { ...(t?.kitchenLog || {}), [courseKey]: { firedAt: fmt(new Date()) } });
+                }}
+                onUndoFire={(tableId, courseKey) => {
+                  const t = tablesRef.current?.find(x => x.id === tableId);
+                  const newLog = { ...(t?.kitchenLog || {}) };
+                  delete newLog[courseKey];
+                  upd(tableId, "kitchenLog", newLog);
+                }}
                 onSeat={seatTable}
                 onUnseat={unseatTable}
-                aperitifOptions={serviceAperitifOptions}
-                wines={wines}
-                cocktails={cocktails}
-                spirits={spirits}
-                beers={beers}
+                profiles={profilesState.profiles}
+                assignments={profilesState.assignments}
               />
-            );
-          })()}
+            </Suspense>
+          ) : (
+            /* Combined Board + per-table Quick Access view */
+            (() => {
+              const visibleTables = tables
+                .filter(t => t.active || t.resName || t.resTime)
+                .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
+
+              return (
+                <DisplayBoard
+                  tables={visibleTables}
+                  optionalExtras={dishes}
+                  optionalPairings={pairings}
+                  upd={upd}
+                  quickTableId={quickTableId}
+                  updSeat={updSeat}
+                  onCardClick={id => setQuickTableId(prev => (prev === id ? null : id))}
+                  onOpenDetail={id => setSel(id)}
+                  onSeat={seatTable}
+                  onUnseat={unseatTable}
+                  aperitifOptions={serviceAperitifOptions}
+                  wines={wines}
+                  cocktails={cocktails}
+                  spirits={spirits}
+                  beers={beers}
+                />
+              );
+            })()
+          )}
         </div>
       ) : (
         <Detail

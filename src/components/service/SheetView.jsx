@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { tokens } from "../../styles/tokens.js";
-import { fmt } from "../../utils/tableHelpers.js";
+import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { restrLabel } from "../../constants/dietary.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 
@@ -10,13 +10,16 @@ const F = tokens.font;
 const lbl = { fontFamily: F, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase" };
 const val = { fontFamily: F, fontSize: "11px", color: tokens.ink[0], textTransform: "uppercase", letterSpacing: "0.03em" };
 const hr  = { height: 1, background: tokens.ink[4] };
+// Every variable-length text cell gets this — grid/flex children default to
+// min-width:auto, which is what made long values overlap adjacent columns.
+const clip = { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
 function SecHead({ label, right }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-      <span style={{ ...lbl, color: tokens.ink[2], fontWeight: 500 }}>[{label}]</span>
+      <span style={{ ...lbl, color: tokens.ink[2], fontWeight: 500, flexShrink: 0 }}>[{label}]</span>
       <div style={{ flex: 1, ...hr }} />
-      {right != null && <span style={{ ...lbl }}>{right}</span>}
+      {right != null && <span style={{ ...lbl, flexShrink: 0 }}>{right}</span>}
     </div>
   );
 }
@@ -42,19 +45,20 @@ function TableListItem({ t, selected, onClick }) {
       onClick={() => onClick(t.id)}
       style={{
         textAlign: "left", display: "grid",
-        gridTemplateColumns: "30px 1fr auto",
+        gridTemplateColumns: "30px minmax(0,1fr) auto",
         alignItems: "center", gap: 6,
         padding: "7px 10px",
         background: selected ? tokens.tint.parchment : "transparent",
         border: `1px solid ${selected ? tokens.charcoal.default : "transparent"}`,
         borderBottom: `1px solid ${tokens.ink[5]}`,
         borderRadius: 0, cursor: "pointer", width: "100%", fontFamily: F,
+        touchAction: "manipulation",
       }}
     >
       <span style={{ fontSize: "11px", fontWeight: 600, color: tokens.ink[0] }}>
         T{String(t.id).padStart(2, "0")}
       </span>
-      <span style={{ fontSize: "10px", color: tokens.ink[1], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: "10px", color: tokens.ink[1], ...clip }}>
         {t.resName || "—"}
       </span>
       <span style={{ fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", color: statusColor, flexShrink: 0 }}>
@@ -65,7 +69,7 @@ function TableListItem({ t, selected, onClick }) {
 }
 
 // ── Center: identity strip ────────────────────────────────────
-function IdentityStrip({ table }) {
+function IdentityStrip({ table, isMobile }) {
   const cells = [
     ["TABLE",   `T${String(table.id).padStart(2, "0")}`],
     ["NAME",    table.resName || "—"],
@@ -78,14 +82,24 @@ function IdentityStrip({ table }) {
   ];
   return (
     <div style={{
-      display: "flex", flexWrap: "wrap", gap: 0,
+      // Fixed 4-up grid on mobile (flex-wrap left ragged rows that read as
+      // misaligned); free-flowing wrap on wider screens.
+      display: isMobile ? "grid" : "flex",
+      gridTemplateColumns: isMobile ? "repeat(4, minmax(0,1fr))" : undefined,
+      flexWrap: isMobile ? undefined : "wrap",
+      gap: isMobile ? "6px 8px" : 0,
       borderBottom: `1px solid ${tokens.ink[3]}`,
       paddingBottom: 10, marginBottom: 12,
     }}>
       {cells.map(([label, value, color]) => (
-        <div key={label} style={{ padding: "4px 14px 4px 0", minWidth: 72 }}>
-          <div style={{ ...lbl }}>{label}</div>
-          <div style={{ ...val, color: color || tokens.ink[0], fontWeight: label === "TABLE" ? 600 : 400, fontSize: label === "TABLE" ? "16px" : "11px" }}>
+        <div key={label} style={{ padding: isMobile ? 0 : "4px 14px 4px 0", minWidth: isMobile ? 0 : 72 }}>
+          <div style={{ ...lbl, ...clip }}>{label}</div>
+          <div style={{
+            ...val, ...clip,
+            color: color || tokens.ink[0],
+            fontWeight: label === "TABLE" ? 600 : 400,
+            fontSize: label === "TABLE" ? "16px" : "11px",
+          }}>
             {value}
           </div>
         </div>
@@ -96,7 +110,7 @@ function IdentityStrip({ table }) {
 
 // ── Center: compact course state window ───────────────────────
 // Shows PREVIOUS / CURRENT / NEXT FIRE derived from getCourseProgressState().
-function CourseSection({ progressState }) {
+function CourseSection({ progressState, isMobile }) {
   const { previous, current, nextFire, allComplete, firedCount, total } = progressState;
 
   const Row = ({ label, c, emphasis, placeholder }) => {
@@ -107,31 +121,31 @@ function CourseSection({ progressState }) {
     const nameColor  = isStrong ? tokens.ink[0] : isMuted ? tokens.ink[3] : tokens.ink[1];
     const nameWeight = isStrong ? 600 : isMuted ? 400 : 500;
     const rowHeight  = isStrong ? 34 : 30;
-    const nameSize   = isStrong ? "13px" : "11px";
+    const nameSize   = isStrong ? (isMobile ? "12px" : "13px") : "11px";
 
     return (
       <div style={{
         display: "grid",
-        gridTemplateColumns: "80px 28px 1fr 84px",
-        alignItems: "center", gap: 8,
+        gridTemplateColumns: isMobile ? "52px 22px minmax(0,1fr) 62px" : "80px 28px minmax(0,1fr) 84px",
+        alignItems: "center", gap: isMobile ? 6 : 8,
         height: rowHeight,
         borderBottom: `1px solid ${tokens.ink[5]}`,
         fontFamily: F,
       }}>
-        <span style={{ ...lbl, color: labelColor, fontWeight: isStrong ? 600 : 500 }}>
+        <span style={{ ...lbl, ...clip, color: labelColor, fontWeight: isStrong ? 600 : 500 }}>
           {label}
         </span>
         <span style={{ fontSize: "10px", color: numColor, letterSpacing: "0.06em", fontWeight: isStrong ? 600 : 400 }}>
           {c ? String(c.index).padStart(2, "0") : "—"}
         </span>
         <span style={{
+          ...clip,
           fontSize: nameSize, color: nameColor, fontWeight: nameWeight,
           textTransform: "uppercase", letterSpacing: "0.04em",
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
           {c ? c.name : (placeholder || "—")}
         </span>
-        <span style={{ fontSize: "10px", color: c?.firedAt ? tokens.green.text : tokens.ink[4], textAlign: "right", letterSpacing: "0.04em" }}>
+        <span style={{ ...clip, fontSize: isMobile ? "9px" : "10px", color: c?.firedAt ? tokens.green.text : tokens.ink[4], textAlign: "right", letterSpacing: "0.04em" }}>
           {c?.firedAt ? `OUT ${c.firedAt}` : "—"}
         </span>
       </div>
@@ -140,35 +154,32 @@ function CourseSection({ progressState }) {
 
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-        <span style={{ ...lbl, color: tokens.ink[2], fontWeight: 500 }}>[COURSE STATE]</span>
-        <div style={{ flex: 1, ...hr }} />
-        <span style={{ ...lbl }}>
-          [PROGRESS] {String(firedCount).padStart(2, "0")} / {String(total).padStart(2, "0")} OUT
-        </span>
-      </div>
+      <SecHead
+        label="COURSE STATE"
+        right={`${String(firedCount).padStart(2, "0")} / ${String(total).padStart(2, "0")} OUT`}
+      />
       {/* PREVIOUS = fired course before current */}
-      <Row label="PREVIOUS" c={previous} emphasis="muted" placeholder="—" />
+      <Row label={isMobile ? "PREV" : "PREVIOUS"} c={previous} emphasis="muted" />
       {/* CURRENT = latest fired course / what is on the table */}
       <Row
-        label="CURRENT"
+        label={isMobile ? "NOW" : "CURRENT"}
         c={current}
         emphasis="strong"
         placeholder={total === 0 ? "—" : "WAITING"}
       />
       {/* NEXT FIRE = first unfired after current */}
       <Row
-        label="NEXT FIRE"
+        label={isMobile ? "NEXT" : "NEXT FIRE"}
         c={allComplete ? null : nextFire}
         emphasis="default"
-        placeholder={allComplete ? "COMPLETE" : (total === 0 ? "—" : current ? "—" : (nextFire ? undefined : "—"))}
+        placeholder={allComplete ? "COMPLETE" : "—"}
       />
     </div>
   );
 }
 
 // ── Center: guest matrix ──────────────────────────────────────
-function GuestMatrix({ table }) {
+function GuestMatrix({ table, isMobile }) {
   const seats = table.seats || [];
   const restrByPos = new Map();
   (table.restrictions || []).forEach(r => {
@@ -178,15 +189,21 @@ function GuestMatrix({ table }) {
       restrByPos.set(r.pos, arr);
     }
   });
+  const cols = isMobile
+    ? "26px minmax(0,1fr) 52px minmax(0,72px)"
+    : "32px minmax(0,1fr) 80px minmax(0,96px)";
   return (
     <div style={{ marginBottom: 14 }}>
       <SecHead label="GUEST MATRIX" right={`${seats.length} PAX`} />
       {/* column headers */}
-      <div style={{ display: "grid", gridTemplateColumns: "32px 1fr 80px 80px", gap: 8, height: 22, alignItems: "center", borderBottom: `1px solid ${tokens.ink[4]}`, marginBottom: 2 }}>
+      <div style={{ display: "grid", gridTemplateColumns: cols, gap: isMobile ? 6 : 8, height: 22, alignItems: "center", borderBottom: `1px solid ${tokens.ink[4]}`, marginBottom: 2 }}>
         {["SEAT","NOTES","WATER","PAIRING"].map(h => (
-          <span key={h} style={{ ...lbl, fontSize: "7.5px" }}>{h}</span>
+          <span key={h} style={{ ...lbl, ...clip, fontSize: "7.5px" }}>{h}</span>
         ))}
       </div>
+      {seats.length === 0 && (
+        <div style={{ ...lbl, color: tokens.ink[4], padding: "6px 0" }}>NO SEATS</div>
+      )}
       {seats.map(seat => {
         const r = restrByPos.get(seat.id) || [];
         const rText = r.length ? r.map(x => restrLabel(x.note) || x.note).join(" · ") : "—";
@@ -194,16 +211,16 @@ function GuestMatrix({ table }) {
         const pairing = (seat.pairing && seat.pairing !== "—") ? seat.pairing : "—";
         return (
           <div key={seat.id} style={{
-            display: "grid", gridTemplateColumns: "32px 1fr 80px 80px",
-            alignItems: "center", gap: 8, height: 28,
+            display: "grid", gridTemplateColumns: cols,
+            alignItems: "center", gap: isMobile ? 6 : 8, height: 28,
             borderBottom: `1px solid ${tokens.ink[5]}`, fontFamily: F,
           }}>
             <span style={{ fontSize: "10px", color: tokens.ink[2], fontWeight: 500 }}>P{seat.id}</span>
-            <span style={{ fontSize: "10px", color: r.length ? tokens.red.text : tokens.ink[3], textTransform: "uppercase", letterSpacing: "0.04em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ ...clip, fontSize: "10px", color: r.length ? tokens.red.text : tokens.ink[3], textTransform: "uppercase", letterSpacing: "0.04em" }}>
               {rText}
             </span>
-            <span style={{ fontSize: "10px", color: water !== "—" ? tokens.ink[1] : tokens.ink[4] }}>{water}</span>
-            <span style={{ fontSize: "10px", color: pairing !== "—" ? tokens.ink[1] : tokens.ink[4], textTransform: "uppercase", letterSpacing: "0.03em" }}>
+            <span style={{ ...clip, fontSize: "10px", color: water !== "—" ? tokens.ink[1] : tokens.ink[4], textTransform: "uppercase" }}>{water}</span>
+            <span style={{ ...clip, fontSize: "10px", color: pairing !== "—" ? tokens.ink[1] : tokens.ink[4], textTransform: "uppercase", letterSpacing: "0.03em" }}>
               {pairing}
             </span>
           </div>
@@ -214,7 +231,7 @@ function GuestMatrix({ table }) {
 }
 
 // ── Center: action strip ──────────────────────────────────────
-function ActionStrip({ table, progressState, onFireNext, onUndoFire, onOpenDetail, onSeat, onUnseat }) {
+function ActionStrip({ table, progressState, onFireNext, onUndoFire, onOpenDetail, onSeat, onUnseat, isMobile }) {
   const { nextFire, current } = progressState;
   const canFire = table.active && !!nextFire;
 
@@ -226,30 +243,32 @@ function ActionStrip({ table, progressState, onFireNext, onUndoFire, onOpenDetai
       disabled={!!opts.disabled}
       style={{
         fontFamily: F, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase",
-        padding: "7px 10px",
+        padding: isMobile ? "10px 12px" : "7px 10px",
         border: `1px solid ${opts.primary ? tokens.charcoal.default : tokens.ink[4]}`,
         background: opts.primary ? tokens.charcoal.default : tokens.neutral[0],
         color: opts.primary ? tokens.neutral[0] : tokens.ink[1],
         borderRadius: 0, cursor: opts.disabled ? "not-allowed" : "pointer",
-        opacity: opts.disabled ? 0.4 : 1, flexShrink: 0, touchAction: "manipulation",
+        opacity: opts.disabled ? 0.4 : 1, touchAction: "manipulation",
+        // Long course names must truncate inside the button, never push the
+        // strip wider than the viewport.
+        maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        flexShrink: 1, minWidth: 0,
       }}
     >
       {label}
     </button>
   );
 
+  const fireLabel = canFire
+    ? (isMobile
+        ? `FIRE C${String(nextFire.index).padStart(2, "0")}`
+        : `FIRE C${String(nextFire.index).padStart(2, "0")} · ${nextFire.name}`)
+    : "FIRE NEXT";
+
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingTop: 10, borderTop: `1px solid ${tokens.ink[4]}` }}>
-      {btn(
-        canFire ? `FIRE C${String(nextFire.index).padStart(2,"0")} · ${nextFire.name}` : "FIRE NEXT",
-        () => canFire && onFireNext(nextFire.key),
-        { primary: true, disabled: !canFire },
-      )}
-      {current && btn(
-        "UNDO LAST FIRE",
-        () => onUndoFire(current.key),
-        {},
-      )}
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingTop: 10, borderTop: `1px solid ${tokens.ink[4]}`, marginBottom: 14 }}>
+      {btn(fireLabel, () => canFire && onFireNext(nextFire.key), { primary: true, disabled: !canFire })}
+      {current && btn("UNDO LAST FIRE", () => onUndoFire(current.key))}
       {table.active
         ? btn("UNSEAT", () => onUnseat(table.id))
         : btn("SEAT",   () => onSeat(table.id))
@@ -273,7 +292,7 @@ function AlertsRail({ table }) {
   if (table.notes?.trim()) items.push({ key: "note", tone: "info", text: table.notes.trim() });
 
   return (
-    <div style={{ marginBottom: 14 }}>
+    <div style={{ marginBottom: 14, minWidth: 0 }}>
       <SecHead label="ALERTS · INTELLIGENCE" right={String(items.length)} />
       {items.length === 0
         ? <div style={{ ...lbl, color: tokens.ink[4], padding: "4px 0" }}>NO ACTIVE ALERTS</div>
@@ -286,7 +305,7 @@ function AlertsRail({ table }) {
               <div key={it.key} style={{
                 fontFamily: F, fontSize: "10px", padding: "6px 8px",
                 background: bg, border: `1px solid ${border}`, color, letterSpacing: "0.04em",
-                lineHeight: 1.3, marginBottom: 4,
+                lineHeight: 1.3, marginBottom: 4, overflowWrap: "anywhere",
               }}>
                 {it.text}
               </div>
@@ -308,18 +327,18 @@ function TimelineRail({ table, courses }) {
   events.sort((a, b) => (a.at || "").localeCompare(b.at || ""));
 
   return (
-    <div>
+    <div style={{ minWidth: 0 }}>
       <SecHead label="TIMELINE" right={String(events.length)} />
       {events.length === 0
         ? <div style={{ ...lbl, color: tokens.ink[4], padding: "4px 0" }}>NO COURSE TIMESTAMPS YET</div>
         : events.map((e, i) => (
             <div key={i} style={{
-              display: "grid", gridTemplateColumns: "42px 1fr",
+              display: "grid", gridTemplateColumns: "42px minmax(0,1fr)",
               alignItems: "center", gap: 8, height: 28,
               borderBottom: `1px solid ${tokens.ink[5]}`, fontFamily: F,
             }}>
               <span style={{ fontSize: "9px", color: tokens.ink[3], letterSpacing: "0.06em" }}>{e.at}</span>
-              <span style={{ fontSize: "10px", color: tokens.ink[1], textTransform: "uppercase", letterSpacing: "0.04em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span style={{ ...clip, fontSize: "10px", color: tokens.ink[1], textTransform: "uppercase", letterSpacing: "0.04em" }}>
                 {e.label}
               </span>
             </div>
@@ -353,14 +372,18 @@ export default function SheetView({
   onUndoFire,
   onSeat,
   onUnseat,
-  isMobile = false,
   profiles = [],
   assignments = {},
 }) {
+  // Three tiers: phone (single column), tablet (list + sheet, rails fold into
+  // the sheet), desktop (full three-column layout from the design reference).
+  const isMobile  = useIsMobile(BP.md);   // < 700
+  const isCompact = useIsMobile(1080);    // < 1080 — not enough room for 3 cols
+
   const list = useMemo(() => sortedTableList(tables), [tables]);
 
-  // Auto-select first active table if nothing selected yet
-  const effectiveId = selectedId && list.some(t => t.id === selectedId)
+  // Auto-select first table if nothing selected yet (or selection vanished)
+  const effectiveId = selectedId != null && list.some(t => t.id === selectedId)
     ? selectedId
     : (list[0]?.id ?? null);
 
@@ -379,51 +402,116 @@ export default function SheetView({
 
   const progressState = useMemo(() => getCourseProgressState(table, courses), [table, courses]);
 
-  // ── MOBILE layout ──────────────────────────────────────────
+  const sheetBody = table && (
+    <>
+      <IdentityStrip table={table} isMobile={isMobile} />
+      {isCompact ? (
+        <CourseSection progressState={progressState} isMobile={isMobile} />
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 16 }}>
+          <CourseSection progressState={progressState} isMobile={false} />
+          <GuestMatrix table={table} isMobile={false} />
+        </div>
+      )}
+      <ActionStrip
+        table={table}
+        progressState={progressState}
+        onFireNext={key => onFireNext(table.id, key)}
+        onUndoFire={key => onUndoFire(table.id, key)}
+        onOpenDetail={onOpenDetail}
+        onSeat={onSeat}
+        onUnseat={onUnseat}
+        isMobile={isMobile}
+      />
+      {isCompact && <GuestMatrix table={table} isMobile={isMobile} />}
+    </>
+  );
+
+  const rails = table && (
+    <>
+      <AlertsRail table={table} />
+      <TimelineRail table={table} courses={courses} />
+    </>
+  );
+
+  // ── MOBILE: chip selector + single stacked column ───────────
   if (isMobile) {
     return (
-      <div style={{ padding: "0 12px 40px", display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ padding: "0 12px 40px", display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
         {/* horizontal table selector */}
-        <div style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 4 }}>
-          {list.map(t => (
-            <button key={t.id} type="button" onClick={() => onSelect(t.id)} style={{
-              fontFamily: F, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase",
-              padding: "7px 10px", flexShrink: 0, borderRadius: 0,
-              border: `1px solid ${t.id === effectiveId ? tokens.charcoal.default : tokens.ink[4]}`,
-              background: t.id === effectiveId ? tokens.tint.parchment : tokens.neutral[0],
-              color: tokens.ink[1], touchAction: "manipulation",
-            }}>
-              T{String(t.id).padStart(2, "0")} {t.resName ? `· ${t.resName}` : ""}
-            </button>
-          ))}
+        <div style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
+          {list.map(t => {
+            const on = t.id === effectiveId;
+            return (
+              <button key={t.id} type="button" onClick={() => onSelect(t.id)} style={{
+                fontFamily: F, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase",
+                padding: "8px 10px", flexShrink: 0, borderRadius: 0,
+                border: `1px solid ${on ? tokens.charcoal.default : tokens.ink[4]}`,
+                background: on ? tokens.tint.parchment : tokens.neutral[0],
+                color: t.active ? tokens.ink[0] : tokens.ink[2],
+                fontWeight: on ? 600 : 400,
+                maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                touchAction: "manipulation",
+              }}>
+                T{String(t.id).padStart(2, "0")}{t.resName ? ` · ${t.resName}` : ""}
+              </button>
+            );
+          })}
         </div>
         {!table ? <EmptySheet /> : (
-          <div style={{ background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}`, padding: 14 }}>
-            <IdentityStrip table={table} />
-            <CourseSection progressState={progressState} />
-            <GuestMatrix table={table} />
-            <AlertsRail table={table} />
-            <TimelineRail table={table} courses={courses} />
-            <ActionStrip
-              table={table}
-              progressState={progressState}
-              onFireNext={key => onFireNext(table.id, key)}
-              onUndoFire={key => onUndoFire(table.id, key)}
-              onOpenDetail={onOpenDetail}
-              onSeat={onSeat}
-              onUnseat={onUnseat}
-            />
+          <div style={{ background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}`, padding: 12, minWidth: 0 }}>
+            {sheetBody}
+            {rails}
           </div>
         )}
       </div>
     );
   }
 
-  // ── DESKTOP layout: 3-column grid ─────────────────────────
+  // ── TABLET: table index + sheet (rails fold into the sheet) ─
+  if (isCompact) {
+    return (
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "190px minmax(0,1fr)",
+        gap: 12,
+        padding: "0 16px 48px",
+        alignItems: "start",
+      }}>
+        <aside style={{
+          position: "sticky", top: 12,
+          maxHeight: "calc(100vh - 150px)", overflowY: "auto",
+          background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}`,
+        }}>
+          <div style={{ padding: "8px 10px", borderBottom: `1px solid ${tokens.ink[4]}` }}>
+            <SecHead label="TABLES" right={String(list.length)} />
+          </div>
+          {list.length === 0
+            ? <div style={{ ...lbl, color: tokens.ink[4], padding: "10px" }}>NO TABLES</div>
+            : list.map(t => (
+                <TableListItem key={t.id} t={t} selected={t.id === effectiveId} onClick={onSelect} />
+              ))
+          }
+        </aside>
+        <main style={{ background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}`, padding: 14, minWidth: 0 }}>
+          {!table ? <EmptySheet /> : (
+            <>
+              {sheetBody}
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 16 }}>
+                {rails}
+              </div>
+            </>
+          )}
+        </main>
+      </div>
+    );
+  }
+
+  // ── DESKTOP: 3-column grid ──────────────────────────────────
   return (
     <div style={{
       display: "grid",
-      gridTemplateColumns: "240px minmax(0,1fr) 300px",
+      gridTemplateColumns: "220px minmax(0,1fr) 280px",
       gap: 16,
       padding: "0 24px 48px",
       alignItems: "start",
@@ -450,40 +538,16 @@ export default function SheetView({
       <main style={{
         background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}`, padding: 16, minWidth: 0,
       }}>
-        {!table ? <EmptySheet /> : (
-          <>
-            <IdentityStrip table={table} />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 14 }}>
-              <CourseSection progressState={progressState} />
-              <GuestMatrix table={table} />
-            </div>
-            <ActionStrip
-              table={table}
-              progressState={progressState}
-              onFireNext={key => onFireNext(table.id, key)}
-              onUndoFire={key => onUndoFire(table.id, key)}
-              onOpenDetail={onOpenDetail}
-              onSeat={onSeat}
-              onUnseat={onUnseat}
-            />
-          </>
-        )}
+        {!table ? <EmptySheet /> : sheetBody}
       </main>
 
       {/* RIGHT — intelligence rail */}
       <aside style={{
         position: "sticky", top: 12,
         background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}`,
-        padding: 14,
+        padding: 14, minWidth: 0,
       }}>
-        {table ? (
-          <>
-            <AlertsRail table={table} />
-            <TimelineRail table={table} courses={courses} />
-          </>
-        ) : (
-          <div style={{ ...lbl, color: tokens.ink[4] }}>SELECT A TABLE</div>
-        )}
+        {table ? rails : <div style={{ ...lbl, color: tokens.ink[4] }}>SELECT A TABLE</div>}
       </aside>
 
     </div>
