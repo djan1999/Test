@@ -4,6 +4,7 @@ import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { parseHHMM } from "../../utils/tableHelpers.js";
 import { restrLabel } from "../../constants/dietary.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
+import { fireGapsForTable, estimateNextFire } from "../../utils/fireCadence.js";
 
 const F = tokens.font;
 
@@ -506,53 +507,84 @@ export default function SheetView({
     return () => clearInterval(id);
   }, []);
 
+  // One pass over the room's active tables feeds both pace comparison and
+  // the pooled fire-interval cadence used when this table lacks history.
+  const roomStats = useMemo(() => {
+    const gaps = [];
+    const otherFracs = [];
+    tables.filter(t => t.active).forEach(t => {
+      const cs = getVisibleCoursesForTable(t, menuCourses, { profiles, assignments });
+      gaps.push(...fireGapsForTable(t, cs));
+      if (table && t.id !== table.id && cs.length) {
+        otherFracs.push(cs.filter(c => c.firedAt).length / cs.length);
+      }
+    });
+    return { gaps, otherFracs };
+  }, [tables, menuCourses, profiles, assignments, table]);
+
   // ── Intelligence signals — derived live, no stored state ────
   //  · SEATED <duration>      — time since arrival
-  //  · LAST FIRE <n> MIN AGO  — fire cadence; warns once the gap drags
+  //  · LAST FIRE <n> MIN AGO  — fire recency
+  //  · C0X DUE IN ~N MIN      — next course extrapolated from tonight's
+  //                             fire rhythm (table's own, else the room's)
   //  · AHEAD/BEHIND ROOM      — this table's progress vs. other active tables
   const intel = useMemo(() => {
     if (!table) return [];
     const out = [];
-    const { firedCount, total, allComplete } = progressState;
+    const { nextFire, firedCount, total, allComplete } = progressState;
+    const now = new Date();
 
     if (table.active && table.arrivedAt) {
-      const m = minutesSince(table.arrivedAt);
+      const m = minutesSince(table.arrivedAt, now);
       if (m != null) out.push({ key: "seated", glyph: "●", tone: "ok", text: `SEATED ${fmtDur(m)}`, detail: table.arrivedAt });
     }
+
+    // Prediction beats the static "NO FIRE" threshold, so the dumb warning
+    // only fires when no estimate could be derived.
+    const est = (table.active && nextFire)
+      ? estimateNextFire({ table, courses, roomGaps: roomStats.gaps, now })
+      : null;
+    // An estimate more than 45 min overdue means stale data, not a late
+    // course (e.g. reviewing an old service) — say nothing rather than nag.
+    const showEst = est && est.dueInMin >= -45;
 
     if (allComplete && total > 0) {
       out.push({ key: "complete", glyph: "✓", tone: "ok", text: "ALL COURSES OUT" });
     } else if (firedCount > 0) {
       const lastFiredAt = courses.filter(c => c.firedAt).map(c => c.firedAt).sort().pop();
-      const m = minutesSince(lastFiredAt);
+      const m = minutesSince(lastFiredAt, now);
       if (m != null) {
+        const stuck = m >= 25 && !showEst;
         out.push({
-          key: "cadence", glyph: m >= 25 ? "!" : "↻",
-          tone: m >= 25 ? "warn" : "info",
-          text: m >= 25 ? `NO FIRE FOR ${fmtDur(m)}` : `LAST FIRE ${fmtDur(m)} AGO`,
+          key: "cadence", glyph: stuck ? "!" : "↻",
+          tone: stuck ? "warn" : "info",
+          text: stuck ? `NO FIRE FOR ${fmtDur(m)}` : `LAST FIRE ${fmtDur(m)} AGO`,
           detail: lastFiredAt,
         });
       }
     }
 
-    if (table.active && total > 0 && !allComplete) {
-      const fracs = tables
-        .filter(t => t.active && t.id !== table.id)
-        .map(t => {
-          const cs = getVisibleCoursesForTable(t, menuCourses, { profiles, assignments });
-          return cs.length ? cs.filter(c => c.firedAt).length / cs.length : null;
-        })
-        .filter(v => v != null);
-      if (fracs.length > 0) {
-        const room = fracs.reduce((a, b) => a + b, 0) / fracs.length;
-        const diff = Math.round((firedCount / total - room) * total);
-        if (diff >= 1)       out.push({ key: "pace", glyph: "↗", tone: "info", text: `AHEAD OF ROOM · ${diff} COURSE${diff > 1 ? "S" : ""}` });
-        else if (diff <= -1) out.push({ key: "pace", glyph: "↘", tone: "warn", text: `BEHIND ROOM · ${-diff} COURSE${diff < -1 ? "S" : ""}` });
-        else                 out.push({ key: "pace", glyph: "→", tone: "ok",   text: "ON PACE WITH ROOM" });
+    if (showEst) {
+      const cLabel = `C${String(nextFire.index).padStart(2, "0")}`;
+      const pace = `~${est.cadenceMin}M ${est.basis === "room" ? "ROOM" : "TBL"} PACE`;
+      if (est.dueInMin > 1) {
+        out.push({ key: "due", glyph: "◷", tone: "info", text: `${cLabel} DUE IN ~${est.dueInMin} MIN`, detail: pace });
+      } else if (est.dueInMin >= -2) {
+        out.push({ key: "due", glyph: "◷", tone: "ok", text: `${cLabel} DUE NOW`, detail: pace });
+      } else {
+        out.push({ key: "due", glyph: "!", tone: "warn", text: `${cLabel} OVERDUE ~${-est.dueInMin} MIN`, detail: pace });
       }
     }
+
+    if (table.active && total > 0 && !allComplete && roomStats.otherFracs.length > 0) {
+      const room = roomStats.otherFracs.reduce((a, b) => a + b, 0) / roomStats.otherFracs.length;
+      const diff = Math.round((firedCount / total - room) * total);
+      if (diff >= 1)       out.push({ key: "pace", glyph: "↗", tone: "info", text: `AHEAD OF ROOM · ${diff} COURSE${diff > 1 ? "S" : ""}` });
+      else if (diff <= -1) out.push({ key: "pace", glyph: "↘", tone: "warn", text: `BEHIND ROOM · ${-diff} COURSE${diff < -1 ? "S" : ""}` });
+      else                 out.push({ key: "pace", glyph: "→", tone: "ok",   text: "ON PACE WITH ROOM" });
+    }
     return out;
-  }, [table, courses, progressState, tables, menuCourses, profiles, assignments, clockTick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [table, courses, progressState, roomStats, clockTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sheetBody = table && (
     <>

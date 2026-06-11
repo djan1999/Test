@@ -30,7 +30,7 @@ import {
   STORAGE_KEY,
 } from "./utils/storage.js";
 import {
-  makeSeats, blankTable, sanitizeTable, initTables, fmt,
+  makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM,
   reservationDescriptiveFields, resolveReservationSession,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
@@ -2208,6 +2208,14 @@ export default function App() {
   };
   // Table currently focused in the sheet view (independent of quickTableId).
   const [sheetTableId, setSheetTableId] = useState(null);
+  // 60s heartbeat keeps clock-derived readout values (arrival radar) live
+  // even when nothing else triggers a render. Service mode only.
+  const [, bumpReadoutClock] = useState(0);
+  useEffect(() => {
+    if (mode !== "service") return;
+    const id = setInterval(() => bumpReadoutClock(t => t + 1), 60 * 1000);
+    return () => clearInterval(id);
+  }, [mode]);
   const [summaryOpen,    setSummaryOpen]    = useState(false);
   const [archiveOpen,    setArchiveOpen]    = useState(false);
   const [inventoryOpen,  setInventoryOpen]  = useState(false);
@@ -4419,11 +4427,25 @@ export default function App() {
                 const seatedNow = tables.filter(t => t.active).filter(isPrimary).length;
                 const guestsNow = tables.filter(t => t.active).filter(isPrimary).reduce((a, t) => a + (t.guests || 0), 0);
                 const resvNow   = tables.filter(t => !t.active && (t.resName || t.resTime)).filter(isPrimary).length;
+                // Arrival radar: reservations due within the next 45 min (and
+                // up to 10 min late) that haven't been seated yet.
+                const nowMin = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
+                const arriving = tables
+                  .filter(isPrimary)
+                  .filter(t => !t.active && !t.arrivedAt && t.resTime)
+                  .map(t => { const m = parseHHMM(t.resTime); return m == null ? null : m - nowMin; })
+                  .filter(dm => dm != null && dm >= -10 && dm <= 45);
+                const nextIn = arriving.length ? Math.max(0, Math.min(...arriving)) : null;
                 return (
-                  <div style={{ display: "flex", gap: appIsMobile ? 8 : 16, alignItems: "center" }}>
+                  <div style={{ display: "flex", gap: appIsMobile ? 8 : 16, alignItems: "center", flexWrap: "wrap" }}>
                     {seatedNow > 0 && (
                       <span style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", color: tokens.green.text, textTransform: "uppercase", fontWeight: 500 }}>
                         ● {seatedNow} ACTIVE · {guestsNow} PAX
+                      </span>
+                    )}
+                    {arriving.length > 0 && (
+                      <span style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", color: tokens.signal.active, textTransform: "uppercase", fontWeight: 600 }}>
+                        ◔ {arriving.length} ARRIVING{nextIn != null ? ` · ${nextIn === 0 ? "NOW" : `${nextIn} MIN`}` : ""}
                       </span>
                     )}
                     {resvNow > 0 && (
