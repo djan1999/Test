@@ -374,7 +374,10 @@ function AlertsRail({ table, intel = [] }) {
     items.push({ key: `r${i}`, tone: "alert", text: desc });
   });
   if (table.birthday) items.push({ key: "bday", tone: "warn", text: table.cakeNote ? `BIRTHDAY · ${table.cakeNote}` : "BIRTHDAY" });
-  if (table.pace)     items.push({ key: "pace", tone: "warn", text: `PACE · ${String(table.pace).toUpperCase()}` });
+  if (table.pace) {
+    const by = table.paceBy ? ` — ${String(table.paceBy).toUpperCase()}${table.paceAt ? ` ${table.paceAt}` : ""}` : "";
+    items.push({ key: "pace", tone: "warn", text: `PACE · ${String(table.pace).toUpperCase()}${by}` });
+  }
   if (table.notes?.trim()) items.push({ key: "note", tone: "info", text: table.notes.trim() });
 
   return (

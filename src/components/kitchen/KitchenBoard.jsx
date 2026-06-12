@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
@@ -6,6 +6,8 @@ import { getCourseMod, optionalPairingsFromCourses, resolveSeatRestrictionKeys }
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
+import { estimateNextFire, fireGapsForTable } from "../../utils/fireCadence.js";
+import { gapsForMenuType } from "../../utils/archiveInsights.js";
 import { extraPairingLabel, extraPairingForSeat } from "../../constants/pairings.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 
@@ -36,7 +38,7 @@ function resolveGuestTemplate(table, profiles, assignments) {
   return isShort ? (p.shortMenuTemplate || p.menuTemplate) : p.menuTemplate;
 }
 
-export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, inlineMods = false, quickAccess = false }) {
+export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, inlineMods = false, quickAccess = false, roomGaps = [], historyGaps = [] }) {
   // Density. Compact tightens the vertical rhythm so two full rows of tickets
   // fit a 720px-tall kitchen display (32" 1280×720 → 5 columns × 2 rows = 10
   // tickets). Gated to large boards by the caller; the physical pixels on such
@@ -273,6 +275,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     const d = end - start; return d >= 0 ? d : d + 1440;
   })();
 
+  // Next-fire countdown — the same cadence intelligence service sees, surfaced
+  // where the prep actually happens. Live board only (upd set); estimates more
+  // than 45 min overdue are stale data (old service), not a late course.
+  const nextEst = (!allDone && upd)
+    ? estimateNextFire({ table, courses: visibleCoursesForTable, roomGaps, historyGaps })
+    : null;
+  const showNextEst = nextEst && nextEst.dueInMin >= -45;
+
   const pLabel = p => p === "Non-Alc" ? "N/A" : p === "Our Story" ? "O.S." : p === "Premium" ? "Prem" : p === "Wine" ? "Wine" : p;
 
   // Slow/Fast pace toggles. Roomy mode shows them in their own PACE row;
@@ -283,10 +293,19 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     const colors = { Slow: { on: tokens.ink[0], bg: tokens.neutral[0], border: tokens.charcoal.default }, Fast: { on: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } };
     const active = table.pace === p;
     const col = colors[p];
+    // Stamp who set the pace and when, so service's intelligence rail can show
+    // "PACE · SLOW — KITCHEN 19:42" instead of an unattributed flag.
+    const setPace = () => {
+      if (!upd) return;
+      const next = active ? "" : p;
+      upd(table.id, "pace", next);
+      upd(table.id, "paceBy", next ? "kitchen" : null);
+      upd(table.id, "paceAt", next ? fmt(new Date()) : null);
+    };
     return (
       <button key={p}
         onPointerDown={e => e.stopPropagation()}
-        onClick={e => { e.stopPropagation(); upd && upd(table.id, "pace", active ? "" : p); }}
+        onClick={e => { e.stopPropagation(); setPace(); }}
         style={{
           fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: dz.paceBtnPad,
           border: `1px solid ${active ? col.border : tokens.ink[4]}`,
@@ -340,6 +359,11 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
           <div style={{ fontFamily: FONT, fontSize: dz.counterFont, fontWeight: 700, color: allDone ? tokens.green.border : tokens.ink[0], lineHeight: 1 }}>{firedCount}<span style={{ fontSize: "9px", color: tokens.ink[3], fontWeight: 400 }}>/{totalCourses}</span></div>
           {allDone && durationMins != null && <div style={{ fontFamily: FONT, fontSize: "8px", color: tokens.green.border }}>{durationMins} min</div>}
+          {showNextEst && (
+            <div style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 600, letterSpacing: "0.06em", whiteSpace: "nowrap", color: nextEst.dueInMin < -2 ? tokens.red.text : tokens.ink[3] }}>
+              {nextEst.dueInMin > 1 ? `NEXT ~${nextEst.dueInMin}M` : nextEst.dueInMin >= -2 ? "NEXT DUE" : `OVER ${-nextEst.dueInMin}M`}
+            </div>
+          )}
           {editable && (
             <button
               onPointerDown={e => e.stopPropagation()}
@@ -875,7 +899,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   );
 }
 
-export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, inlineMods = false, quickAccess = false }) {
+export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, inlineMods = false, quickAccess = false, roomGaps = [], historyGaps = [] }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
@@ -913,6 +937,8 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
           compact={compact}
           inlineMods={inlineMods}
           quickAccess={quickAccess}
+          roomGaps={roomGaps}
+          historyGaps={historyGaps}
         />
       )}
     </div>
@@ -1053,13 +1079,37 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
   );
 }
 
-export default function KitchenBoard({ tables, menuCourses, upd, updMany, profiles = [], assignments = {} }) {
+export default function KitchenBoard({ tables, menuCourses, upd, updMany, profiles = [], assignments = {}, historyGapsByMenu = null, persistedOrder = null, onOrderChange = null }) {
   const activeTables = tables
     .filter(t => t.active && !t.kitchenArchived)
     .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
   const activeIds = activeTables.map(t => t.id).join(",");
 
-  const [order, setOrder] = useState(() => activeTables.map(t => t.id));
+  // Seed from the persisted expediter order (it used to be local state only,
+  // so a refresh scrambled the board back to table-id order).
+  const [order, setOrder] = useState(() => {
+    const ids = activeTables.map(t => t.id);
+    if (!Array.isArray(persistedOrder) || persistedOrder.length === 0) return ids;
+    const idSet = new Set(ids);
+    const kept = persistedOrder.filter(id => idSet.has(id));
+    return [...kept, ...ids.filter(id => !kept.includes(id))];
+  });
+
+  // Tonight's pooled fire rhythm — feeds each ticket's NEXT ~X MIN countdown.
+  const roomGaps = useMemo(() => {
+    const gaps = [];
+    activeTables.forEach(t => {
+      gaps.push(...fireGapsForTable(t, getVisibleCoursesForTable(t, menuCourses, { profiles, assignments })));
+    });
+    return gaps;
+  }, [tables, menuCourses, profiles, assignments]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-render every minute so idle countdowns keep ticking.
+  const [, setCadenceTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setCadenceTick(t => t + 1), 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
   const [activeId, setActiveId] = useState(null);
   // Width of the dragged ticket, captured at drag start so the floating overlay
   // matches the grid cell it came from (cells are now fluid, not a fixed 248px).
@@ -1081,6 +1131,20 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
       return [...kept, ...added];
     });
   }, [activeIds]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Adopt another device's reordering (realtime push) — but never mid-drag.
+  const persistedOrderJson = JSON.stringify(persistedOrder || []);
+  useEffect(() => {
+    if (activeId) return; // a drag is in progress — local hand wins
+    if (!Array.isArray(persistedOrder) || persistedOrder.length === 0) return;
+    setOrder(prev => {
+      const activeIdSet = new Set(activeTables.map(t => t.id));
+      const kept = persistedOrder.filter(id => activeIdSet.has(id));
+      const added = prev.filter(id => activeIdSet.has(id) && !kept.includes(id));
+      const next = [...kept, ...added];
+      return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
+    });
+  }, [persistedOrderJson, activeIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
@@ -1125,11 +1189,16 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
       onDragEnd={({ active, over }) => {
         setActiveId(null);
         if (!over || active.id === over.id) return;
-        setOrder(prev => {
-          const from = prev.indexOf(active.id);
-          const to   = prev.indexOf(over.id);
-          return arrayMove(prev, from, to);
-        });
+        // Persist outside the state updater: updaters must stay pure
+        // (StrictMode runs them twice, which would double-save).
+        const from = order.indexOf(active.id);
+        const to   = order.indexOf(over.id);
+        if (from < 0 || to < 0) return;
+        const next = arrayMove(order, from, to);
+        setOrder(next);
+        // The expediter's ordering survives refreshes and reaches the other
+        // kitchen screens via service_settings.
+        onOrderChange?.(next);
       }}
       onDragCancel={() => setActiveId(null)}
     >
@@ -1160,6 +1229,8 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 compact={compact}
                 inlineMods={largeBoard}
                 quickAccess={!!upd}
+                roomGaps={roomGaps}
+                historyGaps={gapsForMenuType(historyGapsByMenu, t.menuType)}
               />
             ))}
           </div>

@@ -616,6 +616,10 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
     (s.pairing && s.pairing !== "—")
   );
   const [showMoveTable, setShowMoveTable] = useState(false);
+  const [copySourceOpen, setCopySourceOpen] = useState(false);
+  // One drink search for the whole table view; the phase decides whether a
+  // pick lands as an aperitif or with the menu (glasses/cocktails/…).
+  const [drinkPhase, setDrinkPhase] = useState("aperitif");
   useModalEscape(() => setShowMoveTable(false), showMoveTable);
   const canMoveTable = mode === "service" && typeof onMoveTable === "function"
     && (table.active || table.arrivedAt || table.resName || table.resTime);
@@ -659,19 +663,42 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
               <button onClick={() => setGuests(Math.min(14, table.guests + 1))} style={circBtnSm}>+</button>
             </div>
           )}
-          <button
-            onClick={() => onApplySeatToAll && onApplySeatToAll(table.id, 1)}
-            disabled={!canApplySeatToAll}
-            style={{
-              fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em",
-              padding: isMobile ? "10px 10px" : "6px 10px",
-              border: `1px solid ${tokens.ink[4]}`, borderRadius: 0,
-              cursor: canApplySeatToAll ? "pointer" : "not-allowed",
-              background: tokens.neutral[0], color: tokens.ink[2],
-              opacity: canApplySeatToAll ? 1 : 0.4,
-              textTransform: "uppercase", touchAction: "manipulation",
-            }}
-          >[P1→ALL]</button>
+          {/* Copy any seat's choices to the whole table — not just P1's
+              (the host often orders last). Tap opens the source picker. */}
+          {copySourceOpen && canApplySeatToAll ? (
+            <div style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+              <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.10em", color: tokens.ink[3], textTransform: "uppercase" }}>COPY</span>
+              {table.seats.map(s => (
+                <button key={s.id} onClick={() => {
+                  onApplySeatToAll(table.id, s.id);
+                  setCopySourceOpen(false);
+                }} style={{
+                  fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: "0.06em",
+                  padding: isMobile ? "10px 10px" : "6px 9px",
+                  border: `1px solid ${tokens.ink[2]}`, borderRadius: 0, cursor: "pointer",
+                  background: tokens.neutral[0], color: tokens.ink[1], touchAction: "manipulation",
+                }}>P{s.id}</button>
+              ))}
+              <button onClick={() => setCopySourceOpen(false)} style={{
+                fontFamily: FONT, fontSize: 11, padding: isMobile ? "10px 8px" : "6px 8px",
+                border: "none", background: "none", color: tokens.ink[3], cursor: "pointer",
+              }}>×</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => canApplySeatToAll && setCopySourceOpen(true)}
+              disabled={!canApplySeatToAll}
+              style={{
+                fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em",
+                padding: isMobile ? "10px 10px" : "6px 10px",
+                border: `1px solid ${tokens.ink[4]}`, borderRadius: 0,
+                cursor: canApplySeatToAll ? "pointer" : "not-allowed",
+                background: tokens.neutral[0], color: tokens.ink[2],
+                opacity: canApplySeatToAll ? 1 : 0.4,
+                textTransform: "uppercase", touchAction: "manipulation",
+              }}
+            >[Pn→ALL]</button>
+          )}
           <button
             onClick={() => onClearBeverages && onClearBeverages(table.id)}
             disabled={!onClearBeverages || !hasAnyBeverageData}
@@ -924,19 +951,36 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
             )}
             {/* ── Beverages + Extras ── */}
             <div style={{ paddingLeft: isMobile ? 0 : 48, display: "flex", flexDirection: "column", gap: 10 }}>
-              {/* ── Aperitif ── */}
+              {/* ── Drinks — one entry point. Two identical search bars
+                  (aperitif / by-the-glass) used to double-enter the same
+                  catalogue; now the phase chip decides where a pick lands. */}
               <div style={{
                 background: tokens.neutral[50],
                 borderTop: `1px solid ${tokens.ink[4]}`,
                 borderBottom: `1px solid ${tokens.ink[4]}`,
                 padding: isMobile ? "8px 0" : "10px 0",
               }}>
-                <div style={{
-                  fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
-                  textTransform: "uppercase", color: tokens.ink[3], fontWeight: 400,
-                  marginBottom: 8, paddingLeft: isMobile ? 0 : 0,
-                }}>[APERITIF]</div>
-                {/* Quick-add buttons */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                  <div style={{
+                    fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
+                    textTransform: "uppercase", color: tokens.ink[3], fontWeight: 400,
+                  }}>[DRINKS]</div>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[["aperitif", "APERITIF"], ["menu", "WITH MENU"]].map(([ph, label]) => {
+                      const on = drinkPhase === ph;
+                      return (
+                        <button key={ph} onClick={() => setDrinkPhase(ph)} style={{
+                          fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: isMobile ? "8px 10px" : "4px 9px",
+                          border: `1px solid ${on ? tokens.charcoal.default : tokens.neutral[200]}`, borderRadius: 0,
+                          cursor: "pointer", background: on ? tokens.tint.parchment : tokens.neutral[0],
+                          color: on ? tokens.ink[1] : tokens.text.secondary, fontWeight: on ? 600 : 400,
+                          textTransform: "uppercase", touchAction: "manipulation",
+                        }}>{label}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* Quick-add buttons — aperitif presets, always land as aperitif */}
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
                   {aperitifOptions.map(ap => {
                     const found = resolveAperitifFromQuickAccessOption(ap, { wines, cocktails, spirits, beers });
@@ -959,57 +1003,20 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
                 <BeverageSearch
                   wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
                   onAdd={({ type, item }) => {
-                    updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
-                  }}
-                />
-                {/* Aperitif chips */}
-                {(seat.aperitifs || []).length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
-                    {(seat.aperitifs || []).map((x, i) => {
-                      const ts = BEV_TYPES.aperitif;
-                      const label = x?.name || x?.producer || "?";
-                      const sub = x?.producer && x?.name ? x.producer : (x?.notes || "");
-                      return (
-                        <div key={`ap${i}`} style={{
-                          display: "inline-flex", alignItems: "center", gap: 5,
-                          padding: "4px 8px 4px 10px", borderRadius: 0,
-                          background: ts.bg, border: `1px solid ${ts.border}`,
-                        }}>
-                          <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>
-                            {label}{sub ? ` · ${sub}` : ""}
-                          </span>
-                          <button onClick={() => updSeat(seat.id, "aperitifs", (seat.aperitifs||[]).filter((_,idx)=>idx!==i))} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.7, width: 28, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, touchAction: "manipulation" }}>×</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* ── By the Glass ── */}
-              <div style={{
-                background: tokens.neutral[0],
-                borderTop: `1px solid ${tokens.ink[4]}`,
-                borderBottom: `1px solid ${tokens.ink[4]}`,
-                padding: isMobile ? "8px 0" : "10px 0",
-              }}>
-                <div style={{
-                  fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
-                  textTransform: "uppercase", color: tokens.ink[3], fontWeight: 400,
-                  marginBottom: 8,
-                }}>[BY THE GLASS]</div>
-                <BeverageSearch
-                  wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
-                  onAdd={({ type, item }) => {
+                    if (drinkPhase === "aperitif") {
+                      updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
+                      return;
+                    }
                     if (type === "wine" || type === "bottle") updSeat(seat.id, "glasses", [...(seat.glasses || []), item]);
                     if (type === "cocktail") updSeat(seat.id, "cocktails", [...(seat.cocktails || []), item]);
                     if (type === "spirit")   updSeat(seat.id, "spirits",   [...(seat.spirits   || []), item]);
                     if (type === "beer")     updSeat(seat.id, "beers",     [...(seat.beers     || []), item]);
                   }}
                 />
-                {/* By the Glass chips */}
+                {/* All drink chips — the badge tells aperitif from with-menu */}
                 {(() => {
                   const allBevs = [
+                    ...(seat.aperitifs || []).map((x, i) => ({ key: `ap${i}`, type: "aperitif", label: x?.name || x?.producer || "?", sub: (x?.producer && x?.name) ? x.producer : (x?.notes || ""), onRemove: () => updSeat(seat.id, "aperitifs", (seat.aperitifs||[]).filter((_,idx)=>idx!==i)) })),
                     ...(seat.glasses   || []).map((x, i) => ({ key: `g${i}`,  type: x?.byGlass === false ? "bottle" : "wine", label: x?.name, sub: x?.producer, onRemove: () => updSeat(seat.id, "glasses",   (seat.glasses||[]).filter((_,idx)=>idx!==i)) })),
                     ...(seat.cocktails || []).map((x, i) => ({ key: `c${i}`,  type: "cocktail", label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "cocktails", (seat.cocktails||[]).filter((_,idx)=>idx!==i)) })),
                     ...(seat.spirits   || []).map((x, i) => ({ key: `s${i}`,  type: "spirit",   label: x?.name, sub: x?.notes,    onRemove: () => updSeat(seat.id, "spirits",   (seat.spirits||[]).filter((_,idx)=>idx!==i)) })),
@@ -1026,6 +1033,7 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
                             padding: "4px 8px 4px 10px", borderRadius: 0,
                             background: ts.bg, border: `1px solid ${ts.border}`,
                           }}>
+                            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, color: ts.color, opacity: 0.7, textTransform: "uppercase", flexShrink: 0 }}>{ts.label}</span>
                             <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>
                               {bev.label}{bev.sub ? ` · ${bev.sub}` : ""}
                             </span>
@@ -3716,6 +3724,30 @@ export default function App() {
     return { ok: true };
   }, [applyEightySix]);
 
+  // ── Kitchen ticket order: the expediter's drag order, shared + persistent ──
+  const [kitchenTicketOrder, setKitchenTicketOrder] = useState(null);
+  useEffect(() => {
+    if (!supabase || !workspaceId) return;
+    let cancelled = false;
+    scopedFrom(TABLES.SERVICE_SETTINGS)
+      .select("state").eq("id", "kitchen_ticket_order").maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        const ids = data?.state?.ids;
+        if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [workspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveKitchenTicketOrder = useCallback(async (ids) => {
+    const clean = (Array.isArray(ids) ? ids : []).map(Number).filter(Number.isFinite);
+    setKitchenTicketOrder(clean);
+    if (!supabase) return;
+    await scopedFrom(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "kitchen_ticket_order", state: { ids: clean }, updated_at: new Date().toISOString() }, { onConflict: "id" });
+  }, []);
+
   const saveCourseQuickNotes = useCallback(async (next) => {
     const map = next && typeof next === "object" ? next : {};
     setCourseQuickNotes(map);
@@ -4159,16 +4191,22 @@ export default function App() {
     enabled: Boolean(supabase && workspaceId),
   });
 
-  // 86 list realtime — other devices' changes land instantly. The settings
-  // table carries many ids (inventory, configs…); only react to ours.
+  // Settings realtime (86 list + kitchen ticket order) — other devices'
+  // changes land instantly. The settings table carries many ids (inventory,
+  // configs…); only react to the ones owned here.
   useRealtimeTable({
     supabase,
-    channelName: `milka-eighty-six-${workspaceId}`,
+    channelName: `milka-settings-live-${workspaceId}`,
     filter: wsFilter,
     table: TABLES.SERVICE_SETTINGS,
     onChange: (payload) => {
-      if (payload.new?.id !== EIGHTY_SIX_SETTINGS_ID) return;
-      applyEightySix(normalizeEightySixKeys(payload.new?.state));
+      const id = payload.new?.id;
+      if (id === EIGHTY_SIX_SETTINGS_ID) {
+        applyEightySix(normalizeEightySixKeys(payload.new?.state));
+      } else if (id === "kitchen_ticket_order") {
+        const ids = payload.new?.state?.ids;
+        if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
+      }
     },
     enabled: Boolean(supabase && workspaceId),
   });
@@ -4387,6 +4425,9 @@ export default function App() {
             updMany={updMany}
             profiles={profilesState.profiles}
             assignments={profilesState.assignments}
+            historyGapsByMenu={historyGapsByMenu}
+            persistedOrder={kitchenTicketOrder}
+            onOrderChange={saveKitchenTicketOrder}
           />
         </Suspense>
       </div>
