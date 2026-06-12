@@ -34,6 +34,7 @@ import {
   reservationDescriptiveFields, resolveReservationSession,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
+import { stampWineSources } from "./utils/wineEdit.js";
 import {
   currentServiceDay, isStaleServiceDate, isDeliberatelyPastDate,
   SERVICE_DATE_CHOSEN_ON_KEY,
@@ -2773,15 +2774,19 @@ export default function App() {
   };
 
   const saveWines = async (updatedWines) => {
-    setWines(updatedWines);
+    // Copy-on-edit: a human correction to a synced wine flips it to
+    // source:'manual' (same key), which the nightly website sync never deletes
+    // and never re-inserts over (the sync skips keys that already exist).
+    // Without this, any fix to a synced wine was silently undone at 02:00.
+    const withSource = stampWineSources(updatedWines, wines);
+    setWines(withSource);
     if (!supabase) return { ok: true };
     const BATCH = 200;
-    const rows = updatedWines.map(w => {
+    const rows = withSource.map(w => {
       const key = typeof w.id === "string" ? w.id : `manual|legacy_${w.id}`;
-      const source = String(key).startsWith("manual|") ? "manual" : "sync";
       return {
         key,
-        source,
+        source: w.source,
         wine_name: w.name,
         name: w.producer ? `${w.producer} – ${w.name}` : w.name,
         producer: w.producer || "",

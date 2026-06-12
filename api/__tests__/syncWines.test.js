@@ -566,10 +566,14 @@ describe("sync-wines handler — workspace scoping (Milka)", () => {
       expect(res.statusCode).toBe(200);
       expect(res.payload.ok).toBe(true);
 
-      // ── wines: insert rows stamped, delete scoped to workspace ──────────────
+      // ── wines: upsert rows stamped (ignoreDuplicates protects manual-flipped
+      // copy-on-edit rows from being overwritten), delete scoped to workspace ──
       const wineInserts = sb.forTable("wines")
-        .flatMap((b) => b._calls.filter((c) => c[0] === "insert"));
+        .flatMap((b) => b._calls.filter((c) => c[0] === "upsert"));
       expect(wineInserts.length).toBeGreaterThan(0);
+      expect(wineInserts.every((c) =>
+        c[2]?.onConflict === "workspace_id,key" && c[2]?.ignoreDuplicates === true
+      )).toBe(true);
       const insertedWineRows = wineInserts.flatMap((c) => c[1]);
       expect(insertedWineRows.length).toBeGreaterThan(0);
       expect(insertedWineRows.every((r) => r.workspace_id === "milka-ws")).toBe(true);

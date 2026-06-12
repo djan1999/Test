@@ -401,10 +401,15 @@ export default async function handler(req, res) {
       if (deleteError) console.warn("[sync] wines delete error:", deleteError.message);
 
       // Insert all fresh wines in batches, stamping each row with the workspace.
+      // ignoreDuplicates: a wine the staff has hand-corrected keeps its key but
+      // is flipped to source:'manual' (copy-on-edit in the app). The delete
+      // above skips it, so the scraped row collides on (workspace_id, key) —
+      // skip it and let the human correction win.
       const BATCH = 200;
       for (let i = 0; i < uniqueWines.length; i += BATCH) {
         const batch = uniqueWines.slice(i, i + BATCH).map(w => ({ ...w, workspace_id: WORKSPACE_ID }));
-        const { error } = await supabase.from("wines").insert(batch);
+        const { error } = await supabase.from("wines")
+          .upsert(batch, { onConflict: "workspace_id,key", ignoreDuplicates: true });
         if (error) throw error;
         winesUpserted += batch.length;
       }
