@@ -50,21 +50,30 @@ export function median(arr) {
  *   1. median of the table's own intervals (needs ≥ 2 — its actual rhythm)
  *   2. median of the room's pooled intervals tonight (needs ≥ 3)
  *   3. the table's single interval, if that's all there is
+ *   4. median of historical gaps from archived services (needs ≥ 3) — lets
+ *      the prediction start warm instead of dumb on the night's first covers
  * No usable data → null (never guess from thin air).
  *
- * Returns { dueInMin, cadenceMin, basis } or null when there is nothing
- * fired yet, the menu is complete, or no cadence can be derived.
- * dueInMin < 0 means the course is overdue by that many minutes.
+ * Before the first fire, a table with an arrival time still gets an estimate
+ * when the room or history provides a cadence — "C01 due ~20 min after
+ * seating" is exactly when the kitchen wants the heads-up.
+ *
+ * Returns { dueInMin, cadenceMin, basis } or null when the menu is complete
+ * or no cadence can be derived. dueInMin < 0 means overdue by that many min.
  */
-export function estimateNextFire({ table, courses, roomGaps = [], now = new Date() }) {
-  const fired = (courses || []).filter(c => c.firedAt);
-  if (fired.length === 0 || fired.length === (courses || []).length) return null;
+export function estimateNextFire({ table, courses, roomGaps = [], historyGaps = [], now = new Date() }) {
+  const list = courses || [];
+  const fired = list.filter(c => c.firedAt);
+  if (list.length === 0 || fired.length === list.length) return null;
+  // Nothing fired and no arrival stamp → no anchor to extrapolate from.
+  if (fired.length === 0 && !table?.arrivedAt) return null;
 
   const ownGaps = fireGapsForTable(table, courses);
   let cadence = null, basis = null;
-  if (ownGaps.length >= 2)      { cadence = median(ownGaps);  basis = "table"; }
-  else if (roomGaps.length >= 3){ cadence = median(roomGaps); basis = "room"; }
-  else if (ownGaps.length === 1){ cadence = ownGaps[0];       basis = "table"; }
+  if (ownGaps.length >= 2)          { cadence = median(ownGaps);      basis = "table"; }
+  else if (roomGaps.length >= 3)    { cadence = median(roomGaps);     basis = "room"; }
+  else if (ownGaps.length === 1)    { cadence = ownGaps[0];           basis = "table"; }
+  else if (historyGaps.length >= 3) { cadence = median(historyGaps);  basis = "history"; }
   if (cadence == null) return null;
 
   const stamps = [];

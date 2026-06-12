@@ -35,6 +35,7 @@ import {
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { stampWineSources } from "./utils/wineEdit.js";
+import { historyGapsByMenuType } from "./utils/archiveInsights.js";
 import {
   currentServiceDay, isStaleServiceDate, isDeliberatelyPastDate,
   SERVICE_DATE_CHOSEN_ON_KEY,
@@ -4109,6 +4110,25 @@ export default function App() {
     enabled: Boolean(supabase && workspaceId),
   });
 
+  // ── Historical fire cadence (archive-seeded) ───────────────────────────────
+  // Loaded once per session when a live mode starts: recent archives yield
+  // per-menu-type course rhythms so estimateNextFire() has a "history" basis
+  // before tonight's room has produced any gaps of its own.
+  const [historyGapsByMenu, setHistoryGapsByMenu] = useState(null);
+  useEffect(() => {
+    if (!supabase || !workspaceId || historyGapsByMenu) return;
+    if (mode !== "service" && mode !== "display" && mode !== "kitchen") return;
+    let cancelled = false;
+    scopedFrom(TABLES.SERVICE_ARCHIVE)
+      .select("state").is("deleted_at", null)
+      .order("created_at", { ascending: false }).limit(10)
+      .then(({ data, error }) => {
+        if (cancelled || error) return;
+        setHistoryGapsByMenu(historyGapsByMenuType(data || []));
+      });
+    return () => { cancelled = true; };
+  }, [mode, workspaceId, historyGapsByMenu]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Only count primary tables in groups (secondaries have same guest count stamped on them)
   const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
   const active   = tables.filter(t => t.active).filter(isPrimary);
@@ -4559,6 +4579,7 @@ export default function App() {
                 onUnseat={unseatTable}
                 profiles={profilesState.profiles}
                 assignments={profilesState.assignments}
+                historyGapsByMenu={historyGapsByMenu}
               />
             </Suspense>
           ) : (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import FullModal from "../ui/FullModal.jsx";
 import TableSummaryCard from "./TableSummaryCard.jsx";
 import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
@@ -6,6 +6,7 @@ import { supabase, TABLES } from "../../lib/supabaseClient.js";
 import { scopedFrom } from "../../lib/scopedDb.js";
 import { parseHHMM, mergeTableGroups, tableGroupLabel } from "../../utils/tableHelpers.js";
 import { optionalPairingsFromCourses } from "../../utils/menuUtils.js";
+import { aggregateInsights } from "../../utils/archiveInsights.js";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 
@@ -204,6 +205,7 @@ export default function ArchiveModal({
         {!supabase && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[400], padding: "60px 0", textAlign: "center" }}>Supabase not connected</div>}
         {supabase && loading && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[400], padding: "60px 0", textAlign: "center" }}>Loading…</div>}
         {supabase && !loading && entries.length === 0 && archivedTickets.length === 0 && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[400], padding: "60px 0", textAlign: "center" }}>No archived services yet</div>}
+        {supabase && !loading && entries.length > 0 && <InsightsSection entries={entries} />}
         {supabase && !loading && entries.length > 0 && (
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
             <button onClick={deleteAll} disabled={deleting === "all"} style={{
@@ -299,6 +301,85 @@ export default function ArchiveModal({
         )}
       </div>
     </FullModal>
+  );
+}
+
+// ── Insights — what the archives can teach us ────────────────────────────────
+// Aggregates the loaded archive entries into service intelligence: covers,
+// course rhythm, pairing uptake, and the chronically slow courses. Computed
+// lazily on expand — the math walks every seat of every archived table.
+function InsightsSection({ entries }) {
+  const [open, setOpen] = useState(false);
+  const insights = useMemo(() => (open ? aggregateInsights(entries) : null), [open, entries]);
+
+  const fmtMins = (m) => {
+    if (m == null) return "—";
+    const h = Math.floor(m / 60);
+    return h > 0 ? `${h}h ${m % 60}m` : `${m} min`;
+  };
+
+  return (
+    <div style={{ border: `1px solid ${tokens.neutral[200]}`, marginBottom: 16 }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: "100%", textAlign: "left", padding: "12px 16px", cursor: "pointer",
+          background: open ? tokens.neutral[50] : tokens.neutral[0], border: "none",
+          fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: tokens.neutral[700],
+          textTransform: "uppercase", display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}
+      >
+        <span>Insights · last {entries.length} service{entries.length === 1 ? "" : "s"}</span>
+        <span style={{ fontSize: 14, color: tokens.neutral[300], transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>⌄</span>
+      </button>
+      {open && insights && (
+        <div style={{ borderTop: `1px solid ${tokens.neutral[200]}`, padding: "14px 16px" }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+            <SummaryBadge label="services" value={insights.services} />
+            <SummaryBadge label="covers" value={insights.totalCovers} />
+            <SummaryBadge label="avg covers / service" value={insights.avgCovers} />
+            {insights.medianGap != null && <SummaryBadge label="median course gap" value={`${insights.medianGap} min`} />}
+            {insights.medianDuration != null && <SummaryBadge label="median dinner" value={fmtMins(insights.medianDuration)} />}
+            {insights.pairingPct != null && <SummaryBadge label={`pairing uptake (${insights.pairingSeats} seats)`} value={`${insights.pairingPct}%`} />}
+          </div>
+
+          {insights.slowestCourses.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 3, color: tokens.neutral[500], textTransform: "uppercase", marginBottom: 6 }}>
+                Slowest courses (median wait before fire)
+              </div>
+              {insights.slowestCourses.slice(0, 5).map((c, i) => (
+                <div key={c.name} style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[700], padding: "3px 0", display: "flex", justifyContent: "space-between", gap: 12 }}>
+                  <span>{i + 1}. {c.name}</span>
+                  <span style={{ color: i === 0 ? tokens.red.text : tokens.neutral[500], whiteSpace: "nowrap" }}>
+                    ~{c.medianGap} min · {c.samples} fires
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div>
+            <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 3, color: tokens.neutral[500], textTransform: "uppercase", marginBottom: 6 }}>
+              Per service
+            </div>
+            {insights.perEntry.map((e, i) => (
+              <div key={`${e.label}-${i}`} style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[500], padding: "2px 0", display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <span style={{ color: tokens.neutral[700] }}>{e.label}</span>
+                <span style={{ whiteSpace: "nowrap" }}>
+                  {e.covers} covers{e.medianGap != null ? ` · ~${Math.round(e.medianGap)} min/course` : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {open && !insights && (
+        <div style={{ borderTop: `1px solid ${tokens.neutral[200]}`, padding: "14px 16px", fontFamily: FONT, fontSize: 10, color: tokens.neutral[400], fontStyle: "italic" }}>
+          Not enough archived data to analyse yet.
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -5,6 +5,7 @@ import { parseHHMM } from "../../utils/tableHelpers.js";
 import { restrLabel } from "../../constants/dietary.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 import { fireGapsForTable, estimateNextFire } from "../../utils/fireCadence.js";
+import { gapsForMenuType } from "../../utils/archiveInsights.js";
 
 const F = tokens.font;
 
@@ -500,6 +501,7 @@ export default function SheetView({
   onUnseat,
   profiles = [],
   assignments = {},
+  historyGapsByMenu = null,
 }) {
   // Three tiers: phone (single column), tablet (list + sheet, rails fold into
   // the sheet), desktop (full three-column layout from the design reference).
@@ -577,9 +579,14 @@ export default function SheetView({
     }
 
     // Prediction beats the static "NO FIRE" threshold, so the dumb warning
-    // only fires when no estimate could be derived.
+    // only fires when no estimate could be derived. Archived services seed a
+    // "history" cadence so the first covers of the night get estimates too.
     const est = (table.active && nextFire)
-      ? estimateNextFire({ table, courses, roomGaps: roomStats.gaps, now })
+      ? estimateNextFire({
+          table, courses, roomGaps: roomStats.gaps,
+          historyGaps: gapsForMenuType(historyGapsByMenu, table.menuType),
+          now,
+        })
       : null;
     // An estimate more than 45 min overdue means stale data, not a late
     // course (e.g. reviewing an old service) — say nothing rather than nag.
@@ -603,7 +610,7 @@ export default function SheetView({
 
     if (showEst) {
       const cLabel = `C${String(nextFire.index).padStart(2, "0")}`;
-      const pace = `~${est.cadenceMin}M ${est.basis === "room" ? "ROOM" : "TBL"} PACE`;
+      const pace = `~${est.cadenceMin}M ${est.basis === "room" ? "ROOM" : est.basis === "history" ? "HIST" : "TBL"} PACE`;
       if (est.dueInMin > 1) {
         out.push({ key: "due", glyph: "◷", tone: "info", text: `${cLabel} DUE IN ~${est.dueInMin} MIN`, detail: pace });
       } else if (est.dueInMin >= -2) {
@@ -621,7 +628,7 @@ export default function SheetView({
       else                 out.push({ key: "pace", glyph: "→", tone: "ok",   text: "ON PACE WITH ROOM" });
     }
     return out;
-  }, [table, courses, progressState, roomStats, clockTick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [table, courses, progressState, roomStats, historyGapsByMenu, clockTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sheetBody = table && (
     <>

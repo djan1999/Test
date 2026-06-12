@@ -3,6 +3,7 @@ import { RESTRICTIONS, RESTRICTION_GROUPS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, circleButton } from "../../styles/mixins.js";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
+import GuestMemory from "./GuestMemory.jsx";
 
 const FONT = tokens.font;
 const MOBILE_SAFE_INPUT_SIZE = tokens.mobileInputSize;
@@ -305,6 +306,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
         <div>
           <div style={fieldLabel}>Name</div>
           <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Guest name…" style={baseInp} />
+          <GuestMemory name={name} />
         </div>
         <div>
           <div style={fieldLabel}>Sitting</div>
