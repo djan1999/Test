@@ -2314,6 +2314,13 @@ export default function App() {
   // especially must not clear ghost tables) until both reservations and the
   // remote service-table state have actually loaded.
   const [reservationsLoaded, setReservationsLoaded] = useState(!supabase);
+  // True only after the remote service_tables state has been fetched and merged
+  // at least once. `hydrated` alone is NOT enough: it goes true from a (possibly
+  // stale) localStorage cache or the 1s gate timeout, and reconciling/saving
+  // against that stale board once wiped a live service started on another
+  // device — every table looked "not started" locally, so reconcile rebuilt
+  // them from reservations alone and the autosave pushed the wipe to Supabase.
+  const [remoteBoardLoaded, setRemoteBoardLoaded] = useState(!supabase);
   const [boardSyncTick, setBoardSyncTick] = useState(0);
   const [serviceDate,  setServiceDate]  = useState(() => {
     try {
@@ -3238,13 +3245,16 @@ export default function App() {
   // newly-added reservation appears immediately, an edited one updates in
   // place, and a moved/deleted one stops leaving a ghost table behind.
   useEffect(() => {
-    if (!hydrated || !reservationsLoaded) return;
+    // remoteBoardLoaded is non-negotiable: reconciling against a board that
+    // hasn't seen the remote state treats every live table as "not started"
+    // and rebuilds/blanks it — then the autosave broadcasts the wipe.
+    if (!hydrated || !reservationsLoaded || !remoteBoardLoaded) return;
     if ((mode !== "service" && mode !== "display") || !serviceDate) return;
     reconcileBoardWithReservations(reservations.filter(r => {
       if (r.date !== serviceDate) return false;
       return resolveReservationSession(r.data) === activeServiceSession;
     }));
-  }, [reservations, serviceDate, mode, hydrated, reservationsLoaded, boardSyncTick, activeServiceSession]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reservations, serviceDate, mode, hydrated, reservationsLoaded, remoteBoardLoaded, boardSyncTick, activeServiceSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const switchMode = () => { changeMode(null); setSel(null); };
 
@@ -3260,7 +3270,12 @@ export default function App() {
 
     writeLocalBoardState(boardStateRef.current);
 
-    if (!supabase) return;
+    // Never push table rows before the remote board has loaded: the diff would
+    // run against a stale cache and overwrite a live service with old data.
+    // Edits made in that window are safe — they bump tableLocalFreshRef, so
+    // mergeRemoteTables keeps them and they diff against the remote baseline
+    // (prevTablesJsonRef is reset by the merge) on the post-load run.
+    if (!supabase || !remoteBoardLoaded) return;
 
     const nextJsonByIndex = tables.map(t => JSON.stringify(sanitizeTable(t)));
     const changedTables = tables
@@ -3285,7 +3300,7 @@ export default function App() {
     }, 50);
 
     return () => clearTimeout(saveTimerRef.current);
-  }, [tablesJson, hydrated]);
+  }, [tablesJson, hydrated, remoteBoardLoaded]);
 
 
   // ── Load logo (cached device copy paints instantly; Supabase refreshes) ─────
@@ -3797,9 +3812,11 @@ export default function App() {
       clearTimeout(gateTimeout);
 
       if (error) {
+        // Do NOT mark the remote board as loaded: without the source of truth,
+        // reconcile/saves stay disabled. The 15s poll and the visibilitychange
+        // refetch keep retrying and flip the gate on the first success.
         setSyncStatus("sync-error");
         setHydrated(true);
-        setBoardSyncTick(t => t + 1);
         return;
       }
 
@@ -3817,8 +3834,9 @@ export default function App() {
 
       setSyncStatus("live");
       setHydrated(true);
-      // Signal that remote table state is loaded so the reconciliation effect
-      // can run against fresh data (covers the gateTimeout race).
+      // Remote truth is in: unlock the reconciliation effect and table saves,
+      // and signal the reconcile effect to run against the fresh data.
+      setRemoteBoardLoaded(true);
       setBoardSyncTick(t => t + 1);
     };
 
