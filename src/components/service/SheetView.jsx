@@ -307,9 +307,13 @@ function GuestMatrix({ table, isMobile }) {
 }
 
 // ── Center: action strip ──────────────────────────────────────
-function ActionStrip({ table, progressState, onFireNext, onUndoFire, onOpenDetail, onSeat, onUnseat, isMobile }) {
+// SET tells the kitchen the table is ready for the next course (alert +
+// ticket banner). The kitchen fires the course when it actually goes out.
+function ActionStrip({ table, progressState, onSetNext, onUnset, onUndoFire, onOpenDetail, onSeat, onUnseat, isMobile }) {
   const { nextFire, current } = progressState;
-  const canFire = table.active && !!nextFire;
+  const ready = table.courseReady;
+  const setPending = !!ready && !table.kitchenLog?.[ready.key]?.firedAt;
+  const canSet = table.active && !!nextFire && !setPending;
 
   const btn = (label, onClick, opts = {}) => (
     <button
@@ -335,15 +339,18 @@ function ActionStrip({ table, progressState, onFireNext, onUndoFire, onOpenDetai
     </button>
   );
 
-  const fireLabel = canFire
-    ? (isMobile
-        ? `FIRE C${String(nextFire.index).padStart(2, "0")}`
-        : `FIRE C${String(nextFire.index).padStart(2, "0")} · ${nextFire.name}`)
-    : "FIRE NEXT";
+  const setLabel = setPending
+    ? `SET SENT · C${String(ready.index).padStart(2, "0")}`
+    : nextFire
+      ? (isMobile
+          ? `SET C${String(nextFire.index).padStart(2, "0")}`
+          : `SET C${String(nextFire.index).padStart(2, "0")} · ${nextFire.name}`)
+      : "SET NEXT";
 
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingTop: 10, borderTop: `1px solid ${tokens.ink[4]}`, marginBottom: 14 }}>
-      {btn(fireLabel, () => canFire && onFireNext(nextFire.key), { primary: true, disabled: !canFire })}
+      {btn(setLabel, () => canSet && onSetNext(nextFire), { primary: true, disabled: !canSet })}
+      {setPending && btn("UNSET", () => onUnset())}
       {current && btn("UNDO LAST FIRE", () => onUndoFire(current.key))}
       {table.active
         ? btn("UNSEAT", () => onUnseat(table.id))
@@ -486,7 +493,8 @@ export default function SheetView({
   selectedId,
   onSelect,
   onOpenDetail,
-  onFireNext,
+  onSetNext,
+  onUnset,
   onUndoFire,
   onSeat,
   onUnseat,
@@ -559,6 +567,15 @@ export default function SheetView({
       if (m != null) out.push({ key: "seated", glyph: "●", tone: "ok", text: `SEATED ${fmtDur(m)}`, detail: table.arrivedAt });
     }
 
+    const ready = table.courseReady;
+    if (ready && !table.kitchenLog?.[ready.key]?.firedAt) {
+      out.push({
+        key: "set", glyph: "→", tone: "info",
+        text: `SET FOR C${String(ready.index).padStart(2, "0")} · AWAITING KITCHEN`,
+        detail: ready.at,
+      });
+    }
+
     // Prediction beats the static "NO FIRE" threshold, so the dumb warning
     // only fires when no estimate could be derived.
     const est = (table.active && nextFire)
@@ -621,7 +638,8 @@ export default function SheetView({
       <ActionStrip
         table={table}
         progressState={progressState}
-        onFireNext={key => onFireNext(table.id, key)}
+        onSetNext={course => onSetNext(table.id, course)}
+        onUnset={() => onUnset(table.id)}
         onUndoFire={key => onUndoFire(table.id, key)}
         onOpenDetail={onOpenDetail}
         onSeat={onSeat}

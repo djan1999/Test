@@ -45,7 +45,8 @@ function renderSheet(over = {}) {
   const handlers = {
     onSelect: vi.fn(),
     onOpenDetail: vi.fn(),
-    onFireNext: vi.fn(),
+    onSetNext: vi.fn(),
+    onUnset: vi.fn(),
     onUndoFire: vi.fn(),
     onSeat: vi.fn(),
     onUnseat: vi.fn(),
@@ -78,19 +79,35 @@ describe("SheetView smoke tests", () => {
     expect(screen.getByText("[GUEST MATRIX]")).toBeInTheDocument();
     expect(screen.getByText("[ALERTS · INTELLIGENCE]")).toBeInTheDocument();
     expect(screen.getByText("[TIMELINE]")).toBeInTheDocument();
-    // course_1 fired → current is Amuse, next fire is Bread
-    expect(screen.getByText("FIRE C02 · Bread")).toBeInTheDocument();
+    // course_1 fired → current is Amuse, next up is Bread
+    expect(screen.getByText("SET C02 · Bread")).toBeInTheDocument();
   });
 
-  it("fires the next course and undoes the last fire", () => {
+  it("sets the next course for the kitchen and undoes the last fire", () => {
     setViewport(1280);
     const h = renderSheet();
 
-    fireEvent.click(screen.getByText("FIRE C02 · Bread"));
-    expect(h.onFireNext).toHaveBeenCalledWith(3, "course_2");
+    fireEvent.click(screen.getByText("SET C02 · Bread"));
+    expect(h.onSetNext).toHaveBeenCalledWith(3, expect.objectContaining({ key: "course_2", name: "Bread" }));
 
     fireEvent.click(screen.getByText("UNDO LAST FIRE"));
     expect(h.onUndoFire).toHaveBeenCalledWith(3, "course_1");
+  });
+
+  it("shows the pending set state with UNSET and the awaiting-kitchen signal", () => {
+    setViewport(1280);
+    const h = renderSheet({
+      tables: [makeTable({
+        courseReady: { key: "course_2", index: 2, name: "Bread", at: "19:30" },
+      })],
+    });
+
+    const sent = screen.getByText("SET SENT · C02");
+    expect(sent).toBeDisabled();
+    expect(screen.getByText("SET FOR C02 · AWAITING KITCHEN")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("UNSET"));
+    expect(h.onUnset).toHaveBeenCalledWith(3);
   });
 
   it("renders the mobile single-column layout with chip selector", () => {
@@ -100,8 +117,8 @@ describe("SheetView smoke tests", () => {
     // chip selector replaces the table index rail
     expect(screen.queryByText("[TABLES]")).not.toBeInTheDocument();
     expect(screen.getByText("T03 · Novak")).toBeInTheDocument();
-    // mobile fire button drops the course name so it can't overflow
-    expect(screen.getByText("FIRE C02")).toBeInTheDocument();
+    // mobile set button drops the course name so it can't overflow
+    expect(screen.getByText("SET C02")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("T03 · Novak"));
     expect(h.onSelect).toHaveBeenCalledWith(3);

@@ -60,6 +60,10 @@ export const blankTable = id => ({
   // Snapshot of the orders the kitchen last acknowledged (see utils/kitchenAlerts).
   // Lets a Send carry only what's new instead of the whole order again.
   kitchenSent: null,
+  // Service's "table is set for the next course" signal ({key,index,name,at}).
+  // Raised from the sheet view, shown on the kitchen ticket, cleared when the
+  // kitchen fires that course.
+  courseReady: null,
 });
 
 export const initTables = Array.from({ length: 10 }, (_, i) => blankTable(i + 1));

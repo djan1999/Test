@@ -4494,9 +4494,37 @@ export default function App() {
                 selectedId={sheetTableId}
                 onSelect={setSheetTableId}
                 onOpenDetail={id => setSel(id)}
-                onFireNext={(tableId, courseKey) => {
+                onSetNext={(tableId, course) => {
+                  // "Table is set for the next course" — raise the kitchen
+                  // alert (merging into a still-pending order delta so that
+                  // isn't lost) and stamp courseReady on the table. The
+                  // kitchen ticket shows the banner until it fires the course.
                   const t = tablesRef.current?.find(x => x.id === tableId);
-                  upd(tableId, "kitchenLog", { ...(t?.kitchenLog || {}), [courseKey]: { firedAt: fmt(new Date()) } });
+                  const ready = { key: course.key, index: course.index, name: course.name, at: fmt(new Date()) };
+                  const prevAlert = (t?.kitchenAlert && !t.kitchenAlert.confirmed) ? t.kitchenAlert : null;
+                  updMany(tableId, {
+                    courseReady: ready,
+                    kitchenAlert: {
+                      ...(prevAlert || {}),
+                      timestamp: new Date().toISOString(),
+                      tableName: t?.resName || null,
+                      seats: prevAlert?.seats || [],
+                      confirmed: false,
+                      course: ready,
+                    },
+                  });
+                }}
+                onUnset={tableId => {
+                  const t = tablesRef.current?.find(x => x.id === tableId);
+                  const changes = { courseReady: null };
+                  const alert = t?.kitchenAlert;
+                  // Retract the course from a still-pending alert; keep the
+                  // alert alive only if it still carries an order delta.
+                  if (alert && !alert.confirmed && alert.course) {
+                    const { course: _drop, ...rest } = alert;
+                    changes.kitchenAlert = rest.seats?.length ? rest : null;
+                  }
+                  updMany(tableId, changes);
                 }}
                 onUndoFire={(tableId, courseKey) => {
                   const t = tablesRef.current?.find(x => x.id === tableId);

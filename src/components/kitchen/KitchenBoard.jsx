@@ -153,6 +153,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     const now = fmt(new Date());
     const newLog = { ...log, [courseKey]: { firedAt: now } };
     upd(table.id, "kitchenLog", newLog);
+    // Firing the course service asked for fulfils the "table is set" signal.
+    if (table.courseReady?.key === courseKey) upd(table.id, "courseReady", null);
   };
   const unfire = (courseKey) => {
     const newLog = { ...log };
@@ -600,6 +602,28 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         })()}
       </div>
 
+      {/* ── "Table is set" banner — service raised courseReady; stays until
+             this course fires (clearing the overlay alert does NOT clear it). */}
+      {table.courseReady && !log[table.courseReady.key]?.firedAt && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8, padding: dz.rowPad,
+          background: tokens.tint.parchment, borderTop: `1px solid ${tokens.signal.active}`,
+          borderBottom: `1px solid ${tokens.signal.active}`,
+        }}>
+          <span style={{ fontFamily: FONT, fontSize: "10px", color: tokens.signal.active, flexShrink: 0 }}>●</span>
+          <span style={{
+            fontFamily: FONT, fontSize: dz.courseFont, fontWeight: 700, letterSpacing: "0.08em",
+            textTransform: "uppercase", color: tokens.ink[0],
+            minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            SET FOR C{String(table.courseReady.index).padStart(2, "0")} · {table.courseReady.name}
+          </span>
+          <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], marginLeft: "auto", flexShrink: 0 }}>
+            {table.courseReady.at}
+          </span>
+        </div>
+      )}
+
       {/* ── Courses ── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
         {courses.map((course, idx) => {
@@ -961,6 +985,19 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
             </div>
             {/* Body */}
             <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+              {alert.course && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>SET FOR</span>
+                  <span style={{
+                    fontFamily: FONT, fontSize: "13px", fontWeight: 700, letterSpacing: "0.08em",
+                    textTransform: "uppercase", color: tokens.ink[0],
+                    padding: "4px 10px", background: tokens.tint.parchment,
+                    border: `1px solid ${tokens.signal.active}`,
+                  }}>
+                    C{String(alert.course.index).padStart(2, "0")} · {alert.course.name}
+                  </span>
+                </div>
+              )}
               {pairSeats.length > 0 && (() => {
                 // Group seats by pairing type
                 const pairingGroups = {};
@@ -997,7 +1034,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   {group.anyShared && <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, letterSpacing: "0.10em", color: tokens.ink[2], padding: "2px 6px", border: `1px solid ${tokens.ink[4]}`, background: tokens.ink[5] }}>SHARE</span>}
                 </div>
               ))}
-              {pairSeats.length === 0 && extrasGroups.length === 0 && (
+              {pairSeats.length === 0 && extrasGroups.length === 0 && !alert.course && (
                 <span style={{ fontFamily: FONT, fontSize: "10px", color: tokens.ink[4] }}>No extras noted</span>
               )}
             </div>
