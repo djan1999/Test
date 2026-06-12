@@ -154,6 +154,22 @@ describe("SheetView smoke tests", () => {
     expect(screen.getByText("ALL COURSES OUT")).toBeInTheDocument();
   });
 
+  it("timeline collapses to the latest event on mobile and expands on tap", () => {
+    setViewport(390);
+    renderSheet({
+      tables: [makeTable({
+        kitchenLog: { course_1: { firedAt: "19:05" }, course_2: { firedAt: "19:25" } },
+      })],
+    });
+
+    // collapsed: only the most recent event shows as a teaser
+    expect(screen.getByText("C02 OUT · Bread")).toBeInTheDocument();
+    expect(screen.queryByText("C01 OUT · Amuse")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("[TIMELINE]"));
+    expect(screen.getByText("C01 OUT · Amuse")).toBeInTheDocument();
+  });
+
   it("renders the empty state when no tables exist", () => {
     setViewport(1280);
     renderSheet({ tables: [] });

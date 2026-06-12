@@ -415,7 +415,10 @@ function AlertsRail({ table, intel = [] }) {
 }
 
 // ── Right: timeline rail ──────────────────────────────────────
-function TimelineRail({ table, courses }) {
+// Collapsible: the header always shows the event count; collapsed it keeps
+// only the most recent event visible as a one-line teaser.
+function TimelineRail({ table, courses, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   const events = [];
   if (table.resTime && !table.arrivedAt) events.push({ at: table.resTime, label: "RESV" });
   if (table.arrivedAt)                   events.push({ at: table.arrivedAt, label: "ARRIVED" });
@@ -424,23 +427,40 @@ function TimelineRail({ table, courses }) {
   });
   events.sort((a, b) => (a.at || "").localeCompare(b.at || ""));
 
+  const Row = ({ e }) => (
+    <div style={{
+      display: "grid", gridTemplateColumns: "42px minmax(0,1fr)",
+      alignItems: "center", gap: 8, height: 28,
+      borderBottom: `1px solid ${tokens.ink[5]}`, fontFamily: F,
+    }}>
+      <span style={{ fontSize: "9px", color: tokens.ink[3], letterSpacing: "0.06em" }}>{e.at}</span>
+      <span style={{ ...clip, fontSize: "10px", color: tokens.ink[1], textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        {e.label}
+      </span>
+    </div>
+  );
+
   return (
     <div style={{ minWidth: 0 }}>
-      <SecHead label="TIMELINE" right={String(events.length)} />
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: "flex", alignItems: "center", gap: 8, width: "100%",
+          background: "transparent", border: "none", padding: "2px 0", marginBottom: 4,
+          cursor: "pointer", fontFamily: F, touchAction: "manipulation",
+        }}
+      >
+        <span style={{ ...lbl, color: tokens.ink[2], fontWeight: 500, flexShrink: 0 }}>[TIMELINE]</span>
+        <div style={{ flex: 1, ...hr }} />
+        <span style={{ ...lbl, flexShrink: 0 }}>{events.length}</span>
+        <span style={{ ...lbl, color: tokens.ink[2], flexShrink: 0, fontSize: "9px" }}>{open ? "▾" : "▸"}</span>
+      </button>
       {events.length === 0
         ? <div style={{ ...lbl, color: tokens.ink[4], padding: "4px 0" }}>NO COURSE TIMESTAMPS YET</div>
-        : events.map((e, i) => (
-            <div key={i} style={{
-              display: "grid", gridTemplateColumns: "42px minmax(0,1fr)",
-              alignItems: "center", gap: 8, height: 28,
-              borderBottom: `1px solid ${tokens.ink[5]}`, fontFamily: F,
-            }}>
-              <span style={{ fontSize: "9px", color: tokens.ink[3], letterSpacing: "0.06em" }}>{e.at}</span>
-              <span style={{ ...clip, fontSize: "10px", color: tokens.ink[1], textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                {e.label}
-              </span>
-            </div>
-          ))
+        : open
+          ? events.map((e, i) => <Row key={i} e={e} />)
+          : <Row e={events[events.length - 1]} />
       }
     </div>
   );
@@ -615,7 +635,8 @@ export default function SheetView({
   const rails = table && (
     <>
       <AlertsRail table={table} intel={intel} />
-      <TimelineRail table={table} courses={courses} />
+      {/* Desktop's rail has room to spare; compact layouts start collapsed. */}
+      <TimelineRail table={table} courses={courses} defaultOpen={!isCompact} />
     </>
   );
 
