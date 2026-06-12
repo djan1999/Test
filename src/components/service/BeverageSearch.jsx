@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { tokens } from "../../styles/tokens.js";
+import { useEightySix } from "../../hooks/useEightySix.js";
+import { eightySixKeyFor } from "../../utils/eightySix.js";
 
 export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd }) {
   const [q, setQ] = useState("");
@@ -68,7 +70,10 @@ export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd
     setOpen(r.length > 0);
   };
 
+  const eightySix = useEightySix();
+
   const handleAdd = (entry) => {
+    if (eightySix.has(eightySixKeyFor(entry.type, entry.item))) return; // 86'd — not sellable
     onAdd(entry);
     setQ("");
     setResults([]);
@@ -94,10 +99,12 @@ export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd
         <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: tokens.neutral[0], border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, zIndex: 300, boxShadow: "0 6px 24px rgba(0,0,0,0.10)", overflow: "hidden" }}>
           {results.map((r, i) => {
             const ts = BEV_TYPES[r.type];
+            const is86 = eightySix.has(eightySixKeyFor(r.type, r.item));
             return (
-              <div key={i} onMouseDown={() => handleAdd(r)} onTouchEnd={(e) => { e.preventDefault(); handleAdd(r); }} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${tokens.neutral[50]}`, display: "flex", alignItems: "center", gap: 10, background: tokens.neutral[0], touchAction: "manipulation", userSelect: "none" }}>
+              <div key={i} onMouseDown={() => handleAdd(r)} onTouchEnd={(e) => { e.preventDefault(); handleAdd(r); }} style={{ padding: "10px 14px", cursor: is86 ? "not-allowed" : "pointer", borderBottom: `1px solid ${tokens.neutral[50]}`, display: "flex", alignItems: "center", gap: 10, background: tokens.neutral[0], touchAction: "manipulation", userSelect: "none", opacity: is86 ? 0.45 : 1 }}>
                 <span style={{ fontFamily: tokens.font, fontSize: 8, letterSpacing: 1, fontWeight: 600, padding: "2px 6px", borderRadius: 0, color: ts.color, background: ts.bg, border: `1px solid ${ts.border}`, flexShrink: 0, textTransform: "uppercase" }}>{ts.label}</span>
-                <span style={{ fontFamily: tokens.font, fontSize: 12, color: tokens.neutral[900], flex: 1 }}>{r.label}</span>
+                <span style={{ fontFamily: tokens.font, fontSize: 12, color: tokens.neutral[900], flex: 1, textDecoration: is86 ? "line-through" : "none" }}>{r.label}</span>
+                {is86 && <span style={{ fontFamily: tokens.font, fontSize: 8, letterSpacing: 1, fontWeight: 700, padding: "2px 6px", color: tokens.red.text, background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, flexShrink: 0 }}>86</span>}
                 {r.sub && <span style={{ fontFamily: tokens.font, fontSize: 11, color: tokens.neutral[500] }}>{r.sub}</span>}
               </div>
             );

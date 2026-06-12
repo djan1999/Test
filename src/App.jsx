@@ -36,6 +36,8 @@ import {
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { stampWineSources } from "./utils/wineEdit.js";
 import { historyGapsByMenuType } from "./utils/archiveInsights.js";
+import { EIGHTY_SIX_SETTINGS_ID, eightySixKeyFor, dishEightySixKey, normalizeEightySixKeys } from "./utils/eightySix.js";
+import { useEightySix, setEightySixCache } from "./hooks/useEightySix.js";
 import {
   currentServiceDay, isStaleServiceDate, isDeliberatelyPastDate,
   SERVICE_DATE_CHOSEN_ON_KEY,
@@ -89,6 +91,7 @@ const SummaryModal = lazy(() => import("./components/modals/SummaryModal.jsx"));
 const ArchiveModal = lazy(() => import("./components/modals/ArchiveModal.jsx"));
 const InventoryModal = lazy(() => import("./components/modals/InventoryModal.jsx"));
 const SheetView = lazy(() => import("./components/service/SheetView.jsx"));
+const EightySixPanel = lazy(() => import("./components/service/EightySixPanel.jsx"));
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
@@ -598,6 +601,7 @@ function MoveTablePicker({ currentTable, tables = [], reservationOnTable, onCanc
 
 // ── Detail View ───────────────────────────────────────────────────────────────
 function Detail({ table, tables = [], optionalExtras = [], optionalPairings = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages, onClearTable, onMoveTable, reservationOnTable }) {
+  const eightySix = useEightySix();
   const isMobile = useIsMobile(860);
   const isNarrow = useIsMobile(520);
   const row1 = isNarrow ? "30px 1fr 28px" : isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
@@ -934,18 +938,23 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
                 }}>[APERITIF]</div>
                 {/* Quick-add buttons */}
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-                  {aperitifOptions.map(ap => (
-                    <button key={ap.label} onClick={() => {
-                      const found = resolveAperitifFromQuickAccessOption(ap, { wines, cocktails, spirits, beers });
-                      const item = found || { name: ap.searchKey || ap.label, notes: "", __cocktail: true };
-                      updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
-                    }} style={{
-                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: isMobile ? "10px 9px" : "4px 9px",
-                      border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer",
-                      background: tokens.neutral[0], color: tokens.neutral[700], transition: "all 0.1s",
-                      touchAction: "manipulation",
-                    }}>{ap.label}</button>
-                  ))}
+                  {aperitifOptions.map(ap => {
+                    const found = resolveAperitifFromQuickAccessOption(ap, { wines, cocktails, spirits, beers });
+                    const is86 = eightySix.has(eightySixKeyFor(ap.type || "cocktail", found || { name: ap.searchKey || ap.label }));
+                    return (
+                      <button key={ap.label} disabled={is86} onClick={() => {
+                        if (is86) return;
+                        const item = found || { name: ap.searchKey || ap.label, notes: "", __cocktail: true };
+                        updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
+                      }} style={{
+                        fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: isMobile ? "10px 9px" : "4px 9px",
+                        border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: is86 ? "not-allowed" : "pointer",
+                        background: tokens.neutral[0], color: tokens.neutral[700], transition: "all 0.1s",
+                        touchAction: "manipulation", opacity: is86 ? 0.4 : 1,
+                        textDecoration: is86 ? "line-through" : "none",
+                      }}>{ap.label}</button>
+                    );
+                  })}
                 </div>
                 <BeverageSearch
                   wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
@@ -1043,16 +1052,25 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
                     const updLp = (patch) => linkedPairing && updSeat(seat.id, "optionalPairings", {
                       ...(seat.optionalPairings || {}), [linkedPairing.key]: { ...(lpCur || {}), ...patch },
                     });
+                    // An 86'd dish can't be newly ordered, but an existing
+                    // order stays visible (and can still be switched off).
+                    const dishIs86 = eightySix.has(dishEightySixKey(dish.key));
+                    const dishBlocked = dishIs86 && !extra.ordered;
                     return (
                       <div key={dish.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
-                        <div style={{ ...fieldLabel, marginBottom: 4 }}>{dish.name}</div>
-                        <button onClick={() => updSeat(seat.id, "extras", {
-                          ...seat.extras, [dish.key]: { ...extra, ordered: !extra.ordered }
-                        })} style={{
+                        <div style={{ ...fieldLabel, marginBottom: 4, textDecoration: dishIs86 ? "line-through" : "none" }}>
+                          {dish.name}{dishIs86 ? " · 86" : ""}
+                        </div>
+                        <button disabled={dishBlocked} onClick={() => {
+                          if (dishBlocked) return;
+                          updSeat(seat.id, "extras", {
+                            ...seat.extras, [dish.key]: { ...extra, ordered: !extra.ordered }
+                          });
+                        }} style={{
                           fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: isMobile ? "10px 8px" : "5px 8px", border: "1px solid",
-                          borderColor: extra.ordered ? tokens.green.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
+                          borderColor: extra.ordered ? tokens.green.border : tokens.neutral[200], borderRadius: 0, cursor: dishBlocked ? "not-allowed" : "pointer",
                           background: extra.ordered ? tokens.green.bg : tokens.neutral[0], color: extra.ordered ? tokens.green.text : tokens.text.secondary,
-                          transition: "all 0.1s", touchAction: "manipulation",
+                          transition: "all 0.1s", touchAction: "manipulation", opacity: dishBlocked ? 0.4 : 1,
                         }}>{extra.ordered ? "YES" : "NO"}</button>
                         {linkedPairing ? (
                           <div style={{ display: "flex", gap: 3, opacity: extra.ordered ? 1 : 0.3, pointerEvents: extra.ordered ? "auto" : "none" }}>
@@ -2221,6 +2239,16 @@ export default function App() {
   const [summaryOpen,    setSummaryOpen]    = useState(false);
   const [archiveOpen,    setArchiveOpen]    = useState(false);
   const [inventoryOpen,  setInventoryOpen]  = useState(false);
+  const [eightySixOpen,  setEightySixOpen]  = useState(false);
+  // 86 list — out-of-stock dishes/drinks, shared across devices. The array is
+  // the saved truth; setEightySixCache mirrors it into the module store that
+  // search dropdowns and quick-access buttons read.
+  const [eightySixKeys,  setEightySixKeysState] = useState([]);
+  const applyEightySix = useCallback((keys) => {
+    const clean = normalizeEightySixKeys({ keys });
+    setEightySixKeysState(clean);
+    setEightySixCache(clean);
+  }, []);
   const [addResOpen,     setAddResOpen]     = useState(false);
   const [syncStatus,   setSyncStatus]   = useState(hasSupabaseConfig ? "connecting" : "local-only");
   const [logoDataUri,  setLogoDataUri]  = useState(() => readLocalLogo() || "");
@@ -3667,6 +3695,27 @@ export default function App() {
     return { ok: true };
   }, []);
 
+  // ── 86 list: load + save + realtime (service_settings id "eighty_six") ─────
+  useEffect(() => {
+    if (!supabase || !workspaceId) return;
+    let cancelled = false;
+    scopedFrom(TABLES.SERVICE_SETTINGS)
+      .select("state").eq("id", EIGHTY_SIX_SETTINGS_ID).maybeSingle()
+      .then(({ data }) => { if (!cancelled && data?.state) applyEightySix(normalizeEightySixKeys(data.state)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [workspaceId, applyEightySix]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveEightySix = useCallback(async (keys) => {
+    const clean = normalizeEightySixKeys({ keys });
+    applyEightySix(clean);
+    if (!supabase) return { ok: true };
+    const { error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: EIGHTY_SIX_SETTINGS_ID, state: { keys: clean }, updated_at: new Date().toISOString() }, { onConflict: "id" });
+    if (error) { console.error("86 list save failed:", error); return { ok: false, error }; }
+    return { ok: true };
+  }, [applyEightySix]);
+
   const saveCourseQuickNotes = useCallback(async (next) => {
     const map = next && typeof next === "object" ? next : {};
     setCourseQuickNotes(map);
@@ -4110,6 +4159,20 @@ export default function App() {
     enabled: Boolean(supabase && workspaceId),
   });
 
+  // 86 list realtime — other devices' changes land instantly. The settings
+  // table carries many ids (inventory, configs…); only react to ours.
+  useRealtimeTable({
+    supabase,
+    channelName: `milka-eighty-six-${workspaceId}`,
+    filter: wsFilter,
+    table: TABLES.SERVICE_SETTINGS,
+    onChange: (payload) => {
+      if (payload.new?.id !== EIGHTY_SIX_SETTINGS_ID) return;
+      applyEightySix(normalizeEightySixKeys(payload.new?.state));
+    },
+    enabled: Boolean(supabase && workspaceId),
+  });
+
   // ── Historical fire cadence (archive-seeded) ───────────────────────────────
   // Loaded once per session when a live mode starts: recent archives yield
   // per-menu-type course rhythms so estimateNextFire() has a "history" basis
@@ -4146,8 +4209,22 @@ export default function App() {
     onSummary: () => setSummaryOpen(true),
     onArchive: () => setArchiveOpen(true),
     onInventory: () => setInventoryOpen(true),
+    onEightySix: () => setEightySixOpen(true),
+    eightySixCount: eightySixKeys.length,
     onSyncAll: syncWines,
   };
+
+  const eightySixPanelEl = eightySixOpen ? (
+    <Suspense fallback={null}>
+      <EightySixPanel
+        wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
+        dishes={dishes.map(d => ({ key: d.key, label: d.name }))}
+        keys={eightySixKeys}
+        onSave={saveEightySix}
+        onClose={() => setEightySixOpen(false)}
+      />
+    </Suspense>
+  ) : null;
 
   // Preview — visit /#preview to inspect TableCard design without auth
   if (window.location.hash === "#preview") return (
@@ -4326,6 +4403,7 @@ export default function App() {
         </Suspense>
       )}
       {inventoryOpen && <Suspense fallback={null}><InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} /></Suspense>}
+      {eightySixPanelEl}
     </div>
   </>);
 
@@ -4687,6 +4765,7 @@ export default function App() {
         </Suspense>
       )}
       {inventoryOpen && <Suspense fallback={null}><InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} /></Suspense>}
+      {eightySixPanelEl}
 
       {addResOpen && serviceDate && (
         <CenteredModal
