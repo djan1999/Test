@@ -31,7 +31,7 @@ import {
 } from "./utils/storage.js";
 import {
   makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM,
-  reservationDescriptiveFields, resolveReservationSession,
+  reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { stampWineSources } from "./utils/wineEdit.js";
@@ -2881,7 +2881,16 @@ export default function App() {
   };
 
   const clearAll = () => {
-    if (typeof window !== "undefined" && !window.confirm("Clear ALL tables?")) return;
+    // CLEAR ALL discards without archiving. If a live service is on the board
+    // this is destructive and unrecoverable, so warn explicitly and point at
+    // Archive & Clear instead — an accidental tap here can wipe a whole shift.
+    const liveTables = tablesRef.current?.filter(tableHasServiceContent) || [];
+    const msg = liveTables.length > 0
+      ? `Discard ${liveTables.length} live table${liveTables.length === 1 ? "" : "s"} WITHOUT archiving? `
+        + `This permanently deletes tonight's seats, drinks and kitchen progress and cannot be undone. `
+        + `Use "Archive & Clear" instead if you want to keep the record.`
+      : "Clear ALL tables?";
+    if (typeof window !== "undefined" && !window.confirm(msg)) return;
     tableLocalFreshRef.current = new Map();
     setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     setSel(null);
@@ -3220,10 +3229,13 @@ export default function App() {
       }
       let changed = false;
       const next = prev.map(t => {
-        const started = t.active || t.arrivedAt
-          || (t.kitchenLog && Object.keys(t.kitchenLog).length > 0)
-          || t.kitchenArchived;
-        if (started) return t; // live service is sacrosanct
+        // Protect ANY table holding staff-entered service data — not just
+        // active/arrived/kitchen-log ones. A table where waiters entered
+        // water/pairings/drinks before pressing SEAT was previously rebuilt
+        // (and an unowned one blanked) by this reconcile; run against a stale
+        // local view that's how a whole live service got wiped and pushed to
+        // every device. Reconcile is now strictly non-destructive to live work.
+        if (tableHasServiceContent(t)) return t; // live service is sacrosanct
 
         const owner = byTable.get(t.id);
         if (!owner) {

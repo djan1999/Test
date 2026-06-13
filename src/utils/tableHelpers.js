@@ -124,6 +124,22 @@ const seatHasContent = (s) => {
   return false;
 };
 
+// True when a table holds STAFF-ENTERED service data — seated/arrived, kitchen
+// activity, a table-level bottle, or any seat with water/pairing/drinks/extras.
+// The board↔reservations reconcile must never blank or rebuild such a table:
+// doing so against a momentarily-stale local view is how a whole live service
+// got wiped mid-shift and propagated to every device via the autosave.
+// Reservation-derived fields (resName, resTime, restrictions) deliberately do
+// NOT count, so a reserved-but-unstarted table can still be updated or
+// ghost-cleared from the planner.
+export const tableHasServiceContent = (t) => {
+  if (!t) return false;
+  if (t.active || t.arrivedAt || t.kitchenArchived) return true;
+  if (t.kitchenLog && Object.keys(t.kitchenLog).length > 0) return true;
+  if (Array.isArray(t.bottleWines) && t.bottleWines.length > 0) return true;
+  return (t.seats || []).some(seatHasContent);
+};
+
 const sameReservationKey = (t) => {
   const n = String(t?.resName || "").trim().toLowerCase();
   const r = String(t?.resTime || "").trim();

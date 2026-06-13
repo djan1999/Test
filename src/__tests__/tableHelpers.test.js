@@ -1,8 +1,35 @@
 import { describe, it, expect } from "vitest";
 import {
   makeSeats, blankTable, sanitizeTable, fmt, parseHHMM, mergeTableGroups, tableGroupLabel,
-  reservationDescriptiveFields, resolveReservationSession,
+  reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
 } from "../utils/tableHelpers.js";
+
+describe("tableHasServiceContent (reconcile protection)", () => {
+  it("is false for a blank table and a reservation-only table", () => {
+    expect(tableHasServiceContent(blankTable(1))).toBe(false);
+    // Reserved but not started: only reservation-derived metadata → NOT protected
+    // (so the planner can still update or ghost-clear it).
+    const reserved = { ...blankTable(2), resName: "Smith", resTime: "19:00",
+      restrictions: [{ note: "gluten_free" }], seats: makeSeats(2) };
+    expect(tableHasServiceContent(reserved)).toBe(false);
+  });
+
+  it("is true once staff enter anything during service", () => {
+    expect(tableHasServiceContent({ ...blankTable(1), active: true })).toBe(true);
+    expect(tableHasServiceContent({ ...blankTable(1), arrivedAt: "20:10" })).toBe(true);
+    expect(tableHasServiceContent({ ...blankTable(1), kitchenLog: { c1: { firedAt: "20:30" } } })).toBe(true);
+    expect(tableHasServiceContent({ ...blankTable(1), bottleWines: [{ name: "Movia" }] })).toBe(true);
+  });
+
+  it("is true when a seat has water/pairing/drinks even before SEAT is pressed", () => {
+    const withWater = { ...blankTable(1), seats: makeSeats(2).map((s, i) => i === 0 ? { ...s, water: "Still" } : s) };
+    expect(tableHasServiceContent(withWater)).toBe(true);
+    const withGlass = { ...blankTable(1), seats: makeSeats(2).map((s, i) => i === 0 ? { ...s, glasses: [{ name: "Rebula" }] } : s) };
+    expect(tableHasServiceContent(withGlass)).toBe(true);
+    const withPairing = { ...blankTable(1), seats: makeSeats(2).map((s, i) => i === 0 ? { ...s, pairing: "Wine" } : s) };
+    expect(tableHasServiceContent(withPairing)).toBe(true);
+  });
+});
 
 describe("reservationDescriptiveFields", () => {
   it("maps reservation data to table label fields (menuType included)", () => {
