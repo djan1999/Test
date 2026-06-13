@@ -7,6 +7,16 @@
 
 import { getVisibleCoursesForTable } from "./courseProgress.js";
 import { fireGapsForTable, median, toMonotonicMinutes } from "./fireCadence.js";
+import { mergeTableGroups } from "./tableHelpers.js";
+
+// A party seated across several tables (a "group") has the full reservation
+// guest count stamped on EVERY member table, and each member carries its own
+// seats. Counting raw archived tables therefore double-counts covers, seats
+// and fire timelines. mergeTableGroups() collapses each group to one primary
+// row (with combined seats/kitchenLog and a correct `_groupGuests`), exactly
+// as the archive screen already does — so every scan here runs on it first.
+const partyTables = (entry) => mergeTableGroups(entry?.state?.tables || []);
+const tableGuests = (t) => Number(t?._groupGuests ?? t?.guests) || 0;
 
 const normName = (v) => String(v || "").trim().toLowerCase();
 const normMenuKey = (v) => String(v || "").trim().toLowerCase() || "*";
@@ -23,7 +33,7 @@ const seatHasPairing = (seat) => {
  *           durations, courseGaps: Map<name, number[]> }.
  */
 export function archiveEntryStats(entry) {
-  const tables = entry?.state?.tables || [];
+  const tables = partyTables(entry);
   const menuCourses = entry?.state?.menuCourses || [];
   const stats = {
     date: entry?.date || null,
@@ -38,7 +48,7 @@ export function archiveEntryStats(entry) {
   };
 
   for (const t of tables) {
-    stats.covers += Number(t?.guests) || 0;
+    stats.covers += tableGuests(t);
     for (const s of t?.seats || []) {
       stats.seats += 1;
       if (seatHasPairing(s)) stats.paired += 1;
@@ -121,7 +131,7 @@ export function aggregateInsights(entries) {
 export function historyGapsByMenuType(entries) {
   const out = { "*": [] };
   for (const entry of entries || []) {
-    const tables = entry?.state?.tables || [];
+    const tables = partyTables(entry);
     const menuCourses = entry?.state?.menuCourses || [];
     for (const t of tables) {
       const courses = getVisibleCoursesForTable(t, menuCourses);
@@ -160,7 +170,7 @@ export function findGuestHistory(name, entries, { limit = 5 } = {}) {
   if (q.length < 3) return [];
   const matches = [];
   for (const entry of entries || []) {
-    for (const t of entry?.state?.tables || []) {
+    for (const t of partyTables(entry)) {
       const resName = normName(t?.resName);
       if (!resName || !resName.includes(q)) continue;
       const pairings = [...new Set((t.seats || []).map(s => String(s?.pairing || "").trim())
@@ -175,7 +185,7 @@ export function findGuestHistory(name, entries, { limit = 5 } = {}) {
         date: entry?.date || null,
         label: entry?.label || "",
         name: t.resName,
-        guests: Number(t?.guests) || 0,
+        guests: tableGuests(t),
         menuType: t?.menuType || "",
         pairings,
         restrictions,

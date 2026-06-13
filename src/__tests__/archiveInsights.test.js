@@ -55,6 +55,33 @@ describe("archiveEntryStats", () => {
     expect(archiveEntryStats({}).covers).toBe(0);
     expect(archiveEntryStats({ state: { tables: [{}] } }).gaps).toEqual([]);
   });
+
+  it("does not double-count a party seated across grouped tables", () => {
+    // A 4-top split across T02+T03: the reconcile stamps guests=4 on BOTH
+    // members and seats live on both. Raw summing would report 8 covers / 2
+    // tables; merged it must be 4 covers / 1 table.
+    const groupedEntry = {
+      date: "2026-06-12",
+      label: "x",
+      state: {
+        menuCourses: COURSES,
+        tables: [
+          { id: 2, resName: "Group", guests: 4, menuType: "Tasting", tableGroup: [2, 3],
+            seats: [{ id: 1, pairing: "Wine", aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [] },
+                    { id: 2, pairing: "Wine", aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [] }],
+            kitchenLog: {} },
+          { id: 3, resName: "Group", guests: 4, menuType: "Tasting", tableGroup: [2, 3],
+            seats: [{ id: 1, pairing: "Wine", aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [] },
+                    { id: 2, pairing: "Wine", aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [] }],
+            kitchenLog: {} },
+        ],
+      },
+    };
+    const s = archiveEntryStats(groupedEntry);
+    expect(s.covers).toBe(4);
+    expect(s.tableCount).toBe(1);
+    expect(s.seats).toBe(4); // 2+2 real seats, counted once
+  });
 });
 
 describe("aggregateInsights", () => {
