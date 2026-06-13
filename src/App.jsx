@@ -39,7 +39,7 @@ import { historyGapsByMenuType } from "./utils/archiveInsights.js";
 import { EIGHTY_SIX_SETTINGS_ID, eightySixKeyFor, dishEightySixKey, normalizeEightySixKeys } from "./utils/eightySix.js";
 import { useEightySix, setEightySixCache } from "./hooks/useEightySix.js";
 import {
-  currentServiceDay, isStaleServiceDate, isDeliberatelyPastDate,
+  currentServiceDay, isStaleServiceDate, isActivePastReview,
   SERVICE_DATE_CHOSEN_ON_KEY,
 } from "./utils/serviceDay.js";
 import {
@@ -2122,7 +2122,7 @@ export default function App() {
       // A deliberately-past date (demo / reviewing an earlier day) is exempt.
       if ((storedMode === "service" || storedMode === "display")
           && isStaleServiceDate(storedDate)
-          && !isDeliberatelyPastDate(storedDate, chosenOn)) {
+          && !isActivePastReview(storedDate, chosenOn)) {
         return null;
       }
       return storedMode;
@@ -2365,10 +2365,11 @@ export default function App() {
       const stored = localStorage.getItem("milka_service_date");
       if (!stored) return null;
       const chosenOn = localStorage.getItem(SERVICE_DATE_CHOSEN_ON_KEY);
-      if (isStaleServiceDate(stored) && !isDeliberatelyPastDate(stored, chosenOn)) {
+      if (isStaleServiceDate(stored) && !isActivePastReview(stored, chosenOn)) {
         // Date rolled over since last session — drop the stale value so
         // "Start Service" prompts for today's date instead of silently
-        // resuming yesterday's (now empty) service.
+        // resuming yesterday's (now empty) service. An abandoned past-date
+        // review (chosen on an earlier day) is dropped here too.
         try {
           localStorage.removeItem("milka_service_date");
           localStorage.removeItem(SERVICE_DATE_CHOSEN_ON_KEY);
@@ -2887,35 +2888,52 @@ export default function App() {
     setArchiveOpen(false);
   };
 
+  // Guards a manual archive in flight so a double-tap (or a second device a few
+  // seconds later) can't file the same service twice — the cause of the two
+  // identical 23:53 entries in the 10.06 incident.
+  const archivingRef = useRef(false);
   const archiveAndClearAll = async () => {
+    if (archivingRef.current) return;
     if (typeof window !== "undefined" && !window.confirm("Archive today's service and clear all tables?")) return;
-    const snap = boardStateRef.current; // stable reference, never stale
-    // Stamp the archive with the service's actual date, not whatever today
-    // happens to be — otherwise a service ended after midnight (or a stale
-    // day) lands under the wrong date.
-    const archiveDate = serviceDate || toLocalDateISO();
-    const dateStr = new Date(archiveDate + "T00:00:00").toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
-    const archiveLabel = `${dateStr} – ${activeServiceSession.toUpperCase()}`;
-    const activeTables = snap.tables.filter(t => t.active || t.arrivedAt || t.resName || t.resTime);
-    if (supabase) {
-      const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert({
-        date: archiveDate,
-        label: archiveLabel,
-        state: { ...snap, tables: activeTables, menuCourses, serviceSession: activeServiceSession },
-      });
-      if (error) {
-        window.alert("Archive failed: " + error.message);
-        return;
+    archivingRef.current = true;
+    try {
+      const snap = boardStateRef.current; // stable reference, never stale
+      // Stamp the archive with the service's actual date, not whatever today
+      // happens to be — otherwise a service ended after midnight (or a stale
+      // day) lands under the wrong date.
+      const archiveDate = serviceDate || toLocalDateISO();
+      const dateStr = new Date(archiveDate + "T00:00:00").toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
+      const archiveLabel = `${dateStr} – ${activeServiceSession.toUpperCase()}`;
+      const activeTables = snap.tables.filter(t => t.active || t.arrivedAt || t.resName || t.resTime);
+      if (supabase) {
+        // Don't double-file: if this service date+label already has a live
+        // archive (e.g. another device just archived, or a fast double-tap
+        // beat the in-flight ref), skip the insert and just clear locally.
+        const { data: existing } = await scopedFrom(TABLES.SERVICE_ARCHIVE)
+          .select("id").eq("date", archiveDate).eq("label", archiveLabel).is("deleted_at", null).limit(1);
+        if (!existing || existing.length === 0) {
+          const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert({
+            date: archiveDate,
+            label: archiveLabel,
+            state: { ...snap, tables: activeTables, menuCourses, serviceSession: activeServiceSession },
+          });
+          if (error) {
+            window.alert("Archive failed: " + error.message);
+            return;
+          }
+        }
       }
+      tableLocalFreshRef.current = new Map();
+      setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
+      setSel(null);
+      setArchiveOpen(false);
+      // Release the service date lock so the next service can set a new date
+      persistServiceDate(null);
+      // Return to mode selection after archiving
+      changeMode(null);
+    } finally {
+      archivingRef.current = false;
     }
-    tableLocalFreshRef.current = new Map();
-    setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
-    setSel(null);
-    setArchiveOpen(false);
-    // Release the service date lock so the next service can set a new date
-    persistServiceDate(null);
-    // Return to mode selection after archiving
-    changeMode(null);
   };
 
   const endService = async () => {
@@ -4085,7 +4103,7 @@ export default function App() {
         const persisted = data?.state?.date;
         const persistedChosenOn = data?.state?.chosenOn || null;
         if (!persisted) return;
-        if (isStaleServiceDate(persisted) && !isDeliberatelyPastDate(persisted, persistedChosenOn)) {
+        if (isStaleServiceDate(persisted) && !isActivePastReview(persisted, persistedChosenOn)) {
           await autoEndStaleService(persisted);
           return;
         }
@@ -4128,8 +4146,10 @@ export default function App() {
     if (!supabase || !serviceDate) return;
     if (mode !== "service" && mode !== "display") return;
     // A date deliberately chosen in the past (demo / reviewing an earlier day)
-    // is exempt — auto-end only applies to a service that rolled over.
-    if (isDeliberatelyPastDate(serviceDate, serviceDateChosenOn)) return;
+    // is exempt only while it is STILL that service day — once the clock rolls
+    // past chosenOn the review is abandoned and auto-end resumes, so an old
+    // selection can't keep filing live service under a stale date.
+    if (isActivePastReview(serviceDate, serviceDateChosenOn)) return;
     const tick = () => { if (isStaleServiceDate(serviceDate)) autoEndStaleService(serviceDate); };
     tick();
     const id = setInterval(tick, 60 * 1000);
@@ -4251,6 +4271,29 @@ export default function App() {
     eightySixCount: eightySixKeys.length,
     onSyncAll: syncWines,
   };
+
+  // Loud warning when the active service date is in the past — the silent
+  // version of this let a stray "view an old day" pick file a whole night of
+  // service under 10.06. Tapping it opens the date picker to set today.
+  const serviceDateIsPast = Boolean(serviceDate && isStaleServiceDate(serviceDate));
+  const pastDateWarningEl = serviceDateIsPast ? (
+    <div
+      onClick={() => { setPendingModeAfterDate(mode); setShowServiceDatePicker(true); }}
+      style={{
+        fontFamily: FONT, cursor: "pointer", background: tokens.red.bg,
+        borderBottom: `2px solid ${tokens.red.border}`, color: tokens.red.text,
+        padding: appIsMobile ? "9px 12px" : "9px 24px", display: "flex",
+        alignItems: "center", justifyContent: "center", gap: 8, textAlign: "center",
+        fontSize: appIsMobile ? "10px" : "11px", letterSpacing: "0.06em", fontWeight: 600,
+      }}
+    >
+      <span style={{ fontSize: "13px" }}>⚠</span>
+      <span>
+        SERVICE DATE IS IN THE PAST — {new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}.
+        {" "}NEW SERVICE WILL BE FILED UNDER THIS DATE. TAP TO SET TODAY.
+      </span>
+    </div>
+  ) : null;
 
   const eightySixPanelEl = eightySixOpen ? (
     <Suspense fallback={null}>
@@ -4414,6 +4457,7 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
       <Header modeLabel="KITCHEN" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
+      {pastDateWarningEl}
       {/* Slim desktop padding: on a 720px-tall kitchen panel every vertical px
           counts toward fitting two full rows of tickets. */}
       <div style={{ padding: appIsMobile ? "12px 10px" : "10px 16px" }}>
@@ -4549,6 +4593,7 @@ export default function App() {
         onEndService={endService}
         {...hProps}
       />
+      {pastDateWarningEl}
 
       {sel === null ? (
         <div style={{ padding: appIsMobile ? "0 0 32px" : "0 0 48px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
@@ -4574,10 +4619,11 @@ export default function App() {
                   onClick={() => { setPendingModeAfterDate(mode); setShowServiceDatePicker(true); }}
                   style={{
                     fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em",
-                    color: tokens.ink[1], cursor: "pointer", textTransform: "uppercase", fontWeight: 500,
+                    color: serviceDateIsPast ? tokens.red.text : tokens.ink[1],
+                    cursor: "pointer", textTransform: "uppercase", fontWeight: serviceDateIsPast ? 700 : 500,
                   }}
                 >
-                  {new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}
+                  {serviceDateIsPast ? "⚠ " : ""}{new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}
                 </span>
               )}
               <span style={{

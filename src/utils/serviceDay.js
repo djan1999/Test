@@ -29,3 +29,13 @@ export const isStaleServiceDate = (date, today = currentServiceDay()) =>
 export const SERVICE_DATE_CHOSEN_ON_KEY = "milka_service_date_chosen_on";
 export const isDeliberatelyPastDate = (date, chosenOn) =>
   Boolean(date && chosenOn) && String(date) < String(chosenOn);
+
+// A deliberately-past date is only an ACTIVE review while it is still the
+// service day it was chosen on. Once the clock rolls past chosenOn the
+// selection is abandoned: keeping it would silently file new services under a
+// stale past date (the 10.06 incident — a stray "view an old day" pick on the
+// 12th pinned every later service to the 10th). After the rollover it is
+// treated like any other stale date (released / auto-ended), so the picker
+// prompts for today instead.
+export const isActivePastReview = (date, chosenOn, today = currentServiceDay()) =>
+  isDeliberatelyPastDate(date, chosenOn) && String(chosenOn) >= String(today);
