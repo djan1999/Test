@@ -1,0 +1,24 @@
+# PowerSync sync rules — Milka pilot (DEMO WORKSPACE ONLY)
+#
+# Paste this into your PowerSync instance's "Sync Rules" editor.
+#
+# Scope: every data query is hard-filtered to the Demo workspace
+#   547ffccc-cc93-42bd-942e-23eb0dc3a99e
+# so the pilot can NEVER sync or touch the real Hotel Milka workspace
+# (a011c48c-f95b-4d9e-bd75-8a766ec5032b). Nothing else reaches a client.
+#
+# This is a single global bucket (no per-user parameters) on purpose — the
+# pilot only ever serves Demo data, so there's nothing user-specific to scope.
+# The production version would replace this with a parameter query that derives
+# the caller's workspace_id from their JWT / workspace_members.
+
+bucket_definitions:
+  demo_pilot:
+    data:
+      - select * from service_tables   where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
+      - select * from service_settings where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
+      - select * from reservations     where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
+      - select * from menu_courses      where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
+      - select * from wines             where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
+      - select * from beverages         where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
+      - select * from service_archive   where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
