@@ -36,6 +36,7 @@ import {
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { planBoardWrites } from "./utils/boardPersist.js";
 import { mergeTable } from "./utils/tableMerge.js";
+import { reconcileTables } from "./utils/reconcile.js";
 import { stampWineSources } from "./utils/wineEdit.js";
 import { historyGapsByMenuType } from "./utils/archiveInsights.js";
 import { EIGHTY_SIX_SETTINGS_ID, eightySixKeyFor, dishEightySixKey, normalizeEightySixKeys } from "./utils/eightySix.js";
@@ -3274,61 +3275,11 @@ export default function App() {
   // deleted — so editing/moving a reservation no longer leaves a ghost table.
   // Tables that service has already started on (seated / arrived / kitchen
   // activity) are never touched.
+  // Pure, tested reconcile (utils/reconcile) — never touches a table with live
+  // service content; only templates blank/reserved tables and ghost-clears
+  // departed reservations.
   const reconcileBoardWithReservations = (rows) => {
-    setTables(prev => {
-      // table id → the reservation row that owns it (first claim wins)
-      const byTable = new Map();
-      for (const row of rows || []) {
-        const d = row.data || {};
-        const group = (d.tableGroup?.length > 1 ? d.tableGroup : [row.table_id]).map(Number);
-        for (const tid of group) {
-          if (!byTable.has(tid)) byTable.set(tid, { d, group });
-        }
-      }
-      let changed = false;
-      const next = prev.map(t => {
-        // Protect ANY table holding staff-entered service data — not just
-        // active/arrived/kitchen-log ones. A table where waiters entered
-        // water/pairings/drinks before pressing SEAT was previously rebuilt
-        // (and an unowned one blanked) by this reconcile; run against a stale
-        // local view that's how a whole live service got wiped and pushed to
-        // every device. Reconcile is now strictly non-destructive to live work.
-        if (tableHasServiceContent(t)) return t; // live service is sacrosanct
-
-        const owner = byTable.get(t.id);
-        if (!owner) {
-          // No reservation maps here — drop any stale reservation ghost.
-          const blank = blankTable(t.id);
-          if (JSON.stringify(sanitizeTable(t)) === JSON.stringify(sanitizeTable(blank))) return t;
-          changed = true;
-          return blank;
-        }
-        const { d, group } = owner;
-        const rawSeats = makeSeats(d.guests || 2, t.seats);
-        const reconciledSeats = celebrationKeys.length > 0
-          ? rawSeats.map(s => ({
-              ...s,
-              extras: {
-                ...s.extras,
-                ...Object.fromEntries(
-                  celebrationKeys.map(k => [k, { ordered: !!d.birthday, pairing: s.extras?.[k]?.pairing || "—" }])
-                ),
-              },
-            }))
-          : rawSeats;
-        const updated = {
-          ...t,
-          ...reservationDescriptiveFields(d),
-          guests:     d.guests || 2,
-          tableGroup: group,
-          seats:      reconciledSeats,
-        };
-        if (JSON.stringify(sanitizeTable(updated)) === JSON.stringify(sanitizeTable(t))) return t;
-        changed = true;
-        return updated;
-      });
-      return changed ? next : prev;
-    });
+    setTables(prev => reconcileTables(prev, rows, celebrationKeys));
   };
 
   // Update a field in a reservation's data AND sync to service_tables so
