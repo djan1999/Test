@@ -2162,7 +2162,10 @@ export default function App() {
   }, []);
 
   const signOut = useCallback(async () => {
-    try { await supabase?.auth.signOut(); } catch {}
+    // scope:'local' signs out ONLY this device. The floor shares one account
+    // (restaurant@hotelmilka.si) across every tablet/laptop, and the default
+    // global sign-out revokes the session on ALL of them at once.
+    try { await supabase?.auth.signOut({ scope: "local" }); } catch {}
     try { localStorage.removeItem(WORKSPACE_KEY); } catch {}
     setWorkspaceId(null);
     window.location.reload();
@@ -2219,7 +2222,13 @@ export default function App() {
       }
     })();
     return () => { active = false; };
-  }, [session, applyWorkspace]);
+    // Keyed on the USER id, not the whole session object: Supabase hands us a
+    // fresh session object on every token refresh (~hourly, on focus, on
+    // reconnect), and re-resolving workspaces each time bounced a multi-
+    // workspace (master) account back to the restaurant picker. The workspace
+    // choice must survive token refreshes — only re-resolve on an actual login
+    // / user change.
+  }, [session?.user?.id, applyWorkspace]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [sel,          setSel]          = useState(null);
   // Which table (if any) is currently expanded into Quick Access on the board.
