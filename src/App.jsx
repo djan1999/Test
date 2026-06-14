@@ -35,6 +35,7 @@ import {
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { planBoardWrites } from "./utils/boardPersist.js";
+import { mergeTable } from "./utils/tableMerge.js";
 import { stampWineSources } from "./utils/wineEdit.js";
 import { historyGapsByMenuType } from "./utils/archiveInsights.js";
 import { EIGHTY_SIX_SETTINGS_ID, eightySixKeyFor, dishEightySixKey, normalizeEightySixKeys } from "./utils/eightySix.js";
@@ -2408,8 +2409,13 @@ export default function App() {
   const saveTimerRef       = useRef(null);
   const prevTablesJsonRef  = useRef((initialState.tables || initTables).map(t => JSON.stringify(sanitizeTable(t))));
   const tablesRef          = useRef(tables);
-  /** Client monotonic clock (ms) of last local mutation per table — stale remote rows are ignored to stop realtime/poll flicker. */
+  /** Per-table last-local-mutation clock. Superseded for conflict handling by
+   *  the 3-way merge (utils/tableMerge) + lastRemoteTsRef; kept as a harmless
+   *  signal and reset by the explicit clears. No longer read for merge gating. */
   const tableLocalFreshRef = useRef(new Map());
+  /** Highest remote updated_at (ms) we've adopted per table — lets us ignore
+   *  strictly-older out-of-order remote events so a merge can't regress a field. */
+  const lastRemoteTsRef = useRef(new Map());
   /** Table ids the user/system explicitly emptied this tick (clear / archive). The
    *  save guard (planBoardWrites) only allows a MASS blank to persist for these;
    *  an unexplained mass blank is refused so a wipe can't reach Supabase. */
@@ -2504,34 +2510,56 @@ export default function App() {
     .map(c => normalizeOptionalKey(c?.optional_flag))
     .filter(Boolean), [activeMenuCourses]);
 
+  // Apply a full set of remote rows by 3-way MERGING each into local state
+  // (ancestor = prevTablesJsonRef, the last synced baseline), so a poll/refresh
+  // never clobbers this device's unsaved edits — it folds remote changes in
+  // around them. Adopts each remote row as the new ancestor; any still-unsaved
+  // local change survives in the merged row and stays a diff the autosave pushes.
   const mergeRemoteTables = rows => {
     const arr = Array.isArray(rows) ? rows : [];
     const rawById = new Map(arr.map(row => [Number(row.table_id), row]));
-    const nextTables = initTables.map(base => {
+    const cur = tablesRef.current && tablesRef.current.length ? tablesRef.current : initTables;
+    const nextPrev = [...prevTablesJsonRef.current];
+    let changed = false;
+    const nextTables = initTables.map((base, idx) => {
+      const mine = cur.find(t => t.id === base.id) || base;
       const row = rawById.get(base.id);
-      if (!row) return base;
+      if (!row) return mine; // no remote row for this table — keep local
       const remoteTs = parseRemoteUpdatedAt(row.updated_at);
-      const localTs = tableLocalFreshRef.current.get(base.id) || 0;
-      if (remoteTs > 0 && localTs > 0 && remoteTs < localTs) {
-        const cur = tablesRef.current?.find(t => t.id === base.id);
-        return cur ? { ...cur } : base;
-      }
-      return sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) });
+      const lastAdopted = lastRemoteTsRef.current.get(base.id) || 0;
+      if (remoteTs > 0 && lastAdopted > 0 && remoteTs < lastAdopted) return mine; // out-of-order, ignore
+      const theirs = sanitizeTable({ id: base.id, ...(row.data || {}) });
+      const ancestorJson = prevTablesJsonRef.current[idx];
+      let ancestor; try { ancestor = ancestorJson ? JSON.parse(ancestorJson) : mine; } catch { ancestor = mine; }
+      const merged = mergeTable(ancestor, mine, theirs);
+      nextPrev[idx] = JSON.stringify(theirs); // adopt remote as the new ancestor
+      if (remoteTs > 0) lastRemoteTsRef.current.set(base.id, Math.max(remoteTs, lastAdopted));
+      if (JSON.stringify(sanitizeTable(mine)) !== JSON.stringify(merged)) changed = true;
+      return merged;
     });
-    // Snapshot prevTablesJsonRef BEFORE setTables so the save-useEffect sees no diff
-    // after a full poll and doesn't re-save the entire remote state.
-    prevTablesJsonRef.current = nextTables.map(t => JSON.stringify(sanitizeTable(t)));
-    setTables(() => nextTables);
+    prevTablesJsonRef.current = nextPrev;
+    if (changed) setTables(() => nextTables); // skip the re-render when nothing moved
   };
 
   const applyRemoteTableRow = row => {
     const tableId = Number(row?.table_id);
     if (!tableId) return;
     const remoteTs = parseRemoteUpdatedAt(row.updated_at);
-    const localTs = tableLocalFreshRef.current.get(tableId) || 0;
-    if (remoteTs > 0 && localTs > 0 && remoteTs < localTs) return;
-    const nextTable = sanitizeTable({ id: tableId, ...(row.data || {}) });
-    setTables(prev => prev.map(t => t.id === tableId ? nextTable : t));
+    const lastAdopted = lastRemoteTsRef.current.get(tableId) || 0;
+    if (remoteTs > 0 && lastAdopted > 0 && remoteTs < lastAdopted) return; // out-of-order, ignore
+    const idx = (tablesRef.current || initTables).findIndex(t => t.id === tableId);
+    if (idx === -1) return;
+    const mine = tablesRef.current[idx];
+    const theirs = sanitizeTable({ id: tableId, ...(row.data || {}) });
+    const ancestorJson = prevTablesJsonRef.current[idx];
+    let ancestor; try { ancestor = ancestorJson ? JSON.parse(ancestorJson) : mine; } catch { ancestor = mine; }
+    const merged = mergeTable(ancestor, mine, theirs);
+    // Adopt remote as this row's new ancestor (side effects out of the updater).
+    const nextPrev = [...prevTablesJsonRef.current];
+    nextPrev[idx] = JSON.stringify(theirs);
+    prevTablesJsonRef.current = nextPrev;
+    if (remoteTs > 0) lastRemoteTsRef.current.set(tableId, Math.max(remoteTs, lastAdopted));
+    setTables(prev => prev.map(t => t.id === tableId ? merged : t));
   };
 
   const selTable   = tables.find(t => t.id === sel);
@@ -4032,17 +4060,10 @@ export default function App() {
         return;
       }
 
-      if (Array.isArray(data) && data.length > 0) {
-        const nextJson = initTables.map(base => {
-          const row = data.find(item => Number(item.table_id) === base.id);
-          return JSON.stringify(row ? sanitizeTable({ id: base.id, ...(row.data || {}) }) : base);
-        });
-        const hasChanges = nextJson.some((j, i) => j !== prevTablesJsonRef.current[i]);
-        if (hasChanges) {
-          mergeRemoteTables(data);
-          prevTablesJsonRef.current = nextJson;
-        }
-      }
+      // mergeRemoteTables folds remote into local (3-way) and owns the ancestor
+      // bookkeeping + the "did anything change" check, so we always call it and
+      // let it no-op when nothing moved.
+      if (Array.isArray(data) && data.length > 0) mergeRemoteTables(data);
 
       setSyncStatus("live");
       setHydrated(true);
@@ -4088,13 +4109,9 @@ export default function App() {
         return;
       }
       if (!payload.new) return;
+      // applyRemoteTableRow 3-way merges the change into local state and adopts
+      // it as the new ancestor — no extra prevTablesJsonRef bookkeeping needed.
       applyRemoteTableRow(payload.new);
-      const remoteIdx = tablesRef.current.findIndex(t => t.id === Number(payload.new.table_id));
-      if (remoteIdx !== -1) {
-        const next = [...prevTablesJsonRef.current];
-        next[remoteIdx] = JSON.stringify(sanitizeTable({ id: Number(payload.new.table_id), ...(payload.new.data || {}) }));
-        prevTablesJsonRef.current = next;
-      }
       setSyncStatus("live");
     },
     // Drive the header sync chip from the live connection: SUBSCRIBED → live,
