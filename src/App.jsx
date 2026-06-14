@@ -41,7 +41,7 @@ import { EIGHTY_SIX_SETTINGS_ID, eightySixKeyFor, dishEightySixKey, normalizeEig
 import { useEightySix, setEightySixCache } from "./hooks/useEightySix.js";
 import {
   currentServiceDay, isStaleServiceDate, isActivePastReview, shouldClearBoardOnDateChange,
-  SERVICE_DATE_CHOSEN_ON_KEY,
+  resolveServiceEntry, SERVICE_DATE_CHOSEN_ON_KEY,
 } from "./utils/serviceDay.js";
 import {
   resolveAperitifFromQuickAccessOption,
@@ -3317,18 +3317,58 @@ export default function App() {
     }
   };
 
-  const changeMode = nextMode => {
-    // Service mode requires a locked service date
-    if (nextMode === "service" && !serviceDate) {
-      setPendingModeAfterDate(nextMode);
-      setShowServiceDatePicker(true);
-      return;
-    }
+  const enterMode = (nextMode) => {
     setMode(nextMode);
     try {
       if (nextMode) localStorage.setItem("milka_mode", nextMode);
       else          localStorage.removeItem("milka_mode");
     } catch {}
+  };
+
+  // Guards against double-taps while the join check is in flight.
+  const joiningServiceRef = useRef(false);
+
+  // Enter Service by JOINING a live service if one is running on the server, or
+  // prompting to START a new one only when there genuinely isn't. A second
+  // device / a re-login should just drop into the live board — never be asked
+  // to "start" (which used to clear the shared board). If the live date is
+  // already known locally we skip the round-trip and join instantly.
+  const enterServiceMode = useCallback(async () => {
+    if (serviceDate) { enterMode("service"); return; }
+    if (joiningServiceRef.current) return;
+    if (supabase && getWorkspaceId()) {
+      joiningServiceRef.current = true;
+      setSyncStatus("connecting");
+      try {
+        const { data } = await scopedFrom(TABLES.SERVICE_SETTINGS)
+          .select("state").eq("id", "service_date").maybeSingle();
+        const entry = resolveServiceEntry(data?.state);
+        if (entry.action === "join") {
+          // setServiceDate directly (NOT persistServiceDate) so joining never
+          // clears the board or rewrites the date — just adopt the live one.
+          setServiceDate(entry.date);
+          setServiceDateChosenOn(entry.chosenOn);
+          try {
+            localStorage.setItem("milka_service_date", entry.date);
+            if (entry.chosenOn) localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, entry.chosenOn);
+          } catch {}
+          enterMode("service");
+          joiningServiceRef.current = false;
+          return;
+        }
+      } catch { /* fall through to the start prompt */ }
+      joiningServiceRef.current = false;
+    }
+    // No live service to join → prompt to start a new one.
+    setPendingModeAfterDate("service");
+    setShowServiceDatePicker(true);
+  }, [serviceDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const changeMode = nextMode => {
+    // Service mode joins the live service (or prompts to start one); other
+    // modes just switch.
+    if (nextMode === "service" && !serviceDate) { enterServiceMode(); return; }
+    enterMode(nextMode);
     // Entering a live mode triggers the reconciliation effect below (it watches
     // `mode`), so the board is filled from reservations without an extra fetch.
   };
@@ -4005,18 +4045,22 @@ export default function App() {
 
     loadRemoteTables();
 
-    // Polling fallback — refreshes every 15 s in case realtime misses an event
-    const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 15000);
+    // Polling safety net (realtime is the primary path). Tighter than before so
+    // a dropped subscription self-corrects in seconds, not 15s.
+    const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 8000);
 
-    // Immediately re-fetch when the tab/screen becomes visible (e.g. kitchen display wakes up)
-    const onVisibilityChange = () => { if (!document.hidden && isMounted) loadRemoteTables(); };
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    // Re-fetch the instant the device can sync again — on wake or when the
+    // network returns — so a tablet that slept shows the live board immediately.
+    const refetchOnWake = () => { if (!document.hidden && isMounted) loadRemoteTables(); };
+    document.addEventListener("visibilitychange", refetchOnWake);
+    window.addEventListener("online", refetchOnWake);
 
     return () => {
       isMounted = false;
       clearTimeout(gateTimeout);
       clearInterval(pollInterval);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      document.removeEventListener("visibilitychange", refetchOnWake);
+      window.removeEventListener("online", refetchOnWake);
     };
   }, [workspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -4043,6 +4087,15 @@ export default function App() {
         prevTablesJsonRef.current = next;
       }
       setSyncStatus("live");
+    },
+    // Drive the header sync chip from the live connection: SUBSCRIBED → live,
+    // anything else (dropped, retrying) → connecting, so staff can SEE whether
+    // the board is syncing instead of guessing.
+    onStatus: (status) => {
+      if (status === "SUBSCRIBED") setSyncStatus(prev => prev === "sync-error" ? prev : "live");
+      else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        setSyncStatus(prev => prev === "local-only" ? prev : "connecting");
+      }
     },
     enabled: Boolean(supabase && workspaceId),
   });

@@ -5,7 +5,31 @@ import {
   isDeliberatelyPastDate,
   isActivePastReview,
   shouldClearBoardOnDateChange,
+  resolveServiceEntry,
 } from "../utils/serviceDay.js";
+
+describe("resolveServiceEntry (join a live service vs start a new one)", () => {
+  it("JOINs a current live service (second device / re-login just sees it)", () => {
+    const r = resolveServiceEntry({ date: "2026-06-13", chosenOn: "2026-06-13" }, "2026-06-13");
+    expect(r).toEqual({ action: "join", date: "2026-06-13", chosenOn: "2026-06-13" });
+  });
+
+  it("STARTs when there is no persisted service", () => {
+    expect(resolveServiceEntry({}, "2026-06-13").action).toBe("start");
+    expect(resolveServiceEntry(null, "2026-06-13").action).toBe("start");
+  });
+
+  it("STARTs (does not join) when the persisted service is stale/rolled over", () => {
+    const r = resolveServiceEntry({ date: "2026-06-10", chosenOn: "2026-06-10" }, "2026-06-13");
+    expect(r.action).toBe("start");
+  });
+
+  it("JOINs a deliberately-past service still being reviewed on its chosen day", () => {
+    const r = resolveServiceEntry({ date: "2026-06-10", chosenOn: "2026-06-13" }, "2026-06-13");
+    expect(r.action).toBe("join");
+    expect(r.date).toBe("2026-06-10");
+  });
+});
 
 describe("shouldClearBoardOnDateChange", () => {
   // Regression for "opened the board on the laptop and it wiped the tablet":

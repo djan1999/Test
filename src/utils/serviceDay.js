@@ -48,3 +48,18 @@ export const isActivePastReview = (date, chosenOn, today = currentServiceDay()) 
 // device — the "opened on the laptop and it wiped the tablet" bug.
 export const shouldClearBoardOnDateChange = (prevDate, nextDate) =>
   Boolean(nextDate && prevDate && String(nextDate) !== String(prevDate));
+
+// Decide what a device should do when entering Service, given the server's
+// persisted service_date state ({ date, chosenOn }). If a live (non-stale, or
+// still-active past-review) service exists → JOIN it silently, no prompt, no
+// wipe. Otherwise → START: prompt for a new service date. This is what makes a
+// second device / re-login "just see the live service" instead of being asked
+// to start one (and clearing the board in the process).
+export function resolveServiceEntry(state, today = currentServiceDay()) {
+  const date = state?.date || null;
+  const chosenOn = state?.chosenOn || null;
+  if (date && (!isStaleServiceDate(date, today) || isActivePastReview(date, chosenOn, today))) {
+    return { action: "join", date, chosenOn };
+  }
+  return { action: "start", date: null, chosenOn: null };
+}
