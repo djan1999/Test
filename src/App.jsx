@@ -34,6 +34,7 @@ import {
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
+import { planBoardWrites } from "./utils/boardPersist.js";
 import { stampWineSources } from "./utils/wineEdit.js";
 import { historyGapsByMenuType } from "./utils/archiveInsights.js";
 import { EIGHTY_SIX_SETTINGS_ID, eightySixKeyFor, dishEightySixKey, normalizeEightySixKeys } from "./utils/eightySix.js";
@@ -2400,6 +2401,16 @@ export default function App() {
   const tablesRef          = useRef(tables);
   /** Client monotonic clock (ms) of last local mutation per table — stale remote rows are ignored to stop realtime/poll flicker. */
   const tableLocalFreshRef = useRef(new Map());
+  /** Table ids the user/system explicitly emptied this tick (clear / archive). The
+   *  save guard (planBoardWrites) only allows a MASS blank to persist for these;
+   *  an unexplained mass blank is refused so a wipe can't reach Supabase. */
+  const intentionalEmptyRef = useRef(new Set());
+  const markIntentionalEmpty = useCallback((ids) => {
+    (Array.isArray(ids) ? ids : [ids]).forEach(id => { if (id != null) intentionalEmptyRef.current.add(Number(id)); });
+  }, []);
+  const markAllIntentionalEmpty = useCallback(() => {
+    for (let i = 1; i <= 10; i++) intentionalEmptyRef.current.add(i);
+  }, []);
 
   const parseRemoteUpdatedAt = (raw) => {
     if (raw == null || raw === "") return 0;
@@ -2891,6 +2902,7 @@ export default function App() {
         + `Use "Archive & Clear" instead if you want to keep the record.`
       : "Clear ALL tables?";
     if (typeof window !== "undefined" && !window.confirm(msg)) return;
+    markAllIntentionalEmpty(); // user-confirmed full clear — allowed past the wipe guard
     tableLocalFreshRef.current = new Map();
     setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     setSel(null);
@@ -2932,6 +2944,7 @@ export default function App() {
           }
         }
       }
+      markAllIntentionalEmpty(); // archived first — the clear is intentional
       tableLocalFreshRef.current = new Map();
       setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
       setSel(null);
@@ -2998,6 +3011,7 @@ export default function App() {
     }
 
     // Archived (or nothing to archive) — safe to clear local + remote for the new day.
+    markAllIntentionalEmpty(); // rollover auto-end archived first — clear is intentional
     tableLocalFreshRef.current = new Map();
     setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     setSel(null);
@@ -3039,6 +3053,9 @@ export default function App() {
     // Find old group to clear tables that are no longer part of it
     const oldGroup = tables.find(t => t.id === id)?.tableGroup || [id];
     [...new Set([...oldGroup, ...sortedGroup])].forEach(tid => bumpLocalTableFresh(tid));
+    // Tables dropped from the group are intentionally emptied — exempt them from
+    // the mass-blank guard so a regrouping that shrinks a party still persists.
+    markIntentionalEmpty(oldGroup.filter(tid => !sortedGroup.includes(tid)));
     setTables(p => p.map(t => {
       // Clear tables that were in the old group but aren't in the new group
       if (oldGroup.includes(t.id) && !sortedGroup.includes(t.id)) {
@@ -3086,6 +3103,7 @@ export default function App() {
     // new date's reservations. Skip when the date is being released to null,
     // since callers like archiveAndClearAll already cleared local state.
     if (date && date !== previousDate) {
+      markAllIntentionalEmpty(); // explicit date switch clears the board on purpose
       tableLocalFreshRef.current = new Map();
       setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     }
@@ -3349,12 +3367,37 @@ export default function App() {
     // (prevTablesJsonRef is reset by the merge) on the post-load run.
     if (!supabase || !remoteBoardLoaded) return;
 
+    const prevJson = prevTablesJsonRef.current;
     const nextJsonByIndex = tables.map(t => JSON.stringify(sanitizeTable(t)));
-    const changedTables = tables
-      .filter((table, idx) => nextJsonByIndex[idx] !== prevTablesJsonRef.current[idx])
-      .map(table => ({ table_id: table.id, data: sanitizeTable(table), updated_at: new Date().toISOString() }));
 
-    prevTablesJsonRef.current = nextJsonByIndex;
+    // Guard: never persist a MASS destructive blank (2+ live tables emptied at
+    // once) unless it was an explicit clear/archive. This is the structural
+    // backstop against the whole-service wipe — even an unknown trigger can't
+    // push the blank to Supabase, so it can't propagate to other devices.
+    const plan = planBoardWrites({
+      prevJson,
+      nextTables: tables,
+      nextJson: nextJsonByIndex,
+      intentionalEmpty: intentionalEmptyRef.current,
+    });
+    intentionalEmptyRef.current = new Set(); // marks are good for one tick only
+    prevTablesJsonRef.current = plan.baseline;
+
+    if (plan.blocked.length > 0) {
+      console.error(
+        "[board-guard] Refused to wipe live tables", plan.blocked,
+        "— restoring from last good state. An unexpected mass-blank was prevented from reaching the server.",
+      );
+      // Undo the bad blank locally too, so the screen never shows the wipe.
+      setTables(cur => cur.map((t, idx) => {
+        if (!plan.blocked.includes(t.id)) return t;
+        try { return sanitizeTable(JSON.parse(prevJson[idx])); } catch { return t; }
+      }));
+    }
+
+    const changedTables = plan.writes.map(table => ({
+      table_id: table.id, data: sanitizeTable(table), updated_at: new Date().toISOString(),
+    }));
     if (changedTables.length === 0) return;
 
     clearTimeout(saveTimerRef.current);
