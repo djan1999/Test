@@ -4,7 +4,30 @@ import {
   isStaleServiceDate,
   isDeliberatelyPastDate,
   isActivePastReview,
+  shouldClearBoardOnDateChange,
 } from "../utils/serviceDay.js";
+
+describe("shouldClearBoardOnDateChange", () => {
+  // Regression for "opened the board on the laptop and it wiped the tablet":
+  // a device joining the live service has no previous date, so the old
+  // `next !== prev` check wiped the shared board.
+  it("does NOT clear when a fresh device joins (no previous date)", () => {
+    expect(shouldClearBoardOnDateChange(null, "2026-06-13")).toBe(false);
+    expect(shouldClearBoardOnDateChange("", "2026-06-13")).toBe(false);
+  });
+
+  it("does NOT clear when re-picking the same day", () => {
+    expect(shouldClearBoardOnDateChange("2026-06-13", "2026-06-13")).toBe(false);
+  });
+
+  it("clears only on a genuine switch between two different known days", () => {
+    expect(shouldClearBoardOnDateChange("2026-06-12", "2026-06-13")).toBe(true);
+  });
+
+  it("does not clear when releasing the date (next null, e.g. after archive)", () => {
+    expect(shouldClearBoardOnDateChange("2026-06-13", null)).toBe(false);
+  });
+});
 
 describe("currentServiceDay", () => {
   it("stays on the previous calendar date until the rollover hour", () => {

@@ -39,3 +39,12 @@ export const isDeliberatelyPastDate = (date, chosenOn) =>
 // prompts for today instead.
 export const isActivePastReview = (date, chosenOn, today = currentServiceDay()) =>
   isDeliberatelyPastDate(date, chosenOn) && String(chosenOn) >= String(today);
+
+// Whether picking a service date should WIPE the local board. Only true when
+// switching between two genuinely different known days — NOT when a device is
+// joining the current service (prevDate null: a fresh login, a second device,
+// a re-login). The old check (`next && next !== prev`) cleared on join because
+// prev was null, blanking the shared live board and propagating it to every
+// device — the "opened on the laptop and it wiped the tablet" bug.
+export const shouldClearBoardOnDateChange = (prevDate, nextDate) =>
+  Boolean(nextDate && prevDate && String(nextDate) !== String(prevDate));

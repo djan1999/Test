@@ -40,7 +40,7 @@ import { historyGapsByMenuType } from "./utils/archiveInsights.js";
 import { EIGHTY_SIX_SETTINGS_ID, eightySixKeyFor, dishEightySixKey, normalizeEightySixKeys } from "./utils/eightySix.js";
 import { useEightySix, setEightySixCache } from "./hooks/useEightySix.js";
 import {
-  currentServiceDay, isStaleServiceDate, isActivePastReview,
+  currentServiceDay, isStaleServiceDate, isActivePastReview, shouldClearBoardOnDateChange,
   SERVICE_DATE_CHOSEN_ON_KEY,
 } from "./utils/serviceDay.js";
 import {
@@ -3098,12 +3098,15 @@ export default function App() {
         localStorage.removeItem(SERVICE_DATE_CHOSEN_ON_KEY);
       }
     } catch {}
-    // Switching to a *different* day means yesterday's table state is stale —
-    // clearing here lets the reconciliation effect rebuild the board from the
-    // new date's reservations. Skip when the date is being released to null,
-    // since callers like archiveAndClearAll already cleared local state.
-    if (date && date !== previousDate) {
-      markAllIntentionalEmpty(); // explicit date switch clears the board on purpose
+    // Wipe the board ONLY when switching between two real, different service
+    // days. A device JOINING the current service (previousDate null — fresh
+    // login, a second device, a re-login) must NOT clear: that blanks the
+    // shared live board and the autosave then propagates the wipe to every
+    // device. This was the "opened the board on the laptop and it wiped the
+    // tablet" bug. A joining device keeps whatever it loaded from Supabase; a
+    // genuine day-switch that still holds live work is caught by the mass-blank
+    // guard (so it can't be silently lost either).
+    if (shouldClearBoardOnDateChange(previousDate, date)) {
       tableLocalFreshRef.current = new Map();
       setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     }
