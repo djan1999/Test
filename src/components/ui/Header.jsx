@@ -28,8 +28,6 @@ export default function Header({
   onInventory,
   onSyncAll,
   onEndService,
-  onEightySix,
-  eightySixCount = 0,
 }) {
   const isMobile = useIsMobile(BP.sm);
   const [sSt, setSSt] = useState(null);
@@ -143,16 +141,6 @@ export default function Header({
 
           {showInventory && (
             <button onClick={onInventory} style={btn}>{isMobile ? "INV" : "INVENTORY"}</button>
-          )}
-
-          {onEightySix && (
-            <button onClick={onEightySix} style={{
-              ...btn,
-              border: `${rule.hairline} solid ${eightySixCount > 0 ? red.border : ink[3]}`,
-              background: eightySixCount > 0 ? red.bg : neutral[0],
-              color: eightySixCount > 0 ? red.text : ink[1],
-              fontWeight: eightySixCount > 0 ? 600 : 400,
-            }}>86{eightySixCount > 0 ? ` (${eightySixCount})` : ""}</button>
           )}
 
           {showArchive && (
