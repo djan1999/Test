@@ -2388,9 +2388,13 @@ export default function App() {
   const saveTimerRef       = useRef(null);
   const prevTablesJsonRef  = useRef((initialState.tables || initTables).map(t => JSON.stringify(sanitizeTable(t))));
   const tablesRef          = useRef(tables);
-  /** Per-table last-local-mutation clock. Superseded for conflict handling by
-   *  the 3-way merge (utils/tableMerge) + lastRemoteTsRef; kept as a harmless
-   *  signal and reset by the explicit clears. No longer read for merge gating. */
+  /** Per-table last-local-mutation clock (this device's Date.now() at the last
+   *  edit). Gates remote adoption: a remote payload OLDER than our most recent
+   *  local edit to the same table is a stale (usually self-) echo and must not be
+   *  adopted, or the 3-way merge snaps a freshly-typed field back to the older
+   *  value before the newest echo restores it — the input "flicker". Genuinely
+   *  concurrent edits from other devices carry newer timestamps, so they still
+   *  reach the merge. Reset by the explicit clears. */
   const tableLocalFreshRef = useRef(new Map());
   /** Highest remote updated_at (ms) we've adopted per table — lets us ignore
    *  strictly-older out-of-order remote events so a merge can't regress a field. */
@@ -2507,6 +2511,8 @@ export default function App() {
       const remoteTs = parseRemoteUpdatedAt(row.updated_at);
       const lastAdopted = lastRemoteTsRef.current.get(base.id) || 0;
       if (remoteTs > 0 && lastAdopted > 0 && remoteTs < lastAdopted) return mine; // out-of-order, ignore
+      const localTs = tableLocalFreshRef.current.get(base.id) || 0;
+      if (remoteTs > 0 && localTs > 0 && remoteTs < localTs) return mine; // stale vs our last local edit → keep mine (no flicker)
       const theirs = sanitizeTable({ id: base.id, ...(row.data || {}) });
       const ancestorJson = prevTablesJsonRef.current[idx];
       let ancestor; try { ancestor = ancestorJson ? JSON.parse(ancestorJson) : mine; } catch { ancestor = mine; }
@@ -2526,6 +2532,14 @@ export default function App() {
     const remoteTs = parseRemoteUpdatedAt(row.updated_at);
     const lastAdopted = lastRemoteTsRef.current.get(tableId) || 0;
     if (remoteTs > 0 && lastAdopted > 0 && remoteTs < lastAdopted) return; // out-of-order, ignore
+    // Ignore a remote row that predates this device's most recent local edit to
+    // the table: it's a stale self-echo (an earlier in-flight save round-tripping
+    // back). Adopting it lets the merge take `theirs` for a field the user just
+    // typed — because the baseline was eagerly advanced on the keystroke — so the
+    // value flickers back before the freshest echo restores it. The freshest echo
+    // (newer than our last edit) still lands and re-syncs the ancestor.
+    const localTs = tableLocalFreshRef.current.get(tableId) || 0;
+    if (remoteTs > 0 && localTs > 0 && remoteTs < localTs) return;
     const idx = (tablesRef.current || initTables).findIndex(t => t.id === tableId);
     if (idx === -1) return;
     const mine = tablesRef.current[idx];
