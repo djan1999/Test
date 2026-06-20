@@ -6,6 +6,7 @@ import {
   isActivePastReview,
   shouldClearBoardOnDateChange,
   resolveServiceEntry,
+  serviceDayForActivity,
 } from "../utils/serviceDay.js";
 
 describe("resolveServiceEntry (join a live service vs start a new one)", () => {
@@ -101,6 +102,40 @@ describe("isDeliberatelyPastDate", () => {
     // This is the exact condition the auto-end effect checks:
     const shouldAutoEnd = isStaleServiceDate(date, today) && !isDeliberatelyPastDate(date, chosenOn);
     expect(shouldAutoEnd).toBe(false);
+  });
+});
+
+describe("serviceDayForActivity (heal an orphaned, date-less service)", () => {
+  // Regression for the 19.06 incident: a service ran with service_date left
+  // blank, so the rollover auto-end (keyed entirely on service_date) never
+  // saw it and the night was never archived. Recovery re-derives the day from
+  // the board's own latest activity timestamp.
+  it("derives the service day from a daytime activity timestamp", () => {
+    expect(serviceDayForActivity(new Date("2026-06-19T19:51:00").getTime())).toBe("2026-06-19");
+  });
+
+  it("files a past-midnight service under the day it started (before rollover)", () => {
+    // 01:30 the night of the 19th still belongs to the 19.06 service.
+    expect(serviceDayForActivity(new Date("2026-06-20T01:30:00").getTime())).toBe("2026-06-19");
+    // …and only rolls to the new day once past the 06:00 cutoff.
+    expect(serviceDayForActivity(new Date("2026-06-20T06:00:00").getTime())).toBe("2026-06-20");
+  });
+
+  it("returns null when there is no activity to anchor on (empty board)", () => {
+    expect(serviceDayForActivity(NaN)).toBe(null);
+    expect(serviceDayForActivity(-Infinity)).toBe(null);
+    expect(serviceDayForActivity(undefined)).toBe(null);
+  });
+
+  it("a stale orphan re-attached this way is NOT exempt from auto-end", () => {
+    // Heal sets chosenOn === the derived day, so a service that already rolled
+    // over is auto-endable on the same pass (date === chosenOn ⇒ not a
+    // deliberate past-date review).
+    const day = serviceDayForActivity(new Date("2026-06-19T19:51:00").getTime());
+    const today = "2026-06-20";
+    const shouldAutoEnd =
+      isStaleServiceDate(day, today) && !isActivePastReview(day, day, today);
+    expect(shouldAutoEnd).toBe(true);
   });
 });
 

@@ -41,7 +41,7 @@ import { stampWineSources } from "./utils/wineEdit.js";
 import { historyGapsByMenuType } from "./utils/archiveInsights.js";
 import {
   currentServiceDay, isStaleServiceDate, isActivePastReview, shouldClearBoardOnDateChange,
-  resolveServiceEntry, SERVICE_DATE_CHOSEN_ON_KEY,
+  resolveServiceEntry, serviceDayForActivity, SERVICE_DATE_CHOSEN_ON_KEY,
 } from "./utils/serviceDay.js";
 import {
   resolveAperitifFromQuickAccessOption,
@@ -3058,6 +3058,52 @@ export default function App() {
     changeMode(null);
   };
 
+  // A board can carry live tables with NO persisted service_date — e.g. the
+  // night ran after the date was left blank (the 19.06 incident: the service
+  // never auto-archived because the rollover auto-end is keyed entirely on
+  // serviceDate, so an orphaned board is invisible to it). Re-attach the
+  // service day the board's own activity belongs to, with chosenOn === that day
+  // so it counts as a service that ran on its own day — NOT a deliberate
+  // past-date review, which is exempt from auto-end. Once the date is back the
+  // existing rollover auto-end can file it: a still-current orphan is tracked
+  // and ends at the cutoff; a past orphan is already stale and the caller ends
+  // it on this same pass. Returns the day it attached, or null if there was
+  // nothing live to heal (or the read failed — board left untouched).
+  const healOrphanedService = async () => {
+    if (!supabase || serviceDate) return null;
+    let day = null;
+    try {
+      const { data: rows, error } = await scopedFrom(TABLES.SERVICE_TABLES)
+        .select("table_id, data, updated_at");
+      if (error) throw error;
+      const active = (rows || []).filter(r => {
+        const t = sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) });
+        return t.active || t.arrivedAt || t.resName || t.resTime;
+      });
+      if (active.length === 0) return null;
+      const latestMs = active
+        .map(r => new Date(r.updated_at).getTime())
+        .filter(Number.isFinite)
+        .reduce((a, b) => Math.max(a, b), -Infinity);
+      day = serviceDayForActivity(latestMs);
+      if (!day) return null;
+      setServiceDate(day);
+      setServiceDateChosenOn(day);
+      try {
+        localStorage.setItem("milka_service_date", day);
+        localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, day);
+      } catch {}
+      await scopedFrom(TABLES.SERVICE_SETTINGS).upsert(
+        { id: "service_date", state: { date: day, chosenOn: day }, updated_at: new Date().toISOString() },
+        { onConflict: "id" }
+      );
+    } catch (e) {
+      console.warn("Orphaned-service heal skipped; leaving board intact:", e);
+      return null;
+    }
+    return day;
+  };
+
   const swapSeats = (tid, aId, bId) => {
     bumpLocalTableFresh(tid);
     setTables(p => p.map(t => {
@@ -4161,7 +4207,15 @@ export default function App() {
         if (!mounted) return;
         const persisted = data?.state?.date;
         const persistedChosenOn = data?.state?.chosenOn || null;
-        if (!persisted) return;
+        if (!persisted) {
+          // No service_date on record. If the board still holds a live service
+          // (orphaned — see healOrphanedService), re-attach its day so it stops
+          // being invisible to the auto-end; if that day has already rolled
+          // over, end it now so the night is finally filed.
+          const healed = await healOrphanedService();
+          if (healed && isStaleServiceDate(healed)) await autoEndStaleService(healed);
+          return;
+        }
         if (isStaleServiceDate(persisted) && !isActivePastReview(persisted, persistedChosenOn)) {
           await autoEndStaleService(persisted);
           return;

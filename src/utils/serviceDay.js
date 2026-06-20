@@ -49,6 +49,19 @@ export const isActivePastReview = (date, chosenOn, today = currentServiceDay()) 
 export const shouldClearBoardOnDateChange = (prevDate, nextDate) =>
   Boolean(nextDate && prevDate && String(nextDate) !== String(prevDate));
 
+// ── Orphaned-service recovery ─────────────────────────────────────────────
+// A board can end up with live tables but NO persisted service_date. The whole
+// rollover auto-end is keyed on service_date, so such a board is invisible to
+// it and the night never auto-archives (the 19.06 incident: a service ran with
+// the date left blank, and June 19 was still sitting on the board, unfiled, the
+// next day). Recovery re-attaches the service day the board's own activity
+// belongs to, derived from the LATEST table-activity timestamp — so a service
+// that crossed midnight is filed under the day it started, exactly like a
+// service_date chosen at the table. Returns null when there is no activity to
+// anchor on (an empty board is not an orphaned service).
+export const serviceDayForActivity = (latestActivityMs) =>
+  Number.isFinite(latestActivityMs) ? currentServiceDay(new Date(latestActivityMs)) : null;
+
 // Decide what a device should do when entering Service, given the server's
 // persisted service_date state ({ date, chosenOn }). If a live (non-stale, or
 // still-active past-review) service exists → JOIN it silently, no prompt, no
