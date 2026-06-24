@@ -12,7 +12,23 @@ import {
 describe("resolveServiceEntry (join a live service vs start a new one)", () => {
   it("JOINs a current live service (second device / re-login just sees it)", () => {
     const r = resolveServiceEntry({ date: "2026-06-13", chosenOn: "2026-06-13" }, "2026-06-13");
-    expect(r).toEqual({ action: "join", date: "2026-06-13", chosenOn: "2026-06-13" });
+    expect(r).toEqual({ action: "join", date: "2026-06-13", chosenOn: "2026-06-13", session: null, startedAt: null });
+  });
+
+  it("passes the shared session + instance id through on a join", () => {
+    const r = resolveServiceEntry(
+      { date: "2026-06-13", chosenOn: "2026-06-13", session: "lunch", startedAt: "2026-06-13T11:00:00.000Z" },
+      "2026-06-13",
+    );
+    expect(r).toEqual({
+      action: "join", date: "2026-06-13", chosenOn: "2026-06-13",
+      session: "lunch", startedAt: "2026-06-13T11:00:00.000Z",
+    });
+  });
+
+  it("ignores a bogus session value (keeps null so the device falls back)", () => {
+    const r = resolveServiceEntry({ date: "2026-06-13", chosenOn: "2026-06-13", session: "brunch" }, "2026-06-13");
+    expect(r.session).toBeNull();
   });
 
   it("STARTs when there is no persisted service", () => {

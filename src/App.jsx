@@ -37,6 +37,7 @@ import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { planBoardWrites } from "./utils/boardPersist.js";
 import { mergeTable } from "./utils/tableMerge.js";
 import { reconcileTables } from "./utils/reconcile.js";
+import { resolveArchiveDedup, isSameServiceLabel } from "./utils/archiveDedup.js";
 import { stampWineSources } from "./utils/wineEdit.js";
 import { historyGapsByMenuType } from "./utils/archiveInsights.js";
 import {
@@ -2379,6 +2380,25 @@ export default function App() {
   const [activeServiceSession, setActiveServiceSession] = useState(() => {
     try { return localStorage.getItem("milka_service_session") || "dinner"; } catch { return "dinner"; }
   });
+  // Live refs for the service identity so the persist helpers (and fire-and-forget
+  // DB writes) always read the freshest value, not a stale render closure. The
+  // session and a per-service `startedAt` instance id are SHARED across devices
+  // via the service_date settings row — previously the session was device-local
+  // (localStorage only), so a joining device kept its own default and filtered
+  // the board to the wrong session (reservations from the live session vanished),
+  // and the archive could be filed under the wrong session label.
+  const serviceDateRef = useRef(serviceDate);
+  serviceDateRef.current = serviceDate;
+  const serviceDateChosenOnRef = useRef(serviceDateChosenOn);
+  serviceDateChosenOnRef.current = serviceDateChosenOn;
+  const activeServiceSessionRef = useRef(activeServiceSession);
+  activeServiceSessionRef.current = activeServiceSession;
+  // Unique id for THIS service instance (set the moment a service is started).
+  // Lets the archive tell a genuine second service on the same day+session apart
+  // from a double-file race, instead of silently dropping the second one.
+  const serviceStartedAtRef = useRef((() => {
+    try { return localStorage.getItem("milka_service_started_at") || null; } catch { return null; }
+  })());
   // Hydration: render immediately from localStorage, sync Supabase in background
   const [hydrated,     setHydrated]     = useState(() => {
     if (!hasSupabaseConfig) return true;
@@ -2939,6 +2959,14 @@ export default function App() {
     setArchiveOpen(false);
   };
 
+  // Load every non-deleted archive for a service day that shares the base label
+  // (or one of its " · n" variants) — the input set for the dedup decision.
+  const fetchSameDayArchives = async (archiveDate, archiveLabel) => {
+    const { data } = await scopedFrom(TABLES.SERVICE_ARCHIVE)
+      .select("id, label, state, created_at").eq("date", archiveDate).is("deleted_at", null);
+    return (data || []).filter(e => isSameServiceLabel(e.label, archiveLabel));
+  };
+
   // Guards a manual archive in flight so a double-tap (or a second device a few
   // seconds later) can't file the same service twice — the cause of the two
   // identical 23:53 entries in the 10.06 incident.
@@ -2957,16 +2985,22 @@ export default function App() {
       const archiveLabel = `${dateStr} – ${activeServiceSession.toUpperCase()}`;
       const activeTables = snap.tables.filter(t => t.active || t.arrivedAt || t.resName || t.resTime);
       if (supabase) {
-        // Don't double-file: if this service date+label already has a live
-        // archive (e.g. another device just archived, or a fast double-tap
-        // beat the in-flight ref), skip the insert and just clear locally.
-        const { data: existing } = await scopedFrom(TABLES.SERVICE_ARCHIVE)
-          .select("id").eq("date", archiveDate).eq("label", archiveLabel).is("deleted_at", null).limit(1);
-        if (!existing || existing.length === 0) {
+        const startedAt = serviceStartedAtRef.current;
+        const dedup = resolveArchiveDedup({
+          existing: await fetchSameDayArchives(archiveDate, archiveLabel),
+          startedAt, archiveLabel,
+        });
+        // dedup.isDuplicate → the SAME service instance is already filed (a
+        // double-tap or a second device that beat the in-flight ref). A genuine
+        // second service on the same day+session has a different startedAt, so
+        // it is NOT treated as a duplicate — it gets a distinct " · n" label
+        // instead of being silently dropped (the "second service missing from
+        // archive" bug).
+        if (!dedup.isDuplicate) {
           const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert({
             date: archiveDate,
-            label: archiveLabel,
-            state: { ...snap, tables: activeTables, menuCourses, serviceSession: activeServiceSession },
+            label: dedup.label,
+            state: { ...snap, tables: activeTables, menuCourses, serviceSession: activeServiceSession, startedAt },
           });
           if (error) {
             window.alert("Archive failed: " + error.message);
@@ -3018,16 +3052,20 @@ export default function App() {
       if (activeTables.length > 0) {
         const dateStr = new Date(staleDate + "T00:00:00").toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
         const label = `${dateStr} – ${(activeServiceSession || "dinner").toUpperCase()}`;
-        // Don't double-file if another device already archived this service.
-        const { data: existing } = await scopedFrom(TABLES.SERVICE_ARCHIVE)
-          .select("id").eq("date", staleDate).eq("label", label).is("deleted_at", null).limit(1);
-        if (!existing || existing.length === 0) {
+        // Don't double-file the SAME service instance (another device already
+        // archived it), but keep a genuine second service of the same day+session.
+        const startedAt = serviceStartedAtRef.current;
+        const dedup = resolveArchiveDedup({
+          existing: await fetchSameDayArchives(staleDate, label),
+          startedAt, archiveLabel: label,
+        });
+        if (!dedup.isDuplicate) {
           let courses = menuCourses;
           if (!courses || courses.length === 0) { try { courses = await fetchMenuCourses(); } catch { courses = []; } }
           const { error: insErr } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert({
             date: staleDate,
-            label,
-            state: { tables: activeTables, cocktails, spirits, beers, menuCourses: courses || [], serviceSession: activeServiceSession || "dinner", autoEnded: true },
+            label: dedup.label,
+            state: { tables: activeTables, cocktails, spirits, beers, menuCourses: courses || [], serviceSession: activeServiceSession || "dinner", startedAt, autoEnded: true },
           });
           if (insErr) throw insErr;
         }
@@ -3047,9 +3085,11 @@ export default function App() {
     setSel(null);
     setServiceDate(null);
     setServiceDateChosenOn(null);
+    serviceStartedAtRef.current = null;
     try {
       localStorage.removeItem("milka_service_date");
       localStorage.removeItem(SERVICE_DATE_CHOSEN_ON_KEY);
+      localStorage.removeItem("milka_service_started_at");
     } catch {}
     await scopedFrom(TABLES.SERVICE_SETTINGS)
       .upsert({ id: "service_date", state: {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
@@ -3163,15 +3203,23 @@ export default function App() {
     // itself be auto-ended once it later rolls past the cutoff.
     if (date) autoEndingRef.current = false;
     const chosenOn = date ? currentServiceDay() : null;
+    // Fresh instance id per (re)start so two services on the same day+session are
+    // distinguishable in the archive.
+    const startedAt = date ? new Date().toISOString() : null;
     setServiceDate(date);
     setServiceDateChosenOn(chosenOn);
+    serviceDateRef.current = date;
+    serviceDateChosenOnRef.current = chosenOn;
+    serviceStartedAtRef.current = startedAt;
     try {
       if (date) {
         localStorage.setItem("milka_service_date", date);
         localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, chosenOn);
+        if (startedAt) localStorage.setItem("milka_service_started_at", startedAt);
       } else {
         localStorage.removeItem("milka_service_date");
         localStorage.removeItem(SERVICE_DATE_CHOSEN_ON_KEY);
+        localStorage.removeItem("milka_service_started_at");
       }
     } catch {}
     // Wipe the board ONLY when switching between two real, different service
@@ -3188,12 +3236,24 @@ export default function App() {
     }
     if (!supabase) return;
     await scopedFrom(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "service_date", state: date ? { date, chosenOn } : {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
+      .upsert({ id: "service_date", state: date ? { date, chosenOn, session: activeServiceSessionRef.current, startedAt } : {}, updated_at: new Date().toISOString() }, { onConflict: "id" });
   };
 
   const persistServiceSession = (session) => {
     setActiveServiceSession(session);
+    activeServiceSessionRef.current = session;
     try { localStorage.setItem("milka_service_session", session); } catch {}
+    // Share the session with every device on this workspace so their board
+    // reconcile filters and archive labels match the live service. (It used to
+    // live only in localStorage, so a second device kept its own default and
+    // hid the running session's reservations.) Only attach it once a service
+    // date is live — a session toggle with no service yet has nothing to share.
+    if (!supabase) return;
+    const date = serviceDateRef.current;
+    if (!date) return;
+    scopedFrom(TABLES.SERVICE_SETTINGS)
+      .upsert({ id: "service_date", state: { date, chosenOn: serviceDateChosenOnRef.current, session, startedAt: serviceStartedAtRef.current }, updated_at: new Date().toISOString() }, { onConflict: "id" })
+      .then(() => {}, (e) => console.warn("Service session share failed:", e));
   };
 
   // ── Reservations CRUD ─────────────────────────────────────────────────────
@@ -3374,9 +3434,18 @@ export default function App() {
           // clears the board or rewrites the date — just adopt the live one.
           setServiceDate(entry.date);
           setServiceDateChosenOn(entry.chosenOn);
+          serviceStartedAtRef.current = entry.startedAt || serviceStartedAtRef.current;
+          // Adopt the LIVE session so this device filters the board to the same
+          // session the service is actually running (not its own local default).
+          if (entry.session === "lunch" || entry.session === "dinner") {
+            setActiveServiceSession(entry.session);
+            activeServiceSessionRef.current = entry.session;
+          }
           try {
             localStorage.setItem("milka_service_date", entry.date);
             if (entry.chosenOn) localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, entry.chosenOn);
+            if (entry.startedAt) localStorage.setItem("milka_service_started_at", entry.startedAt);
+            if (entry.session === "lunch" || entry.session === "dinner") localStorage.setItem("milka_service_session", entry.session);
           } catch {}
           enterMode("service");
           joiningServiceRef.current = false;
@@ -4207,6 +4276,8 @@ export default function App() {
         if (!mounted) return;
         const persisted = data?.state?.date;
         const persistedChosenOn = data?.state?.chosenOn || null;
+        const persistedSession = data?.state?.session;
+        const persistedStartedAt = data?.state?.startedAt || null;
         if (!persisted) {
           // No service_date on record. If the board still holds a live service
           // (orphaned — see healOrphanedService), re-attach its day so it stops
@@ -4222,9 +4293,18 @@ export default function App() {
         }
         setServiceDate(d => d || persisted); // local state wins if already set
         setServiceDateChosenOn(c => c || persistedChosenOn);
+        serviceStartedAtRef.current = persistedStartedAt || serviceStartedAtRef.current;
+        // Adopt the live service's shared session so this device's board reconcile
+        // shows the right session's reservations (not its own local default).
+        if (persistedSession === "lunch" || persistedSession === "dinner") {
+          setActiveServiceSession(persistedSession);
+          activeServiceSessionRef.current = persistedSession;
+        }
         try {
           localStorage.setItem("milka_service_date", persisted);
           if (persistedChosenOn) localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, persistedChosenOn);
+          if (persistedStartedAt) localStorage.setItem("milka_service_started_at", persistedStartedAt);
+          if (persistedSession === "lunch" || persistedSession === "dinner") localStorage.setItem("milka_service_session", persistedSession);
         } catch {}
       })
       .catch(() => {}); // keep whatever local service date we already have
@@ -4337,6 +4417,21 @@ export default function App() {
       if (id === "kitchen_ticket_order") {
         const ids = payload.new?.state?.ids;
         if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
+      } else if (id === "service_date") {
+        // Another device changed the live session (or started/restarted the
+        // service). Adopt the shared session + instance id so this device's
+        // board filter and archive dedup stay in step. The service DATE is left
+        // to the dedicated load/join paths (changing it can wipe the board).
+        const st = payload.new?.state || {};
+        if (st.session === "lunch" || st.session === "dinner") {
+          setActiveServiceSession(st.session);
+          activeServiceSessionRef.current = st.session;
+          try { localStorage.setItem("milka_service_session", st.session); } catch {}
+        }
+        if (st.startedAt) {
+          serviceStartedAtRef.current = st.startedAt;
+          try { localStorage.setItem("milka_service_started_at", st.startedAt); } catch {}
+        }
       }
     },
     enabled: Boolean(supabase && workspaceId),
@@ -4893,36 +4988,63 @@ export default function App() {
           onApplySeatToAll={(tableId, sourceSeatId) => applySeatTemplateToAll(tableId, sourceSeatId)}
           onClearBeverages={tableId => clearSeatBeverages(tableId)}
           onClearTable={tableId => clear(tableId)}
-          onMoveTable={(fromId, toId, mode = "auto") => {
-            const dst = tablesRef.current?.find(t => t.id === Number(toId));
+          onMoveTable={(fromId, toId, mvMode = "auto") => {
+            const from = Number(fromId);
+            const to = Number(toId);
+            const dst = tablesRef.current?.find(t => t.id === to);
             const dstStarted = dst && (dst.active || dst.arrivedAt
               || (dst.kitchenLog && Object.keys(dst.kitchenLog).length > 0)
               || dst.kitchenArchived);
             const dstHasReservation = !!(dst?.resName || dst?.resTime);
             const dstOccupied = !!(dstStarted || dstHasReservation);
-            const useSwap = mode === "swap" || (mode === "auto" && dstOccupied);
-            const result = useSwap ? swapTableState(fromId, toId) : moveTableState(fromId, toId);
+            const useSwap = mvMode === "swap" || (mvMode === "auto" && dstOccupied);
+            const result = useSwap ? swapTableState(from, to) : moveTableState(from, to);
             if (!result.ok) return result;
-            setSel(toId);
-            const srcResv = reservations.find(r =>
-              r.date === serviceDate && Number(r.table_id) === Number(fromId));
-            const dstResv = useSwap
-              ? reservations.find(r =>
-                  r.date === serviceDate && Number(r.table_id) === Number(toId))
-              : null;
-            // State already moved/swapped above — skip the internal auto-move
-            // so it doesn't re-run against a stale tablesRef snapshot.
-            if (srcResv) {
-              upsertReservation({
-                id: srcResv.id, date: srcResv.date,
-                table_id: Number(toId), data: srcResv.data, _skipAutoMove: true,
-              });
-            }
-            if (dstResv) {
-              upsertReservation({
-                id: dstResv.id, date: dstResv.date,
-                table_id: Number(fromId), data: dstResv.data, _skipAutoMove: true,
-              });
+            setSel(to);
+
+            // Repoint the owning reservation(s) so they follow the live state we
+            // just moved/swapped. CRITICAL: do it in ONE atomic setReservations
+            // (and persist directly), not two separate async upserts. The old
+            // path moved one reservation, awaited the DB, then moved the other —
+            // and in the gap the board↔reservations reconcile saw a table whose
+            // reservation had already left but whose replacement hadn't arrived,
+            // so it blanked the table. A single-table blank isn't caught by the
+            // mass-wipe guard, so the wipe persisted: the "switching tables
+            // deletes one of them" bug.
+            const ownerOf = (tid) => reservations.find(r =>
+              r.date === serviceDate
+              && resolveReservationSession(r.data) === activeServiceSession
+              && (Number(r.table_id) === tid
+                  || (Array.isArray(r.data?.tableGroup) && r.data.tableGroup.map(Number).includes(tid))));
+            // Swap from↔to inside a reservation's tableGroup so a grouped
+            // reservation's member list never dangles at the old id.
+            const remapGroup = (data) => {
+              const g = Array.isArray(data?.tableGroup) ? data.tableGroup.map(Number) : [];
+              if (!g.length) return data;
+              return { ...data, tableGroup: g.map(id => id === from ? to : id === to ? from : id) };
+            };
+            const srcResv = ownerOf(from);
+            const dstResv = useSwap ? ownerOf(to) : null;
+            // The destination's owner only moves on a SWAP; a plain move targets
+            // a free table. Guard against the same reservation matching both.
+            const repoint = (r) => {
+              const tid = Number(r.table_id);
+              const data = remapGroup(r.data);
+              const nextTableId = tid === from ? to : tid === to ? from : tid;
+              return { table_id: nextTableId, data };
+            };
+            if (srcResv || (dstResv && dstResv.id !== srcResv?.id)) {
+              setReservations(prev => prev.map(r => {
+                if (srcResv && r.id === srcResv.id) return { ...r, ...repoint(r) };
+                if (dstResv && dstResv.id !== srcResv?.id && r.id === dstResv.id) return { ...r, ...repoint(r) };
+                return r;
+              }));
+              if (supabase) {
+                const writes = [];
+                if (srcResv) writes.push(scopedFrom(TABLES.RESERVATIONS).update(repoint(srcResv)).eq("id", srcResv.id));
+                if (dstResv && dstResv.id !== srcResv?.id) writes.push(scopedFrom(TABLES.RESERVATIONS).update(repoint(dstResv)).eq("id", dstResv.id));
+                Promise.all(writes).catch(e => console.warn("Reservation table move persist failed:", e));
+              }
             }
             return { ...result, swapped: useSwap };
           }}

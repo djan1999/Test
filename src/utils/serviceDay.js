@@ -71,8 +71,10 @@ export const serviceDayForActivity = (latestActivityMs) =>
 export function resolveServiceEntry(state, today = currentServiceDay()) {
   const date = state?.date || null;
   const chosenOn = state?.chosenOn || null;
+  const session = (state?.session === "lunch" || state?.session === "dinner") ? state.session : null;
+  const startedAt = state?.startedAt || null;
   if (date && (!isStaleServiceDate(date, today) || isActivePastReview(date, chosenOn, today))) {
-    return { action: "join", date, chosenOn };
+    return { action: "join", date, chosenOn, session, startedAt };
   }
-  return { action: "start", date: null, chosenOn: null };
+  return { action: "start", date: null, chosenOn: null, session: null, startedAt: null };
 }
