@@ -395,9 +395,12 @@ create policy "reservations_member_all" on public.reservations
   using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
   with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
 
+-- Legacy open delete policy (`for delete to anon, authenticated using (true)`)
+-- is intentionally NOT recreated: OR-combined with reservations_member_all it
+-- let any authenticated user delete ANY workspace's reservations. Drop it on
+-- upgrade so deletes are governed solely by reservations_member_all above
+-- (workspace members + the platform-admin account).
 drop policy if exists "reservations_delete" on public.reservations;
-create policy "reservations_delete" on public.reservations
-  for delete to anon, authenticated using (true);
 
 -- ── Realtime ─────────────────────────────────────────────────
 do $$
