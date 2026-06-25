@@ -226,6 +226,17 @@ export const mergeTableGroups = (tables = []) => {
   return out;
 };
 
+// Remap the ids inside a table's `tableGroup` when its live state moves or
+// swaps between table ids (swap fromId↔toId). Without this a moved table keeps
+// a tableGroup pointing at its OLD id, so the board's primary-table filter
+// (`id === min(tableGroup)`) drops it and the table vanishes from the board
+// mid-service — the "moved table disappears" bug.
+export const remapTableGroup = (group, fromId, toId) => {
+  if (!Array.isArray(group) || group.length === 0) return [];
+  const a = Number(fromId), b = Number(toId);
+  return group.map((id) => (Number(id) === a ? b : Number(id) === b ? a : Number(id)));
+};
+
 // Render a "T02-03" label from a table that may belong to a group.
 export const tableGroupLabel = (t) => {
   const g = Array.isArray(t?.tableGroup) && t.tableGroup.length > 1

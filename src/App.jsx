@@ -32,6 +32,7 @@ import {
 import {
   makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM,
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
+  remapTableGroup,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { planBoardWrites } from "./utils/boardPersist.js";
@@ -2724,7 +2725,7 @@ export default function App() {
     bumpLocalTableFresh(toId);
     setTables(prev => prev.map(t => {
       if (t.id === Number(fromId)) return blankTable(t.id);
-      if (t.id === Number(toId))   return { ...src, id: t.id };
+      if (t.id === Number(toId))   return { ...src, id: t.id, tableGroup: remapTableGroup(src.tableGroup, fromId, toId) };
       return t;
     }));
     return { ok: true };
@@ -2742,8 +2743,8 @@ export default function App() {
     bumpLocalTableFresh(aId);
     bumpLocalTableFresh(bId);
     setTables(prev => prev.map(t => {
-      if (t.id === Number(aId)) return { ...b, id: t.id };
-      if (t.id === Number(bId)) return { ...a, id: t.id };
+      if (t.id === Number(aId)) return { ...b, id: t.id, tableGroup: remapTableGroup(b.tableGroup, aId, bId) };
+      if (t.id === Number(bId)) return { ...a, id: t.id, tableGroup: remapTableGroup(a.tableGroup, aId, bId) };
       return t;
     }));
     return { ok: true };

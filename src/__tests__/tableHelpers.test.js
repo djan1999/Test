@@ -2,7 +2,37 @@ import { describe, it, expect } from "vitest";
 import {
   makeSeats, blankTable, sanitizeTable, fmt, parseHHMM, mergeTableGroups, tableGroupLabel,
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
+  remapTableGroup,
 } from "../utils/tableHelpers.js";
+
+describe("remapTableGroup (moved/swapped tables stay visible on the board)", () => {
+  // The board renders only the "primary" of a group: id === min(tableGroup).
+  const isPrimary = (t) => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
+
+  it("retargets a single-table group so the moved table is still its own primary", () => {
+    // Before: a reconciled single table T3 carries tableGroup [3].
+    // Move its live state to T5. Without remap the moved table would carry [3],
+    // and isPrimary({id:5, tableGroup:[3]}) === false → it vanishes.
+    const moved = { id: 5, active: true, tableGroup: remapTableGroup([3], 3, 5) };
+    expect(moved.tableGroup).toEqual([5]);
+    expect(isPrimary(moved)).toBe(true);
+  });
+
+  it("swaps the ids for two grouped tables exchanged in place", () => {
+    expect(remapTableGroup([2], 2, 7)).toEqual([7]); // T2's content now at T7
+    expect(remapTableGroup([7], 2, 7)).toEqual([2]); // T7's content now at T2
+  });
+
+  it("keeps other members of a real multi-table group intact", () => {
+    // Group [2,3] with T2 moved to T8 → [8,3].
+    expect(remapTableGroup([2, 3], 2, 8).sort((a, b) => a - b)).toEqual([3, 8]);
+  });
+
+  it("returns [] for an empty/absent group (walk-in seated on a blank table)", () => {
+    expect(remapTableGroup([], 3, 5)).toEqual([]);
+    expect(remapTableGroup(undefined, 3, 5)).toEqual([]);
+  });
+});
 
 describe("tableHasServiceContent (reconcile protection)", () => {
   it("is false for a blank table and a reservation-only table", () => {
