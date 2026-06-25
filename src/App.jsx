@@ -2685,6 +2685,23 @@ export default function App() {
     bumpLocalTableFresh(id);
     setTables(p => p.map(t => t.id !== id ? t : blankTable(id)));
     setSel(null);
+    // If a reservation is templating this table for the live service, flag it
+    // cleared so the board↔reservations reconcile doesn't immediately restore it
+    // (the "cleared table comes back when I switch views / on the next poll"
+    // bug). The booking row is kept for the planner/archive — just taken off the
+    // live board. Editing the reservation later rebuilds its data and re-enables
+    // it. The flag lives on the reservation so every device's reconcile honours it.
+    if (serviceDate && (mode === "service" || mode === "display")) {
+      const owner = reservationOnTable(id);
+      if (owner && !owner.data?.clearedFromBoard) {
+        const nextData = { ...owner.data, clearedFromBoard: true };
+        setReservations(prev => prev.map(r => r.id === owner.id ? { ...r, data: nextData } : r));
+        if (supabase) {
+          scopedFrom(TABLES.RESERVATIONS).update({ data: nextData }).eq("id", owner.id)
+            .then(() => {}, e => console.warn("Clear-table reservation flag failed:", e));
+        }
+      }
+    }
   };
 
   // Returns the active reservation (if any) whose primary or grouped table matches `tableId`
@@ -2694,6 +2711,7 @@ export default function App() {
     if (!serviceDate || !tableId) return null;
     return reservations.find(r => {
       if (r.date !== serviceDate) return false;
+      if (r.data?.clearedFromBoard) return false; // cleared off the board → not occupying
       const sess = r.data?.service_session;
       const resolved = (sess === "lunch" || sess === "dinner")
         ? sess
@@ -3479,6 +3497,8 @@ export default function App() {
     if ((mode !== "service" && mode !== "display") || !serviceDate) return;
     reconcileBoardWithReservations(reservations.filter(r => {
       if (r.date !== serviceDate) return false;
+      // A table cleared off the live board stays cleared — don't re-template it.
+      if (r.data?.clearedFromBoard) return false;
       return resolveReservationSession(r.data) === activeServiceSession;
     }));
   }, [reservations, serviceDate, mode, hydrated, reservationsLoaded, remoteBoardLoaded, boardSyncTick, activeServiceSession]); // eslint-disable-line react-hooks/exhaustive-deps
