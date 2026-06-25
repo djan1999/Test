@@ -38,6 +38,10 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
       : initial?.table_id ? [Number(initial.table_id)]
       : []
   );
+  // Tap = MOVE (replace) by default; Combine mode turns tapping into add/remove
+  // so a multi-table booking can be built deliberately. Editing a booking that
+  // is already combined starts in Combine mode so its group can be managed.
+  const [combineMode, setCombineMode] = useState((initial?.data?.tableGroup?.length || 0) > 1);
   const [conflictPrompt, setConflictPrompt] = useState(null); // { tid, conflictResv }
   const [conflictResolveMode, setConflictResolveMode] = useState(false); // showing table picker for displaced resv
   const [name, setName] = useState(initial?.data?.resName || "");
@@ -103,9 +107,29 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
   return (
     <div style={{ background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "14px 14px 18px", margin: "4px 0 8px", fontFamily: FONT }}>
       <div style={{ marginBottom: 14 }}>
-        <div style={fieldLabel}>
-          Table
-          {tableIds.length > 1 && <span style={{ color: tokens.text.muted, fontWeight: 400, marginLeft: 6 }}>T{sortedGroup.join("-")} · combined</span>}
+        <div style={{ ...fieldLabel, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <span>
+            Table
+            {tableIds.length > 1 && <span style={{ color: tokens.text.muted, fontWeight: 400, marginLeft: 6 }}>T{sortedGroup.join("-")} · combined</span>}
+          </span>
+          {/* Tap moves a single booking; Combine turns tapping into add/remove so
+              a multi-table party can be built on purpose (no accidental "T2-9"). */}
+          <button
+            type="button"
+            onClick={() => setCombineMode((m) => {
+              const next = !m;
+              // Leaving combine mode collapses back to the primary table only.
+              if (!next && tableIds.length > 1) setTableIds([primaryId]);
+              return next;
+            })}
+            style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase",
+              padding: "5px 10px", borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
+              border: `1px solid ${combineMode ? tokens.charcoal.default : tokens.ink[4]}`,
+              background: combineMode ? tokens.charcoal.default : tokens.neutral[0],
+              color: combineMode ? tokens.neutral[0] : tokens.ink[2], fontWeight: combineMode ? 600 : 400,
+            }}
+          >{combineMode ? "Combining ✓" : "+ Combine"}</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
           {Array.from({ length: 10 }, (_, i) => i + 1).map((tid) => {
@@ -121,7 +145,14 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                     setConflictResolveMode(false);
                     return;
                   }
-                  setTableIds((prev) => prev.includes(tid) ? (prev.length > 1 ? prev.filter((x) => x !== tid) : prev) : [...prev, tid]);
+                  setTableIds((prev) => {
+                    if (combineMode) {
+                      // add / remove this table from the combined group (keep ≥1)
+                      return prev.includes(tid) ? (prev.length > 1 ? prev.filter((x) => x !== tid) : prev) : [...prev, tid];
+                    }
+                    // move: a tap relocates the booking to the tapped table
+                    return [tid];
+                  });
                 }}
                 style={{
                   fontFamily: FONT, fontSize: 11, padding: "9px 0",
@@ -138,7 +169,12 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             );
           })}
         </div>
-        {tableIds.length === 0 && <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 4 }}>Select at least one table</div>}
+        <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.muted, marginTop: 4 }}>
+          {tableIds.length === 0
+            ? <span style={{ color: tokens.red.text }}>Select at least one table</span>
+            : combineMode ? "Tap tables to add/remove from the combined booking."
+            : "Tap a table to move this booking. Use + Combine for a multi-table party."}
+        </div>
       </div>
 
       {conflictPrompt && (() => {
@@ -246,12 +282,12 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                           onClick={async () => {
                             if (disabled) return;
                             await onResolveConflict(conflictResv.id, id);
-                            // Claim the freed table for this booking. A single-table
-                            // booking MOVES onto it (replace) — same as the SWAP path —
-                            // instead of becoming a phantom combined "T2-9". A genuine
-                            // multi-table booking still extends (adds the table).
+                            // Claim the freed table for this booking: MOVE onto it
+                            // (replace) unless we're deliberately building a combined
+                            // booking — so taking an occupied table never silently
+                            // creates a phantom combined "T2-9".
                             setTableIds((prev) =>
-                              prev.length <= 1 ? [tid] : (prev.includes(tid) ? prev : [...prev, tid]));
+                              combineMode ? (prev.includes(tid) ? prev : [...prev, tid]) : [tid]);
                             setConflictPrompt(null);
                             setConflictResolveMode(false);
                           }}
