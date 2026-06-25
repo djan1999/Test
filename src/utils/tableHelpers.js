@@ -226,6 +226,17 @@ export const mergeTableGroups = (tables = []) => {
   return out;
 };
 
+// The set of table ids a reservation occupies. A `tableGroup` is only honoured
+// as a real combined booking when it has 2+ members (matching the reconcile
+// rule); a stray single-member group is ignored in favour of `table_id`. This
+// keeps occupancy/conflict checks consistent with how the board is built — so a
+// reservation with a corrupted single-member group can't mark a phantom table
+// as occupied (e.g. a table you already moved away from still showing busy).
+export const reservationTableIds = (data, tableId) => {
+  const grp = Array.isArray(data?.tableGroup) ? data.tableGroup.map(Number) : [];
+  return grp.length > 1 ? grp : [Number(tableId)];
+};
+
 // Remap the ids inside a table's `tableGroup` when its live state moves or
 // swaps between table ids (swap fromId↔toId). Without this a moved table keeps
 // a tableGroup pointing at its OLD id, so the board's primary-table filter

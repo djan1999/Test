@@ -32,7 +32,7 @@ import {
 import {
   makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM,
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
-  remapTableGroup,
+  remapTableGroup, reservationTableIds,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { planBoardWrites } from "./utils/boardPersist.js";
@@ -2699,9 +2699,7 @@ export default function App() {
         ? sess
         : ((r.data?.resTime || "") && r.data.resTime < "15:00" ? "lunch" : "dinner");
       if (resolved !== activeServiceSession) return false;
-      if (Number(r.table_id) === Number(tableId)) return true;
-      const grp = Array.isArray(r.data?.tableGroup) ? r.data.tableGroup.map(Number) : [];
-      return grp.includes(Number(tableId));
+      return reservationTableIds(r.data, r.table_id).includes(Number(tableId));
     }) || null;
   };
 
@@ -5015,8 +5013,7 @@ export default function App() {
             const ownerOf = (tid) => reservations.find(r =>
               r.date === serviceDate
               && resolveReservationSession(r.data) === activeServiceSession
-              && (Number(r.table_id) === tid
-                  || (Array.isArray(r.data?.tableGroup) && r.data.tableGroup.map(Number).includes(tid))));
+              && reservationTableIds(r.data, r.table_id).includes(tid));
             // Swap from↔to inside a reservation's tableGroup so a grouped
             // reservation's member list never dangles at the old id.
             const remapGroup = (data) => {
