@@ -2,8 +2,36 @@ import { describe, it, expect } from "vitest";
 import {
   makeSeats, blankTable, sanitizeTable, fmt, parseHHMM, mergeTableGroups, tableGroupLabel,
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
-  remapTableGroup, reservationTableIds,
+  remapTableGroup, reservationTableIds, mergeRestrictionPositions,
 } from "../utils/tableHelpers.js";
+
+describe("mergeRestrictionPositions (seat assignments survive reconcile)", () => {
+  it("carries a board-assigned seat position onto the matching reservation restriction", () => {
+    const prev = [{ note: "vegetarian", pos: 1 }, { note: "vegetarian", pos: 2 }];
+    const next = [{ note: "vegetarian", pos: null }, { note: "vegetarian", pos: null }];
+    expect(mergeRestrictionPositions(prev, next)).toEqual([
+      { note: "vegetarian", pos: 1 },
+      { note: "vegetarian", pos: 2 },
+    ]);
+  });
+
+  it("keeps a position the reservation itself already specifies", () => {
+    const prev = [{ note: "vegan", pos: 2 }];
+    const next = [{ note: "vegan", pos: 1 }];
+    expect(mergeRestrictionPositions(prev, next)).toEqual([{ note: "vegan", pos: 1 }]);
+  });
+
+  it("follows the reservation SET — drops removed, leaves added unassigned", () => {
+    const prev = [{ note: "vegetarian", pos: 1 }];
+    const next = [{ note: "gluten_free", pos: null }];
+    expect(mergeRestrictionPositions(prev, next)).toEqual([{ note: "gluten_free", pos: null }]);
+  });
+
+  it("is safe with empty / missing inputs", () => {
+    expect(mergeRestrictionPositions(undefined, undefined)).toEqual([]);
+    expect(mergeRestrictionPositions([{ note: "x", pos: 1 }], [])).toEqual([]);
+  });
+});
 
 describe("reservationTableIds (occupancy consistent with the board build)", () => {
   it("uses table_id for a normal single-table reservation", () => {

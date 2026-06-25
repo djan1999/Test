@@ -32,7 +32,7 @@ import {
 import {
   makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM,
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
-  remapTableGroup, reservationTableIds,
+  remapTableGroup, reservationTableIds, mergeRestrictionPositions,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { planBoardWrites } from "./utils/boardPersist.js";
@@ -3271,7 +3271,11 @@ export default function App() {
         || (t.kitchenLog && Object.keys(t.kitchenLog).length > 0)
         || t.kitchenArchived);
       if (!started) return; // not-started tables are owned by the reconcile effect
-      updMany(tid, reservationDescriptiveFields(d));
+      updMany(tid, {
+        ...reservationDescriptiveFields(d),
+        // Keep seat positions a server assigned on the board for this table.
+        restrictions: mergeRestrictionPositions(t.restrictions, d.restrictions),
+      });
     });
   };
 

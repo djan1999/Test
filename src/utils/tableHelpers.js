@@ -226,6 +226,24 @@ export const mergeTableGroups = (tables = []) => {
   return out;
 };
 
+// Re-applying a reservation's dietary restrictions to the board must not wipe
+// the per-SEAT position a server assigned during service (the "vegetarian → P1
+// reset itself after a few seconds" bug). Keep the reservation's restriction
+// SET, but carry each board-assigned `pos` onto a matching (same note)
+// reservation restriction that doesn't already specify one.
+export const mergeRestrictionPositions = (prev = [], next = []) => {
+  const posByNote = {};
+  (Array.isArray(prev) ? prev : []).forEach((r) => {
+    if (r && r.pos != null) (posByNote[r.note] = posByNote[r.note] || []).push(r.pos);
+  });
+  return (Array.isArray(next) ? next : []).map((r) => {
+    if (!r || r.pos != null) return r;
+    const q = posByNote[r.note];
+    if (q && q.length) return { ...r, pos: q.shift() };
+    return r;
+  });
+};
+
 // The set of table ids a reservation occupies. A `tableGroup` is only honoured
 // as a real combined booking when it has 2+ members (matching the reconcile
 // rule); a stray single-member group is ignored in favour of `table_id`. This

@@ -20,6 +20,24 @@ describe("reconcileTables — non-destructive reservation templating", () => {
     expect(t1.seats).toHaveLength(4);
   });
 
+  it("preserves board-assigned restriction seat positions across a reconcile", () => {
+    // Reserved (not yet seated) table where a server assigned vegetarian to P1/P2.
+    // The reservation carries the same two veg restrictions but no positions.
+    const prev = board({
+      1: { resName: "Smith", resTime: "19:00", guests: 2,
+           restrictions: [{ note: "vegetarian", pos: 1 }, { note: "vegetarian", pos: 2 }] },
+    });
+    const next = reconcileTables(prev, [resv(1, {
+      resName: "Smith", resTime: "19:00", guests: 2,
+      restrictions: [{ note: "vegetarian", pos: null }, { note: "vegetarian", pos: null }],
+    })]);
+    const t1 = next.find((t) => t.id === 1);
+    expect(t1.restrictions).toEqual([
+      { note: "vegetarian", pos: 1 },
+      { note: "vegetarian", pos: 2 },
+    ]);
+  });
+
   it("NEVER rebuilds a table that holds live service work", () => {
     const prev = board({
       2: { active: true, arrivedAt: "20:10", guests: 2,
