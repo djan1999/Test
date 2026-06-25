@@ -3,6 +3,7 @@ import { RESTRICTIONS, RESTRICTION_GROUPS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, circleButton } from "../../styles/mixins.js";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
+import { reservationTableIds } from "../../utils/tableHelpers.js";
 import GuestMemory from "./GuestMemory.jsx";
 
 const FONT = tokens.font;
@@ -70,7 +71,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
     // A dinner reservation never blocks a lunch table and vice versa.
     const existingSession = r.data?.service_session || "dinner";
     if (existingSession !== serviceSession) return false;
-    return r.table_id === tid || (r.data?.tableGroup || []).map(Number).includes(tid);
+    return reservationTableIds(r.data, r.table_id).includes(Number(tid));
   }) || null;
   const isConflict = (tid) => !!findConflict(tid);
 
@@ -160,7 +161,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               if (r.date !== initial?.date) return false;
               const sess = r.data?.service_session || "dinner";
               if (sess !== serviceSession) return false;
-              return r.table_id === t || (r.data?.tableGroup || []).map(Number).includes(t);
+              return reservationTableIds(r.data, r.table_id).includes(Number(t));
             });
             return { id: t, owner };
           });

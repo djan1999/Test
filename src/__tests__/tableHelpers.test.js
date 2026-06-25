@@ -2,8 +2,27 @@ import { describe, it, expect } from "vitest";
 import {
   makeSeats, blankTable, sanitizeTable, fmt, parseHHMM, mergeTableGroups, tableGroupLabel,
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
-  remapTableGroup,
+  remapTableGroup, reservationTableIds,
 } from "../utils/tableHelpers.js";
+
+describe("reservationTableIds (occupancy consistent with the board build)", () => {
+  it("uses table_id for a normal single-table reservation", () => {
+    expect(reservationTableIds({ tableGroup: [4] }, 4)).toEqual([4]);
+    expect(reservationTableIds({}, 7)).toEqual([7]);
+  });
+
+  it("honours a real multi-table group", () => {
+    expect(reservationTableIds({ tableGroup: [2, 3] }, 2)).toEqual([2, 3]);
+  });
+
+  it("IGNORES a corrupted single-member group pointing at the wrong table", () => {
+    // Regression: Sandra is on T4 but her group was corrupted to [6]. Occupancy
+    // must follow table_id (4), not the stray group — otherwise T6 (or a table
+    // she was moved away from) shows phantom-occupied.
+    expect(reservationTableIds({ tableGroup: [6] }, 4)).toEqual([4]);
+    expect(reservationTableIds({ tableGroup: [6] }, 4)).not.toContain(6);
+  });
+});
 
 describe("remapTableGroup (moved/swapped tables stay visible on the board)", () => {
   // The board renders only the "primary" of a group: id === min(tableGroup).
