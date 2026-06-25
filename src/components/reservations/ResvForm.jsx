@@ -246,8 +246,12 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                           onClick={async () => {
                             if (disabled) return;
                             await onResolveConflict(conflictResv.id, id);
-                            // Now claim the freed table for this form
-                            setTableIds((prev) => prev.includes(tid) ? prev : [...prev, tid]);
+                            // Claim the freed table for this booking. A single-table
+                            // booking MOVES onto it (replace) — same as the SWAP path —
+                            // instead of becoming a phantom combined "T2-9". A genuine
+                            // multi-table booking still extends (adds the table).
+                            setTableIds((prev) =>
+                              prev.length <= 1 ? [tid] : (prev.includes(tid) ? prev : [...prev, tid]));
                             setConflictPrompt(null);
                             setConflictResolveMode(false);
                           }}
