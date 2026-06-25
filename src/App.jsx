@@ -38,7 +38,7 @@ import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { planBoardWrites } from "./utils/boardPersist.js";
 import { mergeTable } from "./utils/tableMerge.js";
 import { reconcileTables } from "./utils/reconcile.js";
-import { resolveArchiveDedup, isSameServiceLabel } from "./utils/archiveDedup.js";
+import { isSameServiceLabel, nextArchiveLabel } from "./utils/archiveDedup.js";
 import { stampWineSources } from "./utils/wineEdit.js";
 import { historyGapsByMenuType } from "./utils/archiveInsights.js";
 import {
@@ -2982,26 +2982,19 @@ export default function App() {
       const activeTables = snap.tables.filter(t => t.active || t.arrivedAt || t.resName || t.resTime);
       if (supabase) {
         const startedAt = serviceStartedAtRef.current;
-        const dedup = resolveArchiveDedup({
-          existing: await fetchSameDayArchives(archiveDate, archiveLabel),
-          startedAt, archiveLabel,
+        // ALWAYS save — never skip as a "duplicate". When an archive for this
+        // day+session already exists, the new one just gets a distinct " · n"
+        // label so both are visible (the in-flight archivingRef + the confirm
+        // dialog still prevent a single click from firing twice).
+        const label = nextArchiveLabel(await fetchSameDayArchives(archiveDate, archiveLabel), archiveLabel);
+        const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert({
+          date: archiveDate,
+          label,
+          state: { ...snap, tables: activeTables, menuCourses, serviceSession: activeServiceSession, startedAt },
         });
-        // dedup.isDuplicate → the SAME service instance is already filed (a
-        // double-tap or a second device that beat the in-flight ref). A genuine
-        // second service on the same day+session has a different startedAt, so
-        // it is NOT treated as a duplicate — it gets a distinct " · n" label
-        // instead of being silently dropped (the "second service missing from
-        // archive" bug).
-        if (!dedup.isDuplicate) {
-          const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert({
-            date: archiveDate,
-            label: dedup.label,
-            state: { ...snap, tables: activeTables, menuCourses, serviceSession: activeServiceSession, startedAt },
-          });
-          if (error) {
-            window.alert("Archive failed: " + error.message);
-            return;
-          }
+        if (error) {
+          window.alert("Archive failed: " + error.message);
+          return;
         }
       }
       markAllIntentionalEmpty(); // archived first — the clear is intentional
@@ -3048,23 +3041,19 @@ export default function App() {
       if (activeTables.length > 0) {
         const dateStr = new Date(staleDate + "T00:00:00").toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
         const label = `${dateStr} – ${(activeServiceSession || "dinner").toUpperCase()}`;
-        // Don't double-file the SAME service instance (another device already
-        // archived it), but keep a genuine second service of the same day+session.
+        // Always save — distinct " · n" label when this day+session already has
+        // an archive (autoEndingRef + the clear-on-success below keep a normal
+        // rollover from re-filing the same night).
         const startedAt = serviceStartedAtRef.current;
-        const dedup = resolveArchiveDedup({
-          existing: await fetchSameDayArchives(staleDate, label),
-          startedAt, archiveLabel: label,
+        const label2 = nextArchiveLabel(await fetchSameDayArchives(staleDate, label), label);
+        let courses = menuCourses;
+        if (!courses || courses.length === 0) { try { courses = await fetchMenuCourses(); } catch { courses = []; } }
+        const { error: insErr } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert({
+          date: staleDate,
+          label: label2,
+          state: { tables: activeTables, cocktails, spirits, beers, menuCourses: courses || [], serviceSession: activeServiceSession || "dinner", startedAt, autoEnded: true },
         });
-        if (!dedup.isDuplicate) {
-          let courses = menuCourses;
-          if (!courses || courses.length === 0) { try { courses = await fetchMenuCourses(); } catch { courses = []; } }
-          const { error: insErr } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert({
-            date: staleDate,
-            label: dedup.label,
-            state: { tables: activeTables, cocktails, spirits, beers, menuCourses: courses || [], serviceSession: activeServiceSession || "dinner", startedAt, autoEnded: true },
-          });
-          if (insErr) throw insErr;
-        }
+        if (insErr) throw insErr;
       }
     } catch (e) {
       // Archiving failed — do NOT clear, so the data is never lost. We retry on
