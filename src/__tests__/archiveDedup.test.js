@@ -1,46 +1,30 @@
 import { describe, it, expect } from "vitest";
-import { resolveArchiveDedup, isSameServiceLabel } from "../utils/archiveDedup.js";
+import { nextArchiveLabel, isSameServiceLabel } from "../utils/archiveDedup.js";
 
 const LABEL = "13.06.2026 – DINNER";
 
-describe("resolveArchiveDedup", () => {
-  it("files the first service of a day+session under the plain label", () => {
-    const r = resolveArchiveDedup({ existing: [], startedAt: "A", archiveLabel: LABEL });
-    expect(r).toEqual({ isDuplicate: false, label: LABEL });
+describe("nextArchiveLabel (always save; distinguish duplicates)", () => {
+  it("uses the plain label for the first service of a day+session", () => {
+    expect(nextArchiveLabel([], LABEL)).toBe(LABEL);
   });
 
-  it("treats a re-file of the SAME instance as a duplicate (double-tap / 2nd device)", () => {
-    const existing = [{ label: LABEL, state: { startedAt: "A" }, created_at: new Date().toISOString() }];
-    const r = resolveArchiveDedup({ existing, startedAt: "A", archiveLabel: LABEL });
-    expect(r.isDuplicate).toBe(true);
+  it("suffixes a second service of the same day+session", () => {
+    const existing = [{ label: LABEL }];
+    expect(nextArchiveLabel(existing, LABEL)).toBe(`${LABEL} · 2`);
   });
 
-  it("keeps a GENUINE second service of the same day+session, with a distinct label", () => {
-    // First (broken) service already archived under instance "A".
-    const existing = [{ label: LABEL, state: { startedAt: "A" }, created_at: new Date().toISOString() }];
-    // Second (good) service has a different instance id "B" — must NOT be dropped.
-    const r = resolveArchiveDedup({ existing, startedAt: "B", archiveLabel: LABEL });
-    expect(r.isDuplicate).toBe(false);
-    expect(r.label).toBe(`${LABEL} · 2`);
+  it("numbers a third (counting base + variants)", () => {
+    const existing = [{ label: LABEL }, { label: `${LABEL} · 2` }];
+    expect(nextArchiveLabel(existing, LABEL)).toBe(`${LABEL} · 3`);
   });
 
-  it("numbers a third service of the same slot correctly", () => {
-    const existing = [
-      { label: LABEL, state: { startedAt: "A" }, created_at: new Date().toISOString() },
-      { label: `${LABEL} · 2`, state: { startedAt: "B" }, created_at: new Date().toISOString() },
-    ];
-    const r = resolveArchiveDedup({ existing, startedAt: "C", archiveLabel: LABEL });
-    expect(r.isDuplicate).toBe(false);
-    expect(r.label).toBe(`${LABEL} · 3`);
+  it("ignores archives for other days/sessions", () => {
+    const existing = [{ label: "13.06.2026 – LUNCH" }, { label: "14.06.2026 – DINNER" }];
+    expect(nextArchiveLabel(existing, LABEL)).toBe(LABEL);
   });
 
-  it("falls back to a recency window when no instance id is present (legacy/orphan)", () => {
-    const now = Date.now();
-    const recent = [{ label: LABEL, state: {}, created_at: new Date(now - 30 * 1000).toISOString() }];
-    expect(resolveArchiveDedup({ existing: recent, startedAt: null, archiveLabel: LABEL, now }).isDuplicate).toBe(true);
-
-    const old = [{ label: LABEL, state: {}, created_at: new Date(now - 60 * 60 * 1000).toISOString() }];
-    expect(resolveArchiveDedup({ existing: old, startedAt: null, archiveLabel: LABEL, now }).isDuplicate).toBe(false);
+  it("is safe with missing input", () => {
+    expect(nextArchiveLabel(undefined, LABEL)).toBe(LABEL);
   });
 });
 
