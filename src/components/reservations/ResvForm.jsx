@@ -67,6 +67,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
   const findConflict = (tid) => reservations.find((r) => {
     if (r.id === excludeId) return false;
     if (r.date !== initial?.date) return false;
+    if (r.data?.clearedFromBoard) return false; // cleared off the board → table is free
     if (tableIds.includes(tid)) return false;
     // A dinner reservation never blocks a lunch table and vice versa.
     const existingSession = r.data?.service_session || "dinner";
