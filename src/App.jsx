@@ -1950,35 +1950,14 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
 function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd, quickTableId = null, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [], spirits = [], beers = [] }) {
   const isMobile = useIsMobile(BP.md);
 
-  // Auto-detect tables that share the same resName + resTime and have no explicit
-  // tableGroup — treat them as a merged group for display only (no data mutation).
-  const autoGroupMap = (() => {
-    const byKey = new Map();
-    tables.forEach(t => {
-      if (t.tableGroup?.length) return; // already explicitly grouped
-      const n = (t.resName || "").trim();
-      const r = (t.resTime || "").trim();
-      if (!n || !r) return;
-      const k = `${n}|${r}`;
-      byKey.set(k, [...(byKey.get(k) || []), t.id]);
-    });
-    const m = new Map();
-    byKey.forEach(ids => {
-      if (ids.length < 2) return;
-      const sorted = [...ids].sort((a, b) => a - b);
-      sorted.forEach(id => m.set(id, sorted));
-    });
-    return m;
-  })();
-
-  // Augment table objects with computed tableGroup where applicable
-  const effectiveTables = tables.map(t => {
-    const eg = autoGroupMap.get(t.id);
-    return eg ? { ...t, tableGroup: eg } : t;
-  });
-
+  // Tables that belong to a combined booking are grouped solely by their
+  // EXPLICIT tableGroup (set by the reservation form + reconcile). We used to
+  // ALSO auto-merge any two tables sharing resName+resTime, but that legacy
+  // fallback mis-fired after a move/swap — two tables transiently sharing a
+  // name+time got stacked into a phantom "T3-10". Explicit groups now cover
+  // every real combined booking, so the heuristic is gone.
   const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
-  const visible = effectiveTables.filter(t => t.active || t.resTime || t.resName).filter(isPrimary);
+  const visible = tables.filter(t => t.active || t.resTime || t.resName).filter(isPrimary);
   // Include all times that appear on visible tables, not just the predefined
   // SITTING_TIMES — otherwise lunch (or any non-standard) times show nothing.
   const extraTimes = [...new Set(
