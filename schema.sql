@@ -37,13 +37,19 @@ create table if not exists public.platform_admins (
 );
 
 -- Security-definer helpers so RLS policies that call them don't recurse through
--- the RLS of the tables they read.
-create or replace function public.is_platform_admin()
+-- the RLS of the tables they read. They live in a dedicated `private` schema
+-- (NOT the PostgREST-exposed `public` schema) so signed-in users cannot invoke
+-- them via /rest/v1/rpc/; `authenticated` still gets USAGE + EXECUTE so RLS
+-- policy evaluation can call them (Supabase advisor lint 0029).
+create schema if not exists private;
+grant usage on schema private to authenticated;
+
+create or replace function private.is_platform_admin()
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.platform_admins a where a.user_id = auth.uid());
 $$;
 
-create or replace function public.is_workspace_member(ws uuid)
+create or replace function private.is_workspace_member(ws uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
     select 1 from public.workspace_members m
@@ -51,10 +57,10 @@ returns boolean language sql stable security definer set search_path = public as
   );
 $$;
 
-revoke execute on function public.is_platform_admin()       from anon, public;
-revoke execute on function public.is_workspace_member(uuid) from anon, public;
-grant  execute on function public.is_platform_admin()       to authenticated;
-grant  execute on function public.is_workspace_member(uuid) to authenticated;
+revoke execute on function private.is_platform_admin()       from anon, public;
+revoke execute on function private.is_workspace_member(uuid) from anon, public;
+grant  execute on function private.is_platform_admin()       to authenticated;
+grant  execute on function private.is_workspace_member(uuid) to authenticated;
 
 alter table public.workspaces        enable row level security;
 alter table public.workspace_members enable row level security;
@@ -63,14 +69,14 @@ alter table public.platform_admins   enable row level security;
 drop policy if exists "workspaces_read" on public.workspaces;
 create policy "workspaces_read" on public.workspaces
   for select to authenticated
-  using (public.is_platform_admin() or public.is_workspace_member(id));
+  using (private.is_platform_admin() or private.is_workspace_member(id));
 
 -- auth.uid() is wrapped in a scalar subquery so Postgres evaluates it once per
 -- query instead of once per row (Supabase lint 0003_auth_rls_initplan).
 drop policy if exists "members_self_read" on public.workspace_members;
 create policy "members_self_read" on public.workspace_members
   for select to authenticated
-  using (user_id = (select auth.uid()) or public.is_platform_admin());
+  using (user_id = (select auth.uid()) or private.is_platform_admin());
 
 drop policy if exists "platform_admins_self_read" on public.platform_admins;
 create policy "platform_admins_self_read" on public.platform_admins
@@ -80,8 +86,8 @@ create policy "platform_admins_self_read" on public.platform_admins
 -- Each data table below also has a per-workspace policy of the form:
 --   create policy "<table>_member_all" on public.<table>
 --     for all to authenticated
---     using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
---     with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
+--     using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
+--     with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
 
 -- ── service_tables ──────────────────────────────────────────
 -- One row per (workspace, table 1-10). The app upserts the ten rows for a
@@ -105,8 +111,8 @@ drop policy if exists "service_tables_delete" on public.service_tables;
 drop policy if exists "service_tables_member_all" on public.service_tables;
 create policy "service_tables_member_all" on public.service_tables
   for all to authenticated
-  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
-  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
+  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
+  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
 
 -- ── service_settings ────────────────────────────────────────
 -- Generic key/value JSON store. Notable rows used by the app:
@@ -149,8 +155,8 @@ drop policy if exists "service_settings_update" on public.service_settings;
 drop policy if exists "service_settings_member_all" on public.service_settings;
 create policy "service_settings_member_all" on public.service_settings
   for all to authenticated
-  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
-  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
+  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
+  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
 
 -- ── service_archive ─────────────────────────────────────────
 create table if not exists public.service_archive (
@@ -178,8 +184,8 @@ drop policy if exists "service_archive_delete" on public.service_archive;
 drop policy if exists "service_archive_member_all" on public.service_archive;
 create policy "service_archive_member_all" on public.service_archive
   for all to authenticated
-  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
-  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
+  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
+  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
 
 -- ── menu_courses ─────────────────────────────────────────────
 -- This is the authoritative source for all menu data.
@@ -293,8 +299,8 @@ drop policy if exists "menu_courses_delete" on public.menu_courses;
 drop policy if exists "menu_courses_member_all" on public.menu_courses;
 create policy "menu_courses_member_all" on public.menu_courses
   for all to authenticated
-  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
-  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
+  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
+  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
 
 -- ── wines ────────────────────────────────────────────────────
 create table if not exists public.wines (
@@ -330,8 +336,8 @@ drop policy if exists "wines_delete" on public.wines;
 drop policy if exists "wines_member_all" on public.wines;
 create policy "wines_member_all" on public.wines
   for all to authenticated
-  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
-  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
+  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
+  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
 
 -- ── beverages ────────────────────────────────────────────────
 create table if not exists public.beverages (
@@ -363,8 +369,8 @@ drop policy if exists "beverages_delete" on public.beverages;
 drop policy if exists "beverages_member_all" on public.beverages;
 create policy "beverages_member_all" on public.beverages
   for all to authenticated
-  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
-  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
+  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
+  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
 
 -- ── reservations ─────────────────────────────────────────────
 create table if not exists public.reservations (
@@ -386,8 +392,8 @@ drop policy if exists "reservations_update" on public.reservations;
 drop policy if exists "reservations_member_all" on public.reservations;
 create policy "reservations_member_all" on public.reservations
   for all to authenticated
-  using (public.is_workspace_member(workspace_id) or public.is_platform_admin())
-  with check (public.is_workspace_member(workspace_id) or public.is_platform_admin());
+  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
+  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
 
 drop policy if exists "reservations_delete" on public.reservations;
 create policy "reservations_delete" on public.reservations
