@@ -8,7 +8,7 @@
 
 import {
   blankTable, sanitizeTable, makeSeats,
-  reservationDescriptiveFields, tableHasServiceContent,
+  reservationDescriptiveFields, tableHasServiceContent, mergeRestrictionPositions,
 } from "./tableHelpers.js";
 
 const eq = (a, b) => JSON.stringify(sanitizeTable(a)) === JSON.stringify(sanitizeTable(b));
@@ -61,6 +61,8 @@ export function reconcileTables(prevTables, reservationRows, celebrationKeys = [
     const updated = {
       ...t,
       ...reservationDescriptiveFields(d),
+      // Preserve per-seat restriction positions assigned on the board.
+      restrictions: mergeRestrictionPositions(t.restrictions, d.restrictions),
       guests: d.guests || 2,
       tableGroup: group,
       seats: reconciledSeats,
