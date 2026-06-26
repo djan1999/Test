@@ -510,6 +510,8 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "9px 10px", border: "1px solid " + (isEditing ? tokens.charcoal.default : tokens.ink[4]), borderRadius: 0, cursor: "pointer", background: isEditing ? tokens.tint.parchment : tokens.neutral[0], color: isEditing ? tokens.ink[0] : tokens.ink[2], touchAction: "manipulation" }}>EDIT</button>
                     <button onClick={() => { setTicketId(showTicket ? null : r.id); if (!showTicket) setEditingId(null); }}
                       style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "9px 10px", border: "1px solid " + (showTicket ? tokens.charcoal.default : tokens.ink[4]), borderRadius: 0, cursor: "pointer", background: showTicket ? tokens.tint.parchment : tokens.neutral[0], color: showTicket ? tokens.ink[0] : tokens.ink[2], touchAction: "manipulation" }}>TICKET</button>
+                    <button onClick={() => printTickets([r])}
+                      style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "9px 10px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[2], touchAction: "manipulation" }}>PRINT</button>
                     <button onClick={() => {
                       setEditingId("new");
                       setTicketId(null);
