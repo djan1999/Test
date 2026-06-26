@@ -44,6 +44,13 @@ const baseInp = { ...baseInput };
 const fieldLabel = { ...fieldLabelMixin };
 const circBtnSm = { ...circleButton };
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
+
+function getResvSession(r) {
+  const sess = r.data?.service_session;
+  if (sess === "lunch" || sess === "dinner") return sess;
+  const t = r.data?.resTime || "";
+  return t && t < "15:00" ? "lunch" : "dinner";
+}
 const SITTING_TIMES = String(import.meta.env.VITE_DEFAULT_SITTING_TIMES || "18:00,18:30,19:00,19:15").split(",").map(s => s.trim()).filter(Boolean);
 const ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "01,11,12,21,22,23").split(",").map(s => s.trim()).filter(Boolean);
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -255,6 +262,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
   const [draftFromReservation, setDraftFromReservation] = useState(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTicketMenu, setShowTicketMenu] = useState(false);
 
   const weeklyChain = useFocusChain();
   // Escape = back at every sub-level. useModalEscape stacks handlers so the
@@ -298,6 +306,27 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
     .filter(r => r.date === ds)
     .sort((a, b) => (a.data?.resTime || "99:99").localeCompare(b.data?.resTime || "99:99"));
 
+  const printTickets = (resvList) => {
+    try {
+      const html = generateKitchenTicketsHTML(resvList, menuCourses, RESTRICTIONS, profiles, assignments);
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "position:fixed;width:0;height:0;border:0;top:0;left:0;";
+      document.body.appendChild(iframe);
+      const cleanup = () => {
+        if (iframe.parentNode) document.body.removeChild(iframe);
+        URL.revokeObjectURL(url);
+      };
+      iframe.onload = () => {
+        try { iframe.contentWindow.print(); } catch(e) { window.open(url, "_blank"); }
+        setTimeout(cleanup, 5000);
+      };
+      iframe.onerror = cleanup;
+      iframe.src = url;
+    } catch(e) { alert("Print failed: " + e.message); }
+  };
+
   // ── DAY DETAIL VIEW ──────────────────────────────────────────────────────
   if (selectedDay) {
     const dayDate   = new Date(selectedDay + "T00:00:00");
@@ -334,7 +363,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
 
         {/* Sticky header */}
         <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: tokens.neutral[0], zIndex: 50, gap: 12 }}>
-          <button onClick={() => { setSelectedDay(null); setEditingId(null); setTicketId(null); setDraftFromReservation(null); }}
+          <button onClick={() => { setSelectedDay(null); setEditingId(null); setTicketId(null); setDraftFromReservation(null); setShowTicketMenu(false); }}
             style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "10px 14px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[1], flexShrink: 0, touchAction: "manipulation" }}>← WEEK</button>
           <div style={{ flex: 1, textAlign: "center" }}>
             <div style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.18em", textTransform: "uppercase", color: isService ? tokens.green.text : tokens.ink[0], fontWeight: 600 }}>{dayLabel}</div>
@@ -347,29 +376,27 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
             <button onClick={() => setShowBreakdown(true)}
               disabled={dayResv.length === 0}
               style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: tokens.neutral[0], color: tokens.ink[0], fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1, touchAction: "manipulation" }}>SERVICE BREAKDOWN</button>
-            <button
-              disabled={dayResv.length === 0}
-              onClick={() => {
-                try {
-                  const html = generateKitchenTicketsHTML(dayResv, menuCourses, RESTRICTIONS, profiles, assignments);
-                  const blob = new Blob([html], { type: "text/html" });
-                  const url = URL.createObjectURL(blob);
-                  const iframe = document.createElement("iframe");
-                  iframe.style.cssText = "position:fixed;width:0;height:0;border:0;top:0;left:0;";
-                  document.body.appendChild(iframe);
-                  const cleanup = () => {
-                    if (iframe.parentNode) document.body.removeChild(iframe);
-                    URL.revokeObjectURL(url);
-                  };
-                  iframe.onload = () => {
-                    try { iframe.contentWindow.print(); } catch(e) { window.open(url, "_blank"); }
-                    setTimeout(cleanup, 5000);
-                  };
-                  iframe.onerror = cleanup;
-                  iframe.src = url;
-                } catch(e) { alert("Print failed: " + e.message); }
-              }}
-              style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: tokens.neutral[0], color: tokens.ink[0], fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1, touchAction: "manipulation" }}>PRINT TICKETS</button>
+            <div style={{ position: "relative" }}>
+              <button
+                disabled={dayResv.length === 0}
+                onClick={() => setShowTicketMenu(m => !m)}
+                style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 10px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: dayResv.length === 0 ? "not-allowed" : "pointer", background: showTicketMenu ? tokens.tint.parchment : tokens.neutral[0], color: tokens.ink[0], fontWeight: 600, opacity: dayResv.length === 0 ? 0.35 : 1, touchAction: "manipulation" }}>PRINT TICKETS ▾</button>
+              {showTicketMenu && dayResv.length > 0 && (() => {
+                const lunchResv = dayResv.filter(r => getResvSession(r) === "lunch");
+                const dinnerResv = dayResv.filter(r => getResvSession(r) === "dinner");
+                const menuItemSt = { fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "9px 14px", border: "none", borderBottom: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0], color: tokens.ink[1], cursor: "pointer", textAlign: "left", fontWeight: 600, width: "100%", display: "block" };
+                return (
+                  <>
+                    <div onClick={() => setShowTicketMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 199 }} />
+                    <div style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, background: tokens.neutral[0], border: `1px solid ${tokens.ink[3]}`, zIndex: 200, minWidth: 150 }}>
+                      <button style={menuItemSt} onClick={() => { printTickets(dayResv); setShowTicketMenu(false); }}>ALL ({dayResv.length})</button>
+                      {lunchResv.length > 0 && <button style={menuItemSt} onClick={() => { printTickets(lunchResv); setShowTicketMenu(false); }}>LUNCH ({lunchResv.length})</button>}
+                      {dinnerResv.length > 0 && <button style={{ ...menuItemSt, borderBottom: "none" }} onClick={() => { printTickets(dinnerResv); setShowTicketMenu(false); }}>DINNER ({dinnerResv.length})</button>}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
             <button onClick={() => {
               const next = editingId === "new" ? null : "new";
               setEditingId(next);
@@ -532,7 +559,9 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                     <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
                       <KitchenTicket table={ticketVirtualTable} menuCourses={menuCourses} upd={updForTicket} editable quickNotes={courseQuickNotes} kitchenTemplate={ticketGuestTemplate} />
                     </div>
-                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
+                      <button onClick={() => printTickets([r])}
+                        style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 16px", border: `1px solid ${tokens.ink[0]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[0], fontWeight: 600, touchAction: "manipulation" }}>PRINT</button>
                       <button onClick={() => setTicketId(null)}
                         style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 16px", border: `1px solid ${tokens.neutral[0]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[0], fontWeight: 600, touchAction: "manipulation" }}>CLOSE</button>
                     </div>

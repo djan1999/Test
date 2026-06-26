@@ -137,10 +137,11 @@ function groupByTimeSlot(reservations) {
   return slots;
 }
 
-function buildTimeSlotEntries(list) {
+function buildTimeSlotEntries(list, session) {
   return groupByTimeSlot(list).map(([time, resvList]) => ({
     key: time,
     type: "slot",
+    session,
     label: `${time} - ${resvList.length} table${resvList.length !== 1 ? "s" : ""}`,
     reservations: resvList.map((r) => {
       const d = r.data || {};
@@ -176,11 +177,12 @@ function buildInitialState(dateStr, reservations) {
       slots.push({
         key: "__section_lunch",
         type: "section",
+        session: "lunch",
         label: `LUNCH · ${lunch.length} table${lunch.length !== 1 ? "s" : ""} · ${lunchGuests} guest${lunchGuests !== 1 ? "s" : ""}`,
         reservations: [],
       });
     }
-    buildTimeSlotEntries(lunch).forEach(s => slots.push(s));
+    buildTimeSlotEntries(lunch, "lunch").forEach(s => slots.push(s));
   }
 
   if (dinner.length > 0) {
@@ -188,11 +190,12 @@ function buildInitialState(dateStr, reservations) {
       slots.push({
         key: "__section_dinner",
         type: "section",
+        session: "dinner",
         label: `DINNER · ${dinner.length} table${dinner.length !== 1 ? "s" : ""} · ${dinnerGuests} guest${dinnerGuests !== 1 ? "s" : ""}`,
         reservations: [],
       });
     }
-    buildTimeSlotEntries(dinner).forEach(s => slots.push(s));
+    buildTimeSlotEntries(dinner, "dinner").forEach(s => slots.push(s));
   }
 
   const summaryParts = [];
@@ -205,6 +208,9 @@ function buildInitialState(dateStr, reservations) {
   return {
     headerText: formatDateHeader(dateStr),
     summaryText,
+    lunchSummaryText: lunch.length > 0 ? `${lunch.length} table${lunch.length !== 1 ? "s" : ""}, ${lunchGuests} guest${lunchGuests !== 1 ? "s" : ""}` : "",
+    dinnerSummaryText: dinner.length > 0 ? `${dinner.length} table${dinner.length !== 1 ? "s" : ""}, ${dinnerGuests} guest${dinnerGuests !== 1 ? "s" : ""}` : "",
+    hasBothSessions,
     slots,
     bread: "",
     announcements: ["", "", "", ""],
@@ -294,11 +300,31 @@ function AutoTextarea({ value, onChange, style, minRows = 1, placeholder, autoBu
 // ── Component ───────────────────────────────────────────────────────────────
 export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
   const [doc, setDoc] = useState(() => buildInitialState(dateStr, reservations));
+  const initHasLunch = (reservations || []).some(r => getResvSession(r) === "lunch");
+  const [activeTab, setActiveTab] = useState(initHasLunch ? "lunch" : "dinner");
   const chain = useFocusChain();
   useModalEscape(onClose);
 
   const updateHeader = (v) => setDoc((p) => ({ ...p, headerText: v }));
   const updateSummary = (v) => setDoc((p) => ({ ...p, summaryText: v }));
+  const updateLunchSummary = (v) => setDoc((p) => ({ ...p, lunchSummaryText: v }));
+  const updateDinnerSummary = (v) => setDoc((p) => ({ ...p, dinnerSummaryText: v }));
+
+  // Derive which slots to show based on the active tab.
+  // Each entry keeps its original index so handlers still address doc.slots correctly.
+  const filteredSlots = doc.slots
+    .map((slot, i) => ({ slot, si: i }))
+    .filter(({ slot }) => !doc.hasBothSessions || slot.session === activeTab);
+
+  const activeSummaryText =
+    doc.hasBothSessions && activeTab === "lunch" ? doc.lunchSummaryText :
+    doc.hasBothSessions && activeTab === "dinner" ? doc.dinnerSummaryText :
+    doc.summaryText;
+
+  const updateActiveSummary =
+    doc.hasBothSessions && activeTab === "lunch" ? updateLunchSummary :
+    doc.hasBothSessions && activeTab === "dinner" ? updateDinnerSummary :
+    updateSummary;
   const updateSlotLabel = (si, v) =>
     setDoc((p) => ({
       ...p,
@@ -420,12 +446,37 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
         style={{
           display: "flex",
           justifyContent: "flex-end",
+          alignItems: "center",
           gap: 8,
           maxWidth: 1100,
           width: "100%",
           margin: "0 auto 12px",
+          flexWrap: "wrap",
         }}
       >
+        {doc.hasBothSessions && (
+          <div style={{ display: "flex", gap: 4, marginRight: "auto" }}>
+            {["lunch", "dinner"].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  fontFamily: FONT,
+                  fontSize: 10,
+                  letterSpacing: 2,
+                  padding: "8px 16px",
+                  border: `1px solid ${tokens.neutral[0]}`,
+                  borderRadius: 0,
+                  background: activeTab === tab ? tokens.neutral[0] : "transparent",
+                  color: activeTab === tab ? tokens.neutral[900] : tokens.neutral[0],
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                }}
+              >{tab}</button>
+            ))}
+          </div>
+        )}
         <button
           onClick={onPrint}
           style={{
@@ -496,18 +547,18 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
               focusBind={chain.bind("doc-header")}
             />
             <PlainInput
-              value={doc.summaryText}
-              onChange={updateSummary}
+              value={activeSummaryText}
+              onChange={updateActiveSummary}
               style={{ fontSize: "11pt", marginTop: "2pt" }}
               focusBind={chain.bind("doc-summary")}
             />
           </div>
 
-          {doc.slots.map((slot, si) => {
+          {filteredSlots.map(({ slot, si }, filteredIdx) => {
             // Section header sentinel — rendered as a bold label divider, not a time-slot.
             if (slot.type === "section") {
               return (
-                <div key={slot.key} className="slot-block section-header-block" style={{ marginBottom: "8pt", marginTop: si === 0 ? 0 : "14pt" }}>
+                <div key={slot.key} className="slot-block section-header-block" style={{ marginBottom: "8pt", marginTop: filteredIdx === 0 ? 0 : "14pt" }}>
                   <div style={{ borderBottom: `2px solid ${tokens.neutral[900]}`, paddingBottom: "2pt", marginBottom: "4pt" }}>
                     <PlainInput
                       value={slot.label}
