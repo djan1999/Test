@@ -1,20 +1,23 @@
 # PowerSync Sync Streams — MULTI-TENANT (production, all workspaces).
 #
-# Replaces the Demo-only pilot rules. Each connecting client gets ONLY the
-# workspace(s) its logged-in user may see:
-#   • normal restaurant logins → the workspaces they belong to (workspace_members)
-#   • the master / platform-admin account → ALL workspaces (platform_admins)
-# This mirrors the Supabase RLS (private.is_workspace_member / is_platform_admin)
-# at the sync layer. auth.user_id() is the authenticated Supabase user (JWT sub).
+# Each connecting client receives ONLY the workspace(s) its logged-in user
+# belongs to (workspace_members), scoped by auth.user_id() (the Supabase JWT
+# sub). This mirrors the Supabase RLS membership check at the sync layer.
 #
-# Sync Streams (edition 2) support IN-subqueries and nesting but NOT EXISTS, so
-# the admin "sees all" branch is expressed as a nested IN: include every
-# workspace's rows when the caller's id appears in platform_admins.
+# Requires workspace_members to be in the `powersync` publication (added via
+# migration add_workspace_members_to_powersync_publication) so the lookup
+# resolves at runtime.
+#
+# NOTE on the master / platform-admin account: it is NOT a workspace_member, so
+# it does not sync via these rules — it keeps using the existing Supabase path
+# (the client falls back to Supabase when PowerSync has no data). To make the
+# admin sync too, add it to workspace_members for the relevant workspaces; the
+# alpha Sync Streams subset (no EXISTS, only `col = auth.user_id()` subquery
+# conditions) can't express an "admin sees all" branch inline.
 #
 # ⚠️ SECURITY-CRITICAL: a wrong filter here leaks one restaurant's data to
-# another. DO NOT rely on this for live service until it is VERIFIED with the
-# dashboard's Sync Test tool for at least TWO different restaurant users (each
-# must see only its own rows) and the platform-admin (sees all). See PILOT.md.
+# another. Verify with the dashboard's Sync Test tool (simulate a restaurant
+# user → only its own rows) before any client reads from SQLite in live service.
 #
 # Composite-key tables keep their id alias (service_tables→table_id,
 # menu_courses→position, wines→key) so every row has the required `id` column.
@@ -24,43 +27,36 @@ streams:
     query: >-
       SELECT CAST(table_id AS TEXT) AS id, * FROM service_tables
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
   service_settings:
     query: >-
       SELECT * FROM service_settings
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
   reservations:
     query: >-
       SELECT * FROM reservations
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
   menu_courses:
     query: >-
       SELECT CAST(position AS TEXT) AS id, * FROM menu_courses
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
   wines:
     query: >-
       SELECT "key" AS id, * FROM wines
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
   beverages:
     query: >-
       SELECT * FROM beverages
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
   service_archive:
     query: >-
       SELECT * FROM service_archive
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
 
 config:
