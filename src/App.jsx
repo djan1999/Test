@@ -4120,9 +4120,10 @@ export default function App() {
       })();
     }
 
-    // Polling safety net (realtime is the primary path). Tighter than before so
-    // a dropped subscription self-corrects in seconds, not 15s.
-    const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 8000);
+    // Polling safety net. PowerSync watches + Supabase realtime are the primary
+    // live paths now, so this is just a slow backstop (was 8s — relaxed to 30s to
+    // cut idle chatter; the visibilitychange/online refetches below still fire).
+    const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 30000);
 
     // Re-fetch the instant the device can sync again — on wake or when the
     // network returns — so a tablet that slept shows the live board immediately.
@@ -4171,23 +4172,26 @@ export default function App() {
     enabled: Boolean(supabase && workspaceId),
   });
 
-  // ── PowerSync pilot (Demo workspace only) ────────────────────────────────────
-  // When VITE_POWERSYNC_URL is set AND the active workspace is Demo, stream the
-  // synced tables into an on-device SQLite DB (instant, offline-capable reads).
-  // Loaded ENTIRELY via dynamic import() so the PowerSync SDK + wa-sqlite WASM
-  // never ship to the normal Supabase path — prod / Hotel Milka stays
-  // byte-for-byte the current build. Read-only for now (writes still go through
-  // the existing Supabase path); wiring the board's reads to SQLite is a later
-  // step, so this effect currently just proves the sync pipe end-to-end (visible
-  // on the PowerSync dashboard + browser console).
+  // ── PowerSync: connect + stream into the on-device SQLite DB ─────────────────
+  // Enabled app-wide (data isolation is enforced server-side by the per-tenant
+  // sync rules). Loaded ENTIRELY via dynamic import() so the SDK + wa-sqlite WASM
+  // never ship to the normal path. onStatus drives the header sync chip and the
+  // watches gate below; reads paint instantly from SQLite (see the load effects).
+  const [powerSyncStatus, setPowerSyncStatus] = useState(null);
   useEffect(() => {
-    if (!isPowerSyncEnabled(workspaceId)) return undefined;
+    if (!isPowerSyncEnabled(workspaceId)) { setPowerSyncStatus(null); return undefined; }
     let cleanup;
     let cancelled = false;
     (async () => {
       try {
         const { connect } = await import("./powersync/system.js");
-        const disconnect = await connect();
+        const disconnect = await connect((snap) => {
+          if (cancelled) return;
+          setPowerSyncStatus(snap);
+          // Drive the header chip from the live PowerSync connection.
+          if (snap.connected) setSyncStatus(prev => prev === "sync-error" ? prev : "live");
+          else setSyncStatus(prev => (prev === "local-only" || prev === "sync-error") ? prev : "connecting");
+        });
         if (cancelled) { await disconnect?.(); return; }
         cleanup = disconnect;
       } catch (e) {
@@ -4196,6 +4200,43 @@ export default function App() {
     })();
     return () => { cancelled = true; cleanup?.(); };
   }, [workspaceId]);
+
+  // ── PowerSync live updates: drive UI from local-DB changes once synced ───────
+  // Watches re-run the mapped readers whenever a table changes (local edit or a
+  // change streamed from another device), so cross-device updates land instantly
+  // without polling. Gated on a non-empty local DB so empty accounts (e.g. the
+  // platform-admin) stay on the Supabase realtime path. Supabase realtime is
+  // kept as a safety net; only the fast board poll is relaxed (see below).
+  useEffect(() => {
+    if (!isPowerSyncEnabled(workspaceId) || !powerSyncStatus?.hasSynced) return undefined;
+    let dispose;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { readServiceTables } = await import("./powersync/reads.js");
+        const seed = await readServiceTables();
+        if (cancelled || seed.length === 0) return; // empty local DB → keep Supabase realtime
+        const { startWatches } = await import("./powersync/watch.js");
+        const lo = new Date(); lo.setDate(lo.getDate() - 7);
+        const hi = new Date(); hi.setDate(hi.getDate() + 30);
+        const range = { from: toLocalDateISO(lo), to: toLocalDateISO(hi) };
+        dispose = startWatches({
+          onReservations: (rows) => { if (!cancelled && rows.length) setReservations(rows); },
+          onServiceTables: (rows) => { if (!cancelled && rows.length) mergeRemoteTables(rows); },
+          onWines: (rows) => { if (!cancelled && rows.length) setWines(rows); },
+          onBeverages: (data) => {
+            if (cancelled || !data.length) return;
+            setCocktails(pickBeveragesForCategory(data, "cocktail"));
+            setSpirits(pickBeveragesForCategory(data, "spirit"));
+            setBeers(pickBeveragesForCategory(data, "beer"));
+          },
+          onMenuCourses: (rows) => { if (!cancelled && rows.length) setMenuCourses(rows.map(supabaseRowToCourse)); },
+        }, range);
+        if (cancelled) dispose?.();
+      } catch (e) { console.warn("[PowerSync] watches failed — using Supabase realtime:", e); }
+    })();
+    return () => { cancelled = true; dispose?.(); };
+  }, [workspaceId, powerSyncStatus?.hasSynced]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Beverages: load from Supabase + realtime ─────────────────────────────────
   // Reusable loader so the cocktail/spirit/beer lists can be refreshed on demand

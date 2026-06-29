@@ -10,49 +10,49 @@ import { SupabaseConnector } from "./SupabaseConnector.js";
 let _db = null;
 let _connected = false;
 
-// Singleton on-device database. dbFilename namespaces the local SQLite file;
-// the pilot only ever holds Demo data (sync rules hard-filter to Demo), so a
-// single fixed name is fine.
+// Singleton on-device database. dbFilename namespaces the local SQLite file.
 export function getPowerSync() {
   if (!_db) {
     _db = new PowerSyncDatabase({
       schema: AppSchema,
-      database: { dbFilename: "milka-powersync-demo.db" },
+      database: { dbFilename: "milka-powersync.db" },
     });
   }
   return _db;
 }
 
-// Connect the local DB to the PowerSync service and start streaming. Returns a
-// disconnect function for cleanup. Safe to call more than once (no-ops if
-// already connected). Logs sync status transitions so the pilot is observable
-// from the browser console (the PowerSync dashboard also shows the live client).
-export async function connect() {
+// Normalise a PowerSync SyncStatus into the small shape the app cares about.
+function snapshot(s) {
+  return {
+    connected: !!s?.connected,
+    hasSynced: !!s?.hasSynced,
+    lastSyncedAt: s?.lastSyncedAt ? new Date(s.lastSyncedAt).getTime() : null,
+  };
+}
+
+// Connect the local DB to the PowerSync service and start streaming. `onStatus`
+// (optional) is called with a {connected, hasSynced, lastSyncedAt} snapshot on
+// every status change and once immediately. Returns a disconnect function.
+// Safe to call more than once (the connect itself no-ops if already connected).
+export async function connect(onStatus) {
   const db = getPowerSync();
   if (!_connected) {
     await db.connect(new SupabaseConnector());
     _connected = true;
-    db.registerListener({
-      statusChanged: (status) => {
-        console.info(
-          "[PowerSync] status — connected:",
-          status.connected,
-          "| lastSynced:",
-          status.lastSyncedAt,
-          "| hasSynced:",
-          status.hasSynced,
-        );
-      },
-    });
-    // Expose for ad-hoc debugging from DevTools (e.g. window.__powerSync.getAll).
-    if (typeof window !== "undefined") window.__powerSync = db;
+    if (typeof window !== "undefined") window.__powerSync = db; // DevTools aid
   }
+  const dispose = db.registerListener({
+    statusChanged: (status) => {
+      const snap = snapshot(status);
+      console.info("[PowerSync] status —", JSON.stringify(snap));
+      onStatus?.(snap);
+    },
+  });
+  // Emit the current status immediately so callers don't wait for the next change.
+  onStatus?.(snapshot(db.currentStatus));
   return async () => {
-    try {
-      await db.disconnect();
-    } catch {
-      /* noop */
-    }
+    try { dispose?.(); } catch { /* noop */ }
+    try { await db.disconnect(); } catch { /* noop */ }
     _connected = false;
   };
 }
