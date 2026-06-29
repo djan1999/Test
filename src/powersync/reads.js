@@ -62,3 +62,37 @@ export async function readServiceTables() {
   );
   return rows.map(reviveRow);
 }
+
+// Wines, already mapped to the shape setWines() expects (mirrors loadWines).
+export async function readWines() {
+  const rows = await getPowerSync().getAll(
+    "SELECT key, name, wine_name, producer, vintage, region, country, by_glass, source FROM wines ORDER BY name",
+  );
+  return rows.map((r) => ({
+    id: r.key,
+    name: r.wine_name || r.name,
+    producer: r.producer || "",
+    vintage: r.vintage || "",
+    region: r.region || "",
+    country: r.country || "",
+    byGlass: !!r.by_glass,
+    source: r.source || "sync",
+  }));
+}
+
+// Beverages, shaped like the Supabase select loadBeverages() consumes; the
+// caller splits them by category via pickBeveragesForCategory().
+export async function readBeverages() {
+  return getPowerSync().getAll(
+    "SELECT id, category, name, notes, position, source FROM beverages ORDER BY position",
+  );
+}
+
+// Menu course rows with jsonb columns revived to objects; the caller maps each
+// through supabaseRowToCourse (same as the Supabase path).
+export async function readMenuCourses() {
+  const rows = await getPowerSync().getAll(
+    "SELECT * FROM menu_courses ORDER BY position",
+  );
+  return rows.map(reviveRow);
+}

@@ -4235,6 +4235,21 @@ export default function App() {
       if (Array.isArray(cached.spirits))   setSpirits(cached.spirits);
       if (Array.isArray(cached.beers))     setBeers(cached.beers);
     }
+    // PowerSync instant paint when synced; loadBeverages() still refreshes.
+    if (isPowerSyncEnabled(workspaceId)) {
+      (async () => {
+        try {
+          const { whenSynced, readBeverages } = await import("./powersync/reads.js");
+          if (!(await whenSynced())) return;
+          const data = await readBeverages();
+          if (data.length) {
+            setCocktails(pickBeveragesForCategory(data, "cocktail"));
+            setSpirits(pickBeveragesForCategory(data, "spirit"));
+            setBeers(pickBeveragesForCategory(data, "beer"));
+          }
+        } catch (e) { console.warn("[PowerSync] beverages read failed — using Supabase:", e); }
+      })();
+    }
     loadBeverages();
   }, [loadBeverages, workspaceId]);
 
@@ -4278,6 +4293,17 @@ export default function App() {
     // Instant paint from this workspace's cache, then refresh in the background.
     const cachedWines = readLocalWines();
     if (cachedWines && cachedWines.length) setWines(cachedWines);
+    // PowerSync instant paint when synced; loadWines() still refreshes.
+    if (isPowerSyncEnabled(workspaceId)) {
+      (async () => {
+        try {
+          const { whenSynced, readWines } = await import("./powersync/reads.js");
+          if (!(await whenSynced())) return;
+          const rows = await readWines();
+          if (rows.length) setWines(rows);
+        } catch (e) { console.warn("[PowerSync] wines read failed — using Supabase:", e); }
+      })();
+    }
     loadWines();
     return undefined;
   }, [loadWines, workspaceId]);
@@ -4427,6 +4453,18 @@ export default function App() {
     // read the wrong/empty namespace).
     const cached = readLocalMenuCourses();
     if (cached && cached.length) setMenuCourses(cached);
+
+    // PowerSync instant paint when synced; loadCourses() below still refreshes.
+    if (isPowerSyncEnabled(workspaceId)) {
+      (async () => {
+        try {
+          const { whenSynced, readMenuCourses } = await import("./powersync/reads.js");
+          if (!(await whenSynced())) return;
+          const rows = await readMenuCourses();
+          if (mounted && rows.length) setMenuCourses(rows.map(supabaseRowToCourse));
+        } catch (e) { console.warn("[PowerSync] menu read failed — using Supabase:", e); }
+      })();
+    }
 
     const loadCourses = async () => {
       try {
