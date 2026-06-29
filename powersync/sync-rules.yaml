@@ -7,6 +7,10 @@
 # This mirrors the Supabase RLS (private.is_workspace_member / is_platform_admin)
 # at the sync layer. auth.user_id() is the authenticated Supabase user (JWT sub).
 #
+# Sync Streams (edition 2) support IN-subqueries and nesting but NOT EXISTS, so
+# the admin "sees all" branch is expressed as a nested IN: include every
+# workspace's rows when the caller's id appears in platform_admins.
+#
 # ⚠️ SECURITY-CRITICAL: a wrong filter here leaks one restaurant's data to
 # another. DO NOT rely on this for live service until it is VERIFIED with the
 # dashboard's Sync Test tool for at least TWO different restaurant users (each
@@ -20,43 +24,43 @@ streams:
     query: >-
       SELECT CAST(table_id AS TEXT) AS id, * FROM service_tables
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = auth.user_id())
+         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
   service_settings:
     query: >-
       SELECT * FROM service_settings
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = auth.user_id())
+         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
   reservations:
     query: >-
       SELECT * FROM reservations
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = auth.user_id())
+         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
   menu_courses:
     query: >-
       SELECT CAST(position AS TEXT) AS id, * FROM menu_courses
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = auth.user_id())
+         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
   wines:
     query: >-
       SELECT "key" AS id, * FROM wines
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = auth.user_id())
+         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
   beverages:
     query: >-
       SELECT * FROM beverages
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = auth.user_id())
+         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
   service_archive:
     query: >-
       SELECT * FROM service_archive
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = auth.user_id())
+         OR workspace_id IN (SELECT id FROM workspaces WHERE auth.user_id() IN (SELECT user_id FROM platform_admins))
     auto_subscribe: true
 
 config:
