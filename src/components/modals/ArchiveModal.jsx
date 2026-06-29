@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import FullModal from "../ui/FullModal.jsx";
 import TableSummaryCard from "./TableSummaryCard.jsx";
 import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
-import { supabase, TABLES } from "../../lib/supabaseClient.js";
+import { supabase, TABLES, getWorkspaceId } from "../../lib/supabaseClient.js";
 import { scopedFrom } from "../../lib/scopedDb.js";
+import { isPowerSyncEnabled } from "../../powersync/config.js";
 import { parseHHMM, mergeTableGroups, tableGroupLabel } from "../../utils/tableHelpers.js";
 import { optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 import { aggregateInsights } from "../../utils/archiveInsights.js";
@@ -36,6 +37,19 @@ export default function ArchiveModal({
       return;
     }
     setLoading(true);
+    // PowerSync instant paint: when the on-device DB has synced, fill the archive
+    // straight from local SQLite so the modal opens immediately; the Supabase
+    // load below still runs as the source-of-truth refresh.
+    if (isPowerSyncEnabled(getWorkspaceId())) {
+      (async () => {
+        try {
+          const { whenSynced, readServiceArchive } = await import("../../powersync/reads.js");
+          if (!(await whenSynced())) return;
+          const { active, deleted } = await readServiceArchive();
+          if (active.length || deleted.length) { setEntries(active); setDeleted(deleted); setLoading(false); }
+        } catch { /* fall back to Supabase */ }
+      })();
+    }
     Promise.all([
       scopedFrom(TABLES.SERVICE_ARCHIVE).select("*").is("deleted_at", null).order("created_at", { ascending: false }).limit(60),
       scopedFrom(TABLES.SERVICE_ARCHIVE).select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(30),

@@ -8,52 +8,60 @@
 # migration add_workspace_members_to_powersync_publication) so the lookup
 # resolves at runtime.
 #
-# NOTE on the master / platform-admin account: it is NOT a workspace_member, so
-# it does not sync via these rules — it keeps using the existing Supabase path
-# (the client falls back to Supabase when PowerSync has no data). To make the
-# admin sync too, add it to workspace_members for the relevant workspaces; the
-# alpha Sync Streams subset (no EXISTS, only `col = auth.user_id()` subquery
-# conditions) can't express an "admin sees all" branch inline.
+# PRIORITIES (0 = highest … 3 = lowest): the live board, reservations and
+# service settings sync FIRST so a fresh device is usable in seconds, then the
+# menu, then the big reference lists (733 wines), then the archive — so the
+# planner/board never waits behind a full wine download. The client pairs this
+# with whenSyncedPriority(1) to paint as soon as the priority-1 data is in.
 #
-# ⚠️ SECURITY-CRITICAL: a wrong filter here leaks one restaurant's data to
-# another. Verify with the dashboard's Sync Test tool (simulate a restaurant
-# user → only its own rows) before any client reads from SQLite in live service.
+# NOTE on the master / platform-admin account: it is NOT a workspace_member, so
+# it does not sync via these rules — it keeps using the existing Supabase path.
+#
+# ⚠️ SECURITY-CRITICAL: verify with the dashboard's Sync Test tool (simulate a
+# restaurant user → only its own rows) before any client reads from SQLite.
 #
 # Composite-key tables keep their id alias (service_tables→table_id,
 # menu_courses→position, wines→key) so every row has the required `id` column.
 
 streams:
   service_tables:
+    priority: 1
     query: >-
       SELECT CAST(table_id AS TEXT) AS id, * FROM service_tables
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
     auto_subscribe: true
-  service_settings:
-    query: >-
-      SELECT * FROM service_settings
-      WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-    auto_subscribe: true
   reservations:
+    priority: 1
     query: >-
       SELECT * FROM reservations
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
     auto_subscribe: true
+  service_settings:
+    priority: 1
+    query: >-
+      SELECT * FROM service_settings
+      WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
+    auto_subscribe: true
   menu_courses:
+    priority: 2
     query: >-
       SELECT CAST(position AS TEXT) AS id, * FROM menu_courses
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
     auto_subscribe: true
-  wines:
-    query: >-
-      SELECT "key" AS id, * FROM wines
-      WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-    auto_subscribe: true
   beverages:
+    priority: 2
     query: >-
       SELECT * FROM beverages
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
     auto_subscribe: true
+  wines:
+    priority: 3
+    query: >-
+      SELECT "key" AS id, * FROM wines
+      WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
+    auto_subscribe: true
   service_archive:
+    priority: 3
     query: >-
       SELECT * FROM service_archive
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())

@@ -28,6 +28,36 @@ export async function whenSynced(timeoutMs = 4000) {
   });
 }
 
+// Like whenSynced, but resolves as soon as a given priority level has completed
+// its first sync (or the full sync completes, or the timeout). With prioritized
+// sync rules this lets the board/planner paint before lower-priority data (the
+// 733 wines, archive) finishes downloading on a fresh device. Degrades safely:
+// if priorities aren't deployed, the full-sync path resolves it exactly like
+// whenSynced, so it can never regress.
+export async function whenSyncedPriority(priority, timeoutMs = 4000) {
+  const db = getPowerSync();
+  if (db.currentStatus?.hasSynced) return true;
+  if (db.currentStatus?.statusForPriority?.(priority)?.hasSynced) return true;
+  return new Promise((resolve) => {
+    let settled = false;
+    let dispose;
+    const finish = (v) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { dispose?.(); } catch { /* noop */ }
+      resolve(v);
+    };
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    dispose = db.registerListener({
+      statusChanged: (s) => {
+        if (s.hasSynced || s.statusForPriority?.(priority)?.hasSynced) finish(true);
+      },
+    });
+    db.waitForFirstSync?.({ priority }).then(() => finish(true)).catch(() => { /* noop */ });
+  });
+}
+
 // PowerSync stores jsonb columns as JSON text. Re-parse only object/array
 // strings (those starting with { or [) so e.g. reservations.data and
 // service_tables.data become objects again — matching what supabase-js returns.
@@ -95,4 +125,21 @@ export async function readMenuCourses() {
     "SELECT * FROM menu_courses ORDER BY position",
   );
   return rows.map(reviveRow);
+}
+
+// Service archive split into { active, deleted }, mirroring the two Supabase
+// queries the Archive modal runs (active newest-first ≤60, trash newest-first
+// ≤30). state jsonb is revived to an object.
+export async function readServiceArchive() {
+  const rows = await getPowerSync().getAll(
+    "SELECT id, date, label, state, created_at, deleted_at, workspace_id FROM service_archive ORDER BY created_at DESC",
+  );
+  const mapped = rows.map(reviveRow);
+  return {
+    active: mapped.filter((r) => r.deleted_at == null).slice(0, 60),
+    deleted: mapped
+      .filter((r) => r.deleted_at != null)
+      .sort((a, b) => String(b.deleted_at).localeCompare(String(a.deleted_at)))
+      .slice(0, 30),
+  };
 }

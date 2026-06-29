@@ -4112,8 +4112,8 @@ export default function App() {
     if (isPowerSyncEnabled(workspaceId)) {
       (async () => {
         try {
-          const { whenSynced, readServiceTables } = await import("./powersync/reads.js");
-          if (!(await whenSynced())) return;
+          const { whenSyncedPriority, readServiceTables } = await import("./powersync/reads.js");
+          if (!(await whenSyncedPriority(1))) return;
           const rows = await readServiceTables();
           if (isMounted && rows.length > 0) mergeRemoteTables(rows);
         } catch (e) { console.warn("[PowerSync] board read failed — using Supabase:", e); }
@@ -4374,8 +4374,8 @@ export default function App() {
     if (isPowerSyncEnabled(workspaceId)) {
       (async () => {
         try {
-          const { whenSynced, readReservations } = await import("./powersync/reads.js");
-          if (!(await whenSynced())) return;
+          const { whenSyncedPriority, readReservations } = await import("./powersync/reads.js");
+          if (!(await whenSyncedPriority(1))) return;
           const lo = new Date(); lo.setDate(lo.getDate() - 7);
           const hi = new Date(); hi.setDate(hi.getDate() + 30);
           const rows = await readReservations(toLocalDateISO(lo), toLocalDateISO(hi));
