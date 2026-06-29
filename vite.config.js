@@ -91,6 +91,15 @@ export default defineConfig({
       },
     }),
   ],
+  // PowerSync (wa-sqlite) ships a WASM SQLite + web worker. Keep them out of
+  // Vite's dep pre-bundling and emit workers as ES modules so the on-device DB
+  // builds and loads correctly. Inert unless the PowerSync pilot is enabled.
+  optimizeDeps: {
+    exclude: ['@journeyapps/wa-sqlite', '@powersync/web'],
+  },
+  worker: {
+    format: 'es',
+  },
   server: {
     host: true,
     port: 5173,

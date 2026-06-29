@@ -66,6 +66,7 @@ import { kitchenSnapshot, kitchenDelta } from "./utils/kitchenAlerts.js";
 import { BEV_TYPES } from "./constants/beverageTypes.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES, getWorkspaceId, setWorkspaceId } from "./lib/supabaseClient.js";
 import { scopedFrom, scopeJob } from "./lib/scopedDb.js";
+import { isPowerSyncEnabled } from "./powersync/config.js";
 import { tokens } from "./styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, chip as mixinChip, circleButton as mixinCircleButton } from "./styles/mixins.js";
 import WaterPicker from "./components/service/WaterPicker.jsx";
@@ -4153,6 +4154,32 @@ export default function App() {
     },
     enabled: Boolean(supabase && workspaceId),
   });
+
+  // ── PowerSync pilot (Demo workspace only) ────────────────────────────────────
+  // When VITE_POWERSYNC_URL is set AND the active workspace is Demo, stream the
+  // synced tables into an on-device SQLite DB (instant, offline-capable reads).
+  // Loaded ENTIRELY via dynamic import() so the PowerSync SDK + wa-sqlite WASM
+  // never ship to the normal Supabase path — prod / Hotel Milka stays
+  // byte-for-byte the current build. Read-only for now (writes still go through
+  // the existing Supabase path); wiring the board's reads to SQLite is a later
+  // step, so this effect currently just proves the sync pipe end-to-end (visible
+  // on the PowerSync dashboard + browser console).
+  useEffect(() => {
+    if (!isPowerSyncEnabled(workspaceId)) return undefined;
+    let cleanup;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { connect } = await import("./powersync/system.js");
+        const disconnect = await connect();
+        if (cancelled) { await disconnect?.(); return; }
+        cleanup = disconnect;
+      } catch (e) {
+        console.warn("[PowerSync] init failed — staying on Supabase path:", e);
+      }
+    })();
+    return () => { cancelled = true; cleanup?.(); };
+  }, [workspaceId]);
 
   // ── Beverages: load from Supabase + realtime ─────────────────────────────────
   // Reusable loader so the cocktail/spirit/beer lists can be refreshed on demand

@@ -14,7 +14,10 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@powersync/react": "^1.10.0",
+    "@powersync/web": "^1.38.6",
     "@supabase/supabase-js": "^2.49.1",
+    "js-logger": "^1.6.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
