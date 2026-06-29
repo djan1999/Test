@@ -4065,6 +4065,11 @@ export default function App() {
   // restaurant only receives its own changes.
   const wsFilter = workspaceId ? `workspace_id=eq.${workspaceId}` : undefined;
 
+  // Whether the Supabase realtime service-tables channel is currently SUBSCRIBED.
+  // Declared here (before the channel subscribes) so its onStatus can report
+  // health; combined with PowerSync's connection in the aggregator effect below.
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+
   // ── Load service tables from Supabase + subscribe realtime ────────────────
   useEffect(() => {
     if (!supabase || !workspaceId) return;
@@ -4160,13 +4165,13 @@ export default function App() {
       applyRemoteTableRow(payload.new);
       setSyncStatus("live");
     },
-    // Drive the header sync chip from the live connection: SUBSCRIBED → live,
-    // anything else (dropped, retrying) → connecting, so staff can SEE whether
-    // the board is syncing instead of guessing.
+    // Report channel health to the aggregator effect above (it debounces the
+    // live ⇄ connecting transition) instead of writing syncStatus directly, so a
+    // single CLOSED/TIMED_OUT blip can't flip the chip on its own.
     onStatus: (status) => {
-      if (status === "SUBSCRIBED") setSyncStatus(prev => prev === "sync-error" ? prev : "live");
+      if (status === "SUBSCRIBED") setRealtimeConnected(true);
       else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-        setSyncStatus(prev => prev === "local-only" ? prev : "connecting");
+        setRealtimeConnected(false);
       }
     },
     enabled: Boolean(supabase && workspaceId),
@@ -4188,9 +4193,10 @@ export default function App() {
         const disconnect = await connect((snap) => {
           if (cancelled) return;
           setPowerSyncStatus(snap);
-          // Drive the header chip from the live PowerSync connection.
-          if (snap.connected) setSyncStatus(prev => prev === "sync-error" ? prev : "live");
-          else setSyncStatus(prev => (prev === "local-only" || prev === "sync-error") ? prev : "connecting");
+          // Connection health feeds the debounced aggregator effect below; it
+          // does NOT write syncStatus directly. Otherwise a PowerSync blip would
+          // flip the chip to "connecting" even while Supabase realtime is fine,
+          // and the two transports would fight over the status (the flapping).
         });
         if (cancelled) { await disconnect?.(); return; }
         cleanup = disconnect;
@@ -4200,6 +4206,32 @@ export default function App() {
     })();
     return () => { cancelled = true; cleanup?.(); };
   }, [workspaceId]);
+
+  // ── Connection-status aggregator (kills the live ⇄ connecting flapping) ──────
+  // The board syncs over TWO independent transports — Supabase realtime and
+  // PowerSync — and each one cycles its own heartbeats/reconnects. If every
+  // transport blip drove the chip directly, the status would oscillate even
+  // while data is flowing fine on the other transport. Instead:
+  //   • we're "live" the moment EITHER transport is healthy, and
+  //   • we only fall back to "connecting" once BOTH have been down continuously
+  //     for a short grace period — so a transient drop on one transport (token
+  //     refresh, idle socket, a single CLOSED event) never flips the UI.
+  // "local-only" (no Supabase) and "sync-error" (a failed load) are owned
+  // elsewhere and left untouched here.
+  const anyTransportUp = realtimeConnected || Boolean(powerSyncStatus?.connected);
+  useEffect(() => {
+    if (!hasSupabaseConfig) return undefined; // local-only path owns the status
+    if (anyTransportUp) {
+      setSyncStatus(prev => (prev === "sync-error" ? prev : "live"));
+      return undefined;
+    }
+    // Both transports down — wait out the grace period before showing
+    // "connecting"; if either reconnects first, this timer is cleared.
+    const t = setTimeout(() => {
+      setSyncStatus(prev => (prev === "local-only" || prev === "sync-error") ? prev : "connecting");
+    }, 7000);
+    return () => clearTimeout(t);
+  }, [anyTransportUp, hasSupabaseConfig]);
 
   // ── PowerSync live updates: drive UI from local-DB changes once synced ───────
   // Watches re-run the mapped readers whenever a table changes (local edit or a
