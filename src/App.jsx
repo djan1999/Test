@@ -4104,6 +4104,22 @@ export default function App() {
 
     loadRemoteTables();
 
+    // PowerSync instant paint: when the on-device DB has synced, fold the local
+    // board in immediately (no network wait) through the same 3-way merge. The
+    // Supabase load above remains the source of truth and owns the gates, so a
+    // mapping issue self-corrects on the next reconcile. Guarded on non-empty so
+    // an empty local DB (e.g. the platform-admin) never blanks the board.
+    if (isPowerSyncEnabled(workspaceId)) {
+      (async () => {
+        try {
+          const { whenSynced, readServiceTables } = await import("./powersync/reads.js");
+          if (!(await whenSynced())) return;
+          const rows = await readServiceTables();
+          if (isMounted && rows.length > 0) mergeRemoteTables(rows);
+        } catch (e) { console.warn("[PowerSync] board read failed — using Supabase:", e); }
+      })();
+    }
+
     // Polling safety net (realtime is the primary path). Tighter than before so
     // a dropped subscription self-corrects in seconds, not 15s.
     const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 8000);
@@ -4283,6 +4299,23 @@ export default function App() {
     // Instant paint of the planner from this workspace's cache.
     const cachedResv = readLocalReservations();
     if (cachedResv && cachedResv.length) setReservations(cachedResv);
+
+    // PowerSync instant paint: when the on-device DB has synced, paint the
+    // planner straight from local SQLite (no network round-trip). The Supabase
+    // load below still runs as the source-of-truth refresh; guarded on non-empty
+    // so an empty local DB (e.g. the platform-admin) falls through to Supabase.
+    if (isPowerSyncEnabled(workspaceId)) {
+      (async () => {
+        try {
+          const { whenSynced, readReservations } = await import("./powersync/reads.js");
+          if (!(await whenSynced())) return;
+          const lo = new Date(); lo.setDate(lo.getDate() - 7);
+          const hi = new Date(); hi.setDate(hi.getDate() + 30);
+          const rows = await readReservations(toLocalDateISO(lo), toLocalDateISO(hi));
+          if (mounted && rows.length > 0) { setReservations(rows); setReservationsLoaded(true); }
+        } catch (e) { console.warn("[PowerSync] reservations read failed — using Supabase:", e); }
+      })();
+    }
 
     // Restore service date saved by a previous session — but if it has rolled
     // past the service-day cutoff, the service is over: auto-end it (archiving
