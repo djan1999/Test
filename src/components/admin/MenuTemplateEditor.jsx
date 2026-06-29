@@ -27,10 +27,10 @@ import { CSS } from "@dnd-kit/utilities";
 import { FONT, baseInp } from "./adminStyles.js";
 import { tokens } from "../../styles/tokens.js";
 import {
-  BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow, buildDefaultTemplate,
+  BLOCK_META, BLOCK_GROUPS, makeRowId, makeBlock, makeRow,
+  buildDefaultLongMenuTemplate, buildDefaultShortMenuTemplate,
 } from "../../utils/menuTemplateSchema.js";
 import { KT_BLOCK_META, KT_BLOCK_GROUPS, makeKtBlock, makeKtRow, buildDefaultTicketTemplate } from "../../utils/kitchenTicketSchema.js";
-import { buildShortMenuTemplateFromCourses } from "../../utils/menuLayoutProfiles.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 import { generateKitchenTicketHTML } from "../../utils/kitchenTicketGenerator.js";
 import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote, readTeamNames, writeTeamNames } from "../../utils/storage.js";
@@ -723,7 +723,6 @@ export default function MenuTemplateEditor({
   beers = [],
   aperitifOptions = [],
   profileLabel = "",
-  menuCoursesForRebuild = null,
   // Short menu template — lives inside the same profile as menuTemplate.
   // LONG/SHORT toggle switches between editing these two without switching profiles.
   shortMenuTemplate = null,
@@ -1131,11 +1130,13 @@ export default function MenuTemplateEditor({
       }
     } else if (editingShort) {
       // Rebuild ONLY the short template — must never touch the long menu.
-      // Seeds from show_on_short / short_order (falling back to all active
-      // courses) so the short menu starts from a sensible subset.
-      onUpdateShortMenuTemplate?.(buildShortMenuTemplateFromCourses(menuCoursesForRebuild || menuCourses));
+      // Loads the default short layout (header, aperitif/pairing scaffolding,
+      // section gap, footer) with EMPTY course slots so the user picks each dish.
+      onUpdateShortMenuTemplate?.(buildDefaultShortMenuTemplate());
     } else {
-      onUpdateTemplate(buildDefaultTemplate(menuCoursesForRebuild || menuCourses));
+      // Loads the default long layout with all section gaps and EMPTY course
+      // slots — never one row per dish; the user fills each slot in.
+      onUpdateTemplate(buildDefaultLongMenuTemplate());
     }
     setSelectedCell(null);
   };
@@ -1293,8 +1294,8 @@ export default function MenuTemplateEditor({
             title={editingTicketLayout
               ? "Reset ticket layout to default"
               : (editingShort
-                  ? "Rebuild the SHORT menu from current courses (leaves the Long menu untouched)"
-                  : "Rebuild the LONG menu from current courses (leaves the Short menu untouched)")}
+                  ? "Load the default SHORT layout — section gaps and empty course slots to fill in (leaves the Long menu untouched)"
+                  : "Load the default LONG layout — all section gaps and empty course slots to fill in (leaves the Short menu untouched)")}
           >↺ {editingTicketLayout ? "RESET TICKET LAYOUT" : (editingShort ? "REBUILD SHORT FROM COURSES" : "REBUILD LONG FROM COURSES")}</button>
           )}
 

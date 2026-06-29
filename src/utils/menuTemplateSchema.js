@@ -262,3 +262,90 @@ export function buildDefaultTemplate(menuCourses = []) {
 
   return { version: 2, rows };
 }
+
+// ── Baked-in default layout skeletons ─────────────────────────────────────────
+//
+// These reproduce the hand-tuned house long/short menu layouts — header, the
+// aperitif/pairing/optional-pairing drink scaffolding, the pairing-section
+// label, and the section gaps that separate the courses — but leave every
+// course slot EMPTY (courseKey: ""). "Rebuild from courses" loads this structure
+// so the menu always starts from the same shaped layout instead of one row per
+// dish; the user then picks which dish goes in each empty course slot.
+//
+// Every call mints fresh row ids so repeated rebuilds never collide.
+
+const drinks = (drinkSource, extra = {}) => ({
+  type: "drinks", showBottle: true, showByGlass: true, drinkSource, ...extra,
+});
+const emptyCourse = () => ({ type: "course", courseKey: "" });
+
+/**
+ * Default LONG menu layout, with all the section gaps, empty course slots.
+ */
+export function buildDefaultLongMenuTemplate() {
+  const row = (left, right, widthPreset = "55/45", gap = 0, extra = {}) =>
+    ({ id: makeRowId("row"), left, right, widthPreset, gap, ...extra });
+
+  const rows = [
+    row(makeBlock("title"), makeBlock("logo")),
+    row(emptyCourse(), drinks("aperitif")),
+    row(emptyCourse(), drinks("aperitif")),
+    row(emptyCourse(), drinks("aperitif")),
+    row(emptyCourse(), drinks("pairing")),
+    row(emptyCourse(), drinks("optional_pairing", { pairingFlag: "crayfish" })),
+    row(null, { ...makeBlock("pairing_label"), align: "left" }),
+    row(emptyCourse(), drinks("pairing")),
+    row(emptyCourse(), drinks("optional_pairing", { pairingFlag: "n_a_champagne" })),
+    row(emptyCourse(), drinks("pairing")),
+    row(emptyCourse(), drinks("pairing")),
+    row(emptyCourse(), drinks("optional_pairing", { pairingFlag: "beer" })),
+    row(emptyCourse(), drinks("pairing")),
+    row(emptyCourse(), drinks("pairing")),
+    row(null, null, "55/45", 15.5),              // section gap
+    row(emptyCourse(), drinks("pairing")),
+    row(emptyCourse(), drinks("pairing")),
+    row(emptyCourse(), drinks("pairing")),
+    row(emptyCourse(), drinks("pairing")),
+    row(emptyCourse(), drinks("pairing")),
+    row(emptyCourse(), drinks("pairing")),
+    row(makeBlock("goodbye"), null, "100/0"),
+    row(makeBlock("team"),    null, "100/0", 0, { pinToBottom: true }),
+  ];
+
+  return { version: 2, rows };
+}
+
+/**
+ * Default SHORT menu layout, with its section gap, empty course slots.
+ */
+export function buildDefaultShortMenuTemplate() {
+  const row = (left, right, widthPreset = "55/45", gap = 0, extra = {}) =>
+    ({ id: makeRowId("srow"), left, right, widthPreset, gap, ...extra });
+
+  // Short course cells carry the kitchen overlay flags (makeBlock defaults),
+  // matching the house short layout; courseKey stays empty.
+  const shortCourse = () => makeBlock("course");
+
+  const rows = [
+    row(makeBlock("title"), makeBlock("logo")),
+    row(shortCourse(), drinks("aperitif")),
+    row(shortCourse(), drinks("aperitif")),
+    row(shortCourse(), drinks("aperitif")),
+    row(null, { ...makeBlock("pairing_label"), align: "left" }),
+    row(shortCourse(), drinks("pairing")),
+    row(shortCourse(), drinks("pairing")),
+    row(shortCourse(), drinks("pairing")),
+    row(shortCourse(), drinks("pairing")),
+    row(shortCourse(), drinks("pairing")),
+    row(shortCourse(), drinks("pairing")),
+    row(null, null, "55/45", 14.5),              // section gap
+    row(shortCourse(), drinks("pairing")),
+    row(shortCourse(), drinks("pairing")),
+    row(shortCourse(), drinks("pairing")),
+    row(shortCourse(), drinks("pairing")),
+    row(makeBlock("goodbye"), null),
+    row(makeBlock("team"),    null, "55/45", 0, { pinToBottom: true }),
+  ];
+
+  return { version: 2, rows };
+}
