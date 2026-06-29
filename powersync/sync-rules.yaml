@@ -1,24 +1,63 @@
-# PowerSync sync rules — Milka pilot (DEMO WORKSPACE ONLY)
+# PowerSync Sync Streams — MULTI-TENANT (production, all workspaces).
 #
-# Paste this into your PowerSync instance's "Sync Rules" editor.
+# Replaces the Demo-only pilot rules. Each connecting client gets ONLY the
+# workspace(s) its logged-in user may see:
+#   • normal restaurant logins → the workspaces they belong to (workspace_members)
+#   • the master / platform-admin account → ALL workspaces (platform_admins)
+# This mirrors the Supabase RLS (private.is_workspace_member / is_platform_admin)
+# at the sync layer. request.user_id() is the authenticated Supabase user (JWT sub).
 #
-# Scope: every data query is hard-filtered to the Demo workspace
-#   547ffccc-cc93-42bd-942e-23eb0dc3a99e
-# so the pilot can NEVER sync or touch the real Hotel Milka workspace
-# (a011c48c-f95b-4d9e-bd75-8a766ec5032b). Nothing else reaches a client.
+# ⚠️ SECURITY-CRITICAL: a wrong filter here leaks one restaurant's data to
+# another. DO NOT rely on this for live service until it is VERIFIED with the
+# dashboard's Sync Test tool for at least TWO different restaurant users (each
+# must see only its own rows) and the platform-admin (sees all). See PILOT.md.
 #
-# This is a single global bucket (no per-user parameters) on purpose — the
-# pilot only ever serves Demo data, so there's nothing user-specific to scope.
-# The production version would replace this with a parameter query that derives
-# the caller's workspace_id from their JWT / workspace_members.
+# Composite-key tables keep their id alias (service_tables→table_id,
+# menu_courses→position, wines→key) so every row has the required `id` column.
 
-bucket_definitions:
-  demo_pilot:
-    data:
-      - select * from service_tables   where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
-      - select * from service_settings where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
-      - select * from reservations     where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
-      - select * from menu_courses      where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
-      - select * from wines             where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
-      - select * from beverages         where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
-      - select * from service_archive   where workspace_id = '547ffccc-cc93-42bd-942e-23eb0dc3a99e'
+streams:
+  service_tables:
+    query: >-
+      SELECT CAST(table_id AS TEXT) AS id, * FROM service_tables
+      WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = request.user_id())
+         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = request.user_id())
+    auto_subscribe: true
+  service_settings:
+    query: >-
+      SELECT * FROM service_settings
+      WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = request.user_id())
+         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = request.user_id())
+    auto_subscribe: true
+  reservations:
+    query: >-
+      SELECT * FROM reservations
+      WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = request.user_id())
+         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = request.user_id())
+    auto_subscribe: true
+  menu_courses:
+    query: >-
+      SELECT CAST(position AS TEXT) AS id, * FROM menu_courses
+      WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = request.user_id())
+         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = request.user_id())
+    auto_subscribe: true
+  wines:
+    query: >-
+      SELECT "key" AS id, * FROM wines
+      WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = request.user_id())
+         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = request.user_id())
+    auto_subscribe: true
+  beverages:
+    query: >-
+      SELECT * FROM beverages
+      WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = request.user_id())
+         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = request.user_id())
+    auto_subscribe: true
+  service_archive:
+    query: >-
+      SELECT * FROM service_archive
+      WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = request.user_id())
+         OR EXISTS (SELECT 1 FROM platform_admins WHERE user_id = request.user_id())
+    auto_subscribe: true
+
+config:
+  edition: 2
