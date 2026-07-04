@@ -3,8 +3,8 @@ import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../
 import { getAssignedGuestProfile } from "../../utils/menuLayoutProfiles.js";
 import { writeTeamNames, readTeamNames, writeMenuTitle, readMenuTitle, writeThankYouNote, readThankYouNote } from "../../utils/storage.js";
 import { applyCourseRestriction, RESTRICTION_PRIORITY_KEYS, RESTRICTION_COLUMN_MAP, optionalExtrasFromCourses, optionalPairingsFromCourses, normalizeOptionalKey, resolveSeatRestrictionKeys } from "../../utils/menuUtils.js";
-import { TABLES, supabase } from "../../lib/supabaseClient.js";
-import { scopedFrom } from "../../lib/scopedDb.js";
+import { supabase } from "../../lib/supabaseClient.js";
+import { readStateKey, saveStateKey } from "../../lib/stateStore.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES } from "../../constants/countries.js";
 import { restrLabel } from "../../constants/dietary.js";
@@ -84,18 +84,17 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, p
     if (!supabase) { genLoaded.current = true; return; }
     const currentLang = lang;
     Promise.all([
-      scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_team").single(),
-      scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_title").single(),
-      scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_thankyou").single(),
-    ]).then(([teamRes, titleRes, thankYouRes]) => {
-      if (teamRes.data?.state?.value) setTeamNames(teamRes.data.state.value);
+      readStateKey("menu_gen_team").catch(() => null),
+      readStateKey("menu_gen_title").catch(() => null),
+      readStateKey("menu_gen_thankyou").catch(() => null),
+    ]).then(([teamState, titleState, thankYouState]) => {
+      if (teamState?.value) setTeamNames(teamState.value);
 
-      // Only apply Supabase values when in the new bilingual { en, si } format.
+      // Only apply store values when in the new bilingual { en, si } format.
       // The legacy { value } format has no language tag — applying it blindly
       // would overwrite the correct language's localStorage value (e.g. showing
       // the SI title when opening in EN mode). If the row is still in the old
       // format, leave the state as-is (already seeded from localStorage in useState).
-      const titleState = titleRes.data?.state;
       if (titleState && (typeof titleState.en === "string" || typeof titleState.si === "string")) {
         const val = titleState[currentLang] ?? "";
         if (val) {
@@ -106,7 +105,6 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, p
         if (titleState[otherLang]) writeMenuTitle(otherLang, titleState[otherLang]);
       }
 
-      const thankYouState = thankYouRes.data?.state;
       if (thankYouState && (typeof thankYouState.en === "string" || typeof thankYouState.si === "string")) {
         const val = thankYouState[currentLang] ?? "";
         if (val) {
@@ -125,9 +123,7 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, p
   useEffect(() => {
     writeTeamNames(teamNames);
     if (!genLoaded.current || !supabase) return;
-    scopedFrom(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "menu_gen_team", state: { value: teamNames }, updated_at: new Date().toISOString() })
-      .then(() => {});
+    saveStateKey("menu_gen_team", { value: teamNames });
   }, [teamNames]);
 
   // Save menu title to Supabase when changed — store both languages so switching
@@ -136,17 +132,13 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, p
   // (not here) to avoid a React batching race where lang changes before menuTitle.
   useEffect(() => {
     if (!genLoaded.current || !supabase) return;
-    scopedFrom(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "menu_gen_title", state: { en: readMenuTitle("en"), si: readMenuTitle("si") }, updated_at: new Date().toISOString() })
-      .then(() => {});
+    saveStateKey("menu_gen_title", { en: readMenuTitle("en"), si: readMenuTitle("si") });
   }, [menuTitle]);
 
   // Save thank-you note to Supabase when changed — same multi-lang approach.
   useEffect(() => {
     if (!genLoaded.current || !supabase) return;
-    scopedFrom(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "menu_gen_thankyou", state: { en: readThankYouNote("en"), si: readThankYouNote("si") }, updated_at: new Date().toISOString() })
-      .then(() => {});
+    saveStateKey("menu_gen_thankyou", { en: readThankYouNote("en"), si: readThankYouNote("si") });
   }, [thankYouNote]);
 
   const seats        = table.seats        || [];

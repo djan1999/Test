@@ -100,13 +100,14 @@ export async function deleteReservationRow(id) {
   );
 }
 
-// Full menu save: upsert every course row (position is the natural key) and
-// delete rows whose position is no longer present — mirroring the legacy
-// upsert + delete-missing pair, atomically.
-export async function replaceMenuCourses(rows) {
+// Menu save: upsert the CHANGED course rows (position is the natural key) and,
+// when `keptPositions` is provided, delete rows whose position fell out of the
+// kept list — atomically. The caller diffs, so an untouched course is never
+// rewritten and the delete pass only runs when the user actually removed one.
+export async function writeMenuCourses(changedRows, keptPositions = null) {
   const ws = requireWorkspace();
   await getPowerSync().writeTransaction(async (tx) => {
-    for (const row of rows) {
+    for (const row of changedRows) {
       const { position, ...cols } = row;
       const converted = {};
       for (const [k, v] of Object.entries(cols)) converted[k] = sqlite(v);
@@ -116,8 +117,8 @@ export async function replaceMenuCourses(rows) {
         updated_at: new Date().toISOString(),
       });
     }
-    const positions = rows.map((r) => Number(r.position)).filter(Number.isFinite);
-    if (positions.length > 0) {
+    const positions = (keptPositions || []).map(Number).filter(Number.isFinite);
+    if (keptPositions && positions.length > 0) {
       await tx.execute(
         `DELETE FROM menu_courses WHERE workspace_id = ? AND position NOT IN (${positions.map(() => "?").join(",")})`,
         [ws, ...positions],
@@ -152,16 +153,58 @@ export async function deleteWines(keys) {
   );
 }
 
-// Manual beverages: replace all manual rows in the edited categories, like the
-// legacy delete-by-filter + insert. Locally-created rows get a placeholder id;
-// the server mints the real identity id on upload and the synced copy replaces
-// the placeholder after the next checkpoint.
-export async function replaceManualBeverages(rows) {
+// File a service archive entry locally (works offline; uploads like any other
+// write). The uuid is minted client-side so the local row, the uploaded row,
+// and any immediate re-read all share one identity.
+export async function writeArchiveEntry({ date, label, state }) {
+  const ws = requireWorkspace();
+  const id = crypto.randomUUID();
+  await getPowerSync().execute(
+    "INSERT INTO service_archive (id, workspace_id, date, label, state, created_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, NULL)",
+    [id, ws, date, label, sqlite(state ?? {}), new Date().toISOString()],
+  );
+  return id;
+}
+
+// Soft-delete / restore an archive entry (deleted_at timestamp or null).
+export async function setArchiveDeleted(id, deletedAt) {
+  const ws = requireWorkspace();
+  await getPowerSync().execute(
+    "UPDATE service_archive SET deleted_at = ? WHERE id = ? AND workspace_id = ?",
+    [deletedAt, String(id), ws],
+  );
+}
+
+// Soft-delete every active archive entry (the Archive modal's "delete all").
+export async function setAllArchivesDeleted(deletedAt) {
+  const ws = requireWorkspace();
+  await getPowerSync().execute(
+    "UPDATE service_archive SET deleted_at = ? WHERE workspace_id = ? AND deleted_at IS NULL",
+    [deletedAt, ws],
+  );
+}
+
+// Permanently purge everything in the archive trash.
+export async function purgeDeletedArchives() {
+  const ws = requireWorkspace();
+  await getPowerSync().execute(
+    "DELETE FROM service_archive WHERE workspace_id = ? AND deleted_at IS NOT NULL",
+    [ws],
+  );
+}
+
+// Manual beverages: replace the manual rows of the EDITED categories only,
+// like the legacy delete-by-filter + insert but scoped to what changed.
+// Locally-created rows get a placeholder id; the server mints the real
+// identity id on upload and the synced copy replaces the placeholder after
+// the next checkpoint.
+export async function replaceManualBeverages(rows, categories = ["cocktail", "spirit", "beer"]) {
+  if (!categories.length) return;
   const ws = requireWorkspace();
   await getPowerSync().writeTransaction(async (tx) => {
     await tx.execute(
-      "DELETE FROM beverages WHERE workspace_id = ? AND source = 'manual' AND category IN ('cocktail','spirit','beer')",
-      [ws],
+      `DELETE FROM beverages WHERE workspace_id = ? AND source = 'manual' AND category IN (${categories.map(() => "?").join(",")})`,
+      [ws, ...categories],
     );
     for (const row of rows) {
       await tx.execute(

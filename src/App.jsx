@@ -25,6 +25,7 @@ import {
   readLocalReservations, writeLocalReservations,
   readLocalRestrictions, writeLocalRestrictions,
   readLocalCourseNotes, writeLocalCourseNotes,
+  readLocalDemoBoard, writeLocalDemoBoard,
   workspaceKey,
 } from "./utils/storage.js";
 import {
@@ -33,6 +34,7 @@ import {
   remapTableGroup, reservationTableIds, mergeRestrictionPositions,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
+import { foldTable } from "./utils/foldTable.js";
 import { reconcileTables } from "./utils/reconcile.js";
 import { isSameServiceLabel, nextArchiveLabel } from "./utils/archiveDedup.js";
 import { stampWineSources } from "./utils/wineEdit.js";
@@ -60,7 +62,9 @@ import { kitchenSnapshot, kitchenDelta } from "./utils/kitchenAlerts.js";
 import { BEV_TYPES } from "./constants/beverageTypes.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES, getWorkspaceId, setWorkspaceId } from "./lib/supabaseClient.js";
 import { scopedFrom } from "./lib/scopedDb.js";
+import { readStateKey, saveStateKey } from "./lib/stateStore.js";
 import { isPowerSyncEnabled } from "./powersync/config.js";
+import { setSqlitePrimaryFlag } from "./powersync/primary.js";
 import { tokens } from "./styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, chip as mixinChip, circleButton as mixinCircleButton } from "./styles/mixins.js";
 import WaterPicker from "./components/service/WaterPicker.jsx";
@@ -2058,7 +2062,15 @@ export default function App() {
 
   // The board starts blank and paints from the source of truth: the local
   // SQLite DB (instant, works offline) or the direct-Supabase fallback load.
-  const [tables,    setTables]    = useState(initTables);
+  // Demo mode (no Supabase configured) has no store at all — it restores the
+  // device-local demo snapshot instead.
+  const [tables,    setTables]    = useState(() => {
+    if (!hasSupabaseConfig) {
+      const demo = readLocalDemoBoard();
+      if (demo) return demo.map(t => sanitizeTable(t));
+    }
+    return initTables;
+  });
   // Hydrate the reference lists from the per-workspace device cache so they
   // paint instantly on launch; SQLite/Supabase refresh them right after.
   const [menuCourses, setMenuCourses] = useState(() => readLocalMenuCourses() || []);
@@ -2097,7 +2109,14 @@ export default function App() {
 
   const applyWorkspace = useCallback((id) => {
     setWorkspaceId(id);        // module singleton — used by scopedFrom() everywhere
-    setWorkspaceIdState(id);   // React state — drives data-load effects + realtime
+    setWorkspaceIdState(id);   // React state — drives the data-load effects
+    // The store decision is per-workspace: re-gate the fallback loaders until
+    // the sqlite-primary probe resolves for THIS workspace, so a first login
+    // doesn't fire a redundant direct-Supabase burst that the primary path
+    // immediately supersedes.
+    setSqlitePrimary(false);
+    setSqlitePrimaryFlag(false);
+    setPsResolved(!isPowerSyncEnabled(id));
     try {
       if (id) localStorage.setItem(WORKSPACE_KEY, id);
       else localStorage.removeItem(WORKSPACE_KEY);
@@ -2397,40 +2416,15 @@ export default function App() {
   const [psResolved, setPsResolved] = useState(!psEnabled);
   const sqlitePrimaryRef = useRef(false);
   sqlitePrimaryRef.current = sqlitePrimary;
+  // Mirror the decision into the module flag so the shared stateStore helpers
+  // and the admin components outside this tree (inventory, archive, menu
+  // texts) pick the same store. Declared before every consumer effect.
+  useEffect(() => { setSqlitePrimaryFlag(sqlitePrimary); }, [sqlitePrimary]);
 
   // ── Store seams ────────────────────────────────────────────────────────────
-  // One read + one write helper per concern; each picks the local SQLite DB
-  // when primary and falls back to a direct Supabase call otherwise. All the
-  // service_settings blobs (logo, layouts, quick access, service date, …) go
-  // through these two.
-  const readStateKey = useCallback(async (id) => {
-    if (sqlitePrimaryRef.current) {
-      const { readSetting } = await import("./powersync/reads.js");
-      return readSetting(id);
-    }
-    const { data, error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
-      .select("state").eq("id", id).maybeSingle();
-    if (error) throw error;
-    return data?.state ?? null;
-  }, []);
-
-  const saveStateKey = useCallback(async (id, state) => {
-    if (!supabase || !getWorkspaceId()) return { ok: true };
-    try {
-      if (sqlitePrimaryRef.current) {
-        const { writeSetting } = await import("./powersync/writes.js");
-        await writeSetting(id, state);
-      } else {
-        const { error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
-          .upsert({ id, state, updated_at: new Date().toISOString() }, { onConflict: "id" });
-        if (error) throw error;
-      }
-      return { ok: true };
-    } catch (error) {
-      console.error(`Settings save failed (${id}):`, error);
-      return { ok: false, error };
-    }
-  }, []);
+  // The service_settings blobs (logo, layouts, quick access, service date, …)
+  // go through the shared lib/stateStore.js helpers; the board, reservation
+  // and archive seams below pick the store the same way.
 
   // Persist board rows: [{ table_id, data, updated_at }] (update-or-insert).
   const persistBoardRows = useCallback(async (rows) => {
@@ -2500,11 +2494,12 @@ export default function App() {
     .filter(Boolean), [activeMenuCourses]);
 
   // Adopt a full set of store rows into React state. The store (local SQLite
-  // when primary, Supabase on the fallback) is the source of truth; the only
-  // exception is a table with UNSAVED local edits (its current JSON differs
-  // from the last-written baseline) — the debounced save is about to write it,
-  // so the pending local version wins this round and the row converges via
-  // row-level last-write-wins.
+  // when primary, Supabase on the fallback) is the source of truth; a table
+  // with UNSAVED local edits (its current JSON differs from the last-written
+  // baseline) is instead FOLDED with the incoming copy at seat granularity
+  // (utils/foldTable.js) — two waiters editing different seats of the same
+  // table both keep their work. The folded result still differs from the new
+  // baseline, so the pending autosave writes it and every device converges.
   const adoptRemoteTables = rows => {
     const arr = Array.isArray(rows) ? rows : [];
     const rawById = new Map(arr.map(row => [Number(row.table_id), row]));
@@ -2518,7 +2513,17 @@ export default function App() {
       const theirs = sanitizeTable({ id: base.id, ...(row.data || {}) });
       const theirsJson = JSON.stringify(theirs);
       const mineJson = JSON.stringify(sanitizeTable(mine));
-      if (mineJson !== nextPrev[idx]) return mine; // unsaved local edit → pending save wins
+      if (mineJson !== nextPrev[idx]) {
+        // Unsaved local edit. If the incoming copy just echoes what we last
+        // wrote (or equals our local state), nothing to fold — keep typing.
+        if (theirsJson === nextPrev[idx] || theirsJson === mineJson) return mine;
+        let ancestor = null;
+        try { ancestor = nextPrev[idx] ? JSON.parse(nextPrev[idx]) : null; } catch { /* keep null */ }
+        const folded = sanitizeTable(foldTable(ancestor, sanitizeTable(mine), theirs));
+        nextPrev[idx] = theirsJson; // theirs is the store truth we folded onto
+        if (JSON.stringify(folded) !== mineJson) changed = true;
+        return folded;
+      }
       nextPrev[idx] = theirsJson;
       if (mineJson !== theirsJson) changed = true;
       return theirs;
@@ -2791,10 +2796,26 @@ export default function App() {
       return generated ? { ...c, course_key: generated } : c;
     });
     const rows = withKeys.map(c => courseToSupabaseRow(c));
+    // Diff against what this device last saw, so a save only touches the rows
+    // the user actually edited — two devices editing DIFFERENT courses at the
+    // same time no longer stomp each other with full-list rewrites, and the
+    // delete-missing pass only runs when this user really removed a course.
+    const prevJsonByPos = new Map(menuCourses.map(c => {
+      const row = courseToSupabaseRow(c);
+      return [row.position, JSON.stringify(row)];
+    }));
+    const changedRows = rows.filter(r => prevJsonByPos.get(r.position) !== JSON.stringify(r));
+    const keptPositions = rows.map(r => r.position);
+    const keptSet = new Set(keptPositions);
+    const removedAny = [...prevJsonByPos.keys()].some(p => !keptSet.has(p));
+    if (changedRows.length === 0 && !removedAny) {
+      setMenuCourses(withKeys);
+      return { ok: true };
+    }
     if (sqlitePrimaryRef.current) {
       try {
-        const { replaceMenuCourses } = await import("./powersync/writes.js");
-        await replaceMenuCourses(rows);
+        const { writeMenuCourses } = await import("./powersync/writes.js");
+        await writeMenuCourses(changedRows, removedAny ? keptPositions : null);
         setMenuCourses(withKeys);
         return { ok: true };
       } catch (error) {
@@ -2806,28 +2827,30 @@ export default function App() {
     // upsert targets the composite PK (workspace_id, position). Hitting
     // supabase.from() directly with onConflict:"position" trips Postgres 42P10
     // — there is no unique constraint on position alone.
-    let { error } = await scopedFrom(TABLES.MENU_COURSES).upsert(rows);
-    // Pre-migration fallback: if the is_active column hasn't been added yet,
-    // retry without it so the rest of the save still goes through. The toggle
-    // won't persist until the schema migration is applied, but new courses,
-    // edits, and reorders won't be lost.
+    let error = null;
     let isActiveSkipped = false;
-    if (error && (error.code === "PGRST204" || /is_active/i.test(String(error.message || "")))) {
-      const fallbackRows = rows.map(({ is_active, ...rest }) => rest);
-      const retry = await scopedFrom(TABLES.MENU_COURSES).upsert(fallbackRows);
-      error = retry.error;
-      if (!error) {
-        isActiveSkipped = true;
-        console.warn("menu_courses.is_active column missing — saved without it. Run the schema migration to enable archiving.");
+    if (changedRows.length > 0) {
+      ({ error } = await scopedFrom(TABLES.MENU_COURSES).upsert(changedRows));
+      // Pre-migration fallback: if the is_active column hasn't been added yet,
+      // retry without it so the rest of the save still goes through. The toggle
+      // won't persist until the schema migration is applied, but new courses,
+      // edits, and reorders won't be lost.
+      if (error && (error.code === "PGRST204" || /is_active/i.test(String(error.message || "")))) {
+        const fallbackRows = changedRows.map(({ is_active, ...rest }) => rest);
+        const retry = await scopedFrom(TABLES.MENU_COURSES).upsert(fallbackRows);
+        error = retry.error;
+        if (!error) {
+          isActiveSkipped = true;
+          console.warn("menu_courses.is_active column missing — saved without it. Run the schema migration to enable archiving.");
+        }
       }
+      if (error) { console.error("Menu save failed:", error); return { ok: false, error }; }
     }
-    if (error) { console.error("Menu save failed:", error); return { ok: false, error }; }
     // Reflect any auto-generated keys back into local state so the UI shows them.
     setMenuCourses(withKeys);
-    // Remove courses that no longer exist
-    const positions = withKeys.map(c => c.position);
-    if (positions.length > 0) {
-      await scopedFrom(TABLES.MENU_COURSES).delete().not("position", "in", `(${positions.join(",")})`);
+    // Remove courses this user deleted
+    if (removedAny && keptPositions.length > 0) {
+      await scopedFrom(TABLES.MENU_COURSES).delete().not("position", "in", `(${keptPositions.join(",")})`);
     }
     return { ok: true, isActiveSkipped };
   };
@@ -2887,27 +2910,36 @@ export default function App() {
   };
 
   const saveBeverages = async ({ cocktails: newC, spirits: newS, beers: newB }) => {
+    // Only categories whose list actually changed are rewritten (the write is
+    // a replace-all within its category), so saving a cocktail edit can't
+    // race another device's concurrent beer edit.
+    const bevRows = (list, category) =>
+      list.map((item, i) => ({ category, name: item.name, notes: item.notes || "", position: i, source: "manual" }));
+    const sameList = (next, prev) =>
+      JSON.stringify(next.map(x => [x.name, x.notes || ""])) === JSON.stringify(prev.map(x => [x.name, x.notes || ""]));
+    const changed = [
+      ...(sameList(newC, cocktails) ? [] : [{ category: "cocktail", rows: bevRows(newC, "cocktail") }]),
+      ...(sameList(newS, spirits)   ? [] : [{ category: "spirit",   rows: bevRows(newS, "spirit") }]),
+      ...(sameList(newB, beers)     ? [] : [{ category: "beer",     rows: bevRows(newB, "beer") }]),
+    ];
     setCocktails(newC);
     setSpirits(newS);
     setBeers(newB);
     writeLocalBeverages({ cocktails: newC, spirits: newS, beers: newB });
-    if (!supabase) return { ok: true };
-    const rows = [
-      ...newC.map((item, i) => ({ category: "cocktail", name: item.name, notes: item.notes || "", position: i, source: "manual" })),
-      ...newS.map((item, i) => ({ category: "spirit",   name: item.name, notes: item.notes || "", position: i, source: "manual" })),
-      ...newB.map((item, i) => ({ category: "beer",     name: item.name, notes: item.notes || "", position: i, source: "manual" })),
-    ];
+    if (!supabase || changed.length === 0) return { ok: true };
+    const categories = changed.map(c => c.category);
+    const rows = changed.flatMap(c => c.rows);
     if (sqlitePrimaryRef.current) {
       try {
         const { replaceManualBeverages } = await import("./powersync/writes.js");
-        await replaceManualBeverages(rows);
+        await replaceManualBeverages(rows, categories);
         return { ok: true };
       } catch (error) {
         console.error("Beverage save error:", error);
         return { ok: false, error: error.message };
       }
     }
-    const { error: delErr } = await scopedFrom(TABLES.BEVERAGES).delete().eq("source", "manual").in("category", ["cocktail", "spirit", "beer"]);
+    const { error: delErr } = await scopedFrom(TABLES.BEVERAGES).delete().eq("source", "manual").in("category", categories);
     if (delErr) {
       console.error("Beverage delete error:", delErr);
       return { ok: false, error: delErr.message };
@@ -2941,10 +2973,35 @@ export default function App() {
   // Load every non-deleted archive for a service day that shares the base label
   // (or one of its " · n" variants) — the input set for the dedup decision.
   const fetchSameDayArchives = async (archiveDate, archiveLabel) => {
-    const { data } = await scopedFrom(TABLES.SERVICE_ARCHIVE)
-      .select("id, label, state, created_at").eq("date", archiveDate).is("deleted_at", null);
-    return (data || []).filter(e => isSameServiceLabel(e.label, archiveLabel));
+    let rows;
+    if (sqlitePrimaryRef.current) {
+      const { readActiveArchivesForDate } = await import("./powersync/reads.js");
+      rows = await readActiveArchivesForDate(archiveDate);
+    } else {
+      const { data } = await scopedFrom(TABLES.SERVICE_ARCHIVE)
+        .select("id, label, state, created_at").eq("date", archiveDate).is("deleted_at", null);
+      rows = data || [];
+    }
+    return rows.filter(e => isSameServiceLabel(e.label, archiveLabel));
   };
+
+  // File one archive entry through the store seam: local SQLite when primary
+  // (works offline — the whole point of archiving through the sync layer),
+  // direct Supabase otherwise. Returns { ok, error }.
+  const persistArchiveEntry = useCallback(async (entry) => {
+    try {
+      if (sqlitePrimaryRef.current) {
+        const { writeArchiveEntry } = await import("./powersync/writes.js");
+        await writeArchiveEntry(entry);
+      } else {
+        const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert(entry);
+        if (error) throw error;
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error };
+    }
+  }, []);
 
   // Guards a manual archive in flight so a double-tap (or a second device a few
   // seconds later) can't file the same service twice — the cause of the two
@@ -2970,13 +3027,13 @@ export default function App() {
         // label so both are visible (the in-flight archivingRef + the confirm
         // dialog still prevent a single click from firing twice).
         const label = nextArchiveLabel(await fetchSameDayArchives(archiveDate, archiveLabel), archiveLabel);
-        const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert({
+        const { ok, error } = await persistArchiveEntry({
           date: archiveDate,
           label,
           state: { ...snap, tables: activeTables, menuCourses, serviceSession: activeServiceSession, startedAt },
         });
-        if (error) {
-          window.alert("Archive failed: " + error.message);
+        if (!ok) {
+          window.alert("Archive failed: " + (error?.message || error));
           return;
         }
       }
@@ -3028,12 +3085,12 @@ export default function App() {
         const label2 = nextArchiveLabel(await fetchSameDayArchives(staleDate, label), label);
         let courses = menuCourses;
         if (!courses || courses.length === 0) { try { courses = await fetchMenuCourses(); } catch { courses = []; } }
-        const { error: insErr } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert({
+        const { ok, error: insErr } = await persistArchiveEntry({
           date: staleDate,
           label: label2,
           state: { tables: activeTables, cocktails, spirits, beers, menuCourses: courses || [], serviceSession: activeServiceSession || "dinner", startedAt, autoEnded: true },
         });
-        if (insErr) throw insErr;
+        if (!ok) throw insErr;
       }
     } catch (e) {
       // Archiving failed — do NOT clear, so the data is never lost. We retry on
@@ -3439,9 +3496,11 @@ export default function App() {
   // fallback path. Changed rows accumulate in pendingBoardWritesRef across
   // debounce ticks so two edits inside one window can't drop each other.
   useEffect(() => {
+    // Demo mode: the device-local snapshot IS the persistence.
+    if (!supabase) { writeLocalDemoBoard(tables); return; }
     // Never push table rows before the board truth has loaded: the diff would
     // run against the blank boot state and overwrite a live service.
-    if (!supabase || !remoteBoardLoaded) return;
+    if (!remoteBoardLoaded) return;
 
     const prevJson = prevTablesJsonRef.current;
     const nextJson = tables.map(t => JSON.stringify(sanitizeTable(t)));
@@ -4022,7 +4081,7 @@ export default function App() {
   // when the stream drops.
   const probingRef = useRef(false);
   useEffect(() => {
-    if (!psEnabled) { setSqlitePrimary(false); setPsResolved(true); return undefined; }
+    if (!psEnabled) { setSqlitePrimaryFlag(false); setSqlitePrimary(false); setPsResolved(true); return undefined; }
     if (sqlitePrimary) return undefined;
     const deadline = setTimeout(() => setPsResolved(true), 4000);
     if (!powerSyncStatus?.hasSyncedP1 || probingRef.current) return () => clearTimeout(deadline);
@@ -4030,9 +4089,18 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
-        const { localDbHasWorkspaceData } = await import("./powersync/reads.js");
+        const { localDbHasWorkspaceData, detectForeignWorkspaceRows } = await import("./powersync/reads.js");
+        // Tripwire: refuse to go primary if the local DB somehow holds another
+        // workspace's rows — the natural-key aliases aren't workspace-qualified,
+        // so trusting it could cross tenants (see docs/SYNC_UPGRADE_PLAN.md).
+        // Membership is 1:1 today, so this never fires.
+        const foreign = await detectForeignWorkspaceRows(workspaceId);
+        if (foreign.size > 0) {
+          if (!cancelled) setSyncStatus("sync-error");
+          return; // stay on the fallback path; the deadline resolves psResolved
+        }
         const usable = await localDbHasWorkspaceData(workspaceId);
-        if (!cancelled && usable) setSqlitePrimary(true);
+        if (!cancelled && usable) { setSqlitePrimaryFlag(true); setSqlitePrimary(true); }
       } catch (e) {
         console.warn("[PowerSync] local-DB probe failed:", e);
       } finally {

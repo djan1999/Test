@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase, TABLES } from "../../lib/supabaseClient.js";
 import { scopedFrom } from "../../lib/scopedDb.js";
+import { isSqlitePrimary } from "../../powersync/primary.js";
 import { findGuestHistory } from "../../utils/archiveInsights.js";
 import { tokens } from "../../styles/tokens.js";
 
@@ -12,20 +13,35 @@ let archiveCache = { at: 0, entries: null, promise: null };
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const ARCHIVE_LIMIT = 20;
 
+async function fetchRecentArchives() {
+  // Local SQLite when primary (instant, works offline); direct Supabase
+  // otherwise. Both shaped as { date, label, state } rows, newest first.
+  if (isSqlitePrimary()) {
+    const { readServiceArchive } = await import("../../powersync/reads.js");
+    const { active } = await readServiceArchive();
+    return active.slice(0, ARCHIVE_LIMIT).map(({ date, label, state }) => ({ date, label, state }));
+  }
+  const { data, error } = await scopedFrom(TABLES.SERVICE_ARCHIVE)
+    .select("date, label, state")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(ARCHIVE_LIMIT);
+  if (error) throw error;
+  return data || [];
+}
+
 function loadRecentArchives() {
   const fresh = archiveCache.entries && Date.now() - archiveCache.at < CACHE_TTL_MS;
   if (fresh) return Promise.resolve(archiveCache.entries);
   if (archiveCache.promise) return archiveCache.promise;
-  archiveCache.promise = scopedFrom(TABLES.SERVICE_ARCHIVE)
-    .select("date, label, state")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(ARCHIVE_LIMIT)
-    .then(({ data, error }) => {
-      archiveCache.promise = null;
-      if (error) return archiveCache.entries || [];
-      archiveCache = { at: Date.now(), entries: data || [], promise: null };
+  archiveCache.promise = fetchRecentArchives()
+    .then((rows) => {
+      archiveCache = { at: Date.now(), entries: rows, promise: null };
       return archiveCache.entries;
+    })
+    .catch(() => {
+      archiveCache.promise = null;
+      return archiveCache.entries || [];
     });
   return archiveCache.promise;
 }

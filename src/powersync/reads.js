@@ -101,6 +101,39 @@ export async function localDbHasWorkspaceData(workspaceId) {
   return false;
 }
 
+// TRIPWIRE for the natural-key aliasing hazard. The sync streams alias each
+// composite-key table's natural key into the local `id` PK
+// (service_tables→table_id, menu_courses→position, wines→key). Those aliases
+// are NOT workspace-qualified, so if one device ever syncs TWO workspaces at
+// once, "table 3" of workspace A and "table 3" of workspace B collide on the
+// same local row and one silently overwrites the other. Membership is 1:1
+// today so this never fires — but if it ever does, it means the sync-rules
+// alias fix in docs/SYNC_UPGRADE_PLAN.md must be deployed BEFORE trusting the
+// local DB. Returns the set of foreign workspace ids found (empty = safe).
+export async function detectForeignWorkspaceRows(workspaceId) {
+  const db = getPowerSync();
+  const foreign = new Set();
+  for (const table of SYNCED_TABLES) {
+    const rows = await db.getAll(
+      `SELECT DISTINCT workspace_id FROM ${table} WHERE workspace_id IS NOT NULL AND workspace_id != ?`,
+      [workspaceId],
+    ).catch(() => []);
+    for (const r of rows) if (r.workspace_id) foreign.add(r.workspace_id);
+  }
+  if (foreign.size > 0) {
+    console.error(
+      "[PowerSync] SECURITY TRIPWIRE: local DB holds rows from foreign workspace(s)",
+      [...foreign],
+      "while active workspace is", workspaceId,
+      "— the natural-key aliases (service_tables→table_id, menu_courses→position,",
+      "wines→key) are NOT workspace-qualified, so cross-workspace rows can collide.",
+      "Deploy the sync-rules alias fix (docs/SYNC_UPGRADE_PLAN.md) before trusting",
+      "the local DB for a multi-workspace account.",
+    );
+  }
+  return foreign;
+}
+
 // One service_settings blob (id = "menu_logo", "service_date", …) → the state
 // object, or null when the row doesn't exist. Mirrors the Supabase
 // `.select("state").eq("id", id).maybeSingle()` reads: a missing row is null,
@@ -196,6 +229,16 @@ export async function readMenuCourses() {
     }
     return out;
   });
+}
+
+// Active (non-deleted) archive entries for one service day — the input set
+// for the manual-archive label dedup.
+export async function readActiveArchivesForDate(date) {
+  const rows = await getPowerSync().getAll(
+    "SELECT id, label, state, created_at FROM service_archive WHERE workspace_id = ? AND date = ? AND deleted_at IS NULL",
+    [getWorkspaceId(), date],
+  );
+  return rows.map(reviveRow);
 }
 
 // Service archive split into { active, deleted }, mirroring the two Supabase

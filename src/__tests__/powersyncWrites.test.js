@@ -24,7 +24,7 @@ vi.mock("../lib/supabaseClient.js", () => ({
 
 import {
   writeServiceTables, writeSetting, writeReservation, deleteReservationRow,
-  replaceMenuCourses, writeWines, deleteWines, replaceManualBeverages,
+  writeMenuCourses, writeWines, deleteWines, replaceManualBeverages,
 } from "../powersync/writes.js";
 
 beforeEach(() => {
@@ -90,11 +90,11 @@ describe("powersync/writes — reservations", () => {
 });
 
 describe("powersync/writes — menu courses", () => {
-  it("upserts every row (booleans as 0/1, jsonb as text) and deletes missing positions", async () => {
-    await replaceMenuCourses([
+  it("upserts the changed rows (booleans as 0/1, jsonb as text) and deletes missing positions", async () => {
+    await writeMenuCourses([
       { position: 1, menu: { name: "Trout" }, is_snack: false, show_on_short: true, kitchen_note: "" },
       { position: 2, menu: null, is_snack: true, show_on_short: false, kitchen_note: "fire" },
-    ]);
+    ], [1, 2]);
     const inserts = h.calls.filter(c => c.sql.startsWith("INSERT INTO menu_courses"));
     expect(inserts).toHaveLength(2);
     expect(inserts[0].params[0]).toBe("1"); // aliased id = String(position)
@@ -106,6 +106,11 @@ describe("powersync/writes — menu courses", () => {
     const del = h.calls.find(c => c.sql.startsWith("DELETE FROM menu_courses"));
     expect(del.sql).toContain("position NOT IN (?,?)");
     expect(del.params).toEqual(["ws-1", 1, 2]);
+  });
+
+  it("skips the delete pass entirely when no positions were removed", async () => {
+    await writeMenuCourses([{ position: 3, menu: null, kitchen_note: "" }], null);
+    expect(h.calls.some(c => c.sql.startsWith("DELETE FROM menu_courses"))).toBe(false);
   });
 });
 
@@ -124,13 +129,15 @@ describe("powersync/writes — wines & beverages", () => {
     expect(h.calls[0].params).toEqual(["ws-1", "a", "b"]);
   });
 
-  it("manual beverages: replace-all within the edited categories, placeholder uuids on inserts", async () => {
+  it("manual beverages: replace-all scoped to the edited categories only, placeholder uuids on inserts", async () => {
     await replaceManualBeverages([
       { category: "cocktail", name: "Negroni", notes: "", position: 0 },
       { category: "beer", name: "Union", notes: "0.5l", position: 1 },
-    ]);
+    ], ["cocktail", "beer"]);
     expect(h.calls[0].sql).toContain("DELETE FROM beverages");
     expect(h.calls[0].sql).toContain("source = 'manual'");
+    expect(h.calls[0].sql).toContain("category IN (?,?)");
+    expect(h.calls[0].params).toEqual(["ws-1", "cocktail", "beer"]); // untouched spirits survive
     const inserts = h.calls.slice(1);
     expect(inserts).toHaveLength(2);
     expect(typeof inserts[0].params[0]).toBe("string"); // placeholder uuid
