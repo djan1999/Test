@@ -2724,19 +2724,30 @@ export default function App() {
     if (r1.date === serviceDate && (mode === "service" || mode === "display")) {
       swapTableState(t1, t2);
     }
+    // Remap each reservation's tableGroup alongside its table_id. Swapping only
+    // table_id left data.tableGroup pointing at the OLD table — a table_id ↔
+    // tableGroup desync that made reservationTableIds/reconcile disagree about
+    // where the booking sits, duplicating one guest and hiding the other.
+    const swapData = (data, a, b) => {
+      const g = Array.isArray(data?.tableGroup) ? data.tableGroup : [];
+      if (g.length === 0) return data;
+      return { ...data, tableGroup: remapTableGroup(g, a, b) };
+    };
+    const data1 = swapData(r1.data, t1, t2);
+    const data2 = swapData(r2.data, t1, t2);
     // Update r1's local state synchronously so the second upsert sees the new
     // table_id and skips the auto-move (avoids a redundant moveTableState call
     // that would fail-noop now that the swap above already happened).
     setReservations(prev => prev.map(r =>
-      r.id === r1Id ? { ...r, table_id: t2 }
-        : r.id === r2Id ? { ...r, table_id: t1 }
+      r.id === r1Id ? { ...r, table_id: t2, data: data1 }
+        : r.id === r2Id ? { ...r, table_id: t1, data: data2 }
         : r
     ));
     // Persist both rows; ignore the auto-move guards inside upsertReservation
     // by going straight to the store.
     await Promise.all([
-      persistReservationRow({ id: r1Id, date: r1.date, table_id: t2, data: r1.data }),
-      persistReservationRow({ id: r2Id, date: r2.date, table_id: t1, data: r2.data }),
+      persistReservationRow({ id: r1Id, date: r1.date, table_id: t2, data: data1 }),
+      persistReservationRow({ id: r2Id, date: r2.date, table_id: t1, data: data2 }),
     ]);
     return { ok: true };
   };
@@ -5087,9 +5098,15 @@ export default function App() {
                 return r;
               }));
               if (supabase) {
+                // Persist through the store seam (SQLite when primary), NOT a
+                // direct Supabase write: on the SQLite-primary path the
+                // reservations watch re-reads from the local DB, so a direct
+                // Supabase-only write would be reverted by the next watch tick
+                // and the switch would bounce back — leaving the guest on both
+                // tables (the duplicate) and the other table hidden.
                 const writes = [];
-                if (srcResv) writes.push(scopedFrom(TABLES.RESERVATIONS).update(repoint(srcResv)).eq("id", srcResv.id));
-                if (dstResv && dstResv.id !== srcResv?.id) writes.push(scopedFrom(TABLES.RESERVATIONS).update(repoint(dstResv)).eq("id", dstResv.id));
+                if (srcResv) { const rp = repoint(srcResv); writes.push(persistReservationRow({ id: srcResv.id, date: srcResv.date, table_id: rp.table_id, data: rp.data })); }
+                if (dstResv && dstResv.id !== srcResv?.id) { const rp = repoint(dstResv); writes.push(persistReservationRow({ id: dstResv.id, date: dstResv.date, table_id: rp.table_id, data: rp.data })); }
                 Promise.all(writes).catch(e => console.warn("Reservation table move persist failed:", e));
               }
             }
