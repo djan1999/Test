@@ -83,4 +83,43 @@ describe("reconcileTables — non-destructive reservation templating", () => {
     const seat = next.find((t) => t.id === 1).seats[0];
     expect(seat.extras.cake.ordered).toBe(true);
   });
+
+  // Regression for the 04.07 duplication: a guest switched from T4 to T2 was
+  // seated live on T2, but the stale reservation still pointed at T4, so
+  // reconcile re-templated T4 and the guest showed on BOTH tables.
+  it("does NOT re-template a vacated table for a guest already seated elsewhere", () => {
+    const prev = board({
+      2: { active: true, arrivedAt: "19:43", resName: "Ilya Ulyanov", resTime: "19:00", guests: 2,
+           seats: makeSeats(2).map((s, i) => i === 0 ? { ...s, pairing: "Wine" } : s) },
+    });
+    // The reservation still points at the vacated table 4 (table_id lagged the move).
+    const next = reconcileTables(prev, [resv(4, { resName: "Ilya Ulyanov", resTime: "19:00", guests: 2 })]);
+    // T4 must stay blank — Ilya is already live on T2, not duplicated onto T4.
+    expect(next.find((t) => t.id === 4).resName).toBe("");
+    // T2 (the live seat) is untouched.
+    expect(next.find((t) => t.id === 2).resName).toBe("Ilya Ulyanov");
+    expect(next.find((t) => t.id === 2).seats.find((s) => s.id === 1).pairing).toBe("Wine");
+  });
+
+  it("still templates a genuinely different guest onto a free table", () => {
+    // A guest seated on T2 must not suppress a DIFFERENT booking on T1.
+    const prev = board({
+      2: { active: true, arrivedAt: "19:43", resName: "Ilya Ulyanov", resTime: "19:00", guests: 2 },
+    });
+    const next = reconcileTables(prev, [
+      resv(2, { resName: "Ilya Ulyanov", resTime: "19:00", guests: 2 }),
+      resv(1, { resName: "Mary Brooks Smith", resTime: "19:30", guests: 2 }),
+    ]);
+    expect(next.find((t) => t.id === 1).resName).toBe("Mary Brooks Smith");
+  });
+
+  it("a multi-table group still seats every member even if one is already live", () => {
+    // A real 2-table party (group length > 1) is exempt from the anti-duplicate
+    // rule — the same name legitimately appears on all its tables.
+    const prev = board({
+      1: { active: true, arrivedAt: "19:43", resName: "Party", resTime: "19:00", guests: 6, tableGroup: [1, 2] },
+    });
+    const next = reconcileTables(prev, [resv(1, { resName: "Party", resTime: "19:00", guests: 6, tableGroup: [1, 2] })]);
+    expect(next.find((t) => t.id === 2).resName).toBe("Party");
+  });
 });

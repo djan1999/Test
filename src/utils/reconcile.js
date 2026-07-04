@@ -30,11 +30,33 @@ export function reconcileTables(prevTables, reservationRows, celebrationKeys = [
     }
   }
 
+  // Guests already LIVE on the board (a table holding service content). A
+  // single-table reservation whose guest is already seated must NOT be
+  // re-templated onto a different blank table: that is the "switched guest
+  // duplicated onto their old table" bug — the board move landed before the
+  // reservation's table_id caught up, so the stale reservation still points at
+  // the vacated table. Trust the seated board over a lagging reservation.
+  const resvKey = (name, time) => `${String(name || "").trim().toLowerCase()}|${String(time || "")}`;
+  const seatedGuests = new Set();
+  for (const t of prevTables || []) {
+    if (tableHasServiceContent(t) && (t.resName || t.resTime)) {
+      seatedGuests.add(resvKey(t.resName, t.resTime));
+    }
+  }
+
   let changed = false;
   const next = (prevTables || []).map((t) => {
     if (tableHasServiceContent(t)) return t; // live service is sacrosanct
 
     const owner = byTable.get(t.id);
+    if (owner && owner.group.length <= 1 && seatedGuests.has(resvKey(owner.d.resName, owner.d.resTime))) {
+      // This booking's guest is already seated elsewhere — don't duplicate them
+      // onto this (vacated) table. Keep it blank.
+      const blank = blankTable(t.id);
+      if (eq(t, blank)) return t;
+      changed = true;
+      return blank;
+    }
     if (!owner) {
       // No reservation maps here — drop a pure reservation ghost (it has no
       // service content, guarded above) back to blank.
