@@ -7,6 +7,7 @@ import {
   shouldClearBoardOnDateChange,
   resolveServiceEntry,
   serviceDayForActivity,
+  isLiveServiceActivity,
 } from "../utils/serviceDay.js";
 
 describe("resolveServiceEntry (join a live service vs start a new one)", () => {
@@ -152,6 +153,36 @@ describe("serviceDayForActivity (heal an orphaned, date-less service)", () => {
     const shouldAutoEnd =
       isStaleServiceDate(day, today) && !isActivePastReview(day, day, today);
     expect(shouldAutoEnd).toBe(true);
+  });
+});
+
+describe("isLiveServiceActivity (don't wipe a live service under a stale date)", () => {
+  // Regression for the 04.07 incident: a live dinner running under yesterday's
+  // date (03.07) was archived + cleared mid-service when a tablet opened and the
+  // stale-date auto-end fired. Any board still being touched within the current
+  // service day is LIVE and must be re-dated forward, never wiped.
+  it("treats activity within the current service day as LIVE (must not wipe)", () => {
+    const now = new Date("2026-07-04T19:45:00"); // 19:45 local on the 4th
+    const justNow = new Date("2026-07-04T19:41:00").getTime();
+    expect(isLiveServiceActivity(justNow, now)).toBe(true);
+  });
+
+  it("a service that crossed midnight is still live before the 06:00 rollover", () => {
+    const now = new Date("2026-07-05T01:30:00");
+    const lateEdit = new Date("2026-07-05T01:20:00").getTime();
+    expect(isLiveServiceActivity(lateEdit, now)).toBe(true);
+  });
+
+  it("treats last night's activity (past service day) as NOT live → auto-end proceeds", () => {
+    // Opening at 09:58 on the 4th, board last touched during the 3rd's dinner.
+    const now = new Date("2026-07-04T09:58:00");
+    const lastNight = new Date("2026-07-03T22:30:00").getTime();
+    expect(isLiveServiceActivity(lastNight, now)).toBe(false);
+  });
+
+  it("returns false when there is no activity to anchor on", () => {
+    expect(isLiveServiceActivity(-Infinity)).toBe(false);
+    expect(isLiveServiceActivity(NaN)).toBe(false);
   });
 });
 

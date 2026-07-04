@@ -41,7 +41,7 @@ import { stampWineSources } from "./utils/wineEdit.js";
 import { historyGapsByMenuType } from "./utils/archiveInsights.js";
 import {
   currentServiceDay, isStaleServiceDate, isActivePastReview, shouldClearBoardOnDateChange,
-  resolveServiceEntry, serviceDayForActivity, SERVICE_DATE_CHOSEN_ON_KEY,
+  resolveServiceEntry, serviceDayForActivity, isLiveServiceActivity, SERVICE_DATE_CHOSEN_ON_KEY,
 } from "./utils/serviceDay.js";
 import {
   resolveAperitifFromQuickAccessOption,
@@ -2402,6 +2402,10 @@ export default function App() {
    *  flush runs, keyed by table_id — so two edits inside one debounce window
    *  can't drop each other's rows. */
   const pendingBoardWritesRef = useRef(new Map());
+  /** One-shot flag set by the legitimate whole-board clears (CLEAR ALL, archive
+   *  & clear, rollover auto-end, a real day-switch) so the autosave mass-blank
+   *  guard lets THOSE blanks through. Any OTHER mass-blank is refused. */
+  const intentionalBoardClearRef = useRef(false);
 
   // ── SQLite-primary gate ────────────────────────────────────────────────────
   // The on-device PowerSync DB is the app's read/write path once (a) its
@@ -2965,6 +2969,7 @@ export default function App() {
         + `Use "Archive & Clear" instead if you want to keep the record.`
       : "Clear ALL tables?";
     if (typeof window !== "undefined" && !window.confirm(msg)) return;
+    intentionalBoardClearRef.current = true; // user-confirmed whole-board clear
     setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     setSel(null);
     setArchiveOpen(false);
@@ -3037,6 +3042,7 @@ export default function App() {
           return;
         }
       }
+      intentionalBoardClearRef.current = true; // archived first — the clear is intentional
       setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
       setSel(null);
       setArchiveOpen(false);
@@ -3070,6 +3076,46 @@ export default function App() {
       // Read the night's state from the source of truth: local React state may
       // not have painted yet on a fresh load (or be blank on this device).
       const rows = await fetchBoardRows();
+
+      // GUARD: never archive+clear a service that is LIVE right now. A board
+      // whose SEATED tables (active / arrived / kitchen activity) were touched
+      // within the current service day is an in-progress service running under a
+      // mislabeled or rolled-over date — not an abandoned one. Auto-ending it
+      // wiped a live dinner mid-service (the 04.07 incident). Re-date it forward
+      // to today and KEEP the board; the genuine overnight case (last activity on
+      // a past service day) still falls through to the archive+clear below.
+      const seatedRows = (rows || []).filter(r => {
+        const t = sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) });
+        return t.active || t.arrivedAt
+          || (t.kitchenLog && Object.keys(t.kitchenLog).length > 0)
+          || t.kitchenArchived;
+      });
+      const latestSeatedMs = seatedRows
+        .map(r => new Date(r.updated_at).getTime())
+        .filter(Number.isFinite)
+        .reduce((a, b) => Math.max(a, b), -Infinity);
+      if (seatedRows.length > 0 && isLiveServiceActivity(latestSeatedMs)) {
+        const healDay = currentServiceDay();
+        console.warn(
+          `[auto-end] Live service detected under stale date ${staleDate} — re-dating to ${healDay} instead of clearing.`,
+        );
+        setServiceDate(healDay);
+        setServiceDateChosenOn(healDay);
+        serviceDateRef.current = healDay;
+        serviceDateChosenOnRef.current = healDay;
+        try {
+          localStorage.setItem("milka_service_date", healDay);
+          localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, healDay);
+        } catch {}
+        await saveStateKey("service_date", {
+          date: healDay, chosenOn: healDay,
+          session: activeServiceSessionRef.current,
+          startedAt: serviceStartedAtRef.current,
+        });
+        autoEndingRef.current = false;
+        return;
+      }
+
       const activeTables = (rows || [])
         .map(r => sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) }))
         .filter(t => t.active || t.arrivedAt || t.resName || t.resTime)
@@ -3101,6 +3147,7 @@ export default function App() {
     }
 
     // Archived (or nothing to archive) — safe to clear local + remote for the new day.
+    intentionalBoardClearRef.current = true; // rollover auto-end archived first — clear is intentional
     setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     setSel(null);
     setServiceDate(null);
@@ -3238,6 +3285,7 @@ export default function App() {
     // device. This was the "opened the board on the laptop and it wiped the
     // tablet" bug. A joining device keeps whatever it loaded from the store.
     if (shouldClearBoardOnDateChange(previousDate, date)) {
+      intentionalBoardClearRef.current = true; // deliberate switch between two real service days
       setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     }
     if (!supabase) return;
@@ -3504,6 +3552,32 @@ export default function App() {
 
     const prevJson = prevTablesJsonRef.current;
     const nextJson = tables.map(t => JSON.stringify(sanitizeTable(t)));
+
+    // Defense-in-depth mass-blank guard: refuse to persist a blank of 2+ tables
+    // that HELD service content unless a legitimate whole-board clear flagged it.
+    // Even an unexpected trigger (a stale-board reconcile, a rogue effect) can't
+    // push a live-service wipe to the store and other devices — it's restored
+    // locally instead. Single-table changes and flagged clears pass through.
+    const emptiedIdx = [];
+    tables.forEach((table, idx) => {
+      if (nextJson[idx] === prevJson[idx]) return;
+      let prevHadContent = false;
+      try { prevHadContent = tableHasServiceContent(JSON.parse(prevJson[idx])); } catch { /* no content */ }
+      if (prevHadContent && !tableHasServiceContent(sanitizeTable(table))) emptiedIdx.push(idx);
+    });
+    if (emptiedIdx.length >= 2 && !intentionalBoardClearRef.current) {
+      console.error(
+        "[board-guard] Refused to blank live tables", emptiedIdx.map(i => tables[i].id),
+        "— an unexpected mass-blank was prevented from reaching the store; restoring from last good state.",
+      );
+      setTables(cur => cur.map((t, idx) => {
+        if (!emptiedIdx.includes(idx)) return t;
+        try { return sanitizeTable(JSON.parse(prevJson[idx])); } catch { return t; }
+      }));
+      return; // baseline NOT advanced; the restore re-runs this effect cleanly
+    }
+    intentionalBoardClearRef.current = false; // consumed once per autosave pass
+
     const stamp = new Date().toISOString();
     tables.forEach((table, idx) => {
       if (nextJson[idx] === prevJson[idx]) return; // untouched
