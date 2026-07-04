@@ -62,6 +62,19 @@ export const shouldClearBoardOnDateChange = (prevDate, nextDate) =>
 export const serviceDayForActivity = (latestActivityMs) =>
   Number.isFinite(latestActivityMs) ? currentServiceDay(new Date(latestActivityMs)) : null;
 
+// A stale-dated board is a LIVE service — NOT an abandoned overnight one — when
+// its most recent SEATED-table activity belongs to the current service day.
+// That means staff are using it right now under a mislabeled/rolled-over date,
+// so it must be re-dated forward, never auto-archived + cleared out from under
+// them (the 04.07 incident: a live dinner running under yesterday's date was
+// wiped mid-service when a tablet opened and the stale-date auto-end fired).
+// A genuinely abandoned service — last touched on a past service day — is still
+// stale and auto-ends normally.
+export const isLiveServiceActivity = (latestActivityMs, now = new Date()) => {
+  const day = serviceDayForActivity(latestActivityMs);
+  return Boolean(day) && !isStaleServiceDate(day, currentServiceDay(now));
+};
+
 // Decide what a device should do when entering Service, given the server's
 // persisted service_date state ({ date, chosenOn }). If a live (non-stale, or
 // still-active past-review) service exists → JOIN it silently, no prompt, no
