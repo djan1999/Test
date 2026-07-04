@@ -1,0 +1,262 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`generator snapshots — fixture service day (contract lock) > generateKitchenTicketsHTML output is stable 1`] = `
+"<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Kitchen Tickets</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:4mm;}
+@page{size:A4 portrait;margin:0;}
+.page{display:grid;grid-template-columns:repeat(2,1fr);gap:4mm;align-items:start;page-break-after:always;break-after:page;}
+.page:last-child{page-break-after:auto;break-after:auto;}
+.ticket{border:1.5pt solid #000;width:100%;font-family:'Roboto Mono',monospace;page-break-inside:avoid;break-inside:avoid;}
+.hdr{border-bottom:1pt solid #000;padding:4pt 6pt;display:grid;grid-template-columns:1fr 1fr;gap:1pt 5pt;}
+.hcol{display:flex;align-items:baseline;gap:2pt;}
+.hfull{grid-column:1/-1;display:flex;align-items:baseline;gap:2pt;}
+.hlbl{font-size:7pt;font-weight:400;letter-spacing:0.04em;flex-shrink:0;}
+.hval{font-size:11pt;font-weight:700;line-height:1.1;}
+.pair{border-bottom:1pt solid #000;padding:3pt 6pt;font-size:8pt;font-weight:700;letter-spacing:0.08em;text-align:center;}
+.notes{border-bottom:1pt solid #000;padding:2.5pt 6pt;font-size:8pt;font-style:italic;}
+.courses{border-bottom:1pt solid #000;}
+.cr{display:flex;align-items:baseline;padding:1.5pt 6pt;overflow:hidden;}
+.qty{min-width:13pt;font-size:9.5pt;font-weight:700;flex-shrink:0;}
+.cname{font-size:9.5pt;font-weight:700;line-height:1.2;flex-shrink:0;}
+.cmods{font-size:8pt;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.summary{padding:3pt 6pt;}
+.srow{font-size:8.5pt;font-weight:700;min-height:15pt;padding:2pt 0;border-bottom:0.5pt solid #ccc;display:flex;align-items:flex-start;}
+.srow-notes{min-height:20pt;border-bottom:none;}
+.srow:last-child{border-bottom:none;}
+.slbl{flex-shrink:0;}
+.sval{margin-left:4pt;font-weight:700;}
+.srestr-val{font-weight:400;margin-left:3pt;}
+</style>
+</head><body>
+<div class="page"><div class="ticket"><div class="hdr"><div class="hcol"><span class="hlbl">TABLE:</span> <span class="hval">5</span></div><div class="hcol"><span class="hlbl">GUESTS:</span> <span class="hval">2</span></div><div class="hcol"><span class="hlbl">LANG:</span> <span class="hval">ENG</span></div><div class="hcol"><span class="hlbl">TIME:</span> <span class="hval">12:15</span></div><div class="hfull"><span class="hlbl">MENU:</span> <span class="hval">SHORT</span></div></div><div class="pair">WP &nbsp;/&nbsp; PWP &nbsp;/&nbsp; OS &nbsp;/&nbsp; NA &nbsp;/&nbsp; BTB &nbsp;/&nbsp; BTG</div><div class="courses"><div class="cr"><span class="qty">2</span><span class="cname">Trout</span></div><div class="cr"><span class="qty">2</span><span class="cname">Venison</span></div></div><div class="summary"><div class="srow srestr-row"><span class="slbl">Allergies &amp; Restrictions:</span></div><div class="srow srow-notes"></div></div></div>
+<div class="ticket"><div class="hdr"><div class="hcol"><span class="hlbl">TABLE:</span> <span class="hval">2</span></div><div class="hcol"><span class="hlbl">GUESTS:</span> <span class="hval">4</span></div><div class="hcol"><span class="hlbl">LANG:</span> <span class="hval">ENG</span></div><div class="hcol"><span class="hlbl">TIME:</span> <span class="hval">18:30</span></div><div class="hfull"><span class="hlbl">MENU:</span> <span class="hval">LONG</span></div></div><div class="pair">WP &nbsp;/&nbsp; PWP &nbsp;/&nbsp; OS &nbsp;/&nbsp; NA &nbsp;/&nbsp; BTB &nbsp;/&nbsp; BTG</div><div class="notes">window seat</div><div class="courses"><div class="cr"><span class="qty">4</span><span class="cname">Trout</span></div><div class="cr"><span class="qty">4</span><span class="cname">Venison</span></div><div class="cr"><span class="qty">4</span><span class="cname">Walnut Cake</span></div></div><div class="summary"><div class="srow"><span class="slbl">Cake: 40th</span></div><div class="srow srestr-row"><span class="slbl">Allergies &amp; Restrictions:</span> <span class="srestr-val">Gluten Free, custom_allergy (no coriander)</span></div><div class="srow srow-notes"></div></div></div></div>
+
+<script>window.onload = function(){ window.print(); };</script>
+</body></html>"
+`;
+
+exports[`generator snapshots — fixture service day (contract lock) > generateMenuHTML Slovenian output is stable 1`] = `
+"<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>POLETNI MENI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --page-w:148mm;--page-h:210mm;
+  --pad-t:8.4mm;--pad-r:12mm;
+  --pad-b:8.2mm;--pad-l:12mm;
+  --inner-h:calc(var(--page-h) - var(--pad-t) - var(--pad-b));
+}
+@page{size:A5 portrait;margin:0;}
+html,body{width:var(--page-w);height:var(--page-h);overflow:hidden;background:#fff;color:#000;font-family:'Roboto Mono',monospace;font-size:6.75pt;line-height:1.08;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+body{position:relative;}
+#sheet{width:var(--page-w);height:var(--page-h);overflow:hidden;position:relative;background:#fff;}
+#frame{position:absolute;inset:0;padding:var(--pad-t) var(--pad-r) var(--pad-b) var(--pad-l);overflow:hidden;}
+#scaleTarget{width:100%;min-height:var(--inner-h);display:flex;flex-direction:column;transform-origin:top left;}
+.menu-header-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8.6mm;margin-bottom:7mm;}
+#title{font-size:13.9pt;font-weight:700;letter-spacing:0.035em;text-transform:uppercase;text-align:left;}
+#menu-date{font-size:5.8pt;font-weight:400;letter-spacing:0.02em;margin-top:0.8mm;text-transform:none;}
+#logo{transform:translate(0mm,0mm);}
+#logo img{width:10.5mm;display:block;}
+#menu{width:100%;flex:1;display:flex;flex-direction:column;}
+.pin-bottom{margin-top:auto;}
+/* Per-row grid-template-columns are set via inline styles on each .menu-row */
+.menu-row{display:grid;column-gap:9mm;align-items:start;break-inside:avoid;page-break-inside:avoid;}
+.menu-row{margin-bottom:3.15pt;}
+.menu-row.wine-only{margin-bottom:4.5pt;}
+
+.menu-col{min-width:0;}
+.menu-main{font-weight:700;line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;text-transform:uppercase;}
+.menu-sub{line-height:1.08;margin-top:0.75pt;overflow-wrap:anywhere;}
+.menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;text-transform:uppercase;}
+.menu-thankyou{margin-top:7pt;font-size:6.55pt;font-style:normal;}
+#team{font-size:6.5pt;line-height:1.2;overflow-wrap:anywhere;}
+#team .menu-main{margin-bottom:0;}
+</style>
+</head>
+<body>
+<div id="sheet"><div id="frame"><div id="scaleTarget">
+<div id="menu"><div class="menu-header-row" style=""><div id="title">POLETNI MENI<div id="menu-date">4. Julij 2026</div></div></div><div class="menu-row " style="grid-template-columns:minmax(0,55fr) minmax(0,45fr)" data-ck="amuse_bouche"><div class="menu-col left"><div class="menu-main">Amuse Bouche</div><div class="menu-sub">chef's welcome</div></div><div class="menu-col right"></div></div><div class="menu-row " style="grid-template-columns:minmax(0,55fr) minmax(0,45fr)" data-ck="trout"><div class="menu-col left"><div class="menu-main">Trout</div><div class="menu-sub">brook trout, fennel, elderflower</div></div><div class="menu-col right"><div class="menu-main">Verjuice Spritz</div><div class="menu-sub">house-pressed</div></div></div><div class="menu-row " style="grid-template-columns:minmax(0,55fr) minmax(0,45fr)" data-ck="venison"><div class="menu-col left"><div class="menu-main">Venison</div><div class="menu-sub">loin, blackberry, celeriac</div></div><div class="menu-col right"></div></div><div class="menu-row " style="grid-template-columns:minmax(0,55fr) minmax(0,45fr)" data-ck="walnut_cake"><div class="menu-col left"><div class="menu-main">Walnut Cake</div><div class="menu-sub">walnut, plum, sour cream</div></div><div class="menu-col right"></div></div><div class="menu-thankyou " style="font-size:6.55pt;">Hvala za vaš obisk.</div><div id="team" class="" style=""><div class="menu-main" style="margin-bottom:1.4pt">TEAM:</div><div></div></div><div class="menu-row wine-only" style="grid-template-columns:minmax(0,55fr) minmax(0,45fr)"><div class="menu-col left"></div><div class="menu-col right"><div class="menu-main">Marjan Simčič Rebula 2022</div></div></div></div>
+</div></div></div>
+<script>
+(function(){
+  const MIN_SCALE = 0.58;
+  const MAX_TRIES = 80;
+  function fit(){
+    const frame = document.getElementById('frame');
+    const target = document.getElementById('scaleTarget');
+    if (!frame || !target) return;
+    target.style.transform = 'scale(1)';
+    target.style.width = '100%';
+    const maxH = frame.clientHeight;
+    const maxW = frame.clientWidth;
+    const naturalH = target.scrollHeight;
+    const naturalW = target.scrollWidth;
+    let scale = Math.min(1, maxH / naturalH, maxW / naturalW);
+    scale = Math.max(Math.min(scale, 1), MIN_SCALE);
+    let tries = 0;
+    while (tries < MAX_TRIES) {
+      target.style.transform = 'scale(' + scale + ')';
+      target.style.width = (100 / scale) + '%';
+      const rect = target.getBoundingClientRect();
+      if (rect.height <= maxH - 1 && rect.width <= maxW - 1) break;
+      scale -= 0.01;
+      if (scale <= MIN_SCALE) {
+        scale = MIN_SCALE;
+        target.style.transform = 'scale(' + scale + ')';
+        target.style.width = (100 / scale) + '%';
+        break;
+      }
+      tries += 1;
+    }
+  }
+  window.addEventListener('load', function(){ setTimeout(fit, 80); });
+  window.addEventListener('resize', fit);
+  window.addEventListener('beforeprint', fit);
+  window.addEventListener('afterprint', fit);
+})();
+</script>
+</body>
+</html>"
+`;
+
+exports[`generator snapshots — fixture service day (contract lock) > generateMenuHTML output is stable 1`] = `
+"<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>SUMMER MENU</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --page-w:148mm;--page-h:210mm;
+  --pad-t:8.4mm;--pad-r:12mm;
+  --pad-b:8.2mm;--pad-l:12mm;
+  --inner-h:calc(var(--page-h) - var(--pad-t) - var(--pad-b));
+}
+@page{size:A5 portrait;margin:0;}
+html,body{width:var(--page-w);height:var(--page-h);overflow:hidden;background:#fff;color:#000;font-family:'Roboto Mono',monospace;font-size:6.75pt;line-height:1.08;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+body{position:relative;}
+#sheet{width:var(--page-w);height:var(--page-h);overflow:hidden;position:relative;background:#fff;}
+#frame{position:absolute;inset:0;padding:var(--pad-t) var(--pad-r) var(--pad-b) var(--pad-l);overflow:hidden;}
+#scaleTarget{width:100%;min-height:var(--inner-h);display:flex;flex-direction:column;transform-origin:top left;}
+.menu-header-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8.6mm;margin-bottom:7mm;}
+#title{font-size:13.9pt;font-weight:700;letter-spacing:0.035em;text-transform:uppercase;text-align:left;}
+#menu-date{font-size:5.8pt;font-weight:400;letter-spacing:0.02em;margin-top:0.8mm;text-transform:none;}
+#logo{transform:translate(0mm,0mm);}
+#logo img{width:10.5mm;display:block;}
+#menu{width:100%;flex:1;display:flex;flex-direction:column;}
+.pin-bottom{margin-top:auto;}
+/* Per-row grid-template-columns are set via inline styles on each .menu-row */
+.menu-row{display:grid;column-gap:9mm;align-items:start;break-inside:avoid;page-break-inside:avoid;}
+.menu-row{margin-bottom:3.15pt;}
+.menu-row.wine-only{margin-bottom:4.5pt;}
+
+.menu-col{min-width:0;}
+.menu-main{font-weight:700;line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;text-transform:uppercase;}
+.menu-sub{line-height:1.08;margin-top:0.75pt;overflow-wrap:anywhere;}
+.menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:0.6pt;text-transform:uppercase;}
+.menu-thankyou{margin-top:7pt;font-size:6.55pt;font-style:normal;}
+#team{font-size:6.5pt;line-height:1.2;overflow-wrap:anywhere;}
+#team .menu-main{margin-bottom:0;}
+</style>
+</head>
+<body>
+<div id="sheet"><div id="frame"><div id="scaleTarget">
+<div id="menu"><div class="menu-header-row" style=""><div id="title">SUMMER MENU<div id="menu-date">4th of July, 2026</div></div></div><div class="menu-row " style="grid-template-columns:minmax(0,55fr) minmax(0,45fr)" data-ck="amuse_bouche"><div class="menu-col left"><div class="menu-main">Amuse Bouche</div><div class="menu-sub">chef's welcome</div></div><div class="menu-col right"></div></div><div class="menu-row " style="grid-template-columns:minmax(0,55fr) minmax(0,45fr)" data-ck="trout"><div class="menu-col left"><div class="menu-main">Trout</div><div class="menu-sub">brook trout, fennel, elderflower</div></div><div class="menu-col right"><div class="menu-main">Rebula 2022</div><div class="menu-sub">Goriška Brda</div></div></div><div class="menu-row " style="grid-template-columns:minmax(0,55fr) minmax(0,45fr)" data-ck="venison"><div class="menu-col left"><div class="menu-main">Venison</div><div class="menu-sub">loin, blackberry, celeriac</div></div><div class="menu-col right"><div class="menu-main">Blaufränkisch 2019</div><div class="menu-sub">Carinthia</div></div></div><div class="menu-row " style="grid-template-columns:minmax(0,55fr) minmax(0,45fr)" data-ck="walnut_cake"><div class="menu-col left"><div class="menu-main">Walnut Cake</div><div class="menu-sub">walnut, plum, sour cream</div></div><div class="menu-col right"></div></div><div class="menu-thankyou " style="font-size:6.55pt;">Thank you for dining with us.</div><div id="team" class="" style=""><div class="menu-main" style="margin-bottom:1.4pt">TEAM:</div><div>Ana, Bor</div></div><div class="menu-row wine-only" style="grid-template-columns:minmax(0,55fr) minmax(0,45fr)"><div class="menu-col left"></div><div class="menu-col right"><div class="menu-main">Marjan Simčič Rebula 2022</div></div></div></div>
+</div></div></div>
+<script>
+(function(){
+  const MIN_SCALE = 0.58;
+  const MAX_TRIES = 80;
+  function fit(){
+    const frame = document.getElementById('frame');
+    const target = document.getElementById('scaleTarget');
+    if (!frame || !target) return;
+    target.style.transform = 'scale(1)';
+    target.style.width = '100%';
+    const maxH = frame.clientHeight;
+    const maxW = frame.clientWidth;
+    const naturalH = target.scrollHeight;
+    const naturalW = target.scrollWidth;
+    let scale = Math.min(1, maxH / naturalH, maxW / naturalW);
+    scale = Math.max(Math.min(scale, 1), MIN_SCALE);
+    let tries = 0;
+    while (tries < MAX_TRIES) {
+      target.style.transform = 'scale(' + scale + ')';
+      target.style.width = (100 / scale) + '%';
+      const rect = target.getBoundingClientRect();
+      if (rect.height <= maxH - 1 && rect.width <= maxW - 1) break;
+      scale -= 0.01;
+      if (scale <= MIN_SCALE) {
+        scale = MIN_SCALE;
+        target.style.transform = 'scale(' + scale + ')';
+        target.style.width = (100 / scale) + '%';
+        break;
+      }
+      tries += 1;
+    }
+  }
+  window.addEventListener('load', function(){ setTimeout(fit, 80); });
+  window.addEventListener('resize', fit);
+  window.addEventListener('beforeprint', fit);
+  window.addEventListener('afterprint', fit);
+})();
+</script>
+</body>
+</html>"
+`;
+
+exports[`generator snapshots — fixture service day (contract lock) > generateWeeklyAllergyHTML output is stable 1`] = `
+"<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Weekly Allergy Sheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Roboto Mono',monospace;font-size:8pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:5mm 5mm;}
+@page{size:A4 landscape;margin:0;}
+table{border-collapse:collapse;width:auto;table-layout:auto;}
+th,td{border:1px solid #aaa;padding:2pt 4pt;vertical-align:top;text-align:left;font-size:8pt;color:#000;font-weight:700;overflow:hidden;word-wrap:break-word;line-height:1.15;}
+th{text-align:center;}
+.green-header{background:#3d6b4f;color:#fff;}
+.green-header th,.green-header td{border-color:#2e5a3e;color:#fff;}
+.red{color:#c04040;}
+.center{text-align:center;}
+.highlight{background:#edf7ef;}
+.course-name{text-transform:uppercase;font-size:8pt;}
+.course-sub{font-size:6.5pt;color:#555;font-weight:400;}
+.resv-cell{font-size:8pt;line-height:1.15;}
+</style></head><body><table><tr class="green-header"><th style="min-width:110pt;text-align:left;padding-left:6pt;">1.06.-7.06.</th><th style="min-width:90pt;text-align:center;">Kovač</th></tr><tr><td style="padding-left:6pt;">Date</td><td class="center">6.06.</td></tr><tr><td style="padding-left:6pt;font-weight:700;">Allergies/Restrictions</td><td class="center" style="line-height:1.3;">LONG MENU<br>1x gluten free, 1x custom_allergy (no coriander)</td></tr><tr><td style="padding-left:6pt;"><span class="course-name">Trout</span><br><span class="course-sub">brook trout, fennel, elderflower</span></td><td class="resv-cell"></td></tr><tr><td style="padding-left:6pt;"><span class="course-name">Venison</span><br><span class="course-sub">loin, blackberry, celeriac</span></td><td class="resv-cell"></td></tr><tr><td style="padding-left:6pt;"><span class="course-name">Walnut Cake</span><br><span class="course-sub">walnut, plum, sour cream</span></td><td class="resv-cell"></td></tr></table></body></html>"
+`;
+
+exports[`generator snapshots — fixture service day (contract lock) > generateWeeklyReservationsHTML output is stable 1`] = `
+"<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Weekly Reservations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:12mm 10mm;}
+@page{size:A4 portrait;margin:0;}
+table{width:100%;border-collapse:collapse;}
+tr{page-break-inside:avoid;}
+th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:center;font-size:8.5pt;color:#000;font-weight:700;}
+th{text-align:center;background:#fff;}
+.date-row td{background:#f0f0f0;}
+u{text-decoration:underline;color:#000;}
+h1{font-family:'Roboto Mono',monospace;font-size:11pt;text-align:center;margin:0 0 2pt;font-weight:700;}
+h2{font-family:'Roboto Mono',monospace;font-size:9pt;text-align:center;margin:0 0 10pt;font-weight:700;color:#000;}
+</style></head><body><h1>Reservations : 6.06. - 6.06.2026</h1><h2>Guest count : 6</h2><table><tr><th>DATE</th><th>COVER</th><th>TIME</th><th>NAME</th><th>EXP.</th><th>INFO</th><th>ALLERGIES/<br>RESTRICTIONS</th></tr><tr class="date-row"><td class="bold">6.06.</td><td style="font-size:8pt;">Total<br>guest:<br><span class="bold">6</span></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td class="bold">LUNCH</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td class="center">2</td><td>12:15</td><td class="bold">Smith</td><td class="center"><u>SM</u></td><td style="font-size:8pt;"></td><td style="font-size:8pt;white-space:pre-line;"></td></tr><tr><td class="bold">DINNER</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td class="center">4</td><td>18:30</td><td class="bold">Kovač</td><td class="center"><u>L26</u></td><td style="font-size:8pt;"><u>Hotel #12</u><br><u>1xCAKE(40th)</u><br>window seat</td><td style="font-size:8pt;white-space:pre-line;">1x gluten free
+1x custom_allergy (no coriander)</td></tr></table></body></html>"
+`;

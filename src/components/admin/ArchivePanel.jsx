@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
-import { supabase, TABLES } from "../../lib/supabaseClient.js";
-import { scopedFrom } from "../../lib/scopedDb.js";
+import { supabase } from "../../lib/supabaseClient.js";
+import { fetchArchive, archiveSetDeleted, archiveSetAllDeleted, archivePurgeTrash } from "../../lib/archiveStore.js";
 import TableSummaryCard from "../modals/TableSummaryCard.jsx";
 import { optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 
@@ -18,21 +18,19 @@ export default function ArchivePanel({ optionalExtras = [] }) {
   const loadEntries = () => {
     if (!supabase) { setLoading(false); return; }
     setLoading(true);
-    Promise.all([
-      scopedFrom(TABLES.SERVICE_ARCHIVE).select("*").is("deleted_at", null).order("created_at", { ascending: false }).limit(60),
-      scopedFrom(TABLES.SERVICE_ARCHIVE).select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(30),
-    ]).then(([active, trash]) => {
-      setEntries(active.error ? [] : (active.data || []));
-      setDeleted(trash.error ? [] : (trash.data || []));
-      setLoading(false);
-    });
+    // Reads local SQLite when primary (instant, offline-capable); direct
+    // Supabase otherwise.
+    fetchArchive()
+      .then(({ active, deleted }) => { setEntries(active); setDeleted(deleted); })
+      .catch(() => { setEntries([]); setDeleted([]); })
+      .finally(() => setLoading(false));
   };
   useEffect(loadEntries, []);
 
   const deleteEntry = async id => {
     if (!supabase) return;
     setDeleting(id);
-    const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).update({ deleted_at: new Date().toISOString() }).eq("id", id);
+    const { error } = await archiveSetDeleted(id, new Date().toISOString());
     if (error) {
       window.alert("Delete failed: " + error.message);
     } else {
@@ -49,7 +47,7 @@ export default function ArchivePanel({ optionalExtras = [] }) {
     if (!window.confirm("Move ALL archive entries to trash?")) return;
     setDeleting("all");
     const now = new Date().toISOString();
-    const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).update({ deleted_at: now }).is("deleted_at", null);
+    const { error } = await archiveSetAllDeleted(now);
     if (error) {
       window.alert("Delete failed: " + error.message);
     } else {
@@ -63,7 +61,7 @@ export default function ArchivePanel({ optionalExtras = [] }) {
   const restoreEntry = async id => {
     if (!supabase) return;
     setDeleting(id);
-    const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).update({ deleted_at: null }).eq("id", id);
+    const { error } = await archiveSetDeleted(id, null);
     if (error) {
       window.alert("Restore failed: " + error.message);
     } else {
@@ -78,7 +76,7 @@ export default function ArchivePanel({ optionalExtras = [] }) {
     if (!supabase) return;
     if (!window.confirm("Permanently delete all trashed entries? This cannot be undone.")) return;
     setDeleting("trash");
-    const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).delete().not("deleted_at", "is", null);
+    const { error } = await archivePurgeTrash();
     if (error) {
       window.alert("Empty trash failed: " + error.message);
     } else {

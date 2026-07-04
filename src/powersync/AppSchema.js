@@ -8,6 +8,10 @@
 
 import { column, Schema, Table } from "@powersync/web";
 
+// trackPrevious on the composite-key tables: their DELETE ops only carry the
+// aliased natural-key id, so uploadData() needs previousValues.workspace_id
+// (and the natural-key column) to scope the Postgres delete correctly even if
+// the op was queued under a different workspace than the active one.
 const service_tables = new Table(
   {
     // id column (text) is automatically included
@@ -16,7 +20,7 @@ const service_tables = new Table(
     updated_at: column.text,
     workspace_id: column.text,
   },
-  { indexes: {} },
+  { indexes: {}, trackPrevious: true },
 );
 
 const service_settings = new Table(
@@ -26,7 +30,7 @@ const service_settings = new Table(
     updated_at: column.text,
     workspace_id: column.text,
   },
-  { indexes: {} },
+  { indexes: {}, trackPrevious: true },
 );
 
 const reservations = new Table(
@@ -98,7 +102,7 @@ const menu_courses = new Table(
     is_active: column.integer,
     workspace_id: column.text,
   },
-  { indexes: {} },
+  { indexes: {}, trackPrevious: true },
 );
 
 const wines = new Table(
@@ -116,7 +120,7 @@ const wines = new Table(
     source: column.text,
     workspace_id: column.text,
   },
-  { indexes: {} },
+  { indexes: {}, trackPrevious: true },
 );
 
 const beverages = new Table(

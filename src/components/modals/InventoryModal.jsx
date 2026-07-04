@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { TABLES, supabase, getWorkspaceId } from "../../lib/supabaseClient.js";
-import { scopedFrom } from "../../lib/scopedDb.js";
+import { readStateKey, saveStateKey } from "../../lib/stateStore.js";
+import { isSqlitePrimary } from "../../powersync/primary.js";
 import { COUNTRY_NAMES, stripCountryFromRegion, inferCountryFromRegion } from "../../constants/countries.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput } from "../../styles/mixins.js";
@@ -66,12 +67,12 @@ export default function InventoryModal({ wines, onClose }) {
 
   const grandTotal = Object.values(displayCounts).reduce((s, n) => s + n, 0);
 
-  const flushToSupabase = async (state) => {
-    if (!supabase || !navigator.onLine) { setSyncSt("offline"); return; }
-    const { error } = await scopedFrom(TABLES.SERVICE_SETTINGS).upsert(
-      { id: INV_SETTINGS_ID, state, updated_at: new Date().toISOString() },
-    );
-    setSyncSt(error ? "error" : "synced");
+  const flushToStore = async (state) => {
+    // The local-SQLite path works offline (the write uploads later); only the
+    // direct-Supabase fallback needs the network right now.
+    if (!supabase || (!isSqlitePrimary() && !navigator.onLine)) { setSyncSt("offline"); return; }
+    const { ok } = await saveStateKey(INV_SETTINGS_ID, state);
+    setSyncSt(ok ? "synced" : "error");
   };
 
   const applyUpdate = (updater) => {
@@ -84,7 +85,7 @@ export default function InventoryModal({ wines, onClose }) {
       if (supabase) {
         clearTimeout(saveTimer.current);
         setSyncSt((st) => (st === "offline" ? "offline" : "saving"));
-        saveTimer.current = setTimeout(() => flushToSupabase(stRef.current), 1500);
+        saveTimer.current = setTimeout(() => flushToStore(stRef.current), 1500);
       }
       return next;
     });
@@ -117,9 +118,10 @@ export default function InventoryModal({ wines, onClose }) {
 
   useEffect(() => {
     if (!supabase) { setSyncSt(navigator.onLine ? "synced" : "offline"); return; }
-    scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", INV_SETTINGS_ID).single()
-      .then(({ data, error }) => {
-        const remoteD = (!error && data?.state?.d) ? data.state.d : {};
+    readStateKey(INV_SETTINGS_ID)
+      .catch(() => null)
+      .then((state) => {
+        const remoteD = state?.d || {};
         const myRemote = remoteD[myId.current];
         const myLabel = myRemote?.label || `Device ${Object.keys(remoteD).length + 1}`;
         const myLocalCounts = (() => { try { return JSON.parse(localStorage.getItem(INV_LS_KEY) || "{}"); } catch { return {}; } })();
@@ -131,7 +133,7 @@ export default function InventoryModal({ wines, onClose }) {
         stRef.current = next;
         setFullState(next);
         try { localStorage.setItem(INV_LS_KEY, JSON.stringify(mergedMyCounts)); } catch {}
-        if (!myRemote?.label || Object.keys(myLocalCounts).length > 0) flushToSupabase(next);
+        if (!myRemote?.label || Object.keys(myLocalCounts).length > 0) flushToStore(next);
         setSyncSt(navigator.onLine ? "synced" : "offline");
       });
   }, []);
@@ -143,7 +145,7 @@ export default function InventoryModal({ wines, onClose }) {
     const goOnline = () => {
       setSyncSt("saving");
       clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => flushToSupabase(stRef.current), 500);
+      saveTimer.current = setTimeout(() => flushToStore(stRef.current), 500);
     };
     const goOffline = () => { clearTimeout(saveTimer.current); setSyncSt("offline"); };
     window.addEventListener("online", goOnline);

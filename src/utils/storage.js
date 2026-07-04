@@ -31,6 +31,20 @@ function writeJsonCache(base, value) {
   try { localStorage.setItem(wsKey(base), JSON.stringify(value)); } catch {}
 }
 
+// Demo-mode board snapshot — ONLY read/written when no Supabase is configured
+// (the one environment with no other board persistence). Deliberately named
+// "demo" so nobody mistakes it for the deleted sync-path board snapshots.
+const DEMO_BOARD_KEY = "milka_demo_board_v1";
+
+export const readLocalDemoBoard = () => {
+  const tables = readJsonCache(DEMO_BOARD_KEY);
+  return Array.isArray(tables) && tables.length > 0 ? tables : null;
+};
+
+export const writeLocalDemoBoard = (tables) => {
+  writeJsonCache(DEMO_BOARD_KEY, tables);
+};
+
 export const BEV_STORAGE_KEY = "milka-beverages-v1";
 const DEFAULT_TEAM_NAMES_FROM_ENV = String(import.meta.env.VITE_DEFAULT_TEAM_NAMES || "").trim();
 
@@ -96,27 +110,6 @@ export function writeThankYouNote(lang, value) {
   const key = lang === "si" ? THANK_YOU_SI_KEY : THANK_YOU_EN_KEY;
   try { window.localStorage.setItem(wsKey(key), value || ""); } catch {}
 }
-
-export const STORAGE_KEY = "milka-service-board-v8";
-
-export const readLocalBoardState = () => {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(wsKey(STORAGE_KEY));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    return null;
-  }
-};
-
-export const writeLocalBoardState = state => {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(wsKey(STORAGE_KEY), JSON.stringify(state));
-  } catch {}
-};
 
 // ── Menu courses cache ────────────────────────────────────────────────────────
 // Courses are the spine of the menu/board, but were never cached — so every

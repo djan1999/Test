@@ -6,6 +6,7 @@
 import { getPowerSync } from "./system.js";
 import {
   readReservations, readServiceTables, readWines, readBeverages, readMenuCourses,
+  readLiveSettings,
 } from "./reads.js";
 
 // Start watches for the supplied handlers; returns a disposer. `range` is the
@@ -28,6 +29,8 @@ export function startWatches(handlers, range) {
     bind("SELECT count(*) AS n FROM beverages", async () => handlers.onBeverages(await readBeverages()));
   if (handlers.onMenuCourses)
     bind("SELECT count(*) AS n FROM menu_courses", async () => handlers.onMenuCourses(await readMenuCourses()));
+  if (handlers.onLiveSettings)
+    bind("SELECT count(*) AS n, max(updated_at) AS ts FROM service_settings", async () => handlers.onLiveSettings(await readLiveSettings()));
 
   return () => { try { controller.abort(); } catch { /* noop */ } };
 }

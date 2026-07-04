@@ -141,3 +141,102 @@ floor.
 - Supabase partner page (PowerSync) — https://supabase.com/partners/integrations/powersync
 - ElectricSQL Postgres Sync — https://electric-sql.com/primitives/postgres-sync
 - Electric vs PowerSync vs Zero (2026) — https://trybuildpilot.com/648-electric-sql-vs-powersync-vs-zero-2026
+
+---
+
+## 5. FUTURE — natural-key aliasing fix (before any multi-workspace membership)
+
+**Status: not needed today. Deploy only before a single user is ever made a
+member of more than one workspace.** Membership is 1:1 (each restaurant login
+belongs to exactly one workspace), so this hazard cannot fire in production
+right now. A runtime tripwire (`detectForeignWorkspaceRows` in
+`src/powersync/reads.js`) will `console.error` and refuse to go sqlite-primary
+if it ever does — that error is the signal to run this runbook.
+
+### The hazard
+PowerSync requires a text `id` primary key on every local table. The composite-
+key tables have no such column, so the sync streams alias the natural key into
+`id`:
+
+```
+service_tables → CAST(table_id AS TEXT) AS id
+menu_courses   → CAST(position AS TEXT) AS id
+wines          → "key" AS id
+```
+
+These aliases are **not workspace-qualified**. Within one workspace that's
+fine (table_id/position/key are unique per workspace). But if one device syncs
+**two** workspaces at once, workspace A's `service_tables` row for table 3 and
+workspace B's row for table 3 both land on local `id = "3"` — they collide and
+one silently overwrites the other. Same for `menu_courses` position and any
+`wines` key shared across workspaces.
+
+The uuid-keyed tables (`reservations`, `service_archive`) and `service_settings`
+(id already unique per workspace only, but its rows are workspace-scoped in
+every query) are **not** affected the same way — reservations/archive use real
+uuids; service_settings collisions would need the same id in two workspaces,
+which the app's fixed id set makes possible, so include it in the fix too.
+
+### The fix — client + sync rules deploy TOGETHER
+The alias must become a composite of workspace_id + the natural key, on **both**
+sides in one coordinated deploy. Deploying one side without the other duplicates
+or drops rows, so treat this as a single atomic change with the app in a
+maintenance window.
+
+**1. `powersync/sync-rules.yaml`** — qualify every aliased id (illustrative):
+
+```yaml
+service_tables:
+  query: >-
+    SELECT (workspace_id || '|' || CAST(table_id AS TEXT)) AS id, *
+    FROM service_tables
+    WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
+menu_courses:
+  query: >-
+    SELECT (workspace_id || '|' || CAST(position AS TEXT)) AS id, *
+    FROM menu_courses
+    WHERE ...
+wines:
+  query: >-
+    SELECT (workspace_id || '|' || "key") AS id, *
+    FROM wines
+    WHERE ...
+service_settings:
+  query: >-
+    SELECT (workspace_id || '|' || id) AS id, *
+    FROM service_settings
+    WHERE ...
+```
+(This file is normally OUT OF SCOPE to edit — this is the one sanctioned change,
+and only in the coordinated window.)
+
+**2. Client `id` construction** must match the new alias EXACTLY, everywhere the
+local `id` PK is written or matched:
+- `src/powersync/writes.js` — `upsertLocalRow`, `writeReservation`,
+  `replaceManualBeverages`, and the menu/wines helpers set the local `id` to
+  `String(naturalKey)`. Change to `` `${ws}|${naturalKey}` `` for the four
+  aliased tables (service_tables, menu_courses, wines, service_settings).
+- `src/powersync/SupabaseConnector.js` — `uploadData()` reconstructs the natural
+  key FROM the local `id` (`buildRow`, the DELETE branch). Split on `'|'` and
+  take the last segment instead of using the whole `id`. The upload conflict
+  targets and Postgres payloads are unchanged (they already use the real
+  columns, not the alias), so **only the id↔naturalKey mapping moves.**
+- The `reviveRow` reads (`src/powersync/reads.js`) select real columns, not
+  `id`, so reads need no change beyond what's already workspace-scoped.
+
+**3. Migration / cutover**
+- Bump `dbFilename` in `src/powersync/system.js` (e.g. `milka-powersync-v2.db`)
+  so every client rebuilds its local DB from scratch under the new aliases —
+  avoids a half-migrated local file mixing old (`"3"`) and new (`ws|3`) ids.
+- Deploy the sync-rules change and the client change in the same release.
+- Verify with the dashboard Sync Test tool (simulate a user in two workspaces →
+  no id collisions) before trusting any client read.
+
+### Checklist to close this out
+- [ ] sync-rules aliases workspace-qualified for the 4 tables
+- [ ] `writes.js` local id = `${ws}|${key}` for the 4 tables
+- [ ] `SupabaseConnector` natural-key rebuild splits on `'|'`
+- [ ] `dbFilename` bumped so local DBs rebuild
+- [ ] connector + writes unit tests updated for the composite id
+- [ ] Sync Test: a two-workspace user sees no collisions
+- [ ] tripwire (`detectForeignWorkspaceRows`) no longer the gate — can relax it

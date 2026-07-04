@@ -50,27 +50,4 @@ export function scopedFrom(table) {
   };
 }
 
-/**
- * Stamp an offline-queue job with the current workspace at ENQUEUE time. Queued
- * jobs are replayed verbatim by useOfflineQueue (not through scopedFrom), so the
- * workspace they were created in must travel with them — a write made in one
- * restaurant must never flush into another after the user switches profiles.
- */
-export function scopeJob(job) {
-  const ws = getWorkspaceId();
-  if (!ws || !job) return job;
-  const stampRow = (r) => ({ ...r, workspace_id: ws });
-  const next = { ...job, workspaceId: ws };
-  if ((job.op === "insert" || job.op === "upsert" || job.op === "update") && job.payload != null) {
-    next.payload = Array.isArray(job.payload) ? job.payload.map(stampRow) : stampRow(job.payload);
-  }
-  if (job.op === "update" || job.op === "delete") {
-    next.match = { ...(job.match || {}), workspace_id: ws };
-  }
-  if (job.op === "upsert" && COMPOSITE_CONFLICT[job.table]) {
-    next.options = { ...(job.options || {}), onConflict: COMPOSITE_CONFLICT[job.table] };
-  }
-  return next;
-}
-
 export { COMPOSITE_CONFLICT };

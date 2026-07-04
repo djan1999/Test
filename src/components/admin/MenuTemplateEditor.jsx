@@ -34,8 +34,8 @@ import { KT_BLOCK_META, KT_BLOCK_GROUPS, makeKtBlock, makeKtRow, buildDefaultTic
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
 import { generateKitchenTicketHTML } from "../../utils/kitchenTicketGenerator.js";
 import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote, readTeamNames, writeTeamNames } from "../../utils/storage.js";
-import { supabase, TABLES } from "../../lib/supabaseClient.js";
-import { scopedFrom } from "../../lib/scopedDb.js";
+import { supabase } from "../../lib/supabaseClient.js";
+import { readStateKey, saveStateKey } from "../../lib/stateStore.js";
 import { LayoutStylesPanel } from "./MenuTemplatePanels.jsx";
 import { PreviewDataPanel } from "./MenuTemplatePreviewParts.jsx";
 
@@ -766,47 +766,42 @@ export default function MenuTemplateEditor({
   const [thankYouNote, setThankYouNote] = useState(() => readThankYouNote("en"));
   const [teamNames,    setTeamNames]    = useState(readTeamNames);
 
-  // Persist both languages to Supabase so MenuGenerator's on-mount load sees
-  // the admin's latest edits and doesn't overwrite them with a stale value.
-  const syncTitleToSupabase = () => {
+  // Persist both languages through the store seam so MenuGenerator's on-mount
+  // load sees the admin's latest edits and doesn't overwrite them with a stale
+  // value.
+  const syncTitleToStore = () => {
     if (!supabase) return;
-    scopedFrom(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "menu_gen_title", state: { en: readMenuTitle("en"), si: readMenuTitle("si") }, updated_at: new Date().toISOString() })
-      .then(() => {});
+    saveStateKey("menu_gen_title", { en: readMenuTitle("en"), si: readMenuTitle("si") });
   };
-  const syncThankYouToSupabase = () => {
+  const syncThankYouToStore = () => {
     if (!supabase) return;
-    scopedFrom(TABLES.SERVICE_SETTINGS)
-      .upsert({ id: "menu_gen_thankyou", state: { en: readThankYouNote("en"), si: readThankYouNote("si") }, updated_at: new Date().toISOString() })
-      .then(() => {});
+    saveStateKey("menu_gen_thankyou", { en: readThankYouNote("en"), si: readThankYouNote("si") });
   };
 
-  // On mount, pull title / thank-you / team names from Supabase so the editor
+  // On mount, pull title / thank-you / team names from the store so the editor
   // shows correct values on a fresh device where localStorage isn't yet populated.
-  // Without this, switching language or any sync call would overwrite Supabase
+  // Without this, switching language or any sync call would overwrite the store
   // with empty strings from localStorage and permanently destroy saved values.
   useEffect(() => {
     if (!supabase) return;
     Promise.all([
-      scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_title").single(),
-      scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_thankyou").single(),
-      scopedFrom(TABLES.SERVICE_SETTINGS).select("state").eq("id", "menu_gen_team").single(),
-    ]).then(([titleRes, thankYouRes, teamRes]) => {
-      const titleState = titleRes.data?.state;
+      readStateKey("menu_gen_title").catch(() => null),
+      readStateKey("menu_gen_thankyou").catch(() => null),
+      readStateKey("menu_gen_team").catch(() => null),
+    ]).then(([titleState, thankYouState, teamState]) => {
       if (titleState && (typeof titleState.en === "string" || typeof titleState.si === "string")) {
         const val = titleState["en"] ?? "";
         if (val) { writeMenuTitle("en", val); setMenuTitle(val); }
         if (titleState["si"]) writeMenuTitle("si", titleState["si"]);
       }
-      const thankYouState = thankYouRes.data?.state;
       if (thankYouState && (typeof thankYouState.en === "string" || typeof thankYouState.si === "string")) {
         const val = thankYouState["en"] ?? "";
         if (val) { writeThankYouNote("en", val); setThankYouNote(val); }
         if (thankYouState["si"]) writeThankYouNote("si", thankYouState["si"]);
       }
-      if (teamRes.data?.state?.value) {
-        writeTeamNames(teamRes.data.state.value);
-        setTeamNames(teamRes.data.state.value);
+      if (teamState?.value) {
+        writeTeamNames(teamState.value);
+        setTeamNames(teamState.value);
       }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -815,8 +810,8 @@ export default function MenuTemplateEditor({
   const handleLangChange = (nextLang) => {
     writeMenuTitle(previewLang, menuTitle);
     writeThankYouNote(previewLang, thankYouNote);
-    syncTitleToSupabase();
-    syncThankYouToSupabase();
+    syncTitleToStore();
+    syncThankYouToStore();
     setPreviewLang(nextLang);
     setMenuTitle(readMenuTitle(nextLang));
     setThankYouNote(readThankYouNote(nextLang));
@@ -1178,7 +1173,7 @@ export default function MenuTemplateEditor({
             <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", whiteSpace: "nowrap" }}>Menu Title</span>
             <input
               value={menuTitle}
-              onChange={e => { setMenuTitle(e.target.value); writeMenuTitle(previewLang, e.target.value); syncTitleToSupabase(); }}
+              onChange={e => { setMenuTitle(e.target.value); writeMenuTitle(previewLang, e.target.value); syncTitleToStore(); }}
               style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, outline: "none", flex: 1, minWidth: 80 }}
             />
           </div>
@@ -1186,7 +1181,7 @@ export default function MenuTemplateEditor({
             <span style={{ fontFamily: FONT, fontSize: 7.5, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", whiteSpace: "nowrap" }}>Thank You Note</span>
             <input
               value={thankYouNote}
-              onChange={e => { setThankYouNote(e.target.value); writeThankYouNote(previewLang, e.target.value); syncThankYouToSupabase(); }}
+              onChange={e => { setThankYouNote(e.target.value); writeThankYouNote(previewLang, e.target.value); syncThankYouToStore(); }}
               style={{ fontFamily: FONT, fontSize: 10, padding: "4px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, outline: "none", flex: 1, minWidth: 140 }}
             />
           </div>

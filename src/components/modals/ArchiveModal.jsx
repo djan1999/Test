@@ -2,9 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import FullModal from "../ui/FullModal.jsx";
 import TableSummaryCard from "./TableSummaryCard.jsx";
 import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
-import { supabase, TABLES, getWorkspaceId } from "../../lib/supabaseClient.js";
-import { scopedFrom } from "../../lib/scopedDb.js";
-import { isPowerSyncEnabled } from "../../powersync/config.js";
+import { supabase } from "../../lib/supabaseClient.js";
+import { fetchArchive, archiveSetDeleted, archiveSetAllDeleted, archivePurgeTrash } from "../../lib/archiveStore.js";
 import { parseHHMM, mergeTableGroups, tableGroupLabel } from "../../utils/tableHelpers.js";
 import { optionalPairingsFromCourses } from "../../utils/menuUtils.js";
 import { aggregateInsights } from "../../utils/archiveInsights.js";
@@ -37,34 +36,19 @@ export default function ArchiveModal({
       return;
     }
     setLoading(true);
-    // PowerSync instant paint: when the on-device DB has synced, fill the archive
-    // straight from local SQLite so the modal opens immediately; the Supabase
-    // load below still runs as the source-of-truth refresh.
-    if (isPowerSyncEnabled(getWorkspaceId())) {
-      (async () => {
-        try {
-          const { whenSynced, readServiceArchive } = await import("../../powersync/reads.js");
-          if (!(await whenSynced())) return;
-          const { active, deleted } = await readServiceArchive();
-          if (active.length || deleted.length) { setEntries(active); setDeleted(deleted); setLoading(false); }
-        } catch { /* fall back to Supabase */ }
-      })();
-    }
-    Promise.all([
-      scopedFrom(TABLES.SERVICE_ARCHIVE).select("*").is("deleted_at", null).order("created_at", { ascending: false }).limit(60),
-      scopedFrom(TABLES.SERVICE_ARCHIVE).select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(30),
-    ]).then(([active, trash]) => {
-      setEntries(active.error ? [] : (active.data || []));
-      setDeleted(trash.error ? [] : (trash.data || []));
-      setLoading(false);
-    });
+    // fetchArchive reads the on-device SQLite DB when it is primary (instant,
+    // works offline) and falls back to the direct Supabase pair otherwise.
+    fetchArchive()
+      .then(({ active, deleted }) => { setEntries(active); setDeleted(deleted); })
+      .catch(() => { setEntries([]); setDeleted([]); })
+      .finally(() => setLoading(false));
   };
   useEffect(loadEntries, []);
 
   const deleteEntry = async (id) => {
     if (!supabase) return;
     setDeleting(id);
-    const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).update({ deleted_at: new Date().toISOString() }).eq("id", id);
+    const { error } = await archiveSetDeleted(id, new Date().toISOString());
     if (error) {
       alert("Delete failed: " + error.message + "\n\nYou may need to enable UPDATE on the service_archive table in Supabase (Policies → anon → UPDATE).");
     } else {
@@ -81,7 +65,7 @@ export default function ArchiveModal({
     if (!window.confirm("Move ALL archive entries to trash? You can restore them from Recently Deleted.")) return;
     setDeleting("all");
     const now = new Date().toISOString();
-    const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).update({ deleted_at: now }).is("deleted_at", null);
+    const { error } = await archiveSetAllDeleted(now);
     if (error) {
       alert("Delete failed: " + error.message + "\n\nYou may need to enable UPDATE on the service_archive table in Supabase (Policies → anon → UPDATE).");
     } else {
@@ -95,7 +79,7 @@ export default function ArchiveModal({
   const restoreEntry = async (id) => {
     if (!supabase) return;
     setDeleting(id);
-    const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).update({ deleted_at: null }).eq("id", id);
+    const { error } = await archiveSetDeleted(id, null);
     if (error) {
       alert("Restore failed: " + error.message);
     } else {
@@ -110,7 +94,7 @@ export default function ArchiveModal({
     if (!supabase) return;
     if (!window.confirm("Permanently delete all trashed entries? This cannot be undone.")) return;
     setDeleting("trash");
-    const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).delete().not("deleted_at", "is", null);
+    const { error } = await archivePurgeTrash();
     if (error) {
       alert("Empty trash failed: " + error.message);
     } else {
