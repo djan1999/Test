@@ -97,27 +97,6 @@ export function writeThankYouNote(lang, value) {
   try { window.localStorage.setItem(wsKey(key), value || ""); } catch {}
 }
 
-export const STORAGE_KEY = "milka-service-board-v8";
-
-export const readLocalBoardState = () => {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(wsKey(STORAGE_KEY));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    return null;
-  }
-};
-
-export const writeLocalBoardState = state => {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(wsKey(STORAGE_KEY), JSON.stringify(state));
-  } catch {}
-};
-
 // ── Menu courses cache ────────────────────────────────────────────────────────
 // Courses are the spine of the menu/board, but were never cached — so every
 // launch started with an empty list and blocked on the network. Caching them

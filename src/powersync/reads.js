@@ -1,9 +1,14 @@
-// Fast reads from the on-device PowerSync SQLite DB. HEAVY module (pulls the
-// SDK via system.js) — only ever reach it through a dynamic import() gated by
-// isPowerSyncEnabled(). Used to paint the UI instantly from local data while
-// the existing Supabase load still runs as the source-of-truth refresh.
+// Fast reads from the on-device PowerSync SQLite DB — the app's primary read
+// path once the local DB has synced (see localDbHasWorkspaceData below for the
+// gate). HEAVY module (pulls the SDK via system.js) — only ever reach it
+// through a dynamic import() gated by isPowerSyncEnabled().
+//
+// Every query is scoped to the active workspace: the sync streams alias
+// natural keys into the local `id` PK, so an account that syncs more than one
+// workspace must never read another tenant's aliased rows.
 
 import { getPowerSync } from "./system.js";
+import { getWorkspaceId } from "../lib/supabaseClient.js";
 
 // Resolve true once the local DB has completed its first full sync, so we never
 // paint a half-synced (partial) table. Falls through to false after a timeout so
@@ -74,21 +79,68 @@ function reviveRow(row) {
   return out;
 }
 
-// Reservations within the planner window (-7…+30 days), shaped like the
-// Supabase rows the planner already consumes.
-export async function readReservations(fromISO, toISO) {
+// The synced tables, probed by localDbHasWorkspaceData().
+const SYNCED_TABLES = [
+  "service_tables", "service_settings", "reservations",
+  "menu_courses", "wines", "beverages", "service_archive",
+];
+
+// Whether the local DB actually holds this workspace's rows. Gates the
+// sqlite-primary switch: a non-member account (the platform admin — see the
+// sync-rules note) completes its first sync with ZERO rows, and must stay on
+// the direct-Supabase fallback instead of reading an empty board.
+export async function localDbHasWorkspaceData(workspaceId) {
+  const db = getPowerSync();
+  for (const table of SYNCED_TABLES) {
+    const row = await db.get(
+      `SELECT EXISTS(SELECT 1 FROM ${table} WHERE workspace_id = ?) AS has`,
+      [workspaceId],
+    ).catch(() => null);
+    if (row?.has) return true;
+  }
+  return false;
+}
+
+// One service_settings blob (id = "menu_logo", "service_date", …) → the state
+// object, or null when the row doesn't exist. Mirrors the Supabase
+// `.select("state").eq("id", id).maybeSingle()` reads: a missing row is null,
+// a real read failure THROWS — callers that seed defaults on "genuinely empty"
+// (the layout-profiles loader) must be able to tell the two apart.
+export async function readSetting(id) {
+  const row = await getPowerSync().getOptional(
+    "SELECT state FROM service_settings WHERE id = ? AND workspace_id = ?",
+    [id, getWorkspaceId()],
+  );
+  if (row?.state == null) return null;
+  return reviveRow(row).state ?? null;
+}
+
+// The settings rows the app live-updates across devices (mirrors what the
+// legacy service_settings realtime channel reacted to).
+export async function readLiveSettings() {
   const rows = await getPowerSync().getAll(
-    "SELECT id, workspace_id, date, table_id, data, created_at FROM reservations WHERE date >= ? AND date <= ? ORDER BY date, created_at",
-    [fromISO, toISO],
+    "SELECT id, state, updated_at FROM service_settings WHERE workspace_id = ? AND id IN ('kitchen_ticket_order','service_date')",
+    [getWorkspaceId()],
   );
   return rows.map(reviveRow);
 }
 
-// Service board rows, shaped like the Supabase select the board reconcile
-// (mergeRemoteTables) already consumes: { table_id, data, updated_at }.
+// Reservations within the planner window (-7…+30 days), shaped like the
+// Supabase rows the planner already consumes.
+export async function readReservations(fromISO, toISO) {
+  const rows = await getPowerSync().getAll(
+    "SELECT id, workspace_id, date, table_id, data, created_at FROM reservations WHERE workspace_id = ? AND date >= ? AND date <= ? ORDER BY date, created_at",
+    [getWorkspaceId(), fromISO, toISO],
+  );
+  return rows.map(reviveRow);
+}
+
+// Service board rows, shaped like the Supabase select the board consumes:
+// { table_id, data, updated_at }.
 export async function readServiceTables() {
   const rows = await getPowerSync().getAll(
-    "SELECT table_id, data, updated_at FROM service_tables ORDER BY table_id",
+    "SELECT table_id, data, updated_at FROM service_tables WHERE workspace_id = ? ORDER BY table_id",
+    [getWorkspaceId()],
   );
   return rows.map(reviveRow);
 }
@@ -96,7 +148,8 @@ export async function readServiceTables() {
 // Wines, already mapped to the shape setWines() expects (mirrors loadWines).
 export async function readWines() {
   const rows = await getPowerSync().getAll(
-    "SELECT key, name, wine_name, producer, vintage, region, country, by_glass, source FROM wines ORDER BY name",
+    "SELECT key, name, wine_name, producer, vintage, region, country, by_glass, source FROM wines WHERE workspace_id = ? ORDER BY name",
+    [getWorkspaceId()],
   );
   return rows.map((r) => ({
     id: r.key,
@@ -114,17 +167,35 @@ export async function readWines() {
 // caller splits them by category via pickBeveragesForCategory().
 export async function readBeverages() {
   return getPowerSync().getAll(
-    "SELECT id, category, name, notes, position, source FROM beverages ORDER BY position",
+    "SELECT id, category, name, notes, position, source FROM beverages WHERE workspace_id = ? ORDER BY position",
+    [getWorkspaceId()],
   );
 }
 
-// Menu course rows with jsonb columns revived to objects; the caller maps each
-// through supabaseRowToCourse (same as the Supabase path).
+// Postgres boolean columns arrive from SQLite as 0/1 integers. The course
+// mapper (supabaseRowToCourse) uses `!== false` semantics, where a raw 0 would
+// read as TRUE — e.g. an archived course (is_active = 0) would come back
+// active. Convert to real booleans before handing rows to the app.
+const MENU_COURSE_BOOL_COLUMNS = [
+  "is_snack", "optional_pairing_enabled", "optional_pairing_default_on",
+  "section_gap_before", "show_on_short", "is_active",
+];
+
+// Menu course rows with jsonb columns revived to objects and booleans
+// normalised; the caller maps each through supabaseRowToCourse (same as the
+// Supabase path).
 export async function readMenuCourses() {
   const rows = await getPowerSync().getAll(
-    "SELECT * FROM menu_courses ORDER BY position",
+    "SELECT * FROM menu_courses WHERE workspace_id = ? ORDER BY position",
+    [getWorkspaceId()],
   );
-  return rows.map(reviveRow);
+  return rows.map((r) => {
+    const out = reviveRow(r);
+    for (const col of MENU_COURSE_BOOL_COLUMNS) {
+      if (out[col] != null) out[col] = !!out[col];
+    }
+    return out;
+  });
 }
 
 // Service archive split into { active, deleted }, mirroring the two Supabase
@@ -132,7 +203,8 @@ export async function readMenuCourses() {
 // ≤30). state jsonb is revived to an object.
 export async function readServiceArchive() {
   const rows = await getPowerSync().getAll(
-    "SELECT id, date, label, state, created_at, deleted_at, workspace_id FROM service_archive ORDER BY created_at DESC",
+    "SELECT id, date, label, state, created_at, deleted_at, workspace_id FROM service_archive WHERE workspace_id = ? ORDER BY created_at DESC",
+    [getWorkspaceId()],
   );
   const mapped = rows.map(reviveRow);
   return {

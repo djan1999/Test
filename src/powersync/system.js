@@ -22,10 +22,17 @@ export function getPowerSync() {
 }
 
 // Normalise a PowerSync SyncStatus into the small shape the app cares about.
+// hasSyncedP1: the priority-1 data (board, reservations, settings — see
+// powersync/sync-rules.yaml) has completed its first sync, so the board is
+// usable before the big reference lists finish downloading. Falls back to the
+// full-sync flag when priorities aren't deployed.
 function snapshot(s) {
+  let p1 = false;
+  try { p1 = !!s?.statusForPriority?.(1)?.hasSynced; } catch { /* noop */ }
   return {
     connected: !!s?.connected,
     hasSynced: !!s?.hasSynced,
+    hasSyncedP1: !!s?.hasSynced || p1,
     lastSyncedAt: s?.lastSyncedAt ? new Date(s.lastSyncedAt).getTime() : null,
   };
 }
