@@ -51,7 +51,7 @@ import {
 import {
   FLOOR_MAPS_KEY, TERRACE_STATE_KEY, sanitizeFloorMaps, sanitizeTerraceState,
   getActiveDiningMap, getTerraceMap, setTerraceDirty, mapSeatCountForBoardTable,
-  terraceOccupancy, isTerraceDirty,
+  terraceOccupancy, isTerraceDirty, applyLayoutSwitchRow, resolveReservationTable,
 } from "./utils/floorMaps.js";
 import {
   visitStateOf, isArmed as isVisitArmed,
@@ -2823,6 +2823,28 @@ export default function App() {
     persistVisitData(owner, fireLastBite(owner.data, new Date().toISOString()));
   };
 
+  // Apply a confirmed layout-switch diff: only 'move' rows are written
+  // (conflicts and NEEDS TABLE rows stay untouched for the operator to fix).
+  // Same seam as every reservation write — persistReservationRow.
+  const applyLayoutSwitchRows = (rows) => {
+    const moves = new Map((rows || []).filter(r => r.status === "move").map(r => [r.id, r]));
+    if (!moves.size) return;
+    const current = reservations.filter(r => moves.has(r.id));
+    setReservations(prev => prev.map(r => {
+      const next = moves.has(r.id) ? applyLayoutSwitchRow(moves.get(r.id), r) : null;
+      return next || r;
+    }));
+    if (supabase) {
+      current.forEach(r => {
+        const next = applyLayoutSwitchRow(moves.get(r.id), r);
+        if (next) {
+          persistReservationRow({ id: next.id, date: next.date, table_id: next.table_id, data: next.data })
+            .catch(e => console.warn("Layout switch persist failed:", e));
+        }
+      });
+    }
+  };
+
   // Kitchen sees terrace parties' tickets before the dining table is seated:
   // decorate the rows the same way the board is decorated (derived, never
   // persisted) so KitchenBoard can include them.
@@ -4872,6 +4894,9 @@ export default function App() {
       courseQuickNotes={courseQuickNotes}
       profiles={profilesState.profiles}
       assignments={profilesState.assignments}
+      resolveTableFlag={(r) => ({
+        needsTable: !resolveReservationTable(getActiveDiningMap(floorMapsState), r.table_id).table,
+      })}
     />
     {archiveOpen && (
       <ArchiveModal
@@ -5032,6 +5057,10 @@ export default function App() {
         quickAccessItems={quickAccessItems}
         onUpdateQuickAccess={updateQuickAccess}
         aperitifOptions={aperitifOptions}
+        floorMaps={floorMapsState}
+        floorReservations={serviceReservations}
+        onUpdateFloorMaps={updateFloorMaps}
+        onApplyLayoutSwitch={applyLayoutSwitchRows}
         restrictionsList={restrictionsList}
         onSaveRestrictions={saveRestrictions}
         courseQuickNotes={courseQuickNotes}

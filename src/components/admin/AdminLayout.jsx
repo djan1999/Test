@@ -11,6 +11,7 @@ import InventoryPanel from "./InventoryPanel.jsx";
 import SystemPanel from "./SystemPanel.jsx";
 import ArchivePanel from "./ArchivePanel.jsx";
 import QuickAccessPanel from "./QuickAccessPanel.jsx";
+import FloorPanel from "./FloorPanel.jsx";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
 
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
@@ -20,6 +21,7 @@ const SECTIONS = [
   { id: "dishes",      label: "Dishes & Restrictions",  icon: "◈" },
   { id: "drinks",      label: "Drinks & Pairings",      icon: "◎" },
   { id: "quickaccess", label: "Quick Access",            icon: "◇" },
+  { id: "floor",       label: "Floor & Terrace",         icon: "▦" },
   { id: "inventory",   label: "Inventory / Sync",        icon: "↻" },
   { id: "system",      label: "System",                  icon: "◆" },
   { id: "archive",     label: "Archive",                 icon: "◫" },
@@ -86,6 +88,11 @@ export default function AdminLayout({
   quickAccessItems,
   onUpdateQuickAccess,
   aperitifOptions = [],
+  // Floor maps + terrace flow
+  floorMaps = null,
+  floorReservations = [],
+  onUpdateFloorMaps = null,
+  onApplyLayoutSwitch = null,
   // Restrictions + Quick Notes (per-dish presets)
   restrictionsList = [],
   onSaveRestrictions,
@@ -457,6 +464,15 @@ export default function AdminLayout({
               cocktails={cocktails}
               spirits={spirits}
               beers={beers}
+            />
+          )}
+
+          {activeSection === "floor" && floorMaps && (
+            <FloorPanel
+              floorMaps={floorMaps}
+              reservations={floorReservations}
+              onUpdateFloorMaps={onUpdateFloorMaps}
+              onApplyLayoutSwitch={onApplyLayoutSwitch}
             />
           )}
 
