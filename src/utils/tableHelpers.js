@@ -266,6 +266,53 @@ export const remapTableGroup = (group, fromId, toId) => {
   return group.map((id) => (Number(id) === a ? b : Number(id) === b ? a : Number(id)));
 };
 
+// Repoint a reservation when the live table state it owns moves or swaps
+// between two table ids (swap semantics: fromId↔toId, any other id untouched).
+// Returns the next { table_id, data } with `data.tableGroup` remapped alongside
+// the primary id — repointing only `table_id` leaves the group pointing at the
+// OLD table, a table_id↔tableGroup desync that made reservationTableIds and
+// the reconcile disagree about where the booking sits (one guest duplicated
+// onto two tables, the other hidden). Extracted pure from App's onMoveTable /
+// swapReservations so the board invariants suite exercises the REAL transform,
+// not a test-local copy.
+export const repointReservation = (resv, fromId, toId) => {
+  const a = Number(fromId), b = Number(toId);
+  const tid = Number(resv?.table_id);
+  const table_id = tid === a ? b : tid === b ? a : tid;
+  const g = Array.isArray(resv?.data?.tableGroup) ? resv.data.tableGroup : [];
+  const data = g.length ? { ...resv.data, tableGroup: remapTableGroup(g, a, b) } : resv?.data;
+  return { table_id, data };
+};
+
+// Pure list transforms behind App's moveTableState / swapTableState setTables
+// updaters. Kept here (not inline in the updater) so the invariants suite can
+// drive the exact production board transition. Both look the source rows up in
+// the list they're given, so calling them inside `setTables(prev => …)` always
+// moves the freshest state. Unknown ids return the list unchanged — the App
+// wrappers have already validated and returned { ok:false } by then.
+export const moveTableRows = (tables, fromId, toId) => {
+  const a = Number(fromId), b = Number(toId);
+  const src = (tables || []).find(t => t.id === a);
+  if (!src || !(tables || []).some(t => t.id === b)) return tables;
+  return tables.map(t => {
+    if (t.id === a) return blankTable(t.id);
+    if (t.id === b) return { ...src, id: t.id, tableGroup: remapTableGroup(src.tableGroup, a, b) };
+    return t;
+  });
+};
+
+export const swapTableRows = (tables, aId, bId) => {
+  const a = Number(aId), b = Number(bId);
+  const ta = (tables || []).find(t => t.id === a);
+  const tb = (tables || []).find(t => t.id === b);
+  if (!ta || !tb) return tables;
+  return tables.map(t => {
+    if (t.id === a) return { ...tb, id: t.id, tableGroup: remapTableGroup(tb.tableGroup, a, b) };
+    if (t.id === b) return { ...ta, id: t.id, tableGroup: remapTableGroup(ta.tableGroup, a, b) };
+    return t;
+  });
+};
+
 // Render a "T02-03" label from a table that may belong to a group.
 export const tableGroupLabel = (t) => {
   const g = Array.isArray(t?.tableGroup) && t.tableGroup.length > 1

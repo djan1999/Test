@@ -31,7 +31,8 @@ import {
 import {
   makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM,
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
-  remapTableGroup, reservationTableIds, mergeRestrictionPositions,
+  reservationTableIds, mergeRestrictionPositions,
+  repointReservation, moveTableRows, swapTableRows,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { foldTable } from "./utils/foldTable.js";
@@ -2685,11 +2686,7 @@ export default function App() {
       || dst.kitchenArchived;
     const dstHasReservation = !!(dst.resName || dst.resTime);
     if (dstStarted || dstHasReservation) return { ok: false, reason: "destination-occupied" };
-    setTables(prev => prev.map(t => {
-      if (t.id === Number(fromId)) return blankTable(t.id);
-      if (t.id === Number(toId))   return { ...src, id: t.id, tableGroup: remapTableGroup(src.tableGroup, fromId, toId) };
-      return t;
-    }));
+    setTables(prev => moveTableRows(prev, fromId, toId));
     return { ok: true };
   };
 
@@ -2702,11 +2699,7 @@ export default function App() {
     const a = tablesRef.current?.find(t => t.id === Number(aId));
     const b = tablesRef.current?.find(t => t.id === Number(bId));
     if (!a || !b) return { ok: false, reason: "not-found" };
-    setTables(prev => prev.map(t => {
-      if (t.id === Number(aId)) return { ...b, id: t.id, tableGroup: remapTableGroup(b.tableGroup, aId, bId) };
-      if (t.id === Number(bId)) return { ...a, id: t.id, tableGroup: remapTableGroup(a.tableGroup, aId, bId) };
-      return t;
-    }));
+    setTables(prev => swapTableRows(prev, aId, bId));
     return { ok: true };
   };
 
@@ -2724,17 +2717,13 @@ export default function App() {
     if (r1.date === serviceDate && (mode === "service" || mode === "display")) {
       swapTableState(t1, t2);
     }
-    // Remap each reservation's tableGroup alongside its table_id. Swapping only
-    // table_id left data.tableGroup pointing at the OLD table — a table_id ↔
-    // tableGroup desync that made reservationTableIds/reconcile disagree about
-    // where the booking sits, duplicating one guest and hiding the other.
-    const swapData = (data, a, b) => {
-      const g = Array.isArray(data?.tableGroup) ? data.tableGroup : [];
-      if (g.length === 0) return data;
-      return { ...data, tableGroup: remapTableGroup(g, a, b) };
-    };
-    const data1 = swapData(r1.data, t1, t2);
-    const data2 = swapData(r2.data, t1, t2);
+    // repointReservation (utils/tableHelpers) remaps each reservation's
+    // tableGroup alongside its table_id. Swapping only table_id left
+    // data.tableGroup pointing at the OLD table — a table_id ↔ tableGroup
+    // desync that made reservationTableIds/reconcile disagree about where the
+    // booking sits, duplicating one guest and hiding the other.
+    const { data: data1 } = repointReservation(r1, t1, t2);
+    const { data: data2 } = repointReservation(r2, t1, t2);
     // Update r1's local state synchronously so the second upsert sees the new
     // table_id and skips the auto-move (avoids a redundant moveTableState call
     // that would fail-noop now that the swap above already happened).
@@ -5074,23 +5063,14 @@ export default function App() {
               r.date === serviceDate
               && resolveReservationSession(r.data) === activeServiceSession
               && reservationTableIds(r.data, r.table_id).includes(tid));
-            // Swap from↔to inside a reservation's tableGroup so a grouped
+            // repointReservation (utils/tableHelpers) swaps from↔to on the
+            // primary table_id AND inside the tableGroup so a grouped
             // reservation's member list never dangles at the old id.
-            const remapGroup = (data) => {
-              const g = Array.isArray(data?.tableGroup) ? data.tableGroup.map(Number) : [];
-              if (!g.length) return data;
-              return { ...data, tableGroup: g.map(id => id === from ? to : id === to ? from : id) };
-            };
             const srcResv = ownerOf(from);
             const dstResv = useSwap ? ownerOf(to) : null;
             // The destination's owner only moves on a SWAP; a plain move targets
             // a free table. Guard against the same reservation matching both.
-            const repoint = (r) => {
-              const tid = Number(r.table_id);
-              const data = remapGroup(r.data);
-              const nextTableId = tid === from ? to : tid === to ? from : tid;
-              return { table_id: nextTableId, data };
-            };
+            const repoint = (r) => repointReservation(r, from, to);
             if (srcResv || (dstResv && dstResv.id !== srcResv?.id)) {
               setReservations(prev => prev.map(r => {
                 if (srcResv && r.id === srcResv.id) return { ...r, ...repoint(r) };

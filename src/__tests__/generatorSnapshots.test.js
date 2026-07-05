@@ -1,5 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { generateMenuHTML } from "../utils/menuGenerator.js";
+
+// generateMenuHTML prints TODAY's date in the menu header (there is no date
+// parameter — the printed menu is always for the day it's generated). Pin the
+// clock to the day these snapshots were recorded, or the two menu snapshots
+// break at every midnight rollover.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-07-04T18:00:00"));
+});
+afterAll(() => vi.useRealTimers());
 import {
   generateWeeklyReservationsHTML,
   generateWeeklyAllergyHTML,
