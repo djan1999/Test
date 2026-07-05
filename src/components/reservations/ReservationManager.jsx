@@ -251,7 +251,7 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Allergy Sheet</title>${ALLERGY_ROBOTO}<style>${css}</style></head><body>${body}</body></html>`;
 }
 
-export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onSwapReservations, onExit, serviceDate, activeServiceSession = "dinner", onSetServiceDate, onSetServiceSession, onOpenArchive, courseQuickNotes = {}, profiles = [], assignments = {} }) {
+export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onSwapReservations, onExit, serviceDate, activeServiceSession = "dinner", onSetServiceDate, onSetServiceSession, onOpenArchive, courseQuickNotes = {}, profiles = [], assignments = {}, resolveTableFlag = null }) {
   const [weekOffset,  setWeekOffset]  = useState(0);
   const [selectedDay, setSelectedDay] = useState(null);   // "YYYY-MM-DD" or null (week view)
   const [editingId,   setEditingId]   = useState(null);   // reservation id being edited, or "new"
@@ -477,6 +477,11 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
                   {/* Table badge */}
                   <div style={{ background: tokens.neutral[50], color: tokens.ink[0], border: `1px solid ${tokens.charcoal.border}`, fontFamily: FONT, fontSize: "11px", fontWeight: 700, letterSpacing: "0.06em", padding: "8px 12px", borderRadius: 0, minWidth: 48, textAlign: "center" }}>{tLabel}</div>
+                  {/* The assigned table doesn't resolve in the ACTIVE floor
+                      layout (e.g. T5 while Layout B runs) — flag it. */}
+                  {typeof resolveTableFlag === "function" && resolveTableFlag(r)?.needsTable && (
+                    <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.10em", fontWeight: 700, color: tokens.signal.warn, border: `1px solid ${tokens.signal.warn}`, padding: "3px 7px", borderRadius: 0, textTransform: "uppercase", flexShrink: 0 }}>NEEDS TABLE</span>
+                  )}
                   {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: FONT, fontSize: "13px", color: tokens.ink[0], fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
