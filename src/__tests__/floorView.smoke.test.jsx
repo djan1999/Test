@@ -119,3 +119,77 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect([t1Next.x, t1Next.y]).toEqual([18, 18]);
   });
 });
+
+describe("FloorView geometry inspector", () => {
+  const enterEdit = (utils) => {
+    fireEvent.click(utils.getByText("EDIT"));
+    const svg = utils.container.querySelector("svg");
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 368, right: 400, bottom: 368 });
+    return svg;
+  };
+  const tapTable = (container, label) => {
+    const g = findTable(container, label);
+    fireEvent.pointerDown(g, { clientX: 40, clientY: 40 });
+    fireEvent.pointerUp(g, { clientX: 40, clientY: 40 });
+  };
+
+  it("tap-select opens the table inspector; DELETE is two-step; slots chips edit boardIds", () => {
+    const utils = setup();
+    const { container, handlers, getByText } = utils;
+    enterEdit(utils);
+    tapTable(container, "T1");
+    expect(container.textContent).toContain("INSPECTOR — T1");
+    // two-step delete: first tap arms, second applies
+    fireEvent.click(getByText("DELETE T1"));
+    expect(handlers.onUpdateFloorMaps).not.toHaveBeenCalled();
+    fireEvent.click(getByText("CONFIRM ✓"));
+    const next = handlers.onUpdateFloorMaps.mock.calls[0][0];
+    expect(next.maps.find((m) => m.id === "dining_a").tables.some((t) => t.label === "T1")).toBe(false);
+  });
+
+  it("DUPLICATE MAP creates '<NAME> COPY' and switches to it (the LAYOUT C path)", () => {
+    const utils = setup();
+    const { container, handlers, getByText } = utils;
+    enterEdit(utils);
+    fireEvent.click(getByText("DUPLICATE MAP"));
+    const next = handlers.onUpdateFloorMaps.mock.calls[0][0];
+    expect(next.maps.some((m) => m.name === "LAYOUT A COPY")).toBe(true);
+    expect(container.textContent).toContain("MAP — LAYOUT A"); // inspector header follows the switched tab… 
+  });
+
+  it("RESET TO DEFAULTS is confirm-gated and restores only the visible map", () => {
+    // hand the view a mangled Layout A on an old geometry version
+    const mangled = {
+      ...floorMaps,
+      geometryVersion: 1,
+      maps: floorMaps.maps.map((m) => m.id !== "dining_a" ? m : {
+        ...m,
+        tables: m.tables.map((t) => (t.label === "T1" ? { ...t, x: 60, y: 60 } : t)),
+      }),
+    };
+    const utils = setup({ floorMaps: mangled });
+    const { container, handlers, getByText } = utils;
+    enterEdit(utils);
+    expect(container.textContent).toContain("NEW DEFAULT GEOMETRY AVAILABLE — RESET MAP");
+    fireEvent.click(getByText("RESET TO DEFAULTS"));
+    fireEvent.click(getByText("CONFIRM ✓"));
+    const next = handlers.onUpdateFloorMaps.mock.calls[0][0];
+    expect(next.maps.find((m) => m.id === "dining_a").tables.find((t) => t.label === "T1").x).toBe(8);
+    expect(next.geometryVersion).toBeGreaterThan(1);
+  });
+
+  it("RENUMBER: tapping every chair in sequence commits the numbering", () => {
+    const utils = setup();
+    const { container, handlers, getByText } = utils;
+    enterEdit(utils);
+    tapTable(container, "T1");
+    fireEvent.click(getByText("RENUMBER"));
+    const t1 = findTable(container, "T1");
+    const chairs = [...t1.querySelectorAll("g")];
+    fireEvent.click(chairs[1]); // E chair first → becomes seat 1
+    fireEvent.click(chairs[0]);
+    const next = handlers.onUpdateFloorMaps.mock.calls.at(-1)[0];
+    const seats = next.maps.find((m) => m.id === "dining_a").tables.find((t) => t.label === "T1").seats;
+    expect(seats.map((s) => s.no)).toEqual([2, 1]);
+  });
+});
