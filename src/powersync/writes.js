@@ -32,16 +32,30 @@ function requireWorkspace() {
   return ws;
 }
 
-// UPDATE-then-INSERT upsert on (id, workspace_id). `cols` are real column
-// values (already converted); `id` is the aliased local PK.
+// Upsert on (id, workspace_id) — probe-then-UPDATE/INSERT, atomic inside the
+// caller's write transaction. `cols` are real column values (already
+// converted); `id` is the aliased local PK.
+//
+// ⚠️ Do NOT decide UPDATE-vs-INSERT from rowsAffected: the app tables are
+// PowerSync VIEWS, their writes run through INSTEAD OF triggers, and SQLite
+// does not count trigger-made changes — a successful UPDATE reports
+// rowsAffected 0. The original UPDATE-then-INSERT fell through to INSERT on
+// every save of a synced row and died on the ps_data__* primary key
+// ("UNIQUE constraint failed: ps_data__service_tables.id"), which blocked ALL
+// saves the first time a real device went sqlite-primary (05.07 Demo test).
 async function upsertLocalRow(tx, table, ws, id, cols) {
   const names = Object.keys(cols);
   const values = names.map((n) => cols[n]);
-  const updated = await tx.execute(
-    `UPDATE ${table} SET ${names.map((n) => `${n} = ?`).join(", ")} WHERE id = ? AND workspace_id = ?`,
-    [...values, String(id), ws],
+  const existing = await tx.getOptional(
+    `SELECT id FROM ${table} WHERE id = ? AND workspace_id = ?`,
+    [String(id), ws],
   );
-  if ((updated?.rowsAffected ?? 0) === 0) {
+  if (existing) {
+    await tx.execute(
+      `UPDATE ${table} SET ${names.map((n) => `${n} = ?`).join(", ")} WHERE id = ? AND workspace_id = ?`,
+      [...values, String(id), ws],
+    );
+  } else {
     await tx.execute(
       `INSERT INTO ${table} (id, workspace_id, ${names.join(", ")}) VALUES (?, ?, ${names.map(() => "?").join(", ")})`,
       [String(id), ws, ...values],
@@ -79,11 +93,19 @@ export async function writeSetting(id, state) {
 export async function writeReservation({ id, date, table_id, data, created_at }) {
   const ws = requireWorkspace();
   await getPowerSync().writeTransaction(async (tx) => {
-    const updated = await tx.execute(
-      "UPDATE reservations SET date = ?, table_id = ?, data = ? WHERE id = ? AND workspace_id = ?",
-      [date, Number(table_id), sqlite(data ?? {}), String(id), ws],
+    // Probe-then-write, NOT rowsAffected (see upsertLocalRow): view UPDATEs
+    // report 0 changes even on success, which turned every edit of a synced
+    // reservation into a duplicate INSERT that died on the local PK.
+    const existing = await tx.getOptional(
+      "SELECT id FROM reservations WHERE id = ? AND workspace_id = ?",
+      [String(id), ws],
     );
-    if ((updated?.rowsAffected ?? 0) === 0) {
+    if (existing) {
+      await tx.execute(
+        "UPDATE reservations SET date = ?, table_id = ?, data = ? WHERE id = ? AND workspace_id = ?",
+        [date, Number(table_id), sqlite(data ?? {}), String(id), ws],
+      );
+    } else {
       await tx.execute(
         "INSERT INTO reservations (id, workspace_id, date, table_id, data, created_at) VALUES (?, ?, ?, ?, ?, ?)",
         [String(id), ws, date, Number(table_id), sqlite(data ?? {}), created_at || new Date().toISOString()],
