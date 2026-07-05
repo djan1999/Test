@@ -48,6 +48,17 @@ import {
   resolveAperitifFromQuickAccessOption,
   aperitifMatchesQuickAccessOption,
 } from "./utils/quickAccessResolve.js";
+import {
+  FLOOR_MAPS_KEY, TERRACE_STATE_KEY, sanitizeFloorMaps, sanitizeTerraceState,
+  getActiveDiningMap, getTerraceMap, setTerraceDirty, mapSeatCountForBoardTable,
+  terraceOccupancy, isTerraceDirty,
+} from "./utils/floorMaps.js";
+import {
+  visitStateOf, isArmed as isVisitArmed,
+  assignTerrace as assignTerraceData, clearTerraceTable as clearTerraceData,
+  moveToDining as moveToDiningData, markSeated as markSeatedData,
+  shouldArmOnFire, fireLastBite,
+} from "./utils/terraceFlow.js";
 import { useIsMobile, BP } from "./hooks/useIsMobile.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
 import {
@@ -82,6 +93,8 @@ import ProfilePicker from "./components/auth/ProfilePicker.jsx";
 import WineSearch from "./components/service/WineSearch.jsx";
 import BeverageSearch from "./components/service/BeverageSearch.jsx";
 import TableCard from "./components/TableCard/TableCard.jsx";
+import TerracePanel from "./components/floor/TerracePanel.jsx";
+import FloorMap from "./components/floor/FloorMap.jsx";
 
 // Heavy mode-level views and modals are lazy-loaded so the service board (the
 // critical path) ships in a small initial bundle. The PWA precaches every
@@ -592,7 +605,7 @@ function MoveTablePicker({ currentTable, tables = [], reservationOnTable, onCanc
 }
 
 // ── Detail View ───────────────────────────────────────────────────────────────
-function Detail({ table, tables = [], optionalExtras = [], optionalPairings = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages, onClearTable, onMoveTable, reservationOnTable }) {
+function Detail({ table, tables = [], optionalExtras = [], optionalPairings = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages, onClearTable, onMoveTable, reservationOnTable, mapSeatCap = null }) {
   const isMobile = useIsMobile(860);
   const isNarrow = useIsMobile(520);
   const row1 = isNarrow ? "30px 1fr 28px" : isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
@@ -1201,7 +1214,10 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
                     {restrLabel(r.note)}
                   </span>
                   <div style={{ display: "flex", gap: 3 }}>
-                    {Array.from({ length: table.guests }, (_, idx) => {
+                    {/* Seat positions cap at the assigned table's seat count in
+                        the ACTIVE floor map (T9 offers 3 under Layout B, 2
+                        under A); a squeezed-in extra guest still gets a chip. */}
+                    {Array.from({ length: mapSeatCap != null ? Math.max(mapSeatCap, Number(table.guests) || 0) : (Number(table.guests) || 0) }, (_, idx) => {
                       const p = idx + 1; const sel = r.pos === p;
                       return (
                         <button key={p} onClick={() => upd("restrictions", table.restrictions.map((x, ii) =>
@@ -1274,8 +1290,14 @@ const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
 // cards on every DisplayBoard re-render (which caused the visual overlap animation glitch).
-function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [] }) {
+function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onMarkSeated, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [] }) {
     const isSeated = t.active;
+    // Terrace-flow decoration (derived in App, never persisted on the row):
+    // 'terrace' = party outside on t._visit.terraceLabel; 'arriving' = mid
+    // kitchen-visit, walking to this table.
+    const visit = t._visit || null;
+    const isArriving = !isSeated && visit?.visit === "arriving";
+    const onTerrace = !isSeated && visit?.visit === "terrace";
     const allRestr = (t.restrictions || []).filter(r => r.note);
     const [assigningIdx, setAssigningIdx] = useState(null);
     const [justSent, setJustSent] = useState(false);
@@ -1316,10 +1338,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
     return (
       <div style={{
         background: tokens.neutral[0],
-        borderTop:    `1px solid ${tokens.ink[4]}`,
-        borderBottom: `1px solid ${tokens.ink[4]}`,
-        borderLeft:   `3px solid ${isSeated ? tokens.green.border : tokens.ink[4]}`,
-        borderRight:  `1px solid ${tokens.ink[4]}`,
+        borderTop:    `1px ${isArriving ? "dashed" : "solid"} ${isArriving ? tokens.ink[1] : tokens.ink[4]}`,
+        borderBottom: `1px ${isArriving ? "dashed" : "solid"} ${isArriving ? tokens.ink[1] : tokens.ink[4]}`,
+        borderLeft:   isArriving ? `3px dashed ${tokens.ink[1]}` : `3px solid ${isSeated ? tokens.green.border : tokens.ink[4]}`,
+        borderRight:  `1px ${isArriving ? "dashed" : "solid"} ${isArriving ? tokens.ink[1] : tokens.ink[4]}`,
         borderRadius: 0,
         overflow: "hidden",
         transition: "border-color 0.12s",
@@ -1362,11 +1384,52 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
             <span style={{
               fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em",
               padding: "2px 7px", borderRadius: 0,
-              background: isSeated ? tokens.green.bg : tokens.neutral[50],
-              border: `1px solid ${isSeated ? tokens.green.border : tokens.ink[4]}`,
-              color: isSeated ? tokens.green.text : tokens.ink[3], fontWeight: 500,
+              background: isArriving ? tokens.ink[0] : isSeated ? tokens.green.bg : tokens.neutral[50],
+              border: `1px ${isArriving ? "dashed" : "solid"} ${isArriving ? tokens.ink[0] : isSeated ? tokens.green.border : tokens.ink[4]}`,
+              color: isArriving ? tokens.neutral[0] : isSeated ? tokens.green.text : tokens.ink[3], fontWeight: 500,
               textTransform: "uppercase",
-            }}>{isSeated ? "SEATED" : "RESERVED"}</span>
+            }}>{isArriving ? "ARRIVING · KV" : isSeated ? "SEATED" : "RESERVED"}</span>
+            {onTerrace && (
+              <span style={{
+                fontFamily: FONT, fontSize: "8px", letterSpacing: "0.08em",
+                padding: "2px 6px", borderRadius: 0,
+                border: `1px solid ${tokens.ink[4]}`, color: tokens.ink[2],
+                background: tokens.ink[5], fontWeight: 600, textTransform: "uppercase",
+              }}>ON TERRACE{visit.terraceLabel ? ` · ${visit.terraceLabel}` : ""}</span>
+            )}
+            {onTerrace && visit.armed && (
+              <span style={{
+                fontFamily: FONT, fontSize: "8px", letterSpacing: "0.08em",
+                padding: "2px 6px", borderRadius: 0,
+                background: tokens.ink[0], color: tokens.neutral[0], fontWeight: 600,
+              }}>LAST BITE ✓</span>
+            )}
+            {isArriving && onMarkSeated && (
+              <button
+                onClick={e => { e.stopPropagation(); onMarkSeated(t.id); }}
+                style={{
+                  fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em",
+                  padding: "3px 8px", border: `1px solid ${tokens.green.border}`,
+                  background: tokens.green.bg, color: tokens.green.text,
+                  borderRadius: 0, cursor: "pointer", fontWeight: 700,
+                  textTransform: "uppercase", touchAction: "manipulation",
+                }}
+              >MARK SEATED</button>
+            )}
+            {/* arrival flow: a still-booked party can open the terrace mini-map */}
+            {!isSeated && !visit && onAssignTerrace && (
+              <button
+                onClick={e => { e.stopPropagation(); onAssignTerrace(t.id); }}
+                title="Seat this party on the terrace for opening snacks"
+                style={{
+                  fontFamily: FONT, fontSize: "8px", letterSpacing: "0.1em",
+                  padding: "3px 8px", border: `1px solid ${tokens.ink[4]}`,
+                  background: tokens.neutral[0], color: tokens.ink[2],
+                  borderRadius: 0, cursor: "pointer", textTransform: "uppercase",
+                  touchAction: "manipulation",
+                }}
+              >TERRACE →</button>
+            )}
             {t.menuType && (
               <span style={{
                 fontFamily: FONT, fontSize: "8px", letterSpacing: "0.08em",
@@ -1937,7 +2000,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
     );
 }
 
-function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd, quickTableId = null, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, aperitifOptions = [], wines = [], cocktails = [], spirits = [], beers = [] }) {
+function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd, quickTableId = null, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onMarkSeated, onAssignTerrace, aperitifOptions = [], wines = [], cocktails = [], spirits = [], beers = [] }) {
   const isMobile = useIsMobile(BP.md);
 
   // Tables that belong to a combined booking are grouped solely by their
@@ -2008,6 +2071,8 @@ function DisplayBoard({ tables, optionalExtras = [], optionalPairings = [], upd,
                   onOpenDetail={onOpenDetail}
                   onSeat={onSeat}
                   onUnseat={onUnseat}
+                  onMarkSeated={onMarkSeated}
+                  onAssignTerrace={onAssignTerrace}
                   optionalExtras={optionalExtras}
                   optionalPairings={optionalPairings}
                   aperitifOptions={aperitifOptions}
@@ -2311,6 +2376,13 @@ export default function App() {
   // importers see the same list without prop drilling.
   const [restrictionsList, setRestrictionsList] = useState(() => readLocalRestrictions() || DEFAULT_RESTRICTIONS.map(r => ({ ...r })));
   const [courseQuickNotes, setCourseQuickNotes] = useState(() => readLocalCourseNotes() || {});
+  // Floor maps (terrace + dining layouts, seeded from the house diagrams) and
+  // terrace DIRTY strips. Definitions persist via service_settings; terrace
+  // occupancy is DERIVED from reservations, never stored on the board.
+  const [floorMapsState, setFloorMapsState] = useState(() => sanitizeFloorMaps(null));
+  const [terraceState, setTerraceState] = useState(() => sanitizeTerraceState(null));
+  // Party-first ASSIGN TERRACE: the reservation whose mini-map picker is open.
+  const [terraceAssignFor, setTerraceAssignFor] = useState(null);
   // Quick Access items (data-driven, replaces hardcoded APERITIF_OPTIONS)
   const [quickAccessItems, setQuickAccessItems] = useState(() => {
     try {
@@ -2670,6 +2742,73 @@ export default function App() {
       if (resolved !== activeServiceSession) return false;
       return reservationTableIds(r.data, r.table_id).includes(Number(tableId));
     }) || null;
+  };
+
+  // ── Terrace flow — visit-state transitions (utils/terraceFlow, pure) ──────
+  // All writes ride reservations.data through persistReservationRow (the
+  // PowerSync-safe seam); terrace DIRTY strips ride updateTerraceState. The
+  // dining board is untouched by MOVE (no readiness handshake, no auto-ping).
+  const persistVisitData = (resv, nextData) => {
+    if (!nextData) return false;
+    setReservations(prev => prev.map(r => r.id === resv.id ? { ...r, data: nextData } : r));
+    if (supabase) {
+      persistReservationRow({ id: resv.id, date: resv.date, table_id: resv.table_id, data: nextData })
+        .catch(e => console.warn("Terrace flow persist failed:", e));
+    }
+    return true;
+  };
+
+  const assignTerraceTable = (resv, label) => {
+    const terraceMapId = floorMapsState.maps.find(m => m.kind === "terrace")?.id || null;
+    if (!persistVisitData(resv, assignTerraceData(resv.data, label, terraceMapId))) return;
+    // assigning onto a DIRTY table claims it — the strip clears
+    updateTerraceState(setTerraceDirty(terraceState, label, false));
+  };
+
+  const clearTerracePartyTable = (resv) => {
+    const label = resv.data?.terrace_table || null;
+    if (!persistVisitData(resv, clearTerraceData(resv.data))) return;
+    if (label) updateTerraceState(setTerraceDirty(terraceState, label, true));
+  };
+
+  const moveTerracePartyIn = (resv) => {
+    const label = resv.data?.terrace_table || null;
+    const next = moveToDiningData(resv.data, new Date().toISOString(), {
+      singleTap: !!floorMapsState.config?.moveSingleTap,
+    });
+    if (!persistVisitData(resv, next)) return;
+    // side effects: terrace table → DIRTY + freed (occupancy derives from
+    // visit_state, so it frees the moment the write lands)
+    if (label) updateTerraceState(setTerraceDirty(terraceState, label, true));
+    if (next.visit_state === "dining") seatTable(Number(resv.table_id)); // MOVE_SINGLE_TAP path
+  };
+
+  const markTerracePartySeated = (resv) => {
+    if (!persistVisitData(resv, markSeatedData(resv.data))) return;
+    seatTable(Number(resv.table_id)); // full quick access lights up with the seat
+  };
+
+  // The day's reservations for the active session — the input set for terrace
+  // occupancy, the ARRIVING board visuals, and layout re-resolution.
+  const serviceReservations = useMemo(() => {
+    if (!serviceDate) return [];
+    return reservations.filter(r =>
+      r.date === serviceDate && resolveReservationSession(r.data) === activeServiceSession);
+  }, [reservations, serviceDate, activeServiceSession]);
+
+  // MARK SEATED reached from a dining-table card (the arriving party's table).
+  const markSeatedOnTable = (tableId) => {
+    const owner = serviceReservations.find(r =>
+      visitStateOf(r.data) === "arriving" && reservationTableIds(r.data, r.table_id).includes(Number(tableId)));
+    if (owner) markTerracePartySeated(owner);
+  };
+
+  // ASSIGN TERRACE reached from a booked party's card → mini-map picker modal.
+  const requestTerraceAssign = (tableId) => {
+    const owner = serviceReservations.find(r =>
+      visitStateOf(r.data) === "booked" && !r.data?.clearedFromBoard &&
+      reservationTableIds(r.data, r.table_id).includes(Number(tableId)));
+    if (owner) setTerraceAssignFor(owner);
   };
 
   // Move the live service state (active, arrivedAt, seats, kitchenLog, etc.)
@@ -4012,6 +4151,35 @@ export default function App() {
   };
 
 
+  // ── Floor maps + terrace state persistence ───────────────────────────────
+  // Both live in service_settings rows behind the stateStore seam (SQLite
+  // when primary, scopedFrom fallback otherwise) — queue-safe offline, same
+  // as every other settings blob. Terrace occupancy itself is derived from
+  // reservations; only the map definitions and DIRTY strips persist here.
+  useEffect(() => {
+    if (!supabase || !psResolved) return;
+    withRetry(() => readStateKey(FLOOR_MAPS_KEY))
+      .then(s => { if (s) setFloorMapsState(sanitizeFloorMaps(s)); })
+      .catch(() => {});
+    withRetry(() => readStateKey(TERRACE_STATE_KEY))
+      .then(s => { if (s) setTerraceState(sanitizeTerraceState(s)); })
+      .catch(() => {});
+  }, [psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const updateFloorMaps = (next) => {
+    const s = sanitizeFloorMaps(next);
+    setFloorMapsState(s);
+    if (supabase) saveStateKey(FLOOR_MAPS_KEY, s).catch?.(() => {});
+    return s;
+  };
+
+  const updateTerraceState = (next) => {
+    const s = sanitizeTerraceState(next);
+    setTerraceState(s);
+    if (supabase) saveStateKey(TERRACE_STATE_KEY, s).catch?.(() => {});
+    return s;
+  };
+
   // ── Quick Access persistence ──────────────────────────────────────────────
   useEffect(() => {
     try { localStorage.setItem("milka_quick_access", JSON.stringify(quickAccessItems)); } catch {}
@@ -4933,6 +5101,23 @@ export default function App() {
             </div>
           </div>
 
+          {/* [TERRACE] — optional opening leg. Collapsed hairline when unused
+              so the default reservation→dining path is visually unchanged. */}
+          {serviceDate && (
+            <TerracePanel
+              floorMaps={floorMapsState}
+              terraceState={terraceState}
+              reservations={serviceReservations}
+              tables={tables}
+              onAssign={assignTerraceTable}
+              onClear={clearTerracePartyTable}
+              onMove={moveTerracePartyIn}
+              onMarkSeated={markTerracePartySeated}
+              onMarkClean={(label) => updateTerraceState(setTerraceDirty(terraceState, label, false))}
+              isMobile={appIsMobile}
+            />
+          )}
+
           {serviceView === "sheet" ? (
             /* SHEET view — single-table operational sheet (table index +
                course state + guest matrix + intelligence rails). */
@@ -4991,13 +5176,31 @@ export default function App() {
           ) : (
             /* Combined Board + per-table Quick Access view */
             (() => {
+              // Terrace-flow decoration: mark each board table whose party is
+              // still outside (terrace) or mid kitchen-visit (arriving) so the
+              // room reads honestly. Derived per render, never persisted.
+              const visitByTable = {};
+              serviceReservations.forEach(r => {
+                const vs = visitStateOf(r.data);
+                if (vs !== "terrace" && vs !== "arriving") return;
+                reservationTableIds(r.data, r.table_id).forEach(id => {
+                  visitByTable[id] = {
+                    visit: vs,
+                    terraceLabel: r.data?.terrace_table || null,
+                    armed: isVisitArmed(r.data),
+                  };
+                });
+              });
               const visibleTables = tables
                 .filter(t => t.active || t.resName || t.resTime)
-                .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
+                .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup))
+                .map(t => visitByTable[t.id] ? { ...t, _visit: visitByTable[t.id] } : t);
 
               return (
                 <DisplayBoard
                   tables={visibleTables}
+                  onMarkSeated={markSeatedOnTable}
+                  onAssignTerrace={requestTerraceAssign}
                   optionalExtras={dishes}
                   optionalPairings={pairings}
                   upd={upd}
@@ -5095,6 +5298,7 @@ export default function App() {
             return { ...result, swapped: useSwap };
           }}
           reservationOnTable={reservationOnTable}
+          mapSeatCap={mapSeatCountForBoardTable(getActiveDiningMap(floorMapsState), sel)}
         />
       )}
 
@@ -5116,6 +5320,39 @@ export default function App() {
         </Suspense>
       )}
       {inventoryOpen && <Suspense fallback={null}><InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} /></Suspense>}
+
+      {/* Party-first ASSIGN TERRACE — the mini floor-map picker. Free tables
+          tappable (DIRTY ones too, assigning claims them clean); occupied
+          tables render inert + dimmed via the shared renderer's picker mode. */}
+      {terraceAssignFor && (
+        <CenteredModal
+          onClose={() => setTerraceAssignFor(null)}
+          label={`[ASSIGN TERRACE · ${(terraceAssignFor.data?.resName || "—").toUpperCase()} ×${terraceAssignFor.data?.guests || "?"}]`}
+        >
+          {(() => {
+            const occ = terraceOccupancy(serviceReservations);
+            const tState = {};
+            for (const t of (getTerraceMap(floorMapsState)?.tables || [])) {
+              const r = occ[t.label];
+              tState[t.label] = r
+                ? { status: "occupied", name: r.data?.resName || "—", pax: r.data?.guests || undefined }
+                : { status: "free", dirty: isTerraceDirty(terraceState, t.label), selectable: true };
+            }
+            return (
+              <FloorMap
+                map={getTerraceMap(floorMapsState)}
+                mode="picker"
+                tableState={tState}
+                height={300}
+                onTableTap={(t) => {
+                  assignTerraceTable(terraceAssignFor, t.label);
+                  setTerraceAssignFor(null);
+                }}
+              />
+            );
+          })()}
+        </CenteredModal>
+      )}
 
       {addResOpen && serviceDate && (
         <CenteredModal
