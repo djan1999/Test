@@ -61,8 +61,9 @@ const JSON_COLUMNS = {
 // boolean columns per table — SQLite stores 0/1 integers.
 const BOOLEAN_COLUMNS = {
   menu_courses: new Set([
-    "is_snack", "optional_pairing_enabled", "optional_pairing_default_on",
-    "section_gap_before", "show_on_short", "is_active",
+    "is_snack", "is_last_bite", "optional_pairing_enabled",
+    "optional_pairing_default_on", "section_gap_before", "show_on_short",
+    "is_active",
   ]),
   wines: new Set(["by_glass"]),
 };

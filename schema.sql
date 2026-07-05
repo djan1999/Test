@@ -231,6 +231,9 @@ create table if not exists public.menu_courses (
   -- Metadata
   hazards jsonb,
   is_snack boolean not null default false,
+  -- LAST BITE: firing this course arms a terrace party's move (one per menu;
+  -- see docs/TERRACE_FLOW_PLAN.md). Uniqueness is enforced app-side.
+  is_last_bite boolean not null default false,
   course_key text not null default '',
   course_category text not null default 'main',
   optional_flag text not null default '',
@@ -286,7 +289,8 @@ alter table public.menu_courses
   add column if not exists halal jsonb,
   add column if not exists low_fodmap jsonb,
   add column if not exists aperitif_btn text,
-  add column if not exists is_active boolean not null default true;
+  add column if not exists is_active boolean not null default true,
+  add column if not exists is_last_bite boolean not null default false;
 
 alter table public.menu_courses enable row level security;
 

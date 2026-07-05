@@ -253,6 +253,7 @@ function supabaseRowToCourse(r) {
     premium: r.premium,
     premium_si: r.premium_si || null,
     is_snack: r.is_snack,
+    is_last_bite: !!r.is_last_bite,
     menu_si,
     course_key: r.course_key || "",
     course_category: normalizeCourseCategory(r.course_category, r.optional_flag || ""),
@@ -312,6 +313,7 @@ function courseToSupabaseRow(course) {
     premium_si: course.premium_si,
     hazards: course.hazards,
     is_snack: course.is_snack,
+    is_last_bite: course.is_last_bite === true,
     course_key: course.course_key,
     course_category: normalizeCourseCategory(course.course_category, course.optional_flag),
     optional_flag: course.optional_flag,
@@ -2835,12 +2837,12 @@ export default function App() {
     let isActiveSkipped = false;
     if (changedRows.length > 0) {
       ({ error } = await scopedFrom(TABLES.MENU_COURSES).upsert(changedRows));
-      // Pre-migration fallback: if the is_active column hasn't been added yet,
-      // retry without it so the rest of the save still goes through. The toggle
-      // won't persist until the schema migration is applied, but new courses,
-      // edits, and reorders won't be lost.
-      if (error && (error.code === "PGRST204" || /is_active/i.test(String(error.message || "")))) {
-        const fallbackRows = changedRows.map(({ is_active, ...rest }) => rest);
+      // Pre-migration fallback: if the is_active / is_last_bite columns haven't
+      // been added yet, retry without them so the rest of the save still goes
+      // through. The toggles won't persist until the schema migration is
+      // applied, but new courses, edits, and reorders won't be lost.
+      if (error && (error.code === "PGRST204" || /is_active|is_last_bite/i.test(String(error.message || "")))) {
+        const fallbackRows = changedRows.map(({ is_active, is_last_bite, ...rest }) => rest);
         const retry = await scopedFrom(TABLES.MENU_COURSES).upsert(fallbackRows);
         error = retry.error;
         if (!error) {

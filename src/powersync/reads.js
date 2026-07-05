@@ -210,8 +210,9 @@ export async function readBeverages() {
 // read as TRUE — e.g. an archived course (is_active = 0) would come back
 // active. Convert to real booleans before handing rows to the app.
 const MENU_COURSE_BOOL_COLUMNS = [
-  "is_snack", "optional_pairing_enabled", "optional_pairing_default_on",
-  "section_gap_before", "show_on_short", "is_active",
+  "is_snack", "is_last_bite", "optional_pairing_enabled",
+  "optional_pairing_default_on", "section_gap_before", "show_on_short",
+  "is_active",
 ];
 
 // Menu course rows with jsonb columns revived to objects and booleans

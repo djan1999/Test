@@ -57,6 +57,7 @@ const menu_courses = new Table(
     os: column.text,
     premium: column.text,
     is_snack: column.integer,
+    is_last_bite: column.integer,
     updated_at: column.text,
     gluten_free: column.text,
     dairy_free: column.text,
