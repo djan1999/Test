@@ -107,6 +107,7 @@ const SummaryModal = lazy(() => import("./components/modals/SummaryModal.jsx"));
 const ArchiveModal = lazy(() => import("./components/modals/ArchiveModal.jsx"));
 const InventoryModal = lazy(() => import("./components/modals/InventoryModal.jsx"));
 const SheetView = lazy(() => import("./components/service/SheetView.jsx"));
+const KitchenFloorView = lazy(() => import("./components/kitchen/KitchenFloorView.jsx"));
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
@@ -2811,6 +2812,31 @@ export default function App() {
     if (owner) setTerraceAssignFor(owner);
   };
 
+  // The ONLY kitchen-ticket hook of the terrace flow: when the kitchen marks
+  // a course out, arm the party's move iff it's the LAST BITE course and the
+  // party is still on the terrace (pure decision in utils/terraceFlow —
+  // no-ops for everything else, never re-arms).
+  const handleKitchenCourseFired = (tableId, course) => {
+    const owner = serviceReservations.find(r =>
+      !r.data?.clearedFromBoard && reservationTableIds(r.data, r.table_id).includes(Number(tableId)));
+    if (!owner || !shouldArmOnFire(course, owner.data)) return;
+    persistVisitData(owner, fireLastBite(owner.data, new Date().toISOString()));
+  };
+
+  // Kitchen sees terrace parties' tickets before the dining table is seated:
+  // decorate the rows the same way the board is decorated (derived, never
+  // persisted) so KitchenBoard can include them.
+  const kitchenTables = useMemo(() => {
+    const byTable = {};
+    serviceReservations.forEach(r => {
+      if (visitStateOf(r.data) !== "terrace") return;
+      reservationTableIds(r.data, r.table_id).forEach(id => {
+        byTable[id] = { visit: "terrace", terraceLabel: r.data?.terrace_table || null };
+      });
+    });
+    return tables.map(t => (byTable[t.id] ? { ...t, _visit: byTable[t.id] } : t));
+  }, [tables, serviceReservations]);
+
   // Move the live service state (active, arrivedAt, seats, kitchenLog, etc.)
   // from one table id to another, leaving the source blank. Used when moving a
   // reservation mid-service so kitchen progress and seat orders follow the guests.
@@ -4862,27 +4888,59 @@ export default function App() {
   // Kitchen mode (legacy id "display") — KDS board for firing courses.
   // Mutation handlers `upd` / `updMany` are intentionally passed: kitchen
   // staff need to fire/unfire and edit notes here, so this is NOT read-only.
-  if (mode === "display") return (<>
+  // The FLOOR sibling view (mode "kitchen_floor") is strictly read-only.
+  if (mode === "display" || mode === "kitchen_floor") return (<>
     {serviceDatePickerEl}
     <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
-      <Header modeLabel="KITCHEN" showSummary={false} showMenu={false} showArchive={true} showInventory={false} {...hProps} />
+      <Header modeLabel={mode === "kitchen_floor" ? "KITCHEN · FLOOR" : "KITCHEN"} showSummary={false} showMenu={false} showArchive={mode === "display"} showInventory={false} {...hProps} />
       {pastDateWarningEl}
+      {/* TICKETS / FLOOR toggle — same auth + workspace gate for both views;
+          the floor view carries no mutation handlers at all. */}
+      <div style={{ display: "flex", gap: 0, padding: appIsMobile ? "10px 10px 0" : "10px 16px 0" }}>
+        {[["display", "TICKETS"], ["kitchen_floor", "FLOOR"]].map(([m, label]) => {
+          const on = mode === m;
+          return (
+            <button key={m} onClick={() => enterMode(m)} style={{
+              fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase",
+              padding: "7px 14px", marginLeft: -1, borderRadius: 0, cursor: "pointer",
+              border: `1px solid ${on ? tokens.charcoal.default : tokens.ink[4]}`,
+              background: on ? tokens.charcoal.default : tokens.neutral[0],
+              color: on ? tokens.neutral[0] : tokens.ink[2], fontWeight: on ? 600 : 400,
+              touchAction: "manipulation",
+            }}>{label}</button>
+          );
+        })}
+      </div>
       {/* Slim desktop padding: on a 720px-tall kitchen panel every vertical px
           counts toward fitting two full rows of tickets. */}
       <div style={{ padding: appIsMobile ? "12px 10px" : "10px 16px" }}>
         <Suspense fallback={lazyViewFallback}>
+          {mode === "kitchen_floor" ? (
+            <KitchenFloorView
+              floorMaps={floorMapsState}
+              terraceState={terraceState}
+              reservations={serviceReservations}
+              tables={tables}
+              menuCourses={activeMenuCourses}
+              profiles={profilesState.profiles}
+              assignments={profilesState.assignments}
+              isMobile={appIsMobile}
+            />
+          ) : (
           <KitchenBoard
-            tables={tables}
+            tables={kitchenTables}
             menuCourses={activeMenuCourses}
             upd={upd}
             updMany={updMany}
+            onCourseFired={handleKitchenCourseFired}
             profiles={profilesState.profiles}
             assignments={profilesState.assignments}
             historyGapsByMenu={historyGapsByMenu}
             persistedOrder={kitchenTicketOrder}
             onOrderChange={saveKitchenTicketOrder}
           />
+          )}
         </Suspense>
       </div>
       {archiveOpen && (
