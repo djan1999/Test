@@ -4,6 +4,14 @@ import {
   findMapTable, resolveReservationTable, boardIdsOf, mapSeatCountForBoardTable,
   planLayoutSwitch, applyLayoutSwitchRow, seatDisplayPoints, assignSeatNumbers,
   terraceOccupancy, sanitizeTerraceState, isTerraceDirty, setTerraceDirty,
+  GEOMETRY_VERSION, MAP_W, MAP_H,
+  moveTable, resizeTable, rotateTable, setTableShape, renameTable,
+  duplicateTable, addTable, deleteTable,
+  addSeat, removeSeat, moveSeat,
+  setTableMembers, setTableBoardIds,
+  addMap, renameMap, duplicateMap, deleteMap, hasDefaultGeometry, resetMapToDefaults,
+  sanitizeFloorStatus, floorStatusOf, setFloorStatus, cycleFloorStatus,
+  migrateTerraceState, mapTicker,
 } from "../utils/floorMaps.js";
 
 const state = buildDefaultFloorMaps();
@@ -212,5 +220,206 @@ describe("terrace occupancy + DIRTY state", () => {
     ts = setTerraceDirty(ts, "T23", false);
     expect(isTerraceDirty(ts, "T23")).toBe(false);
     expect(sanitizeTerraceState("junk").dirty).toEqual({});
+  });
+});
+
+/* ── floor-first correction: geometry editor + status helpers ─────────────── */
+
+describe("geometry version (the unfreeze)", () => {
+  it("defaults carry the current version; pre-version blobs sanitize to 1", () => {
+    expect(buildDefaultFloorMaps().geometryVersion).toBe(GEOMETRY_VERSION);
+    const stored = { maps: state.maps, activeDiningMapId: "dining_a" };
+    expect(sanitizeFloorMaps(stored).geometryVersion).toBe(1);
+    expect(sanitizeFloorMaps({ ...stored, geometryVersion: 2 }).geometryVersion).toBe(2);
+  });
+
+  it("resetMapToDefaults replaces only that map's tables and stamps the version", () => {
+    let s = sanitizeFloorMaps({ ...buildDefaultFloorMaps(), geometryVersion: 1 });
+    s = moveTable(s, "dining_a", "T1", 50, 50);
+    s = moveTable(s, "dining_b", "T1", 60, 60);
+    const reset = resetMapToDefaults(s, "dining_a");
+    expect(findMapTable(reset.maps.find((m) => m.id === "dining_a"), "T1").x).toBe(8);
+    expect(findMapTable(reset.maps.find((m) => m.id === "dining_b"), "T1").x).toBe(60); // untouched
+    expect(reset.geometryVersion).toBe(GEOMETRY_VERSION);
+  });
+
+  it("no seed for user-created maps → no reset, state identity kept", () => {
+    const s = addMap(state, "dining");
+    const newId = s.maps[s.maps.length - 1].id;
+    expect(hasDefaultGeometry(newId)).toBe(false);
+    expect(resetMapToDefaults(s, newId)).toBe(s);
+  });
+});
+
+describe("table ops", () => {
+  it("moveTable snaps to the unit grid and clamps to the canvas", () => {
+    const s = moveTable(state, "dining_a", "T1", 33.4, -5);
+    const t = findMapTable(getActiveDiningMap(s), "T1");
+    expect([t.x, t.y]).toEqual([33, 0]);
+    const far = findMapTable(getActiveDiningMap(moveTable(state, "dining_a", "T1", 999, 999)), "T1");
+    expect([far.x, far.y]).toEqual([MAP_W - t.w, MAP_H - t.h]);
+  });
+
+  it("resizeTable enforces minimums; rotateTable swaps w/h and re-clamps", () => {
+    const small = findMapTable(getActiveDiningMap(resizeTable(state, "dining_a", "T1", 1, 1)), "T1");
+    expect([small.w, small.h]).toEqual([4, 4]);
+    const rot = findMapTable(getActiveDiningMap(rotateTable(state, "dining_a", "T1")), "T1");
+    expect([rot.w, rot.h]).toEqual([9, 12]);
+  });
+
+  it("renameTable uppercases, rejects empty and duplicate labels", () => {
+    const ok = renameTable(state, "dining_a", "T1", " t99 ");
+    expect(findMapTable(getActiveDiningMap(ok), "T99")).toBeTruthy();
+    expect(renameTable(state, "dining_a", "T1", "T4")).toBe(state);
+    expect(renameTable(state, "dining_a", "T1", "  ")).toBe(state);
+  });
+
+  it("duplicateTable copies geometry+seats but drops boardIds/members (no claim collisions)", () => {
+    const s = duplicateTable(state, "dining_a", "T2-3");
+    const copy = findMapTable(getActiveDiningMap(s), "T2-3'");
+    expect(copy).toBeTruthy();
+    expect(copy.seats.length).toBe(4);
+    expect(copy.boardIds).toBeUndefined();
+    expect(copy.members).toBeUndefined();
+  });
+
+  it("addTable takes the first free T-number with two default seats; deleteTable removes", () => {
+    const s = addTable(state, "dining_b"); // T1..T4,T6..T10 exist → T5 free
+    const t = findMapTable(s.maps.find((m) => m.id === "dining_b"), "T5");
+    expect(t).toBeTruthy();
+    expect(t.seats.length).toBe(2);
+    const gone = deleteTable(s, "dining_b", "T5");
+    expect(findMapTable(gone.maps.find((m) => m.id === "dining_b"), "T5")).toBeNull();
+  });
+
+  it("ops on unknown map/label return the same state object", () => {
+    expect(moveTable(state, "nope", "T1", 1, 1)).toBe(state);
+    expect(deleteTable(state, "dining_a", "T77")).toBe(state);
+  });
+});
+
+describe("seat ops", () => {
+  it("addSeat appends the next number (no CONFIRM); removeSeat compacts numbering", () => {
+    let s = addSeat(state, "dining_a", "T8"); // 2 → 3 seats
+    let t = findMapTable(getActiveDiningMap(s), "T8");
+    expect(t.seats.length).toBe(3);
+    expect(t.seats[2].no).toBe(3);
+    expect(t.seats[2].confirm).toBeUndefined();
+    s = removeSeat(s, "dining_a", "T8", 0); // drop seat no 1 → renumber to 1..2
+    t = findMapTable(getActiveDiningMap(s), "T8");
+    expect(t.seats.map((x) => x.no).sort()).toEqual([1, 2]);
+  });
+
+  it("moveSeat on a rect projects onto the nearest side with a clamped offset", () => {
+    // T8 at x8 y68 w12 h9 — a point just above the top edge, 1/4 along it
+    const s = moveSeat(state, "dining_a", "T8", 0, { x: 11, y: 67 });
+    const seat = findMapTable(getActiveDiningMap(s), "T8").seats[0];
+    expect(seat.side).toBe("N");
+    expect(seat.offset).toBe(0.25);
+    expect(seat.no).toBe(1);           // number travels with the seat
+    expect(seat.confirm).toBe(true);   // moving is not renumbering
+  });
+
+  it("moveSeat on a round table converts to the compass angle (0=N, cw)", () => {
+    // T5 at x8 y38 w11 h11 → center (13.5, 43.5); point due E of center
+    const s = moveSeat(state, "dining_a", "T5", 0, { x: 20, y: 43.5 });
+    const seat = findMapTable(getActiveDiningMap(s), "T5").seats[0];
+    expect(seat.angle).toBe(90);
+    expect(seat.side).toBeUndefined();
+  });
+});
+
+describe("merge ops", () => {
+  it("setTableMembers keeps ≥2 distinct labels, else drops the merge", () => {
+    const s = setTableMembers(state, "dining_a", "T6", ["t6", "T7", "T7"]);
+    expect(findMapTable(getActiveDiningMap(s), "T6").members).toEqual(["T6", "T7"]);
+    const solo = setTableMembers(s, "dining_a", "T6", ["T6"]);
+    expect(findMapTable(getActiveDiningMap(solo), "T6").members).toBeUndefined();
+  });
+
+  it("setTableBoardIds sanitizes to sorted unique ints 1..10", () => {
+    const s = setTableBoardIds(state, "dining_a", "T6", [7, "6", 6, 99, 0]);
+    expect(findMapTable(getActiveDiningMap(s), "T6").boardIds).toEqual([6, 7]);
+  });
+});
+
+describe("map ops", () => {
+  it("addMap creates an empty map of the kind with unique id + name", () => {
+    const s = addMap(addMap(state, "dining"), "dining");
+    const added = s.maps.filter((m) => m.name.startsWith("NEW LAYOUT"));
+    expect(added.length).toBe(2);
+    expect(new Set(added.map((m) => m.id)).size).toBe(2);
+    expect(added[0].tables).toEqual([]);
+  });
+
+  it("duplicateMap deep-copies tables under '<NAME> COPY' (the LAYOUT C path)", () => {
+    const s = duplicateMap(state, "dining_a");
+    const copy = s.maps.find((m) => m.name === "LAYOUT A COPY");
+    expect(copy.tables.length).toBe(mapA.tables.length);
+    expect(copy.tables[0]).not.toBe(mapA.tables[0]); // deep, not shared
+    const moved = moveTable(s, copy.id, "T1", 50, 50);
+    expect(findMapTable(getActiveDiningMap(moved), "T1").x).toBe(8); // source untouched
+  });
+
+  it("deleteMap: last-of-kind is undeletable; deleting the active dining map falls back", () => {
+    expect(deleteMap(state, "terrace_main")).toBe(state); // only terrace map
+    const s = deleteMap(state, "dining_a");
+    expect(s.maps.some((m) => m.id === "dining_a")).toBe(false);
+    expect(s.activeDiningMapId).toBe("dining_b");
+    expect(deleteMap(s, "dining_b")).toBe(s); // now the last dining map
+  });
+
+  it("renameMap uppercases and rejects empty", () => {
+    expect(renameMap(state, "dining_a", "layout c").maps[0].name).toBe("LAYOUT C");
+    expect(renameMap(state, "dining_a", " ")).toBe(state);
+  });
+});
+
+describe("floor status (SET/DIRTY strips)", () => {
+  it("cycle goes — → DIRTY → SET → — and prunes empty buckets", () => {
+    let st = {};
+    st = cycleFloorStatus(st, "dining_a", "T3");
+    expect(floorStatusOf(st, "dining_a", "T3")).toBe("DIRTY");
+    st = cycleFloorStatus(st, "dining_a", "T3");
+    expect(floorStatusOf(st, "dining_a", "T3")).toBe("SET");
+    st = cycleFloorStatus(st, "dining_a", "T3");
+    expect(floorStatusOf(st, "dining_a", "T3")).toBeNull();
+    expect(st).toEqual({});
+  });
+
+  it("sanitize drops junk values and junk shapes; setFloorStatus guards ids", () => {
+    expect(sanitizeFloorStatus({ m1: { T1: "SET", T2: "WET" }, m2: "junk", m3: {} }))
+      .toEqual({ m1: { T1: "SET" } });
+    expect(sanitizeFloorStatus(null)).toEqual({});
+    expect(setFloorStatus({ m1: { T1: "SET" } }, null, "T1", "DIRTY")).toEqual({ m1: { T1: "SET" } });
+  });
+
+  it("statuses are keyed per map — layouts don't share strips", () => {
+    const st = setFloorStatus({}, "dining_a", "T3", "DIRTY");
+    expect(floorStatusOf(st, "dining_b", "T3")).toBeNull();
+  });
+
+  it("migrateTerraceState folds legacy dirty labels once, never over live strips", () => {
+    const legacy = { dirty: { T23: true, T25: true } };
+    expect(migrateTerraceState({}, legacy, "terrace_main"))
+      .toEqual({ terrace_main: { T23: "DIRTY", T25: "DIRTY" } });
+    const live = { terrace_main: { T22: "SET" } };
+    expect(migrateTerraceState(live, legacy, "terrace_main")).toEqual(live);
+    expect(migrateTerraceState({}, legacy, null)).toEqual({});
+    expect(migrateTerraceState({}, null, "terrace_main")).toEqual({});
+  });
+});
+
+describe("mapTicker", () => {
+  it("counts covers/seated/reserved/set/dirty from the visible map's entries", () => {
+    expect(mapTicker([
+      { status: "occupied", pax: 2, strip: "SET" },
+      { status: "occupied", pax: 4 },
+      { status: "reserved" },
+      { status: "arriving" },
+      { status: "free", strip: "DIRTY" },
+      null,
+    ])).toEqual({ covers: 6, seated: 2, reserved: 2, set: 1, dirty: 1 });
+    expect(mapTicker(undefined)).toEqual({ covers: 0, seated: 0, reserved: 0, set: 0, dirty: 0 });
   });
 });
