@@ -1,7 +1,9 @@
 # Floor-First Correction — Implementation Plan
 
-Status: PLAN ONLY — posted for approval before any code, per the spec's
-working style. Branch: `claude/floor-manager-sheet-layer-740ej2`.
+Status: IMPLEMENTED on `claude/floor-manager-sheet-layer-740ej2` (approved
+2026-07-05; open points resolved as recommended in §7 — EDIT behind the
+existing workspace gate, FLOOR as the third view-toggle option, statuses
+keyed per mapId).
 Spec source: FLOOR_FIRST_FIX_PROMPT (+ interaction reference
 `floor-manager-v3.jsx`, matched for interaction model and visual register,
 not literal code).
