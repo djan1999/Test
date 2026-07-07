@@ -191,10 +191,25 @@ export default function FloorMap({
   const sheetEditing = editing && !!onCanvasTap;
   const stampTool = sheetEditing && sheetTool !== "move";
 
+  // Client px → viewBox units. getScreenCTM is exact whatever the element's
+  // box does (zoom, borders, letterboxing); the manual fallback (jsdom has no
+  // CTM) still accounts for preserveAspectRatio's centered "meet" scaling —
+  // naive width/height ratios made drags run at the wrong scale on any
+  // element whose box didn't match the drawing's aspect.
   const toMapUnits = (e) => {
-    const r = svgRef.current?.getBoundingClientRect();
-    if (!r || !r.width || !r.height) return null;
-    return { x: ((e.clientX - r.left) / r.width) * MAP_W, y: ((e.clientY - r.top) / r.height) * MAP_H };
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const ctm = svg.getScreenCTM?.();
+    if (ctm) {
+      const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+      return { x: pt.x, y: pt.y };
+    }
+    const r = svg.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    const scale = Math.min(r.width / MAP_W, r.height / MAP_H);
+    const ox = (r.width - MAP_W * scale) / 2;
+    const oy = (r.height - MAP_H * scale) / 2;
+    return { x: (e.clientX - r.left - ox) / scale, y: (e.clientY - r.top - oy) / scale };
   };
 
   const onTablePointerDown = (t) => (e) => {
@@ -294,7 +309,11 @@ export default function FloorMap({
       ref={svgRef}
       viewBox={`0 0 ${MAP_W} ${MAP_H}`}
       style={{
-        width: "100%", height, display: "block", background: tokens.ink.bg,
+        // The element keeps the drawing's aspect (no letterboxed dead zones):
+        // full width up to the cap that makes it `height` tall, centered.
+        width: "100%", maxWidth: Math.round((height * MAP_W) / MAP_H),
+        aspectRatio: `${MAP_W} / ${MAP_H}`,
+        display: "block", margin: "0 auto", background: tokens.ink.bg,
         border: `1px solid ${tokens.ink[4]}`,
         touchAction: editing ? "none" : undefined,
       }}
@@ -337,12 +356,13 @@ export default function FloorMap({
 
       {(map.tables || []).map((t0, ti) => {
         let t = seatsOverride[t0.label] ? { ...t0, seats: seatsOverride[t0.label] } : t0;
-        // live drag preview (edit mode)
+        // live drag preview (edit mode) — tracks the pointer exactly; the
+        // grid snap happens once, on release, so the drag never steps.
         if (drag?.moved && drag.label === t.label) {
           t = {
             ...t,
-            x: clampPos(snap(t0.x + drag.dx), t0.w, MAP_W),
-            y: clampPos(snap(t0.y + drag.dy), t0.h, MAP_H),
+            x: clampPos(t0.x + drag.dx, t0.w, MAP_W),
+            y: clampPos(t0.y + drag.dy, t0.h, MAP_H),
           };
         }
         const st = tableState[t.label] || {};
