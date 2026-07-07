@@ -54,6 +54,7 @@ export function resetBackend({ psMode = false } = {}) {
   backend.uploadQueue = [];
   backend.watch = null;
   _workspaceId = null;
+  realtimeChannels.clear();
   localStorage.clear();
   sessionStorage.clear();
   // One member workspace → App auto-picks it after the auth bootstrap.
@@ -157,8 +158,35 @@ function makeBuilder(store, table) {
 
 // ── fake Supabase client ──────────────────────────────────────────────────────
 const session = { user: { id: "user-harness", email: "harness@test" } };
+
+// Realtime channels (postgres_changes). Channels register on subscribe();
+// emitRealtime(table, payload) delivers a payload to every binding on that
+// table — simulating another device's change arriving over the wire.
+const realtimeChannels = new Map(); // name → { name, bindings: [{ binding, cb }] }
+export function emitRealtime(table, payload) {
+  for (const ch of realtimeChannels.values()) {
+    for (const { binding, cb } of ch.bindings) {
+      if (binding.table === table) cb(clone(payload));
+    }
+  }
+}
+export const subscribedChannelCount = () => realtimeChannels.size;
+
+function makeChannel(name) {
+  const ch = { name, bindings: [] };
+  const api = {
+    _name: name,
+    on: (_type, binding, cb) => { ch.bindings.push({ binding, cb }); return api; },
+    subscribe: (statusCb) => { realtimeChannels.set(name, ch); statusCb?.("SUBSCRIBED"); return api; },
+    unsubscribe: () => { realtimeChannels.delete(name); },
+  };
+  return api;
+}
+
 export const fakeSupabase = {
   from: (table) => makeBuilder(backend.remote, table),
+  channel: (name) => makeChannel(name),
+  removeChannel: (chApi) => { realtimeChannels.delete(chApi?._name); },
   auth: {
     getSession: async () => ({ data: { session } }),
     onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),

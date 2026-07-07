@@ -24,6 +24,7 @@ import { render, screen, waitFor, act, fireEvent } from "@testing-library/react"
 import {
   backend, resetBackend, seed, remoteRows, localRows,
   drainUploads, syncDown, WORKSPACE_ID,
+  emitRealtime, subscribedChannelCount,
 } from "./harness/fakeBackend.js";
 import { currentServiceDay } from "../utils/serviceDay.js";
 import { blankTable } from "../utils/tableHelpers.js";
@@ -290,5 +291,65 @@ describe.each([
         expect(annaRowCount(tables)).toBe(1);
       }, { timeout: 6000 });
     }
+  }, 20000);
+});
+
+// ── Fallback realtime safety net ──────────────────────────────────────────────
+// Accounts whose sync stream delivers nothing (the platform admin browsing a
+// workspace it isn't a member of) live on the direct-Supabase fallback. Its
+// liveness is the Supabase realtime channels: without them the app is a static
+// snapshot — cross-device edits and freshly added reservations never appear
+// (the 07.07 "nothing syncs / my reservation is invisible" incident).
+describe("app harness — fallback realtime safety net", () => {
+  beforeEach(() => {
+    resetBackend({ psMode: false });
+  });
+
+  it("realtime events keep the board and planner live on the fallback path", async () => {
+    seedLiveService();
+    render(<App />);
+    await enterService();
+
+    // The channels subscribe once the store decision resolves to fallback.
+    await waitFor(() => expect(subscribedChannelCount()).toBeGreaterThan(0), { timeout: 5000 });
+
+    // Another device adds a reservation for tonight → INSERT event arrives.
+    // This device's reconcile must template her table without any reload.
+    const carla = {
+      id: "res-carla", workspace_id: WORKSPACE_ID, date: TODAY(), table_id: 5,
+      created_at: new Date().toISOString(),
+      data: { resName: "Carla Livewire", resTime: "21:00", guests: 2, tableGroup: [], service_session: "dinner" },
+    };
+    remoteRows("reservations").push(carla);
+    await act(async () => {
+      emitRealtime("reservations", { eventType: "INSERT", new: carla, old: null });
+    });
+    await waitFor(() => {
+      expect(rowFor(remoteRows("service_tables"), 5)?.data?.resName).toBe("Carla Livewire");
+    }, { timeout: 5000 });
+
+    // Another device seats Bruno on T2 → UPDATE event triggers a board refetch
+    // and the seated state paints here (active content — reconcile keeps it).
+    const bruno = rowFor(remoteRows("service_tables"), 2) || {
+      workspace_id: WORKSPACE_ID, table_id: 2, data: {}, updated_at: new Date().toISOString(),
+    };
+    bruno.data = { ...bruno.data, resName: "Bruno Livewire", active: true, arrivedAt: "20:17" };
+    bruno.updated_at = new Date().toISOString();
+    if (!rowFor(remoteRows("service_tables"), 2)) remoteRows("service_tables").push(bruno);
+    await act(async () => {
+      emitRealtime("service_tables", { eventType: "UPDATE", new: bruno, old: null });
+    });
+    await screen.findByText(/Bruno Livewire/, {}, { timeout: 5000 });
+
+    // The other device deletes Carla's reservation → DELETE event; reconcile
+    // ghost-clears her still-reserved table.
+    const resv = remoteRows("reservations");
+    resv.splice(resv.findIndex((r) => r.id === "res-carla"), 1);
+    await act(async () => {
+      emitRealtime("reservations", { eventType: "DELETE", new: null, old: { id: "res-carla" } });
+    });
+    await waitFor(() => {
+      expect(rowFor(remoteRows("service_tables"), 5)?.data?.resName || "").toBe("");
+    }, { timeout: 5000 });
   }, 20000);
 });
