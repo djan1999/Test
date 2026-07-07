@@ -96,24 +96,20 @@ const sizeSvg = (container) => {
   return svg;
 };
 
-describe("FloorMap service mode (two-zone tables)", () => {
-  it("strip tap cycles via onStripTap; body tap still opens the table", () => {
-    const onStrip = vi.fn();
+describe("FloorMap service mode", () => {
+  it("body tap reports the table (the caller decides toggle vs sheet)", () => {
     const onTap = vi.fn();
     const { container } = render(
-      <FloorMap map={terrace} mode="service" onStripTap={onStrip} onTableTap={onTap}
+      <FloorMap map={terrace} mode="service" onTableTap={onTap}
         tableState={{ T21: { status: "free", strip: "DIRTY" } }} />,
     );
-    fireEvent.click(container.querySelector('[data-strip="T21"]'));
-    expect(onStrip).toHaveBeenCalledWith("T21");
-    expect(onTap).not.toHaveBeenCalled(); // strip tap must not bubble into the body
-    const body = [...container.querySelectorAll("g")].find((g) => g.textContent.startsWith("T21"));
+    const body = container.querySelector('[data-table="T21"]');
     fireEvent.click(body);
     expect(onTap).toHaveBeenCalledTimes(1);
     expect(onTap.mock.calls[0][0].label).toBe("T21");
   });
 
-  it("renders SET / DIRTY strip labels, pulses DIRTY, and shows the allergy ▲", () => {
+  it("renders SET / DIRTY chips under the table, pulses DIRTY, shows the allergy ▲", () => {
     const { container } = render(
       <FloorMap map={terrace} mode="service" tableState={{
         T21: { status: "occupied", name: "NOVAK", pax: 2, strip: "SET", allergy: true },
@@ -124,6 +120,10 @@ describe("FloorMap service mode (two-zone tables)", () => {
     expect(container.textContent).toContain("DIRTY");
     expect(container.textContent).toContain("▲");
     expect(container.querySelector(".fm-strip-pulse")).toBeTruthy();
+    // the chip sits in the badge slot BELOW the shape — never inside it
+    const chip = [...container.querySelectorAll("text")].find((x) => x.textContent === "SET");
+    const t21 = terrace.tables.find((t) => t.label === "T21");
+    expect(Number(chip.getAttribute("y"))).toBeGreaterThan(t21.y + t21.h);
   });
 
   it("reserved tables render dashed with name + time", () => {

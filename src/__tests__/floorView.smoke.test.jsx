@@ -15,7 +15,11 @@ const boardTable = (id, extra = {}) => ({
 const tables = [
   boardTable(1, { active: true, resName: "NOVAK", guests: 2, resTime: "18:00", restrictions: [{ pos: 1, note: "shellfish" }] }),
   boardTable(4, { resName: "KOVAČ", guests: 4, resTime: "19:30" }),
-  ...[2, 3, 5, 6, 7, 8, 9, 10].map((id) => boardTable(id)),
+  boardTable(9, { active: true, resName: "WEISS", guests: 4, seats: [
+    { id: 1, water: "SPK", pairing: "WINE" },
+    { id: 2, water: "STILL", pairing: "—" },
+  ] }),
+  ...[2, 3, 5, 6, 7, 8, 10].map((id) => boardTable(id)),
 ];
 
 const reservations = [
@@ -57,9 +61,9 @@ describe("FloorView (FOH FLOOR surface)", () => {
     const { container, getByText } = setup();
     getByText("LAYOUT A");
     getByText("TERRACE");
-    // T1 occupied ×2 covers; T4 reserved; r3 arriving on T8 → RES 2
-    expect(container.textContent).toContain("COVERS 2");
-    expect(container.textContent).toContain("SEATED 1");
+    // T1 ×2 + T9 ×4 occupied; T4 reserved; r3 arriving on T8 → RES 2
+    expect(container.textContent).toContain("COVERS 6");
+    expect(container.textContent).toContain("SEATED 2");
     expect(container.textContent).toContain("RES 2");
     expect(container.textContent).toContain("SET 1");
     expect(container.textContent).toContain("DIRTY 1");
@@ -69,13 +73,11 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).toContain("ARRIVING · KV");
   });
 
-  it("a dining table is one big status button: strip tap AND body tap both cycle", () => {
+  it("a dining table is one big SET toggle — tap calls the status handler, no sheet", () => {
     const { container, handlers } = setup();
-    fireEvent.click(container.querySelector('[data-strip="T6"]'));
-    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T6");
-    fireEvent.click(findTable(container, "T1")); // occupied dining body — no sheet, cycles
+    fireEvent.click(findTable(container, "T1")); // occupied dining body — no sheet, toggles
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T1");
-    expect(handlers.onCycleStatus).toHaveBeenCalledTimes(2);
+    expect(handlers.onCycleStatus).toHaveBeenCalledTimes(1);
   });
 
   it("an arriving party's table sheet carries MARK SEATED", () => {
@@ -85,18 +87,34 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(handlers.onMarkSeated).toHaveBeenCalledWith(reservations[2]);
   });
 
-  it("terrace tab: occupied table is armed with MOVE / CLEAR; free table assigns a booked party", () => {
+  it("terrace tab: occupied sheet shows waters by position (no name) + MOVE; free table assigns", () => {
     const { container, handlers, getByText } = setup();
     fireEvent.click(getByText("TERRACE"));
-    expect(container.textContent).toContain("WEISS ×4");
+    expect(container.textContent).toContain("WEISS ×4"); // canvas keeps the party name
     expect(container.textContent).toContain("LAST BITE ✓");
     fireEvent.click(findTable(container, "T23"));
+    // the sheet: waters by seat position + pairings, reservation name omitted
+    const sheet = getByText("P1").closest("div").parentElement.parentElement;
+    expect(sheet.textContent).toContain("SPK");
+    expect(sheet.textContent).toContain("WINE");
+    expect(sheet.textContent).toContain("P2");
+    expect(sheet.textContent).not.toContain("WEISS");
     fireEvent.click(getByText(/MOVE TO T9/));
     expect(handlers.onMove).toHaveBeenCalledWith(reservations[0]);
     // free table → booked-party picker (MURN waits, HORVAT is mid-move)
     fireEvent.click(findTable(container, "T21"));
     fireEvent.click(getByText(/MURN ×2/));
     expect(handlers.onAssign).toHaveBeenCalledWith(reservations[1], "T21");
+  });
+
+  it("a DIRTY terrace table's sheet offers MARK CLEAN (DIRTY is automatic, never a button)", () => {
+    const { handlers, getByText } = setup({
+      floorStatus: { terrace_main: { T25: "DIRTY" } },
+    });
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(getByText("T25").closest("g"));
+    fireEvent.click(getByText("MARK CLEAN"));
+    expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T25");
   });
 });
 

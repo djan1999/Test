@@ -828,9 +828,12 @@ export function setFloorStatus(status, mapId, label, val) {
   return rest;
 }
 
+// Tap = SET toggle. DIRTY is never set by hand (per Djan) — it only arrives
+// automatically when a terrace party vacates a table — and a tap on a DIRTY
+// table clears it (the terrace sheet's MARK CLEAN).
 export function cycleFloorStatus(status, mapId, label) {
   const cur = floorStatusOf(status, mapId, label);
-  return setFloorStatus(status, mapId, label, cur === "DIRTY" ? "SET" : cur === "SET" ? null : "DIRTY");
+  return setFloorStatus(status, mapId, label, cur ? null : "SET");
 }
 
 // One-time read-through of the deprecated terrace_state_v1 row: its DIRTY
