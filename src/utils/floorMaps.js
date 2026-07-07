@@ -25,7 +25,8 @@ export const MAP_H = 92;
 // Bumped whenever the seed geometry below changes. Stored blobs carry the
 // version they were seeded/reset from; older blobs are NEVER auto-overwritten
 // — EDIT mode shows a RESET banner instead (the geometry-trap fix).
-export const GEOMETRY_VERSION = 2;
+// v3: seed sheets (walls / doors / zones / planters).
+export const GEOMETRY_VERSION = 3;
 
 const COMPASS_DEG = { N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315 };
 
@@ -42,6 +43,24 @@ const ms = (no, corner, extra) => rs(no, CORNER[corner][0], CORNER[corner][1], e
 
 const CONFIRM = { confirm: true }; // numbering unmarked on the diagrams — CONFIRM WITH DJAN
 
+// The architecture is data, not hardcoded SVG: each map carries a `sheet` of
+// walls (polylines, closed = room), openings cut into wall segments (doors
+// with leaf + swing arc, or plain passages), hatched zones and planters.
+export const emptySheet = () => ({ walls: [], openings: [], zones: [], planters: [] });
+
+const DINING_SHEET = () => ({
+  walls: [{ id: "w1", pts: [[2, 2], [98, 2], [98, 90], [2, 90]], closed: true, dashed: false }],
+  openings: [{ id: "o1", wallId: "w1", seg: 0, t: 0.64, width: 10, kind: "door", swing: 1, hinge: 1 }],
+  zones: [{ id: "z1", x: 2, y: 82, w: 96, h: 8, label: "PASS / KITCHEN" }],
+  planters: [],
+});
+const TERRACE_SHEET = () => ({
+  walls: [{ id: "w1", pts: [[2, 2], [98, 2], [98, 90], [2, 90]], closed: true, dashed: true }],
+  openings: [{ id: "o1", wallId: "w1", seg: 3, t: 0.85, width: 13, kind: "door", swing: 1, hinge: 1 }],
+  zones: [],
+  planters: [{ id: "p1", x: 13, y: 85, r: 3 }, { id: "p2", x: 34, y: 85, r: 3 }, { id: "p3", x: 55, y: 85, r: 3 }],
+});
+
 export function buildDefaultFloorMaps() {
   return {
     geometryVersion: GEOMETRY_VERSION,
@@ -50,6 +69,7 @@ export function buildDefaultFloorMaps() {
         id: "dining_a",
         kind: "dining",
         name: "LAYOUT A",
+        sheet: DINING_SHEET(),
         tables: [
           { label: "T1", shape: "rect", x: 8, y: 8, w: 12, h: 9, boardIds: [1],
             seats: [rs(1, "W"), rs(2, "E")] },
@@ -76,6 +96,7 @@ export function buildDefaultFloorMaps() {
         id: "dining_b",
         kind: "dining",
         name: "LAYOUT B",
+        sheet: DINING_SHEET(),
         tables: [
           { label: "T1", shape: "rect", x: 8, y: 8, w: 12, h: 9, boardIds: [1],
             seats: [rs(1, "W"), rs(2, "E")] },
@@ -103,6 +124,7 @@ export function buildDefaultFloorMaps() {
         id: "terrace_main",
         kind: "terrace",
         name: "TERRACE",
+        sheet: TERRACE_SHEET(),
         tables: [21, 22, 23, 24, 25, 26].map((n, i) => ({
           label: `T${n}`, shape: "rect",
           x: 8 + (i % 3) * 26, y: 18 + Math.floor(i / 3) * 36, w: 14, h: 10,
@@ -448,6 +470,248 @@ export const setTableBoardIds = (state, mapId, label, boardIds) =>
       .sort((a, b) => a - b),
   }));
 
+// ── SHEET layer: walls / doors / zones / planters ───────────────────────────
+// Pure geometry + editor ops for the architecture layer. Walls are polylines
+// (closed = a room); openings are cut INTO a wall segment (position t along
+// the segment, width in map units) and render as a door leaf + swing arc or
+// as a plain passage with jamb ticks. Zones are hatched stamps, planters are
+// circles. Everything lives under each map's `sheet` key.
+
+const arr = (x) => (Array.isArray(x) ? x : []);
+// Tolerant accessor — stored sheets may be absent or partial.
+export const sheetOf = (map) => {
+  const s = (map && typeof map.sheet === "object" && map.sheet) || {};
+  return { walls: arr(s.walls), openings: arr(s.openings), zones: arr(s.zones), planters: arr(s.planters) };
+};
+
+const patchSheet = (state, mapId, fn) =>
+  patchMaps(state, mapId, (m) => {
+    const sheet = fn(sheetOf(m));
+    return sheet ? { ...m, sheet } : m;
+  });
+
+const nextSheetId = (items, prefix) => {
+  let n = 1;
+  for (const it of items) {
+    const m = String(it.id || "").match(new RegExp(`^${prefix}(\\d+)$`));
+    if (m) n = Math.max(n, Number(m[1]) + 1);
+  }
+  return `${prefix}${n}`;
+};
+
+const dist = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+
+export const wallSegments = (wall) => {
+  const pts = arr(wall?.pts);
+  const out = [];
+  const m = wall?.closed ? pts.length : pts.length - 1;
+  for (let i = 0; i < m; i++) out.push({ p1: pts[i], p2: pts[(i + 1) % pts.length], i });
+  return out;
+};
+
+// Closest point on a segment → { d, t, pt }.
+export function nearestOnSegment(p, p1, p2) {
+  const vx = p2[0] - p1[0], vy = p2[1] - p1[1];
+  const L2 = vx * vx + vy * vy || 1;
+  let t = ((p[0] - p1[0]) * vx + (p[1] - p1[1]) * vy) / L2;
+  t = Math.max(0, Math.min(1, t));
+  const pt = [p1[0] + vx * t, p1[1] + vy * t];
+  return { d: dist(p, pt), t, pt };
+}
+
+// Everything the renderer needs for one opening: gap endpoints A/B, hinge
+// point, leaf end, arc sweep, center, and the segment's unit normal.
+export function doorGeometry(o, walls) {
+  const wall = arr(walls).find((w) => w.id === o.wallId);
+  if (!wall) return null;
+  const seg = wallSegments(wall)[o.seg];
+  if (!seg) return null;
+  const { p1, p2 } = seg;
+  const L = dist(p1, p2);
+  if (!L) return null;
+  const dir = [(p2[0] - p1[0]) / L, (p2[1] - p1[1]) / L];
+  const n0 = [-dir[1], dir[0]];
+  const nrm = [n0[0] * (o.swing || 1), n0[1] * (o.swing || 1)];
+  const gs = o.t * L - o.width / 2, ge = o.t * L + o.width / 2;
+  const A = [p1[0] + dir[0] * gs, p1[1] + dir[1] * gs];
+  const B = [p1[0] + dir[0] * ge, p1[1] + dir[1] * ge];
+  const h = o.hinge ? B : A;
+  const j = o.hinge ? A : B;
+  const leafEnd = [h[0] + nrm[0] * o.width, h[1] + nrm[1] * o.width];
+  const cross = (j[0] - h[0]) * (leafEnd[1] - h[1]) - (j[1] - h[1]) * (leafEnd[0] - h[0]);
+  return { A, B, h, j, leafEnd, sweep: cross < 0 ? 0 : 1, center: [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2], n0 };
+}
+
+// One wall segment minus its openings → the solid runs to draw, as [a, b]
+// distances along the segment.
+export function segmentRuns(wall, segIndex, openings, segLength) {
+  const ops = arr(openings)
+    .filter((o) => o.wallId === wall.id && o.seg === segIndex)
+    .sort((a, b) => a.t - b.t);
+  let cur = 0;
+  const runs = [];
+  for (const o of ops) {
+    const gs = Math.max(0, o.t * segLength - o.width / 2);
+    const ge = Math.min(segLength, o.t * segLength + o.width / 2);
+    runs.push([cur, gs]);
+    cur = ge;
+  }
+  runs.push([cur, segLength]);
+  return runs.filter(([a, b]) => b - a > 0.3);
+}
+
+const snapPt = ([x, y]) => [
+  Math.min(Math.max(snapUnit(x), 0), MAP_W),
+  Math.min(Math.max(snapUnit(y), 0), MAP_H),
+];
+
+export const addWall = (state, mapId, pts, closed) =>
+  patchSheet(state, mapId, (sheet) => {
+    const clean = arr(pts).map(snapPt);
+    if (clean.length < (closed ? 3 : 2)) return null;
+    return {
+      ...sheet,
+      walls: [...sheet.walls, { id: nextSheetId(sheet.walls, "w"), pts: clean, closed: !!closed, dashed: false }],
+    };
+  });
+
+export const setWallDashed = (state, mapId, wallId, dashed) =>
+  patchSheet(state, mapId, (sheet) => ({
+    ...sheet,
+    walls: sheet.walls.map((w) => (w.id === wallId ? { ...w, dashed: !!dashed } : w)),
+  }));
+
+// Deleting a wall takes its openings with it — an opening without its wall
+// is unrenderable.
+export const deleteWall = (state, mapId, wallId) =>
+  patchSheet(state, mapId, (sheet) => ({
+    ...sheet,
+    walls: sheet.walls.filter((w) => w.id !== wallId),
+    openings: sheet.openings.filter((o) => o.wallId !== wallId),
+  }));
+
+const DOOR_MIN = 6, DOOR_MAX = 30, DOOR_DEFAULT = 10;
+const clampDoorT = (t, width, L) => {
+  const margin = (width / 2 + 1) / L;
+  return Math.min(Math.max(t, margin), 1 - margin);
+};
+
+// Cut an opening into the wall segment nearest the tapped point (within 6
+// units). Same-state return = "tap closer to a wall".
+export const addDoorAt = (state, mapId, point) =>
+  patchSheet(state, mapId, (sheet) => {
+    const p = [point.x, point.y];
+    let best = null;
+    for (const w of sheet.walls) {
+      for (const { p1, p2, i } of wallSegments(w)) {
+        const r = nearestOnSegment(p, p1, p2);
+        if (r.d < 6 && (!best || r.d < best.d)) best = { ...r, wallId: w.id, seg: i, L: dist(p1, p2) };
+      }
+    }
+    if (!best || best.L < DOOR_MIN + 2) return null;
+    const width = Math.min(DOOR_DEFAULT, best.L - 2);
+    return {
+      ...sheet,
+      openings: [...sheet.openings, {
+        id: nextSheetId(sheet.openings, "o"),
+        wallId: best.wallId, seg: best.seg,
+        t: clampDoorT(best.t, width, best.L),
+        width, kind: "door", swing: 1, hinge: 1,
+      }],
+    };
+  });
+
+export const patchOpening = (state, mapId, id, patch) =>
+  patchSheet(state, mapId, (sheet) => ({
+    ...sheet,
+    openings: sheet.openings.map((o) => {
+      if (o.id !== id) return o;
+      const next = { ...o, ...patch };
+      next.width = Math.min(Math.max(Number(next.width) || DOOR_DEFAULT, DOOR_MIN), DOOR_MAX);
+      next.kind = next.kind === "pass" ? "pass" : "door";
+      next.swing = next.swing === -1 ? -1 : 1;
+      next.hinge = next.hinge ? 1 : 0;
+      const wall = sheet.walls.find((w) => w.id === next.wallId);
+      const seg = wall && wallSegments(wall)[next.seg];
+      if (seg) next.t = clampDoorT(next.t, next.width, dist(seg.p1, seg.p2));
+      return next;
+    }),
+  }));
+
+export const deleteOpening = (state, mapId, id) =>
+  patchSheet(state, mapId, (sheet) => ({ ...sheet, openings: sheet.openings.filter((o) => o.id !== id) }));
+
+export const addZoneAt = (state, mapId, point) =>
+  patchSheet(state, mapId, (sheet) => ({
+    ...sheet,
+    zones: [...sheet.zones, {
+      id: nextSheetId(sheet.zones, "z"),
+      x: snapPt([point.x - 13, 0])[0], y: snapPt([0, point.y - 8])[1],
+      w: 26, h: 16, label: "ZONE",
+    }],
+  }));
+
+export const patchZone = (state, mapId, id, patch) =>
+  patchSheet(state, mapId, (sheet) => ({
+    ...sheet,
+    zones: sheet.zones.map((z) => {
+      if (z.id !== id) return z;
+      const next = { ...z, ...patch };
+      if (patch.label != null) next.label = String(patch.label).trim().toUpperCase();
+      next.w = Math.min(Math.max(snapUnit(next.w), 8), MAP_W);
+      next.h = Math.min(Math.max(snapUnit(next.h), 5), MAP_H);
+      next.x = Math.min(Math.max(snapUnit(next.x), 0), MAP_W - next.w);
+      next.y = Math.min(Math.max(snapUnit(next.y), 0), MAP_H - next.h);
+      return next;
+    }),
+  }));
+
+export const deleteZone = (state, mapId, id) =>
+  patchSheet(state, mapId, (sheet) => ({ ...sheet, zones: sheet.zones.filter((z) => z.id !== id) }));
+
+export const addPlanterAt = (state, mapId, point) =>
+  patchSheet(state, mapId, (sheet) => {
+    const [x, y] = snapPt([point.x, point.y]);
+    return { ...sheet, planters: [...sheet.planters, { id: nextSheetId(sheet.planters, "p"), x, y, r: 3 }] };
+  });
+
+export const patchPlanter = (state, mapId, id, patch) =>
+  patchSheet(state, mapId, (sheet) => ({
+    ...sheet,
+    planters: sheet.planters.map((p) => {
+      if (p.id !== id) return p;
+      const next = { ...p, ...patch };
+      next.r = Math.min(Math.max(Number(next.r) || 3, 1.5), 8);
+      const [x, y] = snapPt([next.x, next.y]);
+      return { ...next, x, y };
+    }),
+  }));
+
+export const deletePlanter = (state, mapId, id) =>
+  patchSheet(state, mapId, (sheet) => ({ ...sheet, planters: sheet.planters.filter((p) => p.id !== id) }));
+
+// MOVE-tool tap → what did it land on. Doors win (small, on walls), then
+// planters, zones, walls — the mockup's precedence.
+export function hitTestSheet(sheet, point) {
+  const p = [point.x, point.y];
+  for (const o of sheet.openings) {
+    const g = doorGeometry(o, sheet.walls);
+    if (g && dist(p, g.center) < 5) return { kind: "door", id: o.id };
+  }
+  for (const pl of sheet.planters) {
+    if (dist(p, [pl.x, pl.y]) < pl.r + 1.5) return { kind: "planter", id: pl.id };
+  }
+  for (const z of sheet.zones) {
+    if (p[0] >= z.x && p[0] <= z.x + z.w && p[1] >= z.y && p[1] <= z.y + z.h) return { kind: "zone", id: z.id };
+  }
+  for (const w of sheet.walls) {
+    for (const { p1, p2 } of wallSegments(w)) {
+      if (nearestOnSegment(p, p1, p2).d < 2) return { kind: "wall", id: w.id };
+    }
+  }
+  return null;
+}
+
 // ── map ops ─────────────────────────────────────────────────────────────────
 
 const uniqueMapId = (state, base) => {
@@ -470,6 +734,7 @@ export function addMap(state, kind) {
       kind: k,
       name: uniqueMapName(state, k === "terrace" ? "NEW TERRACE" : "NEW LAYOUT"),
       tables: [],
+      sheet: emptySheet(),
     }],
   };
 }
@@ -485,11 +750,18 @@ export function renameMap(state, mapId, name) {
 export function duplicateMap(state, mapId) {
   const src = state.maps.find((m) => m.id === mapId);
   if (!src) return state;
+  const srcSheet = sheetOf(src);
   const copy = {
     ...src,
     id: uniqueMapId(state, `${src.id}_copy`),
     name: uniqueMapName(state, `${src.name} COPY`),
     tables: src.tables.map((t) => ({ ...t, seats: (t.seats || []).map((s) => ({ ...s })) })),
+    sheet: {
+      walls: srcSheet.walls.map((w) => ({ ...w, pts: w.pts.map((p) => [...p]) })),
+      openings: srcSheet.openings.map((o) => ({ ...o })),
+      zones: srcSheet.zones.map((z) => ({ ...z })),
+      planters: srcSheet.planters.map((p) => ({ ...p })),
+    },
   };
   return { ...state, maps: [...state.maps, copy] };
 }
@@ -510,14 +782,14 @@ export function deleteMap(state, mapId) {
 export const hasDefaultGeometry = (mapId) =>
   buildDefaultFloorMaps().maps.some((m) => m.id === mapId);
 
-// RESET TO DEFAULTS: replaces ONLY this map's tables from the seed, keeping
-// every other map (including user-created ones) intact. Stamps the blob's
-// geometryVersion current — the banner is a nudge toward the newest seeds,
-// not a per-map ledger, so one conscious reset acknowledges the new geometry.
+// RESET TO DEFAULTS: replaces ONLY this map's tables + sheet from the seed,
+// keeping every other map (including user-created ones) intact. Stamps the
+// blob's geometryVersion current — the banner is a nudge toward the newest
+// seeds, not a per-map ledger, so one conscious reset acknowledges them.
 export function resetMapToDefaults(state, mapId) {
   const seed = buildDefaultFloorMaps().maps.find((m) => m.id === mapId);
   if (!seed) return state;
-  const next = patchMaps(state, mapId, (m) => ({ ...m, tables: seed.tables }));
+  const next = patchMaps(state, mapId, (m) => ({ ...m, tables: seed.tables, sheet: seed.sheet || emptySheet() }));
   return next === state ? state : { ...next, geometryVersion: GEOMETRY_VERSION };
 }
 
