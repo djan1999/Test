@@ -62,6 +62,7 @@ import {
   moveToDining as moveToDiningData, markSeated as markSeatedData,
   shouldArmOnFire, fireLastBite,
 } from "./utils/terraceFlow.js";
+import { getVisibleCoursesForTable, getCourseProgressState } from "./utils/courseProgress.js";
 import { useIsMobile, BP } from "./hooks/useIsMobile.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
 import {
@@ -5350,6 +5351,34 @@ export default function App() {
               onClear={clearTerracePartyTable}
               onMove={moveTerracePartyIn}
               onMarkSeated={markTerracePartySeated}
+              onSendSetToKitchen={(boardIds) => {
+                // SEND on the floor: every SET table raises the SAME kitchen
+                // banner the sheet view's SET NEXT does — courseReady for the
+                // table's next unfired course + the (merge-safe) kitchen alert
+                // the ticket shows until the course fires.
+                for (const id of boardIds) {
+                  const t = tablesRef.current?.find(x => x.id === id);
+                  if (!t?.active) continue;
+                  const visible = getVisibleCoursesForTable(t, activeMenuCourses, {
+                    profiles: profilesState.profiles, assignments: profilesState.assignments,
+                  });
+                  const { nextFire } = getCourseProgressState(t, visible);
+                  if (!nextFire) continue; // menu complete — nothing to announce
+                  const ready = { key: nextFire.key, index: nextFire.index, name: nextFire.name, at: fmt(new Date()) };
+                  const prevAlert = (t.kitchenAlert && !t.kitchenAlert.confirmed) ? t.kitchenAlert : null;
+                  updMany(id, {
+                    courseReady: ready,
+                    kitchenAlert: {
+                      ...(prevAlert || {}),
+                      timestamp: new Date().toISOString(),
+                      tableName: t.resName || null,
+                      seats: prevAlert?.seats || [],
+                      confirmed: false,
+                      course: ready,
+                    },
+                  });
+                }
+              }}
               isMobile={appIsMobile}
             />
           ) : serviceView === "sheet" ? (
