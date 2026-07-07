@@ -341,6 +341,7 @@ export default function FloorView({
         mode="service"
         tableState={tableState}
         restrictionsByLabel={restrictionsByLabel}
+        seatCodes={false}
         height={isMobile ? 380 : 480}
         onTableTap={(t) => {
           // CHANGE TABLE in flight: the next FREE terrace table tap re-seats
