@@ -46,6 +46,18 @@ const truncate = (s, n) => {
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 };
 
+// Fit a line INSIDE its table: Roboto Mono advances ~0.62em, so shrink the
+// font until the string fits the available width (floor 1.5), then truncate
+// whatever still overflows. Stops party names spilling over the chair marks.
+const CHAR_W = 0.62;
+const fitText = (s, maxFont, availW) => {
+  const text = String(s || "");
+  if (!text) return { text, font: maxFont };
+  let font = Math.min(maxFont, availW / (text.length * CHAR_W));
+  if (font >= 1.5) return { text, font };
+  return { text: truncate(text, Math.max(3, Math.floor(availW / (1.5 * CHAR_W)))), font: 1.5 };
+};
+
 // The architecture layer — walls with openings cut out (door leaf + swing
 // arc, or passage jamb ticks), hatched zones, planters. Rendered in EVERY
 // mode (the kitchen and FOH see the room, not floating tables); pointer
@@ -198,6 +210,9 @@ export default function FloorMap({
   onSheetSelect,            // (hit | null) — MOVE-tool tap
   onSheetMove,              // (kind, id, x, y) — zone/planter drag, on release
   titleIndex = null,        // blueprint modes: this map's DWG number (0-based)
+  seatCodes = true,         // restriction code text beside restricted chairs
+                            // (kitchen needs it; the FOH floor keeps just the
+                            // amber chair + the label's ▲)
   height = 340,
 }) {
   const svgRef = useRef(null);
@@ -432,6 +447,14 @@ export default function FloorMap({
         const restr = restrictionsByLabel[t.label] || [];
         const seatPts = seatDisplayPoints(t);
 
+        // usable text width inside the shape (a circle narrows off-center)
+        const availW = t.shape === "round" ? t.w * 0.78 : t.w - 1.2;
+        const nameLine = fitText(st.name ? `${truncate(st.name, 14)}${st.pax ? ` ×${st.pax}` : ""}` : "", 2.3, availW);
+        const subLine = fitText(st.sub, 2, availW);
+        // badges/chips drop below the chair band when chairs sit on the
+        // bottom edge — nothing renders through a chair mark anymore
+        const belowY = t.y + t.h + (seatPts.some((p) => p.out.y > 0.5) ? 4.4 : 0.8);
+
         return (
           <g
             key={t.label}
@@ -470,26 +493,23 @@ export default function FloorMap({
               </>
             )}
 
-            {/* label + party */}
+            {/* label + party — the ▲ rides the label line so it stays inside
+                round shapes instead of floating off the corner */}
             <text x={cx} y={t.y + (occupied || arriving || reserved ? 3.4 : t.h / 2 + 1)} textAnchor="middle"
               fontFamily={FONT} fontSize={2.8} fontWeight={700}
               fill={arriving ? tokens.ink[0] : occupied ? tokens.green.text : tokens.ink[2]}>
               {t.label}
+              {st.allergy && <tspan fill={tokens.signal.alert}> ▲</tspan>}
             </text>
-            {(occupied || arriving || reserved) && (
-              <text x={cx} y={t.y + 6.2} textAnchor="middle" fontFamily={FONT} fontSize={2.3} fill={tokens.ink[1]}>
-                {truncate(st.name, 12)}{st.pax ? ` ×${st.pax}` : ""}
+            {(occupied || arriving || reserved) && nameLine.text && (
+              <text x={cx} y={t.y + 6.2} textAnchor="middle" fontFamily={FONT} fontSize={nameLine.font} fill={tokens.ink[1]}>
+                {nameLine.text}
               </text>
             )}
-            {(occupied || arriving || reserved) && st.sub && (
-              <text x={cx} y={t.y + 8.6} textAnchor="middle" fontFamily={FONT} fontSize={2} fill={tokens.ink[2]}>
-                {truncate(st.sub, 16)}
+            {(occupied || arriving || reserved) && subLine.text && (
+              <text x={cx} y={t.y + 8.6} textAnchor="middle" fontFamily={FONT} fontSize={subLine.font} fill={tokens.ink[2]}>
+                {subLine.text}
               </text>
-            )}
-            {/* allergy marker — the room's only red-adjacent signal */}
-            {st.allergy && (
-              <text x={t.x + t.w - 1.2} y={t.y + 3.2} textAnchor="end" fontFamily={FONT}
-                fontSize={2.6} fontWeight={700} fill={tokens.signal.alert}>▲</text>
             )}
             {dirty && !occupied && !arriving && !strip && (
               <text x={cx} y={t.y + t.h - 1.4} textAnchor="middle" fontFamily={FONT} fontSize={2}
@@ -497,9 +517,9 @@ export default function FloorMap({
             )}
             {st.badge && (
               <g>
-                <rect x={cx - 8} y={t.y + t.h + 0.8} width={16} height={3.4}
+                <rect x={cx - 8} y={belowY} width={16} height={3.4}
                   fill={st.badge.tone === "warn" ? tokens.signal.warn : tokens.ink[0]} />
-                <text x={cx} y={t.y + t.h + 3.2} textAnchor="middle" fontFamily={FONT} fontSize={2}
+                <text x={cx} y={belowY + 2.4} textAnchor="middle" fontFamily={FONT} fontSize={2}
                   fill={tokens.neutral[0]} letterSpacing={0.2}>
                   {st.badge.text}
                 </text>
@@ -510,9 +530,9 @@ export default function FloorMap({
                 never inside the shape, so nothing clips or crowds the text */}
             {strip && !st.badge && (
               <g className={strip === "DIRTY" ? "fm-strip-pulse" : undefined} pointerEvents="none">
-                <rect x={cx - 5} y={t.y + t.h + 0.8} width={10} height={3.2}
+                <rect x={cx - 5} y={belowY} width={10} height={3.2}
                   fill={strip === "SET" ? tokens.green.strong : tokens.signal.warn} />
-                <text x={cx} y={t.y + t.h + 3.1} textAnchor="middle" fontFamily={FONT} fontSize={2}
+                <text x={cx} y={belowY + 2.3} textAnchor="middle" fontFamily={FONT} fontSize={2}
                   fontWeight={700} letterSpacing={0.3} fill={tokens.neutral[0]}>
                   {strip}
                 </text>
@@ -562,7 +582,7 @@ export default function FloorMap({
                         strokeWidth={0.25} />
                     </g>
                   )}
-                  {hasRestr && (
+                  {hasRestr && seatCodes && (
                     <text x={sx + p.out.x * 3.2} y={sy + p.out.y * 3.2 + 0.7}
                       textAnchor="middle" fontFamily={FONT} fontSize={1.8}
                       fill={tokens.signal.warn} fontWeight={700}>
