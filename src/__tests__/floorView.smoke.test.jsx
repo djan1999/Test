@@ -99,3 +99,28 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(handlers.onAssign).toHaveBeenCalledWith(reservations[1], "T21");
   });
 });
+
+describe("terrace CHANGE TABLE (re-seat on the terrace)", () => {
+  it("occupied sheet arms the move; tapping a free table re-assigns, occupied tables refuse", () => {
+    const { container, handlers, getByText } = setup();
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(findTable(container, "T23")); // WEISS's table
+    fireEvent.click(getByText("CHANGE TABLE"));
+    expect(container.textContent).toContain("TAP A FREE TABLE FOR WEISS ×4");
+    fireEvent.click(findTable(container, "T23")); // still occupied — refused
+    expect(handlers.onAssign).not.toHaveBeenCalled();
+    fireEvent.click(findTable(container, "T25")); // free → re-seat
+    expect(handlers.onAssign).toHaveBeenCalledWith(reservations[0], "T25");
+    expect(container.textContent).not.toContain("TAP A FREE TABLE");
+  });
+
+  it("CANCEL disarms without assigning", () => {
+    const { container, handlers, getByText } = setup();
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(findTable(container, "T23"));
+    fireEvent.click(getByText("CHANGE TABLE"));
+    fireEvent.click(getByText("CANCEL"));
+    fireEvent.click(findTable(container, "T25"));
+    expect(handlers.onAssign).not.toHaveBeenCalled(); // free-table tap = plain sheet again
+  });
+});

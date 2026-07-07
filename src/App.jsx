@@ -1301,7 +1301,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
     // kitchen-visit, walking to this table.
     const visit = t._visit || null;
     const isArriving = !isSeated && visit?.visit === "arriving";
-    const onTerrace = !isSeated && visit?.visit === "terrace";
+    // The badge survives seating: courses often start while the party is
+    // still outside, and the runner needs the terrace table number ON the
+    // board card, not from memory.
+    const onTerrace = visit?.visit === "terrace";
     const allRestr = (t.restrictions || []).filter(r => r.note);
     const [assigningIdx, setAssigningIdx] = useState(null);
     const [justSent, setJustSent] = useState(false);
@@ -2770,9 +2773,15 @@ export default function App() {
 
   const assignTerraceTable = (resv, label) => {
     const terraceMapId = floorMapsState.maps.find(m => m.kind === "terrace")?.id || null;
+    const prevLabel = resv.data?.terrace_table || null;
     if (!persistVisitData(resv, assignTerraceData(resv.data, label, terraceMapId))) return;
-    // assigning onto a DIRTY table claims it — the strip clears
-    if (terraceMapId) updateFloorStatus(setFloorStatus(floorStatus, terraceMapId, label, null));
+    if (terraceMapId) {
+      // assigning onto a DIRTY table claims it — the strip clears; a re-seat
+      // (CHANGE TABLE) leaves the vacated table DIRTY for the runner
+      let st = setFloorStatus(floorStatus, terraceMapId, label, null);
+      if (prevLabel && prevLabel !== label) st = setFloorStatus(st, terraceMapId, prevLabel, "DIRTY");
+      updateFloorStatus(st);
+    }
   };
 
   const clearTerracePartyTable = (resv) => {

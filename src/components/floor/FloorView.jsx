@@ -55,6 +55,7 @@ export default function FloorView({
 
   const [tabId, setTabId] = useState(null);
   const [sheetLabel, setSheetLabel] = useState(null);
+  const [movingParty, setMovingParty] = useState(null); // terrace CHANGE TABLE: the reservation being re-seated
   const [toast, setToast] = useState(null);
 
   const map = tabs.find((m) => m.id === tabId) || tabs[0];
@@ -64,7 +65,7 @@ export default function FloorView({
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
   };
-  const switchTab = (id) => { setTabId(id); setSheetLabel(null); };
+  const switchTab = (id) => { setTabId(id); setSheetLabel(null); setMovingParty(null); };
 
   const progressOf = (boardTable) => {
     if (!boardTable) return "";
@@ -180,6 +181,9 @@ export default function FloorView({
             <button style={actionBtn(true)} onClick={() => { onMove(sheetParty); setSheetLabel(null); }}>
               MOVE TO {diningLabelOf(sheetParty)} →
             </button>
+            <button style={actionBtn(false)} onClick={() => { setMovingParty(sheetParty); setSheetLabel(null); }}>
+              CHANGE TABLE
+            </button>
             <button style={actionBtn(false)} onClick={() => { onClear(sheetParty); setSheetLabel(null); }}>
               CLEAR TABLE
             </button>
@@ -250,6 +254,21 @@ export default function FloorView({
         <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → DIRTY / SET · TERRACE → SHEET</span>
       </div>
 
+      {/* CHANGE TABLE banner — armed until a free table is tapped */}
+      {movingParty && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+          border: `1px solid ${tokens.ink[0]}`, background: tokens.neutral[0],
+          padding: "8px 12px", marginBottom: 6,
+        }}>
+          <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700, color: tokens.ink[0] }}>
+            TAP A FREE TABLE FOR {(movingParty.data?.resName || "—").toUpperCase()} ×{movingParty.data?.guests || "?"}
+          </span>
+          <span style={{ flex: 1 }} />
+          <button style={actionBtn(false)} onClick={() => setMovingParty(null)}>CANCEL</button>
+        </div>
+      )}
+
       {/* stranded armed parties — no table on any map, action must stay reachable */}
       {strandedArmed.map((r) => (
         <div key={r.id} style={{
@@ -272,6 +291,15 @@ export default function FloorView({
         restrictionsByLabel={restrictionsByLabel}
         height={isMobile ? 380 : 480}
         onTableTap={(t) => {
+          // CHANGE TABLE in flight: the next FREE terrace table tap re-seats
+          // the party there (the old table goes DIRTY via the assign handler).
+          if (movingParty && map.kind === "terrace") {
+            if (tableState[t.label]?.status === "occupied") { flash("Table occupied"); return; }
+            onAssign(movingParty, t.label);
+            flash(`${t.label} → ${(movingParty.data?.resName || "—").toUpperCase()}`);
+            setMovingParty(null);
+            return;
+          }
           // terrace tables and ARRIVING dining tables carry actions → sheet;
           // every other dining table is one big DIRTY/SET button.
           if (map.kind === "terrace" || tableState[t.label]?.status === "arriving") setSheetLabel(t.label);
