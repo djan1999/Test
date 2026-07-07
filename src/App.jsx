@@ -49,9 +49,12 @@ import {
   aperitifMatchesQuickAccessOption,
 } from "./utils/quickAccessResolve.js";
 import {
-  FLOOR_MAPS_KEY, TERRACE_STATE_KEY, sanitizeFloorMaps, sanitizeTerraceState,
-  getActiveDiningMap, getTerraceMap, setTerraceDirty, mapSeatCountForBoardTable,
-  terraceOccupancy, isTerraceDirty, applyLayoutSwitchRow, resolveReservationTable,
+  FLOOR_MAPS_KEY, TERRACE_STATE_KEY, FLOOR_STATUS_KEY,
+  sanitizeFloorMaps, sanitizeTerraceState,
+  getActiveDiningMap, getTerraceMap, mapSeatCountForBoardTable,
+  terraceOccupancy, applyLayoutSwitchRow, resolveReservationTable,
+  sanitizeFloorStatus, floorStatusOf, setFloorStatus, cycleFloorStatus,
+  migrateTerraceState,
 } from "./utils/floorMaps.js";
 import {
   visitStateOf, isArmed as isVisitArmed,
@@ -93,7 +96,7 @@ import ProfilePicker from "./components/auth/ProfilePicker.jsx";
 import WineSearch from "./components/service/WineSearch.jsx";
 import BeverageSearch from "./components/service/BeverageSearch.jsx";
 import TableCard from "./components/TableCard/TableCard.jsx";
-import TerracePanel from "./components/floor/TerracePanel.jsx";
+import FloorView from "./components/floor/FloorView.jsx";
 import FloorMap from "./components/floor/FloorMap.jsx";
 
 // Heavy mode-level views and modals are lazy-loaded so the service board (the
@@ -2275,11 +2278,15 @@ export default function App() {
   // Which table (if any) is currently expanded into Quick Access on the board.
   // Clicking a reservation name toggles this; the rest of the board stays compact.
   const [quickTableId, setQuickTableId] = useState(null);
-  // Service board presentation: "board" (card grid) or "sheet" (single-table
-  // operational sheet with table index + intelligence rails). Persisted so a
-  // device keeps its preferred working view across reloads.
+  // Service board presentation: "board" (card grid), "sheet" (single-table
+  // operational sheet with table index + intelligence rails) or "floor" (the
+  // spatial floor map). Persisted so a device keeps its preferred working
+  // view across reloads; anything unknown falls back to "board".
   const [serviceView, setServiceView] = useState(() => {
-    try { return localStorage.getItem("milka_service_view") === "sheet" ? "sheet" : "board"; } catch { return "board"; }
+    try {
+      const v = localStorage.getItem("milka_service_view");
+      return v === "sheet" || v === "floor" ? v : "board";
+    } catch { return "board"; }
   });
   const changeServiceView = v => {
     setServiceView(v);
@@ -2381,7 +2388,9 @@ export default function App() {
   // terrace DIRTY strips. Definitions persist via service_settings; terrace
   // occupancy is DERIVED from reservations, never stored on the board.
   const [floorMapsState, setFloorMapsState] = useState(() => sanitizeFloorMaps(null));
-  const [terraceState, setTerraceState] = useState(() => sanitizeTerraceState(null));
+  // SET/DIRTY strips for every map — floor_status_v1 (terrace_state_v1's
+  // DIRTY labels migrate into it via read-through on load).
+  const [floorStatus, setFloorStatusState] = useState(() => sanitizeFloorStatus(null));
   // Party-first ASSIGN TERRACE: the reservation whose mini-map picker is open.
   const [terraceAssignFor, setTerraceAssignFor] = useState(null);
   // Quick Access items (data-driven, replaces hardcoded APERITIF_OPTIONS)
@@ -2747,7 +2756,7 @@ export default function App() {
 
   // ── Terrace flow — visit-state transitions (utils/terraceFlow, pure) ──────
   // All writes ride reservations.data through persistReservationRow (the
-  // PowerSync-safe seam); terrace DIRTY strips ride updateTerraceState. The
+  // PowerSync-safe seam); DIRTY/SET strips ride updateFloorStatus. The
   // dining board is untouched by MOVE (no readiness handshake, no auto-ping).
   const persistVisitData = (resv, nextData) => {
     if (!nextData) return false;
@@ -2763,24 +2772,26 @@ export default function App() {
     const terraceMapId = floorMapsState.maps.find(m => m.kind === "terrace")?.id || null;
     if (!persistVisitData(resv, assignTerraceData(resv.data, label, terraceMapId))) return;
     // assigning onto a DIRTY table claims it — the strip clears
-    updateTerraceState(setTerraceDirty(terraceState, label, false));
+    if (terraceMapId) updateFloorStatus(setFloorStatus(floorStatus, terraceMapId, label, null));
   };
 
   const clearTerracePartyTable = (resv) => {
     const label = resv.data?.terrace_table || null;
+    const terraceMapId = getTerraceMap(floorMapsState)?.id || null;
     if (!persistVisitData(resv, clearTerraceData(resv.data))) return;
-    if (label) updateTerraceState(setTerraceDirty(terraceState, label, true));
+    if (label && terraceMapId) updateFloorStatus(setFloorStatus(floorStatus, terraceMapId, label, "DIRTY"));
   };
 
   const moveTerracePartyIn = (resv) => {
     const label = resv.data?.terrace_table || null;
+    const terraceMapId = getTerraceMap(floorMapsState)?.id || null;
     const next = moveToDiningData(resv.data, new Date().toISOString(), {
       singleTap: !!floorMapsState.config?.moveSingleTap,
     });
     if (!persistVisitData(resv, next)) return;
     // side effects: terrace table → DIRTY + freed (occupancy derives from
     // visit_state, so it frees the moment the write lands)
-    if (label) updateTerraceState(setTerraceDirty(terraceState, label, true));
+    if (label && terraceMapId) updateFloorStatus(setFloorStatus(floorStatus, terraceMapId, label, "DIRTY"));
     if (next.visit_state === "dining") seatTable(Number(resv.table_id)); // MOVE_SINGLE_TAP path
   };
 
@@ -4206,11 +4217,22 @@ export default function App() {
   // reservations; only the map definitions and DIRTY strips persist here.
   useEffect(() => {
     if (!supabase || !psResolved) return;
-    withRetry(() => readStateKey(FLOOR_MAPS_KEY))
-      .then(s => { if (s) setFloorMapsState(sanitizeFloorMaps(s)); })
-      .catch(() => {});
-    withRetry(() => readStateKey(TERRACE_STATE_KEY))
-      .then(s => { if (s) setTerraceState(sanitizeTerraceState(s)); })
+    // Maps and strips load together so the deprecated terrace_state_v1 row
+    // can fold into floor_status_v1 (needs the terrace map id). The migrated
+    // strips stay in-memory until the first strip write persists them; stale
+    // devices still writing terrace_state_v1 are simply no longer read once
+    // floor_status_v1 carries terrace strips.
+    withRetry(() => Promise.all([
+      readStateKey(FLOOR_MAPS_KEY),
+      readStateKey(FLOOR_STATUS_KEY),
+      readStateKey(TERRACE_STATE_KEY),
+    ]))
+      .then(([fm, fs, ts]) => {
+        const maps = sanitizeFloorMaps(fm);
+        if (fm) setFloorMapsState(maps);
+        setFloorStatusState(migrateTerraceState(
+          sanitizeFloorStatus(fs), sanitizeTerraceState(ts), getTerraceMap(maps)?.id));
+      })
       .catch(() => {});
   }, [psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -4221,10 +4243,10 @@ export default function App() {
     return s;
   };
 
-  const updateTerraceState = (next) => {
-    const s = sanitizeTerraceState(next);
-    setTerraceState(s);
-    if (supabase) saveStateKey(TERRACE_STATE_KEY, s).catch?.(() => {});
+  const updateFloorStatus = (next) => {
+    const s = sanitizeFloorStatus(next);
+    setFloorStatusState(s);
+    if (supabase) saveStateKey(FLOOR_STATUS_KEY, s).catch?.(() => {});
     return s;
   };
 
@@ -4944,7 +4966,7 @@ export default function App() {
           {mode === "kitchen_floor" ? (
             <KitchenFloorView
               floorMaps={floorMapsState}
-              terraceState={terraceState}
+              floorStatus={floorStatus}
               reservations={serviceReservations}
               tables={tables}
               menuCourses={activeMenuCourses}
@@ -5161,9 +5183,10 @@ export default function App() {
                 );
               })()}
             </div>
-            {/* [VIEW] toggle — BOARD (card grid) / SHEET (single-table sheet) */}
+            {/* [VIEW] toggle — BOARD (card grid) / SHEET (single-table sheet)
+                / FLOOR (the spatial floor map) */}
             <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-              {["board", "sheet"].map(v => {
+              {["board", "sheet", "floor"].map(v => {
                 const on = serviceView === v;
                 return (
                   <button
@@ -5188,24 +5211,50 @@ export default function App() {
             </div>
           </div>
 
-          {/* [TERRACE] — optional opening leg. Collapsed hairline when unused
-              so the default reservation→dining path is visually unchanged. */}
-          {serviceDate && (
-            <TerracePanel
+          {serviceView === "floor" ? (
+            /* FLOOR view — the spatial projection of the same board state.
+               Two-zone tables: body tap → the party's sheet (the board's
+               quick-access card / terrace actions), strip tap → DIRTY/SET.
+               The old TerracePanel's whole terrace leg lives in here. */
+            <FloorView
               floorMaps={floorMapsState}
-              terraceState={terraceState}
+              floorStatus={floorStatus}
               reservations={serviceReservations}
               tables={tables}
+              menuCourses={activeMenuCourses}
+              profiles={profilesState.profiles}
+              assignments={profilesState.assignments}
+              onCycleStatus={(mapId, label) => updateFloorStatus(cycleFloorStatus(floorStatus, mapId, label))}
+              onUpdateFloorMaps={updateFloorMaps}
               onAssign={assignTerraceTable}
               onClear={clearTerracePartyTable}
               onMove={moveTerracePartyIn}
               onMarkSeated={markTerracePartySeated}
-              onMarkClean={(label) => updateTerraceState(setTerraceDirty(terraceState, label, false))}
+              editable
               isMobile={appIsMobile}
+              renderQuickAccess={(bt) => (
+                <DisplayBoardCard
+                  t={bt}
+                  quickMode
+                  upd={upd}
+                  updSeat={updSeat}
+                  onCardClick={() => {}}
+                  onOpenDetail={id => setSel(id)}
+                  onSeat={seatTable}
+                  onUnseat={unseatTable}
+                  onMarkSeated={markSeatedOnTable}
+                  onAssignTerrace={requestTerraceAssign}
+                  optionalExtras={dishes}
+                  optionalPairings={pairings}
+                  aperitifOptions={serviceAperitifOptions}
+                  wines={wines}
+                  cocktails={cocktails}
+                  spirits={spirits}
+                  beers={beers}
+                />
+              )}
             />
-          )}
-
-          {serviceView === "sheet" ? (
+          ) : serviceView === "sheet" ? (
             /* SHEET view — single-table operational sheet (table index +
                course state + guest matrix + intelligence rails). */
             <Suspense fallback={lazyViewFallback}>
@@ -5418,12 +5467,13 @@ export default function App() {
         >
           {(() => {
             const occ = terraceOccupancy(serviceReservations);
+            const terraceMap = getTerraceMap(floorMapsState);
             const tState = {};
-            for (const t of (getTerraceMap(floorMapsState)?.tables || [])) {
+            for (const t of (terraceMap?.tables || [])) {
               const r = occ[t.label];
               tState[t.label] = r
                 ? { status: "occupied", name: r.data?.resName || "—", pax: r.data?.guests || undefined }
-                : { status: "free", dirty: isTerraceDirty(terraceState, t.label), selectable: true };
+                : { status: "free", dirty: floorStatusOf(floorStatus, terraceMap.id, t.label) === "DIRTY", selectable: true };
             }
             return (
               <FloorMap

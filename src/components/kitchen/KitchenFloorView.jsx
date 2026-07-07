@@ -2,7 +2,7 @@ import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import FloorMap, { restrictionCode } from "../floor/FloorMap.jsx";
 import {
-  getActiveDiningMap, getTerraceMap, terraceOccupancy, isTerraceDirty, boardIdsOf,
+  getActiveDiningMap, getTerraceMap, terraceOccupancy, floorStatusOf, boardIdsOf,
 } from "../../utils/floorMaps.js";
 import { visitStateOf, isArmed } from "../../utils/terraceFlow.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
@@ -16,7 +16,7 @@ const FONT = tokens.font;
 // data is the same App state the kitchen board renders from (PowerSync sync
 // stream / realtime safety net) — no new subscription.
 export default function KitchenFloorView({
-  floorMaps, terraceState, reservations = [], tables = [], menuCourses = [],
+  floorMaps, floorStatus, reservations = [], tables = [], menuCourses = [],
   profiles = [], assignments = {}, isMobile,
 }) {
   const terraceMap = getTerraceMap(floorMaps);
@@ -61,7 +61,7 @@ export default function KitchenFloorView({
         if (restr.length) restrictionsByLabel[t.label] = restr;
         popoverData[t.label] = { name: r.data?.resName || "—", rows: restrRows(r.data?.restrictions) };
       } else {
-        tableState[t.label] = { status: "free", dirty: isTerraceDirty(terraceState, t.label) };
+        tableState[t.label] = { status: "free", dirty: floorStatusOf(floorStatus, map.id, t.label) === "DIRTY" };
       }
     }
   } else {
