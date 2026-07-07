@@ -124,3 +124,22 @@ describe("terrace CHANGE TABLE (re-seat on the terrace)", () => {
     expect(handlers.onAssign).not.toHaveBeenCalled(); // free-table tap = plain sheet again
   });
 });
+
+describe("SEND SET → KITCHEN", () => {
+  it("appears when a seated table is SET and forwards its board id", () => {
+    const onSend = vi.fn();
+    const { container, getByText } = setup({
+      // T1 seated + SET (sendable); T4 SET but only reserved (not sendable)
+      floorStatus: { dining_a: { T1: "SET", T4: "SET" } },
+      onSendSetToKitchen: onSend,
+    });
+    fireEvent.click(getByText(/SEND SET → KITCHEN \(1\)/));
+    expect(onSend).toHaveBeenCalledWith([1]);
+    expect(container.textContent).toContain("SENT TO KITCHEN ✓");
+  });
+
+  it("hidden when nothing is both seated and SET", () => {
+    const { queryByText } = setup({ onSendSetToKitchen: vi.fn() });
+    expect(queryByText(/SEND SET → KITCHEN/)).toBeNull(); // T4 SET is reserved-only, T5 DIRTY
+  });
+});

@@ -47,6 +47,7 @@ export default function FloorView({
   menuCourses = [], profiles = [], assignments = {},
   onCycleStatus,
   onAssign, onClear, onMove, onMarkSeated,
+  onSendSetToKitchen,
   isMobile,
 }) {
   const diningMap = getActiveDiningMap(floorMaps);
@@ -167,6 +168,15 @@ export default function FloorView({
   const bookedParties = reservations.filter((r) =>
     visitStateOf(r.data) === "booked" && !r.data?.clearedFromBoard && !seatedIds.has(Number(r.table_id)));
 
+  // SET tables with a live board ticket — what SEND forwards to the kitchen.
+  const sendableIds = map.kind === "terrace" ? [] : [...new Set(
+    (map.tables || [])
+      .filter((t) => floorStatusOf(floorStatus, map.id, t.label) === "SET")
+      .map((t) => boardTableOf(t))
+      .filter((bt) => bt?.active)
+      .map((bt) => bt.id),
+  )];
+
   // ── sheet content for the tapped table ────────────────────────────────────
   const sheetTable = sheetLabel ? (map.tables || []).find((t) => t.label === sheetLabel) : null;
   const sheetParty = sheetTable && map.kind === "terrace" ? occ[sheetLabel] : null;
@@ -251,7 +261,18 @@ export default function FloorView({
         <span style={{ color: tokens.green.text }}>SET {ticker.set}</span>
         <span style={{ color: tokens.signal.warn }}>DIRTY {ticker.dirty}</span>
         <span style={{ flex: 1 }} />
-        <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → DIRTY / SET · TERRACE → SHEET</span>
+        {sendableIds.length > 0 && onSendSetToKitchen ? (
+          <button
+            style={{ ...actionBtn(true), padding: "7px 12px", fontSize: 8 }}
+            onClick={() => {
+              onSendSetToKitchen(sendableIds);
+              flash(`SENT TO KITCHEN ✓ (${sendableIds.length})`);
+            }}>
+            SEND SET → KITCHEN ({sendableIds.length})
+          </button>
+        ) : (
+          <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → DIRTY / SET · TERRACE → SHEET</span>
+        )}
       </div>
 
       {/* CHANGE TABLE banner — armed until a free table is tapped */}
