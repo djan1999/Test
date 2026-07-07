@@ -213,6 +213,8 @@ export default function FloorMap({
   seatCodes = true,         // restriction code text beside restricted chairs
                             // (kitchen needs it; the FOH floor keeps just the
                             // amber chair + the label's ▲)
+  seatNotesByLabel = {},    // { [label]: { [seatNo]: "SPK·W" } } — per-seat
+                            // beverage annotations at the chair positions
   height = 340,
 }) {
   const svgRef = useRef(null);
@@ -449,7 +451,10 @@ export default function FloorMap({
 
         // usable text width inside the shape (a circle narrows off-center)
         const availW = t.shape === "round" ? t.w * 0.78 : t.w - 1.2;
-        const nameLine = fitText(st.name ? `${truncate(st.name, 14)}${st.pax ? ` ×${st.pax}` : ""}` : "", 2.3, availW);
+        // the party line renders whatever the caller supplies — FOH omits the
+        // name (per Djan) so it reads "×2"; the kitchen keeps names
+        const partyStr = [st.name ? truncate(st.name, 14) : "", st.pax ? `×${st.pax}` : ""].filter(Boolean).join(" ");
+        const nameLine = fitText(partyStr, 2.3, availW);
         const subLine = fitText(st.sub, 2, availW);
         // badges/chips drop below the chair band when chairs sit on the
         // bottom edge — nothing renders through a chair mark anymore
@@ -553,6 +558,7 @@ export default function FloorMap({
               const seatDraggable = editing && selectedLabel === t.label;
               const numbered = mode === "seats" || editing;
               const deg = Math.atan2(p.out.y, p.out.x) * 180 / Math.PI;
+              const note = !numbered ? seatNotesByLabel[t.label]?.[p.no] : null;
               return (
                 <g key={i}
                   data-seat={i}
@@ -587,6 +593,14 @@ export default function FloorMap({
                       textAnchor="middle" fontFamily={FONT} fontSize={1.8}
                       fill={tokens.signal.warn} fontWeight={700}>
                       {restrictionCode(seatRestr[0].note)}
+                    </text>
+                  )}
+                  {/* per-seat beverage note — waters/pairings BY POSITION */}
+                  {note && !(hasRestr && seatCodes) && (
+                    <text x={sx + p.out.x * 3.4} y={sy + p.out.y * 3.4 + 0.6}
+                      textAnchor="middle" fontFamily={FONT} fontSize={1.6}
+                      fill={tokens.ink[2]} fontWeight={700}>
+                      {note}
                     </text>
                   )}
                 </g>

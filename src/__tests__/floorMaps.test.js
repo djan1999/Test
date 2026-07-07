@@ -256,11 +256,21 @@ describe("geometry version (the unfreeze)", () => {
 
 describe("table ops", () => {
   it("moveTable snaps to the unit grid and clamps to the canvas", () => {
+    // x 33 is already edge-aligned (T1's right edge 45 = T9's right edge),
+    // so the magnet holds it there rather than pulling toward T6
     const s = moveTable(state, "dining_a", "T1", 33.4, -5);
     const t = findMapTable(getActiveDiningMap(s), "T1");
     expect([t.x, t.y]).toEqual([33, 0]);
     const far = findMapTable(getActiveDiningMap(moveTable(state, "dining_a", "T1", 999, 999)), "T1");
     expect([far.x, far.y]).toEqual([MAP_W - t.w, MAP_H - t.h]);
+  });
+
+  it("magnetic drop: a near-miss lands edge-level with the neighbour", () => {
+    // T1 (h9) dropped at y=9.6 → snap 10, bottom edge 19 pulls level with
+    // T2-3's bottom edge 18 → y 9; x 50 has no edge in reach and stays put
+    const s = moveTable(state, "dining_a", "T1", 50, 9.6);
+    const t = findMapTable(getActiveDiningMap(s), "T1");
+    expect([t.x, t.y]).toEqual([50, 9]);
   });
 
   it("resizeTable enforces minimums; rotateTable swaps w/h and re-clamps", () => {
@@ -313,19 +323,23 @@ describe("seat ops", () => {
     expect(t.seats.map((x) => x.no).sort()).toEqual([1, 2]);
   });
 
-  it("moveSeat on a rect projects onto the nearest side with a clamped offset", () => {
-    // T8 at x8 y68 w12 h9 — a point just above the top edge, 1/4 along it
+  it("moveSeat on a rect projects onto the nearest side; offsets magnet onto the house stops", () => {
+    // T8 at x8 y68 w12 h9 — a point just above the top edge, ~1/4 along it:
+    // raw offset 0.25 pulls onto the canonical corner stop 0.22
     const s = moveSeat(state, "dining_a", "T8", 0, { x: 11, y: 67 });
     const seat = findMapTable(getActiveDiningMap(s), "T8").seats[0];
     expect(seat.side).toBe("N");
-    expect(seat.offset).toBe(0.25);
+    expect(seat.offset).toBe(0.22);
     expect(seat.no).toBe(1);           // number travels with the seat
     expect(seat.confirm).toBe(true);   // moving is not renumbering
+    // away from the stops, offsets land on the 0.05 grid
+    const mid = moveSeat(state, "dining_a", "T8", 0, { x: 12.2, y: 67 });
+    expect(findMapTable(getActiveDiningMap(mid), "T8").seats[0].offset).toBe(0.35);
   });
 
-  it("moveSeat on a round table converts to the compass angle (0=N, cw)", () => {
-    // T5 at x8 y38 w11 h11 → center (13.5, 43.5); point due E of center
-    const s = moveSeat(state, "dining_a", "T5", 0, { x: 20, y: 43.5 });
+  it("moveSeat on a round table converts to the compass angle on 15° steps", () => {
+    // T5 at x8 y38 w11 h11 → center (13.5, 43.5); point a hair off due E
+    const s = moveSeat(state, "dining_a", "T5", 0, { x: 20, y: 43 });
     const seat = findMapTable(getActiveDiningMap(s), "T5").seats[0];
     expect(seat.angle).toBe(90);
     expect(seat.side).toBeUndefined();

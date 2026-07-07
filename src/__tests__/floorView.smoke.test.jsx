@@ -67,10 +67,16 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).toContain("RES 2");
     expect(container.textContent).toContain("SET 1");
     expect(container.textContent).toContain("DIRTY 1");
-    // occupied table renders the party, allergy ▲, ARRIVING badge on T8
-    expect(container.textContent).toContain("NOVAK ×2");
+    // occupied tables show ×pax but NO reservation name (per Djan); the
+    // allergy ▲ and ARRIVING badge stay
+    expect(container.textContent).toContain("×2");
+    expect(container.textContent).not.toContain("NOVAK");
+    expect(container.textContent).not.toContain("WEISS");
     expect(container.textContent).toContain("▲");
     expect(container.textContent).toContain("ARRIVING · KV");
+    // waters/pairings BY POSITION at T9's chairs (SPK+WINE / STILL)
+    expect(container.textContent).toContain("SPK·W");
+    expect(container.textContent).toContain("STL");
   });
 
   it("a dining table is one big SET toggle — tap calls the status handler, no sheet", () => {
@@ -90,7 +96,9 @@ describe("FloorView (FOH FLOOR surface)", () => {
   it("terrace tab: occupied sheet shows waters by position (no name) + MOVE; free table assigns", () => {
     const { container, handlers, getByText } = setup();
     fireEvent.click(getByText("TERRACE"));
-    expect(container.textContent).toContain("WEISS ×4"); // canvas keeps the party name
+    expect(container.textContent).toContain("×4");
+    expect(container.textContent).not.toContain("WEISS"); // no names on the floor
+    expect(container.textContent).toContain("SPK·W");     // the party's seat notes travel to the terrace table
     expect(container.textContent).toContain("LAST BITE ✓");
     fireEvent.click(findTable(container, "T23"));
     // the sheet: waters by seat position + pairings, reservation name omitted
