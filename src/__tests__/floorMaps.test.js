@@ -12,6 +12,9 @@ import {
   addMap, renameMap, duplicateMap, deleteMap, hasDefaultGeometry, resetMapToDefaults,
   sanitizeFloorStatus, floorStatusOf, setFloorStatus, cycleFloorStatus,
   migrateTerraceState, mapTicker,
+  sheetOf, doorGeometry, hitTestSheet,
+  addWall, setWallDashed, deleteWall, addDoorAt, patchOpening, deleteOpening,
+  addZoneAt, patchZone, deleteZone, addPlanterAt, patchPlanter, deletePlanter,
 } from "../utils/floorMaps.js";
 
 const state = buildDefaultFloorMaps();
@@ -421,5 +424,103 @@ describe("mapTicker", () => {
       null,
     ])).toEqual({ covers: 6, seated: 2, reserved: 2, set: 1, dirty: 1 });
     expect(mapTicker(undefined)).toEqual({ covers: 0, seated: 0, reserved: 0, set: 0, dirty: 0 });
+  });
+});
+
+/* ── SHEET layer: walls / doors / zones / planters ────────────────────────── */
+
+describe("sheet layer (architecture)", () => {
+  const freshState = () => buildDefaultFloorMaps();
+  const sheetIn = (s, mapId = "dining_a") => sheetOf(s.maps.find((m) => m.id === mapId));
+
+  it("seeds carry sheets and the sanitizer keeps them (maps stay whole)", () => {
+    const s = freshState();
+    expect(sheetIn(s).walls.length).toBe(1);
+    expect(sheetIn(s).zones[0].label).toBe("PASS / KITCHEN");
+    expect(sheetIn(s, "terrace_main").planters.length).toBe(3);
+    const round = sanitizeFloorMaps(JSON.parse(JSON.stringify(s)));
+    expect(sheetIn(round).openings.length).toBe(1);
+    expect(sheetOf({ id: "x", tables: [] })).toEqual({ walls: [], openings: [], zones: [], planters: [] });
+  });
+
+  it("addWall snaps points and needs 2 (open) / 3 (closed); deleteWall drops its openings", () => {
+    let s = addWall(freshState(), "dining_a", [[10.4, 10.6], [40.2, 10.6]], false);
+    const wall = sheetIn(s).walls[1];
+    expect(wall.pts).toEqual([[10, 11], [40, 11]]);
+    expect(wall.closed).toBe(false);
+    expect(addWall(s, "dining_a", [[1, 1], [2, 2]], true)).toBe(s); // closed needs 3
+    // the seed wall carries the seed door — deleting it removes both
+    s = deleteWall(s, "dining_a", "w1");
+    expect(sheetIn(s).walls.map((w) => w.id)).toEqual(["w2"]);
+    expect(sheetIn(s).openings).toEqual([]);
+  });
+
+  it("addDoorAt cuts into the nearest wall; far taps are a same-state no-op", () => {
+    const s = freshState();
+    const next = addDoorAt(s, "dining_a", { x: 30, y: 3 }); // near the top wall
+    const doors = sheetIn(next).openings;
+    expect(doors.length).toBe(2);
+    expect(doors[1]).toMatchObject({ wallId: "w1", seg: 0, kind: "door" });
+    expect(addDoorAt(s, "dining_a", { x: 50, y: 46 })).toBe(s); // mid-room, no wall
+  });
+
+  it("patchOpening clamps width and keeps the gap inside its segment", () => {
+    const s = freshState();
+    const wide = patchOpening(s, "dining_a", "o1", { width: 999 });
+    const o = sheetIn(wide).openings[0];
+    expect(o.width).toBe(30);
+    // top segment is 96 long — a 30-wide gap at t=0.64 still fits with margin
+    expect(o.t * 96 - o.width / 2).toBeGreaterThan(0);
+    expect(patchOpening(s, "dining_a", "o1", { kind: "junk" }).maps[0].sheet.openings[0].kind).toBe("door");
+    expect(sheetIn(deleteOpening(s, "dining_a", "o1")).openings).toEqual([]);
+  });
+
+  it("doorGeometry puts the gap on the segment with leaf + sweep", () => {
+    const s = sheetIn(freshState());
+    const g = doorGeometry(s.openings[0], s.walls);
+    expect(g.center[1]).toBe(2); // on the top wall
+    expect(Math.hypot(g.B[0] - g.A[0], g.B[1] - g.A[1])).toBeCloseTo(s.openings[0].width, 5);
+    expect(doorGeometry({ ...s.openings[0], wallId: "nope" }, s.walls)).toBeNull();
+  });
+
+  it("zones and planters stamp, patch (clamped), drag-target and delete", () => {
+    let s = addZoneAt(freshState(), "dining_a", { x: 50, y: 40 });
+    const z = sheetIn(s).zones[1];
+    expect(z).toMatchObject({ w: 26, h: 16, label: "ZONE" });
+    s = patchZone(s, "dining_a", z.id, { label: "bar", w: 4, x: 999 });
+    const z2 = sheetIn(s).zones[1];
+    expect(z2.label).toBe("BAR");
+    expect(z2.w).toBe(8);            // min width
+    expect(z2.x).toBe(MAP_W - z2.w); // clamped on canvas
+    expect(sheetIn(deleteZone(s, "dining_a", z.id)).zones.length).toBe(1);
+
+    let t = addPlanterAt(freshState(), "terrace_main", { x: 70.4, y: 20.6 });
+    const p = sheetIn(t, "terrace_main").planters[3];
+    expect([p.x, p.y, p.r]).toEqual([70, 21, 3]);
+    t = patchPlanter(t, "terrace_main", p.id, { r: 99 });
+    expect(sheetIn(t, "terrace_main").planters[3].r).toBe(8);
+    expect(sheetIn(deletePlanter(t, "terrace_main", p.id), "terrace_main").planters.length).toBe(3);
+  });
+
+  it("hitTestSheet precedence: door > planter > zone > wall > nothing", () => {
+    const sheet = sheetIn(freshState());
+    const g = doorGeometry(sheet.openings[0], sheet.walls);
+    expect(hitTestSheet(sheet, { x: g.center[0], y: g.center[1] })).toEqual({ kind: "door", id: "o1" });
+    expect(hitTestSheet(sheet, { x: 50, y: 85 })).toEqual({ kind: "zone", id: "z1" }); // inside PASS / KITCHEN
+    expect(hitTestSheet(sheet, { x: 30, y: 2.5 })).toEqual({ kind: "wall", id: "w1" });
+    expect(hitTestSheet(sheet, { x: 50, y: 40 })).toBeNull();
+    const terrace = sheetIn(freshState(), "terrace_main");
+    expect(hitTestSheet(terrace, { x: 13, y: 85 })).toEqual({ kind: "planter", id: "p1" });
+  });
+
+  it("duplicateMap deep-copies the sheet; reset restores tables AND sheet", () => {
+    let s = duplicateMap(freshState(), "dining_a");
+    const copyId = s.maps[s.maps.length - 1].id;
+    s = deleteWall(s, copyId, "w1");
+    expect(sheetIn(s).walls.length).toBe(1); // source untouched
+    let m = deleteWall(freshState(), "dining_a", "w1");
+    m = resetMapToDefaults(m, "dining_a");
+    expect(sheetIn(m).walls.length).toBe(1);
+    expect(sheetIn(m).openings.length).toBe(1);
   });
 });

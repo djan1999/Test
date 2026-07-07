@@ -7,6 +7,8 @@ import {
   duplicateTable, addTable, deleteTable, addSeat, removeSeat,
   setTableMembers, setTableBoardIds,
   addMap, renameMap, duplicateMap, deleteMap, resetMapToDefaults,
+  sheetOf, patchOpening, deleteOpening, patchZone, deleteZone,
+  patchPlanter, deletePlanter, setWallDashed, deleteWall,
 } from "../../utils/floorMaps.js";
 
 const FONT = tokens.font;
@@ -68,14 +70,21 @@ const Row = ({ title, children }) => (
 );
 
 export default function FloorInspector({
-  floorMaps, mapId, selLabel, reservations = [],
-  onUpdate, onSelect, onSwitchMap, onRenumber, renumbering = false,
+  floorMaps, mapId, selLabel, sheetSel = null, reservations = [],
+  onUpdate, onSelect, onSheetSelect, onSwitchMap, onRenumber, renumbering = false,
 }) {
   const map = floorMaps.maps.find((m) => m.id === mapId);
   if (!map) return null;
   const table = selLabel ? findMapTable(map, selLabel) : null;
+  const sheet = sheetOf(map);
+  const selDoor = sheetSel?.kind === "door" ? sheet.openings.find((o) => o.id === sheetSel.id) : null;
+  const selZone = sheetSel?.kind === "zone" ? sheet.zones.find((z) => z.id === sheetSel.id) : null;
+  const selPlanter = sheetSel?.kind === "planter" ? sheet.planters.find((p) => p.id === sheetSel.id) : null;
+  const selWall = sheetSel?.kind === "wall" ? sheet.walls.find((w) => w.id === sheetSel.id) : null;
+  const sheetThing = selDoor || selZone || selPlanter || selWall;
 
   const apply = (next) => { if (next !== floorMaps) onUpdate(next); };
+  const dropSheetSel = (next) => { apply(next); onSheetSelect && onSheetSelect(null); };
 
   // Claim conflicts under THIS map for tonight — the same resolver the
   // active-layout switch confirms with. Only trouble rows surface.
@@ -89,16 +98,70 @@ export default function FloorInspector({
     <div style={{ border: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0], marginTop: 8, padding: "10px 12px 12px" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, paddingBottom: 8 }}>
         <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", fontWeight: 700, color: tokens.ink[1] }}>
-          {table ? `INSPECTOR — ${table.label}` : `MAP — ${map.name}`}
+          {sheetThing
+            ? `INSPECTOR — ${selDoor ? (selDoor.kind === "pass" ? "PASSAGE" : "DOOR") : selZone ? "ZONE" : selPlanter ? "PLANTER" : "WALL"}`
+            : table ? `INSPECTOR — ${table.label}` : `MAP — ${map.name}`}
         </span>
-        {table && (
+        {table && !sheetThing && (
           <span style={{ ...label9, marginLeft: "auto" }}>
             X{table.x} · Y{table.y} · {table.w}×{table.h}
           </span>
         )}
       </div>
 
-      {table ? (
+      {selDoor ? (
+        <>
+          <Row title="TYPE">
+            <button style={btn(selDoor.kind !== "pass")} onClick={() => apply(patchOpening(floorMaps, mapId, selDoor.id, { kind: "door" }))}>DOOR</button>
+            <button style={btn(selDoor.kind === "pass")} onClick={() => apply(patchOpening(floorMaps, mapId, selDoor.id, { kind: "pass" }))}>PASSAGE</button>
+          </Row>
+          <Row title="WIDTH">
+            <button style={stepper} onClick={() => apply(patchOpening(floorMaps, mapId, selDoor.id, { width: selDoor.width - 2 }))}>−</button>
+            <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: tokens.ink[0], minWidth: 24, textAlign: "center" }}>{selDoor.width}</span>
+            <button style={stepper} onClick={() => apply(patchOpening(floorMaps, mapId, selDoor.id, { width: selDoor.width + 2 }))}>+</button>
+            {selDoor.kind !== "pass" && (
+              <>
+                <button style={btn(false)} onClick={() => apply(patchOpening(floorMaps, mapId, selDoor.id, { swing: -selDoor.swing }))}>SWING ⇅</button>
+                <button style={btn(false)} onClick={() => apply(patchOpening(floorMaps, mapId, selDoor.id, { hinge: selDoor.hinge ? 0 : 1 }))}>HINGE ⇄</button>
+              </>
+            )}
+            <Confirm onConfirm={() => dropSheetSel(deleteOpening(floorMaps, mapId, selDoor.id))}>DELETE</Confirm>
+          </Row>
+        </>
+      ) : selZone ? (
+        <>
+          <Row title="LABEL">
+            <BlurInput
+              committedValue={selZone.label}
+              onCommit={(v) => apply(patchZone(floorMaps, mapId, selZone.id, { label: v }))}
+              style={{ ...inputStyle, width: 180 }}
+            />
+          </Row>
+          <Row title="SIZE">
+            <span style={label9}>W</span>
+            <button style={stepper} onClick={() => apply(patchZone(floorMaps, mapId, selZone.id, { w: selZone.w - 4 }))}>−</button>
+            <button style={stepper} onClick={() => apply(patchZone(floorMaps, mapId, selZone.id, { w: selZone.w + 4 }))}>+</button>
+            <span style={label9}>H</span>
+            <button style={stepper} onClick={() => apply(patchZone(floorMaps, mapId, selZone.id, { h: selZone.h - 4 }))}>−</button>
+            <button style={stepper} onClick={() => apply(patchZone(floorMaps, mapId, selZone.id, { h: selZone.h + 4 }))}>+</button>
+            <Confirm onConfirm={() => dropSheetSel(deleteZone(floorMaps, mapId, selZone.id))}>DELETE</Confirm>
+          </Row>
+          <div style={{ ...label9, paddingTop: 8, letterSpacing: "0.08em" }}>drag the zone on the canvas to move it</div>
+        </>
+      ) : selPlanter ? (
+        <Row title="SIZE">
+          <button style={stepper} onClick={() => apply(patchPlanter(floorMaps, mapId, selPlanter.id, { r: selPlanter.r - 1 }))}>−</button>
+          <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: tokens.ink[0], minWidth: 20, textAlign: "center" }}>{selPlanter.r}</span>
+          <button style={stepper} onClick={() => apply(patchPlanter(floorMaps, mapId, selPlanter.id, { r: selPlanter.r + 1 }))}>+</button>
+          <Confirm onConfirm={() => dropSheetSel(deletePlanter(floorMaps, mapId, selPlanter.id))}>DELETE</Confirm>
+        </Row>
+      ) : selWall ? (
+        <Row title="STYLE">
+          <button style={btn(!selWall.dashed)} onClick={() => apply(setWallDashed(floorMaps, mapId, selWall.id, false))}>SOLID</button>
+          <button style={btn(selWall.dashed)} onClick={() => apply(setWallDashed(floorMaps, mapId, selWall.id, true))}>DASHED</button>
+          <Confirm onConfirm={() => dropSheetSel(deleteWall(floorMaps, mapId, selWall.id))}>DELETE WALL</Confirm>
+        </Row>
+      ) : table ? (
         <>
           <Row title="LABEL">
             <BlurInput

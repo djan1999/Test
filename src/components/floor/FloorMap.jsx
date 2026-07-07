@@ -1,6 +1,9 @@
 import { useRef, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
-import { seatDisplayPoints, MAP_W, MAP_H } from "../../utils/floorMaps.js";
+import {
+  seatDisplayPoints, MAP_W, MAP_H,
+  sheetOf, wallSegments, segmentRuns, doorGeometry, hitTestSheet,
+} from "../../utils/floorMaps.js";
 
 // FloorMap — THE floor renderer. Every spatial surface (FOH floor view,
 // terrace picker, kitchen floor view, admin seats editor, geometry editor)
@@ -43,6 +46,98 @@ const truncate = (s, n) => {
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 };
 
+// The architecture layer — walls with openings cut out (door leaf + swing
+// arc, or passage jamb ticks), hatched zones, planters. Rendered in EVERY
+// mode (the kitchen and FOH see the room, not floating tables); pointer
+// events stay off — interaction belongs to the edit-mode canvas rect.
+function SheetLayer({ sheet, sel, drag }) {
+  const off = (el, kind) =>
+    drag?.moved && drag.kind === kind && drag.id === el.id
+      ? { x: el.x + drag.dx, y: el.y + drag.dy }
+      : { x: el.x, y: el.y };
+
+  return (
+    <g pointerEvents="none">
+      {sheet.zones.map((z) => {
+        const p = off(z, "zone");
+        const selected = sel?.kind === "zone" && sel.id === z.id;
+        const showLabel = z.w > 14 && z.label;
+        const boxW = showLabel ? z.label.length * 1.05 + 2.6 : 0;
+        return (
+          <g key={z.id}>
+            <rect x={p.x} y={p.y} width={z.w} height={z.h} fill="url(#fm-hatch)" opacity={0.55} />
+            <rect x={p.x} y={p.y} width={z.w} height={z.h} fill="none" stroke={tokens.ink[2]} strokeWidth={0.3} />
+            {showLabel && (
+              <g>
+                <rect x={p.x + z.w / 2 - boxW / 2} y={p.y + z.h / 2 - 1.7} width={boxW} height={3.4}
+                  fill={tokens.neutral[0]} stroke={tokens.ink[2]} strokeWidth={0.3} />
+                <text x={p.x + z.w / 2} y={p.y + z.h / 2 + 0.75} textAnchor="middle" fontFamily={tokens.font}
+                  fontSize={1.9} fontWeight={700} letterSpacing={0.3} fill={tokens.ink[1]}>{z.label}</text>
+              </g>
+            )}
+            {selected && (
+              <rect x={p.x - 1} y={p.y - 1} width={z.w + 2} height={z.h + 2} fill="none"
+                stroke={tokens.ink[0]} strokeWidth={0.35} strokeDasharray="1.4 1" />
+            )}
+          </g>
+        );
+      })}
+
+      {sheet.planters.map((pl) => {
+        const p = off(pl, "planter");
+        const selected = sel?.kind === "planter" && sel.id === pl.id;
+        return (
+          <g key={pl.id} fill="none" stroke={tokens.ink[3]} strokeWidth={0.35}>
+            <circle cx={p.x} cy={p.y} r={pl.r} />
+            <circle cx={p.x} cy={p.y} r={pl.r * 0.4} opacity={0.6} />
+            {selected && <circle cx={p.x} cy={p.y} r={pl.r + 1.4} stroke={tokens.ink[0]} strokeDasharray="1.4 1" />}
+          </g>
+        );
+      })}
+
+      {sheet.walls.map((wall) => {
+        const selected = sel?.kind === "wall" && sel.id === wall.id;
+        const sw = (wall.dashed ? 0.55 : 0.85) + (selected ? 0.3 : 0);
+        return wallSegments(wall).map(({ p1, p2, i }) => {
+          const L = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+          if (!L) return null;
+          const dir = [(p2[0] - p1[0]) / L, (p2[1] - p1[1]) / L];
+          return segmentRuns(wall, i, sheet.openings, L).map(([a, b], k) => (
+            <line key={`${wall.id}-${i}-${k}`}
+              x1={p1[0] + dir[0] * a} y1={p1[1] + dir[1] * a}
+              x2={p1[0] + dir[0] * b} y2={p1[1] + dir[1] * b}
+              stroke={selected ? tokens.ink[0] : tokens.ink[1]} strokeWidth={sw}
+              strokeDasharray={wall.dashed ? "3.2 2" : undefined} />
+          ));
+        });
+      })}
+
+      {sheet.openings.map((o) => {
+        const g = doorGeometry(o, sheet.walls);
+        if (!g) return null;
+        const selected = sel?.kind === "door" && sel.id === o.id;
+        return (
+          <g key={o.id} stroke={tokens.ink[1]} fill="none">
+            {o.kind === "door" ? (
+              <>
+                <line x1={g.h[0]} y1={g.h[1]} x2={g.leafEnd[0]} y2={g.leafEnd[1]} strokeWidth={0.45} />
+                <path d={`M ${g.j[0]} ${g.j[1]} A ${o.width} ${o.width} 0 0 ${g.sweep} ${g.leafEnd[0]} ${g.leafEnd[1]}`}
+                  strokeWidth={0.3} strokeDasharray="1 1" />
+              </>
+            ) : (
+              <>
+                <line x1={g.A[0] - g.n0[0] * 1.6} y1={g.A[1] - g.n0[1] * 1.6} x2={g.A[0] + g.n0[0] * 1.6} y2={g.A[1] + g.n0[1] * 1.6} strokeWidth={0.45} />
+                <line x1={g.B[0] - g.n0[0] * 1.6} y1={g.B[1] - g.n0[1] * 1.6} x2={g.B[0] + g.n0[0] * 1.6} y2={g.B[1] + g.n0[1] * 1.6} strokeWidth={0.45} />
+              </>
+            )}
+            {selected && <circle cx={g.center[0]} cy={g.center[1]} r={5} stroke={tokens.ink[0]} strokeWidth={0.35} strokeDasharray="1.4 1" />}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
 function TableShape({ t, fill, stroke, strokeWidth = 0.35, dash }) {
   if (t.shape === "round") {
     const r = Math.min(t.w, t.h) / 2;
@@ -72,6 +167,14 @@ export default function FloorMap({
   seatsOverride = {},       // { [label]: seats[] } — seats-mode preview
   seatsEditLabel = null,    // seats mode: the table being renumbered
   selectedLabel = null,     // edit mode: highlighted table
+  // SHEET editing (edit mode only): the active tool decides what a canvas
+  // tap means; the editor owns tool state and commits through pure helpers.
+  sheetTool = "move",       // 'move' | 'wall' | 'door' | 'zone' | 'plant'
+  sheetDraft = null,        // wall-in-progress points [[x,y],…]
+  sheetSel = null,          // { kind: 'wall'|'door'|'zone'|'planter', id }
+  onCanvasTap,              // ({x, y}) — tap with a stamp/draw tool active
+  onSheetSelect,            // (hit | null) — MOVE-tool tap
+  onSheetMove,              // (kind, id, x, y) — zone/planter drag, on release
   height = 340,
 }) {
   const svgRef = useRef(null);
@@ -79,10 +182,14 @@ export default function FloorMap({
   // drag causes exactly one updateFloorMaps persist, not one per move event.
   const [drag, setDrag] = useState(null);     // { label, dx, dy, moved }
   const [seatDrag, setSeatDrag] = useState(null); // { label, index, x, y }
+  const [sheetDrag, setSheetDrag] = useState(null); // { kind, id, dx, dy, moved }
   const gestureRef = useRef(null);            // pointer bookkeeping between events
 
   if (!map) return null;
   const editing = mode === "edit";
+  const sheetData = sheetOf(map);
+  const sheetEditing = editing && !!onCanvasTap;
+  const stampTool = sheetEditing && sheetTool !== "move";
 
   const toMapUnits = (e) => {
     const r = svgRef.current?.getBoundingClientRect();
@@ -117,7 +224,48 @@ export default function FloorMap({
     const dx = p.x - g.start.x, dy = p.y - g.start.y;
     const moved = Math.abs(dx) + Math.abs(dy) > 0.5;
     if (g.kind === "table") setDrag({ label: g.label, dx, dy, moved });
-    else setSeatDrag({ label: g.label, index: g.index, x: p.x, y: p.y, moved });
+    else if (g.kind === "seat") setSeatDrag({ label: g.label, index: g.index, x: p.x, y: p.y, moved });
+    else if (g.kind === "sheetEl") setSheetDrag({ ...g.hit, dx, dy, moved });
+  };
+
+  // Canvas rect (edit mode, sits under the tables): stamp-tool taps place
+  // walls/doors/zones/planters; MOVE-tool taps select the sheet element under
+  // the finger, and zones/planters drag with commit-on-release.
+  const onCanvasPointerDown = (e) => {
+    if (!sheetEditing) return;
+    const p = toMapUnits(e);
+    if (!p) return;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    if (sheetTool === "move") {
+      const hit = hitTestSheet(sheetData, p);
+      if (hit && (hit.kind === "zone" || hit.kind === "planter")) {
+        const el = hit.kind === "zone"
+          ? sheetData.zones.find((z) => z.id === hit.id)
+          : sheetData.planters.find((x) => x.id === hit.id);
+        gestureRef.current = { kind: "sheetEl", hit, start: p, origin: { x: el.x, y: el.y } };
+        setSheetDrag({ ...hit, dx: 0, dy: 0, moved: false });
+        return;
+      }
+      gestureRef.current = { kind: "canvasTap", start: p, hit };
+    } else {
+      gestureRef.current = { kind: "canvasTap", start: p };
+    }
+  };
+
+  const onCanvasPointerUp = () => {
+    const g = gestureRef.current;
+    gestureRef.current = null;
+    if (!g) return;
+    if (g.kind === "sheetEl") {
+      const d = sheetDrag;
+      setSheetDrag(null);
+      if (d?.moved && onSheetMove) onSheetMove(g.hit.kind, g.hit.id, snap(g.origin.x + d.dx), snap(g.origin.y + d.dy));
+      else onSheetSelect && onSheetSelect(g.hit);
+      return;
+    }
+    if (g.kind !== "canvasTap") return;
+    if (sheetTool === "move") onSheetSelect && onSheetSelect(g.hit || null);
+    else onCanvasTap(g.start);
   };
 
   const onPointerUp = (t) => () => {
@@ -159,15 +307,32 @@ export default function FloorMap({
         @media (prefers-reduced-motion: reduce) { .fm-strip-pulse { animation: none; } }
       `}</style>
 
-      {editing && (
-        <g>
-          <defs>
-            <pattern id="fm-grid" width="10" height="10" patternUnits="userSpaceOnUse">
-              <path d="M10 0H0V10" fill="none" stroke={tokens.ink[5]} strokeWidth="0.25" />
-            </pattern>
-          </defs>
-          <rect width={MAP_W} height={MAP_H} fill="url(#fm-grid)" />
-        </g>
+      <defs>
+        <pattern id="fm-hatch" width="2.6" height="2.6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+          <line x1="0" y1="0" x2="0" y2="2.6" stroke={tokens.ink[4]} strokeWidth="0.3" />
+        </pattern>
+        {editing && (
+          <pattern id="fm-grid" width="10" height="10" patternUnits="userSpaceOnUse">
+            <path d="M10 0H0V10" fill="none" stroke={tokens.ink[5]} strokeWidth="0.25" />
+          </pattern>
+        )}
+      </defs>
+      {editing && <rect width={MAP_W} height={MAP_H} fill="url(#fm-grid)" />}
+
+      {/* architecture below the tables, in every mode */}
+      <SheetLayer sheet={sheetData} sel={sheetEditing ? sheetSel : null} drag={sheetDrag} />
+
+      {/* edit-mode canvas: under the tables, so table gestures win unless a
+          stamp tool is active (then the tables go inert below) */}
+      {sheetEditing && (
+        <rect
+          width={MAP_W} height={MAP_H} fill="transparent"
+          data-sheet-canvas="1"
+          style={{ cursor: stampTool ? "crosshair" : "default" }}
+          onPointerDown={onCanvasPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onCanvasPointerUp}
+        />
       )}
 
       {(map.tables || []).map((t0, ti) => {
@@ -211,7 +376,8 @@ export default function FloorMap({
         return (
           <g
             key={t.label}
-            opacity={dimmed ? 0.4 : 1}
+            opacity={dimmed ? 0.4 : stampTool ? 0.35 : 1}
+            pointerEvents={stampTool ? "none" : undefined}
             style={{ cursor: editing ? "grab" : pickable || (mode !== "seats" && onTableTap) ? "pointer" : "default" }}
             onPointerDown={onTablePointerDown(t0)}
             onPointerMove={editing ? onPointerMove : undefined}
@@ -300,7 +466,11 @@ export default function FloorMap({
               </g>
             )}
 
-            {/* seat dots — chair marks numbered per the house diagrams */}
+            {/* chair marks. Two registers: the editing contexts (seats
+                renumber, edit mode) keep numbered dots — the number IS the
+                thing being edited — while the presentation modes (view,
+                picker, service) draw the mockup's chair bars along the edge,
+                numbers hidden except on restricted seats (amber + code). */}
             {seatPts.map((p, i) => {
               const seatRestr = restr.filter((r) => Number(r.pos) === Number(p.no) && p.no != null);
               const hasRestr = seatRestr.length > 0;
@@ -308,6 +478,8 @@ export default function FloorMap({
               const sx = draggingSeat ? seatDrag.x : p.x + p.out.x * 2.4;
               const sy = draggingSeat ? seatDrag.y : p.y + p.out.y * 2.4;
               const seatDraggable = editing && selectedLabel === t.label;
+              const numbered = mode === "seats" || editing;
+              const deg = Math.atan2(p.out.y, p.out.x) * 180 / Math.PI;
               return (
                 <g key={i}
                   style={{ cursor: seatEditing || seatDraggable ? "pointer" : "default" }}
@@ -317,14 +489,25 @@ export default function FloorMap({
                     e.stopPropagation();
                     onSeatTap && onSeatTap(t.label, i);
                   }}>
-                  <circle cx={sx} cy={sy} r={1.7}
-                    fill={hasRestr ? tokens.signal.warn : tokens.neutral[0]}
-                    stroke={hasRestr ? tokens.signal.warn : seatEditing || seatDraggable ? tokens.ink[1] : tokens.ink[3]}
-                    strokeWidth={0.3} />
-                  <text x={sx} y={sy + 0.75} textAnchor="middle" fontFamily={FONT} fontSize={2}
-                    fill={hasRestr ? tokens.neutral[0] : tokens.ink[1]} fontWeight={700}>
-                    {p.no == null ? "·" : `${p.no}${p.confirm ? "?" : ""}`}
-                  </text>
+                  {numbered ? (
+                    <>
+                      <circle cx={sx} cy={sy} r={1.7}
+                        fill={hasRestr ? tokens.signal.warn : tokens.neutral[0]}
+                        stroke={hasRestr ? tokens.signal.warn : seatEditing || seatDraggable ? tokens.ink[1] : tokens.ink[3]}
+                        strokeWidth={0.3} />
+                      <text x={sx} y={sy + 0.75} textAnchor="middle" fontFamily={FONT} fontSize={2}
+                        fill={hasRestr ? tokens.neutral[0] : tokens.ink[1]} fontWeight={700}>
+                        {p.no == null ? "·" : `${p.no}${p.confirm ? "?" : ""}`}
+                      </text>
+                    </>
+                  ) : (
+                    <g transform={`translate(${sx},${sy}) rotate(${deg})`}>
+                      <rect x={-0.55} y={-1.7} width={1.1} height={3.4}
+                        fill={hasRestr ? tokens.signal.warn : tokens.ink[5]}
+                        stroke={hasRestr ? tokens.signal.warn : tokens.ink[4]}
+                        strokeWidth={0.25} />
+                    </g>
+                  )}
                   {hasRestr && (
                     <text x={sx + p.out.x * 3.2} y={sy + p.out.y * 3.2 + 0.7}
                       textAnchor="middle" fontFamily={FONT} fontSize={1.8}
@@ -338,6 +521,18 @@ export default function FloorMap({
           </g>
         );
       })}
+
+      {/* wall in progress — points placed so far (ortho snap lives in the editor) */}
+      {sheetEditing && sheetDraft && sheetDraft.length > 0 && (
+        <g pointerEvents="none">
+          <polyline points={sheetDraft.map((p) => p.join(",")).join(" ")} fill="none"
+            stroke={tokens.ink[0]} strokeWidth={0.6} strokeDasharray="1.6 1.2" />
+          {sheetDraft.map((p, i) => (
+            <rect key={i} x={p[0] - 1} y={p[1] - 1} width={2} height={2}
+              fill={i === 0 ? tokens.ink[0] : tokens.neutral[0]} stroke={tokens.ink[0]} strokeWidth={0.3} />
+          ))}
+        </g>
+      )}
     </svg>
   );
 }

@@ -1301,7 +1301,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
     // kitchen-visit, walking to this table.
     const visit = t._visit || null;
     const isArriving = !isSeated && visit?.visit === "arriving";
-    const onTerrace = !isSeated && visit?.visit === "terrace";
+    // The badge survives seating: courses often start while the party is
+    // still outside, and the runner needs the terrace table number ON the
+    // board card, not from memory.
+    const onTerrace = visit?.visit === "terrace";
     const allRestr = (t.restrictions || []).filter(r => r.note);
     const [assigningIdx, setAssigningIdx] = useState(null);
     const [justSent, setJustSent] = useState(false);
@@ -2770,9 +2773,15 @@ export default function App() {
 
   const assignTerraceTable = (resv, label) => {
     const terraceMapId = floorMapsState.maps.find(m => m.kind === "terrace")?.id || null;
+    const prevLabel = resv.data?.terrace_table || null;
     if (!persistVisitData(resv, assignTerraceData(resv.data, label, terraceMapId))) return;
-    // assigning onto a DIRTY table claims it — the strip clears
-    if (terraceMapId) updateFloorStatus(setFloorStatus(floorStatus, terraceMapId, label, null));
+    if (terraceMapId) {
+      // assigning onto a DIRTY table claims it — the strip clears; a re-seat
+      // (CHANGE TABLE) leaves the vacated table DIRTY for the runner
+      let st = setFloorStatus(floorStatus, terraceMapId, label, null);
+      if (prevLabel && prevLabel !== label) st = setFloorStatus(st, terraceMapId, prevLabel, "DIRTY");
+      updateFloorStatus(st);
+    }
   };
 
   const clearTerracePartyTable = (resv) => {
@@ -5213,8 +5222,8 @@ export default function App() {
 
           {serviceView === "floor" ? (
             /* FLOOR view — the spatial projection of the same board state.
-               Two-zone tables: body tap → the party's sheet (the board's
-               quick-access card / terrace actions), strip tap → DIRTY/SET.
+               A dining table is one big DIRTY/SET button (tap to cycle);
+               terrace tables and ARRIVING tables open their action sheet.
                The old TerracePanel's whole terrace leg lives in here. */
             <FloorView
               floorMaps={floorMapsState}
@@ -5230,29 +5239,7 @@ export default function App() {
               onClear={clearTerracePartyTable}
               onMove={moveTerracePartyIn}
               onMarkSeated={markTerracePartySeated}
-              editable
               isMobile={appIsMobile}
-              renderQuickAccess={(bt) => (
-                <DisplayBoardCard
-                  t={bt}
-                  quickMode
-                  upd={upd}
-                  updSeat={updSeat}
-                  onCardClick={() => {}}
-                  onOpenDetail={id => setSel(id)}
-                  onSeat={seatTable}
-                  onUnseat={unseatTable}
-                  onMarkSeated={markSeatedOnTable}
-                  onAssignTerrace={requestTerraceAssign}
-                  optionalExtras={dishes}
-                  optionalPairings={pairings}
-                  aperitifOptions={serviceAperitifOptions}
-                  wines={wines}
-                  cocktails={cocktails}
-                  spirits={spirits}
-                  beers={beers}
-                />
-              )}
             />
           ) : serviceView === "sheet" ? (
             /* SHEET view — single-table operational sheet (table index +

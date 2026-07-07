@@ -1,32 +1,25 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
-import FloorMap from "../floor/FloorMap.jsx";
-import {
-  getActiveDiningMap, findMapTable, planLayoutSwitch, assignSeatNumbers,
-} from "../../utils/floorMaps.js";
+import FloorEditor from "../floor/FloorEditor.jsx";
+import { planLayoutSwitch } from "../../utils/floorMaps.js";
 
-// ── FloorPanel — floor layouts, seat numbering, terrace flow config ──────────
+// ── FloorPanel — floor layouts, geometry editor, terrace flow config ─────────
 // Three seams, all persisting through onUpdateFloorMaps → the stateStore seam:
 //  · ACTIVE LAYOUT: exactly one dining map is active per service (manual
 //    pre-service toggle). Switching re-resolves tonight's reservations and
 //    shows the confirm diff (moves / conflicts / NEEDS TABLE) BEFORE applying.
-//  · SEATS mode: tap a table, then tap its chair marks in sequence to number
-//    them (tapping the first chair again restarts). Numbers commit when every
-//    chair is tapped. Seat definitions are per map.
+//  · GEOMETRY: the FloorEditor — drag/resize/rename tables, seats (add,
+//    remove, drag, tap-in-sequence renumber), merges, maps (duplicate =
+//    "LAYOUT C" nights), RESET TO DEFAULTS. Editing is an admin concern;
+//    the FOH floor view is service-only.
 //  · MOVE_SINGLE_TAP: MOVE skips the arriving confirm.
-// Walls/doors editing is out of scope — separate track.
 export default function FloorPanel({
-  floorMaps, reservations = [], onUpdateFloorMaps, onApplyLayoutSwitch,
+  floorMaps, reservations = [], onUpdateFloorMaps, onApplyLayoutSwitch, isMobile,
 }) {
   const [pendingSwitch, setPendingSwitch] = useState(null); // { mapId, rows }
-  const [seatsMapId, setSeatsMapId] = useState(null);
-  const [seatsTable, setSeatsTable] = useState(null); // label
-  const [tapSeq, setTapSeq] = useState([]);
 
   const diningMaps = floorMaps.maps.filter((m) => m.kind === "dining");
-  const activeMap = getActiveDiningMap(floorMaps);
-  const seatsMap = floorMaps.maps.find((m) => m.id === seatsMapId) || activeMap;
 
   const label = { fontFamily: FONT, fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: tokens.ink[3], margin: "18px 0 8px" };
   const btn = (on) => ({
@@ -49,38 +42,12 @@ export default function FloorPanel({
     setPendingSwitch(null);
   };
 
-  // SEATS mode tap: first-chair re-tap restarts the sequence; a completed
-  // sequence commits the new numbering into the map (and drops CONFIRM tags).
-  const onSeatTap = (tableLabel, seatIdx) => {
-    if (tableLabel !== seatsTable) return;
-    const table = findMapTable(seatsMap, tableLabel);
-    const seq = seatIdx === tapSeq[0] ? [seatIdx] : [...tapSeq, seatIdx];
-    const { seats, complete } = assignSeatNumbers(table.seats, seq);
-    if (!complete) { setTapSeq(seq); return; }
-    onUpdateFloorMaps({
-      ...floorMaps,
-      maps: floorMaps.maps.map((m) => m.id !== seatsMap.id ? m : {
-        ...m,
-        tables: m.tables.map((t) => t.label === tableLabel ? { ...t, seats } : t),
-      }),
-    });
-    setTapSeq([]);
-    setSeatsTable(null);
-  };
-
-  const seatsPreview = (() => {
-    if (!seatsTable || !tapSeq.length) return {};
-    const table = findMapTable(seatsMap, seatsTable);
-    if (!table) return {};
-    return { [seatsTable]: assignSeatNumbers(table.seats, tapSeq).seats };
-  })();
-
   const statusColor = { move: tokens.ink[1], conflict: tokens.red.text, needs_table: tokens.signal.warn, unchanged: tokens.ink[4] };
 
   return (
     <div>
       <div style={label}>ACTIVE DINING LAYOUT (one per service)</div>
-      <div style={{ display: "flex" }}>
+      <div style={{ display: "flex", flexWrap: "wrap" }}>
         {diningMaps.map((m) => (
           <button key={m.id} style={btn(m.id === floorMaps.activeDiningMapId)} onClick={() => requestSwitch(m.id)}>
             {m.name}
@@ -117,36 +84,12 @@ export default function FloorPanel({
         </div>
       )}
 
-      <div style={label}>SEAT NUMBERING (per map — tap a table, then its chairs in service order)</div>
-      <div style={{ display: "flex", marginBottom: 8 }}>
-        {floorMaps.maps.map((m) => (
-          <button key={m.id} style={btn(m.id === seatsMap.id)}
-            onClick={() => { setSeatsMapId(m.id); setSeatsTable(null); setTapSeq([]); }}>
-            {m.name}
-          </button>
-        ))}
-      </div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-        {seatsMap.tables.map((t) => (
-          <button key={t.label} style={btn(t.label === seatsTable)}
-            onClick={() => { setSeatsTable((prev) => prev === t.label ? null : t.label); setTapSeq([]); }}>
-            {t.label}{t.seats?.some((s) => s.confirm) ? " ?" : ""}
-          </button>
-        ))}
-      </div>
-      {seatsTable && (
-        <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], marginBottom: 6 }}>
-          tap {seatsTable}'s chairs in order — {tapSeq.length}/{findMapTable(seatsMap, seatsTable)?.seats?.length || 0} numbered
-          (tap the first chair again to restart)
-        </div>
-      )}
-      <FloorMap
-        map={seatsMap}
-        mode="seats"
-        seatsEditLabel={seatsTable}
-        seatsOverride={seatsPreview}
-        onSeatTap={onSeatTap}
-        height={360}
+      <div style={label}>GEOMETRY (drag tables · tap to edit · seats, merges & maps below the canvas)</div>
+      <FloorEditor
+        floorMaps={floorMaps}
+        onUpdateFloorMaps={onUpdateFloorMaps}
+        reservations={reservations}
+        isMobile={isMobile}
       />
 
       <div style={label}>TERRACE FLOW</div>

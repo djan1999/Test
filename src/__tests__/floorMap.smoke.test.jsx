@@ -8,12 +8,15 @@ const terrace = state.maps.find((m) => m.kind === "terrace");
 const mapB = state.maps.find((m) => m.id === "dining_b");
 
 describe("FloorMap renderer", () => {
-  it("renders every table label and numbered seat dots", () => {
+  it("renders every table label; chairs are plain bars in view mode, numbered dots in seats mode", () => {
     const { container } = render(<FloorMap map={mapB} mode="view" />);
     const text = container.textContent;
     for (const t of mapB.tables) expect(text).toContain(t.label);
-    // T9 under Layout B seats 3 — dots 1..3 rendered (CONFIRM-tagged seats get a ?)
-    expect(text).toContain("3");
+    // presentation modes hide seat numbers (no CONFIRM ? markers either)
+    expect(text).not.toContain("?");
+    // the seats editor shows them — T7's CONFIRM-tagged numbering renders 1?/2?
+    const seats = render(<FloorMap map={mapB} mode="seats" />);
+    expect(seats.container.textContent).toContain("1?");
   });
 
   it("occupied tables show party name ×pax; armed badge renders", () => {

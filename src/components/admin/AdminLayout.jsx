@@ -473,6 +473,7 @@ export default function AdminLayout({
               reservations={floorReservations}
               onUpdateFloorMaps={onUpdateFloorMaps}
               onApplyLayoutSwitch={onApplyLayoutSwitch}
+              isMobile={isMobile}
             />
           )}
 

@@ -35,7 +35,6 @@ const setup = (overrides = {}) => {
     onClear: vi.fn(),
     onMove: vi.fn(),
     onMarkSeated: vi.fn(),
-    renderQuickAccess: vi.fn((bt) => <div>QUICK-ACCESS-{bt.id}</div>),
   };
   const utils = render(
     <FloorView
@@ -43,7 +42,6 @@ const setup = (overrides = {}) => {
       floorStatus={{ dining_a: { T4: "SET", T5: "DIRTY" } }}
       reservations={reservations}
       tables={tables}
-      editable
       {...handlers}
       {...overrides}
     />,
@@ -71,14 +69,13 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).toContain("ARRIVING · KV");
   });
 
-  it("strip tap cycles status for the visible map; body tap opens the board's quick access", () => {
+  it("a dining table is one big status button: strip tap AND body tap both cycle", () => {
     const { container, handlers } = setup();
     fireEvent.click(container.querySelector('[data-strip="T6"]'));
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T6");
-    fireEvent.click(findTable(container, "T1"));
-    expect(handlers.renderQuickAccess).toHaveBeenCalled();
-    expect(handlers.renderQuickAccess.mock.calls[0][0].id).toBe(1);
-    expect(container.textContent).toContain("QUICK-ACCESS-1");
+    fireEvent.click(findTable(container, "T1")); // occupied dining body — no sheet, cycles
+    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T1");
+    expect(handlers.onCycleStatus).toHaveBeenCalledTimes(2);
   });
 
   it("an arriving party's table sheet carries MARK SEATED", () => {
@@ -101,95 +98,29 @@ describe("FloorView (FOH FLOOR surface)", () => {
     fireEvent.click(getByText(/MURN ×2/));
     expect(handlers.onAssign).toHaveBeenCalledWith(reservations[1], "T21");
   });
-
-  it("EDIT switches the canvas to edit mode and lists every map as a tab", () => {
-    const { container, getByText, handlers } = setup();
-    fireEvent.click(getByText("EDIT"));
-    getByText("LAYOUT B"); // inactive layouts editable too
-    // drag commits exactly one geometry update through updateFloorMaps
-    const svg = container.querySelector("svg");
-    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 368, right: 400, bottom: 368 });
-    const t1 = findTable(container, "T1");
-    fireEvent.pointerDown(t1, { clientX: 40, clientY: 40 });
-    fireEvent.pointerMove(t1, { clientX: 80, clientY: 80 });
-    fireEvent.pointerUp(t1, { clientX: 80, clientY: 80 });
-    expect(handlers.onUpdateFloorMaps).toHaveBeenCalledTimes(1);
-    const next = handlers.onUpdateFloorMaps.mock.calls[0][0];
-    const t1Next = next.maps.find((m) => m.id === "dining_a").tables.find((t) => t.label === "T1");
-    expect([t1Next.x, t1Next.y]).toEqual([18, 18]);
-  });
 });
 
-describe("FloorView geometry inspector", () => {
-  const enterEdit = (utils) => {
-    fireEvent.click(utils.getByText("EDIT"));
-    const svg = utils.container.querySelector("svg");
-    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 368, right: 400, bottom: 368 });
-    return svg;
-  };
-  const tapTable = (container, label) => {
-    const g = findTable(container, label);
-    fireEvent.pointerDown(g, { clientX: 40, clientY: 40 });
-    fireEvent.pointerUp(g, { clientX: 40, clientY: 40 });
-  };
-
-  it("tap-select opens the table inspector; DELETE is two-step; slots chips edit boardIds", () => {
-    const utils = setup();
-    const { container, handlers, getByText } = utils;
-    enterEdit(utils);
-    tapTable(container, "T1");
-    expect(container.textContent).toContain("INSPECTOR — T1");
-    // two-step delete: first tap arms, second applies
-    fireEvent.click(getByText("DELETE T1"));
-    expect(handlers.onUpdateFloorMaps).not.toHaveBeenCalled();
-    fireEvent.click(getByText("CONFIRM ✓"));
-    const next = handlers.onUpdateFloorMaps.mock.calls[0][0];
-    expect(next.maps.find((m) => m.id === "dining_a").tables.some((t) => t.label === "T1")).toBe(false);
+describe("terrace CHANGE TABLE (re-seat on the terrace)", () => {
+  it("occupied sheet arms the move; tapping a free table re-assigns, occupied tables refuse", () => {
+    const { container, handlers, getByText } = setup();
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(findTable(container, "T23")); // WEISS's table
+    fireEvent.click(getByText("CHANGE TABLE"));
+    expect(container.textContent).toContain("TAP A FREE TABLE FOR WEISS ×4");
+    fireEvent.click(findTable(container, "T23")); // still occupied — refused
+    expect(handlers.onAssign).not.toHaveBeenCalled();
+    fireEvent.click(findTable(container, "T25")); // free → re-seat
+    expect(handlers.onAssign).toHaveBeenCalledWith(reservations[0], "T25");
+    expect(container.textContent).not.toContain("TAP A FREE TABLE");
   });
 
-  it("DUPLICATE MAP creates '<NAME> COPY' and switches to it (the LAYOUT C path)", () => {
-    const utils = setup();
-    const { container, handlers, getByText } = utils;
-    enterEdit(utils);
-    fireEvent.click(getByText("DUPLICATE MAP"));
-    const next = handlers.onUpdateFloorMaps.mock.calls[0][0];
-    expect(next.maps.some((m) => m.name === "LAYOUT A COPY")).toBe(true);
-    expect(container.textContent).toContain("MAP — LAYOUT A"); // inspector header follows the switched tab… 
-  });
-
-  it("RESET TO DEFAULTS is confirm-gated and restores only the visible map", () => {
-    // hand the view a mangled Layout A on an old geometry version
-    const mangled = {
-      ...floorMaps,
-      geometryVersion: 1,
-      maps: floorMaps.maps.map((m) => m.id !== "dining_a" ? m : {
-        ...m,
-        tables: m.tables.map((t) => (t.label === "T1" ? { ...t, x: 60, y: 60 } : t)),
-      }),
-    };
-    const utils = setup({ floorMaps: mangled });
-    const { container, handlers, getByText } = utils;
-    enterEdit(utils);
-    expect(container.textContent).toContain("NEW DEFAULT GEOMETRY AVAILABLE — RESET MAP");
-    fireEvent.click(getByText("RESET TO DEFAULTS"));
-    fireEvent.click(getByText("CONFIRM ✓"));
-    const next = handlers.onUpdateFloorMaps.mock.calls[0][0];
-    expect(next.maps.find((m) => m.id === "dining_a").tables.find((t) => t.label === "T1").x).toBe(8);
-    expect(next.geometryVersion).toBeGreaterThan(1);
-  });
-
-  it("RENUMBER: tapping every chair in sequence commits the numbering", () => {
-    const utils = setup();
-    const { container, handlers, getByText } = utils;
-    enterEdit(utils);
-    tapTable(container, "T1");
-    fireEvent.click(getByText("RENUMBER"));
-    const t1 = findTable(container, "T1");
-    const chairs = [...t1.querySelectorAll("g")];
-    fireEvent.click(chairs[1]); // E chair first → becomes seat 1
-    fireEvent.click(chairs[0]);
-    const next = handlers.onUpdateFloorMaps.mock.calls.at(-1)[0];
-    const seats = next.maps.find((m) => m.id === "dining_a").tables.find((t) => t.label === "T1").seats;
-    expect(seats.map((s) => s.no)).toEqual([2, 1]);
+  it("CANCEL disarms without assigning", () => {
+    const { container, handlers, getByText } = setup();
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(findTable(container, "T23"));
+    fireEvent.click(getByText("CHANGE TABLE"));
+    fireEvent.click(getByText("CANCEL"));
+    fireEvent.click(findTable(container, "T25"));
+    expect(handlers.onAssign).not.toHaveBeenCalled(); // free-table tap = plain sheet again
   });
 });
