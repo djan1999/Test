@@ -50,7 +50,8 @@ const truncate = (s, n) => {
 // arc, or passage jamb ticks), hatched zones, planters. Rendered in EVERY
 // mode (the kitchen and FOH see the room, not floating tables); pointer
 // events stay off — interaction belongs to the edit-mode canvas rect.
-function SheetLayer({ sheet, sel, drag }) {
+function SheetLayer({ sheet, sel, drag, blueprint = false }) {
+  const wallInk = blueprint ? tokens.ink[0] : tokens.ink[1];
   const off = (el, kind) =>
     drag?.moved && drag.kind === kind && drag.id === el.id
       ? { x: el.x + drag.dx, y: el.y + drag.dy }
@@ -97,7 +98,7 @@ function SheetLayer({ sheet, sel, drag }) {
 
       {sheet.walls.map((wall) => {
         const selected = sel?.kind === "wall" && sel.id === wall.id;
-        const sw = (wall.dashed ? 0.55 : 0.85) + (selected ? 0.3 : 0);
+        const sw = (wall.dashed ? 0.55 : 0.85) * (blueprint ? 1.4 : 1) + (selected ? 0.3 : 0);
         return wallSegments(wall).map(({ p1, p2, i }) => {
           const L = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
           if (!L) return null;
@@ -106,7 +107,7 @@ function SheetLayer({ sheet, sel, drag }) {
             <line key={`${wall.id}-${i}-${k}`}
               x1={p1[0] + dir[0] * a} y1={p1[1] + dir[1] * a}
               x2={p1[0] + dir[0] * b} y2={p1[1] + dir[1] * b}
-              stroke={selected ? tokens.ink[0] : tokens.ink[1]} strokeWidth={sw}
+              stroke={selected ? tokens.ink[0] : wallInk} strokeWidth={sw}
               strokeDasharray={wall.dashed ? "3.2 2" : undefined} />
           ));
         });
@@ -117,7 +118,7 @@ function SheetLayer({ sheet, sel, drag }) {
         if (!g) return null;
         const selected = sel?.kind === "door" && sel.id === o.id;
         return (
-          <g key={o.id} stroke={tokens.ink[1]} fill="none">
+          <g key={o.id} stroke={wallInk} fill="none">
             {o.kind === "door" ? (
               <>
                 <line x1={g.h[0]} y1={g.h[1]} x2={g.leafEnd[0]} y2={g.leafEnd[1]} strokeWidth={0.45} />
@@ -134,6 +135,28 @@ function SheetLayer({ sheet, sel, drag }) {
           </g>
         );
       })}
+    </g>
+  );
+}
+
+// Drafting-sheet title block (editor only) — the mockup's signature corner.
+function TitleBlock({ name, idx }) {
+  const x = 60.5, y = 78.5, w = 38, h = 12;
+  const date = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase();
+  return (
+    <g pointerEvents="none">
+      <rect x={x} y={y} width={w} height={h} fill={tokens.neutral[0]} stroke={tokens.ink[0]} strokeWidth={0.35} />
+      <line x1={x} y1={y + 4} x2={x + w} y2={y + 4} stroke={tokens.ink[0]} strokeWidth={0.2} />
+      <line x1={x} y1={y + 8} x2={x + w} y2={y + 8} stroke={tokens.ink[4]} strokeWidth={0.15} />
+      <text x={x + 1.4} y={y + 2.9} fontFamily={tokens.font} fontSize={1.9} fontWeight={700} letterSpacing={0.25} fill={tokens.ink[0]}>
+        MILKA — SERVICE BOARD
+      </text>
+      <text x={x + 1.4} y={y + 6.9} fontFamily={tokens.font} fontSize={1.9} fontWeight={700} letterSpacing={0.2} fill={tokens.ink[0]}>
+        {name} · DWG {String((idx ?? 0) + 1).padStart(2, "0")}
+      </text>
+      <text x={x + 1.4} y={y + 10.9} fontFamily={tokens.font} fontSize={1.6} letterSpacing={0.2} fill={tokens.ink[3]}>
+        SCALE 1:50 · {date}
+      </text>
     </g>
   );
 }
@@ -175,6 +198,7 @@ export default function FloorMap({
   onCanvasTap,              // ({x, y}) — tap with a stamp/draw tool active
   onSheetSelect,            // (hit | null) — MOVE-tool tap
   onSheetMove,              // (kind, id, x, y) — zone/planter drag, on release
+  titleIndex = null,        // blueprint modes: this map's DWG number (0-based)
   height = 340,
 }) {
   const svgRef = useRef(null);
@@ -190,6 +214,10 @@ export default function FloorMap({
   const sheetData = sheetOf(map);
   const sheetEditing = editing && !!onCanvasTap;
   const stampTool = sheetEditing && sheetTool !== "move";
+  // The editor is the only consumer of the edit/seats modes, so the mockup's
+  // blueprint register (paper sheet, dual drafting grid, heavy ink, title
+  // block) lives on these modes — the FOH/kitchen views keep the quiet look.
+  const blueprint = editing || mode === "seats";
 
   // Client px → viewBox units. getScreenCTM is exact whatever the element's
   // box does (zoom, borders, letterboxing); the manual fallback (jsdom has no
@@ -314,7 +342,8 @@ export default function FloorMap({
         width: "100%", maxWidth: Math.round((height * MAP_W) / MAP_H),
         aspectRatio: `${MAP_W} / ${MAP_H}`,
         display: "block", margin: "0 auto", background: tokens.ink.bg,
-        border: `1px solid ${tokens.ink[4]}`,
+        border: blueprint ? `1.5px solid ${tokens.ink[0]}` : `1px solid ${tokens.ink[4]}`,
+        boxShadow: blueprint ? `6px 6px 0 ${tokens.ink[5]}` : undefined,
         touchAction: editing ? "none" : undefined,
       }}
       role="img"
@@ -330,16 +359,27 @@ export default function FloorMap({
         <pattern id="fm-hatch" width="2.6" height="2.6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
           <line x1="0" y1="0" x2="0" y2="2.6" stroke={tokens.ink[4]} strokeWidth="0.3" />
         </pattern>
-        {editing && (
-          <pattern id="fm-grid" width="10" height="10" patternUnits="userSpaceOnUse">
-            <path d="M10 0H0V10" fill="none" stroke={tokens.ink[5]} strokeWidth="0.25" />
-          </pattern>
+        {blueprint && (
+          <>
+            {/* the mockup's dual drafting grid: fine unit squares + coarse frame */}
+            <pattern id="fm-grid-s" width="2" height="2" patternUnits="userSpaceOnUse">
+              <path d="M2 0H0V2" fill="none" stroke={tokens.ink[5]} strokeWidth="0.12" />
+            </pattern>
+            <pattern id="fm-grid-l" width="10" height="10" patternUnits="userSpaceOnUse">
+              <path d="M10 0H0V10" fill="none" stroke={tokens.ink[4]} strokeWidth="0.14" opacity="0.5" />
+            </pattern>
+          </>
         )}
       </defs>
-      {editing && <rect width={MAP_W} height={MAP_H} fill="url(#fm-grid)" />}
+      {blueprint && (
+        <>
+          <rect width={MAP_W} height={MAP_H} fill="url(#fm-grid-s)" />
+          <rect width={MAP_W} height={MAP_H} fill="url(#fm-grid-l)" />
+        </>
+      )}
 
       {/* architecture below the tables, in every mode */}
-      <SheetLayer sheet={sheetData} sel={sheetEditing ? sheetSel : null} drag={sheetDrag} />
+      <SheetLayer sheet={sheetData} sel={sheetEditing ? sheetSel : null} drag={sheetDrag} blueprint={blueprint} />
 
       {/* edit-mode canvas: under the tables, so table gestures win unless a
           stamp tool is active (then the tables go inert below) */}
@@ -381,6 +421,7 @@ export default function FloorMap({
           : occupied ? tokens.green.border
           : reserved ? tokens.ink[3]
           : dirty ? tokens.signal.warn
+          : blueprint ? tokens.ink[1]
           : tokens.ink[4];
 
         const cx = t.x + t.w / 2;
@@ -396,6 +437,7 @@ export default function FloorMap({
         return (
           <g
             key={t.label}
+            data-table={t.label}
             opacity={dimmed ? 0.4 : stampTool ? 0.35 : 1}
             pointerEvents={stampTool ? "none" : undefined}
             style={{ cursor: editing ? "grab" : pickable || (mode !== "seats" && onTableTap) ? "pointer" : "default" }}
@@ -409,13 +451,24 @@ export default function FloorMap({
             }}
           >
             {/* DIRTY (view modes): amber band along the top edge */}
-            <TableShape t={t} fill={fill} stroke={stroke} dash={arriving || reserved ? "1.4 1" : undefined} />
+            <TableShape t={t} fill={fill} stroke={stroke} strokeWidth={blueprint ? 0.45 : 0.35}
+              dash={arriving || reserved ? "1.4 1" : undefined} />
             {dirty && !strip && (
               <rect x={t.x} y={t.y} width={t.w} height={1.6} fill={tokens.signal.warn} />
             )}
             {selected && (
-              <TableShape t={{ ...t, x: t.x - 1.2, y: t.y - 1.2, w: t.w + 2.4, h: t.h + 2.4 }}
-                fill="none" stroke={tokens.ink[0]} strokeWidth={0.4} dash="1.6 1.2" />
+              <>
+                <TableShape t={{ ...t, x: t.x - 1.2, y: t.y - 1.2, w: t.w + 2.4, h: t.h + 2.4 }}
+                  fill="none" stroke={tokens.ink[0]} strokeWidth={0.5} dash="1.6 1.2" />
+                {/* the mockup's live size badge, pinned to the table's corner */}
+                <g pointerEvents="none">
+                  <rect x={t.x} y={t.y} width={9.5} height={3} fill={tokens.ink[0]} />
+                  <text x={t.x + 4.75} y={t.y + 2.15} textAnchor="middle" fontFamily={FONT}
+                    fontSize={1.9} fontWeight={700} fill={tokens.neutral[0]}>
+                    {t0.w}×{t0.h}
+                  </text>
+                </g>
+              </>
             )}
 
             {/* label + party */}
@@ -502,6 +555,7 @@ export default function FloorMap({
               const deg = Math.atan2(p.out.y, p.out.x) * 180 / Math.PI;
               return (
                 <g key={i}
+                  data-seat={i}
                   style={{ cursor: seatEditing || seatDraggable ? "pointer" : "default" }}
                   onPointerDown={seatDraggable ? onSeatPointerDown(t0, i) : undefined}
                   onClick={(e) => {
@@ -541,6 +595,8 @@ export default function FloorMap({
           </g>
         );
       })}
+
+      {blueprint && titleIndex != null && <TitleBlock name={map.name} idx={titleIndex} />}
 
       {/* wall in progress — points placed so far (ortho snap lives in the editor) */}
       {sheetEditing && sheetDraft && sheetDraft.length > 0 && (

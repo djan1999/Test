@@ -95,9 +95,16 @@ export default function FloorInspector({
   const memberOptions = [...Array(10)].map((_, i) => `T${i + 1}`);
 
   return (
-    <div style={{ border: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0], marginTop: 8, padding: "10px 12px 12px" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, paddingBottom: 8 }}>
-        <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", fontWeight: 700, color: tokens.ink[1] }}>
+    <div style={{
+      border: `1.5px solid ${tokens.ink[0]}`, background: tokens.neutral[0],
+      boxShadow: `4px 4px 0 ${tokens.ink[5]}`, marginTop: 12,
+    }}>
+      {/* drafting-card header strip, per the mockup's inspector */}
+      <div style={{
+        display: "flex", alignItems: "baseline", gap: 10, padding: "9px 12px",
+        borderBottom: `1.5px solid ${tokens.ink[0]}`, background: tokens.ink[5],
+      }}>
+        <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", fontWeight: 700, color: tokens.ink[0] }}>
           {sheetThing
             ? `INSPECTOR — ${selDoor ? (selDoor.kind === "pass" ? "PASSAGE" : "DOOR") : selZone ? "ZONE" : selPlanter ? "PLANTER" : "WALL"}`
             : table ? `INSPECTOR — ${table.label}` : `MAP — ${map.name}`}
@@ -108,6 +115,7 @@ export default function FloorInspector({
           </span>
         )}
       </div>
+      <div style={{ padding: "2px 12px 12px" }}>
 
       {selDoor ? (
         <>
@@ -296,6 +304,7 @@ export default function FloorInspector({
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

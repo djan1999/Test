@@ -165,8 +165,8 @@ describe("FloorMap edit mode (drag + select)", () => {
       <FloorMap map={mapB} mode="edit" selectedLabel="T8" onSeatMove={onSeatMove} />,
     );
     sizeSvg(container);
-    const t8 = [...container.querySelectorAll("g")].find((g) => g.textContent.startsWith("T8"));
-    const seat = t8.querySelector("g");
+    const t8 = container.querySelector('[data-table="T8"]');
+    const seat = t8.querySelector('[data-seat="0"]');
     fireEvent.pointerDown(seat, { clientX: 40, clientY: 280 });
     fireEvent.pointerMove(seat, { clientX: 56, clientY: 272 });
     fireEvent.pointerUp(seat, { clientX: 56, clientY: 272 });
