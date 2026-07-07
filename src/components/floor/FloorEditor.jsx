@@ -198,7 +198,8 @@ export default function FloorEditor({
       <FloorMap
         map={map}
         mode={renumber ? "seats" : "edit"}
-        height={isMobile ? 380 : 480}
+        height={isMobile ? 420 : 640}
+        titleIndex={floorMaps.maps.indexOf(map)}
         selectedLabel={selLabel}
         seatsEditLabel={renumber?.label || null}
         seatsOverride={renumberPreview}
