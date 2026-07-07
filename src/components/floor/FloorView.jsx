@@ -98,9 +98,29 @@ export default function FloorView({
   };
 
   // ── per-table presentation for the visible map ────────────────────────────
+  // NO reservation names on the FOH floor (per Djan): tables read label +
+  // ×pax + course; the runner's info is the per-seat water·pairing note at
+  // each chair. Names stay on the board and the terrace assign picker.
+  const bevNote = (s) => {
+    const water = s.water && s.water !== "—"
+      ? (String(s.water).toUpperCase().startsWith("SP") ? "SPK" : "STL") : "";
+    const pair = s.pairing && s.pairing !== "—"
+      ? String(s.pairing).trim().charAt(0).toUpperCase() : "";
+    return [water, pair].filter(Boolean).join("·");
+  };
+  const seatNotesOf = (bt) => {
+    const notes = {};
+    for (const s of bt?.seats || []) {
+      const note = bevNote(s);
+      if (note) notes[Number(s.id)] = note;
+    }
+    return Object.keys(notes).length ? notes : null;
+  };
+
   const occ = map.kind === "terrace" ? terraceOccupancy(reservations) : {};
   const tableState = {};
   const restrictionsByLabel = {};
+  const seatNotesByLabel = {};
   for (const t of map.tables || []) {
     const strip = floorStatusOf(floorStatus, map.id, t.label);
     if (map.kind === "terrace") {
@@ -109,7 +129,6 @@ export default function FloorView({
       tableState[t.label] = r
         ? {
             status: "occupied",
-            name: r.data?.resName || "—",
             pax: r.data?.guests || undefined,
             sub: r.data?.resTime || "",
             badge: isArmed(r.data) ? { text: "LAST BITE ✓" } : undefined,
@@ -118,6 +137,10 @@ export default function FloorView({
           }
         : { status: "free", strip };
       if (restr.length) restrictionsByLabel[t.label] = restr;
+      if (r) {
+        const notes = seatNotesOf(tables.find((x) => x.id === Number(r.table_id)));
+        if (notes) seatNotesByLabel[t.label] = notes;
+      }
     } else {
       const bt = boardTableOf(t);
       const arriving = arrivingOf(t);
@@ -125,16 +148,16 @@ export default function FloorView({
       if (bt?.active) {
         tableState[t.label] = {
           status: "occupied",
-          name: bt.resName || "—",
           pax: bt.guests || undefined,
           sub: progressOf(bt),
           allergy: restr.length > 0,
           strip,
         };
+        const notes = seatNotesOf(bt);
+        if (notes) seatNotesByLabel[t.label] = notes;
       } else if (arriving) {
         tableState[t.label] = {
           status: "arriving",
-          name: arriving.data?.resName || "—",
           pax: arriving.data?.guests || undefined,
           badge: { text: "ARRIVING · KV" },
           strip,
@@ -142,7 +165,6 @@ export default function FloorView({
       } else if (bt && (bt.resName || bt.resTime)) {
         tableState[t.label] = {
           status: "reserved",
-          name: bt.resName || "—",
           pax: bt.guests || undefined,
           sub: bt.resTime || "",
           allergy: restr.length > 0,
@@ -342,6 +364,7 @@ export default function FloorView({
         tableState={tableState}
         restrictionsByLabel={restrictionsByLabel}
         seatCodes={false}
+        seatNotesByLabel={seatNotesByLabel}
         height={isMobile ? 380 : 480}
         onTableTap={(t) => {
           // CHANGE TABLE in flight: the next FREE terrace table tap re-seats

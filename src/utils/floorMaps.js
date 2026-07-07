@@ -313,8 +313,33 @@ const clampTablePos = (t) => ({
   y: Math.min(Math.max(t.y, 0), MAP_H - t.h),
 });
 
+// Magnetic alignment: a dropped table pulls its edges level with any other
+// table's edges within reach, per axis — "exactly the same" placement without
+// pixel-precise dragging. Edges only (not centers), so positions stay on the
+// integer grid.
+const MAGNET = 1.5;
+const magnetAxis = (pos, size, others) => {
+  let best = null;
+  for (const o of others) {
+    for (const target of [o.p, o.p + o.s]) {
+      for (const mine of [0, size]) {
+        const d = target - (pos + mine);
+        if (Math.abs(d) <= MAGNET && (best == null || Math.abs(d) < Math.abs(best))) best = d;
+      }
+    }
+  }
+  return best == null ? pos : pos + best;
+};
+
 export const moveTable = (state, mapId, label, x, y) =>
-  patchTable(state, mapId, label, (t) => clampTablePos({ ...t, x: snapUnit(x), y: snapUnit(y) }));
+  patchTable(state, mapId, label, (t, map) => {
+    const others = map.tables.filter((o) => o.label !== label);
+    return clampTablePos({
+      ...t,
+      x: magnetAxis(snapUnit(x), t.w, others.map((o) => ({ p: o.x, s: o.w }))),
+      y: magnetAxis(snapUnit(y), t.h, others.map((o) => ({ p: o.y, s: o.h }))),
+    });
+  });
 
 const MIN_SIDE = 4;
 export const resizeTable = (state, mapId, label, w, h) =>
@@ -423,6 +448,19 @@ export const removeSeat = (state, mapId, label, index) =>
 // Drag a seat along the table outline. Rect: nearest side + offset along it;
 // round: compass angle (0 = N, clockwise — the inverse of seatDisplayPoints).
 // Number and CONFIRM marker travel with the seat — moving is not renumbering.
+//
+// Magnetic: offsets pull onto the canonical house stops (0.22 corner / 0.5
+// middle / 0.78 corner) and otherwise land on a 0.05 grid; round-table angles
+// land on 15° steps (compass points are multiples). Identical seat layouts
+// across tables without pixel-precise dragging.
+const SEAT_STOPS = [0.22, 0.5, 0.78];
+const magnetOffset = (raw) => {
+  for (const stop of SEAT_STOPS) {
+    if (Math.abs(raw - stop) <= 0.06) return stop;
+  }
+  return Math.round(raw * 20) / 20;
+};
+
 export const moveSeat = (state, mapId, label, index, point) =>
   patchTable(state, mapId, label, (t) => {
     const seats = t.seats || [];
@@ -435,7 +473,7 @@ export const moveSeat = (state, mapId, label, index, point) =>
       const cx = t.x + t.w / 2, cy = t.y + t.h / 2;
       const angle = (Math.atan2(px - cx, -(py - cy)) * 180 / Math.PI + 360) % 360;
       const { side, offset, ...rest } = seat;
-      placed = { ...rest, angle: Math.round(angle) };
+      placed = { ...rest, angle: Math.round(angle / 15) * 15 % 360 };
     } else {
       const fx = Math.min(Math.max((px - t.x) / t.w, 0), 1);
       const fy = Math.min(Math.max((py - t.y) / t.h, 0), 1);
@@ -446,7 +484,7 @@ export const moveSeat = (state, mapId, label, index, point) =>
         { side: "E", d: Math.abs(px - (t.x + t.w)), offset: fy },
       ].sort((a, b) => a.d - b.d);
       const { angle, ...rest } = seat;
-      placed = { ...rest, side: edges[0].side, offset: Math.round(edges[0].offset * 100) / 100 };
+      placed = { ...rest, side: edges[0].side, offset: magnetOffset(edges[0].offset) };
     }
     return { ...t, seats: seats.map((s, i) => (i === index ? placed : s)) };
   });
