@@ -6,8 +6,10 @@
 // import() gated by isPowerSyncEnabled() below, so the heavy WASM loads lazily.
 //
 // PowerSync is the app-wide default: it runs for EVERY workspace — Demo and
-// every restaurant (e.g. Hotel Milka) alike — not just a pilot. Supabase
-// realtime remains in place as a safety net alongside it.
+// every restaurant (e.g. Hotel Milka) alike — not just a pilot. Accounts whose
+// sync stream delivers nothing for the active workspace (the platform admin is
+// not a workspace member) run on the direct-Supabase fallback, kept live by
+// the Supabase realtime channels in App.jsx.
 
 // Demo workspace id — kept for reference (sync rules now scope per-tenant by
 // workspace membership, so this is no longer used for gating; PowerSync is on

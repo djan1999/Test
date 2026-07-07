@@ -80,6 +80,7 @@ import { scopedFrom } from "./lib/scopedDb.js";
 import { readStateKey, saveStateKey } from "./lib/stateStore.js";
 import { isPowerSyncEnabled } from "./powersync/config.js";
 import { setSqlitePrimaryFlag } from "./powersync/primary.js";
+import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { tokens } from "./styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, chip as mixinChip, circleButton as mixinCircleButton } from "./styles/mixins.js";
 import WaterPicker from "./components/service/WaterPicker.jsx";
@@ -4323,8 +4324,10 @@ export default function App() {
   // When the local SQLite DB is primary, the watches effect below owns the
   // board (its first fire seeds it and flips the gates). This fallback covers
   // accounts whose sync stream delivers nothing — the platform admin — with a
-  // one-shot load plus minimal liveness: a slow poll and a refetch on wake /
-  // network return.
+  // one-shot load plus a slow poll and a refetch on wake / network return.
+  // Live updates come from the Supabase realtime channels below, which refetch
+  // through fallbackBoardReloadRef on every service_tables event.
+  const fallbackBoardReloadRef = useRef(null);
   useEffect(() => {
     if (!supabase || !workspaceId || !psResolved || sqlitePrimary) return;
     let isMounted = true;
@@ -4354,6 +4357,7 @@ export default function App() {
     };
 
     loadRemoteTables();
+    fallbackBoardReloadRef.current = loadRemoteTables;
 
     const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 60000);
     const refetchOnWake = () => { if (!document.hidden && isMounted) loadRemoteTables(); };
@@ -4362,6 +4366,7 @@ export default function App() {
 
     return () => {
       isMounted = false;
+      fallbackBoardReloadRef.current = null;
       clearInterval(pollInterval);
       document.removeEventListener("visibilitychange", refetchOnWake);
       window.removeEventListener("online", refetchOnWake);
@@ -4733,6 +4738,112 @@ export default function App() {
 
     return () => { mounted = false; };
   }, [workspaceId, psResolved, sqlitePrimary]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fallback realtime safety net (Supabase channels) ────────────────────────
+  // The direct-Supabase fallback serves every account whose sync stream
+  // delivers nothing for the active workspace — the platform admin browsing a
+  // restaurant it isn't a member of, a foreign-rows tripwire refusal, or a
+  // PowerSync outage. Deleting the legacy realtime layer (PR #42) silently
+  // turned that fallback into a static snapshot: reservations/menu/wines/
+  // beverages loaded exactly once per boot and the board crawled on a 60s
+  // poll, so cross-device edits never appeared and "add reservation" looked
+  // like it did nothing (the row landed in Postgres but no other device — and
+  // after a reload not even this one — ever re-read it). These channels
+  // restore the pre-#42 live path for exactly that fallback population; when
+  // the local SQLite DB is primary the PowerSync watches own liveness and the
+  // channels stay unsubscribed.
+  const fallbackRealtime = Boolean(supabase && workspaceId && psResolved && !sqlitePrimary);
+  const wsFilter = workspaceId ? `workspace_id=eq.${workspaceId}` : undefined;
+
+  useRealtimeTable({
+    supabase,
+    channelName: `milka-service-tables-${workspaceId}`,
+    filter: wsFilter,
+    table: TABLES.SERVICE_TABLES,
+    // Refetch through the fallback loader: adoptRemoteTables folds the fresh
+    // rows in with the unsaved-local-edit protection, exactly like the poll.
+    onChange: () => { fallbackBoardReloadRef.current?.(); },
+    enabled: fallbackRealtime,
+  });
+
+  useRealtimeTable({
+    supabase,
+    channelName: `milka-reservations-${workspaceId}`,
+    filter: wsFilter,
+    table: TABLES.RESERVATIONS,
+    onChange: (payload) => {
+      if (payload.eventType === "DELETE") {
+        setReservations(prev => prev.filter(r => r.id !== payload.old?.id));
+      } else if (payload.new) {
+        setReservations(prev => {
+          const without = prev.filter(r => r.id !== payload.new.id);
+          return [...without, payload.new];
+        });
+      }
+    },
+    enabled: fallbackRealtime,
+  });
+
+  // Settings (kitchen ticket order, shared service session) — mirrors the
+  // onLiveSettings watch handler. The settings table carries many ids
+  // (inventory, configs…); only react to the ones owned here.
+  useRealtimeTable({
+    supabase,
+    channelName: `milka-settings-live-${workspaceId}`,
+    filter: wsFilter,
+    table: TABLES.SERVICE_SETTINGS,
+    onChange: (payload) => {
+      const id = payload.new?.id;
+      if (id === "kitchen_ticket_order") {
+        const ids = payload.new?.state?.ids;
+        if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
+      } else if (id === "service_date") {
+        // Another device changed the live session (or started/restarted the
+        // service). Adopt the shared session + start stamp so this device's
+        // board filter and archive dedup stay in step. The service DATE is
+        // left to the dedicated load/join paths (changing it can wipe the
+        // board).
+        const st = payload.new?.state || {};
+        if (st.session === "lunch" || st.session === "dinner") {
+          setActiveServiceSession(st.session);
+          activeServiceSessionRef.current = st.session;
+          try { localStorage.setItem("milka_service_session", st.session); } catch {}
+        }
+        if (st.startedAt) {
+          serviceStartedAtRef.current = st.startedAt;
+          try { localStorage.setItem("milka_service_started_at", st.startedAt); } catch {}
+        }
+      }
+    },
+    enabled: fallbackRealtime,
+  });
+
+  useRealtimeTable({
+    supabase,
+    channelName: `milka-beverages-${workspaceId}`,
+    filter: wsFilter,
+    table: TABLES.BEVERAGES,
+    onChange: () => { loadBeverages(); },
+    enabled: fallbackRealtime,
+  });
+
+  useRealtimeTable({
+    supabase,
+    channelName: `milka-wines-${workspaceId}`,
+    filter: wsFilter,
+    table: TABLES.WINES,
+    onChange: () => { loadWines(); },
+    enabled: fallbackRealtime,
+  });
+
+  useRealtimeTable({
+    supabase,
+    channelName: `milka-menu-courses-${workspaceId}`,
+    filter: wsFilter,
+    table: TABLES.MENU_COURSES,
+    onChange: () => { loadMenuCoursesRef.current?.(); },
+    enabled: fallbackRealtime,
+  });
 
   // ── Historical fire cadence (archive-seeded) ───────────────────────────────
   // Loaded once per session when a live mode starts: recent archives yield
