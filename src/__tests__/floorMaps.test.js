@@ -379,15 +379,17 @@ describe("map ops", () => {
 });
 
 describe("floor status (SET/DIRTY strips)", () => {
-  it("cycle goes — → DIRTY → SET → — and prunes empty buckets", () => {
+  it("tap toggles SET; a tap on auto-DIRTY clears it (MARK CLEAN); empty buckets prune", () => {
     let st = {};
-    st = cycleFloorStatus(st, "dining_a", "T3");
-    expect(floorStatusOf(st, "dining_a", "T3")).toBe("DIRTY");
     st = cycleFloorStatus(st, "dining_a", "T3");
     expect(floorStatusOf(st, "dining_a", "T3")).toBe("SET");
     st = cycleFloorStatus(st, "dining_a", "T3");
     expect(floorStatusOf(st, "dining_a", "T3")).toBeNull();
     expect(st).toEqual({});
+    // DIRTY is only ever set automatically (terrace vacate) — a tap clears it
+    st = setFloorStatus({}, "terrace_main", "T23", "DIRTY");
+    st = cycleFloorStatus(st, "terrace_main", "T23");
+    expect(floorStatusOf(st, "terrace_main", "T23")).toBeNull();
   });
 
   it("sanitize drops junk values and junk shapes; setFloorStatus guards ids", () => {

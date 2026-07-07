@@ -12,9 +12,9 @@ import {
 //   mode "view"    read-only room (kitchen floor view)
 //   mode "picker"  free tables tappable, occupied/inert tables dimmed
 //   mode "seats"   chair marks tappable for SEATS renumbering
-//   mode "service" FOH two-zone tables: body tap → onTableTap, bottom status
-//                  strip (rendered ~30% of height, hit area ≥40%) →
-//                  onStripTap cycling — → DIRTY → SET → —
+//   mode "service" FOH tables: body tap → onTableTap (the caller decides —
+//                  dining tables toggle SET, terrace opens the sheet); the
+//                  status draws as a colored border + chip under the table
 //   mode "edit"    geometry editor: drag tables (unit snap, canvas clamp,
 //                  commit on release via onTableMove), tap = select, drag a
 //                  selected table's chair marks along the outline (onSeatMove)
@@ -183,7 +183,6 @@ export default function FloorMap({
   tableState = {},
   restrictionsByLabel = {}, // { [label]: [{ pos, note }] } → amber seat dots
   onTableTap,
-  onStripTap,               // (label) — service mode status strip
   onSeatTap,                // (label, seatIndex) — seats mode
   onTableMove,              // (label, x, y) — edit mode, on release
   onSeatMove,               // (label, seatIndex, {x, y}) — edit mode, on release
@@ -394,7 +393,7 @@ export default function FloorMap({
         />
       )}
 
-      {(map.tables || []).map((t0, ti) => {
+      {(map.tables || []).map((t0) => {
         let t = seatsOverride[t0.label] ? { ...t0, seats: seatsOverride[t0.label] } : t0;
         // live drag preview (edit mode) — tracks the pointer exactly; the
         // grid snap happens once, on release, so the drag never steps.
@@ -417,7 +416,12 @@ export default function FloorMap({
         const dimmed = (mode === "picker" && !pickable) || (mode === "seats" && seatsEditLabel && !seatEditing);
 
         const fill = occupied ? tokens.green.bg : tokens.neutral[0];
-        const stroke = arriving ? tokens.ink[1]
+        // service mode: the status owns the border — SET reads as a strong
+        // green outline, DIRTY as amber; no band inside the shape (it clipped
+        // the course line and looked wrong inside circles).
+        const stroke = strip === "SET" ? tokens.green.strong
+          : strip === "DIRTY" ? tokens.signal.warn
+          : arriving ? tokens.ink[1]
           : occupied ? tokens.green.border
           : reserved ? tokens.ink[3]
           : dirty ? tokens.signal.warn
@@ -427,12 +431,6 @@ export default function FloorMap({
         const cx = t.x + t.w / 2;
         const restr = restrictionsByLabel[t.label] || [];
         const seatPts = seatDisplayPoints(t);
-
-        // service-mode strip geometry: rendered ~30% of table height, the
-        // invisible hit rect ≥40% so a thumb can't miss it on a phone.
-        const stripH = Math.max(t.h * 0.3, 2.2);
-        const hitH = Math.max(t.h * 0.4, 4);
-        const clipId = `fm-strip-${ti}`;
 
         return (
           <g
@@ -451,7 +449,8 @@ export default function FloorMap({
             }}
           >
             {/* DIRTY (view modes): amber band along the top edge */}
-            <TableShape t={t} fill={fill} stroke={stroke} strokeWidth={blueprint ? 0.45 : 0.35}
+            <TableShape t={t} fill={fill} stroke={stroke}
+              strokeWidth={strip ? 0.7 : blueprint ? 0.45 : 0.35}
               dash={arriving || reserved ? "1.4 1" : undefined} />
             {dirty && !strip && (
               <rect x={t.x} y={t.y} width={t.w} height={1.6} fill={tokens.signal.warn} />
@@ -507,35 +506,16 @@ export default function FloorMap({
               </g>
             )}
 
-            {/* service-mode status strip — the second tap zone */}
-            {mode === "service" && (
-              <g>
-                {t.shape === "round" && (
-                  <clipPath id={clipId}>
-                    <circle cx={cx} cy={t.y + t.h / 2} r={Math.min(t.w, t.h) / 2 - 0.2} />
-                  </clipPath>
-                )}
-                <g clipPath={t.shape === "round" ? `url(#${clipId})` : undefined}>
-                  <rect
-                    className={strip === "DIRTY" ? "fm-strip-pulse" : undefined}
-                    x={t.x} y={t.y + t.h - stripH} width={t.w} height={stripH}
-                    fill={strip === "SET" ? tokens.green.strong : strip === "DIRTY" ? tokens.signal.warn : tokens.ink[5]} />
-                  <text x={cx} y={t.y + t.h - stripH / 2 + 0.8} textAnchor="middle" fontFamily={FONT}
-                    fontSize={1.9} fontWeight={700} letterSpacing={0.3}
-                    fill={strip ? tokens.neutral[0] : tokens.ink[3]}>
-                    {strip || "···"}
-                  </text>
-                </g>
-                <rect
-                  x={t.x} y={t.y + t.h - hitH} width={t.w} height={hitH}
-                  fill="transparent"
-                  style={{ cursor: "pointer" }}
-                  data-strip={t.label}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onStripTap && onStripTap(t.label);
-                  }}
-                />
+            {/* status chip below the table (badge slot wins when both exist) —
+                never inside the shape, so nothing clips or crowds the text */}
+            {strip && !st.badge && (
+              <g className={strip === "DIRTY" ? "fm-strip-pulse" : undefined} pointerEvents="none">
+                <rect x={cx - 5} y={t.y + t.h + 0.8} width={10} height={3.2}
+                  fill={strip === "SET" ? tokens.green.strong : tokens.signal.warn} />
+                <text x={cx} y={t.y + t.h + 3.1} textAnchor="middle" fontFamily={FONT} fontSize={2}
+                  fontWeight={700} letterSpacing={0.3} fill={tokens.neutral[0]}>
+                  {strip}
+                </text>
               </g>
             )}
 

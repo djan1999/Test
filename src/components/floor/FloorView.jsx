@@ -15,12 +15,13 @@ const FONT = tokens.font;
 // layout + terrace), a ticker strip, and the shared FloorMap renderer in
 // `service` mode.
 //
-// Tap model (per Djan): a DINING table is one big status button — tapping it
-// (body or strip) cycles — → DIRTY → SET → —; the board stays the place for
-// guest details, no quick-access sheet on the floor. Exceptions that DO open
-// a sheet, because they carry an action the tap can't mean: an ARRIVING
-// dining table (MARK SEATED) and every terrace table (the old TerracePanel's
-// assign / MOVE / CLEAR leg).
+// Tap model (per Djan): a DINING table is one big SET toggle — DIRTY is
+// never set by hand, it only appears automatically when a terrace party
+// vacates. The board stays the place for guest details; no quick-access
+// sheet on the floor. Exceptions that DO open a sheet, because they carry
+// an action the tap can't mean: an ARRIVING dining table (MARK SEATED) and
+// every terrace table (assign / MOVE / CHANGE / CLEAR, plus the party's
+// waters by seat position + pairings — the runner's crib sheet).
 //
 // STRICTLY service — geometry editing is an admin concern and lives in the
 // Floor & Terrace panel (FloorEditor), not here.
@@ -186,22 +187,52 @@ export default function FloorView({
   const sheetBody = () => {
     if (map.kind === "terrace") {
       if (sheetParty) {
+        // the runner's crib sheet: waters by seat position + pairings, from
+        // the party's board table (no reservation name — per Djan)
+        const bt = tables.find((x) => x.id === Number(sheetParty.table_id)) || null;
+        const seats = (bt?.seats || []).filter((s) => (s.water && s.water !== "—") || (s.pairing && s.pairing !== "—"));
         return (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button style={actionBtn(true)} onClick={() => { onMove(sheetParty); setSheetLabel(null); }}>
-              MOVE TO {diningLabelOf(sheetParty)} →
-            </button>
-            <button style={actionBtn(false)} onClick={() => { setMovingParty(sheetParty); setSheetLabel(null); }}>
-              CHANGE TABLE
-            </button>
-            <button style={actionBtn(false)} onClick={() => { onClear(sheetParty); setSheetLabel(null); }}>
-              CLEAR TABLE
-            </button>
+          <div>
+            {seats.length > 0 ? (
+              <div style={{ marginBottom: 10 }}>
+                {seats.map((s) => (
+                  <div key={s.id} style={{ display: "flex", gap: 12, alignItems: "baseline", padding: "4px 0", borderBottom: `1px solid ${tokens.ink[5]}` }}>
+                    <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: tokens.ink[0], minWidth: 28 }}>P{s.id}</span>
+                    <span style={{ fontFamily: FONT, fontSize: 10, color: (s.water && s.water !== "—") ? tokens.ink[1] : tokens.ink[4], textTransform: "uppercase", minWidth: 48 }}>
+                      {s.water || "—"}
+                    </span>
+                    <span style={{ fontFamily: FONT, fontSize: 10, color: (s.pairing && s.pairing !== "—") ? tokens.ink[1] : tokens.ink[4], textTransform: "uppercase" }}>
+                      {s.pairing || "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginBottom: 10 }}>no waters / pairings yet</div>
+            )}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button style={actionBtn(true)} onClick={() => { onMove(sheetParty); setSheetLabel(null); }}>
+                MOVE TO {diningLabelOf(sheetParty)} →
+              </button>
+              <button style={actionBtn(false)} onClick={() => { setMovingParty(sheetParty); setSheetLabel(null); }}>
+                CHANGE TABLE
+              </button>
+              <button style={actionBtn(false)} onClick={() => { onClear(sheetParty); setSheetLabel(null); }}>
+                CLEAR TABLE
+              </button>
+            </div>
           </div>
         );
       }
       return (
         <div>
+          {floorStatusOf(floorStatus, map.id, sheetLabel) === "DIRTY" && (
+            <button
+              style={{ ...actionBtn(false), borderColor: tokens.signal.warn, color: tokens.signal.warn, marginBottom: 8 }}
+              onClick={() => { onCycleStatus(map.id, sheetLabel); setSheetLabel(null); }}>
+              MARK CLEAN
+            </button>
+          )}
           <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.12em", color: tokens.ink[3], textTransform: "uppercase", margin: "2px 0 6px" }}>
             ASSIGN PARTY
           </div>
@@ -271,7 +302,7 @@ export default function FloorView({
             SEND SET → KITCHEN ({sendableIds.length})
           </button>
         ) : (
-          <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → DIRTY / SET · TERRACE → SHEET</span>
+          <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → SET / UNSET · TERRACE → SHEET</span>
         )}
       </div>
 
@@ -326,7 +357,6 @@ export default function FloorView({
           if (map.kind === "terrace" || tableState[t.label]?.status === "arriving") setSheetLabel(t.label);
           else onCycleStatus(map.id, t.label);
         }}
-        onStripTap={(label) => onCycleStatus(map.id, label)}
       />
 
       {/* table sheet — fixed bottom, thumb-first */}
@@ -346,7 +376,7 @@ export default function FloorView({
               </span>
               <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase" }}>
                 {map.kind === "terrace"
-                  ? (sheetParty ? `${sheetParty.data?.resName || "—"} ×${sheetParty.data?.guests || "?"}${isArmed(sheetParty.data) ? " · LAST BITE ✓" : ""}` : "free")
+                  ? (sheetParty ? `×${sheetParty.data?.guests || "?"}${isArmed(sheetParty.data) ? " · LAST BITE ✓" : ""}` : "free")
                   : (tableState[sheetLabel]?.status || "free")}
               </span>
               <span style={{ flex: 1 }} />
