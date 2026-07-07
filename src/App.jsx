@@ -5230,7 +5230,6 @@ export default function App() {
               onClear={clearTerracePartyTable}
               onMove={moveTerracePartyIn}
               onMarkSeated={markTerracePartySeated}
-              editable
               isMobile={appIsMobile}
               renderQuickAccess={(bt) => (
                 <DisplayBoardCard

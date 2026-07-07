@@ -1,11 +1,9 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import FloorMap from "./FloorMap.jsx";
-import FloorInspector from "./FloorInspector.jsx";
 import {
   getActiveDiningMap, getTerraceMap, terraceOccupancy, boardIdsOf,
-  resolveReservationTable, floorStatusOf, mapTicker, moveTable, moveSeat,
-  findMapTable, assignSeatNumbers, GEOMETRY_VERSION,
+  resolveReservationTable, floorStatusOf, mapTicker,
 } from "../../utils/floorMaps.js";
 import { visitStateOf, isArmed } from "../../utils/terraceFlow.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
@@ -23,10 +21,8 @@ const FONT = tokens.font;
 // App passes `renderQuickAccess(boardTable)` rendering its DisplayBoardCard,
 // so the sheet is the board's sheet, not a fork.
 //
-// EDIT drops the same canvas into FloorMap's edit mode (drag, tap-select);
-// the inspector panel handles everything else. Gated by `editable` — today
-// that is the workspace gate every admin entry point shares (no per-user
-// roles exist); if a role gate lands, this one prop is the mount point.
+// STRICTLY service — geometry editing is an admin concern and lives in the
+// Floor & Terrace panel (FloorEditor), not here.
 
 const btn = (on) => ({
   fontFamily: FONT, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase",
@@ -48,26 +44,19 @@ const actionBtn = (primary) => ({
 export default function FloorView({
   floorMaps, floorStatus, reservations = [], tables = [],
   menuCourses = [], profiles = [], assignments = {},
-  onCycleStatus, onUpdateFloorMaps,
+  onCycleStatus,
   onAssign, onClear, onMove, onMarkSeated,
   renderQuickAccess,
-  editable = false,
   isMobile,
 }) {
   const diningMap = getActiveDiningMap(floorMaps);
   const terraceMap = getTerraceMap(floorMaps);
-  const serviceTabs = [diningMap, terraceMap].filter(Boolean);
+  const tabs = [diningMap, terraceMap].filter(Boolean);
 
   const [tabId, setTabId] = useState(null);
   const [sheetLabel, setSheetLabel] = useState(null);
-  const [edit, setEdit] = useState(false);
-  const [selLabel, setSelLabel] = useState(null);
-  const [renumber, setRenumber] = useState(null); // { label, seq } — SEATS tap sequence
   const [toast, setToast] = useState(null);
 
-  // EDIT sees every map (the inactive layout, LAYOUT C drafts); service sees
-  // only what tonight's staff acts on.
-  const tabs = edit ? floorMaps.maps : serviceTabs;
   const map = tabs.find((m) => m.id === tabId) || tabs[0];
   if (!map) return null;
 
@@ -75,37 +64,7 @@ export default function FloorView({
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
   };
-  const switchTab = (id) => { setTabId(id); setSheetLabel(null); setSelLabel(null); setRenumber(null); };
-
-  // SEATS renumber flow — the exact FloorPanel behavior: tap chairs in
-  // sequence, first-chair re-tap restarts, a completed sequence commits the
-  // numbering (dropping CONFIRM tags) through the same pure helper.
-  const onRenumber = (label) =>
-    setRenumber((prev) => (prev?.label === label ? null : { label, seq: [] }));
-
-  const onSeatTap = (tableLabel, seatIdx) => {
-    if (!renumber || tableLabel !== renumber.label) return;
-    const table = findMapTable(map, tableLabel);
-    const seq = seatIdx === renumber.seq[0] ? [seatIdx] : [...renumber.seq, seatIdx];
-    const { seats, complete } = assignSeatNumbers(table.seats, seq);
-    if (!complete) { setRenumber({ label: tableLabel, seq }); return; }
-    onUpdateFloorMaps({
-      ...floorMaps,
-      maps: floorMaps.maps.map((m) => m.id !== map.id ? m : {
-        ...m,
-        tables: m.tables.map((t) => (t.label === tableLabel ? { ...t, seats } : t)),
-      }),
-    });
-    setRenumber(null);
-    flash("Seats renumbered");
-  };
-
-  const renumberPreview = (() => {
-    if (!renumber?.seq.length) return {};
-    const table = findMapTable(map, renumber.label);
-    if (!table) return {};
-    return { [renumber.label]: assignSeatNumbers(table.seats, renumber.seq).seats };
-  })();
+  const switchTab = (id) => { setTabId(id); setSheetLabel(null); };
 
   const progressOf = (boardTable) => {
     if (!boardTable) return "";
@@ -271,7 +230,7 @@ export default function FloorView({
 
   return (
     <div style={{ margin: isMobile ? "0 12px 40px" : "0 24px 48px" }}>
-      {/* map tabs + EDIT */}
+      {/* map tabs */}
       <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0, marginBottom: 8 }}>
         {tabs.map((m) => (
           <button key={m.id} style={btn(m.id === map.id)} onClick={() => switchTab(m.id)}>
@@ -282,48 +241,23 @@ export default function FloorView({
         {toast && (
           <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.text, letterSpacing: "0.08em", fontWeight: 700, marginRight: 10 }}>{toast}</span>
         )}
-        {editable && (
-          <button style={btn(edit)} onClick={() => { setEdit(!edit); setSelLabel(null); setSheetLabel(null); setRenumber(null); setTabId(null); }}>
-            {edit ? "DONE ✓" : "EDIT"}
-          </button>
-        )}
       </div>
 
-      {/* the geometry-trap unfreeze: stored blob predates the current seeds */}
-      {edit && (floorMaps.geometryVersion || 1) < GEOMETRY_VERSION && (
-        <div style={{
-          fontFamily: FONT, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase",
-          border: `1px solid ${tokens.signal.warn}`, color: tokens.signal.warn,
-          padding: "8px 12px", marginBottom: 8, fontWeight: 700,
-        }}>
-          NEW DEFAULT GEOMETRY AVAILABLE — RESET MAP
-        </div>
-      )}
-
-      {edit && renumber && (
-        <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], letterSpacing: "0.08em", margin: "0 0 6px" }}>
-          tap {renumber.label}'s chairs in service order — {renumber.seq.length}/{findMapTable(map, renumber.label)?.seats?.length || 0} numbered
-          (tap the first chair again to restart)
-        </div>
-      )}
-
       {/* ticker — the visible map's live counts */}
-      {!edit && (
-        <div style={{
-          display: "flex", flexWrap: "wrap", gap: "2px 14px", alignItems: "baseline",
-          borderTop: `1px solid ${tokens.ink[4]}`, borderBottom: `1px solid ${tokens.ink[4]}`,
-          padding: "6px 2px", marginBottom: 8,
-          fontFamily: FONT, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase",
-        }}>
-          <span style={{ color: tokens.ink[0], fontWeight: 700 }}>COVERS {ticker.covers}</span>
-          <span style={{ color: tokens.ink[2] }}>SEATED {ticker.seated}</span>
-          <span style={{ color: tokens.ink[2] }}>RES {ticker.reserved}</span>
-          <span style={{ color: tokens.green.text }}>SET {ticker.set}</span>
-          <span style={{ color: tokens.signal.warn }}>DIRTY {ticker.dirty}</span>
-          <span style={{ flex: 1 }} />
-          <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → SHEET · TAP STRIP → DIRTY / SET</span>
-        </div>
-      )}
+      <div style={{
+        display: "flex", flexWrap: "wrap", gap: "2px 14px", alignItems: "baseline",
+        borderTop: `1px solid ${tokens.ink[4]}`, borderBottom: `1px solid ${tokens.ink[4]}`,
+        padding: "6px 2px", marginBottom: 8,
+        fontFamily: FONT, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase",
+      }}>
+        <span style={{ color: tokens.ink[0], fontWeight: 700 }}>COVERS {ticker.covers}</span>
+        <span style={{ color: tokens.ink[2] }}>SEATED {ticker.seated}</span>
+        <span style={{ color: tokens.ink[2] }}>RES {ticker.reserved}</span>
+        <span style={{ color: tokens.green.text }}>SET {ticker.set}</span>
+        <span style={{ color: tokens.signal.warn }}>DIRTY {ticker.dirty}</span>
+        <span style={{ flex: 1 }} />
+        <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → SHEET · TAP STRIP → DIRTY / SET</span>
+      </div>
 
       {/* stranded armed parties — no table on any map, action must stay reachable */}
       {strandedArmed.map((r) => (
@@ -342,40 +276,16 @@ export default function FloorView({
 
       <FloorMap
         map={map}
-        mode={edit ? (renumber ? "seats" : "edit") : "service"}
-        tableState={edit ? {} : tableState}
-        restrictionsByLabel={edit ? {} : restrictionsByLabel}
+        mode="service"
+        tableState={tableState}
+        restrictionsByLabel={restrictionsByLabel}
         height={isMobile ? 380 : 480}
-        selectedLabel={edit ? selLabel : null}
-        seatsEditLabel={renumber?.label || null}
-        seatsOverride={renumberPreview}
-        onSeatTap={onSeatTap}
-        onTableTap={(t) => {
-          if (edit) setSelLabel((prev) => (prev === t.label ? null : t.label));
-          else setSheetLabel(t.label);
-        }}
-        onStripTap={edit ? undefined : (label) => onCycleStatus(map.id, label)}
-        onTableMove={edit ? (label, x, y) => onUpdateFloorMaps(moveTable(floorMaps, map.id, label, x, y)) : undefined}
-        onSeatMove={edit ? (label, i, p) => onUpdateFloorMaps(moveSeat(floorMaps, map.id, label, i, p)) : undefined}
+        onTableTap={(t) => setSheetLabel(t.label)}
+        onStripTap={(label) => onCycleStatus(map.id, label)}
       />
 
-      {/* geometry inspector (EDIT) */}
-      {edit && (
-        <FloorInspector
-          floorMaps={floorMaps}
-          mapId={map.id}
-          selLabel={selLabel}
-          reservations={reservations}
-          onUpdate={onUpdateFloorMaps}
-          onSelect={setSelLabel}
-          onSwitchMap={switchTab}
-          onRenumber={onRenumber}
-          renumbering={!!renumber}
-        />
-      )}
-
       {/* table sheet — fixed bottom, thumb-first */}
-      {!edit && sheetTable && (
+      {sheetTable && (
         <>
           <div onClick={() => setSheetLabel(null)}
             style={{ position: "fixed", inset: 0, background: tokens.surface.overlay, zIndex: 40 }} />
