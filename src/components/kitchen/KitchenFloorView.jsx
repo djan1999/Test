@@ -11,8 +11,9 @@ const FONT = tokens.font;
 
 // Kitchen floor view — STRICTLY read-only. The kitchen sees the room the way
 // FOH sees it: terrace (default tab) + the active dining layout, party name,
-// pax, course progress C4/12, LAST BITE ✓ arming, and numbered seat dots with
-// restrictions filled amber. No status strips, no quick access, no drag; the
+// pax, course progress C4/12, LAST BITE ✓ arming, chair marks with
+// restrictions filled amber, and the FOH SET/DIRTY strips (service mode with
+// no strip handler — the kitchen watches hands-calls, never sets them). The
 // data is the same App state the kitchen board renders from (PowerSync sync
 // stream / realtime safety net) — no new subscription.
 export default function KitchenFloorView({
@@ -48,6 +49,7 @@ export default function KitchenFloorView({
     const occ = terraceOccupancy(reservations);
     for (const t of map.tables) {
       const r = occ[t.label];
+      const strip = floorStatusOf(floorStatus, map.id, t.label);
       if (r) {
         const boardTable = tables.find((bt) => bt.id === Number(r.table_id)) || null;
         tableState[t.label] = {
@@ -56,12 +58,13 @@ export default function KitchenFloorView({
           pax: r.data?.guests || undefined,
           sub: progressOf(boardTable),
           badge: isArmed(r.data) ? { text: "LAST BITE ✓" } : undefined,
+          strip,
         };
         const restr = (r.data?.restrictions || []).filter((x) => x && x.note);
         if (restr.length) restrictionsByLabel[t.label] = restr;
         popoverData[t.label] = { name: r.data?.resName || "—", rows: restrRows(r.data?.restrictions) };
       } else {
-        tableState[t.label] = { status: "free", dirty: floorStatusOf(floorStatus, map.id, t.label) === "DIRTY" };
+        tableState[t.label] = { status: "free", strip };
       }
     }
   } else {
@@ -75,12 +78,14 @@ export default function KitchenFloorView({
       const boardId = boardIdsOf(t)[0];
       const bt = tables.find((x) => x.id === boardId) || null;
       const arriving = arrivingByTable[boardId];
+      const strip = floorStatusOf(floorStatus, map.id, t.label);
       if (bt?.active) {
         tableState[t.label] = {
           status: "occupied",
           name: bt.resName || "—",
           pax: bt.guests || undefined,
           sub: progressOf(bt),
+          strip,
         };
       } else if (arriving) {
         tableState[t.label] = {
@@ -88,9 +93,10 @@ export default function KitchenFloorView({
           name: arriving.data?.resName || "—",
           pax: arriving.data?.guests || undefined,
           badge: { text: "ARRIVING · KV" },
+          strip,
         };
       } else {
-        tableState[t.label] = { status: "free" };
+        tableState[t.label] = { status: "free", strip };
       }
       const restr = (bt?.restrictions || []).filter((x) => x && x.note);
       if (restr.length) restrictionsByLabel[t.label] = restr;
@@ -121,9 +127,11 @@ export default function KitchenFloorView({
         })}
       </div>
 
+      {/* service mode with no onStripTap: the SET/DIRTY strips render but
+          stay inert — the kitchen reads hands-calls, never writes them */}
       <FloorMap
         map={map}
-        mode="view"
+        mode="service"
         tableState={tableState}
         restrictionsByLabel={restrictionsByLabel}
         height={isMobile ? 300 : 440}

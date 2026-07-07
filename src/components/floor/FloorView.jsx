@@ -13,13 +13,14 @@ const FONT = tokens.font;
 // FloorView — the FOH floor surface (serviceView "floor"). One spatial
 // projection of the same App state the board renders: map tabs (active dining
 // layout + terrace), a ticker strip, and the shared FloorMap renderer in
-// `service` mode — body tap opens the table sheet, strip tap cycles
-// — → DIRTY → SET → —. The old TerracePanel's actions (assign / MOVE /
-// MARK SEATED / CLEAR) live in the terrace tables' sheets here.
+// `service` mode.
 //
-// Dining body taps open THE SAME quick access the board card expands into:
-// App passes `renderQuickAccess(boardTable)` rendering its DisplayBoardCard,
-// so the sheet is the board's sheet, not a fork.
+// Tap model (per Djan): a DINING table is one big status button — tapping it
+// (body or strip) cycles — → DIRTY → SET → —; the board stays the place for
+// guest details, no quick-access sheet on the floor. Exceptions that DO open
+// a sheet, because they carry an action the tap can't mean: an ARRIVING
+// dining table (MARK SEATED) and every terrace table (the old TerracePanel's
+// assign / MOVE / CLEAR leg).
 //
 // STRICTLY service — geometry editing is an admin concern and lives in the
 // Floor & Terrace panel (FloorEditor), not here.
@@ -46,7 +47,6 @@ export default function FloorView({
   menuCourses = [], profiles = [], assignments = {},
   onCycleStatus,
   onAssign, onClear, onMove, onMarkSeated,
-  renderQuickAccess,
   isMobile,
 }) {
   const diningMap = getActiveDiningMap(floorMaps);
@@ -216,16 +216,7 @@ export default function FloorView({
         </button>
       );
     }
-    if (sheetBoard && (sheetBoard.active || sheetBoard.resName || sheetBoard.resTime)) {
-      // THE board sheet — the same DisplayBoardCard quick access the board
-      // card expands into, rendered by App.
-      return renderQuickAccess ? renderQuickAccess(sheetBoard) : null;
-    }
-    return (
-      <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], letterSpacing: "0.1em", textTransform: "uppercase" }}>
-        free · {(sheetTable?.seats || []).length} seats
-      </div>
-    );
+    return null; // dining taps cycle status instead — no sheet
   };
 
   return (
@@ -256,7 +247,7 @@ export default function FloorView({
         <span style={{ color: tokens.green.text }}>SET {ticker.set}</span>
         <span style={{ color: tokens.signal.warn }}>DIRTY {ticker.dirty}</span>
         <span style={{ flex: 1 }} />
-        <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → SHEET · TAP STRIP → DIRTY / SET</span>
+        <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → DIRTY / SET · TERRACE → SHEET</span>
       </div>
 
       {/* stranded armed parties — no table on any map, action must stay reachable */}
@@ -280,7 +271,12 @@ export default function FloorView({
         tableState={tableState}
         restrictionsByLabel={restrictionsByLabel}
         height={isMobile ? 380 : 480}
-        onTableTap={(t) => setSheetLabel(t.label)}
+        onTableTap={(t) => {
+          // terrace tables and ARRIVING dining tables carry actions → sheet;
+          // every other dining table is one big DIRTY/SET button.
+          if (map.kind === "terrace" || tableState[t.label]?.status === "arriving") setSheetLabel(t.label);
+          else onCycleStatus(map.id, t.label);
+        }}
         onStripTap={(label) => onCycleStatus(map.id, label)}
       />
 

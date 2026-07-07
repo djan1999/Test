@@ -35,7 +35,6 @@ const setup = (overrides = {}) => {
     onClear: vi.fn(),
     onMove: vi.fn(),
     onMarkSeated: vi.fn(),
-    renderQuickAccess: vi.fn((bt) => <div>QUICK-ACCESS-{bt.id}</div>),
   };
   const utils = render(
     <FloorView
@@ -70,14 +69,13 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).toContain("ARRIVING · KV");
   });
 
-  it("strip tap cycles status for the visible map; body tap opens the board's quick access", () => {
+  it("a dining table is one big status button: strip tap AND body tap both cycle", () => {
     const { container, handlers } = setup();
     fireEvent.click(container.querySelector('[data-strip="T6"]'));
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T6");
-    fireEvent.click(findTable(container, "T1"));
-    expect(handlers.renderQuickAccess).toHaveBeenCalled();
-    expect(handlers.renderQuickAccess.mock.calls[0][0].id).toBe(1);
-    expect(container.textContent).toContain("QUICK-ACCESS-1");
+    fireEvent.click(findTable(container, "T1")); // occupied dining body — no sheet, cycles
+    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T1");
+    expect(handlers.onCycleStatus).toHaveBeenCalledTimes(2);
   });
 
   it("an arriving party's table sheet carries MARK SEATED", () => {

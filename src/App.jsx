@@ -5213,8 +5213,8 @@ export default function App() {
 
           {serviceView === "floor" ? (
             /* FLOOR view — the spatial projection of the same board state.
-               Two-zone tables: body tap → the party's sheet (the board's
-               quick-access card / terrace actions), strip tap → DIRTY/SET.
+               A dining table is one big DIRTY/SET button (tap to cycle);
+               terrace tables and ARRIVING tables open their action sheet.
                The old TerracePanel's whole terrace leg lives in here. */
             <FloorView
               floorMaps={floorMapsState}
@@ -5231,27 +5231,6 @@ export default function App() {
               onMove={moveTerracePartyIn}
               onMarkSeated={markTerracePartySeated}
               isMobile={appIsMobile}
-              renderQuickAccess={(bt) => (
-                <DisplayBoardCard
-                  t={bt}
-                  quickMode
-                  upd={upd}
-                  updSeat={updSeat}
-                  onCardClick={() => {}}
-                  onOpenDetail={id => setSel(id)}
-                  onSeat={seatTable}
-                  onUnseat={unseatTable}
-                  onMarkSeated={markSeatedOnTable}
-                  onAssignTerrace={requestTerraceAssign}
-                  optionalExtras={dishes}
-                  optionalPairings={pairings}
-                  aperitifOptions={serviceAperitifOptions}
-                  wines={wines}
-                  cocktails={cocktails}
-                  spirits={spirits}
-                  beers={beers}
-                />
-              )}
             />
           ) : serviceView === "sheet" ? (
             /* SHEET view — single-table operational sheet (table index +

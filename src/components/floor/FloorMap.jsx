@@ -300,7 +300,11 @@ export default function FloorMap({
               </g>
             )}
 
-            {/* seat dots — chair marks numbered per the house diagrams */}
+            {/* chair marks. Two registers: the editing contexts (seats
+                renumber, edit mode) keep numbered dots — the number IS the
+                thing being edited — while the presentation modes (view,
+                picker, service) draw the mockup's chair bars along the edge,
+                numbers hidden except on restricted seats (amber + code). */}
             {seatPts.map((p, i) => {
               const seatRestr = restr.filter((r) => Number(r.pos) === Number(p.no) && p.no != null);
               const hasRestr = seatRestr.length > 0;
@@ -308,6 +312,8 @@ export default function FloorMap({
               const sx = draggingSeat ? seatDrag.x : p.x + p.out.x * 2.4;
               const sy = draggingSeat ? seatDrag.y : p.y + p.out.y * 2.4;
               const seatDraggable = editing && selectedLabel === t.label;
+              const numbered = mode === "seats" || editing;
+              const deg = Math.atan2(p.out.y, p.out.x) * 180 / Math.PI;
               return (
                 <g key={i}
                   style={{ cursor: seatEditing || seatDraggable ? "pointer" : "default" }}
@@ -317,14 +323,25 @@ export default function FloorMap({
                     e.stopPropagation();
                     onSeatTap && onSeatTap(t.label, i);
                   }}>
-                  <circle cx={sx} cy={sy} r={1.7}
-                    fill={hasRestr ? tokens.signal.warn : tokens.neutral[0]}
-                    stroke={hasRestr ? tokens.signal.warn : seatEditing || seatDraggable ? tokens.ink[1] : tokens.ink[3]}
-                    strokeWidth={0.3} />
-                  <text x={sx} y={sy + 0.75} textAnchor="middle" fontFamily={FONT} fontSize={2}
-                    fill={hasRestr ? tokens.neutral[0] : tokens.ink[1]} fontWeight={700}>
-                    {p.no == null ? "·" : `${p.no}${p.confirm ? "?" : ""}`}
-                  </text>
+                  {numbered ? (
+                    <>
+                      <circle cx={sx} cy={sy} r={1.7}
+                        fill={hasRestr ? tokens.signal.warn : tokens.neutral[0]}
+                        stroke={hasRestr ? tokens.signal.warn : seatEditing || seatDraggable ? tokens.ink[1] : tokens.ink[3]}
+                        strokeWidth={0.3} />
+                      <text x={sx} y={sy + 0.75} textAnchor="middle" fontFamily={FONT} fontSize={2}
+                        fill={hasRestr ? tokens.neutral[0] : tokens.ink[1]} fontWeight={700}>
+                        {p.no == null ? "·" : `${p.no}${p.confirm ? "?" : ""}`}
+                      </text>
+                    </>
+                  ) : (
+                    <g transform={`translate(${sx},${sy}) rotate(${deg})`}>
+                      <rect x={-0.55} y={-1.7} width={1.1} height={3.4}
+                        fill={hasRestr ? tokens.signal.warn : tokens.ink[5]}
+                        stroke={hasRestr ? tokens.signal.warn : tokens.ink[4]}
+                        strokeWidth={0.25} />
+                    </g>
+                  )}
                   {hasRestr && (
                     <text x={sx + p.out.x * 3.2} y={sy + p.out.y * 3.2 + 0.7}
                       textAnchor="middle" fontFamily={FONT} fontSize={1.8}
