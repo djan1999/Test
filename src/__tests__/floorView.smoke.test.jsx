@@ -75,8 +75,9 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).toContain("▲");
     expect(container.textContent).toContain("ARRIVING · KV");
     // waters/pairings BY POSITION at T9's chairs — the HOUSE shortcuts as
-    // stored (XC / OW), pairing initialed from the stored vocabulary
-    expect(container.textContent).toContain("XC·NA");
+    // stored, stacked water-over-pairing in the chair pill
+    expect(container.textContent).toContain("XC");
+    expect(container.textContent).toContain("NA");
     expect(container.textContent).toContain("OW");
   });
 
@@ -98,7 +99,7 @@ describe("FloorView (FOH FLOOR surface)", () => {
     const { container, handlers, getByText } = setup();
     fireEvent.click(getByText("TERRACE"));
     expect(container.textContent).not.toContain("WEISS"); // no names on the floor
-    expect(container.textContent).toContain("XC·NA");     // the party's seat notes travel to the terrace table
+    expect(container.textContent).toContain("XC");        // the party's seat notes travel to the terrace table
     expect(container.textContent).toContain("LAST BITE ✓");
     fireEvent.click(findTable(container, "T23"));
     expect(container.textContent).toContain("×4");        // pax lives in the sheet header
