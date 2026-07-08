@@ -1425,8 +1425,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                 }}
               >MARK SEATED</button>
             )}
-            {/* arrival flow: a still-booked party can open the terrace mini-map */}
-            {!isSeated && !visit && onAssignTerrace && (
+            {/* arrival flow: any party WITHOUT a terrace leg can open the
+                terrace mini-map — seating the board table first (to start
+                courses) must not lock the party out of a terrace table */}
+            {!visit && onAssignTerrace && (
               <button
                 onClick={e => { e.stopPropagation(); onAssignTerrace(t.id); }}
                 title="Seat this party on the terrace for opening snacks"

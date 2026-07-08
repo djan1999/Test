@@ -213,8 +213,11 @@ export default function FloorMap({
   seatCodes = true,         // restriction code text beside restricted chairs
                             // (kitchen needs it; the FOH floor keeps just the
                             // amber chair + the label's ▲)
-  seatNotesByLabel = {},    // { [label]: { [seatNo]: "SPK·W" } } — per-seat
+  seatNotesByLabel = {},    // { [label]: { [seatNo]: "XC·W" } } — per-seat
                             // beverage annotations at the chair positions
+  showPartyLines = true,    // false (FOH floor): tables render label + ▲
+                            // only — no ×pax, no course; the chairs carry
+                            // the per-seat info
   height = 340,
 }) {
   const svgRef = useRef(null);
@@ -500,18 +503,20 @@ export default function FloorMap({
 
             {/* label + party — the ▲ rides the label line so it stays inside
                 round shapes instead of floating off the corner */}
-            <text x={cx} y={t.y + (occupied || arriving || reserved ? 3.4 : t.h / 2 + 1)} textAnchor="middle"
+            <text x={cx}
+              y={t.y + ((occupied || arriving || reserved) && showPartyLines ? 3.4 : t.h / 2 + 1)}
+              textAnchor="middle"
               fontFamily={FONT} fontSize={2.8} fontWeight={700}
               fill={arriving ? tokens.ink[0] : occupied ? tokens.green.text : tokens.ink[2]}>
               {t.label}
               {st.allergy && <tspan fill={tokens.signal.alert}> ▲</tspan>}
             </text>
-            {(occupied || arriving || reserved) && nameLine.text && (
+            {showPartyLines && (occupied || arriving || reserved) && nameLine.text && (
               <text x={cx} y={t.y + 6.2} textAnchor="middle" fontFamily={FONT} fontSize={nameLine.font} fill={tokens.ink[1]}>
                 {nameLine.text}
               </text>
             )}
-            {(occupied || arriving || reserved) && subLine.text && (
+            {showPartyLines && (occupied || arriving || reserved) && subLine.text && (
               <text x={cx} y={t.y + 8.6} textAnchor="middle" fontFamily={FONT} fontSize={subLine.font} fill={tokens.ink[2]}>
                 {subLine.text}
               </text>
@@ -595,9 +600,12 @@ export default function FloorMap({
                       {restrictionCode(seatRestr[0].note)}
                     </text>
                   )}
-                  {/* per-seat beverage note — waters/pairings BY POSITION */}
+                  {/* per-seat beverage note — waters/pairings BY POSITION.
+                      Placed BESIDE the chair along the table edge (tangent),
+                      never further out, so it can't collide with the status
+                      chip/badge row below the table. */}
                   {note && !(hasRestr && seatCodes) && (
-                    <text x={sx + p.out.x * 3.4} y={sy + p.out.y * 3.4 + 0.6}
+                    <text x={sx + -p.out.y * 3.6} y={sy + p.out.x * 3.6 + 0.55}
                       textAnchor="middle" fontFamily={FONT} fontSize={1.6}
                       fill={tokens.ink[2]} fontWeight={700}>
                       {note}

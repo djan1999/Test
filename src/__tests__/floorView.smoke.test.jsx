@@ -67,9 +67,9 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).toContain("RES 2");
     expect(container.textContent).toContain("SET 1");
     expect(container.textContent).toContain("DIRTY 1");
-    // occupied tables show ×pax but NO reservation name (per Djan); the
-    // allergy ▲ and ARRIVING badge stay
-    expect(container.textContent).toContain("×2");
+    // FOH tables are label-only (per Djan): no names, no ×pax, no course on
+    // the shape — the ▲ and the ARRIVING badge stay
+    expect(container.textContent).not.toContain("×2");
     expect(container.textContent).not.toContain("NOVAK");
     expect(container.textContent).not.toContain("WEISS");
     expect(container.textContent).toContain("▲");
@@ -97,11 +97,11 @@ describe("FloorView (FOH FLOOR surface)", () => {
   it("terrace tab: occupied sheet shows waters by position (no name) + MOVE; free table assigns", () => {
     const { container, handlers, getByText } = setup();
     fireEvent.click(getByText("TERRACE"));
-    expect(container.textContent).toContain("×4");
     expect(container.textContent).not.toContain("WEISS"); // no names on the floor
     expect(container.textContent).toContain("XC·NA");     // the party's seat notes travel to the terrace table
     expect(container.textContent).toContain("LAST BITE ✓");
     fireEvent.click(findTable(container, "T23"));
+    expect(container.textContent).toContain("×4");        // pax lives in the sheet header
     // the sheet: waters by seat position + pairings, reservation name omitted
     const sheet = getByText("P1").closest("div").parentElement.parentElement;
     expect(sheet.textContent).toContain("XC");
