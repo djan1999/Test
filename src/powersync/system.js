@@ -48,6 +48,10 @@ export function getPowerSync() {
   return _db;
 }
 
+// When the current stream error FIRST appeared (see snapshot below).
+let _lastErrText = null;
+let _lastErrAt = null;
+
 // Normalise a PowerSync SyncStatus into the small shape the app cares about.
 // hasSyncedP1: the priority-1 data (board, reservations, settings — see
 // powersync/sync-rules.yaml) has completed its first sync, so the board is
@@ -63,6 +67,14 @@ function snapshot(s) {
   // screenshot from a misbehaving device identifies the cause.
   const flow = s?.dataFlowStatus || {};
   const err = flow.downloadError ?? flow.uploadError ?? null;
+  const errText = err ? String(err?.message || err) : null;
+  // Stamp WHEN an error first appeared: the engine retains the last error
+  // until the next successful cycle clears it, so a healthy "Connected" panel
+  // can otherwise show a scary pre-recovery 401 with no hint that it's old.
+  if (errText !== _lastErrText) {
+    _lastErrText = errText;
+    _lastErrAt = errText ? Date.now() : null;
+  }
   return {
     connected: !!s?.connected,
     connecting: !!s?.connecting,
@@ -71,7 +83,8 @@ function snapshot(s) {
     lastSyncedAt: s?.lastSyncedAt ? new Date(s.lastSyncedAt).getTime() : null,
     downloading: !!flow.downloading,
     uploading: !!flow.uploading,
-    streamError: err ? String(err?.message || err) : null,
+    streamError: errText,
+    streamErrorAt: _lastErrAt,
   };
 }
 
