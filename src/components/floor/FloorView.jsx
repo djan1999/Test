@@ -134,8 +134,9 @@ export default function FloorView({
       tableState[t.label] = r
         ? {
             status: "occupied",
-            pax: r.data?.guests || undefined,
-            sub: r.data?.resTime || "",
+            pax: r.data?.guests || undefined, // ticker covers; not rendered
+            // the party's identity on the terrace IS their dining table
+            sub: diningLabelOf(r),
             badge: isArmed(r.data) ? { text: "LAST BITE ✓" } : undefined,
             allergy: restr.length > 0,
             strip,
@@ -153,8 +154,7 @@ export default function FloorView({
       if (bt?.active) {
         tableState[t.label] = {
           status: "occupied",
-          pax: bt.guests || undefined,
-          sub: progressOf(bt),
+          pax: bt.guests || undefined, // ticker covers; not rendered
           allergy: restr.length > 0,
           strip,
         };
@@ -171,7 +171,6 @@ export default function FloorView({
         tableState[t.label] = {
           status: "reserved",
           pax: bt.guests || undefined,
-          sub: bt.resTime || "",
           allergy: restr.length > 0,
           strip,
         };

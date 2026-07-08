@@ -99,6 +99,7 @@ describe("FloorView (FOH FLOOR surface)", () => {
     const { container, handlers, getByText } = setup();
     fireEvent.click(getByText("TERRACE"));
     expect(container.textContent).not.toContain("WEISS"); // no names on the floor
+    expect(container.textContent).toContain("T9");        // the party's identity = its dining table
     expect(container.textContent).toContain("XC");        // the party's seat notes travel to the terrace table
     expect(container.textContent).toContain("LAST BITE ✓");
     fireEvent.click(findTable(container, "T23"));

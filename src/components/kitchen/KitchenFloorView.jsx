@@ -3,6 +3,7 @@ import { tokens } from "../../styles/tokens.js";
 import FloorMap, { restrictionCode } from "../floor/FloorMap.jsx";
 import {
   getActiveDiningMap, getTerraceMap, terraceOccupancy, floorStatusOf, boardIdsOf,
+  resolveReservationTable,
 } from "../../utils/floorMaps.js";
 import { visitStateOf, isArmed } from "../../utils/terraceFlow.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
@@ -53,11 +54,11 @@ export default function KitchenFloorView({
       const r = occ[t.label];
       const strip = floorStatusOf(floorStatus, map.id, t.label);
       if (r) {
-        const boardTable = tables.find((bt) => bt.id === Number(r.table_id)) || null;
         tableState[t.label] = {
           status: "occupied",
-          pax: r.data?.guests || undefined,
-          sub: progressOf(boardTable),
+          // a terrace party's identity is its DINING table (per Djan):
+          // terrace B occupied by T8's party reads "B / T8" — no pax/course
+          name: resolveReservationTable(diningMap, r.table_id).table?.label || `T${r.table_id}`,
           badge: isArmed(r.data) ? { text: "LAST BITE ✓" } : undefined,
           strip,
         };
