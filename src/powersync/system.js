@@ -6,9 +6,36 @@
 import { PowerSyncDatabase } from "@powersync/web";
 import { AppSchema } from "./AppSchema.js";
 import { SupabaseConnector } from "./SupabaseConnector.js";
+import { supabase } from "../lib/supabaseClient.js";
 
 let _db = null;
 let _connected = false;
+
+// The device remembers which Supabase user last synced the local DB. One
+// dbFilename serves whoever is logged in, so when a DIFFERENT account signs in
+// (admin → restaurant handover, a shared tablet changing hands) the previous
+// user's rows and sync state MUST NOT carry over: stale hasSynced flags let the
+// new session go sqlite-primary on the old account's data, and leftover rows
+// from workspaces the new user can't sync trip the foreign-rows tripwire and
+// wedge the device on the fallback. Clearing before the first connect forces a
+// clean first sync for the new user (PowerSync's documented logout behaviour).
+const LAST_SYNC_USER_KEY = "milka-powersync-last-user";
+
+async function clearIfUserChanged(db) {
+  let userId = null;
+  try {
+    const { data } = await supabase.auth.getSession();
+    userId = data?.session?.user?.id || null;
+  } catch { /* no session yet — the connector waits for login */ }
+  if (!userId) return;
+  let last = null;
+  try { last = localStorage.getItem(LAST_SYNC_USER_KEY); } catch { /* noop */ }
+  if (last && last !== userId) {
+    console.warn("[PowerSync] signed-in account changed — clearing the on-device DB before connect");
+    try { await db.disconnectAndClear(); } catch (e) { console.warn("[PowerSync] disconnectAndClear failed:", e); }
+  }
+  try { localStorage.setItem(LAST_SYNC_USER_KEY, userId); } catch { /* noop */ }
+}
 
 // Singleton on-device database. dbFilename namespaces the local SQLite file.
 export function getPowerSync() {
@@ -44,6 +71,7 @@ function snapshot(s) {
 export async function connect(onStatus) {
   const db = getPowerSync();
   if (!_connected) {
+    await clearIfUserChanged(db);
     await db.connect(new SupabaseConnector());
     _connected = true;
     if (typeof window !== "undefined") window.__powerSync = db; // DevTools aid

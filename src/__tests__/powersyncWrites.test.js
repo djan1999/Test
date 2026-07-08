@@ -120,8 +120,27 @@ describe("powersync/writes — reservations", () => {
     await writeReservation({ id: "uuid-1", date: "2026-06-06", table_id: 2, data: { resName: "Smith" } });
     const updates = callsLike("UPDATE");
     expect(updates).toHaveLength(1);
-    expect(updates[0].sql).toContain("UPDATE reservations SET date = ?, table_id = ?, data = ?");
+    expect(updates[0].sql).toContain("UPDATE reservations SET date = COALESCE(?, date), table_id = COALESCE(?, table_id), data = ?");
     expect(updates[0].sql).not.toContain("created_at");
+    expect(updates[0].params).toEqual(["2026-06-06", 2, '{"resName":"Smith"}', "uuid-1", "ws-1"]);
+    expect(callsLike("INSERT")).toHaveLength(0);
+  });
+
+  it("REGRESSION (08.07): an edit arriving without a date keeps the stored date instead of nulling it", async () => {
+    // A NULL date threw the row out of every date-scoped read (the reservation
+    // 'vanished') and Postgres rejected the upload (NOT NULL). COALESCE binds
+    // null and lets the stored value win.
+    h.rows.add("reservations|uuid-1|ws-1");
+    await writeReservation({ id: "uuid-1", table_id: undefined, data: { resName: "Smith" } });
+    const update = callsLike("UPDATE")[0];
+    expect(update.sql).toContain("date = COALESCE(?, date)");
+    expect(update.sql).toContain("table_id = COALESCE(?, table_id)");
+    expect(update.params).toEqual([null, null, '{"resName":"Smith"}', "uuid-1", "ws-1"]);
+  });
+
+  it("REGRESSION (08.07): refuses to INSERT a reservation without a date", async () => {
+    await expect(writeReservation({ id: "uuid-9", table_id: 4, data: {} }))
+      .rejects.toThrow(/has no date/);
     expect(callsLike("INSERT")).toHaveLength(0);
   });
 
