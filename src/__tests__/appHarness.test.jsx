@@ -375,6 +375,21 @@ describe("app harness — fallback realtime safety net", () => {
     });
     await screen.findByText(/Bruno Livewire/, {}, { timeout: 5000 });
 
+    // A LATE echo carrying an OLDER updated_at than this device's own write
+    // for the table must be dropped, not adopted — adopting it flashed the
+    // previous option until the newer echo landed (the rapid-tap flicker).
+    const stale = {
+      ...bruno,
+      data: { ...bruno.data, resName: "Bruno Stale" },
+      updated_at: new Date(Date.now() - 3600_000).toISOString(),
+    };
+    await act(async () => {
+      emitRealtime("service_tables", { eventType: "UPDATE", new: stale, old: null });
+    });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(screen.queryByText(/Bruno Stale/)).toBeNull();
+    await screen.findByText(/Bruno Livewire/, {}, { timeout: 5000 });
+
     // The other device deletes Carla's reservation → DELETE event; reconcile
     // ghost-clears her still-reserved table.
     const resv = remoteRows("reservations");

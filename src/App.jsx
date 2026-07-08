@@ -2491,6 +2491,12 @@ export default function App() {
    *  flush runs, keyed by table_id — so two edits inside one debounce window
    *  can't drop each other's rows. */
   const pendingBoardWritesRef = useRef(new Map());
+  /** updated_at (epoch ms) of the last row THIS device wrote per table_id.
+   *  adoptRemoteTables uses it to drop stale echoes: on the fallback path a
+   *  rapid tap sequence produces write A then write B, and A's realtime echo
+   *  lands AFTER B is saved — adopting it flashed the previous option before
+   *  B's echo flipped it back (the rapid-tap flicker). */
+  const lastBoardWriteRef = useRef(new Map());
   /** One-shot flag set by the legitimate whole-board clears (CLEAR ALL, archive
    *  & clear, rollover auto-end, a real day-switch) so the autosave mass-blank
    *  guard lets THOSE blanks through. Any OTHER mass-blank is refused. */
@@ -2522,6 +2528,12 @@ export default function App() {
   // Persist board rows: [{ table_id, data, updated_at }] (update-or-insert).
   const persistBoardRows = useCallback(async (rows) => {
     if (!supabase || !getWorkspaceId() || !rows?.length) return { ok: true };
+    // Record what this device is writing (all callers funnel through here —
+    // autosave, CLEAR ALL blanks) so adoptRemoteTables can drop older echoes.
+    for (const r of rows) {
+      const ts = Date.parse(r.updated_at || "");
+      if (Number.isFinite(ts)) lastBoardWriteRef.current.set(Number(r.table_id), ts);
+    }
     try {
       if (sqlitePrimaryRef.current) {
         const { writeServiceTables } = await import("./powersync/writes.js");
@@ -2608,6 +2620,17 @@ export default function App() {
       const mine = cur.find(t => t.id === base.id) || base;
       const row = rawById.get(base.id);
       if (!row) return mine; // no store row for this table — keep local
+      // Stale-echo suppression: an incoming copy STRICTLY OLDER than what this
+      // device last wrote for the table is a late echo of a superseded state —
+      // adopting it flashes the previous option until the newer echo lands
+      // (the rapid-tap flicker). Suppress only against writes from the last
+      // 60s, so clock skew between devices can't hide a genuinely newer
+      // remote edit for more than the contention moment itself.
+      const lastWrite = lastBoardWriteRef.current.get(base.id);
+      if (lastWrite && Date.now() - lastWrite < 60000) {
+        const incoming = Date.parse(row.updated_at || "");
+        if (Number.isFinite(incoming) && incoming < lastWrite) return mine;
+      }
       const theirs = sanitizeTable({ id: base.id, ...(row.data || {}) });
       const theirsJson = JSON.stringify(theirs);
       const mineJson = JSON.stringify(sanitizeTable(mine));
