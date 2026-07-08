@@ -101,12 +101,13 @@ export default function FloorView({
   // ×pax + course; the runner's info is the per-seat water·pairing note at
   // each chair. Names stay on the board and the terrace assign picker.
   // Waters are ALREADY house shortcuts (XC / XW / OC / OW) — show the stored
-  // value untouched. Pairings initial from the stored vocabulary:
-  // Wine→W, Non-Alc→NA, Premium→P, Our Story→OS.
+  // value untouched. Pairings use the house codes; unknown values fall back
+  // to their initials.
+  const PAIRING_CODES = { "Wine": "WP", "Non-Alc": "NA", "Premium": "PWP", "Our Story": "OS" };
   const pairingCode = (p) => {
     const v = String(p || "").trim();
     if (!v || v === "—") return "";
-    return v.split(/[\s-]+/).map((w) => w.charAt(0)).join("").toUpperCase();
+    return PAIRING_CODES[v] || v.split(/[\s-]+/).map((w) => w.charAt(0)).join("").toUpperCase();
   };
   const bevNote = (s) => {
     const water = s.water && s.water !== "—" ? String(s.water).toUpperCase() : "";
