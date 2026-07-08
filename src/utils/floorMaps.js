@@ -246,30 +246,48 @@ export function applyLayoutSwitchRow(row, reservation) {
 // Returns one point per seat ON the table outline, in map units. `out` is the
 // unit outward normal so the renderer can offset chair marks off the edge.
 //
-// Rect seats sharing a side are ALWAYS evenly distributed along it — the
-// stored offset only decides their ORDER (and where a drag re-inserts a
-// seat). Chairs come out perfectly symmetric by construction: one seat sits
-// centered, two sit at the quarter points, three at sixths, and so on.
-// Round seats keep their stored compass angles (15°-snapped by moveSeat) —
-// clustering two chairs on the north face is intentional placement there.
+// Chairs are ALWAYS perfectly distributed — the stored positions only decide
+// ORDER (and where a drag re-inserts a seat):
+//   · rect: seats sharing a side spread evenly along it (one centers, two at
+//     quarter points, three at sixths, …).
+//   · round: seats form a perfect ring (2 opposite, 3 at 120°, …); the
+//     ring's ROTATION is fitted to the stored angles (circular mean) and
+//     snapped to 15° steps, so dragging any chair rotates the whole ring
+//     onto a clean compass footing and tables align with each other.
 export function seatDisplayPoints(table) {
   const { x, y, w, h } = table;
   const seats = table.seats || [];
 
   const bySide = { N: [], S: [], W: [], E: [] };
+  const roundSeats = [];
   seats.forEach((s, i) => {
     if (s.angle == null) bySide[bySide[s.side] ? s.side : "E"].push({ s, i });
+    else roundSeats.push({ s, i });
   });
+
   const evenOffset = new Map(); // seat array index → distributed offset
   for (const side of Object.keys(bySide)) {
     const row = bySide[side].sort((a, b) => ((a.s.offset ?? 0.5) - (b.s.offset ?? 0.5)) || (a.i - b.i));
     row.forEach((e, rank) => evenOffset.set(e.i, (rank + 0.5) / row.length));
   }
 
+  const evenAngle = new Map(); // seat array index → distributed ring angle
+  if (roundSeats.length) {
+    const step = 360 / roundSeats.length;
+    const ring = roundSeats.sort((a, b) => ((a.s.angle ?? 0) - (b.s.angle ?? 0)) || (a.i - b.i));
+    let vx = 0, vy = 0;
+    ring.forEach((e, rank) => {
+      const off = (((e.s.angle ?? 0) - rank * step) * Math.PI) / 180;
+      vx += Math.cos(off); vy += Math.sin(off);
+    });
+    const base = Math.round((Math.atan2(vy, vx) * 180 / Math.PI) / 15) * 15;
+    ring.forEach((e, rank) => evenAngle.set(e.i, (((base + rank * step) % 360) + 360) % 360));
+  }
+
   return seats.map((s, i) => {
     if (s.angle != null) {
       const cx = x + w / 2, cy = y + h / 2, r = Math.min(w, h) / 2;
-      const rad = (s.angle * Math.PI) / 180;
+      const rad = ((evenAngle.get(i) ?? s.angle) * Math.PI) / 180;
       const ox = Math.sin(rad), oy = -Math.cos(rad);
       return { no: s.no, confirm: !!s.confirm, x: cx + r * ox, y: cy + r * oy, out: { x: ox, y: oy } };
     }
