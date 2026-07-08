@@ -5,6 +5,7 @@ import { FONT } from "./adminStyles.js";
 // ── SystemPanel — Supabase connection status, realtime, environment, debug ──
 export default function SystemPanel({
   syncStatus,
+  powerSync = null,
   supabaseUrl,
   hasSupabase,
   onSyncWines,
@@ -84,6 +85,27 @@ export default function SystemPanel({
               {hasSupabase ? "Production" : "Local"}
             </span>
           </div>
+          {/* Sync engine (PowerSync) — the STREAM's own state and, crucially,
+              its last error string, so a device stuck on LINK/ERROR tells us
+              WHY from this panel alone (no DevTools needed on a phone). */}
+          {powerSync && (
+            <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "12px 16px", minWidth: 220, maxWidth: 420 }}>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 6 }}>Sync Stream</div>
+              <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: powerSync.connected ? tokens.green.text : tokens.red.text }}>
+                {powerSync.connected ? "Connected" : "Down"}
+              </span>
+              <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], marginTop: 5 }}>
+                last sync: {powerSync.lastSyncedAt
+                  ? new Date(powerSync.lastSyncedAt).toLocaleString("sl-SI", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+                  : "never"}
+              </div>
+              {powerSync.streamError && (
+                <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 5, wordBreak: "break-word" }}>
+                  {powerSync.streamError}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
