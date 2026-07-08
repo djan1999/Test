@@ -2714,6 +2714,14 @@ export default function App() {
     setTables(p => p.map(t =>
       !ids.includes(t.id) ? t : { ...t, active: true, arrivedAt: now, seats: makeSeats(t.guests, t.seats) }
     ));
+    // Seating by hand completes a mid-terrace visit: a party still marked
+    // 'arriving' (MOVE tapped, MARK SEATED never was) would otherwise wedge
+    // its card — seated, yet hiding both MARK SEATED and TERRACE →.
+    for (const tid of ids) {
+      const owner = serviceReservations.find(r =>
+        visitStateOf(r.data) === "arriving" && reservationTableIds(r.data, r.table_id).includes(Number(tid)));
+      if (owner) persistVisitData(owner, markSeatedData(owner.data));
+    }
   };
 
   const unseatTable = id => {
@@ -2828,10 +2836,12 @@ export default function App() {
     if (owner) markTerracePartySeated(owner);
   };
 
-  // ASSIGN TERRACE reached from a booked party's card → mini-map picker modal.
+  // ASSIGN TERRACE reached from a party's card → mini-map picker modal.
+  // Booked parties (opening snacks) AND dining parties (dessert back out) —
+  // only mid-transition states (terrace/arriving) are excluded.
   const requestTerraceAssign = (tableId) => {
     const owner = serviceReservations.find(r =>
-      visitStateOf(r.data) === "booked" && !r.data?.clearedFromBoard &&
+      ["booked", "dining"].includes(visitStateOf(r.data)) && !r.data?.clearedFromBoard &&
       reservationTableIds(r.data, r.table_id).includes(Number(tableId)));
     if (owner) setTerraceAssignFor(owner);
   };

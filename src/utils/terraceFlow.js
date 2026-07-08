@@ -27,11 +27,13 @@ export const visitStateOf = (data) => {
 export const isArmed = (data) =>
   visitStateOf(data) === "terrace" && !!data?.last_bite_fired_at;
 
-// FOH assigns a terrace table at arrival (mini-map picker). Valid from
-// 'booked', and from 'terrace' as a re-assign. Anything later → no-op (null).
+// FOH assigns a terrace table (mini-map picker). Valid from 'booked'
+// (arrival snacks), from 'terrace' as a re-assign, and from 'dining' —
+// dessert/digestif back outside, and the recovery path for a party whose
+// visit was completed by hand. Mid-transition ('arriving') and 'done' → null.
 export function assignTerrace(data, label, mapId) {
   const s = visitStateOf(data);
-  if (s !== "booked" && s !== "terrace") return null;
+  if (s !== "booked" && s !== "terrace" && s !== "dining") return null;
   if (!label) return null;
   return {
     ...(data || {}),

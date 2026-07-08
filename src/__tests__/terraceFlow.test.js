@@ -20,10 +20,11 @@ describe("assignTerrace", () => {
     expect(next).toMatchObject({ visit_state: "terrace", terrace_table: "T23", terrace_map_id: "terrace_main" });
     expect(next.resName).toBe("NOVAK"); // rest of the reservation untouched
   });
-  it("re-assign while on terrace is allowed; later states are a no-op", () => {
+  it("re-assign on terrace and dining→terrace (dessert outside) allowed; mid-transition is a no-op", () => {
     expect(assignTerrace({ visit_state: "terrace", terrace_table: "T21" }, "T23").terrace_table).toBe("T23");
-    expect(assignTerrace({ visit_state: "dining" }, "T23")).toBeNull();
+    expect(assignTerrace({ visit_state: "dining" }, "T23")).toMatchObject({ visit_state: "terrace", terrace_table: "T23" });
     expect(assignTerrace({ visit_state: "arriving" }, "T23")).toBeNull();
+    expect(assignTerrace({ visit_state: "done" }, "T23")).toBeNull();
     expect(assignTerrace({}, "")).toBeNull();
   });
 });
