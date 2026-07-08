@@ -14,7 +14,6 @@
 import { reservationTableIds, resolveReservationSession } from "./tableHelpers.js";
 
 export const FLOOR_MAPS_KEY = "floor_maps_v1";
-export const TERRACE_STATE_KEY = "terrace_state_v1"; // deprecated — read-through migration only
 export const FLOOR_STATUS_KEY = "floor_status_v1";
 
 // Canvas extent in map units — the one coordinate system every consumer
@@ -856,13 +855,14 @@ export function resetMapToDefaults(state, mapId) {
   return next === state ? state : { ...next, geometryVersion: GEOMETRY_VERSION };
 }
 
-// ── floor status (SET / DIRTY strips) ───────────────────────────────────────
-// One settings row for every map's hands-call strips:
-//   floor_status_v1 = { [mapId]: { [label]: 'SET' | 'DIRTY' } }
-// Keyed per map per spec — dining layouts don't share strips across a switch
-// (layout switches are pre-service). The strip cycle is — → DIRTY → SET → —.
+// ── floor status (SET markers) ──────────────────────────────────────────────
+// One settings row for every map's hands-call markers:
+//   floor_status_v1 = { [mapId]: { [label]: 'SET' } }
+// Keyed per map per spec — dining layouts don't share markers across a switch
+// (layout switches are pre-service). DIRTY was removed per Djan; stored
+// DIRTY values from older builds sanitize away on load.
 
-const STATUS_VALUES = ["SET", "DIRTY"];
+const STATUS_VALUES = ["SET"];
 
 export function sanitizeFloorStatus(state) {
   if (!state || typeof state !== "object") return {};
@@ -891,47 +891,30 @@ export function setFloorStatus(status, mapId, label, val) {
   return rest;
 }
 
-// Tap = SET toggle. DIRTY is never set by hand (per Djan) — it only arrives
-// automatically when a terrace party vacates a table — and a tap on a DIRTY
-// table clears it (the terrace sheet's MARK CLEAN).
+// Tap = SET toggle.
 export function cycleFloorStatus(status, mapId, label) {
   const cur = floorStatusOf(status, mapId, label);
   return setFloorStatus(status, mapId, label, cur ? null : "SET");
 }
 
-// One-time read-through of the deprecated terrace_state_v1 row: its DIRTY
-// labels fold into the terrace map's bucket, but only while that bucket is
-// still empty — once floor_status_v1 carries terrace strips, the old row
-// (which stale devices may still write) is never read again.
-export function migrateTerraceState(status, terraceState, terraceMapId) {
-  const clean = sanitizeFloorStatus(status);
-  if (!terraceMapId || clean[terraceMapId]) return clean;
-  const labels = Object.keys(sanitizeTerraceState(terraceState).dirty);
-  if (!labels.length) return clean;
-  return { ...clean, [terraceMapId]: Object.fromEntries(labels.map((l) => [l, "DIRTY"])) };
-}
-
 // ── ticker counts ───────────────────────────────────────────────────────────
 // Pure aggregation for the strip above the canvas: COVERS · SEATED · RES ·
-// SET n · DIRTY n. `entries` is the visible map's per-table presentation
-// (status, pax, strip) — derivation stays with the caller, counting here.
+// SET n. `entries` is the visible map's per-table presentation (status, pax,
+// strip) — derivation stays with the caller, counting here.
 export function mapTicker(entries) {
-  const t = { covers: 0, seated: 0, reserved: 0, set: 0, dirty: 0 };
+  const t = { covers: 0, seated: 0, reserved: 0, set: 0 };
   for (const e of entries || []) {
     if (!e) continue;
     if (e.status === "occupied") { t.seated++; t.covers += Number(e.pax) || 0; }
     if (e.status === "reserved" || e.status === "arriving") t.reserved++;
     if (e.strip === "SET") t.set++;
-    if (e.strip === "DIRTY") t.dirty++;
   }
   return t;
 }
 
-// ── terrace occupancy + DIRTY state ─────────────────────────────────────────
+// ── terrace occupancy ───────────────────────────────────────────────────────
 // Terrace tables never enter service_tables (its table_id CHECK is 1..10);
-// occupancy is derived from the day's reservations. DIRTY strips now live in
-// floor_status_v1 (above); the terrace_state_v1 helpers below survive only
-// for the read-through migration and for stale devices still writing it.
+// occupancy is derived from the day's reservations.
 export function terraceOccupancy(reservations) {
   const byLabel = {};
   for (const r of reservations || []) {
@@ -939,16 +922,4 @@ export function terraceOccupancy(reservations) {
     if ((d.visit_state || "booked") === "terrace" && d.terrace_table) byLabel[d.terrace_table] = r;
   }
   return byLabel;
-}
-
-export function sanitizeTerraceState(state) {
-  return { dirty: state && typeof state.dirty === "object" && state.dirty ? state.dirty : {} };
-}
-
-export const isTerraceDirty = (terraceState, label) => !!terraceState?.dirty?.[label];
-
-export function setTerraceDirty(terraceState, label, dirty) {
-  const next = { ...(terraceState?.dirty || {}) };
-  if (dirty) next[label] = true; else delete next[label];
-  return { ...sanitizeTerraceState(terraceState), dirty: next };
 }

@@ -13,8 +13,8 @@ const FONT = tokens.font;
 // FOH sees it: terrace (default tab) + the active dining layout, ×pax,
 // course progress C4/12 (the kitchen's core info — FOH drops it, we keep
 // it), LAST BITE ✓ arming, chair marks with restrictions in the app red,
-// and the FOH SET/DIRTY strips (service mode with no strip handler — the
-// kitchen watches hands-calls, never sets them). NO guest names, same as
+// and the FOH SET markers (service mode with no tap handlers — the kitchen
+// watches hands-calls, never sets them). NO guest names, same as
 // the FOH floor. The
 // data is the same App state the kitchen board renders from (PowerSync sync
 // stream / realtime safety net) — no new subscription.
@@ -125,8 +125,8 @@ export default function KitchenFloorView({
         })}
       </div>
 
-      {/* service mode with no onStripTap: the SET/DIRTY strips render but
-          stay inert — the kitchen reads hands-calls, never writes them */}
+      {/* service mode with no tap handlers beyond the popover: the SET
+          markers render read-only — the kitchen never writes them */}
       <FloorMap
         map={map}
         mode="service"

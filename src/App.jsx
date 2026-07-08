@@ -49,12 +49,10 @@ import {
   aperitifMatchesQuickAccessOption,
 } from "./utils/quickAccessResolve.js";
 import {
-  FLOOR_MAPS_KEY, TERRACE_STATE_KEY, FLOOR_STATUS_KEY,
-  sanitizeFloorMaps, sanitizeTerraceState,
+  FLOOR_MAPS_KEY, FLOOR_STATUS_KEY, sanitizeFloorMaps,
   getActiveDiningMap, getTerraceMap, mapSeatCountForBoardTable,
   terraceOccupancy, applyLayoutSwitchRow, resolveReservationTable,
-  sanitizeFloorStatus, floorStatusOf, setFloorStatus, cycleFloorStatus,
-  migrateTerraceState,
+  sanitizeFloorStatus, setFloorStatus, cycleFloorStatus,
 } from "./utils/floorMaps.js";
 import {
   visitStateOf, isArmed as isVisitArmed,
@@ -2392,11 +2390,10 @@ export default function App() {
   const [restrictionsList, setRestrictionsList] = useState(() => readLocalRestrictions() || DEFAULT_RESTRICTIONS.map(r => ({ ...r })));
   const [courseQuickNotes, setCourseQuickNotes] = useState(() => readLocalCourseNotes() || {});
   // Floor maps (terrace + dining layouts, seeded from the house diagrams) and
-  // terrace DIRTY strips. Definitions persist via service_settings; terrace
+  // SET markers. Definitions persist via service_settings; terrace
   // occupancy is DERIVED from reservations, never stored on the board.
   const [floorMapsState, setFloorMapsState] = useState(() => sanitizeFloorMaps(null));
-  // SET/DIRTY strips for every map — floor_status_v1 (terrace_state_v1's
-  // DIRTY labels migrate into it via read-through on load).
+  // SET markers for every map — floor_status_v1.
   const [floorStatus, setFloorStatusState] = useState(() => sanitizeFloorStatus(null));
   // Party-first ASSIGN TERRACE: the reservation whose mini-map picker is open.
   const [terraceAssignFor, setTerraceAssignFor] = useState(null);
@@ -2771,7 +2768,7 @@ export default function App() {
 
   // ── Terrace flow — visit-state transitions (utils/terraceFlow, pure) ──────
   // All writes ride reservations.data through persistReservationRow (the
-  // PowerSync-safe seam); DIRTY/SET strips ride updateFloorStatus. The
+  // PowerSync-safe seam); SET markers ride updateFloorStatus. The
   // dining board is untouched by MOVE (no readiness handshake, no auto-ping).
   const persistVisitData = (resv, nextData) => {
     if (!nextData) return false;
@@ -2785,34 +2782,22 @@ export default function App() {
 
   const assignTerraceTable = (resv, label) => {
     const terraceMapId = floorMapsState.maps.find(m => m.kind === "terrace")?.id || null;
-    const prevLabel = resv.data?.terrace_table || null;
     if (!persistVisitData(resv, assignTerraceData(resv.data, label, terraceMapId))) return;
-    if (terraceMapId) {
-      // assigning onto a DIRTY table claims it — the strip clears; a re-seat
-      // (CHANGE TABLE) leaves the vacated table DIRTY for the runner
-      let st = setFloorStatus(floorStatus, terraceMapId, label, null);
-      if (prevLabel && prevLabel !== label) st = setFloorStatus(st, terraceMapId, prevLabel, "DIRTY");
-      updateFloorStatus(st);
-    }
+    // assigning claims the table — any stale SET marker clears
+    if (terraceMapId) updateFloorStatus(setFloorStatus(floorStatus, terraceMapId, label, null));
   };
 
   const clearTerracePartyTable = (resv) => {
-    const label = resv.data?.terrace_table || null;
-    const terraceMapId = getTerraceMap(floorMapsState)?.id || null;
-    if (!persistVisitData(resv, clearTerraceData(resv.data))) return;
-    if (label && terraceMapId) updateFloorStatus(setFloorStatus(floorStatus, terraceMapId, label, "DIRTY"));
+    persistVisitData(resv, clearTerraceData(resv.data));
   };
 
   const moveTerracePartyIn = (resv) => {
-    const label = resv.data?.terrace_table || null;
-    const terraceMapId = getTerraceMap(floorMapsState)?.id || null;
     const next = moveToDiningData(resv.data, new Date().toISOString(), {
       singleTap: !!floorMapsState.config?.moveSingleTap,
     });
     if (!persistVisitData(resv, next)) return;
-    // side effects: terrace table → DIRTY + freed (occupancy derives from
-    // visit_state, so it frees the moment the write lands)
-    if (label && terraceMapId) updateFloorStatus(setFloorStatus(floorStatus, terraceMapId, label, "DIRTY"));
+    // the terrace table frees the moment the write lands (occupancy derives
+    // from visit_state)
     if (next.visit_state === "dining") seatTable(Number(resv.table_id)); // MOVE_SINGLE_TAP path
   };
 
@@ -4237,24 +4222,17 @@ export default function App() {
   // Both live in service_settings rows behind the stateStore seam (SQLite
   // when primary, scopedFrom fallback otherwise) — queue-safe offline, same
   // as every other settings blob. Terrace occupancy itself is derived from
-  // reservations; only the map definitions and DIRTY strips persist here.
+  // reservations; only the map definitions and SET markers persist here.
   useEffect(() => {
     if (!supabase || !psResolved) return;
-    // Maps and strips load together so the deprecated terrace_state_v1 row
-    // can fold into floor_status_v1 (needs the terrace map id). The migrated
-    // strips stay in-memory until the first strip write persists them; stale
-    // devices still writing terrace_state_v1 are simply no longer read once
-    // floor_status_v1 carries terrace strips.
     withRetry(() => Promise.all([
       readStateKey(FLOOR_MAPS_KEY),
       readStateKey(FLOOR_STATUS_KEY),
-      readStateKey(TERRACE_STATE_KEY),
     ]))
-      .then(([fm, fs, ts]) => {
-        const maps = sanitizeFloorMaps(fm);
-        if (fm) setFloorMapsState(maps);
-        setFloorStatusState(migrateTerraceState(
-          sanitizeFloorStatus(fs), sanitizeTerraceState(ts), getTerraceMap(maps)?.id));
+      .then(([fm, fs]) => {
+        if (fm) setFloorMapsState(sanitizeFloorMaps(fm));
+        // sanitize drops legacy DIRTY values — the feature was removed
+        setFloorStatusState(sanitizeFloorStatus(fs));
       })
       .catch(() => {});
   }, [psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -5346,7 +5324,7 @@ export default function App() {
 
           {serviceView === "floor" ? (
             /* FLOOR view — the spatial projection of the same board state.
-               A dining table is one big DIRTY/SET button (tap to cycle);
+               A dining table is one big SET toggle (tap to flip);
                terrace tables and ARRIVING tables open their action sheet.
                The old TerracePanel's whole terrace leg lives in here. */
             <FloorView
@@ -5597,7 +5575,7 @@ export default function App() {
       {inventoryOpen && <Suspense fallback={null}><InventoryModal wines={wines} onClose={() => setInventoryOpen(false)} /></Suspense>}
 
       {/* Party-first ASSIGN TERRACE — the mini floor-map picker. Free tables
-          tappable (DIRTY ones too, assigning claims them clean); occupied
+          tappable; occupied
           tables render inert + dimmed via the shared renderer's picker mode. */}
       {terraceAssignFor && (
         <CenteredModal
@@ -5612,7 +5590,7 @@ export default function App() {
               const r = occ[t.label];
               tState[t.label] = r
                 ? { status: "occupied", name: r.data?.resName || "—", pax: r.data?.guests || undefined }
-                : { status: "free", dirty: floorStatusOf(floorStatus, terraceMap.id, t.label) === "DIRTY", selectable: true };
+                : { status: "free", selectable: true };
             }
             return (
               <FloorMap

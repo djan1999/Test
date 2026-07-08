@@ -15,13 +15,12 @@ const FONT = tokens.font;
 // layout + terrace), a ticker strip, and the shared FloorMap renderer in
 // `service` mode.
 //
-// Tap model (per Djan): a DINING table is one big SET toggle — DIRTY is
-// never set by hand, it only appears automatically when a terrace party
-// vacates. The board stays the place for guest details; no quick-access
-// sheet on the floor. Exceptions that DO open a sheet, because they carry
-// an action the tap can't mean: an ARRIVING dining table (MARK SEATED) and
-// every terrace table (assign / MOVE / CHANGE / CLEAR, plus the party's
-// waters by seat position + pairings — the runner's crib sheet).
+// Tap model (per Djan): a DINING table is one big SET toggle. The board
+// stays the place for guest details; no quick-access sheet on the floor.
+// Exceptions that DO open a sheet, because they carry an action the tap
+// can't mean: an ARRIVING dining table (MARK SEATED) and every terrace
+// table (assign / MOVE / CHANGE / CLEAR, plus the party's waters by seat
+// position + pairings — the runner's crib sheet).
 //
 // STRICTLY service — geometry editing is an admin concern and lives in the
 // Floor & Terrace panel (FloorEditor), not here.
@@ -254,13 +253,6 @@ export default function FloorView({
       }
       return (
         <div>
-          {floorStatusOf(floorStatus, map.id, sheetLabel) === "DIRTY" && (
-            <button
-              style={{ ...actionBtn(false), borderColor: tokens.signal.warn, color: tokens.signal.warn, marginBottom: 8 }}
-              onClick={() => { onCycleStatus(map.id, sheetLabel); setSheetLabel(null); }}>
-              MARK CLEAN
-            </button>
-          )}
           <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.12em", color: tokens.ink[3], textTransform: "uppercase", margin: "2px 0 6px" }}>
             ASSIGN PARTY
           </div>
@@ -318,7 +310,6 @@ export default function FloorView({
         <span style={{ color: tokens.ink[2] }}>SEATED {ticker.seated}</span>
         <span style={{ color: tokens.ink[2] }}>RES {ticker.reserved}</span>
         <span style={{ color: tokens.green.text }}>SET {ticker.set}</span>
-        <span style={{ color: tokens.signal.warn }}>DIRTY {ticker.dirty}</span>
         <span style={{ flex: 1 }} />
         {sendableIds.length > 0 && onSendSetToKitchen ? (
           <button
@@ -375,7 +366,7 @@ export default function FloorView({
         height={isMobile ? 380 : 480}
         onTableTap={(t) => {
           // CHANGE TABLE in flight: the next FREE terrace table tap re-seats
-          // the party there (the old table goes DIRTY via the assign handler).
+          // the party there.
           if (movingParty && map.kind === "terrace") {
             if (tableState[t.label]?.status === "occupied") { flash("Table occupied"); return; }
             onAssign(movingParty, t.label);
@@ -384,7 +375,7 @@ export default function FloorView({
             return;
           }
           // terrace tables and ARRIVING dining tables carry actions → sheet;
-          // every other dining table is one big DIRTY/SET button.
+          // every other dining table is one big SET toggle.
           if (map.kind === "terrace" || tableState[t.label]?.status === "arriving") setSheetLabel(t.label);
           else onCycleStatus(map.id, t.label);
         }}

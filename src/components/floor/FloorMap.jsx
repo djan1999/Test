@@ -21,7 +21,7 @@ import {
 //
 // Geometry comes from utils/floorMaps.js (pure, tested); this file only
 // paints. Design system: Roboto Mono, zero border-radius, ink grayscale,
-// semantic color only (green = seated/SET, amber = DIRTY, alert = allergy ▲).
+// semantic color only (green = seated/SET, alert red = allergy/restriction).
 
 const FONT = tokens.font;
 
@@ -190,8 +190,8 @@ export default function FloorMap({
   map,
   mode = "view",
   // per-label presentation: { name, pax, sub, badge: {text, tone}, status:
-  // 'free'|'occupied'|'arriving'|'reserved', dirty: bool, strip:
-  // 'SET'|'DIRTY'|null (service), allergy: bool, selectable: bool }
+  // 'free'|'occupied'|'arriving'|'reserved', strip: 'SET'|null (service),
+  // allergy: bool, selectable: bool }
   tableState = {},
   restrictionsByLabel = {}, // { [label]: [{ pos, note }] } → amber seat dots
   onTableTap,
@@ -368,12 +368,6 @@ export default function FloorMap({
       role="img"
       aria-label={`${map.name} floor map`}
     >
-      <style>{`
-        @keyframes fmStripPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
-        .fm-strip-pulse { animation: fmStripPulse 1.6s ease-in-out infinite; }
-        @media (prefers-reduced-motion: reduce) { .fm-strip-pulse { animation: none; } }
-      `}</style>
-
       <defs>
         <pattern id="fm-hatch" width="2.6" height="2.6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
           <line x1="0" y1="0" x2="0" y2="2.6" stroke={tokens.ink[4]} strokeWidth="0.3" />
@@ -428,7 +422,6 @@ export default function FloorMap({
         const occupied = st.status === "occupied";
         const arriving = st.status === "arriving";
         const reserved = st.status === "reserved";
-        const dirty = !!st.dirty;
         const strip = mode === "service" ? (st.strip || null) : null;
         const pickable = mode === "picker" ? st.selectable !== false && !occupied && !arriving : false;
         const seatEditing = mode === "seats" && seatsEditLabel === t.label;
@@ -437,14 +430,12 @@ export default function FloorMap({
 
         const fill = occupied ? tokens.green.bg : tokens.neutral[0];
         // service mode: the status owns the border — SET reads as a strong
-        // green outline, DIRTY as amber; no band inside the shape (it clipped
-        // the course line and looked wrong inside circles).
+        // green outline; no band inside the shape (it clipped the course
+        // line and looked wrong inside circles).
         const stroke = strip === "SET" ? tokens.green.strong
-          : strip === "DIRTY" ? tokens.signal.warn
           : arriving ? tokens.ink[1]
           : occupied ? tokens.green.border
           : reserved ? tokens.ink[3]
-          : dirty ? tokens.signal.warn
           : blueprint ? tokens.ink[1]
           : tokens.ink[4];
 
@@ -480,13 +471,9 @@ export default function FloorMap({
               onTableTap && onTableTap(t0);
             }}
           >
-            {/* DIRTY (view modes): amber band along the top edge */}
             <TableShape t={t} fill={fill} stroke={stroke}
               strokeWidth={strip ? 0.7 : blueprint ? 0.45 : 0.35}
               dash={arriving || reserved ? "1.4 1" : undefined} />
-            {dirty && !strip && (
-              <rect x={t.x} y={t.y} width={t.w} height={1.6} fill={tokens.signal.warn} />
-            )}
             {selected && (
               <>
                 <TableShape t={{ ...t, x: t.x - 1.2, y: t.y - 1.2, w: t.w + 2.4, h: t.h + 2.4 }}
@@ -522,10 +509,6 @@ export default function FloorMap({
                 {subLine.text}
               </text>
             )}
-            {dirty && !occupied && !arriving && !strip && (
-              <text x={cx} y={t.y + t.h - 1.4} textAnchor="middle" fontFamily={FONT} fontSize={2}
-                fill={tokens.signal.warn} fontWeight={700}>DIRTY</text>
-            )}
             {st.badge && (
               <g>
                 <rect x={cx - 8} y={belowY} width={16} height={3.4}
@@ -540,9 +523,8 @@ export default function FloorMap({
             {/* status chip below the table (badge slot wins when both exist) —
                 never inside the shape, so nothing clips or crowds the text */}
             {strip && !st.badge && (
-              <g className={strip === "DIRTY" ? "fm-strip-pulse" : undefined} pointerEvents="none">
-                <rect x={cx - 5} y={belowY} width={10} height={3.2}
-                  fill={strip === "SET" ? tokens.green.strong : tokens.signal.warn} />
+              <g pointerEvents="none">
+                <rect x={cx - 5} y={belowY} width={10} height={3.2} fill={tokens.green.strong} />
                 <text x={cx} y={belowY + 2.3} textAnchor="middle" fontFamily={FONT} fontSize={2}
                   fontWeight={700} letterSpacing={0.3} fill={tokens.neutral[0]}>
                   {strip}
@@ -556,7 +538,7 @@ export default function FloorMap({
                 picker, service) draw chair bars along the edge. A seat with
                 a beverage note grows into a pill with the note INSIDE it —
                 one element, nothing floating. Restrictions highlight in the
-                app's red (amber stays DIRTY's color). */}
+                app's red. */}
             {seatPts.map((p, i) => {
               const seatRestr = restr.filter((r) => Number(r.pos) === Number(p.no) && p.no != null);
               const hasRestr = seatRestr.length > 0;
