@@ -43,7 +43,7 @@ const setup = (overrides = {}) => {
   const utils = render(
     <FloorView
       floorMaps={floorMaps}
-      floorStatus={{ dining_a: { T4: "SET", T5: "DIRTY" } }}
+      floorStatus={{ dining_a: { T4: "SET" } }}
       reservations={reservations}
       tables={tables}
       {...handlers}
@@ -66,7 +66,6 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).toContain("SEATED 2");
     expect(container.textContent).toContain("RES 2");
     expect(container.textContent).toContain("SET 1");
-    expect(container.textContent).toContain("DIRTY 1");
     // FOH tables are label-only (per Djan): no names, no ×pax, no course on
     // the shape — the ▲ and the ARRIVING badge stay
     expect(container.textContent).not.toContain("×2");
@@ -117,15 +116,6 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(handlers.onAssign).toHaveBeenCalledWith(reservations[1], "T21");
   });
 
-  it("a DIRTY terrace table's sheet offers MARK CLEAN (DIRTY is automatic, never a button)", () => {
-    const { handlers, getByText } = setup({
-      floorStatus: { terrace_main: { T25: "DIRTY" } },
-    });
-    fireEvent.click(getByText("TERRACE"));
-    fireEvent.click(getByText("T25").closest("g"));
-    fireEvent.click(getByText("MARK CLEAN"));
-    expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T25");
-  });
 });
 
 describe("terrace CHANGE TABLE (re-seat on the terrace)", () => {
@@ -168,6 +158,6 @@ describe("SEND SET → KITCHEN", () => {
 
   it("hidden when nothing is both seated and SET", () => {
     const { queryByText } = setup({ onSendSetToKitchen: vi.fn() });
-    expect(queryByText(/SEND SET → KITCHEN/)).toBeNull(); // T4 SET is reserved-only, T5 DIRTY
+    expect(queryByText(/SEND SET → KITCHEN/)).toBeNull(); // T4 SET is reserved-only
   });
 });

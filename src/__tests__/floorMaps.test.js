@@ -3,15 +3,14 @@ import {
   buildDefaultFloorMaps, sanitizeFloorMaps, getActiveDiningMap, getTerraceMap,
   findMapTable, resolveReservationTable, boardIdsOf, mapSeatCountForBoardTable,
   planLayoutSwitch, applyLayoutSwitchRow, seatDisplayPoints, assignSeatNumbers,
-  terraceOccupancy, sanitizeTerraceState, isTerraceDirty, setTerraceDirty,
+  terraceOccupancy,
   GEOMETRY_VERSION, MAP_W, MAP_H,
   moveTable, resizeTable, rotateTable, setTableShape, renameTable,
   duplicateTable, addTable, deleteTable,
   addSeat, removeSeat, moveSeat,
   setTableMembers, setTableBoardIds,
   addMap, renameMap, duplicateMap, deleteMap, hasDefaultGeometry, resetMapToDefaults,
-  sanitizeFloorStatus, floorStatusOf, setFloorStatus, cycleFloorStatus,
-  migrateTerraceState, mapTicker,
+  sanitizeFloorStatus, floorStatusOf, setFloorStatus, cycleFloorStatus, mapTicker,
   sheetOf, doorGeometry, hitTestSheet,
   addWall, setWallDashed, deleteWall, addDoorAt, patchOpening, deleteOpening,
   addZoneAt, patchZone, deleteZone, addPlanterAt, patchPlanter, deletePlanter,
@@ -227,7 +226,7 @@ describe("assignSeatNumbers (SEATS mode)", () => {
   });
 });
 
-describe("terrace occupancy + DIRTY state", () => {
+describe("terrace occupancy", () => {
   it("occupancy derives only from terrace-state reservations with a table", () => {
     const occ = terraceOccupancy([
       res("a", 4, { visit_state: "terrace", terrace_table: "T23", resName: "NOVAK" }),
@@ -239,14 +238,6 @@ describe("terrace occupancy + DIRTY state", () => {
     expect(occ.T23.data.resName).toBe("NOVAK");
   });
 
-  it("dirty flags set/clear per label and survive junk state", () => {
-    let ts = sanitizeTerraceState(null);
-    ts = setTerraceDirty(ts, "T23", true);
-    expect(isTerraceDirty(ts, "T23")).toBe(true);
-    ts = setTerraceDirty(ts, "T23", false);
-    expect(isTerraceDirty(ts, "T23")).toBe(false);
-    expect(sanitizeTerraceState("junk").dirty).toEqual({});
-  });
 });
 
 /* ── floor-first correction: geometry editor + status helpers ─────────────── */
@@ -415,54 +406,40 @@ describe("map ops", () => {
   });
 });
 
-describe("floor status (SET/DIRTY strips)", () => {
-  it("tap toggles SET; a tap on auto-DIRTY clears it (MARK CLEAN); empty buckets prune", () => {
+describe("floor status (SET markers)", () => {
+  it("tap toggles SET; empty buckets prune", () => {
     let st = {};
     st = cycleFloorStatus(st, "dining_a", "T3");
     expect(floorStatusOf(st, "dining_a", "T3")).toBe("SET");
     st = cycleFloorStatus(st, "dining_a", "T3");
     expect(floorStatusOf(st, "dining_a", "T3")).toBeNull();
     expect(st).toEqual({});
-    // DIRTY is only ever set automatically (terrace vacate) — a tap clears it
-    st = setFloorStatus({}, "terrace_main", "T23", "DIRTY");
-    st = cycleFloorStatus(st, "terrace_main", "T23");
-    expect(floorStatusOf(st, "terrace_main", "T23")).toBeNull();
   });
 
-  it("sanitize drops junk values and junk shapes; setFloorStatus guards ids", () => {
-    expect(sanitizeFloorStatus({ m1: { T1: "SET", T2: "WET" }, m2: "junk", m3: {} }))
+  it("sanitize drops junk values (incl. legacy DIRTY) and junk shapes; setFloorStatus guards ids", () => {
+    expect(sanitizeFloorStatus({ m1: { T1: "SET", T2: "WET", T3: "DIRTY" }, m2: "junk", m3: {} }))
       .toEqual({ m1: { T1: "SET" } });
     expect(sanitizeFloorStatus(null)).toEqual({});
-    expect(setFloorStatus({ m1: { T1: "SET" } }, null, "T1", "DIRTY")).toEqual({ m1: { T1: "SET" } });
+    expect(setFloorStatus({ m1: { T1: "SET" } }, null, "T1", "SET")).toEqual({ m1: { T1: "SET" } });
   });
 
-  it("statuses are keyed per map — layouts don't share strips", () => {
-    const st = setFloorStatus({}, "dining_a", "T3", "DIRTY");
+  it("statuses are keyed per map — layouts don't share markers", () => {
+    const st = setFloorStatus({}, "dining_a", "T3", "SET");
     expect(floorStatusOf(st, "dining_b", "T3")).toBeNull();
-  });
-
-  it("migrateTerraceState folds legacy dirty labels once, never over live strips", () => {
-    const legacy = { dirty: { T23: true, T25: true } };
-    expect(migrateTerraceState({}, legacy, "terrace_main"))
-      .toEqual({ terrace_main: { T23: "DIRTY", T25: "DIRTY" } });
-    const live = { terrace_main: { T22: "SET" } };
-    expect(migrateTerraceState(live, legacy, "terrace_main")).toEqual(live);
-    expect(migrateTerraceState({}, legacy, null)).toEqual({});
-    expect(migrateTerraceState({}, null, "terrace_main")).toEqual({});
   });
 });
 
 describe("mapTicker", () => {
-  it("counts covers/seated/reserved/set/dirty from the visible map's entries", () => {
+  it("counts covers/seated/reserved/set from the visible map's entries", () => {
     expect(mapTicker([
       { status: "occupied", pax: 2, strip: "SET" },
       { status: "occupied", pax: 4 },
       { status: "reserved" },
       { status: "arriving" },
-      { status: "free", strip: "DIRTY" },
+      { status: "free", strip: "SET" },
       null,
-    ])).toEqual({ covers: 6, seated: 2, reserved: 2, set: 1, dirty: 1 });
-    expect(mapTicker(undefined)).toEqual({ covers: 0, seated: 0, reserved: 0, set: 0, dirty: 0 });
+    ])).toEqual({ covers: 6, seated: 2, reserved: 2, set: 2 });
+    expect(mapTicker(undefined)).toEqual({ covers: 0, seated: 0, reserved: 0, set: 0 });
   });
 });
 

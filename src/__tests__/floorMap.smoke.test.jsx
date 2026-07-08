@@ -58,12 +58,6 @@ describe("FloorMap renderer", () => {
     expect(container.textContent).toContain("SHF");
   });
 
-  it("dirty tables carry the amber DIRTY strip label", () => {
-    const { container } = render(
-      <FloorMap map={terrace} mode="view" tableState={{ T23: { status: "free", dirty: true } }} />,
-    );
-    expect(container.textContent).toContain("DIRTY");
-  });
 
   it("seats mode: chair taps report (label, seatIndex) only for the edited table", () => {
     const onSeat = vi.fn();
@@ -101,7 +95,7 @@ describe("FloorMap service mode", () => {
     const onTap = vi.fn();
     const { container } = render(
       <FloorMap map={terrace} mode="service" onTableTap={onTap}
-        tableState={{ T21: { status: "free", strip: "DIRTY" } }} />,
+        tableState={{ T21: { status: "free", strip: "SET" } }} />,
     );
     const body = container.querySelector('[data-table="T21"]');
     fireEvent.click(body);
@@ -109,17 +103,14 @@ describe("FloorMap service mode", () => {
     expect(onTap.mock.calls[0][0].label).toBe("T21");
   });
 
-  it("renders SET / DIRTY chips under the table, pulses DIRTY, shows the allergy ▲", () => {
+  it("renders the SET chip under the table and the allergy ▲", () => {
     const { container } = render(
       <FloorMap map={terrace} mode="service" tableState={{
         T21: { status: "occupied", name: "NOVAK", pax: 2, strip: "SET", allergy: true },
-        T22: { status: "free", strip: "DIRTY" },
       }} />,
     );
     expect(container.textContent).toContain("SET");
-    expect(container.textContent).toContain("DIRTY");
     expect(container.textContent).toContain("▲");
-    expect(container.querySelector(".fm-strip-pulse")).toBeTruthy();
     // the chip sits in the badge slot BELOW the shape — never inside it
     const chip = [...container.querySelectorAll("text")].find((x) => x.textContent === "SET");
     const t21 = terrace.tables.find((t) => t.label === "T21");
