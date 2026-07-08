@@ -191,10 +191,11 @@ export default function FloorView({
     ? reservations.filter((r) => isArmed(r.data) && !r.data?.terrace_table)
     : [];
 
-  // Parties eligible for a terrace assignment (TerracePanel's exact rule).
-  const seatedIds = new Set(tables.filter((t) => t.active).map((t) => t.id));
+  // Parties eligible for a terrace assignment: anyone without a terrace leg
+  // yet. Seated-inside parties stay eligible — Djan seats the board table
+  // first (courses start) while the party physically sits outside.
   const bookedParties = reservations.filter((r) =>
-    visitStateOf(r.data) === "booked" && !r.data?.clearedFromBoard && !seatedIds.has(Number(r.table_id)));
+    visitStateOf(r.data) === "booked" && !r.data?.clearedFromBoard);
 
   // SET tables with a live board ticket — what SEND forwards to the kitchen.
   const sendableIds = map.kind === "terrace" ? [] : [...new Set(
@@ -370,6 +371,7 @@ export default function FloorView({
         restrictionsByLabel={restrictionsByLabel}
         seatCodes={false}
         seatNotesByLabel={seatNotesByLabel}
+        showPartyLines={false}
         height={isMobile ? 380 : 480}
         onTableTap={(t) => {
           // CHANGE TABLE in flight: the next FREE terrace table tap re-seats
