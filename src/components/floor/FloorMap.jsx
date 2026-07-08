@@ -490,25 +490,37 @@ export default function FloorMap({
             )}
 
             {/* label + party — the ▲ rides the label line so it stays inside
-                round shapes instead of floating off the corner */}
-            <text x={cx}
-              y={t.y + ((occupied || arriving || reserved) && showPartyLines ? 3.4 : t.h / 2 + 1)}
-              textAnchor="middle"
-              fontFamily={FONT} fontSize={2.8} fontWeight={700}
-              fill={arriving ? tokens.ink[0] : occupied ? tokens.green.text : tokens.ink[2]}>
-              {t.label}
-              {st.allergy && <tspan fill={tokens.signal.alert}> ▲</tspan>}
-            </text>
-            {showPartyLines && (occupied || arriving || reserved) && nameLine.text && (
-              <text x={cx} y={t.y + 6.2} textAnchor="middle" fontFamily={FONT} fontSize={nameLine.font} fill={tokens.ink[1]}>
-                {nameLine.text}
-              </text>
-            )}
-            {showPartyLines && (occupied || arriving || reserved) && subLine.text && (
-              <text x={cx} y={t.y + 8.6} textAnchor="middle" fontFamily={FONT} fontSize={subLine.font} fill={tokens.ink[2]}>
-                {subLine.text}
-              </text>
-            )}
+                round shapes instead of floating off the corner. In label-only
+                mode (FOH) a provided `sub` still renders — it carries the
+                party's DINING table on the terrace, their identity there. */}
+            {(() => {
+              const busy = occupied || arriving || reserved;
+              const second = busy && (showPartyLines ? (nameLine.text || subLine.text) : subLine.text);
+              return (
+                <>
+                  <text x={cx}
+                    y={t.y + (second ? 3.4 : t.h / 2 + 1)}
+                    textAnchor="middle"
+                    fontFamily={FONT} fontSize={2.8} fontWeight={700}
+                    fill={arriving ? tokens.ink[0] : occupied ? tokens.green.text : tokens.ink[2]}>
+                    {t.label}
+                    {st.allergy && <tspan fill={tokens.signal.alert}> ▲</tspan>}
+                  </text>
+                  {showPartyLines && busy && nameLine.text && (
+                    <text x={cx} y={t.y + 6.2} textAnchor="middle" fontFamily={FONT} fontSize={nameLine.font} fill={tokens.ink[1]}>
+                      {nameLine.text}
+                    </text>
+                  )}
+                  {busy && subLine.text && (
+                    <text x={cx} y={t.y + (showPartyLines && nameLine.text ? 8.6 : 6.2)} textAnchor="middle"
+                      fontFamily={FONT} fontSize={subLine.font} fontWeight={showPartyLines ? 400 : 700}
+                      fill={tokens.ink[1]}>
+                      {subLine.text}
+                    </text>
+                  )}
+                </>
+              );
+            })()}
             {st.badge && (
               <g>
                 <rect x={cx - 8} y={belowY} width={16} height={3.4}
