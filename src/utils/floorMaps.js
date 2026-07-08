@@ -340,7 +340,9 @@ const clampTablePos = (t) => ({
 // tables dropped near each other land with room for both tables' chairs
 // instead of overlapping them.
 const MAGNET = 1.5;
-const CHAIR_CLEARANCE = 7;
+// Wide enough for two FACING chair rows with stacked note pills (each ~5
+// units deep) plus a sliver of aisle.
+const CHAIR_CLEARANCE = 11;
 const magnetAxis = (pos, size, others) => {
   let best = null;
   for (const o of others) {

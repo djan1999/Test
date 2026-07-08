@@ -462,7 +462,7 @@ export default function FloorMap({
         // badges/chips drop below the chair band when chairs sit on the
         // bottom edge (deep enough to clear a stacked two-line note pill) —
         // nothing renders through a chair mark
-        const belowY = t.y + t.h + (seatPts.some((p) => p.out.y > 0.5) ? 6.4 : 0.8);
+        const belowY = t.y + t.h + (seatPts.some((p) => p.out.y > 0.5) ? 5.6 : 0.8);
 
         return (
           <g
@@ -569,9 +569,9 @@ export default function FloorMap({
               const note = !numbered ? seatNotesByLabel[t.label]?.[p.no] : null;
               // notes stack vertically (water over pairing) → a narrow pill
               const noteLines = note ? (Array.isArray(note) ? note : String(note).split("·")) : [];
-              // note pills sit a touch further out so their inner edge clears
-              // the table border on side chairs
-              const nx = p.x + p.out.x * 3.6, ny = p.y + p.out.y * 3.6;
+              // note pills hug the table edge so neighbouring tables' chairs
+              // don't meet in the aisle
+              const nx = p.x + p.out.x * 2.6, ny = p.y + p.out.y * 2.6;
               const pillW = noteLines.length ? Math.max(...noteLines.map((l) => l.length)) * 1.05 + 1.4 : 0;
               const pillH = noteLines.length * 1.9 + 1;
               return (
