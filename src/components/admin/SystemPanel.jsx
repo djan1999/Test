@@ -101,6 +101,11 @@ export default function SystemPanel({
               </div>
               {powerSync.streamError && (
                 <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 5, wordBreak: "break-word" }}>
+                  {powerSync.streamErrorAt && (
+                    <span style={{ color: tokens.ink[3] }}>
+                      [{new Date(powerSync.streamErrorAt).toLocaleTimeString("sl-SI", { hour: "2-digit", minute: "2-digit" })}]{" "}
+                    </span>
+                  )}
                   {powerSync.streamError}
                 </div>
               )}
