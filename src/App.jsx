@@ -2557,8 +2557,13 @@ export default function App() {
         const { writeReservation } = await import("./powersync/writes.js");
         await writeReservation({ id, date, table_id, data, created_at });
       } else {
+        // Never SET a null date: Postgres rejects it (NOT NULL — the 08.07
+        // null-date incident) and the write dies silently. Omitting the column
+        // keeps the store's existing date, matching the sqlite path's COALESCE.
+        const patch = { table_id, data };
+        if (date != null) patch.date = date;
         const { error } = await scopedFrom(TABLES.RESERVATIONS)
-          .update({ date, table_id, data }).eq("id", id);
+          .update(patch).eq("id", id);
         if (error) throw error;
       }
       return { ok: true };
@@ -3544,7 +3549,15 @@ export default function App() {
   };
 
   const upsertReservation = async ({ id, date, table_id, data: rData, _skipAutoMove = false }) => {
-    const dbRow = { date, table_id, data: rData };
+    // A reservation can never render without a date (the planner and the board
+    // reconcile both key on it) and Postgres rejects NULL — three writes died
+    // silently on 08.07. An EDIT arriving date-less simply omits the column so
+    // the store's existing date survives; a NEW reservation is refused loudly.
+    if (!id && !date) {
+      console.error("[reservations] refusing to create a reservation without a date:", { table_id, data: rData });
+      return { ok: false, error: new Error("reservation has no date") };
+    }
+    const dbRow = date ? { date, table_id, data: rData } : { table_id, data: rData };
     if (id) {
       // If an existing reservation's primary table_id changes and the previous
       // table has active service, carry the live state over to the new table so

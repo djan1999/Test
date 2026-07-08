@@ -101,11 +101,19 @@ export async function writeReservation({ id, date, table_id, data, created_at })
       [String(id), ws],
     );
     if (existing) {
+      // COALESCE keeps the stored date/table_id when an edit arrives without
+      // one. Binding NULL here nulled the column: the row fell out of every
+      // date-scoped read (the reservation "vanished" on this device) and the
+      // upload died on Postgres NOT NULL — the 08.07 null-date incident.
+      const tid = Number(table_id);
       await tx.execute(
-        "UPDATE reservations SET date = ?, table_id = ?, data = ? WHERE id = ? AND workspace_id = ?",
-        [date, Number(table_id), sqlite(data ?? {}), String(id), ws],
+        "UPDATE reservations SET date = COALESCE(?, date), table_id = COALESCE(?, table_id), data = ? WHERE id = ? AND workspace_id = ?",
+        [date ?? null, Number.isFinite(tid) ? tid : null, sqlite(data ?? {}), String(id), ws],
       );
     } else {
+      // A date-less INSERT can never render anywhere and Postgres rejects it —
+      // fail loudly so the caller reports {ok:false} instead of a silent loss.
+      if (!date) throw new Error(`[PowerSync writes] reservation ${id} has no date — refusing to insert an invisible row`);
       await tx.execute(
         "INSERT INTO reservations (id, workspace_id, date, table_id, data, created_at) VALUES (?, ?, ?, ?, ?, ?)",
         [String(id), ws, date, Number(table_id), sqlite(data ?? {}), created_at || new Date().toISOString()],
