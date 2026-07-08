@@ -3044,18 +3044,42 @@ export default function App() {
       return generated ? { ...c, course_key: generated } : c;
     });
     const rows = withKeys.map(c => courseToSupabaseRow(c));
-    // Diff against what this device last saw, so a save only touches the rows
-    // the user actually edited — two devices editing DIFFERENT courses at the
-    // same time no longer stomp each other with full-list rewrites, and the
-    // delete-missing pass only runs when this user really removed a course.
-    const prevJsonByPos = new Map(menuCourses.map(c => {
-      const row = courseToSupabaseRow(c);
-      return [row.position, JSON.stringify(row)];
-    }));
-    const changedRows = rows.filter(r => prevJsonByPos.get(r.position) !== JSON.stringify(r));
     const keptPositions = rows.map(r => r.position);
     const keptSet = new Set(keptPositions);
-    const removedAny = [...prevJsonByPos.keys()].some(p => !keptSet.has(p));
+    // Diff against the STORE's current rows — NEVER against the live
+    // menuCourses state. The course editor lifts every keystroke into that
+    // state, so the save's input and the old baseline were the SAME array:
+    // the diff always came up empty and every course save since the diff
+    // refactor (c44819c) was a silent no-op that still reported ok. Reading
+    // the store at save time keeps the property the diff exists for (two
+    // devices editing DIFFERENT courses don't stomp each other) while making
+    // the comparison honest. An unreadable store degrades to writing every
+    // row — the pre-refactor behavior, safe via upsert.
+    let prevJsonByPos = null;
+    try {
+      if (sqlitePrimaryRef.current) {
+        const { readMenuCourses } = await import("./powersync/reads.js");
+        const raw = await readMenuCourses();
+        prevJsonByPos = new Map(raw.map(r => {
+          const row = courseToSupabaseRow(supabaseRowToCourse(r));
+          return [row.position, JSON.stringify(row)];
+        }));
+      } else {
+        const stored = await fetchMenuCourses();
+        if (stored) {
+          prevJsonByPos = new Map(stored.map(c => {
+            const row = courseToSupabaseRow(c);
+            return [row.position, JSON.stringify(row)];
+          }));
+        }
+      }
+    } catch { /* store unreadable → write everything */ }
+    const changedRows = prevJsonByPos
+      ? rows.filter(r => prevJsonByPos.get(r.position) !== JSON.stringify(r))
+      : rows;
+    const removedAny = prevJsonByPos
+      ? [...prevJsonByPos.keys()].some(p => !keptSet.has(p))
+      : false;
     if (changedRows.length === 0 && !removedAny) {
       setMenuCourses(withKeys);
       menuCoursesDirtyRef.current = false; // draft matches the store again
