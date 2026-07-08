@@ -57,6 +57,19 @@ describe("reconcileTables — non-destructive reservation templating", () => {
     expect(next.find((t) => t.id === 3).resName).toBe("");
   });
 
+  it("HOTFIX REGRESSION: tableHasServiceContent survives point-free filter/some (index as 2nd arg)", async () => {
+    const { tableHasServiceContent, blankTable: blank } = await import("../utils/tableHelpers.js");
+    const tables = [
+      { ...blank(1), seats: [{ id: 1, extras: { cake: { ordered: true } } }] },
+      { ...blank(2), seats: [{ id: 1, extras: { cake: { ordered: true } } }] },
+      { ...blank(3) },
+    ];
+    // filter passes (element, INDEX, array) — index 1+ landed in
+    // ignoreExtraKeys and (1).includes crashed the app on 09.07.
+    expect(() => tables.filter(tableHasServiceContent)).not.toThrow();
+    expect(tables.filter(tableHasServiceContent)).toHaveLength(2);
+  });
+
   it("REGRESSION (09.07): its own cake seeding never freezes a birthday table — a later combine re-templates it", () => {
     const celebration = ["cake"];
     // First template: solo birthday booking on T3 → every seat gains an

@@ -116,11 +116,15 @@ export const sanitizeTable = t => ({
 // a multi-table reservation into a single display row.
 const seatHasContent = (s, ignoreExtraKeys = null) => {
   if (!s) return false;
+  // Array.isArray, NOT truthiness: point-free callers (tables.filter(
+  // tableHasServiceContent)) receive filter's INDEX as the second argument,
+  // and (1).includes crashed the whole app ("n.includes is not a function").
+  const ignore = Array.isArray(ignoreExtraKeys) ? ignoreExtraKeys : null;
   if (s.gender || (s.water && s.water !== "—") || (s.pairing && s.pairing !== "—" && s.pairing !== "")) return true;
   if ((s.aperitifs || []).length || (s.glasses || []).length || (s.cocktails || []).length
       || (s.spirits || []).length || (s.beers || []).length) return true;
   if (Object.entries(s.extras || {}).some(([k, e]) => e?.ordered
-      && !(ignoreExtraKeys && ignoreExtraKeys.includes(k)))) return true;
+      && !(ignore && ignore.includes(k)))) return true;
   if (Object.values(s.optionalPairings || {}).some(p => p?.ordered)) return true;
   return false;
 };
@@ -143,10 +147,12 @@ const seatHasContent = (s, ignoreExtraKeys = null) => {
 // every template, so nothing staff entered is at risk.
 export const tableHasServiceContent = (t, ignoreExtraKeys = null) => {
   if (!t) return false;
+  // Guard point-free usage (filter/some pass index as the 2nd arg).
+  const ignore = Array.isArray(ignoreExtraKeys) ? ignoreExtraKeys : null;
   if (t.active || t.arrivedAt || t.kitchenArchived) return true;
   if (t.kitchenLog && Object.keys(t.kitchenLog).length > 0) return true;
   if (Array.isArray(t.bottleWines) && t.bottleWines.length > 0) return true;
-  return (t.seats || []).some((s) => seatHasContent(s, ignoreExtraKeys));
+  return (t.seats || []).some((s) => seatHasContent(s, ignore));
 };
 
 const sameReservationKey = (t) => {
