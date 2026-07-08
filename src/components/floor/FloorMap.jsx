@@ -552,8 +552,10 @@ export default function FloorMap({
             {/* chair marks. Two registers: the editing contexts (seats
                 renumber, edit mode) keep numbered dots — the number IS the
                 thing being edited — while the presentation modes (view,
-                picker, service) draw the mockup's chair bars along the edge,
-                numbers hidden except on restricted seats (amber + code). */}
+                picker, service) draw chair bars along the edge. A seat with
+                a beverage note grows into a pill with the note INSIDE it —
+                one element, nothing floating. Restrictions highlight in the
+                app's red (amber stays DIRTY's color). */}
             {seatPts.map((p, i) => {
               const seatRestr = restr.filter((r) => Number(r.pos) === Number(p.no) && p.no != null);
               const hasRestr = seatRestr.length > 0;
@@ -564,6 +566,10 @@ export default function FloorMap({
               const numbered = mode === "seats" || editing;
               const deg = Math.atan2(p.out.y, p.out.x) * 180 / Math.PI;
               const note = !numbered ? seatNotesByLabel[t.label]?.[p.no] : null;
+              // note pills sit a touch further out so their inner edge clears
+              // the table border on side chairs
+              const nx = p.x + p.out.x * 3.6, ny = p.y + p.out.y * 3.6;
+              const pillW = note ? note.length * 1.05 + 1.6 : 0;
               return (
                 <g key={i}
                   data-seat={i}
@@ -577,38 +583,38 @@ export default function FloorMap({
                   {numbered ? (
                     <>
                       <circle cx={sx} cy={sy} r={1.7}
-                        fill={hasRestr ? tokens.signal.warn : tokens.neutral[0]}
-                        stroke={hasRestr ? tokens.signal.warn : seatEditing || seatDraggable ? tokens.ink[1] : tokens.ink[3]}
+                        fill={hasRestr ? tokens.signal.alert : tokens.neutral[0]}
+                        stroke={hasRestr ? tokens.signal.alert : seatEditing || seatDraggable ? tokens.ink[1] : tokens.ink[3]}
                         strokeWidth={0.3} />
                       <text x={sx} y={sy + 0.75} textAnchor="middle" fontFamily={FONT} fontSize={2}
                         fill={hasRestr ? tokens.neutral[0] : tokens.ink[1]} fontWeight={700}>
                         {p.no == null ? "·" : `${p.no}${p.confirm ? "?" : ""}`}
                       </text>
                     </>
+                  ) : note ? (
+                    <g>
+                      <rect x={nx - pillW / 2} y={ny - 1.5} width={pillW} height={3}
+                        fill={hasRestr ? tokens.signal.alert : tokens.ink[5]}
+                        stroke={hasRestr ? tokens.signal.alert : tokens.ink[4]}
+                        strokeWidth={0.25} />
+                      <text x={nx} y={ny + 0.6} textAnchor="middle" fontFamily={FONT} fontSize={1.6}
+                        fill={hasRestr ? tokens.neutral[0] : tokens.ink[1]} fontWeight={700}>
+                        {note}
+                      </text>
+                    </g>
                   ) : (
                     <g transform={`translate(${sx},${sy}) rotate(${deg})`}>
                       <rect x={-0.55} y={-1.7} width={1.1} height={3.4}
-                        fill={hasRestr ? tokens.signal.warn : tokens.ink[5]}
-                        stroke={hasRestr ? tokens.signal.warn : tokens.ink[4]}
+                        fill={hasRestr ? tokens.signal.alert : tokens.ink[5]}
+                        stroke={hasRestr ? tokens.signal.alert : tokens.ink[4]}
                         strokeWidth={0.25} />
                     </g>
                   )}
                   {hasRestr && seatCodes && (
                     <text x={sx + p.out.x * 3.2} y={sy + p.out.y * 3.2 + 0.7}
                       textAnchor="middle" fontFamily={FONT} fontSize={1.8}
-                      fill={tokens.signal.warn} fontWeight={700}>
+                      fill={tokens.signal.alert} fontWeight={700}>
                       {restrictionCode(seatRestr[0].note)}
-                    </text>
-                  )}
-                  {/* per-seat beverage note — waters/pairings BY POSITION.
-                      Placed BESIDE the chair along the table edge (tangent),
-                      never further out, so it can't collide with the status
-                      chip/badge row below the table. */}
-                  {note && !(hasRestr && seatCodes) && (
-                    <text x={sx + -p.out.y * 3.6} y={sy + p.out.x * 3.6 + 0.55}
-                      textAnchor="middle" fontFamily={FONT} fontSize={1.6}
-                      fill={tokens.ink[2]} fontWeight={700}>
-                      {note}
                     </text>
                   )}
                 </g>

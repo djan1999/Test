@@ -149,10 +149,10 @@ export default function KitchenFloorView({
           )}
           {popover.rows.map((r, i) => (
             <div key={i} style={{ display: "flex", gap: 12, alignItems: "baseline", padding: "3px 0", borderBottom: `1px solid ${tokens.ink[5]}` }}>
-              <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: r.seat ? tokens.signal.warn : tokens.ink[1], minWidth: 44 }}>
+              <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: r.seat ? tokens.signal.alert : tokens.ink[1], minWidth: 44 }}>
                 {r.seat ? `SEAT ${r.seat}` : "TABLE"}
               </span>
-              <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: tokens.signal.warn, minWidth: 34 }}>{r.code}</span>
+              <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: tokens.signal.alert, minWidth: 34 }}>{r.code}</span>
               <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2] }}>{r.note}</span>
             </div>
           ))}
