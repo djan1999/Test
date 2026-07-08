@@ -64,6 +64,20 @@ function snapshot(s) {
   };
 }
 
+// Wipe the local DB and reconnect the stream — the self-heal for a local DB
+// contaminated with another account's rows. Devices that switched logins
+// BEFORE the account-switch guard existed (the 07.07 admin → restaurant
+// handover) still carry the previous user's workspaces; the foreign-rows
+// tripwire spots them and calls this instead of wedging on the fallback
+// forever. Safe because the stream can only re-deliver the CURRENT user's
+// workspaces. Registered status listeners survive the reconnect.
+export async function clearLocalAndResync() {
+  const db = getPowerSync();
+  await db.disconnectAndClear();
+  await db.connect(new SupabaseConnector());
+  _connected = true;
+}
+
 // Connect the local DB to the PowerSync service and start streaming. `onStatus`
 // (optional) is called with a {connected, hasSynced, lastSyncedAt} snapshot on
 // every status change and once immediately. Returns a disconnect function.

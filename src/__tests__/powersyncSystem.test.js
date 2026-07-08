@@ -71,4 +71,12 @@ describe("powersync/system — account-switch clears the on-device DB", () => {
     expect(h.connects).toBe(1);
     expect(localStorage.getItem("milka-powersync-last-user")).toBe("user-b");
   });
+
+  it("clearLocalAndResync wipes the local DB and reconnects the stream", async () => {
+    const { connect, clearLocalAndResync } = await loadSystem();
+    await connect();
+    await clearLocalAndResync();
+    expect(h.clears).toBe(1);
+    expect(h.connects).toBe(2);
+  });
 });
