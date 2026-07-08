@@ -17,7 +17,7 @@ const tables = [
   boardTable(4, { resName: "KOVAČ", guests: 4, resTime: "19:30" }),
   boardTable(9, { active: true, resName: "WEISS", guests: 4, seats: [
     { id: 1, water: "XC", pairing: "Non-Alc" },
-    { id: 2, water: "OW", pairing: "—" },
+    { id: 2, water: "OW", pairing: "Wine" },
   ] }),
   ...[2, 3, 5, 6, 7, 8, 10].map((id) => boardTable(id)),
 ];
@@ -74,10 +74,11 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).toContain("▲");
     expect(container.textContent).toContain("ARRIVING · KV");
     // waters/pairings BY POSITION at T9's chairs — the HOUSE shortcuts as
-    // stored, stacked water-over-pairing in the chair pill
+    // stored, stacked water-over-pairing in the chair pill (Wine → WP)
     expect(container.textContent).toContain("XC");
     expect(container.textContent).toContain("NA");
     expect(container.textContent).toContain("OW");
+    expect(container.textContent).toContain("WP");
   });
 
   it("a dining table is one big SET toggle — tap calls the status handler, no sheet", () => {
