@@ -45,12 +45,19 @@ input, textarea, select {
   font-size: 16px;
 }
 
-/* Eliminate the 300ms tap delay on interactive elements.
-   touch-action: manipulation disables double-tap-to-zoom so the browser
-   fires click immediately on touch — critical for service-speed UI. */
-button, [role="button"], a, label {
-  touch-action: manipulation;
-}
+/* Eliminate the ~350ms double-tap-to-zoom wait on EVERY tap target, not just
+   buttons. Most of this app's controls are clickable <div>s and SVG shapes
+   (board cards, seat cells, floor tables, status strips) — scoping this to
+   button/a/label left all of them lagging: tap twice fast and the second tap
+   landed on a delay while iOS waited to rule out a zoom gesture.
+   `manipulation` keeps scrolling and pinch-zoom working; gesture surfaces
+   that need full control (the floor editor) override with inline
+   touch-action, which beats this stylesheet rule. */
+* { touch-action: manipulation; }
+
+/* Kill the gray tap-flash overlay — it reads as latency. The button :active
+   inset shadow below stays as the press feedback. */
+html { -webkit-tap-highlight-color: rgba(0, 0, 0, 0); }
 
 body { color: #1a1a1a; background: #f8f7f5; }
 
