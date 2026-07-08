@@ -196,11 +196,11 @@ describe("seatDisplayPoints", () => {
 });
 
 describe("chair-clearance magnet", () => {
-  it("a table dropped near a neighbour snaps to exactly one chair band of gap", () => {
-    // T1 (w12) dropped so its left edge falls ~6.4 right of T2-3's right edge
-    // (54): snaps to 61 — the 7-unit chair-clearance stop
-    const s = moveTable(state, "dining_a", "T1", 60.4, 24);
-    expect(findMapTable(getActiveDiningMap(s), "T1").x).toBe(61);
+  it("a table dropped near a neighbour snaps to a full chair-band of gap", () => {
+    // T1 dropped so its left edge falls near T2-3's right edge (54) + the
+    // 11-unit clearance stop → snaps to 65
+    const s = moveTable(state, "dining_a", "T1", 64.6, 24);
+    expect(findMapTable(getActiveDiningMap(s), "T1").x).toBe(65);
   });
 });
 
@@ -288,13 +288,12 @@ describe("table ops", () => {
     expect([far.x, far.y]).toEqual([MAP_W - t.w, MAP_H - t.h]);
   });
 
-  it("magnetic drop: near-misses land edge-level or one chair band off the neighbour", () => {
-    // y: bottom edge 19 pulls level with T2-3's bottom edge 18 → y 9.
-    // x: right edge 62 pulls onto the chair-clearance stop 61 (T2-3's right
-    // edge 54 + the 7-unit chair band) → x 49.
+  it("magnetic drop: a near-miss lands edge-level with the neighbour", () => {
+    // y: bottom edge 19 pulls level with T2-3's bottom edge 18 → y 9;
+    // x 50 has no stop in reach and stays put
     const s = moveTable(state, "dining_a", "T1", 50, 9.6);
     const t = findMapTable(getActiveDiningMap(s), "T1");
-    expect([t.x, t.y]).toEqual([49, 9]);
+    expect([t.x, t.y]).toEqual([50, 9]);
   });
 
   it("resizeTable enforces minimums; rotateTable swaps w/h and re-clamps", () => {
