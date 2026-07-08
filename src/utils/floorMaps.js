@@ -246,16 +246,35 @@ export function applyLayoutSwitchRow(row, reservation) {
 // ── seat geometry (kept here so it is pure + testable; FloorMap.jsx renders) ─
 // Returns one point per seat ON the table outline, in map units. `out` is the
 // unit outward normal so the renderer can offset chair marks off the edge.
+//
+// Rect seats sharing a side are ALWAYS evenly distributed along it — the
+// stored offset only decides their ORDER (and where a drag re-inserts a
+// seat). Chairs come out perfectly symmetric by construction: one seat sits
+// centered, two sit at the quarter points, three at sixths, and so on.
+// Round seats keep their stored compass angles (15°-snapped by moveSeat) —
+// clustering two chairs on the north face is intentional placement there.
 export function seatDisplayPoints(table) {
   const { x, y, w, h } = table;
-  return (table.seats || []).map((s) => {
+  const seats = table.seats || [];
+
+  const bySide = { N: [], S: [], W: [], E: [] };
+  seats.forEach((s, i) => {
+    if (s.angle == null) bySide[bySide[s.side] ? s.side : "E"].push({ s, i });
+  });
+  const evenOffset = new Map(); // seat array index → distributed offset
+  for (const side of Object.keys(bySide)) {
+    const row = bySide[side].sort((a, b) => ((a.s.offset ?? 0.5) - (b.s.offset ?? 0.5)) || (a.i - b.i));
+    row.forEach((e, rank) => evenOffset.set(e.i, (rank + 0.5) / row.length));
+  }
+
+  return seats.map((s, i) => {
     if (s.angle != null) {
       const cx = x + w / 2, cy = y + h / 2, r = Math.min(w, h) / 2;
       const rad = (s.angle * Math.PI) / 180;
       const ox = Math.sin(rad), oy = -Math.cos(rad);
       return { no: s.no, confirm: !!s.confirm, x: cx + r * ox, y: cy + r * oy, out: { x: ox, y: oy } };
     }
-    const t = s.offset ?? 0.5;
+    const t = evenOffset.get(i) ?? 0.5;
     switch (s.side) {
       case "N": return { no: s.no, confirm: !!s.confirm, x: x + t * w, y, out: { x: 0, y: -1 } };
       case "S": return { no: s.no, confirm: !!s.confirm, x: x + t * w, y: y + h, out: { x: 0, y: 1 } };
@@ -316,12 +335,16 @@ const clampTablePos = (t) => ({
 // Magnetic alignment: a dropped table pulls its edges level with any other
 // table's edges within reach, per axis — "exactly the same" placement without
 // pixel-precise dragging. Edges only (not centers), so positions stay on the
-// integer grid.
+// integer grid. Besides edge-alignment, it also offers CHAIR-CLEARANCE stops:
+// positions exactly one chair band (7 units) off a neighbour's edge, so two
+// tables dropped near each other land with room for both tables' chairs
+// instead of overlapping them.
 const MAGNET = 1.5;
+const CHAIR_CLEARANCE = 7;
 const magnetAxis = (pos, size, others) => {
   let best = null;
   for (const o of others) {
-    for (const target of [o.p, o.p + o.s]) {
+    for (const target of [o.p, o.p + o.s, o.p - CHAIR_CLEARANCE, o.p + o.s + CHAIR_CLEARANCE]) {
       for (const mine of [0, size]) {
         const d = target - (pos + mine);
         if (Math.abs(d) <= MAGNET && (best == null || Math.abs(d) < Math.abs(best))) best = d;
