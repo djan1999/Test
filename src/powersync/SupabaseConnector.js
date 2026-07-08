@@ -22,10 +22,12 @@
 import { supabase, getWorkspaceId } from "../lib/supabaseClient.js";
 import { POWERSYNC_URL } from "./config.js";
 
-// @powersync/common UpdateType value, inlined so this module stays importable
+// @powersync/common UpdateType values, inlined so this module stays importable
 // without the SDK (unit tests exercise uploadData with mock transactions).
-// op.op is "PUT" | "PATCH" | "DELETE"; PUT and PATCH share the upsert path.
+// op.op is "PUT" | "PATCH" | "DELETE". PUT (full row) uploads as an upsert;
+// PATCH (changed columns only) uploads as a plain UPDATE — see applyOp.
 const OP_DELETE = "DELETE";
+const OP_PATCH = "PATCH";
 
 // Conflict targets per composite-key table — must mirror lib/scopedDb.js
 // COMPOSITE_CONFLICT / the schema.sql primary keys exactly, or PostgREST
@@ -157,10 +159,6 @@ async function applyOp(op) {
     return from.delete().match({ id: op.id, workspace_id: ws });
   }
 
-  // PUT and PATCH both land as an upsert on the legacy conflict target:
-  // PostgREST only SETs the columns present in the payload, so a PATCH updates
-  // just the changed columns while a PUT writes the full row — mirroring the
-  // legacy scopedFrom(table).upsert() behaviour exactly.
   const row = buildRow(op, ws);
 
   if (op.table === "beverages") {
@@ -177,6 +175,27 @@ async function applyOp(op) {
   }
 
   const nat = NATURAL_KEY[op.table];
+
+  // A PATCH carries ONLY the columns that changed. Upserting it builds an
+  // INSERT tuple with NULL for every absent column, and Postgres checks NOT
+  // NULL constraints on that proposed tuple EVEN when the key conflicts and
+  // the UPDATE arm would run. So a reservations edit that didn't change
+  // `date` died with 23502, was permanently skipped, and the next checkpoint
+  // reverted the device — the 08/09.07 "assigned, then it unassigns itself"
+  // class (terrace assigns, visit states, archive soft-deletes). A plain
+  // UPDATE sets only what the op carries and can never trip absent-column
+  // constraints. A PATCH whose server row is gone matches nothing and is
+  // dropped — a deleted row must stay deleted, not be resurrected half-empty.
+  if (op.op === OP_PATCH) {
+    if (nat) {
+      const key = nat.int ? Number(op.id) : op.id;
+      return from.update(row).match({ [nat.column]: key, workspace_id: ws });
+    }
+    const { id: _rowId, ...cols } = row;
+    return from.update(cols).match({ id: op.id, workspace_id: ws });
+  }
+
+  // PUT carries the full row — the legacy scopedFrom(table).upsert() shape.
   return from.upsert(row, { onConflict: nat ? nat.conflict : "id" });
 }
 

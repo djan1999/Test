@@ -66,11 +66,42 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     expect(tx.complete).toHaveBeenCalledTimes(1);
   });
 
-  it("service_tables PATCH without table_id column derives it from the aliased op id", async () => {
+  it("service_tables PATCH → plain UPDATE matched on the natural key (never an upsert)", async () => {
     const tx = makeTx([patch("service_tables", "7", { data: "{}", updated_at: "t" })]);
     await new SupabaseConnector().uploadData(makeDb(tx));
-    expect(h.calls[0].payload.table_id).toBe(7);
-    expect(h.calls[0].payload.workspace_id).toBe("ws-active"); // falls back to active workspace
+    const c = h.calls[0];
+    expect(c.op).toBe("update");
+    expect(c.match).toEqual({ table_id: 7, workspace_id: "ws-active" }); // falls back to active workspace
+    expect(c.payload.data).toEqual({});
+  });
+
+  it("REGRESSION (09.07): reservations PATCH without date → UPDATE by id, NOT an upsert", async () => {
+    // Upserting a partial PATCH builds an INSERT tuple with NULL date, and
+    // Postgres checks NOT NULL on that tuple even though the row exists —
+    // 23502 → permanent skip → the next checkpoint reverted the device
+    // ("assigned a terrace table, then it unassigned itself").
+    const tx = makeTx([patch("reservations", "uuid-1", {
+      data: '{"resName":"Smith","visit_state":"terrace_seated","terrace_table":"KV"}',
+      workspace_id: "ws-a",
+    })]);
+    await new SupabaseConnector().uploadData(makeDb(tx));
+    const c = h.calls[0];
+    expect(c.op).toBe("update");
+    expect(c.match).toEqual({ id: "uuid-1", workspace_id: "ws-a" });
+    expect(c.payload.data).toEqual({ resName: "Smith", visit_state: "terrace_seated", terrace_table: "KV" });
+    expect("id" in c.payload).toBe(false);
+    expect("date" in c.payload).toBe(false); // absent column stays absent — never NULLed
+  });
+
+  it("REGRESSION (09.07): service_archive PATCH (soft-delete) → UPDATE by id", async () => {
+    const tx = makeTx([patch("service_archive", "uuid-a", {
+      deleted_at: "2026-07-09T10:00:00Z", workspace_id: "ws-a",
+    })]);
+    await new SupabaseConnector().uploadData(makeDb(tx));
+    const c = h.calls[0];
+    expect(c.op).toBe("update");
+    expect(c.match).toEqual({ id: "uuid-a", workspace_id: "ws-a" });
+    expect(c.payload.deleted_at).toBe("2026-07-09T10:00:00Z");
   });
 
   it("menu_courses PUT → upsert on workspace_id,position with 0/1→boolean and jsonb parsing", async () => {
