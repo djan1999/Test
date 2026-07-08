@@ -4788,9 +4788,21 @@ export default function App() {
     channelName: `milka-service-tables-${workspaceId}`,
     filter: wsFilter,
     table: TABLES.SERVICE_TABLES,
-    // Refetch through the fallback loader: adoptRemoteTables folds the fresh
-    // rows in with the unsaved-local-edit protection, exactly like the poll.
-    onChange: () => { fallbackBoardReloadRef.current?.(); },
+    // Apply the changed row straight from the event payload — adoptRemoteTables
+    // folds a PARTIAL set (tables not in it keep local state), so another
+    // device's tap paints here at realtime latency with no REST refetch
+    // round-trip in between (the refetch made the live feed visibly lag).
+    // Mirrors the primary watch handler's gates. Events without a row fall
+    // back to the full reload.
+    onChange: (payload) => {
+      if (payload.new && payload.new.table_id != null) {
+        adoptRemoteTables([payload.new]);
+        setRemoteBoardLoaded(true);
+        setBoardSyncTick(t => t + 1);
+      } else {
+        fallbackBoardReloadRef.current?.();
+      }
+    },
     enabled: fallbackRealtime,
   });
 
