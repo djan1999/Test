@@ -460,8 +460,9 @@ export default function FloorMap({
         const nameLine = fitText(partyStr, 2.3, availW);
         const subLine = fitText(st.sub, 2, availW);
         // badges/chips drop below the chair band when chairs sit on the
-        // bottom edge — nothing renders through a chair mark anymore
-        const belowY = t.y + t.h + (seatPts.some((p) => p.out.y > 0.5) ? 4.4 : 0.8);
+        // bottom edge (deep enough to clear a stacked two-line note pill) —
+        // nothing renders through a chair mark
+        const belowY = t.y + t.h + (seatPts.some((p) => p.out.y > 0.5) ? 6.4 : 0.8);
 
         return (
           <g
@@ -566,10 +567,13 @@ export default function FloorMap({
               const numbered = mode === "seats" || editing;
               const deg = Math.atan2(p.out.y, p.out.x) * 180 / Math.PI;
               const note = !numbered ? seatNotesByLabel[t.label]?.[p.no] : null;
+              // notes stack vertically (water over pairing) → a narrow pill
+              const noteLines = note ? (Array.isArray(note) ? note : String(note).split("·")) : [];
               // note pills sit a touch further out so their inner edge clears
               // the table border on side chairs
               const nx = p.x + p.out.x * 3.6, ny = p.y + p.out.y * 3.6;
-              const pillW = note ? note.length * 1.05 + 1.6 : 0;
+              const pillW = noteLines.length ? Math.max(...noteLines.map((l) => l.length)) * 1.05 + 1.4 : 0;
+              const pillH = noteLines.length * 1.9 + 1;
               return (
                 <g key={i}
                   data-seat={i}
@@ -591,16 +595,20 @@ export default function FloorMap({
                         {p.no == null ? "·" : `${p.no}${p.confirm ? "?" : ""}`}
                       </text>
                     </>
-                  ) : note ? (
+                  ) : noteLines.length ? (
                     <g>
-                      <rect x={nx - pillW / 2} y={ny - 1.5} width={pillW} height={3}
+                      <rect x={nx - pillW / 2} y={ny - pillH / 2} width={pillW} height={pillH}
                         fill={hasRestr ? tokens.signal.alert : tokens.ink[5]}
                         stroke={hasRestr ? tokens.signal.alert : tokens.ink[4]}
                         strokeWidth={0.25} />
-                      <text x={nx} y={ny + 0.6} textAnchor="middle" fontFamily={FONT} fontSize={1.6}
-                        fill={hasRestr ? tokens.neutral[0] : tokens.ink[1]} fontWeight={700}>
-                        {note}
-                      </text>
+                      {noteLines.map((line, li) => (
+                        <text key={li} x={nx}
+                          y={ny - ((noteLines.length - 1) * 1.9) / 2 + li * 1.9 + 0.55}
+                          textAnchor="middle" fontFamily={FONT} fontSize={1.5}
+                          fill={hasRestr ? tokens.neutral[0] : tokens.ink[1]} fontWeight={700}>
+                          {line}
+                        </text>
+                      ))}
                     </g>
                   ) : (
                     <g transform={`translate(${sx},${sy}) rotate(${deg})`}>
