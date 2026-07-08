@@ -179,6 +179,18 @@ describe("seatDisplayPoints", () => {
     expect(pts[1].x).toBeCloseTo(0);  expect(pts[1].y).toBeCloseTo(5); // W
   });
 
+  it("round chairs distribute into a perfect ring — stored angles set order + rotation", () => {
+    // 3 sloppily-dragged seats: offsets vs a 120° ring average ≈56.5° → the
+    // ring snaps to base 60 → display angles 60 / 180 / 300
+    const pts = seatDisplayPoints({ x: 0, y: 0, w: 10, h: 10, seats: [
+      { no: 1, angle: 40 }, { no: 2, angle: 200 }, { no: 3, angle: 290 },
+    ] });
+    const angleOf = (p) => (Math.atan2(p.out.x, -p.out.y) * 180 / Math.PI + 360) % 360;
+    expect(angleOf(pts[0])).toBeCloseTo(60);
+    expect(angleOf(pts[1])).toBeCloseTo(180);
+    expect(angleOf(pts[2])).toBeCloseTo(300);
+  });
+
   it("rect chairs sharing a side distribute evenly — stored offsets only order them", () => {
     // three sloppily-dragged N seats land at perfect sixths, in offset order
     const pts = seatDisplayPoints({ x: 0, y: 0, w: 12, h: 6, seats: [
