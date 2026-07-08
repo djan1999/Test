@@ -10,10 +10,12 @@ import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/c
 const FONT = tokens.font;
 
 // Kitchen floor view — STRICTLY read-only. The kitchen sees the room the way
-// FOH sees it: terrace (default tab) + the active dining layout, party name,
-// pax, course progress C4/12, LAST BITE ✓ arming, chair marks with
-// restrictions filled amber, and the FOH SET/DIRTY strips (service mode with
-// no strip handler — the kitchen watches hands-calls, never sets them). The
+// FOH sees it: terrace (default tab) + the active dining layout, ×pax,
+// course progress C4/12 (the kitchen's core info — FOH drops it, we keep
+// it), LAST BITE ✓ arming, chair marks with restrictions in the app red,
+// and the FOH SET/DIRTY strips (service mode with no strip handler — the
+// kitchen watches hands-calls, never sets them). NO guest names, same as
+// the FOH floor. The
 // data is the same App state the kitchen board renders from (PowerSync sync
 // stream / realtime safety net) — no new subscription.
 export default function KitchenFloorView({
@@ -54,7 +56,6 @@ export default function KitchenFloorView({
         const boardTable = tables.find((bt) => bt.id === Number(r.table_id)) || null;
         tableState[t.label] = {
           status: "occupied",
-          name: r.data?.resName || "—",
           pax: r.data?.guests || undefined,
           sub: progressOf(boardTable),
           badge: isArmed(r.data) ? { text: "LAST BITE ✓" } : undefined,
@@ -62,7 +63,7 @@ export default function KitchenFloorView({
         };
         const restr = (r.data?.restrictions || []).filter((x) => x && x.note);
         if (restr.length) restrictionsByLabel[t.label] = restr;
-        popoverData[t.label] = { name: r.data?.resName || "—", rows: restrRows(r.data?.restrictions) };
+        popoverData[t.label] = { rows: restrRows(r.data?.restrictions) };
       } else {
         tableState[t.label] = { status: "free", strip };
       }
@@ -82,7 +83,6 @@ export default function KitchenFloorView({
       if (bt?.active) {
         tableState[t.label] = {
           status: "occupied",
-          name: bt.resName || "—",
           pax: bt.guests || undefined,
           sub: progressOf(bt),
           strip,
@@ -90,7 +90,6 @@ export default function KitchenFloorView({
       } else if (arriving) {
         tableState[t.label] = {
           status: "arriving",
-          name: arriving.data?.resName || "—",
           pax: arriving.data?.guests || undefined,
           badge: { text: "ARRIVING · KV" },
           strip,
@@ -102,7 +101,6 @@ export default function KitchenFloorView({
       if (restr.length) restrictionsByLabel[t.label] = restr;
       if (bt?.active || arriving) {
         popoverData[t.label] = {
-          name: (bt?.active ? bt.resName : arriving?.data?.resName) || "—",
           rows: restrRows(bt?.active ? bt.restrictions : arriving?.data?.restrictions),
         };
       }
@@ -142,7 +140,7 @@ export default function KitchenFloorView({
       {popover && (
         <div style={{ border: `1px solid ${tokens.ink[4]}`, borderTop: "none", background: tokens.neutral[0], padding: "10px 14px" }}>
           <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], marginBottom: 6 }}>
-            [{popover.label}] {popover.name}
+            [{popover.label}]
           </div>
           {popover.rows.length === 0 && (
             <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3] }}>no restrictions</div>
