@@ -114,12 +114,13 @@ export const sanitizeTable = t => ({
 // Two seats are "real" if they hold any guest-facing data. Used by mergeTableGroups
 // below to discard empty placeholder seats from secondary tables when collapsing
 // a multi-table reservation into a single display row.
-const seatHasContent = (s) => {
+const seatHasContent = (s, ignoreExtraKeys = null) => {
   if (!s) return false;
   if (s.gender || (s.water && s.water !== "—") || (s.pairing && s.pairing !== "—" && s.pairing !== "")) return true;
   if ((s.aperitifs || []).length || (s.glasses || []).length || (s.cocktails || []).length
       || (s.spirits || []).length || (s.beers || []).length) return true;
-  if (Object.values(s.extras || {}).some(e => e?.ordered)) return true;
+  if (Object.entries(s.extras || {}).some(([k, e]) => e?.ordered
+      && !(ignoreExtraKeys && ignoreExtraKeys.includes(k)))) return true;
   if (Object.values(s.optionalPairings || {}).some(p => p?.ordered)) return true;
   return false;
 };
@@ -132,12 +133,20 @@ const seatHasContent = (s) => {
 // Reservation-derived fields (resName, resTime, restrictions) deliberately do
 // NOT count, so a reserved-but-unstarted table can still be updated or
 // ghost-cleared from the planner.
-export const tableHasServiceContent = (t) => {
+//
+// `ignoreExtraKeys` (the reconcile passes its celebrationKeys): ordered extras
+// under these keys don't count as content. The reconcile itself SEEDS the
+// celebration extras from the reservation's birthday flag — counting them
+// froze every birthday booking's table after its first template, so a later
+// combine/move/delete could never re-template it (the 09.07 "tables aren't
+// properly combined" bug). They're fully reservation-derived and re-seeded on
+// every template, so nothing staff entered is at risk.
+export const tableHasServiceContent = (t, ignoreExtraKeys = null) => {
   if (!t) return false;
   if (t.active || t.arrivedAt || t.kitchenArchived) return true;
   if (t.kitchenLog && Object.keys(t.kitchenLog).length > 0) return true;
   if (Array.isArray(t.bottleWines) && t.bottleWines.length > 0) return true;
-  return (t.seats || []).some(seatHasContent);
+  return (t.seats || []).some((s) => seatHasContent(s, ignoreExtraKeys));
 };
 
 const sameReservationKey = (t) => {

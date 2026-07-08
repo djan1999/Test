@@ -39,14 +39,18 @@ export function reconcileTables(prevTables, reservationRows, celebrationKeys = [
   const resvKey = (name, time) => `${String(name || "").trim().toLowerCase()}|${String(time || "")}`;
   const seatedGuests = new Set();
   for (const t of prevTables || []) {
-    if (tableHasServiceContent(t) && (t.resName || t.resTime)) {
+    // celebrationKeys are ignored in the content check: the reconcile seeds
+    // those extras itself from the reservation's birthday flag, and counting
+    // them froze every birthday table after its first template (see
+    // tableHasServiceContent).
+    if (tableHasServiceContent(t, celebrationKeys) && (t.resName || t.resTime)) {
       seatedGuests.add(resvKey(t.resName, t.resTime));
     }
   }
 
   let changed = false;
   const next = (prevTables || []).map((t) => {
-    if (tableHasServiceContent(t)) return t; // live service is sacrosanct
+    if (tableHasServiceContent(t, celebrationKeys)) return t; // live STAFF work is sacrosanct
 
     const owner = byTable.get(t.id);
     if (owner && owner.group.length <= 1 && seatedGuests.has(resvKey(owner.d.resName, owner.d.resTime))) {

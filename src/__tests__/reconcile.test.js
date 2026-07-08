@@ -57,6 +57,35 @@ describe("reconcileTables — non-destructive reservation templating", () => {
     expect(next.find((t) => t.id === 3).resName).toBe("");
   });
 
+  it("REGRESSION (09.07): its own cake seeding never freezes a birthday table — a later combine re-templates it", () => {
+    const celebration = ["cake"];
+    // First template: solo birthday booking on T3 → every seat gains an
+    // ordered celebration extra (seeded by the reconcile itself).
+    const solo = reconcileTables(board(), [resv(3, {
+      resName: "Kat", resTime: "18:30", guests: 4, birthday: true, tableGroup: [],
+    })], celebration);
+    expect(solo.find((t) => t.id === 3).seats.every((s) => s.extras?.cake?.ordered)).toBe(true);
+
+    // The booking now combines onto T2+T3. Before the fix, T3 counted its own
+    // seeded cake extras as staff work, froze, and kept the stale solo card.
+    const combined = reconcileTables(solo, [resv(2, {
+      resName: "Kat", resTime: "18:30", guests: 4, birthday: true, tableGroup: [2, 3],
+    })], celebration);
+    expect(combined.find((t) => t.id === 2).tableGroup).toEqual([2, 3]);
+    expect(combined.find((t) => t.id === 3).tableGroup).toEqual([2, 3]);
+    // The cake still fires: seeding survives the re-template.
+    expect(combined.find((t) => t.id === 3).seats.every((s) => s.extras?.cake?.ordered)).toBe(true);
+
+    // A seat with REAL staff work keeps freezing the table, cake or not.
+    const withDrinks = combined.map((t) => (t.id === 2
+      ? { ...t, seats: t.seats.map((s, i) => (i === 0 ? { ...s, glasses: [{ name: "GV" }] } : s)) }
+      : t));
+    const after = reconcileTables(withDrinks, [resv(2, {
+      resName: "Kat", resTime: "18:30", guests: 2, birthday: true, tableGroup: [2],
+    })], celebration);
+    expect(after.find((t) => t.id === 2).guests).toBe(4); // untouched — staff drinks protect it
+  });
+
   it("does NOT clear an unowned table that holds service work (no reservation)", () => {
     const prev = board({
       4: { seats: makeSeats(2).map((s, i) => i === 0 ? { ...s, water: "Sparkling" } : s) },
