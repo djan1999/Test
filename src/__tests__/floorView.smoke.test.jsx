@@ -16,8 +16,8 @@ const tables = [
   boardTable(1, { active: true, resName: "NOVAK", guests: 2, resTime: "18:00", restrictions: [{ pos: 1, note: "shellfish" }] }),
   boardTable(4, { resName: "KOVAČ", guests: 4, resTime: "19:30" }),
   boardTable(9, { active: true, resName: "WEISS", guests: 4, seats: [
-    { id: 1, water: "SPK", pairing: "WINE" },
-    { id: 2, water: "STILL", pairing: "—" },
+    { id: 1, water: "XC", pairing: "Non-Alc" },
+    { id: 2, water: "OW", pairing: "—" },
   ] }),
   ...[2, 3, 5, 6, 7, 8, 10].map((id) => boardTable(id)),
 ];
@@ -74,9 +74,10 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).not.toContain("WEISS");
     expect(container.textContent).toContain("▲");
     expect(container.textContent).toContain("ARRIVING · KV");
-    // waters/pairings BY POSITION at T9's chairs (SPK+WINE / STILL)
-    expect(container.textContent).toContain("SPK·W");
-    expect(container.textContent).toContain("STL");
+    // waters/pairings BY POSITION at T9's chairs — the HOUSE shortcuts as
+    // stored (XC / OW), pairing initialed from the stored vocabulary
+    expect(container.textContent).toContain("XC·NA");
+    expect(container.textContent).toContain("OW");
   });
 
   it("a dining table is one big SET toggle — tap calls the status handler, no sheet", () => {
@@ -98,13 +99,13 @@ describe("FloorView (FOH FLOOR surface)", () => {
     fireEvent.click(getByText("TERRACE"));
     expect(container.textContent).toContain("×4");
     expect(container.textContent).not.toContain("WEISS"); // no names on the floor
-    expect(container.textContent).toContain("SPK·W");     // the party's seat notes travel to the terrace table
+    expect(container.textContent).toContain("XC·NA");     // the party's seat notes travel to the terrace table
     expect(container.textContent).toContain("LAST BITE ✓");
     fireEvent.click(findTable(container, "T23"));
     // the sheet: waters by seat position + pairings, reservation name omitted
     const sheet = getByText("P1").closest("div").parentElement.parentElement;
-    expect(sheet.textContent).toContain("SPK");
-    expect(sheet.textContent).toContain("WINE");
+    expect(sheet.textContent).toContain("XC");
+    expect(sheet.textContent).toContain("Non-Alc");
     expect(sheet.textContent).toContain("P2");
     expect(sheet.textContent).not.toContain("WEISS");
     fireEvent.click(getByText(/MOVE TO T9/));

@@ -101,12 +101,17 @@ export default function FloorView({
   // NO reservation names on the FOH floor (per Djan): tables read label +
   // ×pax + course; the runner's info is the per-seat water·pairing note at
   // each chair. Names stay on the board and the terrace assign picker.
+  // Waters are ALREADY house shortcuts (XC / XW / OC / OW) — show the stored
+  // value untouched. Pairings initial from the stored vocabulary:
+  // Wine→W, Non-Alc→NA, Premium→P, Our Story→OS.
+  const pairingCode = (p) => {
+    const v = String(p || "").trim();
+    if (!v || v === "—") return "";
+    return v.split(/[\s-]+/).map((w) => w.charAt(0)).join("").toUpperCase();
+  };
   const bevNote = (s) => {
-    const water = s.water && s.water !== "—"
-      ? (String(s.water).toUpperCase().startsWith("SP") ? "SPK" : "STL") : "";
-    const pair = s.pairing && s.pairing !== "—"
-      ? String(s.pairing).trim().charAt(0).toUpperCase() : "";
-    return [water, pair].filter(Boolean).join("·");
+    const water = s.water && s.water !== "—" ? String(s.water).toUpperCase() : "";
+    return [water, pairingCode(s.pairing)].filter(Boolean).join("·");
   };
   const seatNotesOf = (bt) => {
     const notes = {};
