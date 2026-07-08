@@ -2151,6 +2151,14 @@ export default function App() {
   // Hydrate the reference lists from the per-workspace device cache so they
   // paint instantly on launch; SQLite/Supabase refresh them right after.
   const [menuCourses, setMenuCourses] = useState(() => readLocalMenuCourses() || []);
+  /** True while the admin course editor holds UNSAVED edits. menuCourses is
+   *  both the live synced list AND the editor's draft (CourseEditorPanel has
+   *  no local copy), so a sync repaint mid-edit — typically the checkpoint
+   *  echo of the user's own PREVIOUS save — silently reverted the draft and
+   *  made the next save diff to nothing ("edited Peas, pressed save, it
+   *  reverted"). While dirty, the watch/loader adoption is suppressed; the
+   *  flag clears on save or when leaving admin. */
+  const menuCoursesDirtyRef = useRef(false);
   const [wines,     setWines]     = useState(() => readLocalWines() || []);
   const [cocktails, setCocktails] = useState(localBev?.cocktails ?? initCocktails);
   const [spirits,   setSpirits]   = useState(localBev?.spirits   ?? initSpirits);
@@ -3050,6 +3058,7 @@ export default function App() {
     const removedAny = [...prevJsonByPos.keys()].some(p => !keptSet.has(p));
     if (changedRows.length === 0 && !removedAny) {
       setMenuCourses(withKeys);
+      menuCoursesDirtyRef.current = false; // draft matches the store again
       return { ok: true };
     }
     if (sqlitePrimaryRef.current) {
@@ -3057,6 +3066,7 @@ export default function App() {
         const { writeMenuCourses } = await import("./powersync/writes.js");
         await writeMenuCourses(changedRows, removedAny ? keptPositions : null);
         setMenuCourses(withKeys);
+        menuCoursesDirtyRef.current = false; // saved — watches may adopt again
         return { ok: true };
       } catch (error) {
         console.error("Menu save failed:", error);
@@ -3088,6 +3098,7 @@ export default function App() {
     }
     // Reflect any auto-generated keys back into local state so the UI shows them.
     setMenuCourses(withKeys);
+    menuCoursesDirtyRef.current = false; // saved — the loaders may adopt again
     // Remove courses this user deleted
     if (removedAny && keptPositions.length > 0) {
       await scopedFrom(TABLES.MENU_COURSES).delete().not("position", "in", `(${keptPositions.join(",")})`);
@@ -4622,8 +4633,10 @@ export default function App() {
           onMenuCourses: (rows) => {
             if (cancelled || !rows.length) return;
             const courses = rows.map(supabaseRowToCourse);
-            setMenuCourses(courses);
             writeLocalMenuCourses(courses);
+            // Never clobber an admin draft in progress (see menuCoursesDirtyRef).
+            if (menuCoursesDirtyRef.current) return;
+            setMenuCourses(courses);
           },
           onLiveSettings: (rows) => {
             if (cancelled) return;
@@ -4833,8 +4846,10 @@ export default function App() {
       try {
         const courses = await withRetry(() => fetchMenuCourses());
         if (!mounted || !courses) return;
-        setMenuCourses(courses);
         writeLocalMenuCourses(courses); // keep the device cache warm for next launch
+        // Never clobber an admin draft in progress (see menuCoursesDirtyRef).
+        if (menuCoursesDirtyRef.current) return;
+        setMenuCourses(courses);
       } catch (error) {
         // Keep the cached courses on screen rather than blanking the menu/board.
         console.warn("Menu courses fetch failed — keeping cached list:", error);
@@ -5261,7 +5276,7 @@ export default function App() {
       <GlobalStyle />
       <Suspense fallback={lazyViewFallback}><AdminLayout
         menuCourses={menuCourses}
-        onUpdateMenuCourses={setMenuCourses}
+        onUpdateMenuCourses={(next) => { menuCoursesDirtyRef.current = true; setMenuCourses(next); }}
         onSaveMenuCourses={saveMenuCourses}
         menuTemplate={menuTemplate}
         onUpdateTemplate={setMenuTemplate}
