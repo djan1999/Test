@@ -294,6 +294,80 @@ describe.each([
   }, 20000);
 });
 
+// ── Shared service lifecycle ──────────────────────────────────────────────────
+// A service started or ended on ANY device applies everywhere, live. The
+// adopting device never writes anything back (no archive, no clears) — the
+// 08.07 phone kept showing a dead service all night because end-adoption
+// didn't exist.
+describe.each([
+  ["fallback", false],
+  ["sqlite-primary", true],
+])("app harness — shared service lifecycle (%s)", (modeName, psMode) => {
+  beforeEach(() => {
+    resetBackend({ psMode });
+  });
+
+  it("a service ENDED on another device ends here too, with no duplicate archive", async () => {
+    seedLiveService();
+    render(<App />);
+    await enterService();
+
+    // Another device ENDs the service: archives (its job), blanks the board,
+    // releases the date — all remotely.
+    const stamp = new Date(Date.now() + 1500).toISOString();
+    const dateRow = remoteRows("service_settings").find((r) => r.id === "service_date");
+    dateRow.state = {};
+    dateRow.updated_at = stamp;
+    remoteRows("service_tables").forEach((r) => { r.data = {}; r.updated_at = stamp; });
+
+    if (psMode) {
+      await act(async () => { await syncDown(); });
+    } else {
+      await act(async () => {
+        emitRealtime("service_settings", { eventType: "UPDATE", new: { ...dateRow }, old: null });
+      });
+    }
+
+    // This device leaves the live view and returns to mode selection…
+    await screen.findByText("[Service]", {}, { timeout: 5000 });
+    // …WITHOUT filing its own archive or resurrecting the date.
+    expect(remoteRows("service_archive")).toHaveLength(0);
+    expect(localStorage.getItem("milka_service_date")).toBeNull();
+  }, 15000);
+
+  it("a service STARTED on another device is adopted here — Service joins with no prompt", async () => {
+    // Reservations exist, but nobody has started a service yet.
+    seed("reservations", [
+      { id: "res-anna", date: TODAY(), table_id: 1, created_at: new Date().toISOString(),
+        data: { resName: "Anna Harness", resTime: "19:30", guests: 2, tableGroup: [], service_session: "dinner" } },
+    ]);
+    render(<App />);
+    await screen.findByText("[Service]", {}, { timeout: 5000 });
+
+    // Another device starts tonight's dinner.
+    const stamp = new Date(Date.now() + 1500).toISOString();
+    const row = {
+      workspace_id: WORKSPACE_ID, id: "service_date",
+      state: { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: stamp },
+      updated_at: stamp,
+    };
+    remoteRows("service_settings").push({ ...row });
+    if (psMode) {
+      await act(async () => { await syncDown(); });
+    } else {
+      await act(async () => {
+        emitRealtime("service_settings", { eventType: "UPDATE", new: { ...row }, old: null });
+      });
+    }
+
+    // The live day is adopted without entering service…
+    await waitFor(() => expect(localStorage.getItem("milka_service_date")).toBe(TODAY()), { timeout: 5000 });
+    // …and tapping [Service] drops straight into the live board (no start prompt).
+    fireEvent.click(screen.getByText("[Service]"));
+    await screen.findByText(/Anna Harness/, {}, { timeout: 5000 });
+  }, 15000);
+});
+
 // ── Contaminated local DB self-heal ───────────────────────────────────────────
 // A device that switched Supabase accounts before the account-switch guard
 // existed still carries the previous login's workspaces in its local DB. The

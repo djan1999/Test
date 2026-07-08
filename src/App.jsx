@@ -3528,6 +3528,75 @@ export default function App() {
     await saveStateKey("service_date", date ? { date, chosenOn, session: activeServiceSessionRef.current, startedAt } : {});
   };
 
+  // ── Shared service lifecycle ────────────────────────────────────────────────
+  // A service STARTED or ENDED on any device applies everywhere, live: the
+  // service_date settings row is the shared truth, and every device adopts its
+  // transitions from the watch / realtime feed. The adopting device NEVER
+  // writes anything (no archive, no clears, no date persist) — the store is
+  // already the new truth, which is what makes adoption wipe-proof (the 04.07
+  // wipe class came from devices WRITING what they believed, not adopting).
+  // Ordering is guarded by the row's updated_at; STALE dates never auto-adopt
+  // (the boot/auto-end healing paths own those).
+  const serviceLifecycleTsRef = useRef(0);
+  const adoptServiceLifecycle = (st, rowUpdatedAt) => {
+    const ts = Date.parse(rowUpdatedAt || "");
+    if (Number.isFinite(ts)) {
+      if (ts <= serviceLifecycleTsRef.current) return; // stale echo / replay
+      serviceLifecycleTsRef.current = ts;
+    }
+    const state = st || {};
+    // Session + start stamp travel on every lifecycle change (pre-existing
+    // behavior — keeps board filters and archive dedup in step).
+    if (state.session === "lunch" || state.session === "dinner") {
+      setActiveServiceSession(state.session);
+      activeServiceSessionRef.current = state.session;
+      try { localStorage.setItem("milka_service_session", state.session); } catch {}
+    }
+    if (state.startedAt) {
+      serviceStartedAtRef.current = state.startedAt;
+      try { localStorage.setItem("milka_service_started_at", state.startedAt); } catch {}
+    }
+    const remoteDate = state.date || null;
+    const localDate = serviceDateRef.current;
+    if (remoteDate && remoteDate !== localDate) {
+      // STARTED (or re-dated) on another device — adopt the live day.
+      if (isStaleServiceDate(remoteDate) && !isActivePastReview(remoteDate, state.chosenOn)) return;
+      setServiceDate(remoteDate);
+      setServiceDateChosenOn(state.chosenOn || null);
+      serviceDateRef.current = remoteDate;
+      serviceDateChosenOnRef.current = state.chosenOn || null;
+      try {
+        localStorage.setItem("milka_service_date", remoteDate);
+        if (state.chosenOn) localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, state.chosenOn);
+      } catch {}
+      setShowServiceDatePicker(false); // a start prompt waiting here is moot now
+    } else if (!remoteDate && localDate) {
+      // ENDED on another device — end here too. The ending device already
+      // archived and cleared the shared board; this device just releases the
+      // date and leaves the live views (the 08.07 phone kept showing a dead
+      // service all night because this adoption didn't exist).
+      setServiceDate(null);
+      setServiceDateChosenOn(null);
+      serviceDateRef.current = null;
+      serviceDateChosenOnRef.current = null;
+      serviceStartedAtRef.current = null;
+      try {
+        localStorage.removeItem("milka_service_date");
+        localStorage.removeItem(SERVICE_DATE_CHOSEN_ON_KEY);
+        localStorage.removeItem("milka_service_started_at");
+      } catch {}
+      setMode(prev => {
+        if (prev !== "service" && prev !== "display") return prev;
+        try { localStorage.removeItem("milka_mode"); } catch { /* noop */ }
+        return null;
+      });
+    }
+  };
+  // Ref indirection: the watch/channel handlers are bound once per
+  // subscription, so they call through the ref to reach the latest closure.
+  const adoptServiceLifecycleRef = useRef(adoptServiceLifecycle);
+  adoptServiceLifecycleRef.current = adoptServiceLifecycle;
+
   const persistServiceSession = (session) => {
     setActiveServiceSession(session);
     activeServiceSessionRef.current = session;
@@ -4563,21 +4632,9 @@ export default function App() {
                 const ids = row.state?.ids;
                 if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
               } else if (row.id === "service_date") {
-                // Another device changed the live session (or started/restarted
-                // the service). Adopt the shared session + instance id so this
-                // device's board filter and archive dedup stay in step. The
-                // service DATE is left to the dedicated load/join paths
-                // (changing it can wipe the board).
-                const st = row.state || {};
-                if (st.session === "lunch" || st.session === "dinner") {
-                  setActiveServiceSession(st.session);
-                  activeServiceSessionRef.current = st.session;
-                  try { localStorage.setItem("milka_service_session", st.session); } catch {}
-                }
-                if (st.startedAt) {
-                  serviceStartedAtRef.current = st.startedAt;
-                  try { localStorage.setItem("milka_service_started_at", st.startedAt); } catch {}
-                }
+                // Shared service lifecycle: a service started/ended on another
+                // device applies here too (adopt-only — never writes back).
+                adoptServiceLifecycleRef.current?.(row.state, row.updated_at);
               }
             }
           },
@@ -4847,7 +4904,7 @@ export default function App() {
     enabled: fallbackRealtime,
   });
 
-  // Settings (kitchen ticket order, shared service session) — mirrors the
+  // Settings (kitchen ticket order, shared service lifecycle) — mirrors the
   // onLiveSettings watch handler. The settings table carries many ids
   // (inventory, configs…); only react to the ones owned here.
   useRealtimeTable({
@@ -4861,21 +4918,9 @@ export default function App() {
         const ids = payload.new?.state?.ids;
         if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
       } else if (id === "service_date") {
-        // Another device changed the live session (or started/restarted the
-        // service). Adopt the shared session + start stamp so this device's
-        // board filter and archive dedup stay in step. The service DATE is
-        // left to the dedicated load/join paths (changing it can wipe the
-        // board).
-        const st = payload.new?.state || {};
-        if (st.session === "lunch" || st.session === "dinner") {
-          setActiveServiceSession(st.session);
-          activeServiceSessionRef.current = st.session;
-          try { localStorage.setItem("milka_service_session", st.session); } catch {}
-        }
-        if (st.startedAt) {
-          serviceStartedAtRef.current = st.startedAt;
-          try { localStorage.setItem("milka_service_started_at", st.startedAt); } catch {}
-        }
+        // Shared service lifecycle: a service started/ended on another device
+        // applies here too (adopt-only — never writes back).
+        adoptServiceLifecycleRef.current?.(payload.new?.state, payload.new?.updated_at);
       }
     },
     enabled: fallbackRealtime,
