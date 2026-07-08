@@ -5203,6 +5203,7 @@ export default function App() {
         onSaveBeverages={saveBeverages}
         onSyncWines={syncWines}
         syncStatus={syncStatus}
+        powerSync={powerSyncStatus}
         supabaseUrl={supabaseUrl}
         hasSupabase={hasSupabaseConfig}
         logoDataUri={logoDataUri}

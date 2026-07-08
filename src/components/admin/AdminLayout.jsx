@@ -62,6 +62,7 @@ export default function AdminLayout({
   onSyncWines,
   // System
   syncStatus,
+  powerSync = null,
   supabaseUrl,
   hasSupabase,
   logoDataUri,
@@ -487,6 +488,7 @@ export default function AdminLayout({
           {activeSection === "system" && (
             <SystemPanel
               syncStatus={syncStatus}
+              powerSync={powerSync}
               supabaseUrl={supabaseUrl}
               hasSupabase={hasSupabase}
               onSyncWines={onSyncWines}

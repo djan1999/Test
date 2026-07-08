@@ -56,11 +56,22 @@ export function getPowerSync() {
 function snapshot(s) {
   let p1 = false;
   try { p1 = !!s?.statusForPriority?.(1)?.hasSynced; } catch { /* noop */ }
+  // Surface WHY the stream is down, not just that it is: the download/upload
+  // errors are the only place the engine names its failure (401, WebSocket
+  // refused, sync-rule errors…). They reach the console via the status log
+  // below and the admin SYSTEM panel via App's powerSyncStatus — so a single
+  // screenshot from a misbehaving device identifies the cause.
+  const flow = s?.dataFlowStatus || {};
+  const err = flow.downloadError ?? flow.uploadError ?? null;
   return {
     connected: !!s?.connected,
+    connecting: !!s?.connecting,
     hasSynced: !!s?.hasSynced,
     hasSyncedP1: !!s?.hasSynced || p1,
     lastSyncedAt: s?.lastSyncedAt ? new Date(s.lastSyncedAt).getTime() : null,
+    downloading: !!flow.downloading,
+    uploading: !!flow.uploading,
+    streamError: err ? String(err?.message || err) : null,
   };
 }
 
