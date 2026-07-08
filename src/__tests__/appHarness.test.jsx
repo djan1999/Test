@@ -294,6 +294,40 @@ describe.each([
   }, 20000);
 });
 
+// ── Contaminated local DB self-heal ───────────────────────────────────────────
+// A device that switched Supabase accounts before the account-switch guard
+// existed still carries the previous login's workspaces in its local DB. The
+// foreign-rows tripwire used to wedge such a device on the fallback with a
+// permanent ERROR chip (the 08.07 phone); now it wipes the local DB ONCE,
+// re-syncs the current user's data, and goes primary on the clean copy.
+describe("app harness — contaminated local DB self-heal", () => {
+  beforeEach(() => {
+    resetBackend({ psMode: true });
+  });
+
+  it("foreign-workspace rows trigger one wipe-and-resync, then the device goes primary", async () => {
+    seedLiveService();
+    // The previous account's leftovers live ONLY locally — this user's sync
+    // stream never delivers ws-other rows.
+    localRows("service_tables").push({
+      workspace_id: "ws-other", table_id: 1,
+      data: { resName: "Ghost Of Admin" }, updated_at: new Date().toISOString(),
+    });
+    render(<App />);
+    await enterService();
+
+    await waitFor(() => expect(backend.clearResyncs).toBe(1), { timeout: 5000 });
+    expect(localRows("service_tables").every((r) => r.workspace_id === WORKSPACE_ID)).toBe(true);
+
+    // Primary again on the clean DB: seating Bruno lands in the LOCAL store
+    // (the local-first contract), not just the remote one.
+    fireEvent.click(await screen.findByText("SEAT", {}, { timeout: 5000 }));
+    await waitFor(() => {
+      expect(rowFor(localRows("service_tables"), 2)?.data?.active).toBe(true);
+    }, { timeout: 5000 });
+  }, 20000);
+});
+
 // ── Fallback realtime safety net ──────────────────────────────────────────────
 // Accounts whose sync stream delivers nothing (the platform admin browsing a
 // workspace it isn't a member of) live on the direct-Supabase fallback. Its

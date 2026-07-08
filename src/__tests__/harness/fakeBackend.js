@@ -38,6 +38,8 @@ export const backend = {
   connectorDown: false,    // sqlite-path offline: uploads queue instead of mirroring
   uploadQueue: [],
   watch: null,             // { handlers, range } once App registers
+  clearResyncs: 0,         // clearLocalAndResync invocations (contaminated-DB heal)
+  lastOnStatus: null,      // the status callback App registered via connect()
 };
 
 // ── workspace singleton (mirrors the real supabaseClient module) ─────────────
@@ -53,6 +55,8 @@ export function resetBackend({ psMode = false } = {}) {
   backend.connectorDown = false;
   backend.uploadQueue = [];
   backend.watch = null;
+  backend.clearResyncs = 0;
+  backend.lastOnStatus = null;
   _workspaceId = null;
   realtimeChannels.clear();
   localStorage.clear();
@@ -489,8 +493,18 @@ export const fakeConfig = {
 export const fakeSystem = {
   getPowerSync: () => { throw new Error("fake system: getPowerSync not modeled"); },
   connect: async (onStatus) => {
+    backend.lastOnStatus = onStatus || null;
     onStatus?.({ connected: true, hasSynced: true, hasSyncedP1: true, lastSyncedAt: Date.now() });
     return async () => {};
+  },
+  // Contaminated-DB self-heal: wipe local, "re-sync" the current user's rows
+  // (remote copy — the stream never delivers foreign workspaces), and emit a
+  // fresh checkpoint status so the sqlite-primary probe re-runs.
+  clearLocalAndResync: async () => {
+    backend.clearResyncs += 1;
+    backend.local = newStore();
+    for (const [name, rows] of backend.remote.tables) tableOf(backend.local, name).push(...clone(rows));
+    backend.lastOnStatus?.({ connected: true, hasSynced: true, hasSyncedP1: true, lastSyncedAt: Date.now() + backend.clearResyncs });
   },
 };
 

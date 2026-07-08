@@ -4412,6 +4412,10 @@ export default function App() {
   // Once primary, stays primary for the session: local data doesn't vanish
   // when the stream drops.
   const probingRef = useRef(false);
+  // One wipe-and-resync attempt per session for a contaminated local DB (see
+  // the tripwire below) — a second detection means the stream itself is
+  // delivering foreign rows, where wiping can't help.
+  const foreignClearRef = useRef(false);
   useEffect(() => {
     if (!psEnabled) { setSqlitePrimaryFlag(false); setSqlitePrimary(false); setPsResolved(true); return undefined; }
     if (sqlitePrimary) return undefined;
@@ -4419,24 +4423,44 @@ export default function App() {
     if (!powerSyncStatus?.hasSyncedP1 || probingRef.current) return () => clearTimeout(deadline);
     probingRef.current = true;
     let cancelled = false;
+    let handedOff = false;
     (async () => {
       try {
         const { localDbHasWorkspaceData, detectForeignWorkspaceRows } = await import("./powersync/reads.js");
-        // Tripwire: refuse to go primary if the local DB somehow holds another
+        // Tripwire: never go primary while the local DB holds another
         // workspace's rows — the natural-key aliases aren't workspace-qualified,
         // so trusting it could cross tenants (see docs/SYNC_UPGRADE_PLAN.md).
-        // Membership is 1:1 today, so this never fires.
         const foreign = await detectForeignWorkspaceRows(workspaceId);
         if (foreign.size > 0) {
-          if (!cancelled) setSyncStatus("sync-error");
-          return; // stay on the fallback path; the deadline resolves psResolved
+          // Contaminated local DB: a device that switched accounts BEFORE the
+          // account-switch guard existed still carries the previous login's
+          // workspaces (the 08.07 phone — permanent ERROR chip, wedged on the
+          // fallback). The stream can only deliver the CURRENT user's
+          // workspaces, so wipe once and re-sync clean: release the probe
+          // guard FIRST so the resync's own status events re-run this probe
+          // against the clean DB (holding it made the re-run bail and the
+          // heal never completed). If foreign rows come BACK after a wipe,
+          // the stream itself delivers multiple workspaces (a real
+          // multi-workspace member) — that's the alias hazard, so wedge on
+          // the fallback as before.
+          if (foreignClearRef.current) {
+            if (!cancelled) setSyncStatus("sync-error");
+            return; // stay on the fallback path; the deadline resolves psResolved
+          }
+          foreignClearRef.current = true;
+          console.warn("[PowerSync] local DB holds foreign workspace rows — clearing and re-syncing:", [...foreign]);
+          const { clearLocalAndResync } = await import("./powersync/system.js");
+          handedOff = true;
+          probingRef.current = false;
+          await clearLocalAndResync();
+          return;
         }
         const usable = await localDbHasWorkspaceData(workspaceId);
         if (!cancelled && usable) { setSqlitePrimaryFlag(true); setSqlitePrimary(true); }
       } catch (e) {
         console.warn("[PowerSync] local-DB probe failed:", e);
       } finally {
-        probingRef.current = false;
+        if (!handedOff) probingRef.current = false;
         if (!cancelled) setPsResolved(true);
       }
     })();
