@@ -1310,13 +1310,13 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
     const [justSent, setJustSent] = useState(false);
     const seats = t.seats || [];
 
-    // Service → kitchen "Send" only carries what's new since the kitchen last
-    // acknowledged. Diff the live order against the acknowledged baseline (or
-    // against a still-pending alert, so a second Send doesn't repeat what's
-    // already on the kitchen screen). hasKitchenUpdate drives the button.
+    // Service → kitchen "Send" only carries what's new since this table LAST
+    // SENT (kitchenSent advances at send time, not on a kitchen confirmation —
+    // the confirm flow isn't part of service reality, so waiting on it made
+    // every Send re-transmit the whole night's pairings and orders).
+    // hasKitchenUpdate drives the button.
     const kitchenCurrent = kitchenSnapshot(seats, optionalExtras, optionalPairings);
-    const pendingSnap = (t.kitchenAlert && !t.kitchenAlert.confirmed) ? (t.kitchenAlert.snapshot || null) : null;
-    const hasKitchenUpdate = kitchenDelta(kitchenCurrent, pendingSnap || t.kitchenSent || {}).length > 0;
+    const hasKitchenUpdate = kitchenDelta(kitchenCurrent, t.kitchenSent || {}).length > 0;
 
     const unassigned = allRestr.map((r, i) => ({ ...r, _i: i })).filter(r => !r.pos);
 
@@ -1963,9 +1963,11 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                 disabled={justSent || idle}
                 title={idle ? "Kitchen is up to date — nothing new to send" : undefined}
                 onClick={() => {
-                  // Only the new/changed items since the kitchen's acknowledged
-                  // baseline; snapshot rides along so the kitchen can advance the
-                  // baseline when it confirms.
+                  // Only the new/changed items since this table's LAST SEND —
+                  // and advance the baseline immediately, so the next Send can
+                  // never repeat what the kitchen was already shown. (It used
+                  // to advance only when the kitchen confirmed the alert; with
+                  // the confirm flow unused, every Send re-sent everything.)
                   const deltaSeats = kitchenDelta(kitchenCurrent, t.kitchenSent || {});
                   if (deltaSeats.length === 0) return;
                   upd(t.id, "kitchenAlert", {
@@ -1975,6 +1977,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                     confirmed: false,
                     snapshot: kitchenCurrent,
                   });
+                  upd(t.id, "kitchenSent", kitchenCurrent);
                   setJustSent(true);
                   setTimeout(() => setJustSent(false), 2000);
                 }}
@@ -5501,8 +5504,11 @@ export default function App() {
               onSendSetToKitchen={(boardIds) => {
                 // SEND on the floor: every SET table raises the SAME kitchen
                 // banner the sheet view's SET NEXT does — courseReady for the
-                // table's next unfired course + the (merge-safe) kitchen alert
-                // the ticket shows until the course fires.
+                // table's next unfired course. The alert carries ONLY the set
+                // course: previously it re-attached the last unconfirmed order
+                // delta, so 'send SET' also re-sent pairings and every earlier
+                // change to the kitchen (orders were already sent once — the
+                // ticket still shows them; the alert must not repeat them).
                 for (const id of boardIds) {
                   const t = tablesRef.current?.find(x => x.id === id);
                   if (!t?.active) continue;
@@ -5512,14 +5518,12 @@ export default function App() {
                   const { nextFire } = getCourseProgressState(t, visible);
                   if (!nextFire) continue; // menu complete — nothing to announce
                   const ready = { key: nextFire.key, index: nextFire.index, name: nextFire.name, at: fmt(new Date()) };
-                  const prevAlert = (t.kitchenAlert && !t.kitchenAlert.confirmed) ? t.kitchenAlert : null;
                   updMany(id, {
                     courseReady: ready,
                     kitchenAlert: {
-                      ...(prevAlert || {}),
                       timestamp: new Date().toISOString(),
                       tableName: t.resName || null,
-                      seats: prevAlert?.seats || [],
+                      seats: [],
                       confirmed: false,
                       course: ready,
                     },
@@ -5540,19 +5544,19 @@ export default function App() {
                 onOpenDetail={id => setSel(id)}
                 onSetNext={(tableId, course) => {
                   // "Table is set for the next course" — raise the kitchen
-                  // alert (merging into a still-pending order delta so that
-                  // isn't lost) and stamp courseReady on the table. The
-                  // kitchen ticket shows the banner until it fires the course.
+                  // alert and stamp courseReady on the table. The alert carries
+                  // ONLY the set course (see onSendSetToKitchen: re-attaching
+                  // the previous unconfirmed order delta made SET re-send
+                  // pairings and every earlier change). The kitchen ticket
+                  // shows the banner until it fires the course.
                   const t = tablesRef.current?.find(x => x.id === tableId);
                   const ready = { key: course.key, index: course.index, name: course.name, at: fmt(new Date()) };
-                  const prevAlert = (t?.kitchenAlert && !t.kitchenAlert.confirmed) ? t.kitchenAlert : null;
                   updMany(tableId, {
                     courseReady: ready,
                     kitchenAlert: {
-                      ...(prevAlert || {}),
                       timestamp: new Date().toISOString(),
                       tableName: t?.resName || null,
-                      seats: prevAlert?.seats || [],
+                      seats: [],
                       confirmed: false,
                       course: ready,
                     },
