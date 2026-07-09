@@ -31,7 +31,14 @@ export default defineConfig({
       },
       workbox: {
         // App shell — precached with cache-first (revision-stamped filenames).
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // wasm is the PowerSync/wa-sqlite SQLite core: without it precached,
+        // the offline-first engine itself needed a live network fetch at boot,
+        // and a flaky link pinned the device to the direct-Supabase fallback
+        // for the whole session (the wifi-extender kitchen-display incident).
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,wasm}'],
+        // The async wa-sqlite cores are ~2.3–2.6 MB, over workbox's 2 MiB
+        // default — without this they'd be silently dropped from the precache.
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         navigateFallback: '/',
 
         runtimeCaching: [

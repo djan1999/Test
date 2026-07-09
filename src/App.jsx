@@ -2498,10 +2498,22 @@ export default function App() {
    *  the pending save wins, row-level last-write-wins). */
   const prevTablesJsonRef  = useRef(initTables.map(t => JSON.stringify(sanitizeTable(t))));
   const tablesRef          = useRef(tables);
-  /** Changed board rows accumulated across save ticks until the debounced
-   *  flush runs, keyed by table_id — so two edits inside one debounce window
-   *  can't drop each other's rows. */
-  const pendingBoardWritesRef = useRef(new Map());
+  /** table_ids with local changes not yet CONFIRMED persisted — added at queue
+   *  time, removed only when a flush write succeeds. A Set of ids, not row
+   *  snapshots: the flush derives each row from tablesRef.current at send time,
+   *  so a fold that lands between queue and flush can't be overwritten by a
+   *  stale queued copy. Ids survive failed flushes (re-added) so the drain
+   *  heartbeat below retries them without needing another local edit. */
+  const pendingBoardWritesRef = useRef(new Set());
+  /** Sanitized-table JSON of the last state CONFIRMED in the store, by index —
+   *  advanced only when a write succeeds or a store row is adopted, unlike
+   *  prevTablesJsonRef above which advances at queue time. adoptRemoteTables
+   *  keys its unsaved-edit detection and fold ancestor off THIS baseline, so a
+   *  write that failed (or is still in flight) still reads as "unsaved" and an
+   *  incoming stale store row FOLDS instead of clobbering it (the wifi-extender
+   *  incident: fired dishes vanished when a refetch adopted the old row after
+   *  the save had silently failed). */
+  const confirmedTablesJsonRef = useRef(initTables.map(t => JSON.stringify(sanitizeTable(t))));
   /** updated_at (epoch ms) of the last row THIS device wrote per table_id.
    *  adoptRemoteTables uses it to drop stale echoes: on the fallback path a
    *  rapid tap sequence produces write A then write B, and A's realtime echo
@@ -2554,11 +2566,77 @@ export default function App() {
           .upsert(rows, { onConflict: "table_id" });
         if (error) throw error;
       }
+      // The store now holds exactly these rows — advance the CONFIRMED
+      // baseline so the reconciler stops shielding them as unsaved (mirror of
+      // lastBoardWriteRef above: every board writer funnels through here).
+      for (const r of rows) {
+        const idx = (tablesRef.current || []).findIndex(t => t.id === Number(r.table_id));
+        if (idx !== -1) {
+          confirmedTablesJsonRef.current[idx] =
+            JSON.stringify(sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) }));
+        }
+      }
       return { ok: true };
     } catch (error) {
       return { ok: false, error };
     }
   }, []);
+
+  /** Drain the pending board-write set. Rows are derived from CURRENT state at
+   *  send time (never from queue-time snapshots — a fold that landed in
+   *  between must win), written with the same 4-attempt cadence the autosave
+   *  always used, and on failure the ids are re-added so the drain heartbeat
+   *  retries them without needing another local edit (they used to sit until
+   *  the next tap — during the wifi-extender lag-out that ate every fired
+   *  dish). Single-flight with a trailing re-run: two overlapping flushes
+   *  could land out of order and regress the store. */
+  const flushingBoardRef = useRef(false);
+  const flushAgainRef = useRef(false);
+  const flushBoardWrites = useCallback(async () => {
+    if (flushingBoardRef.current) { flushAgainRef.current = true; return; }
+    flushingBoardRef.current = true;
+    try {
+      do {
+        flushAgainRef.current = false;
+        const ids = [...pendingBoardWritesRef.current];
+        pendingBoardWritesRef.current = new Set();
+        if (ids.length === 0) return;
+        const stamp = new Date().toISOString();
+        const cur = tablesRef.current || [];
+        const rows = [];
+        for (const id of ids) {
+          const table = cur.find(t => t.id === id);
+          if (!table) continue; // table no longer on the board — nothing to write
+          const data = sanitizeTable(table);
+          const idx = cur.indexOf(table);
+          // Already confirmed (an adoption made local == store truth after the
+          // id was queued) — nothing left to write for this table.
+          if (JSON.stringify(data) === confirmedTablesJsonRef.current[idx]) continue;
+          rows.push({ table_id: id, data, updated_at: stamp });
+        }
+        if (rows.length === 0) continue;
+        let lastError;
+        let ok = false;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          if (attempt > 0) await new Promise(r => setTimeout(r, 500 * attempt));
+          const result = await persistBoardRows(rows);
+          if (result.ok) { ok = true; break; }
+          lastError = result.error || new Error("Unknown service table sync error");
+        }
+        if (ok) {
+          setSyncStatus("live");
+        } else {
+          // Confirmed baseline stays put for these tables, so adoptRemoteTables
+          // keeps folding around them; the re-added ids retry on the heartbeat.
+          rows.forEach(r => pendingBoardWritesRef.current.add(r.table_id));
+          setSyncStatus("sync-error");
+          console.error("Save failed after 4 attempts:", lastError);
+        }
+      } while (flushAgainRef.current);
+    } finally {
+      flushingBoardRef.current = false;
+    }
+  }, [persistBoardRows]);
 
   // Read the full board from the source of truth (SQLite when primary).
   const fetchBoardRows = useCallback(async () => {
@@ -2626,6 +2704,7 @@ export default function App() {
     const rawById = new Map(arr.map(row => [Number(row.table_id), row]));
     const cur = tablesRef.current && tablesRef.current.length ? tablesRef.current : initTables;
     const nextPrev = [...prevTablesJsonRef.current];
+    const confirmed = confirmedTablesJsonRef.current;
     let changed = false;
     const nextTables = initTables.map((base, idx) => {
       const mine = cur.find(t => t.id === base.id) || base;
@@ -2645,18 +2724,32 @@ export default function App() {
       const theirs = sanitizeTable({ id: base.id, ...(row.data || {}) });
       const theirsJson = JSON.stringify(theirs);
       const mineJson = JSON.stringify(sanitizeTable(mine));
-      if (mineJson !== nextPrev[idx]) {
-        // Unsaved local edit. If the incoming copy just echoes what we last
-        // wrote (or equals our local state), nothing to fold — keep typing.
-        if (theirsJson === nextPrev[idx] || theirsJson === mineJson) return mine;
+      // Unsaved-edit detection keys off the CONFIRMED baseline — advanced only
+      // when a write actually lands, unlike the queue-time diff baseline. A
+      // failed or still-in-flight write therefore still counts as unsaved, so
+      // a refetch returning the pre-write store row FOLDS around it instead of
+      // erasing it (the wifi-extender incident: the save failed, the diff
+      // baseline claimed "saved", and the next refetch wiped the fired dish).
+      if (mineJson !== confirmed[idx]) {
+        // If the incoming copy just echoes what the store last confirmed (or
+        // equals our local state), nothing to fold — keep typing.
+        if (theirsJson === confirmed[idx] || theirsJson === mineJson) return mine;
         let ancestor = null;
-        try { ancestor = nextPrev[idx] ? JSON.parse(nextPrev[idx]) : null; } catch { /* keep null */ }
+        try { ancestor = confirmed[idx] ? JSON.parse(confirmed[idx]) : null; } catch { /* keep null */ }
         const folded = sanitizeTable(foldTable(ancestor, sanitizeTable(mine), theirs));
-        nextPrev[idx] = theirsJson; // theirs is the store truth we folded onto
-        if (JSON.stringify(folded) !== mineJson) changed = true;
+        const foldedJson = JSON.stringify(folded);
+        // theirs is the store truth we folded onto — both baselines move to it.
+        nextPrev[idx] = theirsJson;
+        confirmed[idx] = theirsJson;
+        // A fold result the store doesn't hold yet must be (re-)queued here:
+        // when it equals local state there is no re-render, so the autosave
+        // effect never ticks and only the drain heartbeat re-persists it.
+        if (foldedJson !== theirsJson) pendingBoardWritesRef.current.add(base.id);
+        if (foldedJson !== mineJson) changed = true;
         return folded;
       }
       nextPrev[idx] = theirsJson;
+      confirmed[idx] = theirsJson;
       if (mineJson !== theirsJson) changed = true;
       return theirs;
     });
@@ -3904,8 +3997,9 @@ export default function App() {
   // Diffs the sanitized tables against the last-written baseline and writes
   // ONLY the changed rows — to local SQLite when primary (instant, offline-safe,
   // uploaded by the connector's retry queue), or directly to Supabase on the
-  // fallback path. Changed rows accumulate in pendingBoardWritesRef across
-  // debounce ticks so two edits inside one window can't drop each other.
+  // fallback path. Changed table_ids accumulate in pendingBoardWritesRef across
+  // debounce ticks so two edits inside one window can't drop each other; the
+  // flush derives each row from current state at send time.
   useEffect(() => {
     // Demo mode: the device-local snapshot IS the persistence.
     if (!supabase) { writeLocalDemoBoard(tables); return; }
@@ -3941,40 +4035,35 @@ export default function App() {
     }
     intentionalBoardClearRef.current = false; // consumed once per autosave pass
 
-    const stamp = new Date().toISOString();
     tables.forEach((table, idx) => {
       if (nextJson[idx] === prevJson[idx]) return; // untouched
-      pendingBoardWritesRef.current.set(table.id, {
-        table_id: table.id, data: sanitizeTable(table), updated_at: stamp,
-      });
+      pendingBoardWritesRef.current.add(table.id);
     });
     prevTablesJsonRef.current = nextJson;
     if (pendingBoardWritesRef.current.size === 0) return;
 
     clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      const rows = [...pendingBoardWritesRef.current.values()];
-      pendingBoardWritesRef.current = new Map();
-      let lastError;
-      for (let attempt = 0; attempt < 4; attempt++) {
-        if (attempt > 0) await new Promise(r => setTimeout(r, 500 * attempt));
-        const result = await persistBoardRows(rows);
-        if (result.ok) { setSyncStatus("live"); return; }
-        lastError = result.error || new Error("Unknown service table sync error");
-      }
-      // Re-queue the failed rows (unless a newer edit superseded them) so the
-      // next flush retries instead of silently dropping the change.
-      rows.forEach(r => {
-        if (!pendingBoardWritesRef.current.has(r.table_id)) {
-          pendingBoardWritesRef.current.set(r.table_id, r);
-        }
-      });
-      setSyncStatus("sync-error");
-      console.error("Save failed after 4 attempts:", lastError);
-    }, 50);
+    saveTimerRef.current = setTimeout(flushBoardWrites, 50);
 
     return () => clearTimeout(saveTimerRef.current);
   }, [tablesJson, remoteBoardLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Drain: retry unconfirmed board writes without needing another edit ──────
+  // Failed flushes leave their table_ids in pendingBoardWritesRef; before this
+  // they were only retried when the NEXT local edit re-ran the autosave — on a
+  // laggy network a fired dish could sit unsaved indefinitely while refetches
+  // kept threatening it. A slow heartbeat plus the browser's own network-back
+  // signal re-drains the set as soon as writes can land again.
+  useEffect(() => {
+    if (!supabase || !remoteBoardLoaded) return undefined;
+    const drain = () => { if (pendingBoardWritesRef.current.size > 0) flushBoardWrites(); };
+    const heartbeat = setInterval(drain, 15000);
+    window.addEventListener("online", drain);
+    return () => {
+      clearInterval(heartbeat);
+      window.removeEventListener("online", drain);
+    };
+  }, [remoteBoardLoaded, flushBoardWrites]);
 
 
   // ── Load logo (cached device copy paints instantly; Supabase refreshes) ─────
@@ -4524,10 +4613,20 @@ export default function App() {
   // of the initial bundle. onStatus drives the header sync chip and the
   // sqlite-primary probe; the watches below drive every read once primary.
   const [powerSyncStatus, setPowerSyncStatus] = useState(null);
+  // Init retry counter: bumping it re-runs the connect effect. A failed init
+  // (the SDK chunk not fetching over a dying link at boot — the wifi-extender
+  // incident) used to pin the session to the fragile direct-Supabase fallback
+  // until a full reload; now it retries with capped backoff and on the
+  // browser's network-back signal. The sqlite-primary probe below re-runs on
+  // each status change, so a late successful init still flips the device to
+  // the offline-safe path mid-session.
+  const [psInitAttempt, setPsInitAttempt] = useState(0);
   useEffect(() => {
     if (!psEnabled) { setPowerSyncStatus(null); return undefined; }
     let cleanup;
     let cancelled = false;
+    let retryTimer;
+    const retryNow = () => setPsInitAttempt(a => a + 1);
     (async () => {
       try {
         const { connect } = await import("./powersync/system.js");
@@ -4538,12 +4637,25 @@ export default function App() {
         if (cancelled) { await disconnect?.(); return; }
         cleanup = disconnect;
       } catch (e) {
-        console.warn("[PowerSync] init failed — using the direct-Supabase fallback:", e);
-        if (!cancelled) setPsResolved(true); // unblock the fallback loaders
+        console.warn(`[PowerSync] init failed (attempt ${psInitAttempt + 1}) — using the direct-Supabase fallback:`, e);
+        if (cancelled) return;
+        setPsResolved(true); // unblock the fallback loaders
+        // 5s → 10s → 20s → 40s → 80s, then only the 'online' signal retries.
+        // The retry listeners are registered ONLY on failure, so a healthy
+        // connect can never be double-initialised by them.
+        if (psInitAttempt < 5) {
+          retryTimer = setTimeout(retryNow, 5000 * 2 ** psInitAttempt);
+        }
+        window.addEventListener("online", retryNow, { once: true });
       }
     })();
-    return () => { cancelled = true; cleanup?.(); };
-  }, [psEnabled, workspaceId]);
+    return () => {
+      cancelled = true;
+      clearTimeout(retryTimer);
+      window.removeEventListener("online", retryNow);
+      cleanup?.();
+    };
+  }, [psEnabled, workspaceId, psInitAttempt]);
 
   // ── sqlite-primary probe ─────────────────────────────────────────────────────
   // Flip to primary once the priority-1 first sync is in AND the local DB holds

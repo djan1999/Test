@@ -153,8 +153,10 @@ export function KitchenTicket({ table, menuCourses, upd, onCourseFired, dragHand
 
   const fire = (courseKey, course) => {
     const now = fmt(new Date());
-    const newLog = { ...log, [courseKey]: { firedAt: now } };
-    upd(table.id, "kitchenLog", newLog);
+    // Functional update: two fires in quick succession on the same table must
+    // both land — building from the render-captured `log` dropped the earlier
+    // one when the second click won the race.
+    upd(table.id, "kitchenLog", (prev) => ({ ...(prev || {}), [courseKey]: { firedAt: now } }));
     // Firing the course service asked for fulfils the "table is set" signal.
     if (table.courseReady?.key === courseKey) upd(table.id, "courseReady", null);
     // The ONLY terrace-flow hook in the kitchen: App checks is_last_bite +
@@ -162,9 +164,11 @@ export function KitchenTicket({ table, menuCourses, upd, onCourseFired, dragHand
     if (onCourseFired && course) onCourseFired(table.id, course);
   };
   const unfire = (courseKey) => {
-    const newLog = { ...log };
-    delete newLog[courseKey];
-    upd(table.id, "kitchenLog", newLog);
+    upd(table.id, "kitchenLog", (prev) => {
+      const newLog = { ...(prev || {}) };
+      delete newLog[courseKey];
+      return newLog;
+    });
   };
 
   const assignRestrToSeat = (seatId) => {
