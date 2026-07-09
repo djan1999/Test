@@ -4613,10 +4613,20 @@ export default function App() {
   // of the initial bundle. onStatus drives the header sync chip and the
   // sqlite-primary probe; the watches below drive every read once primary.
   const [powerSyncStatus, setPowerSyncStatus] = useState(null);
+  // Init retry counter: bumping it re-runs the connect effect. A failed init
+  // (the SDK chunk not fetching over a dying link at boot — the wifi-extender
+  // incident) used to pin the session to the fragile direct-Supabase fallback
+  // until a full reload; now it retries with capped backoff and on the
+  // browser's network-back signal. The sqlite-primary probe below re-runs on
+  // each status change, so a late successful init still flips the device to
+  // the offline-safe path mid-session.
+  const [psInitAttempt, setPsInitAttempt] = useState(0);
   useEffect(() => {
     if (!psEnabled) { setPowerSyncStatus(null); return undefined; }
     let cleanup;
     let cancelled = false;
+    let retryTimer;
+    const retryNow = () => setPsInitAttempt(a => a + 1);
     (async () => {
       try {
         const { connect } = await import("./powersync/system.js");
@@ -4627,12 +4637,25 @@ export default function App() {
         if (cancelled) { await disconnect?.(); return; }
         cleanup = disconnect;
       } catch (e) {
-        console.warn("[PowerSync] init failed — using the direct-Supabase fallback:", e);
-        if (!cancelled) setPsResolved(true); // unblock the fallback loaders
+        console.warn(`[PowerSync] init failed (attempt ${psInitAttempt + 1}) — using the direct-Supabase fallback:`, e);
+        if (cancelled) return;
+        setPsResolved(true); // unblock the fallback loaders
+        // 5s → 10s → 20s → 40s → 80s, then only the 'online' signal retries.
+        // The retry listeners are registered ONLY on failure, so a healthy
+        // connect can never be double-initialised by them.
+        if (psInitAttempt < 5) {
+          retryTimer = setTimeout(retryNow, 5000 * 2 ** psInitAttempt);
+        }
+        window.addEventListener("online", retryNow, { once: true });
       }
     })();
-    return () => { cancelled = true; cleanup?.(); };
-  }, [psEnabled, workspaceId]);
+    return () => {
+      cancelled = true;
+      clearTimeout(retryTimer);
+      window.removeEventListener("online", retryNow);
+      cleanup?.();
+    };
+  }, [psEnabled, workspaceId, psInitAttempt]);
 
   // ── sqlite-primary probe ─────────────────────────────────────────────────────
   // Flip to primary once the priority-1 first sync is in AND the local DB holds
