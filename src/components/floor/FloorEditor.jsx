@@ -13,13 +13,15 @@ const FONT = tokens.font;
 // & Terrace panel; the FOH floor view is service-only). Two layers on one
 // canvas, per the reference mockup:
 //
-//   TABLES — drag tables (unit snap), tap to select → inspector; drag a
-//   selected table's chairs; RENUMBER flips the canvas to seats mode.
+//   TABLES — tap to select → inspector; drag a selected table's chairs.
+//   Dragging tables is armed by the MOVE tool only (SELECT is the default,
+//   so a stray touch can't rearrange the room); RENUMBER flips the canvas
+//   to seats mode.
 //
-//   SHEET — the architecture. MOVE selects/drags sheet elements; WALL places
-//   polyline points (ortho snap) finished with CLOSE (room) or END
-//   (partition); DOOR cuts an opening into the nearest wall; ZONE / PLANT
-//   stamp elements to drag and edit in MOVE.
+//   SHEET — the architecture. SELECT taps sheet elements to edit; MOVE also
+//   drags them; WALL places polyline points (ortho snap) finished with CLOSE
+//   (room) or END (partition); DOOR cuts an opening into the nearest wall;
+//   ZONE / PLANT stamp elements to drag and edit in MOVE.
 
 const btn = (on) => ({
   fontFamily: FONT, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase",
@@ -30,10 +32,11 @@ const btn = (on) => ({
   touchAction: "manipulation",
 });
 
-const TOOLS = [["MOVE", "move"], ["WALL", "wall"], ["DOOR", "door"], ["ZONE", "zone"], ["PLANT", "plant"]];
+const TOOLS = [["SELECT", "select"], ["MOVE", "move"], ["WALL", "wall"], ["DOOR", "door"], ["ZONE", "zone"], ["PLANT", "plant"]];
 
 const HINTS = {
-  move: "drag tables · tap anything to edit it · drag zones & planters",
+  select: "tap anything to edit it — pick MOVE to rearrange the room",
+  move: "drag tables, zones & planters · tap anything to edit it",
   wall: "tap to place points (ortho snap) — CLOSE makes a room, END a partition",
   door: "tap a wall to cut an opening with a swing arc",
   zone: "tap to stamp a hatched zone",
@@ -46,7 +49,7 @@ export default function FloorEditor({
   const [tabId, setTabId] = useState(null);
   const [selLabel, setSelLabel] = useState(null);
   const [renumber, setRenumber] = useState(null); // { label, seq } — SEATS tap sequence
-  const [tool, setTool] = useState("move");
+  const [tool, setTool] = useState("select"); // dragging opts in via MOVE
   const [draft, setDraft] = useState([]);         // wall in progress
   const [sheetSel, setSheetSel] = useState(null); // { kind, id }
   const [note, setNote] = useState(null);
@@ -61,7 +64,7 @@ export default function FloorEditor({
 
   const switchTab = (id) => {
     setTabId(id); setSelLabel(null); setRenumber(null);
-    setTool("move"); setDraft([]); setSheetSel(null);
+    setTool("select"); setDraft([]); setSheetSel(null);
   };
 
   const onRenumber = (label) =>
@@ -135,7 +138,7 @@ export default function FloorEditor({
   const finishWall = (closed) => {
     const next = addWall(floorMaps, map.id, draft, closed);
     setDraft([]);
-    setTool("move");
+    setTool("select"); // walls don't drag — back to tap-to-edit
     if (next === floorMaps) return; // too few points
     onUpdateFloorMaps(next);
     setSheetSel({ kind: "wall", id: lastOf(next, "walls").id });
@@ -199,7 +202,6 @@ export default function FloorEditor({
         map={map}
         mode={renumber ? "seats" : "edit"}
         height={isMobile ? 420 : 640}
-        titleIndex={floorMaps.maps.indexOf(map)}
         selectedLabel={selLabel}
         seatsEditLabel={renumber?.label || null}
         seatsOverride={renumberPreview}

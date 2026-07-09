@@ -373,11 +373,13 @@ describe("seat ops", () => {
 });
 
 describe("merge ops", () => {
-  it("setTableMembers keeps ≥2 distinct labels, else drops the merge", () => {
+  it("setTableMembers keeps distinct labels (one survives — merges build chip by chip); empty clears", () => {
     const s = setTableMembers(state, "dining_a", "T6", ["t6", "T7", "T7"]);
     expect(findMapTable(getActiveDiningMap(s), "T6").members).toEqual(["T6", "T7"]);
     const solo = setTableMembers(s, "dining_a", "T6", ["T6"]);
-    expect(findMapTable(getActiveDiningMap(solo), "T6").members).toBeUndefined();
+    expect(findMapTable(getActiveDiningMap(solo), "T6").members).toEqual(["T6"]);
+    const none = setTableMembers(solo, "dining_a", "T6", []);
+    expect(findMapTable(getActiveDiningMap(none), "T6").members).toBeUndefined();
   });
 
   it("setTableBoardIds sanitizes to sorted unique ints 1..10", () => {

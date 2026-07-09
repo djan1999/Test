@@ -110,7 +110,7 @@ function SheetLayer({ sheet, sel, drag, blueprint = false }) {
 
       {sheet.walls.map((wall) => {
         const selected = sel?.kind === "wall" && sel.id === wall.id;
-        const sw = (wall.dashed ? 0.55 : 0.85) * (blueprint ? 1.4 : 1) + (selected ? 0.3 : 0);
+        const sw = (wall.dashed ? 0.3 : 0.85) * (blueprint ? 1.4 : 1) + (selected ? 0.3 : 0);
         return wallSegments(wall).map(({ p1, p2, i }) => {
           const L = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
           if (!L) return null;
@@ -151,28 +151,6 @@ function SheetLayer({ sheet, sel, drag, blueprint = false }) {
   );
 }
 
-// Drafting-sheet title block (editor only) — the mockup's signature corner.
-function TitleBlock({ name, idx }) {
-  const x = 60.5, y = 78.5, w = 38, h = 12;
-  const date = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase();
-  return (
-    <g pointerEvents="none">
-      <rect x={x} y={y} width={w} height={h} fill={tokens.neutral[0]} stroke={tokens.ink[0]} strokeWidth={0.35} />
-      <line x1={x} y1={y + 4} x2={x + w} y2={y + 4} stroke={tokens.ink[0]} strokeWidth={0.2} />
-      <line x1={x} y1={y + 8} x2={x + w} y2={y + 8} stroke={tokens.ink[4]} strokeWidth={0.15} />
-      <text x={x + 1.4} y={y + 2.9} fontFamily={tokens.font} fontSize={1.9} fontWeight={700} letterSpacing={0.25} fill={tokens.ink[0]}>
-        MILKA — SERVICE BOARD
-      </text>
-      <text x={x + 1.4} y={y + 6.9} fontFamily={tokens.font} fontSize={1.9} fontWeight={700} letterSpacing={0.2} fill={tokens.ink[0]}>
-        {name} · DWG {String((idx ?? 0) + 1).padStart(2, "0")}
-      </text>
-      <text x={x + 1.4} y={y + 10.9} fontFamily={tokens.font} fontSize={1.6} letterSpacing={0.2} fill={tokens.ink[3]}>
-        SCALE 1:50 · {date}
-      </text>
-    </g>
-  );
-}
-
 function TableShape({ t, fill, stroke, strokeWidth = 0.35, dash }) {
   if (t.shape === "round") {
     const r = Math.min(t.w, t.h) / 2;
@@ -203,13 +181,14 @@ export default function FloorMap({
   selectedLabel = null,     // edit mode: highlighted table
   // SHEET editing (edit mode only): the active tool decides what a canvas
   // tap means; the editor owns tool state and commits through pure helpers.
-  sheetTool = "move",       // 'move' | 'wall' | 'door' | 'zone' | 'plant'
+  sheetTool = "move",       // 'select' | 'move' | 'wall' | 'door' | 'zone' | 'plant'
+                            // — only MOVE drags tables/zones/planters; SELECT
+                            // is tap-to-edit only (accidental-drag guard)
   sheetDraft = null,        // wall-in-progress points [[x,y],…]
   sheetSel = null,          // { kind: 'wall'|'door'|'zone'|'planter', id }
   onCanvasTap,              // ({x, y}) — tap with a stamp/draw tool active
   onSheetSelect,            // (hit | null) — MOVE-tool tap
   onSheetMove,              // (kind, id, x, y) — zone/planter drag, on release
-  titleIndex = null,        // blueprint modes: this map's DWG number (0-based)
   seatCodes = true,         // restriction code text beside restricted chairs
                             // (kitchen needs it; the FOH floor keeps just the
                             // amber chair + the label's ▲)
@@ -232,7 +211,8 @@ export default function FloorMap({
   const editing = mode === "edit";
   const sheetData = sheetOf(map);
   const sheetEditing = editing && !!onCanvasTap;
-  const stampTool = sheetEditing && sheetTool !== "move";
+  const moveTool = sheetTool === "move";
+  const stampTool = sheetEditing && !moveTool && sheetTool !== "select";
   // The editor is the only consumer of the edit/seats modes, so the mockup's
   // blueprint register (paper sheet, dual drafting grid, heavy ink, title
   // block) lives on these modes — the FOH/kitchen views keep the quiet look.
@@ -264,7 +244,9 @@ export default function FloorMap({
     const p = toMapUnits(e);
     if (!p) return;
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    gestureRef.current = { kind: "table", label: t.label, start: p, origin: { x: t.x, y: t.y } };
+    // dragging is armed by the MOVE tool only — with SELECT active a table
+    // gesture can never move geometry, it resolves as a tap on release
+    gestureRef.current = { kind: "table", label: t.label, start: p, origin: { x: t.x, y: t.y }, movable: moveTool };
     setDrag({ label: t.label, dx: 0, dy: 0, moved: false });
   };
 
@@ -285,7 +267,7 @@ export default function FloorMap({
     if (!p) return;
     const dx = p.x - g.start.x, dy = p.y - g.start.y;
     const moved = Math.abs(dx) + Math.abs(dy) > 0.5;
-    if (g.kind === "table") setDrag({ label: g.label, dx, dy, moved });
+    if (g.kind === "table") { if (g.movable) setDrag({ label: g.label, dx, dy, moved }); }
     else if (g.kind === "seat") setSeatDrag({ label: g.label, index: g.index, x: p.x, y: p.y, moved });
     else if (g.kind === "sheetEl") setSheetDrag({ ...g.hit, dx, dy, moved });
   };
@@ -298,9 +280,10 @@ export default function FloorMap({
     const p = toMapUnits(e);
     if (!p) return;
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    if (sheetTool === "move") {
+    if (sheetTool === "move" || sheetTool === "select") {
       const hit = hitTestSheet(sheetData, p);
-      if (hit && (hit.kind === "zone" || hit.kind === "planter")) {
+      // SELECT never drags — the tap resolves to a selection on release
+      if (moveTool && hit && (hit.kind === "zone" || hit.kind === "planter")) {
         const el = hit.kind === "zone"
           ? sheetData.zones.find((z) => z.id === hit.id)
           : sheetData.planters.find((x) => x.id === hit.id);
@@ -326,7 +309,7 @@ export default function FloorMap({
       return;
     }
     if (g.kind !== "canvasTap") return;
-    if (sheetTool === "move") onSheetSelect && onSheetSelect(g.hit || null);
+    if (sheetTool === "move" || sheetTool === "select") onSheetSelect && onSheetSelect(g.hit || null);
     else onCanvasTap(g.start);
   };
 
@@ -461,7 +444,7 @@ export default function FloorMap({
             data-table={t.label}
             opacity={dimmed ? 0.4 : stampTool ? 0.35 : 1}
             pointerEvents={stampTool ? "none" : undefined}
-            style={{ cursor: editing ? "grab" : pickable || (mode !== "seats" && onTableTap) ? "pointer" : "default" }}
+            style={{ cursor: editing ? (moveTool ? "grab" : "pointer") : pickable || (mode !== "seats" && onTableTap) ? "pointer" : "default" }}
             onPointerDown={onTablePointerDown(t0)}
             onPointerMove={editing ? onPointerMove : undefined}
             onPointerUp={editing ? onPointerUp(t0) : undefined}
@@ -625,8 +608,6 @@ export default function FloorMap({
           </g>
         );
       })}
-
-      {blueprint && titleIndex != null && <TitleBlock name={map.name} idx={titleIndex} />}
 
       {/* wall in progress — points placed so far (ortho snap lives in the editor) */}
       {sheetEditing && sheetDraft && sheetDraft.length > 0 && (
