@@ -539,7 +539,10 @@ export const moveSeat = (state, mapId, label, index, point) =>
 export const setTableMembers = (state, mapId, label, members) =>
   patchTable(state, mapId, label, (t) => {
     const clean = [...new Set((members || []).map((m) => String(m).trim().toUpperCase()).filter(Boolean))];
-    if (clean.length < 2) { const { members: _drop, ...rest } = t; return rest; }
+    // a single member is a merge under construction — the inspector chips
+    // toggle one label per tap, so refusing <2 made merges impossible to
+    // build from the UI; only an empty list clears the merge
+    if (!clean.length) { const { members: _drop, ...rest } = t; return rest; }
     return { ...t, members: clean };
   });
 

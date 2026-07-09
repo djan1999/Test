@@ -50,8 +50,19 @@ describe("FloorEditor (admin geometry surface)", () => {
     getByText("TERRACE");
   });
 
-  it("drag commits one snapped move through updateFloorMaps", () => {
+  it("SELECT (the default) never drags — a stray swipe resolves as a tap-select", () => {
     const { container, onUpdateFloorMaps } = setup();
+    const t1 = findTable(container, "T1");
+    fireEvent.pointerDown(t1, { clientX: 40, clientY: 40 });
+    fireEvent.pointerMove(t1, { clientX: 80, clientY: 80 });
+    fireEvent.pointerUp(t1, { clientX: 80, clientY: 80 });
+    expect(onUpdateFloorMaps).not.toHaveBeenCalled(); // geometry untouched
+    expect(container.textContent).toContain("INSPECTOR — T1");
+  });
+
+  it("MOVE armed: drag commits one snapped move through updateFloorMaps", () => {
+    const { container, onUpdateFloorMaps, getByText } = setup();
+    fireEvent.click(getByText("MOVE"));
     // T1 sits at (8,8); 400px/368px box → 4px per map unit. +40px/+40px = +10/+10 units.
     const t1 = findTable(container, "T1");
     fireEvent.pointerDown(t1, { clientX: 40, clientY: 40 });
@@ -99,6 +110,19 @@ describe("FloorEditor (admin geometry surface)", () => {
     expect(next.geometryVersion).toBeGreaterThan(1);
   });
 
+  it("MEMBERS chips build a merge one tap at a time", () => {
+    const utils = setup();
+    const { container, onUpdateFloorMaps } = utils;
+    tapTable(container, "T6");
+    // chips add one label per tap — the first (single-member) tap must stick
+    const chip = (lbl) => utils.getAllByText(lbl).find((el) => el.tagName === "BUTTON");
+    fireEvent.click(chip("T6"));
+    fireEvent.click(chip("T7"));
+    const next = onUpdateFloorMaps.mock.calls.at(-1)[0];
+    const t6 = next.maps.find((m) => m.id === "dining_a").tables.find((t) => t.label === "T6");
+    expect(t6.members).toEqual(["T6", "T7"]);
+  });
+
   it("RENUMBER: tapping every chair in sequence commits the numbering", () => {
     const { container, onUpdateFloorMaps, getByText } = setup();
     tapTable(container, "T1");
@@ -123,7 +147,7 @@ describe("FloorEditor sheet tools (walls / doors / zones / planters)", () => {
   it("renders the seed architecture and the tool row", () => {
     const { container, getByText } = setup();
     expect(container.textContent).toContain("PASS / KITCHEN"); // seed zone
-    for (const t of ["MOVE", "WALL", "DOOR", "ZONE", "PLANT"]) getByText(t);
+    for (const t of ["SELECT", "MOVE", "WALL", "DOOR", "ZONE", "PLANT"]) getByText(t);
   });
 
   it("WALL: taps place ortho-snapped points, END commits an open wall", () => {
@@ -158,11 +182,12 @@ describe("FloorEditor sheet tools (walls / doors / zones / planters)", () => {
     expect(container.textContent).toContain("INSPECTOR — ZONE");
   });
 
-  it("MOVE: tapping the seed zone selects it; dragging commits one snapped move", () => {
-    const { container, onUpdateFloorMaps } = setup();
+  it("SELECT taps the seed zone open; MOVE drag commits one snapped move", () => {
+    const { container, onUpdateFloorMaps, getByText } = setup();
     // seed zone spans x2..98, y82..90 → tap (50, 85) = client (200, 340)
-    tap(canvas(container), 200, 340);
+    tap(canvas(container), 200, 340); // default SELECT: tap-to-edit works
     expect(container.textContent).toContain("INSPECTOR — ZONE");
+    fireEvent.click(getByText("MOVE"));
     fireEvent.pointerDown(canvas(container), { clientX: 200, clientY: 340 });
     fireEvent.pointerMove(canvas(container), { clientX: 200, clientY: 300 }); // up 10 units
     fireEvent.pointerUp(canvas(container), { clientX: 200, clientY: 300 });
