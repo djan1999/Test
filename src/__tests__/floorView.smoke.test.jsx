@@ -145,6 +145,38 @@ describe("terrace CHANGE TABLE (re-seat on the terrace)", () => {
   });
 });
 
+describe("terrace SET FOR BITES", () => {
+  it("free-table sheet toggles the strip and closes", () => {
+    const { container, handlers, getByText, queryByText } = setup();
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(findTable(container, "T25")); // free
+    fireEvent.click(getByText("SET FOR BITES"));
+    expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T25");
+    expect(queryByText("ASSIGN PARTY")).toBeNull(); // sheet closed
+  });
+
+  it("an already-SET table offers UNSET instead, and its strip shows on the tile", () => {
+    const { container, handlers, getByText, queryByText } = setup({
+      floorStatus: { terrace_main: { T25: "SET" } },
+    });
+    fireEvent.click(getByText("TERRACE"));
+    expect(container.textContent).toContain("SET"); // strip on the T25 tile
+    fireEvent.click(findTable(container, "T25"));
+    expect(queryByText("SET FOR BITES")).toBeNull();
+    fireEvent.click(getByText("UNSET"));
+    expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T25");
+  });
+
+  it("an occupied party's sheet carries the toggle next to its move/clear actions", () => {
+    const { container, handlers, getByText } = setup();
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(findTable(container, "T23")); // WEISS's table
+    getByText(/MOVE TO T9/); // still the party sheet…
+    fireEvent.click(getByText("SET FOR BITES")); // …with the bites toggle
+    expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T23");
+  });
+});
+
 describe("SEND SET → KITCHEN", () => {
   it("appears when a seated table is SET and forwards its board id", () => {
     const onSend = vi.fn();
