@@ -294,6 +294,70 @@ describe.each([
   }, 20000);
 });
 
+// ── Failed-write survival (the wifi-extender lag-out incident) ────────────────
+// The kitchen display ran on the direct-Supabase fallback over a laggy wifi
+// extender: every upsert failed, yet reads/realtime kept flowing (seat presses
+// from other devices still arrived). Each incoming event refetched the board,
+// and the refetch ADOPTED the stale store row — erasing the local press and its
+// timing as if the click never happened, because the diff baseline had been
+// advanced at queue time and the reconciler saw "nothing unsaved". These pins
+// hold the fix: an unconfirmed write must survive any refetch (folding in the
+// other device's fields), and must drain on its own once the network returns —
+// no follow-up edit required.
+describe("app harness — fallback mode: failed writes survive refetches", () => {
+  beforeEach(() => {
+    resetBackend({ psMode: false });
+  });
+
+  it("an edit whose save failed survives a newer stale refetch and drains on 'online' (wifi-extender incident)", async () => {
+    seedLiveService();
+    render(<App />);
+    await enterService();
+
+    // Bruno's reservation templates T2 and the autosave persists it — wait for
+    // that write to land so the confirmed baseline holds the pre-seat state.
+    await waitFor(() => {
+      expect(rowFor(remoteRows("service_tables"), 2)?.data?.resName).toBe("Bruno Harness");
+    }, { timeout: 5000 });
+
+    // Writes die; reads and realtime stay up (exactly the lag-out shape).
+    backend.failRemoteWrites = true;
+
+    // Seat Bruno — paints immediately, but every upsert attempt fails.
+    fireEvent.click(await screen.findByText("SEAT", {}, { timeout: 5000 }));
+    await new Promise((r) => setTimeout(r, 3600)); // all 4 attempts exhausted
+    expect(rowFor(remoteRows("service_tables"), 2)?.data?.active).not.toBe(true);
+    await screen.findByText("ERROR", {}, { timeout: 5000 }); // header chip
+
+    // Another device now writes the SAME table with a NEWER stamp but WITHOUT
+    // the seat (it never received it), plus its own new field. The realtime
+    // event triggers a board refetch on this device.
+    const t2 = rowFor(remoteRows("service_tables"), 2);
+    t2.data = { ...t2.data, notes: "candles at 21:00" };
+    t2.updated_at = new Date(Date.now() + 2000).toISOString();
+    await act(async () => {
+      emitRealtime("service_tables", { eventType: "UPDATE", new: t2, old: null });
+    });
+    await new Promise((r) => setTimeout(r, 400));
+
+    // The unsaved seat SURVIVES the refetch — pre-fix it was wiped here (the
+    // press and its timing vanished, SEAT reappeared).
+    expect(screen.queryByText("SEAT")).toBeNull();
+
+    // Network returns: the pending write drains WITHOUT any further edit
+    // (pre-fix it sat re-queued until the next local tap), and the store
+    // converges to BOTH devices' edits — ours seated, theirs folded in.
+    backend.failRemoteWrites = false;
+    await act(async () => { window.dispatchEvent(new Event("online")); });
+    await waitFor(() => {
+      const row = rowFor(remoteRows("service_tables"), 2);
+      expect(row?.data?.active).toBe(true);                 // this device's seat
+      expect(row?.data?.notes).toBe("candles at 21:00");    // other device's edit
+    }, { timeout: 6000 });
+    await screen.findByText("SYNC", {}, { timeout: 5000 }); // chip recovered
+  }, 25000);
+});
+
 // ── Shared service lifecycle ──────────────────────────────────────────────────
 // A service started or ended on ANY device applies everywhere, live. The
 // adopting device never writes anything back (no archive, no clears) — the
