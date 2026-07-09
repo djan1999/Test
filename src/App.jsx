@@ -2822,21 +2822,33 @@ export default function App() {
   const assignTerraceTable = (resv, label) => {
     const terraceMapId = floorMapsState.maps.find(m => m.kind === "terrace")?.id || null;
     if (!persistVisitData(resv, assignTerraceData(resv.data, label, terraceMapId))) return;
-    // assigning claims the table — any stale SET marker clears
-    if (terraceMapId) updateFloorStatus(setFloorStatus(floorStatus, terraceMapId, label, null));
+    // A SET marker SURVIVES the assign: terrace tables are set FOR the
+    // incoming party ("set for bites"), so the kitchen must keep seeing it
+    // exactly when the party lands. It clears when the party leaves the
+    // table (move-in / clear below) — the table needs re-prepping then.
+  };
+
+  // Clear the terrace table's SET strip when its party departs.
+  const clearTerraceStrip = (label) => {
+    const terraceMapId = getTerraceMap(floorMapsState)?.id || null;
+    if (label && terraceMapId) updateFloorStatus(setFloorStatus(floorStatus, terraceMapId, label, null));
   };
 
   const clearTerracePartyTable = (resv) => {
-    persistVisitData(resv, clearTerraceData(resv.data));
+    const label = resv.data?.terrace_table || null;
+    if (!persistVisitData(resv, clearTerraceData(resv.data))) return;
+    clearTerraceStrip(label);
   };
 
   const moveTerracePartyIn = (resv) => {
+    const label = resv.data?.terrace_table || null;
     const next = moveToDiningData(resv.data, new Date().toISOString(), {
       singleTap: !!floorMapsState.config?.moveSingleTap,
     });
     if (!persistVisitData(resv, next)) return;
     // the terrace table frees the moment the write lands (occupancy derives
-    // from visit_state)
+    // from visit_state) — and its bites-SET clears with the departure
+    if (next.visit_state === "dining" || next.visit_state === "arriving") clearTerraceStrip(label);
     if (next.visit_state === "dining") seatTable(Number(resv.table_id)); // MOVE_SINGLE_TAP path
   };
 

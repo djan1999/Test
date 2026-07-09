@@ -213,6 +213,19 @@ export default function FloorView({
 
   const sheetBody = () => {
     if (map.kind === "terrace") {
+      // Terrace tables are settable too ("set for bites"): the same
+      // floor_status_v1 strip the dining tables use, toggled from the sheet
+      // (a terrace body-tap must keep opening the sheet — it carries assign/
+      // move actions a status cycle can't mean). The kitchen's terrace tab
+      // already renders these strips live, so SET is visible there instantly.
+      const sheetStrip = floorStatusOf(floorStatus, map.id, sheetLabel);
+      const setToggle = (
+        <button
+          style={actionBtn(sheetStrip !== "SET")}
+          onClick={() => { onCycleStatus(map.id, sheetLabel); setSheetLabel(null); }}>
+          {sheetStrip === "SET" ? "UNSET" : "SET FOR BITES"}
+        </button>
+      );
       if (sheetParty) {
         // the runner's crib sheet: waters by seat position + pairings, from
         // the party's board table (no reservation name — per Djan)
@@ -247,12 +260,16 @@ export default function FloorView({
               <button style={actionBtn(false)} onClick={() => { onClear(sheetParty); setSheetLabel(null); }}>
                 CLEAR TABLE
               </button>
+              {setToggle}
             </div>
           </div>
         );
       }
       return (
         <div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            {setToggle}
+          </div>
           <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.12em", color: tokens.ink[3], textTransform: "uppercase", margin: "2px 0 6px" }}>
             ASSIGN PARTY
           </div>
