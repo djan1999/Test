@@ -30,9 +30,9 @@ offline→reconnect through the actual UI in BOTH storage modes.
 
 | # | Rule | Enforced by |
 |---|------|-------------|
-| D1 | Every read/write of workspace data goes through a store seam (`lib/stateStore`, `lib/archiveStore`, App's `persistBoardRows` / `persistReservationRow` / `persistArchiveEntry` / `fetchBoardRows`, `powersync/writes\|reads`). Direct `scopedFrom(...)` / `supabase.from(...)` calls exist only on a curated allowlist (seam fallback branches, auth bootstrap). | `seamDiscipline.test.js` — static scan of `src/`, fails on any new direct call site **and** on stale allowlist entries. This is the test that would have caught the PR #44 primary bug (a direct reservation update inside `onMoveTable` that the SQLite watch reverted every tick). Behaviourally re-verified by `appHarness.test.jsx`'s local-first assertion (a seam bypass leaves the on-device DB stale and fails the switch scenario). |
+| D1 | Every read/write of workspace data goes through a store seam (`lib/stateStore`, `lib/archiveStore`, `lib/serviceLifecycleStore`, the shared board CAS, reservation seams, or `powersync/writes\|reads`). Direct `scopedFrom(...)` / `supabase.from(...)` calls exist only on a curated allowlist. | `seamDiscipline.test.js` — static scan of `src/`, fails on any new direct call site **and** on stale allowlist entries. Behaviourally re-verified by `appHarness.test.jsx`. |
 | D4 | Local-first on SQLite-primary: a write is durable in the on-device DB before any server echo, and the watch tick never reverts it. | `appHarness.test.jsx` (switch + offline scenarios, sqlite-primary mode) |
-| D2 | Writes to Supabase from the sync engine replicate the legacy conflict targets exactly (composite keys per table, jsonb parsing, 0/1→boolean, alias mapping); transient errors rethrow, permanent errors complete. | `supabaseConnector.test.js` |
+| D2 | Sync uploads preserve composite keys, JSON/boolean types and workspace aliases. Operational writes are never discarded on schema/permission errors; they remain queued for retry. | `supabaseConnector.test.js` |
 | D3 | Local SQLite writes are UPDATE-then-INSERT so nulls travel via PATCH. | `powersyncWrites.test.js` |
 
 ### Board ↔ reservations
@@ -52,17 +52,17 @@ offline→reconnect through the actual UI in BOTH storage modes.
 |---|------|-------------|
 | L1 | Auto-end never wipes a LIVE service: if the most recent seated-table activity belongs to the current service day, the service is re-dated forward, not archived. Only a genuinely abandoned board (last touch on a past service day) auto-ends. | `serviceDay.test.js` (`isLiveServiceActivity`); `appHarness.test.jsx` (whole-app stale-date scenario, both storage modes) |
 | L2 | Autosave refuses to persist a blank of 2+ previously-contentful tables unless the clear is flagged intentional (CLEAR ALL / Archive&Clear / auto-end / day-switch). | mass-blank guard in App's autosave (`intentionalBoardClearRef`) — **app-level, no isolated test yet** (the harness exercises the flagged-clear path via auto-end, not the guard's refusal branch) |
-| L3 | Every destructive path archives first — data is recoverable after any wipe. | by construction (`archiveAndClear*`, auto-end archive step); `appHarness.test.jsx` (overnight auto-end archives before clearing); drill E in `docs/SERVICE_DRILLS.md` |
+| L3 | Ending service is one durable operation: archive (when present), all ten board clears, and the lifecycle clear commit together locally and upload through one Postgres transaction. | `serviceLifecycleStore.test.js`; `powersyncWrites.test.js`; `supabaseConnector.test.js`; `appHarness.test.jsx`; drill F in `docs/SERVICE_DRILLS.md` |
 | L5 | A second device joining a live service just drops in — never a "start" prompt, never a board rebuild. | `appHarness.test.jsx` (join scenario); `serviceDay.test.js` (`resolveServiceEntry`) |
 | L6 | Offline edits are never silently dropped: fallback autosave retries then re-queues for the next flush; SQLite-primary writes land locally and upload after reconnect. | `appHarness.test.jsx` (offline→reconnect scenario, both modes) |
-| L4 | Concurrent edits to different seats of the same table both survive (per-seat fold). Same-seat edits are last-write-wins (known limit). | `foldTable.test.js` |
+| L4 | Concurrent edits to different seats of the same table both survive. The upload connector folds against the tracked ancestor and commits with a server compare-and-swap; same-seat edits remain last-write-wins. | `foldTable.test.js`; `supabaseConnector.test.js` |
 
 ### Output contracts
 
 | # | Rule | Enforced by |
 |---|------|-------------|
 | O1 | Kitchen ticket / weekly print / menu generator output shapes are locked. | `generatorSnapshots.test.js` |
-| O2 | The five manual service drills (two-device propagation, airplane reconcile, offline archive, stale-date open, master fallback) describe the end-to-end contract on real hardware. | `docs/SERVICE_DRILLS.md` — **manual**, never yet run on real tablets; run before the next big cut |
+| O2 | The six core manual drills cover two-device propagation, offline reconciliation, cold start, catalogue preservation and atomic service ending; the additional outage drill verifies the direct fallback. | `docs/SERVICE_DRILLS.md` — **manual**, never yet run on real tablets; run before the next big cut |
 
 ## When you change something
 

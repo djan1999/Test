@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { TABLES, supabase, getWorkspaceId } from "../../lib/supabaseClient.js";
-import { readStateKey, saveStateKey } from "../../lib/stateStore.js";
+import { readStateKey, readStatePrefix, saveStateKey } from "../../lib/stateStore.js";
 import { isSqlitePrimary } from "../../powersync/primary.js";
+import { workspaceKey } from "../../utils/storage.js";
 import { COUNTRY_NAMES, stripCountryFromRegion, inferCountryFromRegion } from "../../constants/countries.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput } from "../../styles/mixins.js";
@@ -11,7 +12,15 @@ import { useIsMobile } from "../../hooks/useIsMobile.js";
 const FONT = tokens.font;
 const baseInp = { ...baseInput };
 const INV_LS_KEY = "milka-inventory-counts";
-const INV_SETTINGS_ID = "inventory";
+const LEGACY_INV_SETTINGS_ID = "inventory";
+const INV_SETTINGS_PREFIX = "inventory_device:";
+
+const escapeHtml = (value) => String(value ?? "")
+  .replaceAll("&", "&amp;")
+  .replaceAll("<", "&lt;")
+  .replaceAll(">", "&gt;")
+  .replaceAll('"', "&quot;")
+  .replaceAll("'", "&#039;");
 
 const getDeviceId = () => {
   const KEY = "milka-inv-did";
@@ -26,6 +35,8 @@ const getDeviceId = () => {
 export default function InventoryModal({ wines, onClose }) {
   const isMobile = useIsMobile(640);
   const myId = useRef(getDeviceId());
+  const mySettingsId = `${INV_SETTINGS_PREFIX}${myId.current}`;
+  const localCountsKey = workspaceKey(INV_LS_KEY);
   const stRef = useRef(null);
   const saveTimer = useRef(null);
   const [syncSt, setSyncSt] = useState("loading");
@@ -33,7 +44,7 @@ export default function InventoryModal({ wines, onClose }) {
 
   const [fullState, setFullState] = useState(() => {
     let myCountsLS = {};
-    try { myCountsLS = JSON.parse(localStorage.getItem(INV_LS_KEY) || "{}"); } catch {}
+    try { myCountsLS = JSON.parse(localStorage.getItem(localCountsKey) || "{}"); } catch {}
     const initial = { d: { [myId.current]: { label: "...", counts: myCountsLS } } };
     stRef.current = initial;
     return initial;
@@ -71,7 +82,8 @@ export default function InventoryModal({ wines, onClose }) {
     // The local-SQLite path works offline (the write uploads later); only the
     // direct-Supabase fallback needs the network right now.
     if (!supabase || (!isSqlitePrimary() && !navigator.onLine)) { setSyncSt("offline"); return; }
-    const { ok } = await saveStateKey(INV_SETTINGS_ID, state);
+    const mine = state?.d?.[myId.current] || { label: "This device", counts: {} };
+    const { ok } = await saveStateKey(mySettingsId, mine);
     setSyncSt(ok ? "synced" : "error");
   };
 
@@ -79,7 +91,7 @@ export default function InventoryModal({ wines, onClose }) {
     setFullState((prev) => {
       const prevMy = prev.d[myId.current]?.counts || {};
       const nextMy = typeof updater === "function" ? updater(prevMy) : updater;
-      try { localStorage.setItem(INV_LS_KEY, JSON.stringify(nextMy)); } catch {}
+      try { localStorage.setItem(localCountsKey, JSON.stringify(nextMy)); } catch {}
       const next = { d: { ...prev.d, [myId.current]: { ...prev.d[myId.current], counts: nextMy } } };
       stRef.current = next;
       if (supabase) {
@@ -118,13 +130,18 @@ export default function InventoryModal({ wines, onClose }) {
 
   useEffect(() => {
     if (!supabase) { setSyncSt(navigator.onLine ? "synced" : "offline"); return; }
-    readStateKey(INV_SETTINGS_ID)
-      .catch(() => null)
-      .then((state) => {
-        const remoteD = state?.d || {};
+    Promise.all([
+      readStatePrefix(INV_SETTINGS_PREFIX).catch(() => []),
+      readStateKey(LEGACY_INV_SETTINGS_ID).catch(() => null),
+    ]).then(([deviceRows, legacyState]) => {
+        const remoteD = { ...(legacyState?.d || {}) };
+        for (const row of deviceRows) {
+          const did = String(row.id || "").slice(INV_SETTINGS_PREFIX.length);
+          if (did) remoteD[did] = row.state || {};
+        }
         const myRemote = remoteD[myId.current];
         const myLabel = myRemote?.label || `Device ${Object.keys(remoteD).length + 1}`;
-        const myLocalCounts = (() => { try { return JSON.parse(localStorage.getItem(INV_LS_KEY) || "{}"); } catch { return {}; } })();
+        const myLocalCounts = (() => { try { return JSON.parse(localStorage.getItem(localCountsKey) || "{}"); } catch { return {}; } })();
         const baseCounts = myRemote?.counts || {};
         const mergedMyCounts = { ...baseCounts };
         Object.entries(myLocalCounts).forEach(([id, n]) => { if (n > 0) mergedMyCounts[id] = n; });
@@ -132,7 +149,7 @@ export default function InventoryModal({ wines, onClose }) {
         const next = { d: fullD };
         stRef.current = next;
         setFullState(next);
-        try { localStorage.setItem(INV_LS_KEY, JSON.stringify(mergedMyCounts)); } catch {}
+        try { localStorage.setItem(localCountsKey, JSON.stringify(mergedMyCounts)); } catch {}
         if (!myRemote?.label || Object.keys(myLocalCounts).length > 0) flushToStore(next);
         setSyncSt(navigator.onLine ? "synced" : "offline");
       });
@@ -157,21 +174,46 @@ export default function InventoryModal({ wines, onClose }) {
   }, []);
 
   useEffect(() => {
-    if (!supabase) return;
-    const ch = supabase.channel(`milka-inventory-${getWorkspaceId()}`)
-      .on("postgres_changes", {
-        event: "UPDATE",
-        schema: "public",
-        table: TABLES.SERVICE_SETTINGS,
-        filter: `workspace_id=eq.${getWorkspaceId()}`,
-      }, (payload) => {
-        if (payload.new?.id !== INV_SETTINGS_ID) return;
-        const remoteD = payload.new?.state?.d;
-        if (!remoteD) return;
-        setFullState((prev) => ({ d: { ...remoteD, [myId.current]: prev.d[myId.current] } }));
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    if (!supabase) return undefined;
+    let disposed = false;
+    let cleanup = () => {};
+    const reloadOthers = async () => {
+      const rows = await readStatePrefix(INV_SETTINGS_PREFIX).catch(() => []);
+      if (disposed) return;
+      const remote = {};
+      for (const row of rows) {
+        const did = String(row.id || "").slice(INV_SETTINGS_PREFIX.length);
+        if (did) remote[did] = row.state || {};
+      }
+      setFullState((prev) => ({ d: { ...remote, [myId.current]: prev.d[myId.current] } }));
+    };
+    if (isSqlitePrimary()) {
+      import("../../powersync/system.js").then(({ getPowerSync }) => {
+        if (disposed) return;
+        const controller = new AbortController();
+        getPowerSync().watch(
+          "SELECT count(*) AS n, max(updated_at) AS ts FROM service_settings WHERE workspace_id = ? AND id LIKE ?",
+          [getWorkspaceId(), `${getWorkspaceId()}|${INV_SETTINGS_PREFIX}%`],
+          { onResult: reloadOthers, onError: () => setSyncSt("error") },
+          { signal: controller.signal },
+        );
+        cleanup = () => controller.abort();
+      });
+    } else {
+      const ch = supabase.channel(`milka-inventory-${getWorkspaceId()}`)
+        .on("postgres_changes", {
+          event: "*",
+          schema: "public",
+          table: TABLES.SERVICE_SETTINGS,
+          filter: `workspace_id=eq.${getWorkspaceId()}`,
+        }, (payload) => {
+          const id = payload.new?.id || payload.old?.id || "";
+          if (String(id).startsWith(INV_SETTINGS_PREFIX)) reloadOthers();
+        })
+        .subscribe();
+      cleanup = () => supabase.removeChannel(ch);
+    }
+    return () => { disposed = true; cleanup(); };
   }, []);
 
   const q = search.trim().toLowerCase();
@@ -198,7 +240,7 @@ export default function InventoryModal({ wines, onClose }) {
       byCountry[country].push(w);
     });
     const dateStr = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-    const deviceSummary = deviceTotals.map((d) => `${d.label}: ${fmtCount(d.total)}`).join(" · ");
+    const deviceSummary = deviceTotals.map((d) => `${escapeHtml(d.label)}: ${fmtCount(d.total)}`).join(" · ");
     const rows = (ws) => ws.map((w) => {
       const n = displayCounts[w.id] || 0;
       const rawVin = String(w.vintage || "").trim();
@@ -207,15 +249,15 @@ export default function InventoryModal({ wines, onClose }) {
       const sub = [stripCountryFromRegion(w.region, rc), COUNTRY_NAMES[rc] || rc].filter(Boolean).join(", ");
       return `<tr>
         <td style="padding:5px 4px;border-bottom:1px solid ${tokens.neutral[200]};vertical-align:top;">
-          <div style="font-weight:600;">${w.producer} ${w.name} <span style="font-weight:400;color:${tokens.neutral[500]};">${vin}</span></div>
-          ${sub ? `<div style="font-size:9px;color:${tokens.neutral[400]};margin-top:1px;">${sub}</div>` : ""}
+          <div style="font-weight:600;">${escapeHtml(w.producer)} ${escapeHtml(w.name)} <span style="font-weight:400;color:${tokens.neutral[500]};">${escapeHtml(vin)}</span></div>
+          ${sub ? `<div style="font-size:9px;color:${tokens.neutral[400]};margin-top:1px;">${escapeHtml(sub)}</div>` : ""}
         </td>
         <td style="padding:5px 4px;border-bottom:1px solid ${tokens.neutral[200]};text-align:right;font-size:15px;font-weight:700;color:${n > 0 ? tokens.neutral[900] : tokens.neutral[300]};white-space:nowrap;width:48px;">${fmtCount(n)}</td>
       </tr>`;
     }).join("");
     const sections = Object.entries(byCountry).sort(([a], [b]) => a.localeCompare(b)).map(([country, ws]) => `
       <div style="margin-bottom:20px;">
-        <div style="font-size:9px;letter-spacing:3px;color:${tokens.neutral[500]};text-transform:uppercase;border-bottom:1px solid ${tokens.neutral[200]};padding-bottom:4px;margin-bottom:6px;">${country}</div>
+        <div style="font-size:9px;letter-spacing:3px;color:${tokens.neutral[500]};text-transform:uppercase;border-bottom:1px solid ${tokens.neutral[200]};padding-bottom:4px;margin-bottom:6px;">${escapeHtml(country)}</div>
         <table style="width:100%;border-collapse:collapse;">${rows(ws)}</table>
       </div>`).join("");
     const html = `<html><head><title>Wine Inventory · ${dateStr}</title>

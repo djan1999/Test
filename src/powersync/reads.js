@@ -1,6 +1,5 @@
 // Fast reads from the on-device PowerSync SQLite DB — the app's primary read
-// path once the local DB has synced (see localDbHasWorkspaceData below for the
-// gate). HEAVY module (pulls the SDK via system.js) — only ever reach it
+// path once priority-1 has synced. HEAVY module (pulls the SDK via system.js) — only ever reach it
 // through a dynamic import() gated by isPowerSyncEnabled().
 //
 // Every query is scoped to the active workspace: the sync streams alias
@@ -9,6 +8,7 @@
 
 import { getPowerSync } from "./system.js";
 import { getWorkspaceId } from "../lib/supabaseClient.js";
+import { localRowId, naturalKeyFromLocalId } from "./rowId.js";
 
 // Resolve true once the local DB has completed its first full sync, so we never
 // paint a half-synced (partial) table. Falls through to false after a timeout so
@@ -79,83 +79,46 @@ function reviveRow(row) {
   return out;
 }
 
-// The synced tables, probed by localDbHasWorkspaceData().
-const SYNCED_TABLES = [
-  "service_tables", "service_settings", "reservations",
-  "menu_courses", "wines", "beverages", "service_archive",
-];
-
-// Whether the local DB actually holds this workspace's rows. Gates the
-// sqlite-primary switch: a non-member account (the platform admin — see the
-// sync-rules note) completes its first sync with ZERO rows, and must stay on
-// the direct-Supabase fallback instead of reading an empty board.
-export async function localDbHasWorkspaceData(workspaceId) {
-  const db = getPowerSync();
-  for (const table of SYNCED_TABLES) {
-    const row = await db.get(
-      `SELECT EXISTS(SELECT 1 FROM ${table} WHERE workspace_id = ?) AS has`,
-      [workspaceId],
-    ).catch(() => null);
-    if (row?.has) return true;
-  }
-  return false;
-}
-
-// TRIPWIRE for the natural-key aliasing hazard. The sync streams alias each
-// composite-key table's natural key into the local `id` PK
-// (service_tables→table_id, menu_courses→position, wines→key). Those aliases
-// are NOT workspace-qualified, so if one device ever syncs TWO workspaces at
-// once, "table 3" of workspace A and "table 3" of workspace B collide on the
-// same local row and one silently overwrites the other. Membership is 1:1
-// today so this never fires — but if it ever does, it means the sync-rules
-// alias fix in docs/SYNC_UPGRADE_PLAN.md must be deployed BEFORE trusting the
-// local DB. Returns the set of foreign workspace ids found (empty = safe).
-export async function detectForeignWorkspaceRows(workspaceId) {
-  const db = getPowerSync();
-  const foreign = new Set();
-  for (const table of SYNCED_TABLES) {
-    const rows = await db.getAll(
-      `SELECT DISTINCT workspace_id FROM ${table} WHERE workspace_id IS NOT NULL AND workspace_id != ?`,
-      [workspaceId],
-    ).catch(() => []);
-    for (const r of rows) if (r.workspace_id) foreign.add(r.workspace_id);
-  }
-  if (foreign.size > 0) {
-    console.error(
-      "[PowerSync] SECURITY TRIPWIRE: local DB holds rows from foreign workspace(s)",
-      [...foreign],
-      "while active workspace is", workspaceId,
-      "— the natural-key aliases (service_tables→table_id, menu_courses→position,",
-      "wines→key) are NOT workspace-qualified, so cross-workspace rows can collide.",
-      "Deploy the sync-rules alias fix (docs/SYNC_UPGRADE_PLAN.md) before trusting",
-      "the local DB for a multi-workspace account.",
-    );
-  }
-  return foreign;
-}
-
 // One service_settings blob (id = "menu_logo", "service_date", …) → the state
 // object, or null when the row doesn't exist. Mirrors the Supabase
 // `.select("state").eq("id", id).maybeSingle()` reads: a missing row is null,
 // a real read failure THROWS — callers that seed defaults on "genuinely empty"
 // (the layout-profiles loader) must be able to tell the two apart.
 export async function readSetting(id) {
+  const ws = getWorkspaceId();
   const row = await getPowerSync().getOptional(
     "SELECT state FROM service_settings WHERE id = ? AND workspace_id = ?",
-    [id, getWorkspaceId()],
+    [localRowId(ws, id), ws],
   );
   if (row?.state == null) return null;
   return reviveRow(row).state ?? null;
 }
 
+export async function readSettingsPrefix(prefix) {
+  const ws = getWorkspaceId();
+  const rows = await getPowerSync().getAll(
+    "SELECT id, state, updated_at FROM service_settings WHERE workspace_id = ? AND id LIKE ? ORDER BY id",
+    [ws, `${localRowId(ws, prefix)}%`],
+  );
+  return rows.map((row) => ({
+    ...reviveRow(row),
+    id: naturalKeyFromLocalId(row.id, ws),
+  }));
+}
+
 // The settings rows the app live-updates across devices (mirrors what the
 // legacy service_settings realtime channel reacted to).
 export async function readLiveSettings() {
+  const ws = getWorkspaceId();
+  const ids = ["kitchen_ticket_order", "service_date"].map((id) => localRowId(ws, id));
   const rows = await getPowerSync().getAll(
-    "SELECT id, state, updated_at FROM service_settings WHERE workspace_id = ? AND id IN ('kitchen_ticket_order','service_date')",
-    [getWorkspaceId()],
+    "SELECT id, state, updated_at FROM service_settings WHERE workspace_id = ? AND id IN (?, ?)",
+    [ws, ...ids],
   );
-  return rows.map(reviveRow);
+  return rows.map((row) => ({
+    ...reviveRow(row),
+    id: naturalKeyFromLocalId(row.id, ws),
+  }));
 }
 
 // Reservations within the planner window (-7…+30 days), shaped like the

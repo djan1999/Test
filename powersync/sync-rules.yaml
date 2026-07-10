@@ -4,9 +4,10 @@
 # belongs to (workspace_members), scoped by auth.user_id() (the Supabase JWT
 # sub). This mirrors the Supabase RLS membership check at the sync layer.
 #
-# Requires workspace_members to be in the `powersync` publication (added via
-# migration add_workspace_members_to_powersync_publication) so the lookup
-# resolves at runtime.
+# Requires the source tables and workspace_members in the `powersync`
+# publication. The bundled
+# 20260710010000_powersync_publication_and_role_preflight migration creates and
+# verifies that publication.
 #
 # PRIORITIES (0 = highest … 3 = lowest): the live board, reservations and
 # service settings sync FIRST so a fresh device is usable in seconds, then the
@@ -14,20 +15,21 @@
 # planner/board never waits behind a full wine download. The client pairs this
 # with whenSyncedPriority(1) to paint as soon as the priority-1 data is in.
 #
-# NOTE on the master / platform-admin account: it is NOT a workspace_member, so
-# it does not sync via these rules — it keeps using the existing Supabase path.
+# Demo is an ordinary sandbox workspace with its own test-account membership.
+# There is no cross-restaurant account or authorization bypass.
 #
 # ⚠️ SECURITY-CRITICAL: verify with the dashboard's Sync Test tool (simulate a
 # restaurant user → only its own rows) before any client reads from SQLite.
 #
-# Composite-key tables keep their id alias (service_tables→table_id,
-# menu_courses→position, wines→key) so every row has the required `id` column.
+# Composite-key tables use workspace-qualified aliases. PowerSync's implicit id
+# is global within a local table; a natural key by itself is only unique inside
+# one workspace.
 
 streams:
   service_tables:
     priority: 1
     query: >-
-      SELECT CAST(table_id AS TEXT) AS id, * FROM service_tables
+      SELECT workspace_id || '|' || CAST(table_id AS TEXT) AS id, * FROM service_tables
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
     auto_subscribe: true
   reservations:
@@ -39,13 +41,13 @@ streams:
   service_settings:
     priority: 1
     query: >-
-      SELECT * FROM service_settings
+      SELECT workspace_id || '|' || id AS id, state, updated_at, workspace_id FROM service_settings
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
     auto_subscribe: true
   menu_courses:
     priority: 2
     query: >-
-      SELECT CAST(position AS TEXT) AS id, * FROM menu_courses
+      SELECT workspace_id || '|' || CAST(position AS TEXT) AS id, * FROM menu_courses
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
     auto_subscribe: true
   beverages:
@@ -57,7 +59,7 @@ streams:
   wines:
     priority: 3
     query: >-
-      SELECT "key" AS id, * FROM wines
+      SELECT workspace_id || '|' || "key" AS id, * FROM wines
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
     auto_subscribe: true
   service_archive:

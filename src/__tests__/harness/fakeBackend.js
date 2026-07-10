@@ -189,6 +189,36 @@ function makeChannel(name) {
 
 export const fakeSupabase = {
   from: (table) => makeBuilder(backend.remote, table),
+  rpc: async (name, args) => {
+    if (backend.failRemoteWrites) return { data: null, error: new Error("fake network: remote writes are failing") };
+    if (name === "save_service_table_if_current") {
+      const rows = tableOf(backend.remote, "service_tables");
+      const hit = rows.find((r) => r.workspace_id === args.p_workspace_id && Number(r.table_id) === Number(args.p_table_id));
+      const expected = args.p_expected_updated_at ?? null;
+      if ((!hit && expected != null) || (hit && expected == null) || (hit && hit.updated_at !== expected)) {
+        return { data: false, error: null };
+      }
+      upsertInto(backend.remote, "service_tables", ["workspace_id", "table_id"], {
+        workspace_id: args.p_workspace_id,
+        table_id: Number(args.p_table_id),
+        data: clone(args.p_data || {}),
+        updated_at: args.p_updated_at || nowISO(),
+      });
+      return { data: true, error: null };
+    }
+    if (name === "archive_and_finish_service") {
+      applyFinishedServiceToStore(backend.remote, args.p_workspace_id, {
+        archive: args.p_archive_id ? {
+          id: args.p_archive_id,
+          date: args.p_archive_date,
+          label: args.p_archive_label,
+          state: args.p_archive_state || {},
+        } : null,
+      });
+      return { data: null, error: null };
+    }
+    return { data: null, error: null };
+  },
   channel: (name) => makeChannel(name),
   removeChannel: (chApi) => { realtimeChannels.delete(chApi?._name); },
   auth: {
@@ -199,21 +229,11 @@ export const fakeSupabase = {
 };
 
 // ── fake powersync: reads over backend.local ─────────────────────────────────
-const SYNCED_TABLES = ["service_tables", "service_settings", "reservations", "menu_courses", "wines", "beverages", "service_archive"];
 const wsRows = (table) => tableOf(backend.local, table).filter((r) => r.workspace_id === getWorkspaceId());
 
 export const fakeReads = {
   whenSynced: async () => true,
   whenSyncedPriority: async () => true,
-  localDbHasWorkspaceData: async (ws) =>
-    SYNCED_TABLES.some((t) => tableOf(backend.local, t).some((r) => r.workspace_id === ws)),
-  detectForeignWorkspaceRows: async (ws) => {
-    const foreign = new Set();
-    for (const t of SYNCED_TABLES) {
-      for (const r of tableOf(backend.local, t)) if (r.workspace_id && r.workspace_id !== ws) foreign.add(r.workspace_id);
-    }
-    return foreign;
-  },
   readSetting: async (id) => clone(wsRows("service_settings").find((r) => asKey(r.id) === asKey(id))?.state ?? null),
   readLiveSettings: async () =>
     clone(wsRows("service_settings").filter((r) => r.id === "kitchen_ticket_order" || r.id === "service_date")
@@ -249,6 +269,38 @@ const upsertInto = (store, table, keys, row) => {
   const hit = rows.find((r) => keys.every((k) => asKey(r[k]) === asKey(row[k])));
   if (hit) Object.assign(hit, clone(row));
   else rows.push(clone(row));
+};
+const applyFinishedServiceToStore = (store, ws, { archive = null, blankRows = null } = {}) => {
+  if (archive) {
+    upsertInto(store, "service_archive", ["id"], {
+      workspace_id: ws,
+      id: archive.id,
+      date: archive.date,
+      label: archive.label,
+      state: clone(archive.state || {}),
+      created_at: nowISO(),
+      deleted_at: null,
+    });
+  }
+  const rows = blankRows || Array.from({ length: 10 }, (_, i) => ({
+    table_id: i + 1,
+    data: {},
+    updated_at: nowISO(),
+  }));
+  for (const row of rows) {
+    upsertInto(store, "service_tables", ["workspace_id", "table_id"], {
+      workspace_id: ws,
+      table_id: Number(row.table_id),
+      data: clone(row.data || {}),
+      updated_at: row.updated_at || nowISO(),
+    });
+  }
+  upsertInto(store, "service_settings", ["workspace_id", "id"], {
+    workspace_id: ws,
+    id: "service_date",
+    state: {},
+    updated_at: nowISO(),
+  });
 };
 const mirror = (apply) => {
   if (backend.connectorDown) backend.uploadQueue.push(apply);
@@ -324,13 +376,19 @@ export const fakeWrites = {
     mirror(drop);
     await fireWatches();
   },
-  writeArchiveEntry: async ({ date, label, state }) => {
+  writeArchiveEntry: async ({ id, date, label, state }) => {
     const ws = requireWorkspace();
-    const row = { workspace_id: ws, id: crypto.randomUUID(), date, label, state: clone(state), created_at: nowISO(), deleted_at: null };
-    tableOf(backend.local, "service_archive").push(row);
-    mirror((store) => tableOf(store, "service_archive").push(clone(row)));
+    const row = { workspace_id: ws, id: id || crypto.randomUUID(), date, label, state: clone(state), created_at: nowISO(), deleted_at: null };
+    upsertInto(backend.local, "service_archive", ["id"], row);
+    mirror((store) => upsertInto(store, "service_archive", ["id"], row));
     await fireWatches();
     return row.id;
+  },
+  finishServiceLocally: async ({ archive = null, blankRows = [] }) => {
+    const ws = requireWorkspace();
+    applyFinishedServiceToStore(backend.local, ws, { archive, blankRows });
+    mirror((store) => applyFinishedServiceToStore(store, ws, { archive, blankRows }));
+    await fireWatches();
   },
   setArchiveDeleted: async (id, deletedAt) => {
     const set = (store) => {
@@ -485,7 +543,6 @@ export const fakeArchiveStore = {
 
 // ── fake powersync: config / system / watch ──────────────────────────────────
 export const fakeConfig = {
-  DEMO_WORKSPACE_ID: "demo-not-used",
   POWERSYNC_URL: "https://fake.powersync.test",
   isPowerSyncEnabled: (workspaceId) => backend.psMode && Boolean(workspaceId),
 };

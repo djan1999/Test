@@ -10,10 +10,10 @@
 -- bootstrapped from it gets the same tenancy enforcement as production.
 -- ============================================================
 
--- ── workspaces / members / platform admins ──────────────────
+-- ── workspaces / members ────────────────────────────────────
 -- A workspace = one restaurant (kind 'restaurant') or a test/demo copy
--- (kind 'sandbox'). Membership grants access; a platform admin (the master
--- "Demo" account) can reach every workspace.
+-- (kind 'sandbox'). Each login reaches only its explicit membership. Demo is
+-- an ordinary sandbox owned by a separate test login.
 create table if not exists public.workspaces (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -31,11 +31,6 @@ create table if not exists public.workspace_members (
 );
 create index if not exists workspace_members_user_idx on public.workspace_members(user_id);
 
-create table if not exists public.platform_admins (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  created_at timestamptz not null default now()
-);
-
 -- Security-definer helpers so RLS policies that call them don't recurse through
 -- the RLS of the tables they read. They live in a dedicated `private` schema
 -- (NOT the PostgREST-exposed `public` schema) so signed-in users cannot invoke
@@ -43,11 +38,6 @@ create table if not exists public.platform_admins (
 -- policy evaluation can call them (Supabase advisor lint 0029).
 create schema if not exists private;
 grant usage on schema private to authenticated;
-
-create or replace function private.is_platform_admin()
-returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.platform_admins a where a.user_id = auth.uid());
-$$;
 
 create or replace function private.is_workspace_member(ws uuid)
 returns boolean language sql stable security definer set search_path = public as $$
@@ -57,37 +47,29 @@ returns boolean language sql stable security definer set search_path = public as
   );
 $$;
 
-revoke execute on function private.is_platform_admin()       from anon, public;
 revoke execute on function private.is_workspace_member(uuid) from anon, public;
-grant  execute on function private.is_platform_admin()       to authenticated;
 grant  execute on function private.is_workspace_member(uuid) to authenticated;
 
 alter table public.workspaces        enable row level security;
 alter table public.workspace_members enable row level security;
-alter table public.platform_admins   enable row level security;
 
 drop policy if exists "workspaces_read" on public.workspaces;
 create policy "workspaces_read" on public.workspaces
   for select to authenticated
-  using (private.is_platform_admin() or private.is_workspace_member(id));
+  using (private.is_workspace_member(id));
 
 -- auth.uid() is wrapped in a scalar subquery so Postgres evaluates it once per
 -- query instead of once per row (Supabase lint 0003_auth_rls_initplan).
 drop policy if exists "members_self_read" on public.workspace_members;
 create policy "members_self_read" on public.workspace_members
   for select to authenticated
-  using (user_id = (select auth.uid()) or private.is_platform_admin());
-
-drop policy if exists "platform_admins_self_read" on public.platform_admins;
-create policy "platform_admins_self_read" on public.platform_admins
-  for select to authenticated
   using (user_id = (select auth.uid()));
 
 -- Each data table below also has a per-workspace policy of the form:
 --   create policy "<table>_member_all" on public.<table>
 --     for all to authenticated
---     using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
---     with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
+--     using (private.is_workspace_member(workspace_id))
+--     with check (private.is_workspace_member(workspace_id));
 
 -- ── service_tables ──────────────────────────────────────────
 -- One row per (workspace, table 1-10). The app upserts the ten rows for a
@@ -111,8 +93,8 @@ drop policy if exists "service_tables_delete" on public.service_tables;
 drop policy if exists "service_tables_member_all" on public.service_tables;
 create policy "service_tables_member_all" on public.service_tables
   for all to authenticated
-  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
-  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
+  using (private.is_workspace_member(workspace_id))
+  with check (private.is_workspace_member(workspace_id));
 
 -- ── service_settings ────────────────────────────────────────
 -- Generic key/value JSON store. Notable rows used by the app:
@@ -155,8 +137,8 @@ drop policy if exists "service_settings_update" on public.service_settings;
 drop policy if exists "service_settings_member_all" on public.service_settings;
 create policy "service_settings_member_all" on public.service_settings
   for all to authenticated
-  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
-  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
+  using (private.is_workspace_member(workspace_id))
+  with check (private.is_workspace_member(workspace_id));
 
 -- ── service_archive ─────────────────────────────────────────
 create table if not exists public.service_archive (
@@ -184,8 +166,8 @@ drop policy if exists "service_archive_delete" on public.service_archive;
 drop policy if exists "service_archive_member_all" on public.service_archive;
 create policy "service_archive_member_all" on public.service_archive
   for all to authenticated
-  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
-  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
+  using (private.is_workspace_member(workspace_id))
+  with check (private.is_workspace_member(workspace_id));
 
 -- ── menu_courses ─────────────────────────────────────────────
 -- This is the authoritative source for all menu data.
@@ -303,8 +285,8 @@ drop policy if exists "menu_courses_delete" on public.menu_courses;
 drop policy if exists "menu_courses_member_all" on public.menu_courses;
 create policy "menu_courses_member_all" on public.menu_courses
   for all to authenticated
-  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
-  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
+  using (private.is_workspace_member(workspace_id))
+  with check (private.is_workspace_member(workspace_id));
 
 -- ── wines ────────────────────────────────────────────────────
 create table if not exists public.wines (
@@ -340,8 +322,8 @@ drop policy if exists "wines_delete" on public.wines;
 drop policy if exists "wines_member_all" on public.wines;
 create policy "wines_member_all" on public.wines
   for all to authenticated
-  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
-  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
+  using (private.is_workspace_member(workspace_id))
+  with check (private.is_workspace_member(workspace_id));
 
 -- ── beverages ────────────────────────────────────────────────
 create table if not exists public.beverages (
@@ -373,8 +355,8 @@ drop policy if exists "beverages_delete" on public.beverages;
 drop policy if exists "beverages_member_all" on public.beverages;
 create policy "beverages_member_all" on public.beverages
   for all to authenticated
-  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
-  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
+  using (private.is_workspace_member(workspace_id))
+  with check (private.is_workspace_member(workspace_id));
 
 -- ── reservations ─────────────────────────────────────────────
 create table if not exists public.reservations (
@@ -396,14 +378,14 @@ drop policy if exists "reservations_update" on public.reservations;
 drop policy if exists "reservations_member_all" on public.reservations;
 create policy "reservations_member_all" on public.reservations
   for all to authenticated
-  using (private.is_workspace_member(workspace_id) or private.is_platform_admin())
-  with check (private.is_workspace_member(workspace_id) or private.is_platform_admin());
+  using (private.is_workspace_member(workspace_id))
+  with check (private.is_workspace_member(workspace_id));
 
 -- Legacy open delete policy (`for delete to anon, authenticated using (true)`)
 -- is intentionally NOT recreated: OR-combined with reservations_member_all it
 -- let any authenticated user delete ANY workspace's reservations. Drop it on
 -- upgrade so deletes are governed solely by reservations_member_all above
--- (workspace members + the platform-admin account).
+-- (workspace members only).
 drop policy if exists "reservations_delete" on public.reservations;
 
 -- ── Realtime ─────────────────────────────────────────────────
@@ -428,3 +410,239 @@ begin
     end if;
   end loop;
 end $$;
+
+-- ── Realtime hardening / atomic catalog replacement ─────────
+-- Atomic catalog replacement and indexes used by live service reads.
+-- Generated for the 2026-07-10 realtime hardening release.
+
+create index if not exists service_tables_workspace_updated_idx
+  on public.service_tables(workspace_id, updated_at);
+create index if not exists service_settings_workspace_updated_idx
+  on public.service_settings(workspace_id, updated_at);
+create index if not exists reservations_workspace_date_created_idx
+  on public.reservations(workspace_id, date, created_at);
+create index if not exists service_archive_workspace_date_deleted_created_idx
+  on public.service_archive(workspace_id, date, deleted_at, created_at desc);
+drop index if exists public.wines_source_country_idx;
+create index if not exists wines_workspace_source_country_idx
+  on public.wines(workspace_id, source, country);
+drop index if exists public.beverages_source_category_idx;
+create index if not exists beverages_workspace_source_category_position_idx
+  on public.beverages(workspace_id, source, category, position);
+
+create or replace function public.replace_synced_catalog(
+  p_workspace_id uuid,
+  p_wines jsonb default '[]'::jsonb,
+  p_wine_countries text[] default '{}'::text[],
+  p_beverages jsonb default '[]'::jsonb,
+  p_beverage_categories text[] default '{}'::text[]
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  wine_count integer := 0;
+  beverage_count integer := 0;
+  empty_category text;
+begin
+  if p_workspace_id is null then
+    raise exception 'workspace_id is required';
+  end if;
+  if jsonb_typeof(coalesce(p_wines, '[]'::jsonb)) <> 'array'
+     or jsonb_typeof(coalesce(p_beverages, '[]'::jsonb)) <> 'array' then
+    raise exception 'catalog payloads must be JSON arrays';
+  end if;
+
+  select c.category_name into empty_category
+  from unnest(coalesce(p_beverage_categories, '{}'::text[])) as c(category_name)
+  where not exists (
+    select 1
+    from jsonb_to_recordset(coalesce(p_beverages, '[]'::jsonb))
+      as b(category text, name text, notes text, position integer, source text)
+    where b.category = c.category_name
+  )
+  limit 1;
+  if empty_category is not null then
+    raise exception 'refusing to replace beverage category % with zero rows', empty_category;
+  end if;
+
+  delete from public.wines
+   where workspace_id = p_workspace_id
+     and source = 'sync'
+     and country = any(coalesce(p_wine_countries, '{}'::text[]));
+
+  insert into public.wines (
+    workspace_id, key, producer, name, wine_name, vintage, region,
+    country, by_glass, source, updated_at
+  )
+  select
+    p_workspace_id, w.key, w.producer, w.name, w.wine_name,
+    coalesce(nullif(w.vintage, ''), 'NV'), w.region, w.country,
+    coalesce(w.by_glass, false), 'sync', now()
+  from jsonb_to_recordset(coalesce(p_wines, '[]'::jsonb)) as w(
+    key text, producer text, name text, wine_name text, vintage text,
+    region text, country text, by_glass boolean, source text
+  )
+  where w.key is not null and w.producer is not null and w.name is not null
+  on conflict (workspace_id, key) do nothing;
+  get diagnostics wine_count = row_count;
+
+  delete from public.beverages
+   where workspace_id = p_workspace_id
+     and source = 'sync'
+     and category = any(coalesce(p_beverage_categories, '{}'::text[]));
+
+  insert into public.beverages (
+    workspace_id, category, name, notes, position, source, updated_at
+  )
+  select
+    p_workspace_id, b.category, b.name, coalesce(b.notes, ''),
+    coalesce(b.position, 0), 'sync', now()
+  from jsonb_to_recordset(coalesce(p_beverages, '[]'::jsonb)) as b(
+    category text, name text, notes text, position integer, source text
+  )
+  where b.category is not null and b.name is not null;
+  get diagnostics beverage_count = row_count;
+
+  return jsonb_build_object('wines', wine_count, 'beverages', beverage_count);
+end;
+$$;
+
+revoke all on function public.replace_synced_catalog(uuid, jsonb, text[], jsonb, text[])
+  from public, anon, authenticated;
+grant execute on function public.replace_synced_catalog(uuid, jsonb, text[], jsonb, text[])
+  to service_role;
+
+create or replace function public.save_service_table_if_current(
+  p_workspace_id uuid,
+  p_table_id integer,
+  p_expected_updated_at timestamptz,
+  p_data jsonb,
+  p_updated_at timestamptz
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  changed integer := 0;
+begin
+  if p_expected_updated_at is null then
+    insert into public.service_tables(workspace_id, table_id, data, updated_at)
+    values (p_workspace_id, p_table_id, coalesce(p_data, '{}'::jsonb), p_updated_at)
+    on conflict (workspace_id, table_id) do nothing;
+  else
+    update public.service_tables
+       set data = coalesce(p_data, '{}'::jsonb), updated_at = p_updated_at
+     where workspace_id = p_workspace_id
+       and table_id = p_table_id
+       and updated_at = p_expected_updated_at;
+  end if;
+  get diagnostics changed = row_count;
+  return changed = 1;
+end;
+$$;
+
+revoke all on function public.save_service_table_if_current(uuid, integer, timestamptz, jsonb, timestamptz)
+  from public, anon;
+grant execute on function public.save_service_table_if_current(uuid, integer, timestamptz, jsonb, timestamptz)
+  to authenticated, service_role;
+
+create or replace function public.archive_and_finish_service(
+  p_workspace_id uuid,
+  p_archive_id uuid default null,
+  p_archive_date date default null,
+  p_archive_label text default null,
+  p_archive_state jsonb default null
+)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if p_workspace_id is null then
+    raise exception 'workspace_id is required';
+  end if;
+
+  if p_archive_id is not null then
+    if p_archive_date is null or nullif(p_archive_label, '') is null then
+      raise exception 'archive date and label are required';
+    end if;
+    insert into public.service_archive(
+      id, workspace_id, date, label, state, created_at, deleted_at
+    )
+    values (
+      p_archive_id, p_workspace_id, p_archive_date, p_archive_label,
+      coalesce(p_archive_state, '{}'::jsonb), clock_timestamp(), null
+    )
+    on conflict (id) do nothing;
+  end if;
+
+  insert into public.service_tables(workspace_id, table_id, data, updated_at)
+  select p_workspace_id, table_id, '{}'::jsonb, clock_timestamp()
+  from generate_series(1, 10) as table_id
+  on conflict (workspace_id, table_id)
+  do update set data = '{}'::jsonb, updated_at = excluded.updated_at;
+
+  insert into public.service_settings(workspace_id, id, state, updated_at)
+  values (p_workspace_id, 'service_date', '{}'::jsonb, clock_timestamp())
+  on conflict (workspace_id, id)
+  do update set state = '{}'::jsonb, updated_at = excluded.updated_at;
+end;
+$$;
+
+revoke all on function public.archive_and_finish_service(uuid, uuid, date, text, jsonb)
+  from public, anon;
+grant execute on function public.archive_and_finish_service(uuid, uuid, date, text, jsonb)
+  to authenticated, service_role;
+
+
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1 from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public' and tablename = 'service_archive'
+     ) then
+    alter publication supabase_realtime add table public.service_archive;
+  end if;
+end
+$$;
+
+-- PowerSync must receive both the workspace membership lookup and every table
+-- referenced by the deployed sync streams. Keep this idempotent so a project
+-- can be reconstructed from the repository instead of dashboard memory.
+do $$
+declare
+  table_name text;
+begin
+  if not exists (select 1 from pg_publication where pubname = 'powersync') then
+    execute 'create publication powersync';
+  end if;
+
+  foreach table_name in array array[
+    'workspace_members',
+    'service_tables',
+    'reservations',
+    'service_settings',
+    'menu_courses',
+    'beverages',
+    'wines',
+    'service_archive'
+  ] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'powersync'
+        and schemaname = 'public'
+        and tablename = table_name
+    ) then
+      execute format('alter publication powersync add table public.%I', table_name);
+    end if;
+  end loop;
+end
+$$;

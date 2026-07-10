@@ -38,6 +38,7 @@ import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { foldTable } from "./utils/foldTable.js";
 import { reconcileTables } from "./utils/reconcile.js";
 import { isSameServiceLabel, nextArchiveLabel } from "./utils/archiveDedup.js";
+import { archiveIdForService } from "./utils/archiveIdentity.js";
 import { stampWineSources } from "./utils/wineEdit.js";
 import { historyGapsByMenuType } from "./utils/archiveInsights.js";
 import {
@@ -77,6 +78,7 @@ import { BEV_TYPES } from "./constants/beverageTypes.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES, getWorkspaceId, setWorkspaceId } from "./lib/supabaseClient.js";
 import { scopedFrom } from "./lib/scopedDb.js";
 import { readStateKey, saveStateKey } from "./lib/stateStore.js";
+import { finishServiceStore } from "./lib/serviceLifecycleStore.js";
 import { isPowerSyncEnabled } from "./powersync/config.js";
 import { setSqlitePrimaryFlag } from "./powersync/primary.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
@@ -2171,9 +2173,9 @@ export default function App() {
   const [beers,     setBeers]     = useState(localBev?.beers      ?? initBeers);
   const [mode, setMode] = useState(() => {
     try {
-      const storedMode = localStorage.getItem("milka_mode") || null;
-      const storedDate = localStorage.getItem("milka_service_date");
-      const chosenOn   = localStorage.getItem(SERVICE_DATE_CHOSEN_ON_KEY);
+      const storedMode = localStorage.getItem(workspaceKey("milka_mode")) || null;
+      const storedDate = localStorage.getItem(workspaceKey("milka_service_date"));
+      const chosenOn   = localStorage.getItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
       // If the saved service date rolled over to yesterday, don't auto-resume
       // service/display — those modes require a date that matches today.
       // A deliberately-past date (demo / reviewing an earlier day) is exempt.
@@ -2192,7 +2194,6 @@ export default function App() {
   const [sessionChecked, setSessionChecked] = useState(!supabase);
   const [workspaceId, setWorkspaceIdState]  = useState(() => (supabase ? readPersistedWorkspace() : null));
   const [myWorkspaces, setMyWorkspaces]     = useState([]);
-  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   // False until the post-login workspace query actually resolves. Gates the
   // ProfilePicker so its "no restaurant linked" empty state can't flash while
   // the list is still loading.
@@ -2249,28 +2250,27 @@ export default function App() {
     return () => { active = false; sub?.subscription?.unsubscribe?.(); };
   }, []);
 
-  // Once signed in, resolve which workspaces this user can reach (RLS returns
-  // just their restaurant, or all restaurants for the master/super-admin) and
-  // settle on the active one (restore the saved pick, or auto-pick when there's
-  // only one, else fall through to the picker).
+  // Once signed in, RLS returns only workspaces where this user has an explicit
+  // membership. A restaurant login normally has exactly one; the separate Demo
+  // login has only the sandbox. Multiple memberships still use the generic
+  // picker, but there is no special account that can see every restaurant.
   useEffect(() => {
     if (!supabase || !session) {
-      setMyWorkspaces([]); setIsPlatformAdmin(false); setWorkspacesResolved(false);
+      setMyWorkspaces([]); setWorkspacesResolved(false);
       return;
     }
     let active = true;
     setWorkspacesResolved(false);
     (async () => {
       try {
-        const uid = session.user?.id;
-        const [{ data: adminRow }, { data: wsRows }] = await withRetry(() => Promise.all([
-          supabase.from("platform_admins").select("user_id").eq("user_id", uid).maybeSingle(),
-          supabase.from("workspaces").select("id, name, kind, slug")
-            .order("kind", { ascending: true }).order("name", { ascending: true }),
-        ]));
+        const { data: wsRows } = await withRetry(async () => {
+          const result = await supabase.from("workspaces").select("id, name, kind, slug")
+            .order("kind", { ascending: true }).order("name", { ascending: true });
+          if (result.error) throw result.error;
+          return result;
+        });
         if (!active) return;
         const list = wsRows || [];
-        setIsPlatformAdmin(!!adminRow);
         setMyWorkspaces(list);
         const persisted = readPersistedWorkspace();
         if (persisted && list.some(w => w.id === persisted)) applyWorkspace(persisted);
@@ -2288,10 +2288,14 @@ export default function App() {
     // Keyed on the USER id, not the whole session object: Supabase hands us a
     // fresh session object on every token refresh (~hourly, on focus, on
     // reconnect), and re-resolving workspaces each time bounced a multi-
-    // workspace (master) account back to the restaurant picker. The workspace
+    // workspace account back to the restaurant picker. The workspace
     // choice must survive token refreshes — only re-resolve on an actual login
     // / user change.
   }, [session?.user?.id, applyWorkspace]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Roles are deliberately deferred. For the polishing phase, explicit
+  // workspace membership means full restaurant-owner/admin capability.
+  const canAdmin = Boolean(workspaceId && myWorkspaces.some((w) => w.id === workspaceId));
 
   const [sel,          setSel]          = useState(null);
   // Which table (if any) is currently expanded into Quick Access on the board.
@@ -2303,13 +2307,13 @@ export default function App() {
   // view across reloads; anything unknown falls back to "board".
   const [serviceView, setServiceView] = useState(() => {
     try {
-      const v = localStorage.getItem("milka_service_view");
+      const v = localStorage.getItem(workspaceKey("milka_service_view"));
       return v === "sheet" || v === "floor" ? v : "board";
     } catch { return "board"; }
   });
   const changeServiceView = v => {
     setServiceView(v);
-    try { localStorage.setItem("milka_service_view", v); } catch {}
+    try { localStorage.setItem(workspaceKey("milka_service_view"), v); } catch {}
   };
   // Table currently focused in the sheet view (independent of quickTableId).
   const [sheetTableId, setSheetTableId] = useState(null);
@@ -2328,7 +2332,7 @@ export default function App() {
   const [syncStatus,   setSyncStatus]   = useState(hasSupabaseConfig ? "connecting" : "local-only");
   const [logoDataUri,  setLogoDataUri]  = useState(() => readLocalLogo() || "");
   const [wineSyncConfig, setWineSyncConfig] = useState(() => {
-    try { return normalizeSyncConfig(JSON.parse(localStorage.getItem(SYNC_CONFIG_KEY) || "null")); } catch { return DEFAULT_SYNC_CONFIG; }
+    try { return normalizeSyncConfig(JSON.parse(localStorage.getItem(workspaceKey(SYNC_CONFIG_KEY)) || "null")); } catch { return DEFAULT_SYNC_CONFIG; }
   });
   const syncConfigRef = useRef(wineSyncConfig);
   syncConfigRef.current = wineSyncConfig;
@@ -2388,7 +2392,7 @@ export default function App() {
 
   const [menuRules, setMenuRules] = useState(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem("milka_menu_rules") || "null");
+      const raw = JSON.parse(localStorage.getItem(workspaceKey("milka_menu_rules")) || "null");
       return normalizeMenuRules(raw || DEFAULT_MENU_RULES);
     } catch {
       return normalizeMenuRules(DEFAULT_MENU_RULES);
@@ -2414,7 +2418,7 @@ export default function App() {
   // Quick Access items (data-driven, replaces hardcoded APERITIF_OPTIONS)
   const [quickAccessItems, setQuickAccessItems] = useState(() => {
     try {
-      const stored = JSON.parse(localStorage.getItem("milka_quick_access") || "null");
+      const stored = JSON.parse(localStorage.getItem(workspaceKey("milka_quick_access")) || "null");
       if (stored) return stored;
     } catch {}
         return DEFAULT_QUICK_ACCESS_ITEMS.map(item => ({ ...item }));
@@ -2423,6 +2427,8 @@ export default function App() {
   const [authed,       setAuthed]       = useState(() => readAccess());
   // Reservations & service date — hydrate the planner instantly from cache.
   const [reservations, setReservations] = useState(() => readLocalReservations() || []);
+  const reservationsRef = useRef(reservations);
+  reservationsRef.current = reservations;
   // Gates the board↔reservations reconciliation effect: it must not run (and
   // especially must not clear ghost tables) until both reservations and the
   // remote service-table state have actually loaded.
@@ -2447,17 +2453,17 @@ export default function App() {
   }, [remoteBoardLoaded, bootGateDone]);
   const [serviceDate,  setServiceDate]  = useState(() => {
     try {
-      const stored = localStorage.getItem("milka_service_date");
+      const stored = localStorage.getItem(workspaceKey("milka_service_date"));
       if (!stored) return null;
-      const chosenOn = localStorage.getItem(SERVICE_DATE_CHOSEN_ON_KEY);
+      const chosenOn = localStorage.getItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
       if (isStaleServiceDate(stored) && !isActivePastReview(stored, chosenOn)) {
         // Date rolled over since last session — drop the stale value so
         // "Start Service" prompts for today's date instead of silently
         // resuming yesterday's (now empty) service. An abandoned past-date
         // review (chosen on an earlier day) is dropped here too.
         try {
-          localStorage.removeItem("milka_service_date");
-          localStorage.removeItem(SERVICE_DATE_CHOSEN_ON_KEY);
+          localStorage.removeItem(workspaceKey("milka_service_date"));
+          localStorage.removeItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
         } catch {}
         return null;
       }
@@ -2467,12 +2473,12 @@ export default function App() {
   // Service day at the moment the date was chosen — distinguishes a service
   // that rolled over (auto-end) from one deliberately started on a past day.
   const [serviceDateChosenOn, setServiceDateChosenOn] = useState(() => {
-    try { return localStorage.getItem(SERVICE_DATE_CHOSEN_ON_KEY) || null; } catch { return null; }
+    try { return localStorage.getItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY)) || null; } catch { return null; }
   });
   const [showServiceDatePicker,  setShowServiceDatePicker]  = useState(false);
   const [pendingModeAfterDate,   setPendingModeAfterDate]   = useState(null);
   const [activeServiceSession, setActiveServiceSession] = useState(() => {
-    try { return localStorage.getItem("milka_service_session") || "dinner"; } catch { return "dinner"; }
+    try { return localStorage.getItem(workspaceKey("milka_service_session")) || "dinner"; } catch { return "dinner"; }
   });
   // Live refs for the service identity so the persist helpers (and fire-and-forget
   // DB writes) always read the freshest value, not a stale render closure. The
@@ -2491,7 +2497,7 @@ export default function App() {
   // Lets the archive tell a genuine second service on the same day+session apart
   // from a double-file race, instead of silently dropping the second one.
   const serviceStartedAtRef = useRef((() => {
-    try { return localStorage.getItem("milka_service_started_at") || null; } catch { return null; }
+    try { return localStorage.getItem(workspaceKey("milka_service_started_at")) || null; } catch { return null; }
   })());
   const saveTimerRef       = useRef(null);
   /** Sanitized-table JSON of the last state written to (or adopted from) the
@@ -2530,12 +2536,11 @@ export default function App() {
 
   // ── SQLite-primary gate ────────────────────────────────────────────────────
   // The on-device PowerSync DB is the app's read/write path once (a) its
-  // priority-1 first sync has completed AND (b) it actually holds this
-  // workspace's rows. A non-member account (the platform admin — see
-  // powersync/sync-rules.yaml) syncs nothing and stays on the minimal
-  // direct-Supabase fallback below. `psResolved` flips once the decision is
-  // made (or after a boot deadline) so the fallback loaders neither race the
-  // probe nor hang forever if PowerSync can't initialise.
+  // priority-1 first sync has completed. Workspace access was already proven
+  // by the membership-scoped workspace query above, so an empty new restaurant
+  // is a valid local-first database—not a reason to enter another data path.
+  // `psResolved` flips after sync or a boot deadline so the direct-Supabase
+  // outage fallback neither races the primary store nor hangs forever.
   const psEnabled = isPowerSyncEnabled(workspaceId);
   const [sqlitePrimary, setSqlitePrimary] = useState(false);
   const [psResolved, setPsResolved] = useState(!psEnabled);
@@ -2565,9 +2570,24 @@ export default function App() {
         const { writeServiceTables } = await import("./powersync/writes.js");
         await writeServiceTables(rows);
       } else {
-        const { error } = await scopedFrom(TABLES.SERVICE_TABLES)
-          .upsert(rows, { onConflict: "table_id" });
-        if (error) throw error;
+        const { saveServiceTableWithCas } = await import("./lib/serviceTableCas.js");
+        const ws = getWorkspaceId();
+        for (const row of rows) {
+          const idx = (tablesRef.current || []).findIndex(t => t.id === Number(row.table_id));
+          let ancestor = null;
+          try {
+            ancestor = idx >= 0 && confirmedTablesJsonRef.current[idx]
+              ? JSON.parse(confirmedTablesJsonRef.current[idx])
+              : null;
+          } catch { ancestor = null; }
+          await saveServiceTableWithCas({
+            client: supabase,
+            workspaceId: ws,
+            tableId: row.table_id,
+            data: row.data,
+            ancestor,
+          });
+        }
       }
       // The store now holds exactly these rows — advance the CONFIRMED
       // baseline so the reconciler stops shielding them as unsaved (mirror of
@@ -2673,6 +2693,27 @@ export default function App() {
       return { ok: true };
     } catch (error) {
       console.warn("Reservation persist failed:", error);
+      return { ok: false, error };
+    }
+  }, []);
+
+  // Multi-row reservation operations (notably SWAP) must commit as one local
+  // transaction / one PostgREST statement. Two independent requests can leave
+  // both parties assigned to the same table if one succeeds and one fails.
+  const persistReservationRows = useCallback(async (rows) => {
+    if (!supabase || !getWorkspaceId() || !rows?.length) return { ok: true };
+    try {
+      if (sqlitePrimaryRef.current) {
+        const { writeReservations } = await import("./powersync/writes.js");
+        await writeReservations(rows);
+      } else {
+        const { error } = await scopedFrom(TABLES.RESERVATIONS)
+          .upsert(rows, { onConflict: "id" });
+        if (error) throw error;
+      }
+      return { ok: true };
+    } catch (error) {
+      console.warn("Reservation batch persist failed:", error);
       return { ok: false, error };
     }
   }, []);
@@ -3109,12 +3150,20 @@ export default function App() {
         : r.id === r2Id ? { ...r, table_id: t1, data: data2 }
         : r
     ));
-    // Persist both rows; ignore the auto-move guards inside upsertReservation
-    // by going straight to the store.
-    await Promise.all([
-      persistReservationRow({ id: r1Id, date: r1.date, table_id: t2, data: data1 }),
-      persistReservationRow({ id: r2Id, date: r2.date, table_id: t1, data: data2 }),
+    const result = await persistReservationRows([
+      { id: r1Id, date: r1.date, table_id: t2, data: data1 },
+      { id: r2Id, date: r2.date, table_id: t1, data: data2 },
     ]);
+    if (!result.ok) {
+      // The batch did not commit, so restore the optimistic UI and table swap.
+      setReservations(prev => prev.map(r =>
+        r.id === r1Id ? r1 : r.id === r2Id ? r2 : r
+      ));
+      if (r1.date === serviceDate && (mode === "service" || mode === "display")) {
+        swapTableState(t1, t2);
+      }
+      return { ok: false, reason: "persist-failed", error: result.error };
+    }
     return { ok: true };
   };
 
@@ -3126,18 +3175,25 @@ export default function App() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 90_000);
     try {
-      const secret = import.meta.env.VITE_SYNC_SECRET || "";
-      if (!secret) {
-        return { ok: false, error: "VITE_SYNC_SECRET is not set for this build. Add it in Vercel → Settings → Environment Variables (value must match CRON_SECRET or SYNC_SECRET), then redeploy." };
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (sessionError || !accessToken) {
+        return { ok: false, error: "Your login expired. Sign in again and retry." };
       }
       const cfg = normalizeSyncConfig(syncConfigRef.current);
-      const payload = encodeURIComponent(JSON.stringify(cfg));
-      const url = `/api/sync-wines?secret=${encodeURIComponent(secret)}&config=${payload}`;
-      const r = await fetch(url, { signal: controller.signal });
+      const r = await fetch("/api/sync-wines", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ workspaceId: getWorkspaceId(), config: cfg }),
+        signal: controller.signal,
+      });
       const json = await r.json().catch(() => ({}));
       if (!r.ok) {
         const base = json.error || `HTTP ${r.status}`;
-        if (r.status === 401) return { ok: false, error: `${base} — VITE_SYNC_SECRET on the frontend doesn't match CRON_SECRET / SYNC_SECRET on the backend. Update the values in Vercel so they match, then redeploy.` };
+        if (r.status === 401) return { ok: false, error: `${base} Sign in again and retry.` };
         return { ok: false, error: base };
       }
       // Refresh both catalogs the sync writes to. On the fallback path reload
@@ -3257,8 +3313,16 @@ export default function App() {
     setMenuCourses(withKeys);
     menuCoursesDirtyRef.current = false; // saved — the loaders may adopt again
     // Remove courses this user deleted
-    if (removedAny && keptPositions.length > 0) {
-      await scopedFrom(TABLES.MENU_COURSES).delete().not("position", "in", `(${keptPositions.join(",")})`);
+    if (removedAny) {
+      let deleteQuery = scopedFrom(TABLES.MENU_COURSES).delete();
+      if (keptPositions.length > 0) {
+        deleteQuery = deleteQuery.not("position", "in", `(${keptPositions.join(",")})`);
+      }
+      const { error: deleteError } = await deleteQuery;
+      if (deleteError) {
+        console.error("Menu delete failed:", deleteError);
+        return { ok: false, error: deleteError };
+      }
     }
     return { ok: true, isActiveSkipped };
   };
@@ -3394,23 +3458,48 @@ export default function App() {
     return rows.filter(e => isSameServiceLabel(e.label, archiveLabel));
   };
 
-  // File one archive entry through the store seam: local SQLite when primary
-  // (works offline — the whole point of archiving through the sync layer),
-  // direct Supabase otherwise. Returns { ok, error }.
-  const persistArchiveEntry = useCallback(async (entry) => {
+  // Archive + board clear + shared lifecycle clear are one store operation.
+  // SQLite-primary devices commit one local transaction; the fallback calls
+  // one Postgres function/transaction. This removes the old half-ended states
+  // (archive saved but board/date clear failed, or board cleared before date).
+  const persistServiceEnd = useCallback(async ({ archive = null }) => {
     try {
-      if (sqlitePrimaryRef.current) {
-        const { writeArchiveEntry } = await import("./powersync/writes.js");
-        await writeArchiveEntry(entry);
-      } else {
-        const { error } = await scopedFrom(TABLES.SERVICE_ARCHIVE).insert(entry);
-        if (error) throw error;
-      }
-      return { ok: true };
+      const rows = await finishServiceStore({
+        client: supabase,
+        workspaceId: getWorkspaceId(),
+        sqlitePrimary: sqlitePrimaryRef.current,
+        archive,
+      });
+      return { ok: true, rows };
     } catch (error) {
       return { ok: false, error };
     }
   }, []);
+
+  const applyFinishedServiceLocally = (rows) => {
+    const blank = Array.from({ length: 10 }, (_, i) => blankTable(i + 1));
+    const json = blank.map((table) => JSON.stringify(sanitizeTable(table)));
+    intentionalBoardClearRef.current = true;
+    pendingBoardWritesRef.current = new Set();
+    prevTablesJsonRef.current = [...json];
+    confirmedTablesJsonRef.current = [...json];
+    tablesRef.current = blank;
+    for (const row of rows || []) {
+      const ts = Date.parse(row.updated_at || "");
+      if (Number.isFinite(ts)) lastBoardWriteRef.current.set(Number(row.table_id), ts);
+    }
+    setTables(blank);
+    setServiceDate(null);
+    setServiceDateChosenOn(null);
+    serviceDateRef.current = null;
+    serviceDateChosenOnRef.current = null;
+    serviceStartedAtRef.current = null;
+    try {
+      localStorage.removeItem(workspaceKey("milka_service_date"));
+      localStorage.removeItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
+      localStorage.removeItem(workspaceKey("milka_service_started_at"));
+    } catch {}
+  };
 
   // Guards a manual archive in flight so a double-tap (or a second device a few
   // seconds later) can't file the same service twice — the cause of the two
@@ -3429,29 +3518,31 @@ export default function App() {
       const dateStr = new Date(archiveDate + "T00:00:00").toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
       const archiveLabel = `${dateStr} – ${activeServiceSession.toUpperCase()}`;
       const activeTables = snap.tables.filter(t => t.active || t.arrivedAt || t.resName || t.resTime);
+      let archive = null;
       if (supabase) {
         const startedAt = serviceStartedAtRef.current;
-        // ALWAYS save — never skip as a "duplicate". When an archive for this
-        // day+session already exists, the new one just gets a distinct " · n"
-        // label so both are visible (the in-flight archivingRef + the confirm
-        // dialog still prevent a single click from firing twice).
         const label = nextArchiveLabel(await fetchSameDayArchives(archiveDate, archiveLabel), archiveLabel);
-        const { ok, error } = await persistArchiveEntry({
+        archive = {
+          // Very old live services may predate the shared startedAt stamp.
+          // Fall back to the service day/session so two tablets still choose
+          // the same archive id instead of filing duplicate legacy entries.
+          id: await archiveIdForService(
+            getWorkspaceId(),
+            startedAt || `${archiveDate}|${activeServiceSession}`,
+          ),
           date: archiveDate,
           label,
           state: { ...snap, tables: activeTables, menuCourses, serviceSession: activeServiceSession, startedAt },
-        });
-        if (!ok) {
-          window.alert("Archive failed: " + (error?.message || error));
-          return;
-        }
+        };
       }
-      intentionalBoardClearRef.current = true; // archived first — the clear is intentional
-      setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
+      const result = await persistServiceEnd({ archive });
+      if (!result.ok) {
+        window.alert("Service was not ended; the live board is unchanged. Please retry: " + (result.error?.message || result.error));
+        return;
+      }
+      applyFinishedServiceLocally(result.rows);
       setSel(null);
       setArchiveOpen(false);
-      // Release the service date lock so the next service can set a new date
-      persistServiceDate(null);
       // Return to mode selection after archiving
       changeMode(null);
     } finally {
@@ -3476,6 +3567,7 @@ export default function App() {
   const autoEndStaleService = async (staleDate) => {
     if (!supabase || !staleDate || autoEndingRef.current) return;
     autoEndingRef.current = true;
+    let archive = null;
     try {
       // Read the night's state from the source of truth: local React state may
       // not have painted yet on a fresh load (or be blank on this device).
@@ -3508,8 +3600,8 @@ export default function App() {
         serviceDateRef.current = healDay;
         serviceDateChosenOnRef.current = healDay;
         try {
-          localStorage.setItem("milka_service_date", healDay);
-          localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, healDay);
+          localStorage.setItem(workspaceKey("milka_service_date"), healDay);
+          localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), healDay);
         } catch {}
         await saveStateKey("service_date", {
           date: healDay, chosenOn: healDay,
@@ -3528,19 +3620,19 @@ export default function App() {
       if (activeTables.length > 0) {
         const dateStr = new Date(staleDate + "T00:00:00").toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
         const label = `${dateStr} – ${(activeServiceSession || "dinner").toUpperCase()}`;
-        // Always save — distinct " · n" label when this day+session already has
-        // an archive (autoEndingRef + the clear-on-success below keep a normal
-        // rollover from re-filing the same night).
         const startedAt = serviceStartedAtRef.current;
         const label2 = nextArchiveLabel(await fetchSameDayArchives(staleDate, label), label);
         let courses = menuCourses;
         if (!courses || courses.length === 0) { try { courses = await fetchMenuCourses(); } catch { courses = []; } }
-        const { ok, error: insErr } = await persistArchiveEntry({
+        archive = {
+          id: await archiveIdForService(
+            getWorkspaceId(),
+            startedAt || `${staleDate}|${activeServiceSession || "dinner"}`,
+          ),
           date: staleDate,
           label: label2,
           state: { tables: activeTables, cocktails, spirits, beers, menuCourses: courses || [], serviceSession: activeServiceSession || "dinner", startedAt, autoEnded: true },
-        });
-        if (!ok) throw insErr;
+        };
       }
     } catch (e) {
       // Archiving failed — do NOT clear, so the data is never lost. We retry on
@@ -3550,21 +3642,14 @@ export default function App() {
       return;
     }
 
-    // Archived (or nothing to archive) — safe to clear local + remote for the new day.
-    intentionalBoardClearRef.current = true; // rollover auto-end archived first — clear is intentional
-    setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
+    const result = await persistServiceEnd({ archive });
+    if (!result.ok) {
+      console.error("Auto-end transaction failed; leaving service visible:", result.error);
+      autoEndingRef.current = false;
+      return;
+    }
+    applyFinishedServiceLocally(result.rows);
     setSel(null);
-    setServiceDate(null);
-    setServiceDateChosenOn(null);
-    serviceStartedAtRef.current = null;
-    try {
-      localStorage.removeItem("milka_service_date");
-      localStorage.removeItem(SERVICE_DATE_CHOSEN_ON_KEY);
-      localStorage.removeItem("milka_service_started_at");
-    } catch {}
-    await saveStateKey("service_date", {});
-    const blankRows = Array.from({ length: 10 }, (_, i) => ({ table_id: i + 1, data: {}, updated_at: new Date().toISOString() }));
-    await persistBoardRows(blankRows);
     changeMode(null);
   };
 
@@ -3598,8 +3683,8 @@ export default function App() {
       setServiceDate(day);
       setServiceDateChosenOn(day);
       try {
-        localStorage.setItem("milka_service_date", day);
-        localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, day);
+        localStorage.setItem(workspaceKey("milka_service_date"), day);
+        localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), day);
       } catch {}
       await saveStateKey("service_date", { date: day, chosenOn: day });
     } catch (e) {
@@ -3666,6 +3751,13 @@ export default function App() {
     // Fresh instance id per (re)start so two services on the same day+session are
     // distinguishable in the archive.
     const startedAt = date ? new Date().toISOString() : null;
+    if (supabase) {
+      const result = await saveStateKey(
+        "service_date",
+        date ? { date, chosenOn, session: activeServiceSessionRef.current, startedAt } : {},
+      );
+      if (!result.ok) return result;
+    }
     setServiceDate(date);
     setServiceDateChosenOn(chosenOn);
     serviceDateRef.current = date;
@@ -3673,13 +3765,13 @@ export default function App() {
     serviceStartedAtRef.current = startedAt;
     try {
       if (date) {
-        localStorage.setItem("milka_service_date", date);
-        localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, chosenOn);
-        if (startedAt) localStorage.setItem("milka_service_started_at", startedAt);
+        localStorage.setItem(workspaceKey("milka_service_date"), date);
+        localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), chosenOn);
+        if (startedAt) localStorage.setItem(workspaceKey("milka_service_started_at"), startedAt);
       } else {
-        localStorage.removeItem("milka_service_date");
-        localStorage.removeItem(SERVICE_DATE_CHOSEN_ON_KEY);
-        localStorage.removeItem("milka_service_started_at");
+        localStorage.removeItem(workspaceKey("milka_service_date"));
+        localStorage.removeItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
+        localStorage.removeItem(workspaceKey("milka_service_started_at"));
       }
     } catch {}
     // Wipe the board ONLY when switching between two real, different service
@@ -3692,8 +3784,7 @@ export default function App() {
       intentionalBoardClearRef.current = true; // deliberate switch between two real service days
       setTables(Array.from({ length: 10 }, (_, i) => blankTable(i + 1)));
     }
-    if (!supabase) return;
-    await saveStateKey("service_date", date ? { date, chosenOn, session: activeServiceSessionRef.current, startedAt } : {});
+    return { ok: true };
   };
 
   // ── Shared service lifecycle ────────────────────────────────────────────────
@@ -3718,11 +3809,11 @@ export default function App() {
     if (state.session === "lunch" || state.session === "dinner") {
       setActiveServiceSession(state.session);
       activeServiceSessionRef.current = state.session;
-      try { localStorage.setItem("milka_service_session", state.session); } catch {}
+      try { localStorage.setItem(workspaceKey("milka_service_session"), state.session); } catch {}
     }
     if (state.startedAt) {
       serviceStartedAtRef.current = state.startedAt;
-      try { localStorage.setItem("milka_service_started_at", state.startedAt); } catch {}
+      try { localStorage.setItem(workspaceKey("milka_service_started_at"), state.startedAt); } catch {}
     }
     const remoteDate = state.date || null;
     const localDate = serviceDateRef.current;
@@ -3734,8 +3825,8 @@ export default function App() {
       serviceDateRef.current = remoteDate;
       serviceDateChosenOnRef.current = state.chosenOn || null;
       try {
-        localStorage.setItem("milka_service_date", remoteDate);
-        if (state.chosenOn) localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, state.chosenOn);
+        localStorage.setItem(workspaceKey("milka_service_date"), remoteDate);
+        if (state.chosenOn) localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), state.chosenOn);
       } catch {}
       setShowServiceDatePicker(false); // a start prompt waiting here is moot now
     } else if (!remoteDate && localDate) {
@@ -3743,19 +3834,10 @@ export default function App() {
       // archived and cleared the shared board; this device just releases the
       // date and leaves the live views (the 08.07 phone kept showing a dead
       // service all night because this adoption didn't exist).
-      setServiceDate(null);
-      setServiceDateChosenOn(null);
-      serviceDateRef.current = null;
-      serviceDateChosenOnRef.current = null;
-      serviceStartedAtRef.current = null;
-      try {
-        localStorage.removeItem("milka_service_date");
-        localStorage.removeItem(SERVICE_DATE_CHOSEN_ON_KEY);
-        localStorage.removeItem("milka_service_started_at");
-      } catch {}
+      applyFinishedServiceLocally([]);
       setMode(prev => {
         if (prev !== "service" && prev !== "display") return prev;
-        try { localStorage.removeItem("milka_mode"); } catch { /* noop */ }
+        try { localStorage.removeItem(workspaceKey("milka_mode")); } catch { /* noop */ }
         return null;
       });
     }
@@ -3768,7 +3850,7 @@ export default function App() {
   const persistServiceSession = (session) => {
     setActiveServiceSession(session);
     activeServiceSessionRef.current = session;
-    try { localStorage.setItem("milka_service_session", session); } catch {}
+    try { localStorage.setItem(workspaceKey("milka_service_session"), session); } catch {}
     // Share the session with every device on this workspace so their board
     // reconcile filters and archive labels match the live service. (It used to
     // live only in localStorage, so a second device kept its own default and
@@ -3876,8 +3958,10 @@ export default function App() {
   };
 
   const deleteReservation = async (id) => {
-    setReservations(prev => prev.filter(r => r.id !== id));
-    if (!supabase) return { ok: true };
+    if (!supabase) {
+      setReservations(prev => prev.filter(r => r.id !== id));
+      return { ok: true };
+    }
     try {
       if (sqlitePrimaryRef.current) {
         const { deleteReservationRow } = await import("./powersync/writes.js");
@@ -3886,6 +3970,7 @@ export default function App() {
         const { error } = await scopedFrom(TABLES.RESERVATIONS).delete().eq("id", id);
         if (error) throw error;
       }
+      setReservations(prev => prev.filter(r => r.id !== id));
       return { ok: true };
     } catch (error) {
       console.warn("Reservation delete failed:", error);
@@ -3915,7 +4000,7 @@ export default function App() {
     }));
     // Persist outside the state updater: updaters must stay pure (StrictMode
     // runs them twice, which double-fired this write before).
-    const target = reservations.find(r => r.id === resvId);
+    const target = reservationsRef.current.find(r => r.id === resvId);
     if (target && supabase && getWorkspaceId()) {
       const newData = { ...(target.data || {}), [field]: value };
       persistReservationRow({ id: resvId, date: target.date, table_id: target.table_id, data: newData });
@@ -3931,8 +4016,8 @@ export default function App() {
   const enterMode = (nextMode) => {
     setMode(nextMode);
     try {
-      if (nextMode) localStorage.setItem("milka_mode", nextMode);
-      else          localStorage.removeItem("milka_mode");
+      if (nextMode) localStorage.setItem(workspaceKey("milka_mode"), nextMode);
+      else          localStorage.removeItem(workspaceKey("milka_mode"));
     } catch {}
   };
 
@@ -3966,10 +4051,10 @@ export default function App() {
             activeServiceSessionRef.current = entry.session;
           }
           try {
-            localStorage.setItem("milka_service_date", entry.date);
-            if (entry.chosenOn) localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, entry.chosenOn);
-            if (entry.startedAt) localStorage.setItem("milka_service_started_at", entry.startedAt);
-            if (entry.session === "lunch" || entry.session === "dinner") localStorage.setItem("milka_service_session", entry.session);
+            localStorage.setItem(workspaceKey("milka_service_date"), entry.date);
+            if (entry.chosenOn) localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), entry.chosenOn);
+            if (entry.startedAt) localStorage.setItem(workspaceKey("milka_service_started_at"), entry.startedAt);
+            if (entry.session === "lunch" || entry.session === "dinner") localStorage.setItem(workspaceKey("milka_service_session"), entry.session);
           } catch {}
           enterMode("service");
           joiningServiceRef.current = false;
@@ -4139,7 +4224,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    try { localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(wineSyncConfig)); } catch {}
+    try { localStorage.setItem(workspaceKey(SYNC_CONFIG_KEY), JSON.stringify(wineSyncConfig)); } catch {}
   }, [wineSyncConfig]);
 
   useEffect(() => {
@@ -4463,7 +4548,7 @@ export default function App() {
 
   // ── Menu generation rules (layout behavior) ───────────────────────────────
   useEffect(() => {
-    try { localStorage.setItem("milka_menu_rules", JSON.stringify(menuRules)); } catch {}
+    try { localStorage.setItem(workspaceKey("milka_menu_rules"), JSON.stringify(menuRules)); } catch {}
   }, [menuRules]);
 
   useEffect(() => {
@@ -4472,7 +4557,7 @@ export default function App() {
       .then(state => {
         if (state && typeof state === "object") {
           setMenuRules(normalizeMenuRules(state));
-          try { localStorage.setItem("milka_menu_rules", JSON.stringify(state)); } catch {}
+          try { localStorage.setItem(workspaceKey("milka_menu_rules"), JSON.stringify(state)); } catch {}
         }
       })
       .catch(() => {}); // localStorage-hydrated rules stay in place
@@ -4548,7 +4633,7 @@ export default function App() {
 
   // ── Quick Access persistence ──────────────────────────────────────────────
   useEffect(() => {
-    try { localStorage.setItem("milka_quick_access", JSON.stringify(quickAccessItems)); } catch {}
+    try { localStorage.setItem(workspaceKey("milka_quick_access"), JSON.stringify(quickAccessItems)); } catch {}
   }, [quickAccessItems]);
 
   useEffect(() => {
@@ -4606,11 +4691,10 @@ export default function App() {
       }));
   }, [quickAccessItems, activeMenuCourses]);
 
-  // ── Board truth: fallback direct-Supabase load (non-member accounts) ───────
+  // ── Board truth: direct-Supabase outage/disabled fallback ──────────────────
   // When the local SQLite DB is primary, the watches effect below owns the
   // board (its first fire seeds it and flips the gates). This fallback covers
-  // accounts whose sync stream delivers nothing — the platform admin — with a
-  // one-shot load plus a slow poll and a refetch on wake / network return.
+  // a one-shot load plus a slow poll and a refetch on wake / network return.
   // Live updates come from the Supabase realtime channels below, which refetch
   // through fallbackBoardReloadRef on every service_tables event.
   const fallbackBoardReloadRef = useRef(null);
@@ -4709,67 +4793,22 @@ export default function App() {
   }, [psEnabled, workspaceId, psInitAttempt]);
 
   // ── sqlite-primary probe ─────────────────────────────────────────────────────
-  // Flip to primary once the priority-1 first sync is in AND the local DB holds
-  // this workspace's rows. Re-probes on each checkpoint until it flips (a fresh
-  // member device becomes primary the moment its first download lands); a boot
-  // deadline resolves to the fallback when PowerSync stays unusable — a
-  // non-member account, an init failure, or a fresh device with no network.
+  // Flip to primary once the priority-1 first sync is in. Membership has already
+  // been verified, so zero rows is a legitimate empty restaurant. A boot
+  // deadline resolves to the fallback when PowerSync stays unusable due to an
+  // init failure or a fresh device with no network.
   // Once primary, stays primary for the session: local data doesn't vanish
   // when the stream drops.
-  const probingRef = useRef(false);
-  // One wipe-and-resync attempt per session for a contaminated local DB (see
-  // the tripwire below) — a second detection means the stream itself is
-  // delivering foreign rows, where wiping can't help.
-  const foreignClearRef = useRef(false);
   useEffect(() => {
     if (!psEnabled) { setSqlitePrimaryFlag(false); setSqlitePrimary(false); setPsResolved(true); return undefined; }
     if (sqlitePrimary) return undefined;
     const deadline = setTimeout(() => setPsResolved(true), 4000);
-    if (!powerSyncStatus?.hasSyncedP1 || probingRef.current) return () => clearTimeout(deadline);
-    probingRef.current = true;
-    let cancelled = false;
-    let handedOff = false;
-    (async () => {
-      try {
-        const { localDbHasWorkspaceData, detectForeignWorkspaceRows } = await import("./powersync/reads.js");
-        // Tripwire: never go primary while the local DB holds another
-        // workspace's rows — the natural-key aliases aren't workspace-qualified,
-        // so trusting it could cross tenants (see docs/SYNC_UPGRADE_PLAN.md).
-        const foreign = await detectForeignWorkspaceRows(workspaceId);
-        if (foreign.size > 0) {
-          // Contaminated local DB: a device that switched accounts BEFORE the
-          // account-switch guard existed still carries the previous login's
-          // workspaces (the 08.07 phone — permanent ERROR chip, wedged on the
-          // fallback). The stream can only deliver the CURRENT user's
-          // workspaces, so wipe once and re-sync clean: release the probe
-          // guard FIRST so the resync's own status events re-run this probe
-          // against the clean DB (holding it made the re-run bail and the
-          // heal never completed). If foreign rows come BACK after a wipe,
-          // the stream itself delivers multiple workspaces (a real
-          // multi-workspace member) — that's the alias hazard, so wedge on
-          // the fallback as before.
-          if (foreignClearRef.current) {
-            if (!cancelled) setSyncStatus("sync-error");
-            return; // stay on the fallback path; the deadline resolves psResolved
-          }
-          foreignClearRef.current = true;
-          console.warn("[PowerSync] local DB holds foreign workspace rows — clearing and re-syncing:", [...foreign]);
-          const { clearLocalAndResync } = await import("./powersync/system.js");
-          handedOff = true;
-          probingRef.current = false;
-          await clearLocalAndResync();
-          return;
-        }
-        const usable = await localDbHasWorkspaceData(workspaceId);
-        if (!cancelled && usable) { setSqlitePrimaryFlag(true); setSqlitePrimary(true); }
-      } catch (e) {
-        console.warn("[PowerSync] local-DB probe failed:", e);
-      } finally {
-        if (!handedOff) probingRef.current = false;
-        if (!cancelled) setPsResolved(true);
-      }
-    })();
-    return () => { cancelled = true; clearTimeout(deadline); };
+    if (powerSyncStatus?.hasSyncedP1) {
+      setSqlitePrimaryFlag(true);
+      setSqlitePrimary(true);
+      setPsResolved(true);
+    }
+    return () => clearTimeout(deadline);
   }, [psEnabled, workspaceId, sqlitePrimary, powerSyncStatus?.hasSyncedP1, powerSyncStatus?.lastSyncedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Connection-status chip ───────────────────────────────────────────────────
@@ -4821,9 +4860,13 @@ export default function App() {
             setReservations(rows);
             setReservationsLoaded(true);
           },
-          onWines: (rows) => { if (!cancelled && rows.length) { setWines(rows); writeLocalWines(rows); } },
+          onWines: (rows) => {
+            if (cancelled || (!rows.length && !powerSyncStatus?.hasSynced)) return;
+            setWines(rows);
+            writeLocalWines(rows);
+          },
           onBeverages: (data) => {
-            if (cancelled || !data.length) return;
+            if (cancelled || (!data.length && !powerSyncStatus?.hasSynced)) return;
             const c = pickBeveragesForCategory(data, "cocktail");
             const s = pickBeveragesForCategory(data, "spirit");
             const b = pickBeveragesForCategory(data, "beer");
@@ -4833,7 +4876,7 @@ export default function App() {
             writeLocalBeverages({ cocktails: c, spirits: s, beers: b });
           },
           onMenuCourses: (rows) => {
-            if (cancelled || !rows.length) return;
+            if (cancelled || (!rows.length && !powerSyncStatus?.hasSynced)) return;
             const courses = rows.map(supabaseRowToCourse);
             writeLocalMenuCourses(courses);
             // Never clobber an admin draft in progress (see menuCoursesDirtyRef).
@@ -4858,7 +4901,7 @@ export default function App() {
       } catch (e) { console.error("[PowerSync] watches failed:", e); }
     })();
     return () => { cancelled = true; dispose?.(); };
-  }, [sqlitePrimary, workspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sqlitePrimary, workspaceId, powerSyncStatus?.hasSynced]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Beverages: fallback direct-Supabase loader ───────────────────────────────
   // Used when the local DB isn't primary, and by syncWines() to refresh the
@@ -4984,10 +5027,10 @@ export default function App() {
           activeServiceSessionRef.current = persistedSession;
         }
         try {
-          localStorage.setItem("milka_service_date", persisted);
-          if (persistedChosenOn) localStorage.setItem(SERVICE_DATE_CHOSEN_ON_KEY, persistedChosenOn);
-          if (persistedStartedAt) localStorage.setItem("milka_service_started_at", persistedStartedAt);
-          if (persistedSession === "lunch" || persistedSession === "dinner") localStorage.setItem("milka_service_session", persistedSession);
+          localStorage.setItem(workspaceKey("milka_service_date"), persisted);
+          if (persistedChosenOn) localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), persistedChosenOn);
+          if (persistedStartedAt) localStorage.setItem(workspaceKey("milka_service_started_at"), persistedStartedAt);
+          if (persistedSession === "lunch" || persistedSession === "dinner") localStorage.setItem(workspaceKey("milka_service_session"), persistedSession);
         } catch {}
       })
       .catch(() => {}); // keep whatever local service date we already have
@@ -5065,10 +5108,9 @@ export default function App() {
   }, [workspaceId, psResolved, sqlitePrimary]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fallback realtime safety net (Supabase channels) ────────────────────────
-  // The direct-Supabase fallback serves every account whose sync stream
-  // delivers nothing for the active workspace — the platform admin browsing a
-  // restaurant it isn't a member of, a foreign-rows tripwire refusal, or a
-  // PowerSync outage. Deleting the legacy realtime layer (PR #42) silently
+  // The direct-Supabase fallback serves a PowerSync outage or a deployment
+  // where PowerSync is deliberately disabled. Deleting the
+  // legacy realtime layer (PR #42) silently
   // turned that fallback into a static snapshot: reservations/menu/wines/
   // beverages loaded exactly once per boot and the board crawled on a 60s
   // poll, so cross-device edits never appeared and "add reservation" looked
@@ -5206,7 +5248,7 @@ export default function App() {
     onSummary: () => setSummaryOpen(true),
     onArchive: () => setArchiveOpen(true),
     onInventory: () => setInventoryOpen(true),
-    onSyncAll: syncWines,
+    onSyncAll: canAdmin ? syncWines : undefined,
   };
 
   // Loud warning when the active service date is in the past — the silent
@@ -5273,16 +5315,16 @@ export default function App() {
     );
     if (!sessionChecked) return splash;
     if (!session) return <AuthScreen />;
+    if (!workspacesResolved) return splash;
     // Wait for the workspace query before deciding picker-vs-board, so the
     // "no restaurant linked" empty state never flashes mid-resolution.
-    if (!workspaceId) return workspacesResolved ? (
+    if (!workspaceId) return (
       <ProfilePicker
         workspaces={myWorkspaces}
-        isAdmin={isPlatformAdmin}
         onPick={applyWorkspace}
         onSignOut={signOut}
       />
-    ) : splash;
+    );
   } else if (!authed) {
     // Local-only fallback (no Supabase): keep the legacy password gate.
     return <GateScreen onPass={() => setAuthed(true)} />;
@@ -5325,7 +5367,7 @@ export default function App() {
         setPendingModeAfterDate(null);
         if (target) {
           setMode(target);
-          try { localStorage.setItem("milka_mode", target); } catch {}
+          try { localStorage.setItem(workspaceKey("milka_mode"), target); } catch {}
           // The reconciliation effect (watches `mode` + `serviceDate` + `activeServiceSession`)
           // fills the board from reservations for the chosen date and session.
         }
@@ -5335,10 +5377,11 @@ export default function App() {
   ) : null;
 
   if (!mode) return <>{serviceDatePickerEl}<LoginScreen
-      onEnter={m => { changeMode(m); setSel(null); }}
-      onSyncAll={syncWines}
+      onEnter={m => { if (m !== "admin" || canAdmin) { changeMode(m); setSel(null); } }}
+      onSyncAll={canAdmin ? syncWines : undefined}
+      canAdmin={canAdmin}
       workspaceName={myWorkspaces.find(w => w.id === workspaceId)?.name || ""}
-      canSwitchProfile={Boolean(supabase) && (isPlatformAdmin || myWorkspaces.length > 1)}
+      canSwitchProfile={Boolean(supabase) && myWorkspaces.length > 1}
       onSwitchProfile={openProfilePicker}
       onSignOut={supabase ? signOut : undefined}
     /></>;

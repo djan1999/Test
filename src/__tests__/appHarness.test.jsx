@@ -442,7 +442,7 @@ describe.each([
     await screen.findByText("[Service]", {}, { timeout: 5000 });
     // …WITHOUT filing its own archive or resurrecting the date.
     expect(remoteRows("service_archive")).toHaveLength(0);
-    expect(localStorage.getItem("milka_service_date")).toBeNull();
+    expect(localStorage.getItem(`milka_service_date:${WORKSPACE_ID}`)).toBeNull();
   }, 15000);
 
   it("a service STARTED on another device is adopted here — Service joins with no prompt", async () => {
@@ -471,28 +471,24 @@ describe.each([
     }
 
     // The live day is adopted without entering service…
-    await waitFor(() => expect(localStorage.getItem("milka_service_date")).toBe(TODAY()), { timeout: 5000 });
+    await waitFor(() => expect(localStorage.getItem(`milka_service_date:${WORKSPACE_ID}`)).toBe(TODAY()), { timeout: 5000 });
     // …and tapping [Service] drops straight into the live board (no start prompt).
     fireEvent.click(screen.getByText("[Service]"));
     await screen.findByText(/Anna Harness/, {}, { timeout: 5000 });
   }, 15000);
 });
 
-// ── Contaminated local DB self-heal ───────────────────────────────────────────
-// A device that switched Supabase accounts before the account-switch guard
-// existed still carries the previous login's workspaces in its local DB. The
-// foreign-rows tripwire used to wedge such a device on the fallback with a
-// permanent ERROR chip (the 08.07 phone); now it wipes the local DB ONCE,
-// re-syncs the current user's data, and goes primary on the clean copy.
-describe("app harness — contaminated local DB self-heal", () => {
+// ── Workspace-qualified local rows ────────────────────────────────────────────
+// A legitimate multi-workspace membership can sync more than one restaurant.
+// Local ids and every read are workspace-scoped, so those rows may coexist
+// without a destructive wipe or cross-restaurant paint.
+describe("app harness — workspace-qualified local rows", () => {
   beforeEach(() => {
     resetBackend({ psMode: true });
   });
 
-  it("foreign-workspace rows trigger one wipe-and-resync, then the device goes primary", async () => {
+  it("another workspace's rows coexist without a wipe or leaking into the active board", async () => {
     seedLiveService();
-    // The previous account's leftovers live ONLY locally — this user's sync
-    // stream never delivers ws-other rows.
     localRows("service_tables").push({
       workspace_id: "ws-other", table_id: 1,
       data: { resName: "Ghost Of Admin" }, updated_at: new Date().toISOString(),
@@ -500,11 +496,11 @@ describe("app harness — contaminated local DB self-heal", () => {
     render(<App />);
     await enterService();
 
-    await waitFor(() => expect(backend.clearResyncs).toBe(1), { timeout: 5000 });
-    expect(localRows("service_tables").every((r) => r.workspace_id === WORKSPACE_ID)).toBe(true);
+    expect(backend.clearResyncs).toBe(0);
+    expect(screen.queryByText(/Ghost Of Admin/)).toBeNull();
+    expect(localRows("service_tables").some((r) => r.workspace_id === "ws-other")).toBe(true);
 
-    // Primary again on the clean DB: seating Bruno lands in the LOCAL store
-    // (the local-first contract), not just the remote one.
+    // The active workspace is still SQLite-primary and local-first.
     fireEvent.click(await screen.findByText("SEAT", {}, { timeout: 5000 }));
     await waitFor(() => {
       expect(rowFor(localRows("service_tables"), 2)?.data?.active).toBe(true);
@@ -513,8 +509,8 @@ describe("app harness — contaminated local DB self-heal", () => {
 });
 
 // ── Fallback realtime safety net ──────────────────────────────────────────────
-// Accounts whose sync stream delivers nothing (the platform admin browsing a
-// workspace it isn't a member of) live on the direct-Supabase fallback. Its
+// A PowerSync outage or deliberately disabled deployment uses the
+// direct-Supabase fallback. Its
 // liveness is the Supabase realtime channels: without them the app is a static
 // snapshot — cross-device edits and freshly added reservations never appear
 // (the 07.07 "nothing syncs / my reservation is invisible" incident).
