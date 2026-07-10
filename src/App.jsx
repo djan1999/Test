@@ -58,7 +58,7 @@ import {
   visitStateOf, isArmed as isVisitArmed,
   assignTerrace as assignTerraceData, clearTerraceTable as clearTerraceData,
   moveToDining as moveToDiningData, markSeated as markSeatedData,
-  shouldArmOnFire, fireLastBite,
+  shouldArmOnFire, fireLastBite, closeVisit as closeVisitData,
 } from "./utils/terraceFlow.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "./utils/courseProgress.js";
 import { useIsMobile, BP } from "./hooks/useIsMobile.js";
@@ -2843,13 +2843,26 @@ export default function App() {
     setTables(p => p.map(t =>
       !ids.includes(t.id) ? t : { ...t, active: true, arrivedAt: now, seats: makeSeats(t.guests, t.seats) }
     ));
-    // Seating by hand completes a mid-terrace visit: a party still marked
-    // 'arriving' (MOVE tapped, MARK SEATED never was) would otherwise wedge
-    // its card — seated, yet hiding both MARK SEATED and TERRACE →.
+    // Seating by hand completes a mid-terrace visit — SEAT is the universal
+    // escape hatch, so no party state may survive it as a dangling badge:
+    // - 'arriving' (MOVE tapped, MARK SEATED never was) → seated.
+    // - 'terrace' → the party is physically at its dining table now; complete
+    //   the move ourselves (single-tap semantics) and free + un-SET the
+    //   terrace tile. Without this a terrace party seated by hand stayed
+    //   "ON TERRACE" forever, ghost ticket on the kitchen board included.
     for (const tid of ids) {
       const owner = serviceReservations.find(r =>
-        visitStateOf(r.data) === "arriving" && reservationTableIds(r.data, r.table_id).includes(Number(tid)));
-      if (owner) persistVisitData(owner, markSeatedData(owner.data));
+        ["arriving", "terrace"].includes(visitStateOf(r.data)) &&
+        reservationTableIds(r.data, r.table_id).includes(Number(tid)));
+      if (!owner) continue;
+      if (visitStateOf(owner.data) === "arriving") {
+        persistVisitData(owner, markSeatedData(owner.data));
+      } else {
+        const label = owner.data?.terrace_table || null;
+        if (persistVisitData(owner, moveToDiningData(owner.data, new Date().toISOString(), { singleTap: true }))) {
+          clearTerraceStrip(label);
+        }
+      }
     }
   };
 
@@ -2874,7 +2887,11 @@ export default function App() {
     if (serviceDate && (mode === "service" || mode === "display")) {
       const owner = reservationOnTable(id);
       if (owner && !owner.data?.clearedFromBoard) {
-        const nextData = { ...owner.data, clearedFromBoard: true };
+        // Close the terrace-flow visit too (the plan's dining → done arrow —
+        // it was never wired): a cleared table must not leave a dangling
+        // visit_state that keeps badges or kitchen tickets alive elsewhere.
+        const closed = closeVisitData(owner.data) || owner.data;
+        const nextData = { ...closed, clearedFromBoard: true };
         setReservations(prev => prev.map(r => r.id === owner.id ? { ...r, data: nextData } : r));
         persistReservationRow({ id: owner.id, date: owner.date, table_id: owner.table_id, data: nextData });
       }
