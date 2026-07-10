@@ -12,6 +12,20 @@ describe("visit state derivation", () => {
     expect(visitStateOf({})).toBe("booked");
     expect(visitStateOf({ visit_state: "nonsense" })).toBe("booked");
   });
+
+  it("self-heals the dead-end: un-armed 'terrace' with no table reads as 'booked'", () => {
+    // The stuck party (10.07): cleared from its terrace table before the
+    // kitchen fired anything — 'terrace' + no table + not armed locked it out
+    // of every seat/assign surface and kept its ghost kitchen ticket alive.
+    // Reading it as 'booked' returns it to the normal pool everywhere,
+    // including rows already persisted in that state before the fix.
+    expect(visitStateOf({ visit_state: "terrace", terrace_table: null })).toBe("booked");
+    expect(visitStateOf({ visit_state: "terrace" })).toBe("booked");
+    // ARMED without a table stays 'terrace' — the stranded MOVE banner owns it.
+    expect(visitStateOf({ visit_state: "terrace", last_bite_fired_at: NOW })).toBe("terrace");
+    // A terrace party WITH a table is on terrace, armed or not.
+    expect(visitStateOf({ visit_state: "terrace", terrace_table: "T23" })).toBe("terrace");
+  });
 });
 
 describe("assignTerrace", () => {
@@ -31,7 +45,7 @@ describe("assignTerrace", () => {
 
 describe("last bite arming (the single kitchen hook)", () => {
   it("arms only a terrace party on an is_last_bite course, only once", () => {
-    expect(shouldArmOnFire({ is_last_bite: true }, { visit_state: "terrace" })).toBe(true);
+    expect(shouldArmOnFire({ is_last_bite: true }, { visit_state: "terrace", terrace_table: "T23" })).toBe(true);
     // no terrace assignment → no-op
     expect(shouldArmOnFire({ is_last_bite: true }, {})).toBe(false);
     expect(shouldArmOnFire({ is_last_bite: true }, { visit_state: "dining" })).toBe(false);
@@ -57,6 +71,16 @@ describe("last bite arming (the single kitchen hook)", () => {
     expect(isArmed(d)).toBe(true);
     expect(moveToDining(d, NOW)).toMatchObject({ visit_state: "arriving" });
   });
+
+  it("clearing an UN-armed terrace party returns it to 'booked' — never a dead end (10.07 stuck party)", () => {
+    const d = clearTerraceTable({ visit_state: "terrace", terrace_table: "T23", resName: "NOVAK" });
+    expect(d.terrace_table).toBeNull();
+    expect(d.visit_state).toBe("booked");
+    expect(d.resName).toBe("NOVAK"); // rest of the reservation untouched
+    // ...so every normal action is available again:
+    expect(assignTerrace(d, "T24")).toMatchObject({ visit_state: "terrace", terrace_table: "T24" });
+    expect(isArmed(d)).toBe(false);
+  });
 });
 
 describe("MOVE / SEATED", () => {
@@ -68,7 +92,7 @@ describe("MOVE / SEATED", () => {
   });
 
   it("MOVE is never blocked: works armed or not, from terrace only", () => {
-    expect(moveToDining({ visit_state: "terrace" }, NOW).visit_state).toBe("arriving");
+    expect(moveToDining({ visit_state: "terrace", terrace_table: "T21" }, NOW).visit_state).toBe("arriving");
     expect(moveToDining({ visit_state: "booked" }, NOW)).toBeNull();
     expect(moveToDining({ visit_state: "arriving" }, NOW)).toBeNull();
   });

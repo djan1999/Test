@@ -18,7 +18,17 @@ export const VISIT_STATES = ["booked", "terrace", "arriving", "dining", "done"];
 
 export const visitStateOf = (data) => {
   const s = data?.visit_state;
-  return VISIT_STATES.includes(s) ? s : "booked";
+  if (!VISIT_STATES.includes(s)) return "booked";
+  // Self-heal the dead-end state: 'terrace' with NO table and NO fired last
+  // bite is a party the flow has nothing left to offer — not on any terrace
+  // tile, no MOVE (that needs ARMED), and 'terrace' locks it out of every
+  // (re)assign gate and keeps its ghost ticket on the kitchen board. Reading
+  // it as 'booked' returns the party to the normal pool everywhere at once,
+  // including rows already stuck in the store from before this fix. An ARMED
+  // party without a table stays 'terrace' on purpose — the stranded banner's
+  // MOVE is its designed path in.
+  if (s === "terrace" && !data?.terrace_table && !data?.last_bite_fired_at) return "booked";
+  return s;
 };
 
 // LAST BITE ✓ badge. Kept true after a manual terrace-table clear (the clear
@@ -44,11 +54,15 @@ export function assignTerrace(data, label, mapId) {
 }
 
 // FOH clears the terrace table without moving the party (spilled drink, table
-// broken down early). visit_state stays 'terrace' so an armed party keeps its
-// MOVE action on the reservation row.
+// broken down early). An ARMED party keeps visit_state 'terrace' so its MOVE
+// stays reachable (the stranded banner). An UN-armed party — nothing fired
+// yet — returns to 'booked': keeping it 'terrace' locked it out of every
+// seat/assign surface with no way back (the stuck "ON TERRACE" party).
 export function clearTerraceTable(data) {
   if (visitStateOf(data) !== "terrace") return null;
-  return { ...(data || {}), terrace_table: null };
+  const next = { ...(data || {}), terrace_table: null };
+  if (!next.last_bite_fired_at) next.visit_state = "booked";
+  return next;
 }
 
 // The ONLY kitchen hook: called when a course is marked out on the ticket.

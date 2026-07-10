@@ -358,6 +358,41 @@ describe("app harness — fallback mode: failed writes survive refetches", () =>
   }, 25000);
 });
 
+// ── Terrace flow: SEAT is the universal escape hatch ──────────────────────────
+// A party marked 'terrace' must never dead-end: seating its dining table by
+// hand completes the terrace visit (10.07 report: cleared terrace party stuck
+// "ON TERRACE" — unseatable, ghost ticket on the kitchen board).
+describe("app harness — terrace party seated by hand completes the visit", () => {
+  beforeEach(() => {
+    resetBackend({ psMode: false });
+  });
+
+  it("SEAT on a terrace party's dining table moves the visit to 'dining' and drops the badge", async () => {
+    seedLiveService();
+    // Bruno's party is outside on terrace table T23, nothing fired yet.
+    const bruno = remoteRows("reservations").find((r) => r.id === "res-bruno");
+    bruno.data = { ...bruno.data, visit_state: "terrace", terrace_table: "T23" };
+
+    render(<App />);
+    await enterService();
+    await screen.findByText(/ON TERRACE/, {}, { timeout: 5000 }); // the seed took
+
+    // The guests walk inside and staff simply seat the table.
+    fireEvent.click(await screen.findByText("SEAT", {}, { timeout: 5000 }));
+
+    // The visit completes (single-tap move semantics) and persists...
+    await waitFor(() => {
+      const row = remoteRows("reservations").find((r) => r.id === "res-bruno");
+      expect(row?.data?.visit_state).toBe("dining");
+      expect(row?.data?.moved_at).toBeTruthy();
+    }, { timeout: 5000 });
+    // ...and the board card stops claiming they're outside.
+    await waitFor(() => {
+      expect(screen.queryByText(/ON TERRACE/)).toBeNull();
+    }, { timeout: 5000 });
+  }, 20000);
+});
+
 // ── Shared service lifecycle ──────────────────────────────────────────────────
 // A service started or ended on ANY device applies everywhere, live. The
 // adopting device never writes anything back (no archive, no clears) — the
