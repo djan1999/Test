@@ -300,7 +300,10 @@ export function generateMenuHTML({
   // If the caller didn't provide a v2 template (e.g. first run, or tests
   // without a template), build one from the course list.  The result is
   // used for this render only — persistence is handled by the editor/App.
-  const template = (menuTemplate?.version === 2 && Array.isArray(menuTemplate.rows))
+  // A template with an empty rows array is treated the same as no template:
+  // rendering it would produce a fully blank page (no header, no courses),
+  // which is never what the operator wants at print/preview time.
+  const template = (menuTemplate?.version === 2 && Array.isArray(menuTemplate.rows) && menuTemplate.rows.length > 0)
     ? menuTemplate
     : buildDefaultTemplate(menuCourses);
 

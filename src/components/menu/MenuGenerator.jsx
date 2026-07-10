@@ -43,9 +43,13 @@ export default function MenuGenerator({ table, menuCourses = [], upd, onClose, p
     [profiles, assignments]
   );
   const isShortMenu = String(table?.menuType || "").trim().toLowerCase() === "short";
+  // A stored template with zero rows renders a completely blank menu, so treat
+  // it as absent — the fallback chain (short → long → auto-built default in
+  // generateMenuHTML) then produces a printable menu instead of an empty page.
+  const nonEmptyTemplate = (t) => (t && Array.isArray(t.rows) && t.rows.length > 0) ? t : null;
   const menuTemplate = isShortMenu
-    ? (assignedProfile?.shortMenuTemplate || assignedProfile?.menuTemplate || null)
-    : (assignedProfile?.menuTemplate || null);
+    ? (nonEmptyTemplate(assignedProfile?.shortMenuTemplate) || nonEmptyTemplate(assignedProfile?.menuTemplate) || null)
+    : (nonEmptyTemplate(assignedProfile?.menuTemplate) || null);
   const defaultLayoutStyles = assignedProfile?.layoutStyles || {};
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState(() => readMenuTitle(table.lang || "en"));

@@ -116,6 +116,20 @@ describe("generateMenuHTML — basic structure", () => {
     // No course rows — only the thank-you div should be inside #menu
     expect(html).not.toContain('class="menu-row');
   });
+
+  it("falls back to the default template when the stored template has zero rows", () => {
+    // Regression: a profile saved with menuTemplate {version:2, rows:[]} used
+    // to be accepted as-is and rendered a completely blank page in the seat
+    // preview and the PDF. An empty-rows template must behave like no template.
+    const courses = [makeCourse("LAMB", "rosemary jus")];
+    const html = render({}, {}, courses, {
+      menuTitle: "SPRING MENU",
+      menuTemplate: { version: 2, rows: [] },
+    });
+    expect(html).toContain("SPRING MENU");
+    expect(html).toContain("LAMB");
+    expect(html).toContain('class="menu-row');
+  });
 });
 
 // ── Course rendering ───────────────────────────────────────────────────────────
