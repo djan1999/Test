@@ -222,6 +222,13 @@ describe.each([
   it("genuine overnight leftover archives FIRST, then clears the board", async () => {
     // Same stale date, but the board's last activity is ALSO two days old —
     // an abandoned service. Auto-end files it and resets for the new day.
+    // Also pins the mass-blank guard's flagged pass-through: the whole-board
+    // blank must NOT trip the '[board-guard]' refusal — a guard regression
+    // that refuses a legitimate end-of-service would be a worse incident than
+    // the wipe it exists to prevent. (The refusal branch itself is pinned at
+    // unit level in boardGuard.test.js — it is unreachable through honest UI
+    // vectors by design.)
+    const errSpy = vi.spyOn(console, "error");
     const stale = daysAgoISO(2);
     seedLiveService({ serviceDate: stale, boardUpdatedAt: `${stale}T21:00:00.000Z` });
     render(<App />);
@@ -240,6 +247,10 @@ describe.each([
       const state = remoteRows("service_settings").find((r) => r.id === "service_date")?.state;
       expect(state?.date).toBeUndefined();
     }, { timeout: 5000 });
+
+    const guardRefusals = errSpy.mock.calls.filter((args) => String(args[0]).includes("[board-guard]"));
+    expect(guardRefusals).toHaveLength(0);
+    errSpy.mockRestore();
   });
 
   it("offline edits survive and converge to the store after reconnect", async () => {

@@ -32,7 +32,7 @@ import {
   makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM,
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
   reservationTableIds, mergeRestrictionPositions,
-  repointReservation, moveTableRows, swapTableRows,
+  repointReservation, moveTableRows, swapTableRows, massBlankedIndices,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { foldTable } from "./utils/foldTable.js";
@@ -4059,13 +4059,9 @@ export default function App() {
     // Even an unexpected trigger (a stale-board reconcile, a rogue effect) can't
     // push a live-service wipe to the store and other devices — it's restored
     // locally instead. Single-table changes and flagged clears pass through.
-    const emptiedIdx = [];
-    tables.forEach((table, idx) => {
-      if (nextJson[idx] === prevJson[idx]) return;
-      let prevHadContent = false;
-      try { prevHadContent = tableHasServiceContent(JSON.parse(prevJson[idx])); } catch { /* no content */ }
-      if (prevHadContent && !tableHasServiceContent(sanitizeTable(table))) emptiedIdx.push(idx);
-    });
+    // (Predicate extracted to utils/tableHelpers for unit coverage — the
+    // refusal branch is unreachable through honest UI vectors by design.)
+    const emptiedIdx = massBlankedIndices(prevJson, tables, nextJson);
     if (emptiedIdx.length >= 2 && !intentionalBoardClearRef.current) {
       console.error(
         "[board-guard] Refused to blank live tables", emptiedIdx.map(i => tables[i].id),
