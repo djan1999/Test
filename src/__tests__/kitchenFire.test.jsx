@@ -86,6 +86,107 @@ describe("KitchenBoard — archived-ticket recovery strip", () => {
   });
 });
 
+describe("KitchenBoard — upcoming reservation banners", () => {
+  const baseTable = (id, extra = {}) => ({
+    id, active: false, guests: 4, tableGroup: [], restrictions: [],
+    seats: [], kitchenLog: {}, kitchenAlert: null, courseOverrides: {},
+    kitchenCourseNotes: {}, menuType: "", lang: "en", resName: "", resTime: "",
+    ...extra,
+  });
+
+  it("an unseated reservation shows as a banner (time/pax/restrictions), NOT a ticket", () => {
+    render(
+      <KitchenBoard
+        tables={[baseTable(3, {
+          resName: "NOVAK", resTime: "19:30", guests: 4,
+          restrictions: [{ note: "No Ricotta", pos: null }],
+        })]}
+        menuCourses={[makeCourse(1)]}
+        upd={vi.fn()}
+        updMany={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/UPCOMING · 1/)).toBeTruthy();
+    expect(screen.getByText("19:30")).toBeTruthy();
+    expect(screen.getByText("T3")).toBeTruthy();
+    expect(screen.getByText("No Ricotta")).toBeTruthy();
+    // The banner carries no courses — the ticket only appears once seated.
+    expect(screen.queryByText("Course 1")).toBeNull();
+    expect(screen.getByText("No active tables")).toBeTruthy();
+  });
+
+  it("seating the table promotes the banner to a full ticket", () => {
+    render(
+      <KitchenBoard
+        tables={[baseTable(3, {
+          active: true, resName: "NOVAK", resTime: "19:30",
+          seats: [{ id: 1, ...seatDefaults }],
+        })]}
+        menuCourses={[makeCourse(1)]}
+        upd={vi.fn()}
+        updMany={vi.fn()}
+      />
+    );
+    expect(screen.queryByText(/UPCOMING/)).toBeNull();
+    expect(screen.getByText("Course 1")).toBeTruthy(); // full ticket
+  });
+
+  it("banners are sorted by reservation time", () => {
+    render(
+      <KitchenBoard
+        tables={[
+          baseTable(2, { resName: "LATE", resTime: "21:00" }),
+          baseTable(5, { resName: "EARLY", resTime: "18:30" }),
+        ]}
+        menuCourses={[makeCourse(1)]}
+        upd={vi.fn()}
+        updMany={vi.fn()}
+      />
+    );
+    const early = screen.getByText("EARLY");
+    const late = screen.getByText("LATE");
+    // EARLY (18:30) must render before LATE (21:00) in document order.
+    expect(early.compareDocumentPosition(late) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("KitchenTicket — pace visible in the header banner", () => {
+  const liveTable = (extra = {}) => ({
+    id: 1, active: true, guests: 2, tableGroup: [], restrictions: [],
+    seats: [{ id: 1, ...seatDefaults }],
+    kitchenLog: {}, kitchenAlert: null, courseOverrides: {},
+    kitchenCourseNotes: {}, menuType: "", lang: "en", resName: "", resTime: "",
+    ...extra,
+  });
+
+  it("a set pace renders as a header badge (not only in the PACE row / quick drawer)", () => {
+    render(
+      <KitchenBoard
+        tables={[liveTable({ pace: "Fast" })]}
+        menuCourses={[makeCourse(1)]}
+        upd={vi.fn()}
+        updMany={vi.fn()}
+      />
+    );
+    // The PACE row's toggle button is one "Fast"; the header badge is a second.
+    expect(screen.getAllByText("Fast").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("no header badge when no pace is set", () => {
+    render(
+      <KitchenBoard
+        tables={[liveTable()]}
+        menuCourses={[makeCourse(1)]}
+        upd={vi.fn()}
+        updMany={vi.fn()}
+      />
+    );
+    // Only the PACE row toggles remain — exactly one "Fast" and one "Slow".
+    expect(screen.getAllByText("Fast")).toHaveLength(1);
+    expect(screen.getAllByText("Slow")).toHaveLength(1);
+  });
+});
+
 describe("KitchenBoard fire — rapid taps", () => {
   it("two quick fires on the same table both land (functional updates, no stale-closure drop)", () => {
     const table = {
