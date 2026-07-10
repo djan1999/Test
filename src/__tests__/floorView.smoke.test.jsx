@@ -145,6 +145,30 @@ describe("terrace CHANGE TABLE (re-seat on the terrace)", () => {
   });
 });
 
+describe("stranded terrace parties (no reachable tile)", () => {
+  it("a party whose terrace label vanished from the map gets a rescue banner with MOVE + CHANGE TABLE", () => {
+    const stranded = { id: "r9", table_id: 6, data: { resName: "ZUPAN", guests: 3, visit_state: "terrace", terrace_table: "T99" } };
+    const { container, handlers, getByText } = setup({ reservations: [...reservations, stranded] });
+    fireEvent.click(getByText("TERRACE"));
+    // no tile named T99 → the banner is the only way back in
+    fireEvent.click(getByText(/MOVE TO T6/));
+    expect(handlers.onMove).toHaveBeenCalledWith(stranded);
+    fireEvent.click(getByText("CHANGE TABLE"));
+    expect(container.textContent).toContain("TAP A FREE TABLE FOR ZUPAN ×3");
+    fireEvent.click(findTable(container, "T25")); // free tile → re-assign
+    expect(handlers.onAssign).toHaveBeenCalledWith(stranded, "T25");
+  });
+
+  it("armed party with NO table still gets the banner (regression pin) — with its LAST BITE badge", () => {
+    const armedNoTable = { id: "r8", table_id: 7, data: { resName: "KRANJC", guests: 2, visit_state: "terrace", terrace_table: null, last_bite_fired_at: "2026-07-10T20:00:00Z" } };
+    const { handlers, getByText, getAllByText } = setup({ reservations: [...reservations, armedNoTable] });
+    fireEvent.click(getByText("TERRACE"));
+    expect(getAllByText("LAST BITE ✓").length).toBeGreaterThan(0);
+    fireEvent.click(getByText(/MOVE TO T7/));
+    expect(handlers.onMove).toHaveBeenCalledWith(armedNoTable);
+  });
+});
+
 describe("terrace SET FOR BITES", () => {
   it("free-table sheet toggles the strip and closes", () => {
     const { container, handlers, getByText, queryByText } = setup();

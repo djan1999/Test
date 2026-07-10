@@ -2946,7 +2946,12 @@ export default function App() {
 
   const clearTerracePartyTable = (resv) => {
     const label = resv.data?.terrace_table || null;
-    if (!persistVisitData(resv, clearTerraceData(resv.data))) return;
+    // Where are the guests? A dessert-outside party's dining table is still
+    // ACTIVE — the un-armed heal must land on 'dining' (still eating inside),
+    // not 'booked' (would re-offer them in the ASSIGN PARTY picker).
+    const seatedInside = reservationTableIds(resv.data, resv.table_id)
+      .some(id => tablesRef.current?.find(t => t.id === Number(id))?.active);
+    if (!persistVisitData(resv, clearTerraceData(resv.data, { seatedInside }))) return;
     clearTerraceStrip(label);
   };
 

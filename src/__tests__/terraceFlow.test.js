@@ -81,6 +81,22 @@ describe("last bite arming (the single kitchen hook)", () => {
     expect(assignTerrace(d, "T24")).toMatchObject({ visit_state: "terrace", terrace_table: "T24" });
     expect(isArmed(d)).toBe(false);
   });
+
+  it("clearing an UN-armed party who is SEATED INSIDE heals to 'dining' — not back into the waiting pool", () => {
+    // Dessert-outside party: dining table still active, tile struck early.
+    const d = clearTerraceTable(
+      { visit_state: "terrace", terrace_table: "T23" },
+      { seatedInside: true },
+    );
+    expect(d.terrace_table).toBeNull();
+    expect(d.visit_state).toBe("dining"); // still eating inside — NOT 'booked'
+    // an ARMED party keeps 'terrace' regardless (the stranded MOVE owns it)
+    const armed = clearTerraceTable(
+      { visit_state: "terrace", terrace_table: "T23", last_bite_fired_at: NOW },
+      { seatedInside: true },
+    );
+    expect(armed.visit_state).toBe("terrace");
+  });
 });
 
 describe("MOVE / SEATED", () => {

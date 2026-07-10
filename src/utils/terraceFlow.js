@@ -67,12 +67,16 @@ export function assignTerrace(data, label, mapId) {
 // FOH clears the terrace table without moving the party (spilled drink, table
 // broken down early). An ARMED party keeps visit_state 'terrace' so its MOVE
 // stays reachable (the stranded banner). An UN-armed party — nothing fired
-// yet — returns to 'booked': keeping it 'terrace' locked it out of every
-// seat/assign surface with no way back (the stuck "ON TERRACE" party).
-export function clearTerraceTable(data) {
+// yet — leaves 'terrace': keeping it locked the party out of every
+// seat/assign surface with no way back (the stuck "ON TERRACE" party). The
+// heal target depends on where the guests actually are: `seatedInside` (the
+// caller checks the board) means a dessert-outside party still eating at its
+// ACTIVE dining table → 'dining', so they don't reappear in the ASSIGN PARTY
+// picker as a waiting party (the double-seat hazard). Otherwise → 'booked'.
+export function clearTerraceTable(data, { seatedInside = false } = {}) {
   if (visitStateOf(data) !== "terrace") return null;
   const next = { ...(data || {}), terrace_table: null };
-  if (!next.last_bite_fired_at) next.visit_state = "booked";
+  if (!next.last_bite_fired_at) next.visit_state = seatedInside ? "dining" : "booked";
   return next;
 }
 

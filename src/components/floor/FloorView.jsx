@@ -183,11 +183,17 @@ export default function FloorView({
 
   const ticker = mapTicker(Object.values(tableState));
 
-  // Parties the terrace tab must keep reachable even without a table: an
-  // armed party whose terrace table was cleared mid-visit has no shape on
-  // any map, but its MOVE action must stay one tap away.
+  // Parties the terrace tab must keep reachable even without a tile:
+  // - an ARMED party whose terrace table was cleared mid-visit (no label),
+  // - ANY terrace party whose label no longer exists on the current map
+  //   (tile renamed/deleted mid-service). No tile means no sheet, no MOVE,
+  //   and no self-heal (visitStateOf stays map-blind on purpose) — this
+  //   banner is the only way back in for both.
+  const mapLabels = new Set((map.tables || []).map((t) => t.label));
   const strandedArmed = map.kind === "terrace"
-    ? reservations.filter((r) => isArmed(r.data) && !r.data?.terrace_table)
+    ? reservations.filter((r) =>
+        visitStateOf(r.data) === "terrace" &&
+        (r.data?.terrace_table ? !mapLabels.has(r.data.terrace_table) : isArmed(r.data)))
     : [];
 
   // Parties eligible for a terrace assignment: anyone without a terrace leg
@@ -357,7 +363,8 @@ export default function FloorView({
         </div>
       )}
 
-      {/* stranded armed parties — no table on any map, action must stay reachable */}
+      {/* stranded terrace parties — no reachable tile (cleared mid-visit or
+          the label vanished in a map edit); actions must stay one tap away */}
       {strandedArmed.map((r) => (
         <div key={r.id} style={{
           display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
@@ -366,8 +373,11 @@ export default function FloorView({
           <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: tokens.ink[0] }}>
             {r.data?.resName || "—"} {r.data?.guests ? `×${r.data.guests}` : ""}
           </span>
-          <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.1em", background: tokens.ink[0], color: tokens.neutral[0], padding: "2px 6px" }}>LAST BITE ✓</span>
+          {isArmed(r.data) && (
+            <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.1em", background: tokens.ink[0], color: tokens.neutral[0], padding: "2px 6px" }}>LAST BITE ✓</span>
+          )}
           <span style={{ flex: 1 }} />
+          <button style={actionBtn(false)} onClick={() => setMovingParty(r)}>CHANGE TABLE</button>
           <button style={actionBtn(true)} onClick={() => onMove(r)}>MOVE TO {diningLabelOf(r)} →</button>
         </div>
       ))}
