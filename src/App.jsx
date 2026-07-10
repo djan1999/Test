@@ -33,6 +33,7 @@ import {
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
   reservationTableIds, mergeRestrictionPositions,
   repointReservation, moveTableRows, swapTableRows, massBlankedIndices,
+  swapSeatData,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { foldTable } from "./utils/foldTable.js";
@@ -3692,22 +3693,11 @@ export default function App() {
     return day;
   };
 
+  // Guests trade places: seat payloads swap AND their positional restrictions
+  // follow (swapSeatData, pure + tested). Reached from the board's SwapPicker
+  // and the floor's drag-a-chair-onto-a-chair gesture.
   const swapSeats = (tid, aId, bId) => {
-    setTables(p => p.map(t => {
-      if (t.id !== tid) return t;
-      const sA = t.seats.find(s => s.id === aId);
-      const sB = t.seats.find(s => s.id === bId);
-      // Spreading an undefined seat would wipe the other seat's data.
-      if (!sA || !sB) return t;
-      return {
-        ...t,
-        seats: t.seats.map(s => {
-          if (s.id === aId) return { ...sB, id: aId };
-          if (s.id === bId) return { ...sA, id: bId };
-          return s;
-        }),
-      };
-    }));
+    setTables(p => p.map(t => (t.id === tid ? swapSeatData(t, aId, bId) : t)));
   };
 
   const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, rooms, birthday, cakeNote, restrictions, notes, lang }) => {
@@ -5778,6 +5768,7 @@ export default function App() {
               onClear={clearTerracePartyTable}
               onMove={moveTerracePartyIn}
               onMarkSeated={markTerracePartySeated}
+              onSwapSeats={swapSeats}
               onSendSetToKitchen={(boardIds) => {
                 // SEND on the floor: every SET table raises the SAME kitchen
                 // banner the sheet view's SET NEXT does — courseReady for the
