@@ -963,6 +963,43 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
   );
 }
 
+// Upcoming banners join the same sortable grid as the tickets — the expediter
+// can drag one out of the way (or slot a party that arrived early wherever the
+// wall needs it), exactly like an unexpanded ticket. The whole card is the
+// drag handle; the sensors' hold-delay keeps scrolling working.
+export function SortableBanner({ table, isDragging, anyDragging, compact = false }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+    id: table.id,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      role="button"
+      aria-label="Drag to reorder upcoming table"
+      style={{
+        width: "100%", minWidth: 0,
+        transform: anyDragging && transform ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : undefined,
+        transition: isDragging ? 'none' : (anyDragging ? transition : undefined),
+        userSelect: "none", WebkitUserSelect: "none",
+        touchAction: "pan-y", cursor: "grab",
+      }}
+    >
+      {isDragging ? (
+        // Ghost placeholder — banner-sized, so the slot stays visible
+        <div style={{
+          width: "100%", height: "100%", minHeight: 48,
+          border: `2px dashed ${tokens.green.border}`, borderRadius: 0,
+          background: tokens.green.bg,
+        }} />
+      ) : (
+        <UpcomingBanner table={table} compact={compact} />
+      )}
+    </div>
+  );
+}
+
 export function KitchenAlertOverlay({ alerts, onConfirm }) {
   if (alerts.length === 0) return null;
   const PAIR_COLORS = {
@@ -1296,7 +1333,8 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
   );
 
   const orderedTables = order.map(id => displayTables.find(t => t.id === id)).filter(Boolean);
-  const activeTable  = activeId ? activeTables.find(t => t.id === activeId) : null;
+  // Banners drag too, so the overlay's source is the full display list.
+  const activeTable  = activeId ? displayTables.find(t => t.id === activeId) : null;
 
   return (
     <>
@@ -1341,7 +1379,13 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
             gap: compact ? 8 : 12,
           }}>
             {orderedTables.map(t => upcomingIds.has(t.id) ? (
-              <UpcomingBanner key={t.id} table={t} compact={compact} />
+              <SortableBanner
+                key={t.id}
+                table={t}
+                isDragging={activeId === t.id}
+                anyDragging={activeId !== null}
+                compact={compact}
+              />
             ) : (
               <SortableTicket
                 key={t.id}
@@ -1370,15 +1414,19 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
             boxShadow: "0 4px 16px rgba(0,0,0,0.10)",
             opacity: 0.97,
           }}>
-            <KitchenTicket
-              table={activeTable}
-              menuCourses={menuCourses}
-              upd={upd}
-              profiles={profiles}
-              assignments={assignments}
-              compact={compact}
-              inlineMods={largeBoard}
-            />
+            {upcomingIds.has(activeTable.id) ? (
+              <UpcomingBanner table={activeTable} compact={compact} />
+            ) : (
+              <KitchenTicket
+                table={activeTable}
+                menuCourses={menuCourses}
+                upd={upd}
+                profiles={profiles}
+                assignments={assignments}
+                compact={compact}
+                inlineMods={largeBoard}
+              />
+            )}
           </div>
         )}
       </DragOverlay>

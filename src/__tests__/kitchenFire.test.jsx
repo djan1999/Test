@@ -132,6 +132,23 @@ describe("KitchenBoard — upcoming reservation banners", () => {
     expect(screen.getByText("Course 1")).toBeTruthy(); // full ticket
   });
 
+  it("a banner is a sortable grid item — draggable out of the way like an unexpanded ticket", () => {
+    render(
+      <KitchenBoard
+        tables={[
+          baseTable(3, { resName: "NOVAK", resTime: "19:30" }),
+          baseTable(8, { active: true, seats: [{ id: 1, ...seatDefaults }] }),
+        ]}
+        menuCourses={[makeCourse(1)]}
+        upd={vi.fn()}
+        updMany={vi.fn()}
+      />
+    );
+    // The banner registers with the same dnd grid as the tickets (whole card
+    // is the handle), so it can be reordered and never blocks a ticket's move.
+    expect(screen.getByLabelText("Drag to reorder upcoming table")).toBeTruthy();
+  });
+
   it("banners are sorted by reservation time", () => {
     render(
       <KitchenBoard
