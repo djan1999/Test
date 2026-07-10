@@ -16,6 +16,17 @@
 
 export const VISIT_STATES = ["booked", "terrace", "arriving", "dining", "done"];
 
+/** The reservation-data keys that carry the visit through the flow. Any code
+ *  that REBUILDS a reservation's data blob (the edit form) must carry these,
+ *  or a routine mid-service edit teleports a live terrace party back to
+ *  'booked' — ghost tile, lost LAST BITE arming. */
+export const FLOW_KEYS = ["visit_state", "terrace_table", "terrace_map_id", "last_bite_fired_at", "moved_at"];
+
+/** Pick only the flow keys PRESENT on a data blob — legacy rows (none of the
+ *  keys) come back as {} so rebuilt blobs stay byte-identical for them. */
+export const pickFlowKeys = (data) =>
+  Object.fromEntries(FLOW_KEYS.filter((k) => (data || {})[k] !== undefined).map((k) => [k, data[k]]));
+
 export const visitStateOf = (data) => {
   const s = data?.visit_state;
   if (!VISIT_STATES.includes(s)) return "booked";
