@@ -389,6 +389,9 @@ export default function FloorMap({
         border: blueprint ? `1.5px solid ${tokens.ink[0]}` : `1px solid ${tokens.ink[4]}`,
         boxShadow: blueprint ? `6px 6px 0 ${tokens.ink[5]}` : undefined,
         touchAction: editing ? "none" : undefined,
+        // The map is a control surface — drag gestures (tables, seats, seat
+        // swap) must never read as a text selection sweep across the labels.
+        userSelect: "none", WebkitUserSelect: "none",
       }}
       role="img"
       aria-label={`${map.name} floor map`}
