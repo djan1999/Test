@@ -449,7 +449,9 @@ export default function FloorView({
         mode="service"
         tableState={tableState}
         restrictionsByLabel={restrictionsByLabel}
-        seatCodes={false}
+        // The label ▲ read as a dead button (per Djan) — the restriction CODE
+        // in red at the exact chair replaces it on the FOH floor too.
+        seatCodes
         seatNotesByLabel={seatNotesByLabel}
         seatGendersByLabel={seatGendersByLabel}
         onSeatSwap={onSwapSeats ? swapSeatPositions : undefined}

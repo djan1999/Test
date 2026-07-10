@@ -41,9 +41,18 @@ describe("swapSeatData (guests trade places — payloads AND restrictions follow
     expect(next.restrictions.find((r) => r.note === "nuts").pos).toBe(1);
   });
 
-  it("a missing seat is a no-op (never wipes the other seat)", () => {
+  it("dropping on an EMPTY position MOVES the guest there — restrictions follow, order stays sorted", () => {
+    const next = swapSeatData(table(), 1, 6);
+    expect(next.seats.map((s) => Number(s.id))).toEqual([2, 3, 6]); // P1 became P6
+    expect(next.seats.find((s) => Number(s.id) === 6)).toEqual({ id: 6, water: "XC", pairing: "Wine", gender: "Mrs" });
+    expect(next.seats.some((s) => Number(s.id) === 1)).toBe(false); // old chair freed
+    expect(next.restrictions.find((r) => r.note === "gluten").pos).toBe(6);
+    expect(next.restrictions.find((r) => r.note === "nuts").pos).toBe(3);
+  });
+
+  it("dragging FROM an empty position is a no-op (nobody to move)", () => {
     const t = table();
-    expect(swapSeatData(t, 1, 9)).toBe(t);
+    expect(swapSeatData(t, 9, 1)).toBe(t);
   });
 });
 

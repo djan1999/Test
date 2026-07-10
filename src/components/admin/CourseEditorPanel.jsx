@@ -155,6 +155,23 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
             </select>
           </div>
           <div style={{ marginBottom: 12 }}>
+            <div style={labelSm}>Terrace Flow</div>
+            <label style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2], display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={course.is_last_bite === true}
+                onChange={e => upd("is_last_bite", e.target.checked)}
+              />
+              Clears terrace when fired — the kitchen firing this course frees the party's
+              terrace table (they're walking in), so a new party can be seated there
+            </label>
+            {course.is_last_bite === true && !String(course.course_key || "").trim() && (
+              <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 4 }}>
+                ⚠ needs a Course Key to match the kitchen fire — set one above
+              </div>
+            )}
+          </div>
+          <div style={{ marginBottom: 12 }}>
             <div style={labelSm}>Optional Pairing</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <label style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2], display: "flex", alignItems: "center", gap: 6 }}>

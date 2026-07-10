@@ -4142,6 +4142,40 @@ export default function App() {
     if (JSON.stringify(next) !== JSON.stringify(sanitizeFloorStatus(floorStatus))) updateFloorStatus(next);
   }, [tablesJson, floorStatus, floorMapsState, serviceReservations]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Fire-to-clear terrace (course-flagged) ──────────────────────────────────
+  // A course flagged is_last_bite ("clears terrace when fired", set per course
+  // in Admin → Courses) going out of the kitchen means the terrace party is
+  // walking in: the fire auto-runs the same MOVE the terrace sheet button does
+  // — visit → arriving, the terrace tile frees for the next seating, and its
+  // SET strip clears. Transition-detected (the FIRE event, not the state), so
+  // a dessert-outside party whose flagged course fired long ago is never
+  // yanked back inside.
+  const prevFlaggedFiredRef = useRef(null);
+  useEffect(() => {
+    const flagged = new Set(
+      (activeMenuCourses || [])
+        .filter(c => c.is_last_bite && String(c.course_key || "").trim())
+        .map(c => c.course_key),
+    );
+    const cur = {};
+    tables.forEach(t => {
+      cur[t.id] = Object.keys(t.kitchenLog || {})
+        .filter(k => flagged.has(k) && t.kitchenLog[k]?.firedAt)
+        .sort().join(",");
+    });
+    const prev = prevFlaggedFiredRef.current;
+    prevFlaggedFiredRef.current = cur;
+    if (!prev) return; // first observation — no fires to judge yet
+    if (mode !== "service" && mode !== "display") return;
+    const newlyFired = tables.filter(t => cur[t.id] && cur[t.id] !== (prev[t.id] ?? ""));
+    if (!newlyFired.length) return;
+    serviceReservations.forEach(r => {
+      if (visitStateOf(r.data) !== "terrace") return;
+      const ids = reservationTableIds(r.data, r.table_id).map(Number);
+      if (newlyFired.some(t => ids.includes(Number(t.id)))) moveTerracePartyIn(r);
+    });
+  }, [tablesJson, activeMenuCourses, serviceReservations, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Autosave: write changed board rows to the store ─────────────────────────
   // Diffs the sanitized tables against the last-written baseline and writes
   // ONLY the changed rows — to local SQLite when primary (instant, offline-safe,

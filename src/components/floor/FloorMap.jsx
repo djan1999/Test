@@ -169,7 +169,8 @@ export default function FloorMap({
   mode = "view",
   // per-label presentation: { name, pax, sub, badge: {text, tone}, status:
   // 'free'|'occupied'|'arriving'|'reserved', strip: 'SET'|null (service),
-  // allergy: bool, selectable: bool }
+  // selectable: bool } — (allergy flags retired: the red chairs + codes ARE
+  // the restriction signal; the label ▲ was noise on top)
   tableState = {},
   restrictionsByLabel = {}, // { [label]: [{ pos, note }] } → amber seat dots
   onTableTap,
@@ -190,8 +191,8 @@ export default function FloorMap({
   onSheetSelect,            // (hit | null) — MOVE-tool tap
   onSheetMove,              // (kind, id, x, y) — zone/planter drag, on release
   seatCodes = true,         // restriction code text beside restricted chairs
-                            // (kitchen needs it; the FOH floor keeps just the
-                            // amber chair + the label's ▲)
+                            // (both floors now — the code at the chair IS the
+                            // restriction signal since the label ▲ retired)
   seatNotesByLabel = {},    // { [label]: { [seatNo]: "XC·W" } } — per-seat
                             // beverage annotations at the chair positions
   seatGendersByLabel = {},  // { [label]: { [seatNo]: "Mr"|"Mrs" } } — chairs
@@ -535,7 +536,6 @@ export default function FloorMap({
                     fontFamily={FONT} fontSize={2.8} fontWeight={700}
                     fill={arriving ? tokens.ink[0] : occupied ? tokens.neutral[0] : tokens.ink[2]}>
                     {t.label}
-                    {st.allergy && <tspan fill={occupied ? tokens.red.bg : tokens.signal.alert} fontWeight={700}> ▲</tspan>}
                   </text>
                   {showPartyLines && busy && nameLine.text && (
                     <text x={cx} y={t.y + 6.2} textAnchor="middle" fontFamily={FONT} fontSize={nameLine.font}

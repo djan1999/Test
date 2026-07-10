@@ -184,6 +184,42 @@ describe("app harness — kitchen board through the real App", () => {
     }, { timeout: 5000 });
   }, 25000);
 
+  it("firing a course flagged 'clears terrace' auto-moves the party in and frees their terrace table", async () => {
+    const now = new Date().toISOString();
+    seed("service_settings", [{
+      id: "service_date",
+      state: { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: now },
+      updated_at: now,
+    }]);
+    // Bruno's party is out on terrace T23; his dining table (2) is templated
+    // but NOT seated — the kitchen ticket exists via the terrace decoration.
+    seed("service_tables", [{
+      table_id: 2,
+      data: { ...blankTable(2), resName: "Bruno Harness", resTime: "20:15", guests: 3 },
+      updated_at: now,
+    }]);
+    seed("reservations", [{
+      id: "res-bruno", date: TODAY(), table_id: 2, created_at: now,
+      data: { resName: "Bruno Harness", resTime: "20:15", guests: 3, tableGroup: [],
+        service_session: "dinner", visit_state: "terrace", terrace_table: "T23" },
+    }]);
+    seed("menu_courses", [
+      courseRow(1, "amuse", "Amuse"),
+      { ...courseRow(2, "crayfish", "Crayfish"), is_last_bite: true },
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByText("[Kitchen]", {}, { timeout: 5000 }));
+    await screen.findByText(/Bruno Harness/, {}, { timeout: 5000 }); // terrace ticket
+
+    fireEvent.click(await screen.findByText("Crayfish", {}, { timeout: 5000 }));
+    // The fire runs the MOVE: visit → arriving, terrace table freed.
+    await waitFor(() => {
+      expect(resRow("res-bruno")?.data?.visit_state).toBe("arriving");
+    }, { timeout: 5000 });
+    // Firing the OTHER course must not have been required — and an unflagged
+    // fire alone (Amuse) would not have moved anyone: the flag did it.
+  }, 25000);
+
   it("a stale SET banner (course key no longer on the menu) self-heals on the kitchen board", async () => {
     // The SET snapshot points at a course key that a mid-service menu edit
     // removed — fire() clears only on an exact key match, so this banner

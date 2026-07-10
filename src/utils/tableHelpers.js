@@ -3,28 +3,55 @@
  * No React or browser dependencies — safe to import in tests and serverless code.
  */
 
-export const makeSeats = (n, ex = []) =>
-  Array.from({ length: n }, (_, i) => ({
-    id: i + 1,
-    gender:            ex[i]?.gender            ?? null,
-    pairingSharedWith: ex[i]?.pairingSharedWith ?? null,
-    water:             ex[i]?.water             ?? "—",
-    aperitifs: ex[i]?.aperitifs ?? [],
-    glasses:   ex[i]?.glasses   ?? [],
-    cocktails: ex[i]?.cocktails ?? [],
-    spirits:   ex[i]?.spirits   ?? [],
-    beers:     ex[i]?.beers     ?? [],
-    pairing:   ex[i]?.pairing   ?? "",
-    extras:    ex[i]?.extras    ?? {},
-    // Preserve ordered, mode (alco/nonalc override) and label (custom drink name).
-    optionalPairings: Object.fromEntries(
-      Object.entries(ex[i]?.optionalPairings || {}).map(([k, v]) => [k, {
-        ordered: !!v?.ordered,
-        ...(v?.mode  != null ? { mode:  v.mode  } : {}),
-        ...(v?.label != null ? { label: v.label } : {}),
-      }])
-    ),
-  }));
+const normSeat = (id, e) => ({
+  id,
+  gender:            e?.gender            ?? null,
+  pairingSharedWith: e?.pairingSharedWith ?? null,
+  water:             e?.water             ?? "—",
+  aperitifs: e?.aperitifs ?? [],
+  glasses:   e?.glasses   ?? [],
+  cocktails: e?.cocktails ?? [],
+  spirits:   e?.spirits   ?? [],
+  beers:     e?.beers     ?? [],
+  pairing:   e?.pairing   ?? "",
+  extras:    e?.extras    ?? {},
+  // Preserve ordered, mode (alco/nonalc override) and label (custom drink name).
+  optionalPairings: Object.fromEntries(
+    Object.entries(e?.optionalPairings || {}).map(([k, v]) => [k, {
+      ordered: !!v?.ordered,
+      ...(v?.mode  != null ? { mode:  v.mode  } : {}),
+      ...(v?.label != null ? { label: v.label } : {}),
+    }])
+  ),
+});
+
+export const makeSeats = (n, ex = []) => {
+  // Seat ids are POSITIONS (chair numbers), not array indexes. When the
+  // incoming seats all carry valid distinct ids, PRESERVE them — a guest
+  // moved to chair 6 on the floor must stay P6 through sanitize/reconcile
+  // (the old index-based rebuild silently snapped them back to 1..n). For
+  // contiguous 1..k inputs this reproduces the historic result exactly;
+  // id-less arrays (fresh templating) keep the legacy by-index numbering.
+  const ids = ex.map((e) => Number(e?.id));
+  const idBased = ex.length > 0
+    && ids.every((v) => Number.isFinite(v) && v >= 1)
+    && new Set(ids).size === ex.length;
+  if (!idBased) return Array.from({ length: n }, (_, i) => normSeat(i + 1, ex[i]));
+  // Keep the n lowest-numbered chairs; fill up to n with blanks at the
+  // lowest free chair numbers.
+  const kept = [...ex]
+    .sort((a, b) => Number(a.id) - Number(b.id))
+    .slice(0, n)
+    .map((e) => normSeat(Number(e.id), e));
+  const taken = new Set(kept.map((s) => s.id));
+  let free = 1;
+  while (kept.length < n) {
+    while (taken.has(free)) free++;
+    kept.push(normSeat(free, undefined));
+    taken.add(free);
+  }
+  return kept.sort((a, b) => a.id - b.id);
+};
 
 export const fmt = d =>
   `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -290,27 +317,41 @@ export const reservationTableIds = (data, tableId) => {
   return grp.length > 1 ? grp : [Number(tableId)];
 };
 
-// Swap two seat POSITIONS on one table: the guests trade places, so the seat
-// payloads exchange ids AND each guest's positional restrictions follow them
+// Rearrange seat POSITIONS on one table. Both positions occupied → the guests
+// trade places (payloads exchange ids). Target position EMPTY → the guest
+// simply moves there, taking the new position number, and their old position
+// frees up. Either way each guest's positional restrictions follow them
 // (swapping only the seat objects left "P2 · GLU" pointing at whoever just
-// moved INTO P2). Missing seats are a no-op — spreading undefined would wipe
-// the other seat's data. Extracted pure from App's swapSeats so the floor's
-// drag-to-swap and the board's SwapPicker exercise one tested transform.
+// moved INTO P2). Dragging from an empty position is a no-op. Extracted pure
+// from App's swapSeats so the floor's drag gesture and the board's SwapPicker
+// exercise one tested transform.
 export const swapSeatData = (t, aId, bId) => {
   const a = Number(aId), b = Number(bId);
   const sA = (t.seats || []).find((s) => Number(s.id) === a);
   const sB = (t.seats || []).find((s) => Number(s.id) === b);
-  if (!sA || !sB) return t;
+  if (!sA) return t; // nobody sits at the source — nothing to move
+  if (sB) {
+    return {
+      ...t,
+      seats: t.seats.map((s) =>
+        Number(s.id) === a ? { ...sB, id: s.id }
+          : Number(s.id) === b ? { ...sA, id: s.id }
+          : s),
+      restrictions: (t.restrictions || []).map((r) =>
+        Number(r.pos) === a ? { ...r, pos: sB.id }
+          : Number(r.pos) === b ? { ...r, pos: sA.id }
+          : r),
+    };
+  }
+  // MOVE to an empty chair — the guest becomes P{b}; kept sorted so seat
+  // chips and pickers keep reading in position order.
   return {
     ...t,
-    seats: t.seats.map((s) =>
-      Number(s.id) === a ? { ...sB, id: s.id }
-        : Number(s.id) === b ? { ...sA, id: s.id }
-        : s),
+    seats: t.seats
+      .map((s) => (Number(s.id) === a ? { ...s, id: b } : s))
+      .sort((x, y) => Number(x.id) - Number(y.id)),
     restrictions: (t.restrictions || []).map((r) =>
-      Number(r.pos) === a ? { ...r, pos: sB.id }
-        : Number(r.pos) === b ? { ...r, pos: sA.id }
-        : r),
+      Number(r.pos) === a ? { ...r, pos: b } : r),
   };
 };
 
