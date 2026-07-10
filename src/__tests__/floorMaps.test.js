@@ -11,7 +11,7 @@ import {
   setTableMembers, setTableBoardIds,
   addMap, renameMap, duplicateMap, deleteMap, hasDefaultGeometry, resetMapToDefaults,
   sanitizeFloorStatus, floorStatusOf, setFloorStatus, cycleFloorStatus, mapTicker,
-  pruneFloorStatus,
+  pruneFloorStatus, clearStripsForBoardGroup,
   sheetOf, doorGeometry, hitTestSheet,
   addWall, setWallDashed, deleteWall, addDoorAt, patchOpening, deleteOpening,
   addZoneAt, patchZone, deleteZone, addPlanterAt, patchPlanter, deletePlanter,
@@ -473,6 +473,37 @@ describe("floor status (SET markers)", () => {
     maps = renameTable(maps, "dining_a", "T4", "T44");
     st = pruneFloorStatus(st, maps);
     expect(st).toEqual({});
+  });
+});
+
+describe("clearStripsForBoardGroup (SET follows the course it announced)", () => {
+  it("drops the dining strip of the fired table, leaves the others", () => {
+    const st = { dining_a: { T4: "SET", T8: "SET" } };
+    expect(clearStripsForBoardGroup(st, state, [], [4]))
+      .toEqual({ dining_a: { T8: "SET" } });
+  });
+
+  it("a merged tile clears through ANY of its group ids (courseReady lives on the primary)", () => {
+    const st = { dining_a: { "T2-3": "SET" } };
+    expect(clearStripsForBoardGroup(st, state, [], [2, 3])).toEqual({});
+    expect(clearStripsForBoardGroup(st, state, [], [2])).toEqual({});
+  });
+
+  it("clears the terrace strip through the party's reservation", () => {
+    const st = { terrace_main: { T23: "SET" }, dining_a: { T4: "SET" } };
+    const reservations = [res("r1", 9, { visit_state: "terrace", terrace_table: "T23" })];
+    expect(clearStripsForBoardGroup(st, state, reservations, [9]))
+      .toEqual({ dining_a: { T4: "SET" } });
+    // a different table firing leaves the terrace party's SET alone
+    expect(clearStripsForBoardGroup(st, state, reservations, [4]))
+      .toEqual({ terrace_main: { T23: "SET" } });
+  });
+
+  it("no ids / no matching strips → unchanged (sanitized)", () => {
+    const st = { dining_a: { T4: "SET" } };
+    expect(clearStripsForBoardGroup(st, state, [], [])).toEqual(st);
+    expect(clearStripsForBoardGroup(st, state, [], [9])).toEqual(st);
+    expect(clearStripsForBoardGroup(null, state, [], [4])).toEqual({});
   });
 });
 

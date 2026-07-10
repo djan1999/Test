@@ -145,18 +145,44 @@ describe("app harness — kitchen board through the real App", () => {
     expect(screen.queryByText("TICKETS")).toBeNull();
   }, 20000);
 
-  it("an unseated reservation shows as an UPCOMING banner on the kitchen board, not a ticket", async () => {
+  it("an unseated reservation shows as an upcoming banner in the ticket grid, not a ticket", async () => {
     seedLiveService();
     render(<App />);
     await enterKitchen();
 
     // Bruno (20:15, table 2) is booked but not seated — banner only.
-    await screen.findByText(/UPCOMING · 1/, {}, { timeout: 5000 });
-    expect(screen.getByText("Bruno Harness")).toBeTruthy();
+    await screen.findByText("Bruno Harness", {}, { timeout: 5000 });
     expect(screen.getByText("20:15")).toBeTruthy();
     // Anna's seated ticket carries the courses; Bruno's banner must not.
     expect(screen.getAllByText("Amuse")).toHaveLength(1);
   }, 20000);
+
+  it("firing the SET course drops the floor SET strip by itself (no manual un-tap)", async () => {
+    // FOH sent SET for Anna's next course (amuse): courseReady on the table,
+    // SET strip on her dining tile. The strip must clear the moment the
+    // kitchen fires that course — it used to persist until manually un-tapped
+    // (and even across services).
+    seedLiveService({
+      annaExtra: { courseReady: { key: "amuse", index: 1, name: "Amuse", at: "19:45" } },
+    });
+    const now = new Date().toISOString();
+    seed("service_settings", [{
+      id: "floor_status_v1",
+      state: { dining_a: { T1: "SET" } },
+      updated_at: now,
+    }]);
+    render(<App />);
+    await enterKitchen();
+
+    fireEvent.click(await screen.findByText("Amuse", {}, { timeout: 5000 }));
+    await waitFor(() => {
+      expect(rowFor(remoteRows("service_tables"), 1)?.data?.courseReady).toBeNull();
+    }, { timeout: 5000 });
+    await waitFor(() => {
+      const row = remoteRows("service_settings").find((r) => r.id === "floor_status_v1");
+      expect(row?.state || {}).toEqual({});
+    }, { timeout: 5000 });
+  }, 25000);
 
   it("a stale SET banner (course key no longer on the menu) self-heals on the kitchen board", async () => {
     // The SET snapshot points at a course key that a mid-service menu edit

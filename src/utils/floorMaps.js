@@ -936,6 +936,35 @@ export function cycleFloorStatus(status, mapId, label) {
   return setFloorStatus(status, mapId, label, cur ? null : "SET");
 }
 
+// A SET strip announces ONE course — when that course goes out the marker is
+// done and must drop by itself (strips used to persist until someone un-tapped
+// them, even across services). Given the board-table ids whose courseReady
+// just resolved (the whole tableGroup for merges), clear their strips on every
+// map: dining tiles match through boardIds, terrace tiles through the party's
+// reservation (the day's terrace occupancy).
+export function clearStripsForBoardGroup(status, mapsState, reservations, ids) {
+  const groupIds = new Set((ids || []).map(Number));
+  let next = sanitizeFloorStatus(status);
+  if (!groupIds.size) return next;
+  const occ = terraceOccupancy(reservations);
+  for (const m of mapsState?.maps || []) {
+    for (const t of m.tables || []) {
+      if (!floorStatusOf(next, m.id, t.label)) continue;
+      const match = m.kind === "terrace"
+        ? (() => {
+            const r = occ[t.label];
+            if (!r) return false;
+            const grp = Array.isArray(r.data?.tableGroup) ? r.data.tableGroup.map(Number) : [];
+            const rIds = grp.length > 1 ? grp : [Number(r.table_id)];
+            return rIds.some((id) => groupIds.has(id));
+          })()
+        : boardIdsOf(t).some((id) => groupIds.has(Number(id)));
+      if (match) next = setFloorStatus(next, m.id, t.label, null);
+    }
+  }
+  return next;
+}
+
 // ── ticker counts ───────────────────────────────────────────────────────────
 // Pure aggregation for the strip above the canvas: COVERS · SEATED · RES ·
 // SET n. `entries` is the visible map's per-table presentation (status, pax,

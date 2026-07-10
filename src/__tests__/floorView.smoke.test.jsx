@@ -175,35 +175,54 @@ describe("stranded terrace parties (no reachable tile)", () => {
   });
 });
 
-describe("terrace SET FOR BITES", () => {
-  it("free-table sheet toggles the strip and closes", () => {
-    const { container, handlers, getByText, queryByText } = setup();
-    fireEvent.click(getByText("TERRACE"));
-    fireEvent.click(findTable(container, "T25")); // free
-    fireEvent.click(getByText("SET FOR BITES"));
-    expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T25");
-    expect(queryByText("ASSIGN PARTY")).toBeNull(); // sheet closed
-  });
-
-  it("an already-SET table offers UNSET instead, and its strip shows on the tile", () => {
-    const { container, handlers, getByText, queryByText } = setup({
-      floorStatus: { terrace_main: { T25: "SET" } },
-    });
-    fireEvent.click(getByText("TERRACE"));
-    expect(container.textContent).toContain("SET"); // strip on the T25 tile
-    fireEvent.click(findTable(container, "T25"));
-    expect(queryByText("SET FOR BITES")).toBeNull();
-    fireEvent.click(getByText("UNSET"));
-    expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T25");
-  });
-
-  it("an occupied party's sheet carries the toggle next to its move/clear actions", () => {
-    const { container, handlers, getByText } = setup();
+describe("terrace SET → KITCHEN (same handshake as the dining room)", () => {
+  it("an occupied party's sheet sends SET for the next course AND turns the strip on", () => {
+    const onSend = vi.fn();
+    const { container, handlers, getByText } = setup({ onSendSetToKitchen: onSend });
     fireEvent.click(getByText("TERRACE"));
     fireEvent.click(findTable(container, "T23")); // WEISS's table
     getByText(/MOVE TO T9/); // still the party sheet…
-    fireEvent.click(getByText("SET FOR BITES")); // …with the bites toggle
+    fireEvent.click(getByText("SET → KITCHEN"));
+    // …and SET informs the kitchen: the party's board table (T9) gets the
+    // courseReady handshake, exactly like a dining SEND
+    expect(onSend).toHaveBeenCalledWith([9]);
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T23");
+    expect(container.textContent).toContain("SET → KITCHEN ✓");
+  });
+
+  it("an already-SET party offers UNSET instead — no double-send", () => {
+    const onSend = vi.fn();
+    const { container, handlers, getByText, queryByText } = setup({
+      floorStatus: { terrace_main: { T23: "SET" } },
+      onSendSetToKitchen: onSend,
+    });
+    fireEvent.click(getByText("TERRACE"));
+    expect(container.textContent).toContain("SET"); // strip on the T23 tile
+    fireEvent.click(findTable(container, "T23"));
+    expect(queryByText("SET → KITCHEN")).toBeNull();
+    fireEvent.click(getByText("UNSET"));
+    expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T23");
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("a free terrace table has NO set control ('set for bites' is retired)", () => {
+    const { container, getByText, queryByText } = setup({ onSendSetToKitchen: vi.fn() });
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(findTable(container, "T25")); // free
+    getByText("ASSIGN PARTY"); // the sheet is purely the assign picker
+    expect(queryByText("SET FOR BITES")).toBeNull();
+    expect(queryByText("SET → KITCHEN")).toBeNull();
+  });
+
+  it("a leftover strip on a now-free table still offers UNSET so it can't get stuck", () => {
+    const { container, handlers, getByText } = setup({
+      floorStatus: { terrace_main: { T25: "SET" } },
+      onSendSetToKitchen: vi.fn(),
+    });
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(findTable(container, "T25"));
+    fireEvent.click(getByText("UNSET"));
+    expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T25");
   });
 });
 

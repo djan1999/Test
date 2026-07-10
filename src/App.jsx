@@ -54,6 +54,7 @@ import {
   getActiveDiningMap, getTerraceMap, mapSeatCountForBoardTable,
   terraceOccupancy, applyLayoutSwitchRow, resolveReservationTable,
   sanitizeFloorStatus, setFloorStatus, cycleFloorStatus, pruneFloorStatus,
+  clearStripsForBoardGroup,
 } from "./utils/floorMaps.js";
 import {
   visitStateOf,
@@ -3477,6 +3478,10 @@ export default function App() {
       if (Number.isFinite(ts)) lastBoardWriteRef.current.set(Number(row.table_id), ts);
     }
     setTables(blank);
+    // SET strips are hands-calls for THIS service — they must not greet the
+    // next one. Local clear only: adopting devices never write; the ending
+    // device persists the empty blob itself (see archive/auto-end paths).
+    setFloorStatusState({});
     setServiceDate(null);
     setServiceDateChosenOn(null);
     serviceDateRef.current = null;
@@ -3529,6 +3534,9 @@ export default function App() {
         return;
       }
       applyFinishedServiceLocally(result.rows);
+      // Persist the strip wipe so the store's floor_status doesn't carry this
+      // service's SET markers into the next one (adopters only clear locally).
+      updateFloorStatus({});
       setSel(null);
       setArchiveOpen(false);
       // Return to mode selection after archiving
@@ -3637,6 +3645,8 @@ export default function App() {
       return;
     }
     applyFinishedServiceLocally(result.rows);
+    // The auto-ended service's SET markers must not survive into the next one.
+    updateFloorStatus({});
     setSel(null);
     changeMode(null);
   };
@@ -4110,6 +4120,38 @@ export default function App() {
     });
   }, [activeMenuCourses, tablesJson, mode, profilesState]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── SET strips follow the course they announced ─────────────────────────────
+  // A floor SET marker means "this table is set for the course we sent". The
+  // moment that course goes out (fire() resolves courseReady), the strip must
+  // drop by itself — it used to persist until someone manually un-tapped it,
+  // and even across services. Transition-detected on whichever device observes
+  // courseReady resolve (the firing kitchen sees its own write immediately);
+  // the cleared blob syncs through FLOOR_STATUS_KEY like every strip write.
+  const prevReadyKeysRef = useRef(null);
+  // Clears queue until the floor-status blob has hydrated: judging against the
+  // boot-empty {} would consume the transition without writing anything, and
+  // the strip would survive after all. Local-only mode has nothing to wait for.
+  const floorStatusHydratedRef = useRef(!supabase);
+  const pendingStripClearsRef = useRef([]);
+  useEffect(() => {
+    const prev = prevReadyKeysRef.current;
+    const cur = {};
+    tables.forEach(t => { cur[t.id] = t.courseReady?.key || null; });
+    prevReadyKeysRef.current = cur;
+    if (prev) {
+      tables.forEach(t => {
+        if (prev[t.id] && !cur[t.id]) {
+          pendingStripClearsRef.current.push(...(t.tableGroup?.length ? t.tableGroup : [t.id]));
+        }
+      });
+    }
+    if (!floorStatusHydratedRef.current || !pendingStripClearsRef.current.length) return;
+    const ids = pendingStripClearsRef.current;
+    pendingStripClearsRef.current = [];
+    const next = clearStripsForBoardGroup(floorStatus, floorMapsState, serviceReservations, ids);
+    if (JSON.stringify(next) !== JSON.stringify(sanitizeFloorStatus(floorStatus))) updateFloorStatus(next);
+  }, [tablesJson, floorStatus, floorMapsState, serviceReservations]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Autosave: write changed board rows to the store ─────────────────────────
   // Diffs the sanitized tables against the last-written baseline and writes
   // ONLY the changed rows — to local SQLite when primary (instant, offline-safe,
@@ -4581,7 +4623,10 @@ export default function App() {
   // as every other settings blob. Terrace occupancy itself is derived from
   // reservations; only the map definitions and SET markers persist here.
   useEffect(() => {
-    if (!supabase || !psResolved) return;
+    // workspaceId is part of the gate (and deps): keyed on psResolved alone
+    // this ran before the workspace was applied on a fresh login, read null
+    // and never retried — maps and strips silently stayed at defaults.
+    if (!supabase || !workspaceId || !psResolved) return;
     withRetry(() => Promise.all([
       readStateKey(FLOOR_MAPS_KEY),
       readStateKey(FLOOR_STATUS_KEY),
@@ -4593,9 +4638,12 @@ export default function App() {
         // strips already orphaned in the store by an old map edit — ADOPT
         // only, never written back at boot (a loading device must not write).
         setFloorStatusState(pruneFloorStatus(fs, maps));
+        // The strip-follows-courseReady watcher may hold clears queued from
+        // before this blob arrived — it can trust local state from here on.
+        floorStatusHydratedRef.current = true;
       })
       .catch(() => {});
-  }, [psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workspaceId, psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateFloorMaps = (next) => {
     const s = sanitizeFloorMaps(next);
@@ -5738,9 +5786,19 @@ export default function App() {
                 // delta, so 'send SET' also re-sent pairings and every earlier
                 // change to the kitchen (orders were already sent once — the
                 // ticket still shows them; the alert must not repeat them).
+                // Board tables whose party is still out on the terrace already
+                // have a live kitchen ticket (kitchenTables decoration), so a
+                // terrace SET must reach it even though the dining table isn't
+                // seated yet.
+                const terraceIds = new Set();
+                serviceReservations.forEach(r => {
+                  if (visitStateOf(r.data) !== "terrace") return;
+                  reservationTableIds(r.data, r.table_id).forEach(tid => terraceIds.add(Number(tid)));
+                });
                 for (const id of boardIds) {
                   const t = tablesRef.current?.find(x => x.id === id);
-                  if (!t?.active) continue;
+                  if (!t) continue;
+                  if (!t.active && !terraceIds.has(t.id)) continue;
                   const visible = getVisibleCoursesForTable(t, activeMenuCourses, {
                     profiles: profilesState.profiles, assignments: profilesState.assignments,
                   });

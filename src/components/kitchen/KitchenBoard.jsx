@@ -299,10 +299,9 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
   const pLabel = p => p === "Non-Alc" ? "N/A" : p === "Our Story" ? "O.S." : p === "Premium" ? "Prem" : p === "Wine" ? "Wine" : p;
 
-  // Slow/Fast pace toggles. Roomy mode shows them in their own PACE row;
-  // compact offers them in the quick-access drawer instead, keeping the
-  // header free for the guest name. They stop pointer events so a tap
-  // never starts the header drag.
+  // Slow/Fast pace toggles — offered ONLY in the quick-access drawer (per
+  // Djan); the header badge above is the always-visible indicator. They stop
+  // pointer events so a tap never starts the header drag.
   const paceButtons = ["Slow", "Fast"].map(p => {
     const colors = { Slow: { on: tokens.ink[0], bg: tokens.neutral[0], border: tokens.charcoal.default }, Fast: { on: tokens.red.text, bg: tokens.red.bg, border: tokens.red.border } };
     const active = table.pace === p;
@@ -568,14 +567,6 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* ── Pace ── (compact offers pace via the quick-access drawer instead) */}
-      {!compact && (
-        <div style={{ background: tokens.neutral[0], padding: dz.rowPad, display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase", flexShrink: 0 }}>PACE</span>
-          {paceButtons}
         </div>
       )}
 
@@ -1106,6 +1097,41 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
   );
 }
 
+// Upcoming reservation banner — the ticket's header-level facts only (time,
+// table, pax, restrictions…), no courses. It sits in the grid slot the full
+// ticket will occupy once the table is seated, so it stays small (dashed
+// border = "not in yet") and simply expands in place on the seat.
+export function UpcomingBanner({ table: t, compact = false }) {
+  const label = t.tableGroup?.length > 1 ? `T${t.tableGroup.join("-")}` : `T${t.id}`;
+  const pax = t.guests || (t.seats || []).length || 0;
+  const isShort = String(t.menuType || "").trim().toLowerCase() === "short";
+  const restrNotes = [...new Set((t.restrictions || []).map(r => r?.note).filter(Boolean).map(restrLabel))];
+  const rooms = Array.isArray(t.rooms) && t.rooms.length ? t.rooms.filter(Boolean) : (t.room ? [t.room] : []);
+  return (
+    <div style={{
+      border: `1px dashed ${CARD_BORDER}`, borderRadius: 0, background: tokens.neutral[0],
+      padding: compact ? "5px 9px" : "7px 11px", display: "flex", flexDirection: "column",
+      gap: 3, minWidth: 0,
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 7, minWidth: 0 }}>
+        {t.resTime && <span style={{ fontFamily: FONT, fontSize: compact ? 13 : 14, fontWeight: 800, color: tokens.ink[0], letterSpacing: "-0.01em", flexShrink: 0 }}>{t.resTime}</span>}
+        <span style={{ fontFamily: FONT, fontSize: compact ? 11 : 12, fontWeight: 700, color: tokens.ink[1], flexShrink: 0 }}>{label}</span>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: tokens.ink[0], flexShrink: 0 }}>{pax} <span style={{ fontWeight: 400, fontSize: 9, letterSpacing: "0.06em" }}>PAX</span></span>
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
+        {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 600, letterSpacing: "0.08em", padding: "0 3px", background: tokens.ink[5], color: tokens.ink[3], flexShrink: 0 }}>{isShort ? "SHORT" : "LONG"}</span>}
+        {t.resName && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{t.resName}</span>}
+        {t.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3], letterSpacing: "0.06em", flexShrink: 0 }}>{rooms.length ? `#${rooms.join(", ")}` : "Hotel"}</span>}
+        {t.birthday && <span style={{ fontSize: 10, flexShrink: 0 }}>🎂</span>}
+      </div>
+      {restrNotes.length > 0 && (
+        <div style={{ fontFamily: FONT, fontSize: 9, fontWeight: 600, color: tokens.red.text, letterSpacing: "0.04em" }}>{restrNotes.join(" · ")}</div>
+      )}
+    </div>
+  );
+}
+
 export default function KitchenBoard({ tables, menuCourses, upd, updMany, profiles = [], assignments = {}, historyGapsByMenu = null, persistedOrder = null, onOrderChange = null }) {
   // A party still out on the terrace (t._visit, decorated by App) gets its
   // ticket BEFORE the dining table is seated — the kitchen fires the opening
@@ -1113,16 +1139,22 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
   const activeTables = tables
     .filter(t => (t.active || t._visit?.visit === "terrace") && !t.kitchenArchived)
     .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
-  const activeIds = activeTables.map(t => t.id).join(",");
 
-  // Reservations that haven't been seated yet — surfaced as slim banners so
-  // the chef sees what's coming (time, table, pax, restrictions) without the
-  // ticket itself. The full ticket only appears when the table is seated
-  // (t.active) or the party is already out on the terrace.
+  // Reservations that haven't been seated yet — slim banner cards that OCCUPY
+  // the grid slot their ticket will use, in reservation-time order, so the
+  // chef sees what's coming (time, table, pax, restrictions) and the card
+  // simply expands into the full ticket when the table is seated (t.active)
+  // or the party heads out to the terrace.
   const upcomingTables = tables
     .filter(t => !t.active && t._visit?.visit !== "terrace" && (t.resTime || t.resName))
-    .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup))
-    .sort((a, b) => (parseHHMM(a.resTime) ?? 24 * 60) - (parseHHMM(b.resTime) ?? 24 * 60));
+    .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
+  const upcomingIds = new Set(upcomingTables.map(t => t.id));
+  const displayTables = [...activeTables, ...upcomingTables];
+  const displayIds = displayTables.map(t => t.id).join(",");
+  // New (unordered) cards slot in by reservation time so a banner sits where
+  // its ticket belongs in the night's timeline.
+  const timeOrdered = (list) => [...list].sort((a, b) =>
+    ((parseHHMM(a.resTime) ?? 24 * 60) - (parseHHMM(b.resTime) ?? 24 * 60)) || (a.id - b.id));
 
   // Tickets archived while their table/party is still LIVE. Archive was a
   // one-way door from the kitchen's side — a mis-tap hid a live ticket and
@@ -1135,9 +1167,11 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
   const [showArchived, setShowArchived] = useState(false);
 
   // Seed from the persisted expediter order (it used to be local state only,
-  // so a refresh scrambled the board back to table-id order).
+  // so a refresh scrambled the board back to table-id order). The order now
+  // spans BOTH tickets and upcoming banners — a banner holds the grid slot
+  // its ticket will expand into, so seating a table never reshuffles the wall.
   const [order, setOrder] = useState(() => {
-    const ids = activeTables.map(t => t.id);
+    const ids = timeOrdered(displayTables).map(t => t.id);
     if (!Array.isArray(persistedOrder) || persistedOrder.length === 0) return ids;
     const idSet = new Set(ids);
     const kept = persistedOrder.filter(id => idSet.has(id));
@@ -1171,15 +1205,16 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
   const largeBoard = !useIsMobile(LARGE_BOARD_BP);
   const compact = largeBoard;
 
-  // Keep order in sync when tables are added/removed
+  // Keep order in sync when tables/banners are added/removed. A seated table
+  // keeps the slot its banner held; brand-new cards slot in by time.
   useEffect(() => {
     setOrder(prev => {
-      const activeIdSet = new Set(activeTables.map(t => t.id));
-      const kept = prev.filter(id => activeIdSet.has(id));
-      const added = activeTables.map(t => t.id).filter(id => !kept.includes(id));
+      const idSet = new Set(displayTables.map(t => t.id));
+      const kept = prev.filter(id => idSet.has(id));
+      const added = timeOrdered(displayTables.filter(t => !kept.includes(t.id))).map(t => t.id);
       return [...kept, ...added];
     });
-  }, [activeIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [displayIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Adopt another device's reordering (realtime push) — but never mid-drag.
   const persistedOrderJson = JSON.stringify(persistedOrder || []);
@@ -1187,13 +1222,13 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     if (activeId) return; // a drag is in progress — local hand wins
     if (!Array.isArray(persistedOrder) || persistedOrder.length === 0) return;
     setOrder(prev => {
-      const activeIdSet = new Set(activeTables.map(t => t.id));
-      const kept = persistedOrder.filter(id => activeIdSet.has(id));
-      const added = prev.filter(id => activeIdSet.has(id) && !kept.includes(id));
+      const idSet = new Set(displayTables.map(t => t.id));
+      const kept = persistedOrder.filter(id => idSet.has(id));
+      const added = prev.filter(id => idSet.has(id) && !kept.includes(id));
       const next = [...kept, ...added];
       return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
     });
-  }, [persistedOrderJson, activeIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [persistedOrderJson, displayIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
@@ -1211,44 +1246,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     const snap = pendingAlerts.find(a => a.tableId === tableId)?.alert?.snapshot;
     updMany(tableId, snap ? { kitchenAlert: null, kitchenSent: snap } : { kitchenAlert: null });
   };
-
-  // Upcoming banner strip — rendered in BOTH branches below: before the first
-  // seat of the night the grid is empty, and that is exactly when the chef
-  // needs to see what's booked.
-  const upcomingStrip = upcomingTables.length > 0 && (
-    <div style={{ marginBottom: compact ? 8 : 12 }}>
-      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.16em", textTransform: "uppercase", color: tokens.ink[3], marginBottom: 5 }}>
-        UPCOMING · {upcomingTables.length}
-      </div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {upcomingTables.map(t => {
-          const label = t.tableGroup?.length > 1 ? `T${t.tableGroup.join("-")}` : `T${t.id}`;
-          const pax = t.guests || (t.seats || []).length || 0;
-          const isShort = String(t.menuType || "").trim().toLowerCase() === "short";
-          const restrNotes = [...new Set((t.restrictions || []).map(r => r?.note).filter(Boolean).map(restrLabel))];
-          const rooms = Array.isArray(t.rooms) && t.rooms.length ? t.rooms.filter(Boolean) : (t.room ? [t.room] : []);
-          return (
-            <div key={t.id} style={{
-              border: `1px solid ${CARD_BORDER}`, borderRadius: 0, background: tokens.neutral[0],
-              padding: compact ? "4px 9px" : "6px 11px", display: "flex", alignItems: "baseline",
-              gap: 8, flexWrap: "wrap", maxWidth: "100%",
-            }}>
-              {t.resTime && <span style={{ fontFamily: FONT, fontSize: compact ? 12 : 13, fontWeight: 800, color: tokens.ink[0], letterSpacing: "-0.01em" }}>{t.resTime}</span>}
-              <span style={{ fontFamily: FONT, fontSize: compact ? 11 : 12, fontWeight: 700, color: tokens.ink[1] }}>{label}</span>
-              <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: tokens.ink[0] }}>{pax} <span style={{ fontWeight: 400, fontSize: 9, letterSpacing: "0.06em" }}>PAX</span></span>
-              {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 600, letterSpacing: "0.08em", padding: "0 3px", background: tokens.ink[5], color: tokens.ink[3] }}>{isShort ? "SHORT" : "LONG"}</span>}
-              {t.resName && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{t.resName}</span>}
-              {t.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3], letterSpacing: "0.06em" }}>{rooms.length ? `#${rooms.join(", ")}` : "Hotel"}</span>}
-              {t.birthday && <span style={{ fontSize: 10 }}>🎂</span>}
-              {restrNotes.length > 0 && (
-                <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 600, color: tokens.red.text, letterSpacing: "0.04em" }}>{restrNotes.join(" · ")}</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 
   // Rendered in BOTH branches below — with every live ticket archived the
   // grid is empty, and that is exactly when the way back matters most.
@@ -1288,10 +1285,9 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     </div>
   );
 
-  if (activeTables.length === 0) return (
+  if (displayTables.length === 0) return (
     <>
-      {upcomingStrip}
-      <div style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[4], textAlign: "center", paddingTop: upcomingTables.length > 0 ? 40 : 80 }}>
+      <div style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[4], textAlign: "center", paddingTop: 80 }}>
         No active tables
       </div>
       {archivedStrip}
@@ -1299,7 +1295,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     </>
   );
 
-  const orderedTables = order.map(id => activeTables.find(t => t.id === id)).filter(Boolean);
+  const orderedTables = order.map(id => displayTables.find(t => t.id === id)).filter(Boolean);
   const activeTable  = activeId ? activeTables.find(t => t.id === activeId) : null;
 
   return (
@@ -1331,11 +1327,11 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     >
       <SortableContext items={order} strategy={rectSortingStrategy}>
         <div style={{ paddingBottom: 8 }}>
-          {upcomingStrip}
           {/* Responsive grid. Large boards (≥1100px, e.g. a 32" 1280×720 panel)
               always run 5 fixed columns so 10 tickets show as two full rows
               and a sparse board keeps the same ticket size. Narrower screens
-              auto-fill. */}
+              auto-fill. Upcoming banners share the grid: each one holds the
+              cell its ticket expands into on seating. */}
           <div style={{
             display: "grid",
             gridTemplateColumns: largeBoard
@@ -1344,7 +1340,9 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
             alignItems: "start",
             gap: compact ? 8 : 12,
           }}>
-            {orderedTables.map(t => (
+            {orderedTables.map(t => upcomingIds.has(t.id) ? (
+              <UpcomingBanner key={t.id} table={t} compact={compact} />
+            ) : (
               <SortableTicket
                 key={t.id}
                 table={t}

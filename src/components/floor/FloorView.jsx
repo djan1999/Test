@@ -216,20 +216,37 @@ export default function FloorView({
 
   const sheetBody = () => {
     if (map.kind === "terrace") {
-      // Terrace tables are settable too ("set for bites"): the same
-      // floor_status_v1 strip the dining tables use, toggled from the sheet
-      // (a terrace body-tap must keep opening the sheet — it carries assign/
-      // move actions a status cycle can't mean). The kitchen's terrace tab
-      // already renders these strips live, so SET is visible there instantly.
+      // Terrace SET works exactly like the dining room's (per Djan — the old
+      // "set for bites" toggle told the kitchen nothing): one press in the
+      // sheet raises the SAME kitchen banner, courseReady for the party's
+      // next unfired course, and turns the strip on. The strip then clears
+      // by itself when that course fires (App's courseReady-resolve watcher).
       const sheetStrip = floorStatusOf(floorStatus, map.id, sheetLabel);
-      const setToggle = (
-        <button
-          style={actionBtn(sheetStrip !== "SET")}
-          onClick={() => { onCycleStatus(map.id, sheetLabel); setSheetLabel(null); }}>
-          {sheetStrip === "SET" ? "UNSET" : "SET FOR BITES"}
-        </button>
-      );
       if (sheetParty) {
+        // A merged group's kitchen ticket lives on the PRIMARY board table.
+        const primaryBoardId = (() => {
+          const tid = Number(sheetParty.table_id);
+          const bt = tables.find((x) => x.id === tid);
+          return bt?.tableGroup?.length ? Math.min(...bt.tableGroup.map(Number)) : tid;
+        })();
+        const setToggle = sheetStrip === "SET" ? (
+          <button
+            style={actionBtn(false)}
+            onClick={() => { onCycleStatus(map.id, sheetLabel); setSheetLabel(null); }}>
+            UNSET
+          </button>
+        ) : (
+          <button
+            style={actionBtn(true)}
+            onClick={() => {
+              onSendSetToKitchen?.([primaryBoardId]);
+              onCycleStatus(map.id, sheetLabel);
+              flash(`${sheetLabel} SET → KITCHEN ✓`);
+              setSheetLabel(null);
+            }}>
+            SET → KITCHEN
+          </button>
+        );
         // the runner's crib sheet: waters by seat position + pairings, from
         // the party's board table (no reservation name — per Djan)
         const bt = tables.find((x) => x.id === Number(sheetParty.table_id)) || null;
@@ -268,11 +285,20 @@ export default function FloorView({
           </div>
         );
       }
+      // Free terrace table — no SET here: with no party there is no course to
+      // announce, so the sheet is purely the assign picker. (A leftover strip
+      // from a departed party still offers UNSET so it can't get stuck.)
       return (
         <div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-            {setToggle}
-          </div>
+          {sheetStrip === "SET" && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+              <button
+                style={actionBtn(false)}
+                onClick={() => { onCycleStatus(map.id, sheetLabel); setSheetLabel(null); }}>
+                UNSET
+              </button>
+            </div>
+          )}
           <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.12em", color: tokens.ink[3], textTransform: "uppercase", margin: "2px 0 6px" }}>
             ASSIGN PARTY
           </div>
