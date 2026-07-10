@@ -2,10 +2,16 @@ import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
 
+// Baked in at build time (vite define) — "which version is this tablet
+// actually running" must be answerable from a phone screenshot.
+const BUILD_ID = typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "dev";
+
 // ── SystemPanel — Supabase connection status, realtime, environment, debug ──
 export default function SystemPanel({
   syncStatus,
   powerSync = null,
+  sqlitePrimary = false,
+  lastSyncError = null,
   supabaseUrl,
   hasSupabase,
   onSyncWines,
@@ -85,6 +91,30 @@ export default function SystemPanel({
               {hasSupabase ? "Production" : "Local"}
             </span>
           </div>
+          {/* Storage mode + build — the two facts every remote diagnosis needs:
+              is this device local-first or on the direct fallback, and which
+              build is it actually running (installed PWAs cache old bundles). */}
+          <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "12px 16px", minWidth: 160 }}>
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 6 }}>Storage Mode</div>
+            <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: sqlitePrimary ? tokens.green.text : tokens.ink[1] }}>
+              {sqlitePrimary ? "Local-first (SQLite)" : "Direct (fallback)"}
+            </span>
+          </div>
+          <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "12px 16px", minWidth: 200 }}>
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 6 }}>App Build</div>
+            <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[1], wordBreak: "break-word" }}>{BUILD_ID}</span>
+          </div>
+          {lastSyncError && (
+            <div style={{ border: `1px solid ${tokens.red.border}`, background: tokens.red.bg, borderRadius: 0, padding: "12px 16px", minWidth: 220, maxWidth: 420 }}>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.red.text, textTransform: "uppercase", marginBottom: 6 }}>Last Sync Error</div>
+              <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, wordBreak: "break-word" }}>
+                <span style={{ color: tokens.ink[2] }}>
+                  [{new Date(lastSyncError.at).toLocaleTimeString("sl-SI", { hour: "2-digit", minute: "2-digit" })}] {lastSyncError.source}:{" "}
+                </span>
+                {lastSyncError.msg}
+              </div>
+            </div>
+          )}
           {/* Sync engine (PowerSync) — the STREAM's own state and, crucially,
               its last error string, so a device stuck on LINK/ERROR tells us
               WHY from this panel alone (no DevTools needed on a phone). */}

@@ -2330,6 +2330,14 @@ export default function App() {
   const [inventoryOpen,  setInventoryOpen]  = useState(false);
   const [addResOpen,     setAddResOpen]     = useState(false);
   const [syncStatus,   setSyncStatus]   = useState(hasSupabaseConfig ? "connecting" : "local-only");
+  // The LAST direct-Supabase failure, kept for the admin SYSTEM panel: a bare
+  // "Error" light stalled the 10.07 rollout diagnosis for an hour — the panel
+  // must say WHAT failed and WHEN, phone-screenshot-friendly, no DevTools.
+  const [lastSyncError, setLastSyncError] = useState(null);
+  const noteSyncError = (source, error) => setLastSyncError({
+    at: Date.now(), source,
+    msg: String(error?.message || error?.code || error || "unknown"),
+  });
   const [logoDataUri,  setLogoDataUri]  = useState(() => readLocalLogo() || "");
   const [wineSyncConfig, setWineSyncConfig] = useState(() => {
     try { return normalizeSyncConfig(JSON.parse(localStorage.getItem(workspaceKey(SYNC_CONFIG_KEY)) || "null")); } catch { return DEFAULT_SYNC_CONFIG; }
@@ -2653,6 +2661,7 @@ export default function App() {
           // keeps folding around them; the re-added ids retry on the heartbeat.
           rows.forEach(r => pendingBoardWritesRef.current.add(r.table_id));
           setSyncStatus("sync-error");
+          noteSyncError("board save", lastError);
           console.error("Save failed after 4 attempts:", lastError);
         }
       } while (flushAgainRef.current);
@@ -4714,6 +4723,7 @@ export default function App() {
         // reconcile/saves stay disabled. The poll and the visibilitychange
         // refetch keep retrying and flip the gate on the first success.
         setSyncStatus("sync-error");
+        noteSyncError("board load (fallback)", error);
         return;
       }
 
@@ -4821,14 +4831,22 @@ export default function App() {
   useEffect(() => {
     if (!hasSupabaseConfig || !sqlitePrimary) return undefined;
     if (anyTransportUp) {
-      setSyncStatus(prev => (prev === "sync-error" ? prev : "live"));
+      // On the LOCAL-FIRST path a connected stream with no upload/download
+      // error IS healthy — clear a stale sync-error instead of keeping it
+      // sticky. The sticky rule exists for the FALLBACK path (where "live"
+      // must be earned by a successful direct op); here it left tablets
+      // showing a permanent ERROR/Inactive panel from one failed boot-window
+      // fallback probe, masking a perfectly working device (10.07 rollout).
+      // A genuinely failing upload keeps the error: streamError stays set.
+      setSyncStatus(prev =>
+        (prev === "sync-error" && powerSyncStatus?.streamError ? prev : "live"));
       return undefined;
     }
     const t = setTimeout(() => {
       setSyncStatus(prev => (prev === "local-only" || prev === "sync-error") ? prev : "connecting");
     }, 7000);
     return () => clearTimeout(t);
-  }, [anyTransportUp, hasSupabaseConfig, sqlitePrimary]);
+  }, [anyTransportUp, hasSupabaseConfig, sqlitePrimary, powerSyncStatus?.streamError]);
 
   // ── Primary read path: SQLite watches drive every load + live update ─────────
   // Each watch re-runs its reader whenever the underlying table changes — a
@@ -5544,6 +5562,8 @@ export default function App() {
         onSyncWines={syncWines}
         syncStatus={syncStatus}
         powerSync={powerSyncStatus}
+        sqlitePrimary={sqlitePrimary}
+        lastSyncError={lastSyncError}
         supabaseUrl={supabaseUrl}
         hasSupabase={hasSupabaseConfig}
         logoDataUri={logoDataUri}
