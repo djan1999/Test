@@ -7,6 +7,9 @@ import {
 } from "../../utils/floorMaps.js";
 import { visitStateOf } from "../../utils/terraceFlow.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
+import {
+  floorPositionKey, seatFloorPosition, restrictionsAtFloorPositions,
+} from "../../utils/tableHelpers.js";
 
 const FONT = tokens.font;
 
@@ -114,20 +117,20 @@ export default function FloorView({
     const water = s.water && s.water !== "—" ? String(s.water).toUpperCase() : "";
     return [water, pairingCode(s.pairing)].filter(Boolean).join("·");
   };
-  const seatNotesOf = (bt) => {
+  const seatNotesOf = (bt, positionKey) => {
     const notes = {};
     for (const s of bt?.seats || []) {
       const note = bevNote(s);
-      if (note) notes[Number(s.id)] = note;
+      if (note) notes[seatFloorPosition(s, positionKey)] = note;
     }
     return Object.keys(notes).length ? notes : null;
   };
   // Chairs outline in the seat's gender color (Mr blue / Mrs pink) so the
   // runner can address the right guest from the map.
-  const seatGendersOf = (bt) => {
+  const seatGendersOf = (bt, positionKey) => {
     const out = {};
     for (const s of bt?.seats || []) {
-      if (s.gender === "Mr" || s.gender === "Mrs") out[Number(s.id)] = s.gender;
+      if (s.gender === "Mr" || s.gender === "Mrs") out[seatFloorPosition(s, positionKey)] = s.gender;
     }
     return Object.keys(out).length ? out : null;
   };
@@ -148,10 +151,12 @@ export default function FloorView({
   const seatGendersByLabel = {};
   for (const t of map.tables || []) {
     const strip = floorStatusOf(floorStatus, map.id, t.label);
+    const positionKey = floorPositionKey(map.id, t.label);
     if (map.kind === "terrace") {
       const r = occ[t.label];
       const bt = terracePartyBoardTable(r);
-      const restr = ((bt?.restrictions?.length ? bt.restrictions : r?.data?.restrictions) || [])
+      const restrSource = (bt?.restrictions?.length ? bt.restrictions : r?.data?.restrictions) || [];
+      const restr = restrictionsAtFloorPositions(bt?.seats || [], restrSource, positionKey)
         .filter((x) => x && x.note);
       tableState[t.label] = r
         ? {
@@ -165,17 +170,18 @@ export default function FloorView({
         : { status: "free", strip };
       if (restr.length) restrictionsByLabel[t.label] = restr;
       if (bt) {
-        const notes = seatNotesOf(bt);
+        const notes = seatNotesOf(bt, positionKey);
         if (notes) seatNotesByLabel[t.label] = notes;
-        const genders = seatGendersOf(bt);
+        const genders = seatGendersOf(bt, positionKey);
         if (genders) seatGendersByLabel[t.label] = genders;
       }
     } else {
       const bt = boardTableOf(t);
       const arriving = arrivingOf(t);
-      const restr = (bt?.restrictions || []).filter((x) => x && x.note);
+      const restr = restrictionsAtFloorPositions(bt?.seats || [], bt?.restrictions || [], positionKey)
+        .filter((x) => x && x.note);
       if (bt) {
-        const genders = seatGendersOf(bt);
+        const genders = seatGendersOf(bt, positionKey);
         if (genders) seatGendersByLabel[t.label] = genders;
       }
       if (bt?.active) {
@@ -185,7 +191,7 @@ export default function FloorView({
           allergy: restr.length > 0,
           strip,
         };
-        const notes = seatNotesOf(bt);
+        const notes = seatNotesOf(bt, positionKey);
         if (notes) seatNotesByLabel[t.label] = notes;
       } else if (arriving) {
         tableState[t.label] = {
@@ -210,18 +216,22 @@ export default function FloorView({
 
   const ticker = mapTicker(Object.values(tableState));
 
-  // Drag a chair onto another chair of the same table → swap those two
-  // positions' guests (seat payloads + their positional restrictions, via
-  // App's swapSeats). Works on dining tiles and terrace tiles alike — the
-  // swap always lands on the party's board table.
+  // Drag a chair onto another chair of the same table. P-numbers stay tied to
+  // guests; only their physical chair assignment for this map/table changes.
   const swapSeatPositions = (label, aNo, bNo) => {
     if (!onSwapSeats) return;
     const bt = map.kind === "terrace"
       ? terracePartyBoardTable(occ[label])
       : boardTableOf((map.tables || []).find((x) => x.label === label));
     if (!bt) return;
-    onSwapSeats(bt.id, Number(aNo), Number(bNo));
-    flash(`${label} · P${aNo} ⇄ P${bNo}`);
+    const positionKey = floorPositionKey(map.id, label);
+    const source = (bt.seats || []).find((seat) => seatFloorPosition(seat, positionKey) === Number(aNo));
+    if (!source) return;
+    const target = (bt.seats || []).find((seat) => seatFloorPosition(seat, positionKey) === Number(bNo));
+    onSwapSeats(bt.id, Number(aNo), Number(bNo), positionKey);
+    flash(target
+      ? `${label} · P${source.id} ⇄ P${target.id}`
+      : `${label} · P${source.id} → CHAIR ${bNo}`);
   };
 
   // Parties the terrace tab must keep reachable even without a tile: any

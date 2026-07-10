@@ -3,7 +3,43 @@ import {
   makeSeats, blankTable, sanitizeTable, fmt, parseHHMM, mergeTableGroups, tableGroupLabel,
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
   remapTableGroup, reservationTableIds, mergeRestrictionPositions, swapSeatData,
+  moveSeatOnFloor, seatFloorPosition, restrictionsAtFloorPositions,
 } from "../utils/tableHelpers.js";
+
+describe("floor chair placement (guest ids stay stable)", () => {
+  const key = "terrace:T23";
+  const table = () => ({
+    id: 1,
+    guests: 2,
+    seats: [
+      { id: 1, water: "XC", floorPositions: {} },
+      { id: 2, water: "OW", floorPositions: {} },
+    ],
+    restrictions: [{ note: "gluten", pos: 2 }],
+  });
+
+  it("moves P2 to empty chair 6 without creating P6", () => {
+    const next = moveSeatOnFloor(table(), 2, 6, key);
+    expect(next.seats.map((seat) => seat.id)).toEqual([1, 2]);
+    expect(seatFloorPosition(next.seats[1], key)).toBe(6);
+    expect(next.restrictions).toEqual([{ note: "gluten", pos: 2 }]);
+    expect(restrictionsAtFloorPositions(next.seats, next.restrictions, key))
+      .toEqual([{ note: "gluten", pos: 6 }]);
+  });
+
+  it("swaps occupied physical chairs while keeping guest labels", () => {
+    const moved = moveSeatOnFloor(table(), 2, 6, key);
+    const next = moveSeatOnFloor(moved, 1, 6, key);
+    expect(next.seats.map((seat) => seat.id)).toEqual([1, 2]);
+    expect(seatFloorPosition(next.seats[0], key)).toBe(6);
+    expect(seatFloorPosition(next.seats[1], key)).toBe(1);
+  });
+
+  it("keeps chair assignments isolated per floor table", () => {
+    const next = moveSeatOnFloor(table(), 2, 6, key);
+    expect(seatFloorPosition(next.seats[1], "dining:T9")).toBe(2);
+  });
+});
 
 describe("swapSeatData (guests trade places — payloads AND restrictions follow)", () => {
   const table = () => ({
@@ -214,7 +250,7 @@ describe("makeSeats", () => {
   it("creates n seats with default values", () => {
     const seats = makeSeats(3);
     expect(seats).toHaveLength(3);
-    expect(seats[0]).toEqual({ id: 1, gender: null, pairingSharedWith: null, water: "—", aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [], pairing: "", extras: {}, optionalPairings: {} });
+    expect(seats[0]).toEqual({ id: 1, gender: null, pairingSharedWith: null, water: "—", aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [], pairing: "", extras: {}, floorPositions: {}, optionalPairings: {} });
   });
 
   it("ids start at 1 and increment", () => {
@@ -230,6 +266,27 @@ describe("makeSeats", () => {
     expect(seats[0].pairing).toBe("Wine");
     expect(seats[0].extras).toEqual({ cake: true });
     expect(seats[0].optionalPairings).toEqual({ crayfish: { ordered: true, mode: "alco" } });
+  });
+
+  it("migrates an old out-of-range positional id back into the missing guest slot", () => {
+    const seats = makeSeats(2, [
+      { id: 1, water: "XC" },
+      { id: 6, water: "OW", pairing: "Wine" },
+    ]);
+    expect(seats.map((seat) => seat.id)).toEqual([1, 2]);
+    expect(seats[1].water).toBe("OW");
+    expect(seats[1].pairing).toBe("Wine");
+  });
+
+  it("keeps physical chairs unique when guest count grows into an occupied chair number", () => {
+    const key = "terrace:T23";
+    const seats = makeSeats(6, [
+      { id: 1, floorPositions: {} },
+      { id: 2, floorPositions: { [key]: 6 } },
+    ]);
+    expect(seatFloorPosition(seats[1], key)).toBe(6);
+    expect(seatFloorPosition(seats[5], key)).toBe(2);
+    expect(new Set(seats.map((seat) => seatFloorPosition(seat, key))).size).toBe(6);
   });
 
   it("uses defaults for seats beyond the ex array length", () => {

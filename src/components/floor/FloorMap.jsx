@@ -200,6 +200,8 @@ export default function FloorMap({
                             // chairs stay red-filled with the gender outline)
   seatPositionLabels = false, // chairs render as little P1/P2 blocks so the
                             // kitchen reads positions off the map directly
+  seatLabelsByLabel = {},   // { [label]: { [chairNo]: guestNo } } — keeps
+                            // guest labels stable when P2 sits at chair 6
   onSeatSwap,               // (label, fromNo, toNo) — service mode: drag a
                             // chair onto another chair of the SAME table to
                             // swap those two positions' guests
@@ -606,6 +608,8 @@ export default function FloorMap({
                 : gender === "Mrs" ? tokens.gender.female.border : null;
               const genderFill = gender === "Mr" ? tokens.gender.male.bg
                 : gender === "Mrs" ? tokens.gender.female.bg : null;
+              const seatLabelMap = seatLabelsByLabel[t.label];
+              const guestLabel = seatLabelMap ? seatLabelMap[p.no] : p.no;
               // notes stack vertically (water over pairing) → a narrow pill
               const noteLines = note ? (Array.isArray(note) ? note : String(note).split("·")) : [];
               // note pills hug the table edge so neighbouring tables' chairs
@@ -656,9 +660,9 @@ export default function FloorMap({
                         </text>
                       ))}
                     </g>
-                  ) : seatPositionLabels && p.no != null ? (
-                    // kitchen register: the chair IS its position — a little
-                    // P1/P2 block in the same restriction/gender colors
+                  ) : seatPositionLabels && guestLabel != null ? (
+                    // Kitchen register: show the stable GUEST label at their
+                    // physical chair. Empty chairs stay plain chair bars.
                     <g>
                       <rect x={sx - 1.9} y={sy - 1.3} width={3.8} height={2.6}
                         fill={hasRestr ? tokens.signal.alert : genderFill || tokens.ink[5]}
@@ -667,7 +671,7 @@ export default function FloorMap({
                       <text x={sx} y={sy + 0.6} textAnchor="middle" fontFamily={FONT}
                         fontSize={1.7} fontWeight={700}
                         fill={hasRestr ? tokens.neutral[0] : tokens.ink[1]}>
-                        P{p.no}
+                        P{guestLabel}
                       </text>
                     </g>
                   ) : (

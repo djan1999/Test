@@ -33,7 +33,7 @@ import {
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
   reservationTableIds, mergeRestrictionPositions,
   repointReservation, moveTableRows, swapTableRows, massBlankedIndices,
-  swapSeatData,
+  swapSeatData, moveSeatOnFloor,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { foldTable } from "./utils/foldTable.js";
@@ -99,6 +99,7 @@ import AuthScreen from "./components/auth/AuthScreen.jsx";
 import ProfilePicker from "./components/auth/ProfilePicker.jsx";
 import WineSearch from "./components/service/WineSearch.jsx";
 import BeverageSearch from "./components/service/BeverageSearch.jsx";
+import QuickAperitifSearch from "./components/service/QuickAperitifSearch.jsx";
 import TableCard from "./components/TableCard/TableCard.jsx";
 import FloorView from "./components/floor/FloorView.jsx";
 import FloorMap from "./components/floor/FloorMap.jsx";
@@ -840,7 +841,7 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
           {WATER_OPTS.map(opt => {
             const allMatch = table.seats.every(s => s.water === opt);
             return (
-              <button key={opt} onClick={() => table.seats.forEach(s => updSeat(s.id, "water", opt))} style={{
+              <button key={opt} onClick={() => table.seats.forEach(s => updSeat(s.id, "water", allMatch && opt !== "—" ? "—" : opt))} style={{
                 fontFamily: FONT, fontSize: "9px", letterSpacing: "0.06em",
                 padding: isMobile ? "9px 9px" : "5px 9px",
                 border: `1px solid ${allMatch ? tokens.charcoal.default : tokens.ink[4]}`,
@@ -907,7 +908,7 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
                     const ps = pairingStyle[p];
                     const on = seat.pairing === p;
                     return (
-                      <button key={p} onClick={() => updSeat(seat.id, "pairing", p)} style={{
+                      <button key={p} onClick={() => updSeat(seat.id, "pairing", p === "—" ? "" : (on ? "" : p))} style={{
                         fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
                         padding: "5px 8px", border: "1px solid",
                         borderColor: on ? ps.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
@@ -941,7 +942,7 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
                   const ps = pairingStyle[p];
                   const on = seat.pairing === p;
                   return (
-                    <button key={p} onClick={() => updSeat(seat.id, "pairing", p)} style={{
+                    <button key={p} onClick={() => updSeat(seat.id, "pairing", p === "—" ? "" : (on ? "" : p))} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
                       padding: "6px 10px", border: "1px solid",
                       borderColor: on ? ps.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
@@ -1297,7 +1298,7 @@ const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
 // cards on every DisplayBoard re-render (which caused the visual overlap animation glitch).
-function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onMarkSeated, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [] }) {
+export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onMarkSeated, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [] }) {
     const isSeated = t.active;
     // Terrace-flow decoration (derived in App, never persisted on the row):
     // 'terrace' = party outside on t._visit.terraceLabel; 'arriving' = mid
@@ -1509,7 +1510,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[50] }}>
             <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[4], textTransform: "uppercase", minWidth: 56 }}>[ALL]</span>
             <div style={{ display: "flex", gap: 4 }}>
-              {WATER_QUICK.map(opt => wBtn(opt, allWaterMatch(opt), () => seats.forEach(s => updSeat && updSeat(t.id, s.id, "water", opt))))}
+              {WATER_QUICK.map(opt => {
+                const active = allWaterMatch(opt);
+                return wBtn(opt, active, () => seats.forEach(s => updSeat && updSeat(t.id, s.id, "water", active ? "—" : opt)));
+              })}
             </div>
           </div>
         )}
@@ -1522,7 +1526,8 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
               const pc      = PC[s.pairing];
               const restr   = allRestr.filter(r => r.pos === s.id);
               const extras  = optionalExtras.filter(d => (s.extras?.[d.key] || s.extras?.[d.id])?.ordered);
-              const hasContent = (s.water && s.water !== "—") || s.pairing || restr.length > 0 || extras.length > 0 || (s.aperitifs || []).length > 0;
+              const hasPairing = !!(s.pairing && s.pairing !== "—");
+              const hasContent = (s.water && s.water !== "—") || hasPairing || restr.length > 0 || extras.length > 0 || (s.aperitifs || []).length > 0;
 
               if (quickMode) {
                 const cyclePairing = () => {
@@ -1530,7 +1535,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                   const cur = s.pairing || "—";
                   const idx = PAIRINGS.indexOf(cur);
                   const nx = PAIRINGS[(idx + 1) % PAIRINGS.length];
-                  updSeat(t.id, s.id, "pairing", nx);
+                  updSeat(t.id, s.id, "pairing", nx === "—" ? "" : nx);
                 };
                 const curPairing = s.pairing || "—";
                 const pcStyle = PC[curPairing] || PC["—"];
@@ -1632,7 +1637,10 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                       <div>
                         {qSectionLabel("Water")}
                         <div style={{ display: "flex", gap: 4 }}>
-                          {WATER_QUICK.map(opt => wBtn(opt, s.water === opt, () => updSeat && updSeat(t.id, s.id, "water", opt)))}
+                          {WATER_QUICK.map(opt => {
+                            const active = s.water === opt;
+                            return wBtn(opt, active, () => updSeat && updSeat(t.id, s.id, "water", active ? "—" : opt));
+                          })}
                         </div>
                       </div>
                       <div style={{ flex: 1 }}>
@@ -1648,7 +1656,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                             display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 600,
                             touchAction: "manipulation",
                           }}>
-                            <span>{curPairing}</span>
+                            <span>{curPairing === "—" ? "None" : curPairing}</span>
                             <span style={{ fontSize: "8px", opacity: 0.55, fontWeight: 400 }}>→</span>
                           </button>
                           {(() => {
@@ -1819,31 +1827,41 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                       }));
                     })()}
 
-                    {/* APERITIF — same matching logic as before, now in a labeled row */}
-                    {aperitifOptions && aperitifOptions.length > 0 && sectionBlock("Aperitif", aperitifOptions.map(opt => {
-                      const label = opt.label ?? opt;
-                      const apMatch = (x) => aperitifMatchesQuickAccessOption(x, opt, { wines, cocktails, spirits, beers });
-                      const active = (s.aperitifs || []).some(apMatch);
-                      return (
-                        <button key={label} onClick={() => {
-                          if (!updSeat) return;
-                          if (active) {
-                            updSeat(t.id, s.id, "aperitifs", (s.aperitifs || []).filter(x => !apMatch(x)));
-                          } else {
-                            const found = resolveAperitifFromQuickAccessOption(opt, { wines, cocktails, spirits, beers });
-                            const item = found || { name: label, notes: "", __cocktail: true };
-                            updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item]);
-                          }
-                        }} style={{
-                          fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "7px 12px",
-                          border: `1px solid ${active ? tokens.charcoal.default : tokens.neutral[200]}`,
-                          borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                          background: active ? tokens.tint.parchment : tokens.neutral[0],
-                          color: active ? tokens.neutral[700] : tokens.text.disabled,
-                          fontWeight: active ? 700 : 500,
-                        }}>{label}</button>
-                      );
-                    }))}
+                    {/* APERITIF — quick picks plus the complete live beverage catalog */}
+                    {sectionBlock("Aperitif", [
+                      ...(aperitifOptions || []).map(opt => {
+                        const label = opt.label ?? opt;
+                        const apMatch = (x) => aperitifMatchesQuickAccessOption(x, opt, { wines, cocktails, spirits, beers });
+                        const active = (s.aperitifs || []).some(apMatch);
+                        return (
+                          <button key={label} onClick={() => {
+                            if (!updSeat) return;
+                            if (active) {
+                              updSeat(t.id, s.id, "aperitifs", (s.aperitifs || []).filter(x => !apMatch(x)));
+                            } else {
+                              const found = resolveAperitifFromQuickAccessOption(opt, { wines, cocktails, spirits, beers });
+                              const item = found || { name: label, notes: "", __cocktail: true };
+                              updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item]);
+                            }
+                          }} style={{
+                            fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "7px 12px",
+                            border: `1px solid ${active ? tokens.charcoal.default : tokens.neutral[200]}`,
+                            borderRadius: 0, cursor: "pointer", lineHeight: 1,
+                            background: active ? tokens.tint.parchment : tokens.neutral[0],
+                            color: active ? tokens.neutral[700] : tokens.text.disabled,
+                            fontWeight: active ? 700 : 500,
+                          }}>{label}</button>
+                        );
+                      }),
+                      <QuickAperitifSearch
+                        key="all-beverage-search"
+                        wines={wines}
+                        cocktails={cocktails}
+                        spirits={spirits}
+                        beers={beers}
+                        onAdd={(item) => updSeat && updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item])}
+                      />,
+                    ])}
 
                     <div style={{ height: 6 }} />
                   </div>
@@ -1880,7 +1898,7 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                       border: `1px solid ${tokens.ink[4]}`,
                     }}>{s.water}</span>
                   )}
-                  {s.pairing && pc && (
+                  {hasPairing && pc && (
                     <span style={{
                       fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
                       background: pc.bg, border: `1px solid ${pc.border}`,
@@ -3693,11 +3711,13 @@ export default function App() {
     return day;
   };
 
-  // Guests trade places: seat payloads swap AND their positional restrictions
-  // follow (swapSeatData, pure + tested). Reached from the board's SwapPicker
-  // and the floor's drag-a-chair-onto-a-chair gesture.
-  const swapSeats = (tid, aId, bId) => {
-    setTables(p => p.map(t => (t.id === tid ? swapSeatData(t, aId, bId) : t)));
+  // Board swaps exchange P-slot payloads. Floor drags instead change only the
+  // guest's physical chair for that concrete map/table, keeping P1..P{pax}
+  // stable when (for example) P2 moves to terrace chair 6.
+  const swapSeats = (tid, aId, bId, floorKey = null) => {
+    setTables(p => p.map(t => (t.id === tid
+      ? (floorKey ? moveSeatOnFloor(t, aId, bId, floorKey) : swapSeatData(t, aId, bId))
+      : t)));
   };
 
   const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, rooms, birthday, cakeNote, restrictions, notes, lang }) => {
