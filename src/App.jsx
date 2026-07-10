@@ -31,7 +31,7 @@ import {
 import {
   makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM,
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
-  reservationTableIds, mergeRestrictionPositions,
+  reservationTableIds, mergeRestrictionPositions, startedTablePatchFromReservation,
   repointReservation, moveTableRows, swapTableRows, massBlankedIndices,
   swapSeatData, moveSeatOnFloor,
 } from "./utils/tableHelpers.js";
@@ -3870,13 +3870,15 @@ export default function App() {
   };
 
   // ── Reservations CRUD ─────────────────────────────────────────────────────
-  // Push descriptive reservation fields (menu type, name, notes…) to tables
-  // where service has ALREADY started. The reconcile effect deliberately skips
-  // started tables to protect live seats/orders/kitchen progress — but that
-  // also froze label-level fields, so e.g. switching a seated table to the
-  // SHORT menu on the reservation sheet never reached the kitchen board (it
-  // derives its course list from table.menuType) and the kitchen kept firing
-  // the long menu. Seats, guest count, grouping and kitchen log stay untouched.
+  // Push reservation edits to tables where service has ALREADY started. The
+  // reconcile effect deliberately skips started tables to protect live
+  // seats/orders/kitchen progress — but that also froze label-level fields
+  // (a seated table switched to the SHORT menu never reached the kitchen) AND
+  // the guest count (a booking corrected mid-service kept the old pax on the
+  // live board all night). startedTablePatchFromReservation (pure, tested)
+  // carries the descriptive fields, resizes guests/seats only when the count
+  // actually changed, and keeps server-assigned restriction positions.
+  // Grouping and kitchen log stay untouched.
   const syncStartedTablesFromReservation = (dateStr, rData, tableIdNum) => {
     if (!dateStr || dateStr !== serviceDate) return;
     const d = rData || {};
@@ -3888,11 +3890,7 @@ export default function App() {
         || (t.kitchenLog && Object.keys(t.kitchenLog).length > 0)
         || t.kitchenArchived);
       if (!started) return; // not-started tables are owned by the reconcile effect
-      updMany(tid, {
-        ...reservationDescriptiveFields(d),
-        // Keep seat positions a server assigned on the board for this table.
-        restrictions: mergeRestrictionPositions(t.restrictions, d.restrictions),
-      });
+      updMany(tid, startedTablePatchFromReservation(t, d));
     });
   };
 
