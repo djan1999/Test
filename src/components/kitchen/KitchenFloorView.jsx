@@ -7,6 +7,9 @@ import {
 } from "../../utils/floorMaps.js";
 import { visitStateOf } from "../../utils/terraceFlow.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
+import {
+  floorPositionKey, seatFloorPosition, restrictionsAtFloorPositions,
+} from "../../utils/tableHelpers.js";
 
 const FONT = tokens.font;
 
@@ -46,17 +49,22 @@ export default function KitchenFloorView({
 
   // Chair outlines carry the seat's gender (Mr blue / Mrs pink) so the
   // kitchen can plate for the right guest.
-  const seatGendersOf = (bt) => {
+  const seatGendersOf = (bt, positionKey) => {
     const out = {};
     for (const s of bt?.seats || []) {
-      if (s.gender === "Mr" || s.gender === "Mrs") out[Number(s.id)] = s.gender;
+      if (s.gender === "Mr" || s.gender === "Mrs") out[seatFloorPosition(s, positionKey)] = s.gender;
     }
     return Object.keys(out).length ? out : null;
   };
 
+  const seatLabelsOf = (bt, positionKey) => Object.fromEntries(
+    (bt?.seats || []).map((seat) => [seatFloorPosition(seat, positionKey), Number(seat.id)])
+  );
+
   const tableState = {};
   const restrictionsByLabel = {};
   const seatGendersByLabel = {};
+  const seatLabelsByLabel = {};
   const popoverData = {};
 
   if (map.kind === "terrace") {
@@ -64,6 +72,7 @@ export default function KitchenFloorView({
     for (const t of map.tables) {
       const r = occ[t.label];
       const strip = floorStatusOf(floorStatus, map.id, t.label);
+      const positionKey = floorPositionKey(map.id, t.label);
       if (r) {
         // The party's LIVE restrictions (incl. seat assignments made in
         // service/kitchen) live on its board table — the reservation blob is
@@ -79,10 +88,12 @@ export default function KitchenFloorView({
           name: resolveReservationTable(diningMap, r.table_id).table?.label || `T${r.table_id}`,
           strip,
         };
-        const restr = restrSource.filter((x) => x && x.note);
+        const restr = restrictionsAtFloorPositions(bt?.seats || [], restrSource, positionKey)
+          .filter((x) => x && x.note);
         if (restr.length) restrictionsByLabel[t.label] = restr;
-        const genders = seatGendersOf(bt);
+        const genders = seatGendersOf(bt, positionKey);
         if (genders) seatGendersByLabel[t.label] = genders;
+        if (bt) seatLabelsByLabel[t.label] = seatLabelsOf(bt, positionKey);
         popoverData[t.label] = { rows: restrRows(restrSource) };
       } else {
         tableState[t.label] = { status: "free", strip };
@@ -100,8 +111,10 @@ export default function KitchenFloorView({
       const bt = tables.find((x) => x.id === boardId) || null;
       const arriving = arrivingByTable[boardId];
       const strip = floorStatusOf(floorStatus, map.id, t.label);
-      const genders = seatGendersOf(bt);
+      const positionKey = floorPositionKey(map.id, t.label);
+      const genders = seatGendersOf(bt, positionKey);
       if (genders) seatGendersByLabel[t.label] = genders;
+      if (bt) seatLabelsByLabel[t.label] = seatLabelsOf(bt, positionKey);
       if (bt?.active) {
         tableState[t.label] = {
           status: "occupied",
@@ -119,7 +132,8 @@ export default function KitchenFloorView({
       } else {
         tableState[t.label] = { status: "free", strip };
       }
-      const restr = (bt?.restrictions || []).filter((x) => x && x.note);
+      const restr = restrictionsAtFloorPositions(bt?.seats || [], bt?.restrictions || [], positionKey)
+        .filter((x) => x && x.note);
       if (restr.length) restrictionsByLabel[t.label] = restr;
       if (bt?.active || arriving) {
         popoverData[t.label] = {
@@ -155,6 +169,7 @@ export default function KitchenFloorView({
         tableState={tableState}
         restrictionsByLabel={restrictionsByLabel}
         seatGendersByLabel={seatGendersByLabel}
+        seatLabelsByLabel={seatLabelsByLabel}
         seatPositionLabels
         height={isMobile ? 300 : 440}
         onTableTap={(t) => setPopover(popoverData[t.label] ? { label: t.label, ...popoverData[t.label] } : null)}

@@ -14,7 +14,10 @@ const boardTable = (id, extra = {}) => ({
 });
 
 const tables = [
-  boardTable(1, { active: true, resName: "NOVAK", guests: 2, resTime: "18:00", restrictions: [{ pos: 1, note: "shellfish" }] }),
+  boardTable(1, { active: true, resName: "NOVAK", guests: 2, resTime: "18:00", restrictions: [{ pos: 1, note: "shellfish" }], seats: [
+    { id: 1, water: "—", pairing: "", floorPositions: {} },
+    { id: 2, water: "—", pairing: "", floorPositions: {} },
+  ] }),
   boardTable(4, { resName: "KOVAČ", guests: 4, resTime: "19:30" }),
   boardTable(9, { active: true, resName: "WEISS", guests: 4, restrictions: [{ pos: 2, note: "gluten" }], seats: [
     { id: 1, water: "XC", pairing: "Non-Alc", gender: "Mrs" },
@@ -295,7 +298,7 @@ describe("seat swap — drag a chair onto another chair of the same table", () =
     fireEvent.pointerDown(seat, { clientX: 22, clientY: 50 });
     fireEvent.pointerMove(seat, { clientX: 60, clientY: 50 });
     fireEvent.pointerUp(seat, { clientX: 90, clientY: 50 });
-    expect(onSwapSeats).toHaveBeenCalledWith(1, 1, 2);
+    expect(onSwapSeats).toHaveBeenCalledWith(1, 1, 2, "dining_a:T1");
   });
 
   it("a drag that lands on empty floor swaps nothing", () => {

@@ -15,6 +15,15 @@ const normSeat = (id, e) => ({
   beers:     e?.beers     ?? [],
   pairing:   e?.pairing   ?? "",
   extras:    e?.extras    ?? {},
+  // A guest's P-number is their stable service identity. Physical chair
+  // placement is map/table-specific, so moving P2 to chair 6 on the terrace
+  // must not turn the guest into P6 (or hide them on a two-chair dining map).
+  floorPositions: Object.fromEntries(
+    Object.entries(e?.floorPositions || {}).flatMap(([key, value]) => {
+      const chair = Number(value);
+      return key && Number.isFinite(chair) && chair >= 1 ? [[key, chair]] : [];
+    })
+  ),
   // Preserve ordered, mode (alco/nonalc override) and label (custom drink name).
   optionalPairings: Object.fromEntries(
     Object.entries(e?.optionalPairings || {}).map(([k, v]) => [k, {
@@ -25,32 +34,56 @@ const normSeat = (id, e) => ({
   ),
 });
 
+const keepFloorPositionsUnique = (seats) => {
+  const keys = new Set(seats.flatMap((seat) => Object.keys(seat.floorPositions || {})));
+  if (!keys.size) return seats;
+  let next = seats;
+  for (const key of keys) {
+    const claimed = new Set();
+    const chairByGuest = new Map();
+    const explicit = next.filter((seat) => Object.prototype.hasOwnProperty.call(seat.floorPositions || {}, key));
+    const implicit = next.filter((seat) => !Object.prototype.hasOwnProperty.call(seat.floorPositions || {}, key));
+    for (const seat of [...explicit, ...implicit]) {
+      let chair = Number(seat.floorPositions?.[key] ?? seat.id);
+      if (claimed.has(chair)) {
+        chair = 1;
+        while (claimed.has(chair)) chair++;
+      }
+      claimed.add(chair);
+      chairByGuest.set(seat.id, chair);
+    }
+    next = next.map((seat) => {
+      const chair = chairByGuest.get(seat.id);
+      const wasExplicit = Object.prototype.hasOwnProperty.call(seat.floorPositions || {}, key);
+      if (!wasExplicit && chair === Number(seat.id)) return seat;
+      return { ...seat, floorPositions: { ...(seat.floorPositions || {}), [key]: chair } };
+    });
+  }
+  return next;
+};
+
 export const makeSeats = (n, ex = []) => {
-  // Seat ids are POSITIONS (chair numbers), not array indexes. When the
-  // incoming seats all carry valid distinct ids, PRESERVE them — a guest
-  // moved to chair 6 on the floor must stay P6 through sanitize/reconcile
-  // (the old index-based rebuild silently snapped them back to 1..n). For
-  // contiguous 1..k inputs this reproduces the historic result exactly;
-  // id-less arrays (fresh templating) keep the legacy by-index numbering.
+  // P-numbers are stable GUEST identities and must always be 1..guest count.
+  // Physical chair placement lives in floorPositions instead. During the
+  // migration from the old positional-id model, keep canonical ids in their
+  // slots and use any overflow id (for example the old P6) to fill the one
+  // missing guest slot. This recovers [P1,P6] as [P1,P2] and [P2,P6] as
+  // [P1,P2] without dropping either guest's service data.
   const ids = ex.map((e) => Number(e?.id));
   const idBased = ex.length > 0
     && ids.every((v) => Number.isFinite(v) && v >= 1)
     && new Set(ids).size === ex.length;
-  if (!idBased) return Array.from({ length: n }, (_, i) => normSeat(i + 1, ex[i]));
-  // Keep the n lowest-numbered chairs; fill up to n with blanks at the
-  // lowest free chair numbers.
-  const kept = [...ex]
-    .sort((a, b) => Number(a.id) - Number(b.id))
-    .slice(0, n)
-    .map((e) => normSeat(Number(e.id), e));
-  const taken = new Set(kept.map((s) => s.id));
-  let free = 1;
-  while (kept.length < n) {
-    while (taken.has(free)) free++;
-    kept.push(normSeat(free, undefined));
-    taken.add(free);
-  }
-  return kept.sort((a, b) => a.id - b.id);
+  if (!idBased) return keepFloorPositionsUnique(Array.from({ length: n }, (_, i) => normSeat(i + 1, ex[i])));
+  const byCanonicalId = new Map(
+    ex.filter((e) => Number(e.id) <= n).map((e) => [Number(e.id), e])
+  );
+  const overflow = ex
+    .filter((e) => Number(e.id) > n)
+    .sort((a, b) => Number(a.id) - Number(b.id));
+  return keepFloorPositionsUnique(Array.from({ length: n }, (_, i) => {
+    const id = i + 1;
+    return normSeat(id, byCanonicalId.get(id) || overflow.shift());
+  }));
 };
 
 export const fmt = d =>
@@ -315,6 +348,54 @@ export const mergeRestrictionPositions = (prev = [], next = []) => {
 export const reservationTableIds = (data, tableId) => {
   const grp = Array.isArray(data?.tableGroup) ? data.tableGroup.map(Number) : [];
   return grp.length > 1 ? grp : [Number(tableId)];
+};
+
+// A physical chair assignment is scoped to one concrete floor-map table.
+// The same P2 can sit at chair 6 on terrace T23 and chair 2 on dining T9.
+export const floorPositionKey = (mapId, tableLabel) =>
+  `${String(mapId || "").trim()}:${String(tableLabel || "").trim()}`;
+
+export const seatFloorPosition = (seat, positionKey) => {
+  const assigned = Number(seat?.floorPositions?.[positionKey]);
+  return Number.isFinite(assigned) && assigned >= 1 ? assigned : Number(seat?.id);
+};
+
+// Project guest-linked restrictions onto the physical chairs drawn by a
+// particular floor table. The stored restriction.pos stays the stable guest
+// id, so it continues to follow that guest everywhere else in the app.
+export const restrictionsAtFloorPositions = (seats = [], restrictions = [], positionKey) => {
+  const chairByGuest = new Map(
+    (seats || []).map((seat) => [Number(seat.id), seatFloorPosition(seat, positionKey)])
+  );
+  return (restrictions || []).map((restriction) => {
+    if (restriction?.pos == null) return restriction;
+    const chair = chairByGuest.get(Number(restriction.pos));
+    return chair == null ? restriction : { ...restriction, pos: chair };
+  });
+};
+
+// Move the guest occupying physical chair A to chair B for one floor table.
+// Occupied targets swap; empty targets simply receive the guest. Guest ids,
+// restrictions and all service data remain P1..P{guest count}.
+export const moveSeatOnFloor = (table, aChair, bChair, positionKey) => {
+  const a = Number(aChair), b = Number(bChair);
+  if (!table || !positionKey || !Number.isFinite(a) || !Number.isFinite(b) || a === b) return table;
+  const seats = table.seats || [];
+  const source = seats.find((seat) => seatFloorPosition(seat, positionKey) === a);
+  if (!source) return table;
+  const target = seats.find((seat) => seatFloorPosition(seat, positionKey) === b);
+  return {
+    ...table,
+    seats: seats.map((seat) => {
+      if (seat.id === source.id) {
+        return { ...seat, floorPositions: { ...(seat.floorPositions || {}), [positionKey]: b } };
+      }
+      if (target && seat.id === target.id) {
+        return { ...seat, floorPositions: { ...(seat.floorPositions || {}), [positionKey]: a } };
+      }
+      return seat;
+    }),
+  };
 };
 
 // Rearrange seat POSITIONS on one table. Both positions occupied → the guests

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { tokens } from "../../styles/tokens.js";
 
-export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd }) {
+export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd, autoFocus = false, placeholder = "search beverages…", inlineResults = false }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
@@ -20,6 +20,10 @@ export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd
       document.removeEventListener("touchstart", h);
     };
   }, []);
+
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus();
+  }, [autoFocus]);
 
   const baseInp = {
     fontFamily: tokens.font,
@@ -86,12 +90,12 @@ export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd
           search(e.target.value);
         }}
         onFocus={() => results.length && setOpen(true)}
-        placeholder="search beverages…"
+        placeholder={placeholder}
         autoComplete="off"
         style={{ ...baseInp, fontSize: tokens.mobileInputSize, padding: "9px 12px", letterSpacing: 0.3 }}
       />
       {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: tokens.neutral[0], border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, zIndex: 300, boxShadow: "0 6px 24px rgba(0,0,0,0.10)", overflow: "hidden" }}>
+        <div style={{ position: inlineResults ? "static" : "absolute", top: inlineResults ? undefined : "calc(100% + 3px)", left: 0, right: 0, marginTop: inlineResults ? 3 : 0, background: tokens.neutral[0], border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, zIndex: 300, boxShadow: "0 6px 24px rgba(0,0,0,0.10)", overflow: "hidden" }}>
           {results.map((r, i) => {
             const ts = BEV_TYPES[r.type];
             return (
