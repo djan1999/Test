@@ -44,8 +44,19 @@ export default function KitchenFloorView({
       seat: r.pos || null, code: restrictionCode(r.note), note: r.note,
     }));
 
+  // Chair outlines carry the seat's gender (Mr blue / Mrs pink) so the
+  // kitchen can plate for the right guest.
+  const seatGendersOf = (bt) => {
+    const out = {};
+    for (const s of bt?.seats || []) {
+      if (s.gender === "Mr" || s.gender === "Mrs") out[Number(s.id)] = s.gender;
+    }
+    return Object.keys(out).length ? out : null;
+  };
+
   const tableState = {};
   const restrictionsByLabel = {};
+  const seatGendersByLabel = {};
   const popoverData = {};
 
   if (map.kind === "terrace") {
@@ -54,6 +65,13 @@ export default function KitchenFloorView({
       const r = occ[t.label];
       const strip = floorStatusOf(floorStatus, map.id, t.label);
       if (r) {
+        // The party's LIVE restrictions (incl. seat assignments made in
+        // service/kitchen) live on its board table — the reservation blob is
+        // only the fallback, so terrace chairs mark by position exactly like
+        // the dining tab's.
+        let bt = tables.find((x) => x.id === Number(r.table_id)) || null;
+        if (bt?.tableGroup?.length) bt = tables.find((x) => x.id === Math.min(...bt.tableGroup)) || bt;
+        const restrSource = bt?.restrictions?.length ? bt.restrictions : (r.data?.restrictions || []);
         tableState[t.label] = {
           status: "occupied",
           // a terrace party's identity is its DINING table (per Djan):
@@ -61,9 +79,11 @@ export default function KitchenFloorView({
           name: resolveReservationTable(diningMap, r.table_id).table?.label || `T${r.table_id}`,
           strip,
         };
-        const restr = (r.data?.restrictions || []).filter((x) => x && x.note);
+        const restr = restrSource.filter((x) => x && x.note);
         if (restr.length) restrictionsByLabel[t.label] = restr;
-        popoverData[t.label] = { rows: restrRows(r.data?.restrictions) };
+        const genders = seatGendersOf(bt);
+        if (genders) seatGendersByLabel[t.label] = genders;
+        popoverData[t.label] = { rows: restrRows(restrSource) };
       } else {
         tableState[t.label] = { status: "free", strip };
       }
@@ -80,6 +100,8 @@ export default function KitchenFloorView({
       const bt = tables.find((x) => x.id === boardId) || null;
       const arriving = arrivingByTable[boardId];
       const strip = floorStatusOf(floorStatus, map.id, t.label);
+      const genders = seatGendersOf(bt);
+      if (genders) seatGendersByLabel[t.label] = genders;
       if (bt?.active) {
         tableState[t.label] = {
           status: "occupied",
@@ -132,6 +154,7 @@ export default function KitchenFloorView({
         mode="service"
         tableState={tableState}
         restrictionsByLabel={restrictionsByLabel}
+        seatGendersByLabel={seatGendersByLabel}
         height={isMobile ? 300 : 440}
         onTableTap={(t) => setPopover(popoverData[t.label] ? { label: t.label, ...popoverData[t.label] } : null)}
       />

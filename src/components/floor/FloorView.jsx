@@ -48,6 +48,7 @@ export default function FloorView({
   onCycleStatus,
   onAssign, onClear, onMove, onMarkSeated,
   onSendSetToKitchen,
+  onSwapSeats,
   isMobile,
 }) {
   const diningMap = getActiveDiningMap(floorMaps);
@@ -121,16 +122,37 @@ export default function FloorView({
     }
     return Object.keys(notes).length ? notes : null;
   };
+  // Chairs outline in the seat's gender color (Mr blue / Mrs pink) so the
+  // runner can address the right guest from the map.
+  const seatGendersOf = (bt) => {
+    const out = {};
+    for (const s of bt?.seats || []) {
+      if (s.gender === "Mr" || s.gender === "Mrs") out[Number(s.id)] = s.gender;
+    }
+    return Object.keys(out).length ? out : null;
+  };
+  // A terrace party's live restrictions belong to its BOARD table (seat
+  // assignments made in service/kitchen live there) — the reservation blob is
+  // only the fallback for parties whose board table isn't templated yet.
+  const terracePartyBoardTable = (r) => {
+    if (!r) return null;
+    let bt = tables.find((x) => x.id === Number(r.table_id)) || null;
+    if (bt?.tableGroup?.length) bt = tables.find((x) => x.id === Math.min(...bt.tableGroup)) || bt;
+    return bt;
+  };
 
   const occ = map.kind === "terrace" ? terraceOccupancy(reservations) : {};
   const tableState = {};
   const restrictionsByLabel = {};
   const seatNotesByLabel = {};
+  const seatGendersByLabel = {};
   for (const t of map.tables || []) {
     const strip = floorStatusOf(floorStatus, map.id, t.label);
     if (map.kind === "terrace") {
       const r = occ[t.label];
-      const restr = (r?.data?.restrictions || []).filter((x) => x && x.note);
+      const bt = terracePartyBoardTable(r);
+      const restr = ((bt?.restrictions?.length ? bt.restrictions : r?.data?.restrictions) || [])
+        .filter((x) => x && x.note);
       tableState[t.label] = r
         ? {
             status: "occupied",
@@ -142,14 +164,20 @@ export default function FloorView({
           }
         : { status: "free", strip };
       if (restr.length) restrictionsByLabel[t.label] = restr;
-      if (r) {
-        const notes = seatNotesOf(tables.find((x) => x.id === Number(r.table_id)));
+      if (bt) {
+        const notes = seatNotesOf(bt);
         if (notes) seatNotesByLabel[t.label] = notes;
+        const genders = seatGendersOf(bt);
+        if (genders) seatGendersByLabel[t.label] = genders;
       }
     } else {
       const bt = boardTableOf(t);
       const arriving = arrivingOf(t);
       const restr = (bt?.restrictions || []).filter((x) => x && x.note);
+      if (bt) {
+        const genders = seatGendersOf(bt);
+        if (genders) seatGendersByLabel[t.label] = genders;
+      }
       if (bt?.active) {
         tableState[t.label] = {
           status: "occupied",
@@ -181,6 +209,20 @@ export default function FloorView({
   }
 
   const ticker = mapTicker(Object.values(tableState));
+
+  // Drag a chair onto another chair of the same table → swap those two
+  // positions' guests (seat payloads + their positional restrictions, via
+  // App's swapSeats). Works on dining tiles and terrace tiles alike — the
+  // swap always lands on the party's board table.
+  const swapSeatPositions = (label, aNo, bNo) => {
+    if (!onSwapSeats) return;
+    const bt = map.kind === "terrace"
+      ? terracePartyBoardTable(occ[label])
+      : boardTableOf((map.tables || []).find((x) => x.label === label));
+    if (!bt) return;
+    onSwapSeats(bt.id, Number(aNo), Number(bNo));
+    flash(`${label} · P${aNo} ⇄ P${bNo}`);
+  };
 
   // Parties the terrace tab must keep reachable even without a tile: any
   // terrace party whose label no longer exists on the current map (tile
@@ -409,6 +451,8 @@ export default function FloorView({
         restrictionsByLabel={restrictionsByLabel}
         seatCodes={false}
         seatNotesByLabel={seatNotesByLabel}
+        seatGendersByLabel={seatGendersByLabel}
+        onSeatSwap={onSwapSeats ? swapSeatPositions : undefined}
         showPartyLines={false}
         height={isMobile ? 380 : 480}
         onTableTap={(t) => {

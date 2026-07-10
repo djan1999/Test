@@ -194,6 +194,12 @@ export default function FloorMap({
                             // amber chair + the label's ▲)
   seatNotesByLabel = {},    // { [label]: { [seatNo]: "XC·W" } } — per-seat
                             // beverage annotations at the chair positions
+  seatGendersByLabel = {},  // { [label]: { [seatNo]: "Mr"|"Mrs" } } — chairs
+                            // outline in the seat's gender color (restricted
+                            // chairs stay red-filled with the gender outline)
+  onSeatSwap,               // (label, fromNo, toNo) — service mode: drag a
+                            // chair onto another chair of the SAME table to
+                            // swap those two positions' guests
   showPartyLines = true,    // false (FOH floor): tables render label + ▲
                             // only — no ×pax, no course; the chairs carry
                             // the per-seat info
@@ -206,6 +212,9 @@ export default function FloorMap({
   const [seatDrag, setSeatDrag] = useState(null); // { label, index, x, y }
   const [sheetDrag, setSheetDrag] = useState(null); // { kind, id, dx, dy, moved }
   const gestureRef = useRef(null);            // pointer bookkeeping between events
+  // A completed seat-swap drag must not fall through to the table tap (which
+  // would toggle SET on a dining table) — the click that follows is consumed.
+  const swallowTapRef = useRef(false);
 
   if (!map) return null;
   const editing = mode === "edit";
@@ -260,6 +269,37 @@ export default function FloorMap({
     setSeatDrag({ label: t.label, index: i, x: p.x, y: p.y, moved: false });
   };
 
+  // Service-mode seat swap: hold a chair and drag it onto another chair of the
+  // same table. A plain tap on a chair still bubbles to the table tap.
+  const onSeatSwapPointerDown = (t, i, no) => (e) => {
+    if (no == null) return;
+    const p = toMapUnits(e);
+    if (!p) return;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    gestureRef.current = { kind: "seatSwap", label: t.label, index: i, no, start: p };
+    setSeatDrag({ label: t.label, index: i, x: p.x, y: p.y, moved: false });
+  };
+
+  const onSeatSwapPointerUp = (t) => (e) => {
+    const g = gestureRef.current;
+    if (!g || g.kind !== "seatSwap") return;
+    gestureRef.current = null;
+    const s = seatDrag;
+    setSeatDrag(null);
+    if (!s?.moved) return; // tap, not a drag — the table tap handles it
+    e.stopPropagation();
+    swallowTapRef.current = true; // the trailing click must not toggle SET
+    const drop = toMapUnits(e) || s; // release point, not the last move sample
+    const pts = seatDisplayPoints(t);
+    let best = null;
+    pts.forEach((p, i) => {
+      if (i === g.index || p.no == null) return;
+      const d = Math.hypot(p.x + p.out.x * 2.4 - drop.x, p.y + p.out.y * 2.4 - drop.y);
+      if (d < 5 && (!best || d < best.d)) best = { d, no: p.no };
+    });
+    if (best && best.no !== g.no) onSeatSwap?.(t.label, g.no, best.no);
+  };
+
   const onPointerMove = (e) => {
     const g = gestureRef.current;
     if (!g) return;
@@ -268,7 +308,7 @@ export default function FloorMap({
     const dx = p.x - g.start.x, dy = p.y - g.start.y;
     const moved = Math.abs(dx) + Math.abs(dy) > 0.5;
     if (g.kind === "table") { if (g.movable) setDrag({ label: g.label, dx, dy, moved }); }
-    else if (g.kind === "seat") setSeatDrag({ label: g.label, index: g.index, x: p.x, y: p.y, moved });
+    else if (g.kind === "seat" || g.kind === "seatSwap") setSeatDrag({ label: g.label, index: g.index, x: p.x, y: p.y, moved });
     else if (g.kind === "sheetEl") setSheetDrag({ ...g.hit, dx, dy, moved });
   };
 
@@ -411,13 +451,15 @@ export default function FloorMap({
         const selected = editing && selectedLabel === t.label;
         const dimmed = (mode === "picker" && !pickable) || (mode === "seats" && seatsEditLabel && !seatEditing);
 
-        const fill = occupied ? tokens.green.bg : tokens.neutral[0];
+        // Seated tables read SOLID green with white type — the old pale-green
+        // fill + mid-green text washed out at panel distance (per Djan).
+        const fill = occupied ? tokens.green.strong : tokens.neutral[0];
         // service mode: the status owns the border — SET reads as a strong
         // green outline; no band inside the shape (it clipped the course
         // line and looked wrong inside circles).
         const stroke = strip === "SET" ? tokens.green.strong
           : arriving ? tokens.ink[1]
-          : occupied ? tokens.green.border
+          : occupied ? tokens.green.strong
           : reserved ? tokens.ink[3]
           : blueprint ? tokens.ink[1]
           : tokens.ink[4];
@@ -449,6 +491,7 @@ export default function FloorMap({
             onPointerMove={editing ? onPointerMove : undefined}
             onPointerUp={editing ? onPointerUp(t0) : undefined}
             onClick={() => {
+              if (swallowTapRef.current) { swallowTapRef.current = false; return; } // seat-swap drag just ended
               if (editing || mode === "seats") return; // taps handled elsewhere
               if (mode === "picker" && !pickable) return;
               onTableTap && onTableTap(t0);
@@ -485,19 +528,21 @@ export default function FloorMap({
                     y={t.y + (second ? 3.4 : t.h / 2 + 1)}
                     textAnchor="middle"
                     fontFamily={FONT} fontSize={2.8} fontWeight={700}
-                    fill={arriving ? tokens.ink[0] : occupied ? tokens.green.text : tokens.ink[2]}>
+                    fill={arriving ? tokens.ink[0] : occupied ? tokens.neutral[0] : tokens.ink[2]}>
                     {t.label}
-                    {st.allergy && <tspan fill={tokens.signal.alert}> ▲</tspan>}
+                    {st.allergy && <tspan fill={occupied ? tokens.red.bg : tokens.signal.alert} fontWeight={700}> ▲</tspan>}
                   </text>
                   {showPartyLines && busy && nameLine.text && (
-                    <text x={cx} y={t.y + 6.2} textAnchor="middle" fontFamily={FONT} fontSize={nameLine.font} fill={tokens.ink[1]}>
+                    <text x={cx} y={t.y + 6.2} textAnchor="middle" fontFamily={FONT} fontSize={nameLine.font}
+                      fontWeight={occupied ? 700 : 400}
+                      fill={occupied ? tokens.neutral[0] : tokens.ink[1]}>
                       {nameLine.text}
                     </text>
                   )}
                   {busy && subLine.text && (
                     <text x={cx} y={t.y + (showPartyLines && nameLine.text ? 8.6 : 6.2)} textAnchor="middle"
-                      fontFamily={FONT} fontSize={subLine.font} fontWeight={showPartyLines ? 400 : 700}
-                      fill={tokens.ink[1]}>
+                      fontFamily={FONT} fontSize={subLine.font} fontWeight={700}
+                      fill={occupied ? tokens.neutral[0] : tokens.ink[1]}>
                       {subLine.text}
                     </text>
                   )}
@@ -542,20 +587,35 @@ export default function FloorMap({
               const sy = draggingSeat ? seatDrag.y : p.y + p.out.y * 2.4;
               const seatDraggable = editing && selectedLabel === t.label;
               const numbered = mode === "seats" || editing;
+              // Service floor: chairs are drag handles too — drop one on
+              // another chair of the same table to swap those positions.
+              const swappable = mode === "service" && !!onSeatSwap && p.no != null;
               const deg = Math.atan2(p.out.y, p.out.x) * 180 / Math.PI;
               const note = !numbered ? seatNotesByLabel[t.label]?.[p.no] : null;
+              // The seat's gender colors the chair OUTLINE (restricted chairs
+              // keep the red fill under a Mr-blue / Mrs-pink stroke).
+              const gender = !numbered ? seatGendersByLabel[t.label]?.[p.no] : null;
+              const genderStroke = gender === "Mr" ? tokens.gender.male.border
+                : gender === "Mrs" ? tokens.gender.female.border : null;
               // notes stack vertically (water over pairing) → a narrow pill
               const noteLines = note ? (Array.isArray(note) ? note : String(note).split("·")) : [];
               // note pills hug the table edge so neighbouring tables' chairs
               // don't meet in the aisle
-              const nx = p.x + p.out.x * 2.6, ny = p.y + p.out.y * 2.6;
+              const nx = draggingSeat ? seatDrag.x : p.x + p.out.x * 2.6;
+              const ny = draggingSeat ? seatDrag.y : p.y + p.out.y * 2.6;
               const pillW = noteLines.length ? Math.max(...noteLines.map((l) => l.length)) * 1.05 + 1.4 : 0;
               const pillH = noteLines.length * 1.9 + 1;
               return (
                 <g key={i}
                   data-seat={i}
-                  style={{ cursor: seatEditing || seatDraggable ? "pointer" : "default" }}
-                  onPointerDown={seatDraggable ? onSeatPointerDown(t0, i) : undefined}
+                  style={{
+                    cursor: seatEditing || seatDraggable ? "pointer" : swappable ? "grab" : "default",
+                    touchAction: swappable ? "none" : undefined,
+                  }}
+                  onPointerDown={seatDraggable ? onSeatPointerDown(t0, i)
+                    : swappable ? onSeatSwapPointerDown(t, i, p.no) : undefined}
+                  onPointerMove={swappable ? onPointerMove : undefined}
+                  onPointerUp={swappable ? onSeatSwapPointerUp(t) : undefined}
                   onClick={(e) => {
                     if (!seatEditing) return;
                     e.stopPropagation();
@@ -576,8 +636,8 @@ export default function FloorMap({
                     <g>
                       <rect x={nx - pillW / 2} y={ny - pillH / 2} width={pillW} height={pillH}
                         fill={hasRestr ? tokens.signal.alert : tokens.ink[5]}
-                        stroke={hasRestr ? tokens.signal.alert : tokens.ink[4]}
-                        strokeWidth={0.25} />
+                        stroke={genderStroke || (hasRestr ? tokens.signal.alert : tokens.ink[4])}
+                        strokeWidth={genderStroke ? 0.5 : 0.25} />
                       {noteLines.map((line, li) => (
                         <text key={li} x={nx}
                           y={ny - ((noteLines.length - 1) * 1.9) / 2 + li * 1.9 + 0.55}
@@ -591,8 +651,8 @@ export default function FloorMap({
                     <g transform={`translate(${sx},${sy}) rotate(${deg})`}>
                       <rect x={-0.55} y={-1.7} width={1.1} height={3.4}
                         fill={hasRestr ? tokens.signal.alert : tokens.ink[5]}
-                        stroke={hasRestr ? tokens.signal.alert : tokens.ink[4]}
-                        strokeWidth={0.25} />
+                        stroke={genderStroke || (hasRestr ? tokens.signal.alert : tokens.ink[4])}
+                        strokeWidth={genderStroke ? 0.5 : 0.25} />
                     </g>
                   )}
                   {hasRestr && seatCodes && (

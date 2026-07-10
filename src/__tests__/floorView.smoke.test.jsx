@@ -15,9 +15,9 @@ const boardTable = (id, extra = {}) => ({
 const tables = [
   boardTable(1, { active: true, resName: "NOVAK", guests: 2, resTime: "18:00", restrictions: [{ pos: 1, note: "shellfish" }] }),
   boardTable(4, { resName: "KOVAČ", guests: 4, resTime: "19:30" }),
-  boardTable(9, { active: true, resName: "WEISS", guests: 4, seats: [
-    { id: 1, water: "XC", pairing: "Non-Alc" },
-    { id: 2, water: "OW", pairing: "Wine" },
+  boardTable(9, { active: true, resName: "WEISS", guests: 4, restrictions: [{ pos: 2, note: "gluten" }], seats: [
+    { id: 1, water: "XC", pairing: "Non-Alc", gender: "Mrs" },
+    { id: 2, water: "OW", pairing: "Wine", gender: "Mr" },
   ] }),
   ...[2, 3, 5, 6, 7, 8, 10].map((id) => boardTable(id)),
 ];
@@ -223,6 +223,80 @@ describe("terrace SET → KITCHEN (same handshake as the dining room)", () => {
     fireEvent.click(findTable(container, "T25"));
     fireEvent.click(getByText("UNSET"));
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T25");
+  });
+});
+
+describe("seat presentation — gender outlines + positional restrictions", () => {
+  it("chairs outline in the seat's gender color (Mrs pink / Mr blue)", () => {
+    const { container } = setup();
+    // T9's P1 is Mrs (pink outline), P2 is Mr (blue outline) — note pills
+    expect(container.querySelector('rect[stroke="#f9a8d4"]')).toBeTruthy();
+    expect(container.querySelector('rect[stroke="#93c5fd"]')).toBeTruthy();
+  });
+
+  it("a restricted Mrs seat reads red-filled with the pink gender outline", () => {
+    const { container } = setup({
+      tables: tables.map((t) => t.id === 9
+        ? { ...t, restrictions: [{ pos: 1, note: "gluten" }] }
+        : t),
+    });
+    const pill = container.querySelector('rect[stroke="#f9a8d4"]');
+    expect(pill).toBeTruthy();
+    expect(pill.getAttribute("fill")).toBe("#b84a3a"); // signal.alert
+  });
+
+  it("terrace chairs mark restrictions by position from the party's BOARD table", () => {
+    const { container, getByText } = setup();
+    fireEvent.click(getByText("TERRACE"));
+    // WEISS (board T9, gluten on P2) sits at T23 — the terrace chair carries
+    // the live board restriction even though the reservation blob has none.
+    const t23 = findTable(container, "T23");
+    expect(t23.querySelector('rect[fill="#b84a3a"]')).toBeTruthy();
+    expect(t23.textContent).toContain("▲");
+  });
+});
+
+describe("seat swap — drag a chair onto another chair of the same table", () => {
+  const mockBox = (container) => {
+    const svg = container.querySelector("svg");
+    // jsdom rects are all-zero; 400×368 box → 4px per map unit.
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 368, right: 400, bottom: 368 });
+  };
+
+  it("dropping P1 on P2 swaps those positions on the board table", () => {
+    const onSwapSeats = vi.fn();
+    const { container } = setup({ onSwapSeats });
+    mockBox(container);
+    // Dining T1 at (8,8) 12×9: P1 chairs the W edge (~5.6,12.5 units → ~22,50px),
+    // P2 the E edge (~22.4,12.5 units → ~90,50px).
+    const seat = findTable(container, "T1").querySelector('[data-seat="0"]');
+    fireEvent.pointerDown(seat, { clientX: 22, clientY: 50 });
+    fireEvent.pointerMove(seat, { clientX: 60, clientY: 50 });
+    fireEvent.pointerUp(seat, { clientX: 90, clientY: 50 });
+    expect(onSwapSeats).toHaveBeenCalledWith(1, 1, 2);
+  });
+
+  it("a drag that lands on empty floor swaps nothing", () => {
+    const onSwapSeats = vi.fn();
+    const { container } = setup({ onSwapSeats });
+    mockBox(container);
+    const seat = findTable(container, "T1").querySelector('[data-seat="0"]');
+    fireEvent.pointerDown(seat, { clientX: 22, clientY: 50 });
+    fireEvent.pointerMove(seat, { clientX: 22, clientY: 150 });
+    fireEvent.pointerUp(seat, { clientX: 22, clientY: 150 });
+    expect(onSwapSeats).not.toHaveBeenCalled();
+  });
+
+  it("a plain tap on a chair still resolves as the table tap (SET toggle intact)", () => {
+    const onSwapSeats = vi.fn();
+    const { container, handlers } = setup({ onSwapSeats });
+    mockBox(container);
+    const seat = findTable(container, "T1").querySelector('[data-seat="0"]');
+    fireEvent.pointerDown(seat, { clientX: 22, clientY: 50 });
+    fireEvent.pointerUp(seat, { clientX: 22, clientY: 50 });
+    fireEvent.click(seat); // bubbles to the table group
+    expect(onSwapSeats).not.toHaveBeenCalled();
+    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T1");
   });
 });
 

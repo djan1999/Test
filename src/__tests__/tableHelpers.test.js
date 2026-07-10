@@ -2,8 +2,50 @@ import { describe, it, expect } from "vitest";
 import {
   makeSeats, blankTable, sanitizeTable, fmt, parseHHMM, mergeTableGroups, tableGroupLabel,
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
-  remapTableGroup, reservationTableIds, mergeRestrictionPositions,
+  remapTableGroup, reservationTableIds, mergeRestrictionPositions, swapSeatData,
 } from "../utils/tableHelpers.js";
+
+describe("swapSeatData (guests trade places — payloads AND restrictions follow)", () => {
+  const table = () => ({
+    id: 1,
+    seats: [
+      { id: 1, water: "XC", pairing: "Wine", gender: "Mrs" },
+      { id: 2, water: "OW", pairing: "Non-Alc", gender: "Mr" },
+      { id: 3, water: "—", pairing: "" },
+    ],
+    restrictions: [
+      { note: "gluten", pos: 1 },
+      { note: "nuts", pos: 3 },
+      { note: "vegan", pos: null }, // table-wide — untouched by a swap
+    ],
+  });
+
+  it("swaps the two seat payloads in place, ids stay positional", () => {
+    const next = swapSeatData(table(), 1, 2);
+    expect(next.seats[0]).toEqual({ id: 1, water: "OW", pairing: "Non-Alc", gender: "Mr" });
+    expect(next.seats[1]).toEqual({ id: 2, water: "XC", pairing: "Wine", gender: "Mrs" });
+    expect(next.seats[2]).toEqual(table().seats[2]); // bystander untouched
+  });
+
+  it("positional restrictions travel WITH their guest", () => {
+    const next = swapSeatData(table(), 1, 2);
+    // the gluten guest moved from P1 to P2
+    expect(next.restrictions.find((r) => r.note === "gluten").pos).toBe(2);
+    expect(next.restrictions.find((r) => r.note === "nuts").pos).toBe(3);
+    expect(next.restrictions.find((r) => r.note === "vegan").pos).toBeNull();
+  });
+
+  it("swapping two restricted guests exchanges their positions", () => {
+    const next = swapSeatData(table(), 1, 3);
+    expect(next.restrictions.find((r) => r.note === "gluten").pos).toBe(3);
+    expect(next.restrictions.find((r) => r.note === "nuts").pos).toBe(1);
+  });
+
+  it("a missing seat is a no-op (never wipes the other seat)", () => {
+    const t = table();
+    expect(swapSeatData(t, 1, 9)).toBe(t);
+  });
+});
 
 describe("mergeRestrictionPositions (seat assignments survive reconcile)", () => {
   it("carries a board-assigned seat position onto the matching reservation restriction", () => {

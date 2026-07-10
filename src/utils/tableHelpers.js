@@ -290,6 +290,30 @@ export const reservationTableIds = (data, tableId) => {
   return grp.length > 1 ? grp : [Number(tableId)];
 };
 
+// Swap two seat POSITIONS on one table: the guests trade places, so the seat
+// payloads exchange ids AND each guest's positional restrictions follow them
+// (swapping only the seat objects left "P2 · GLU" pointing at whoever just
+// moved INTO P2). Missing seats are a no-op — spreading undefined would wipe
+// the other seat's data. Extracted pure from App's swapSeats so the floor's
+// drag-to-swap and the board's SwapPicker exercise one tested transform.
+export const swapSeatData = (t, aId, bId) => {
+  const a = Number(aId), b = Number(bId);
+  const sA = (t.seats || []).find((s) => Number(s.id) === a);
+  const sB = (t.seats || []).find((s) => Number(s.id) === b);
+  if (!sA || !sB) return t;
+  return {
+    ...t,
+    seats: t.seats.map((s) =>
+      Number(s.id) === a ? { ...sB, id: s.id }
+        : Number(s.id) === b ? { ...sA, id: s.id }
+        : s),
+    restrictions: (t.restrictions || []).map((r) =>
+      Number(r.pos) === a ? { ...r, pos: sB.id }
+        : Number(r.pos) === b ? { ...r, pos: sA.id }
+        : r),
+  };
+};
+
 // Remap the ids inside a table's `tableGroup` when its live state moves or
 // swaps between table ids (swap fromId↔toId). Without this a moved table keeps
 // a tableGroup pointing at its OLD id, so the board's primary-table filter
