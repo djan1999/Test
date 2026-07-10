@@ -4,7 +4,60 @@ import {
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
   remapTableGroup, reservationTableIds, mergeRestrictionPositions, swapSeatData,
   moveSeatOnFloor, seatFloorPosition, restrictionsAtFloorPositions,
+  startedTablePatchFromReservation,
 } from "../utils/tableHelpers.js";
+
+describe("startedTablePatchFromReservation (mid-service reservation edits reach the live table)", () => {
+  const startedTable = () => ({
+    id: 1, active: true, guests: 2, arrivedAt: "19:00",
+    seats: [
+      { ...makeSeats(2)[0], water: "XC", pairing: "Wine" },
+      { ...makeSeats(2)[1], water: "OW" },
+    ],
+    restrictions: [{ note: "gluten", pos: 2 }],
+  });
+
+  it("guest count change resizes the live table — existing P data survives", () => {
+    const patch = startedTablePatchFromReservation(startedTable(), { resName: "N", guests: 4 });
+    expect(patch.guests).toBe(4);
+    expect(patch.seats).toHaveLength(4);
+    expect(patch.seats[0].water).toBe("XC"); // P1's live orders kept
+    expect(patch.seats[0].pairing).toBe("Wine");
+    expect(patch.seats[1].water).toBe("OW");
+  });
+
+  it("shrinking drops the highest P's; a restriction pinned there goes UNASSIGNED, not lost", () => {
+    const patch = startedTablePatchFromReservation(startedTable(), {
+      resName: "N", guests: 1, restrictions: [{ note: "gluten", pos: null }],
+    });
+    expect(patch.guests).toBe(1);
+    expect(patch.seats).toHaveLength(1);
+    expect(patch.seats[0].water).toBe("XC");
+    // gluten was pinned to P2 (kept via mergeRestrictionPositions) but P2 no
+    // longer exists -> it resurfaces unassigned instead of vanishing.
+    expect(patch.restrictions).toEqual([{ note: "gluten", pos: null }]);
+  });
+
+  it("unchanged guest count never rebuilds live seats (a rename is just a rename)", () => {
+    const patch = startedTablePatchFromReservation(startedTable(), { resName: "Renamed", guests: 2 });
+    expect(patch.resName).toBe("Renamed");
+    expect("seats" in patch).toBe(false);
+    expect("guests" in patch).toBe(false);
+  });
+
+  it("missing/invalid reservation guests leaves the table size alone", () => {
+    const patch = startedTablePatchFromReservation(startedTable(), { resName: "N" });
+    expect("seats" in patch).toBe(false);
+    expect("guests" in patch).toBe(false);
+  });
+
+  it("server-assigned restriction positions survive the edit (merge semantics kept)", () => {
+    const patch = startedTablePatchFromReservation(startedTable(), {
+      resName: "N", guests: 2, restrictions: [{ note: "gluten", pos: null }],
+    });
+    expect(patch.restrictions).toEqual([{ note: "gluten", pos: 2 }]);
+  });
+});
 
 describe("floor chair placement (guest ids stay stable)", () => {
   const key = "terrace:T23";

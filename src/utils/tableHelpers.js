@@ -346,6 +346,29 @@ export const mergeRestrictionPositions = (prev = [], next = []) => {
   });
 };
 
+// Patch for a STARTED table when its reservation is edited mid-service.
+// Descriptive fields always follow (name, menuType, notes…); the GUEST COUNT
+// now follows too — a booking corrected from 2 to 4 pax must resize the live
+// table (it used to stay frozen, so the kitchen ticket and floor pax read the
+// old size all night). Seats resize through makeSeats: per-P data survives by
+// id, growing adds blanks, shrinking drops the highest P's. A restriction
+// pinned to a dropped position falls back to UNASSIGNED (pos null) so it
+// resurfaces on the kitchen ticket instead of silently vanishing. Seats/guests
+// are only included when the count actually changed — live seat state is
+// never rebuilt for a rename.
+export const startedTablePatchFromReservation = (t, d = {}) => {
+  const guests = Number(d.guests) > 0 ? Number(d.guests) : Number(t?.guests) || 0;
+  const merged = mergeRestrictionPositions(t?.restrictions, d.restrictions);
+  return {
+    ...reservationDescriptiveFields(d),
+    restrictions: merged.map((r) =>
+      (r && r.pos != null && Number(r.pos) > guests) ? { ...r, pos: null } : r),
+    ...(guests > 0 && guests !== (Number(t?.guests) || 0)
+      ? { guests, seats: makeSeats(guests, t?.seats || []) }
+      : {}),
+  };
+};
+
 // The set of table ids a reservation occupies. A `tableGroup` is only honoured
 // as a real combined booking when it has 2+ members (matching the reconcile
 // rule); a stray single-member group is ignored in favour of `table_id`. This
