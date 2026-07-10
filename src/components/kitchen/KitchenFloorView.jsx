@@ -155,6 +155,7 @@ export default function KitchenFloorView({
         tableState={tableState}
         restrictionsByLabel={restrictionsByLabel}
         seatGendersByLabel={seatGendersByLabel}
+        seatPositionLabels
         height={isMobile ? 300 : 440}
         onTableTap={(t) => setPopover(popoverData[t.label] ? { label: t.label, ...popoverData[t.label] } : null)}
       />

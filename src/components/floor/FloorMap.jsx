@@ -197,6 +197,8 @@ export default function FloorMap({
   seatGendersByLabel = {},  // { [label]: { [seatNo]: "Mr"|"Mrs" } } — chairs
                             // outline in the seat's gender color (restricted
                             // chairs stay red-filled with the gender outline)
+  seatPositionLabels = false, // chairs render as little P1/P2 blocks so the
+                            // kitchen reads positions off the map directly
   onSeatSwap,               // (label, fromNo, toNo) — service mode: drag a
                             // chair onto another chair of the SAME table to
                             // swap those two positions' guests
@@ -592,11 +594,15 @@ export default function FloorMap({
               const swappable = mode === "service" && !!onSeatSwap && p.no != null;
               const deg = Math.atan2(p.out.y, p.out.x) * 180 / Math.PI;
               const note = !numbered ? seatNotesByLabel[t.label]?.[p.no] : null;
-              // The seat's gender colors the chair OUTLINE (restricted chairs
-              // keep the red fill under a Mr-blue / Mrs-pink stroke).
+              // The seat's gender colors the chair: unrestricted chairs fill
+              // with the soft gender tint under the gender outline; restricted
+              // chairs keep the red fill and carry the gender on the OUTLINE
+              // only (red + pink = restricted Mrs, at a glance).
               const gender = !numbered ? seatGendersByLabel[t.label]?.[p.no] : null;
               const genderStroke = gender === "Mr" ? tokens.gender.male.border
                 : gender === "Mrs" ? tokens.gender.female.border : null;
+              const genderFill = gender === "Mr" ? tokens.gender.male.bg
+                : gender === "Mrs" ? tokens.gender.female.bg : null;
               // notes stack vertically (water over pairing) → a narrow pill
               const noteLines = note ? (Array.isArray(note) ? note : String(note).split("·")) : [];
               // note pills hug the table edge so neighbouring tables' chairs
@@ -635,7 +641,7 @@ export default function FloorMap({
                   ) : noteLines.length ? (
                     <g>
                       <rect x={nx - pillW / 2} y={ny - pillH / 2} width={pillW} height={pillH}
-                        fill={hasRestr ? tokens.signal.alert : tokens.ink[5]}
+                        fill={hasRestr ? tokens.signal.alert : genderFill || tokens.ink[5]}
                         stroke={genderStroke || (hasRestr ? tokens.signal.alert : tokens.ink[4])}
                         strokeWidth={genderStroke ? 0.5 : 0.25} />
                       {noteLines.map((line, li) => (
@@ -647,10 +653,24 @@ export default function FloorMap({
                         </text>
                       ))}
                     </g>
+                  ) : seatPositionLabels && p.no != null ? (
+                    // kitchen register: the chair IS its position — a little
+                    // P1/P2 block in the same restriction/gender colors
+                    <g>
+                      <rect x={sx - 1.9} y={sy - 1.3} width={3.8} height={2.6}
+                        fill={hasRestr ? tokens.signal.alert : genderFill || tokens.ink[5]}
+                        stroke={genderStroke || (hasRestr ? tokens.signal.alert : tokens.ink[4])}
+                        strokeWidth={genderStroke ? 0.5 : 0.25} />
+                      <text x={sx} y={sy + 0.6} textAnchor="middle" fontFamily={FONT}
+                        fontSize={1.7} fontWeight={700}
+                        fill={hasRestr ? tokens.neutral[0] : tokens.ink[1]}>
+                        P{p.no}
+                      </text>
+                    </g>
                   ) : (
                     <g transform={`translate(${sx},${sy}) rotate(${deg})`}>
                       <rect x={-0.55} y={-1.7} width={1.1} height={3.4}
-                        fill={hasRestr ? tokens.signal.alert : tokens.ink[5]}
+                        fill={hasRestr ? tokens.signal.alert : genderFill || tokens.ink[5]}
                         stroke={genderStroke || (hasRestr ? tokens.signal.alert : tokens.ink[4])}
                         strokeWidth={genderStroke ? 0.5 : 0.25} />
                     </g>
