@@ -52,7 +52,7 @@ import {
   FLOOR_MAPS_KEY, FLOOR_STATUS_KEY, sanitizeFloorMaps,
   getActiveDiningMap, getTerraceMap, mapSeatCountForBoardTable,
   terraceOccupancy, applyLayoutSwitchRow, resolveReservationTable,
-  sanitizeFloorStatus, setFloorStatus, cycleFloorStatus,
+  sanitizeFloorStatus, setFloorStatus, cycleFloorStatus, pruneFloorStatus,
 } from "./utils/floorMaps.js";
 import {
   visitStateOf, isArmed as isVisitArmed,
@@ -4518,9 +4518,12 @@ export default function App() {
       readStateKey(FLOOR_STATUS_KEY),
     ]))
       .then(([fm, fs]) => {
-        if (fm) setFloorMapsState(sanitizeFloorMaps(fm));
-        // sanitize drops legacy DIRTY values — the feature was removed
-        setFloorStatusState(sanitizeFloorStatus(fs));
+        const maps = fm ? sanitizeFloorMaps(fm) : floorMapsState;
+        if (fm) setFloorMapsState(maps);
+        // sanitize drops legacy DIRTY values (feature removed); prune heals
+        // strips already orphaned in the store by an old map edit — ADOPT
+        // only, never written back at boot (a loading device must not write).
+        setFloorStatusState(pruneFloorStatus(fs, maps));
       })
       .catch(() => {});
   }, [psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -4529,6 +4532,14 @@ export default function App() {
     const s = sanitizeFloorMaps(next);
     setFloorMapsState(s);
     if (supabase) saveStateKey(FLOOR_MAPS_KEY, s).catch?.(() => {});
+    // A map edit (rename/delete/re-add) can orphan SET strips — and addTable
+    // re-mints freed labels, so a stale strip would resurrect on the next
+    // table with that name and reach the kitchen as a phantom SET. The
+    // EDITING device prunes and persists the cleaned strips.
+    const pruned = pruneFloorStatus(floorStatus, s);
+    if (JSON.stringify(pruned) !== JSON.stringify(sanitizeFloorStatus(floorStatus))) {
+      updateFloorStatus(pruned);
+    }
     return s;
   };
 

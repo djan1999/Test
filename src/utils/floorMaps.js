@@ -902,6 +902,24 @@ export function sanitizeFloorStatus(state) {
 export const floorStatusOf = (status, mapId, label) =>
   STATUS_VALUES.includes(status?.[mapId]?.[label]) ? status[mapId][label] : null;
 
+// Strips are keyed [mapId][label]; the geometry ops (rename/delete) stay
+// deliberately strip-blind, and addTable RE-MINTS freed labels (first free
+// T${n}) — so a stale strip on a reused label showed a SET the table never
+// earned, and sendableIds forwarded it to the kitchen as a phantom SET.
+// Prune every strip whose map or label no longer exists in the maps state.
+export function pruneFloorStatus(status, mapsState) {
+  const clean = sanitizeFloorStatus(status);
+  const out = {};
+  for (const [mapId, byLabel] of Object.entries(clean)) {
+    const map = (mapsState?.maps || []).find(m => m.id === mapId);
+    if (!map) continue;
+    const labels = new Set((map.tables || []).map(t => t.label));
+    const kept = Object.fromEntries(Object.entries(byLabel).filter(([l]) => labels.has(l)));
+    if (Object.keys(kept).length) out[mapId] = kept;
+  }
+  return out;
+}
+
 export function setFloorStatus(status, mapId, label, val) {
   if (!mapId || !label) return sanitizeFloorStatus(status);
   const clean = sanitizeFloorStatus(status);
