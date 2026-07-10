@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  visitStateOf, isArmed, assignTerrace, clearTerraceTable, shouldArmOnFire,
-  fireLastBite, moveToDining, markSeated, closeVisit, FLOW_KEYS, pickFlowKeys,
+  visitStateOf, assignTerrace, clearTerraceTable,
+  moveToDining, markSeated, closeVisit, FLOW_KEYS, pickFlowKeys,
 } from "../utils/terraceFlow.js";
 
 const NOW = "2026-07-05T19:30:00.000Z";
@@ -13,17 +13,16 @@ describe("visit state derivation", () => {
     expect(visitStateOf({ visit_state: "nonsense" })).toBe("booked");
   });
 
-  it("self-heals the dead-end: un-armed 'terrace' with no table reads as 'booked'", () => {
-    // The stuck party (10.07): cleared from its terrace table before the
-    // kitchen fired anything — 'terrace' + no table + not armed locked it out
-    // of every seat/assign surface and kept its ghost kitchen ticket alive.
-    // Reading it as 'booked' returns it to the normal pool everywhere,
-    // including rows already persisted in that state before the fix.
+  it("self-heals the dead-end: 'terrace' with no table reads as 'booked'", () => {
+    // The stuck party (10.07): cleared from its terrace table — 'terrace' +
+    // no table locked it out of every seat/assign surface and kept its ghost
+    // kitchen ticket alive. Reading it as 'booked' returns it to the normal
+    // pool everywhere, including rows already persisted in that state before
+    // the fix — and rows still carrying the retired last_bite_fired_at stamp.
     expect(visitStateOf({ visit_state: "terrace", terrace_table: null })).toBe("booked");
     expect(visitStateOf({ visit_state: "terrace" })).toBe("booked");
-    // ARMED without a table stays 'terrace' — the stranded MOVE banner owns it.
-    expect(visitStateOf({ visit_state: "terrace", last_bite_fired_at: NOW })).toBe("terrace");
-    // A terrace party WITH a table is on terrace, armed or not.
+    expect(visitStateOf({ visit_state: "terrace", last_bite_fired_at: NOW })).toBe("booked");
+    // A terrace party WITH a table is on terrace.
     expect(visitStateOf({ visit_state: "terrace", terrace_table: "T23" })).toBe("terrace");
   });
 });
@@ -43,46 +42,23 @@ describe("assignTerrace", () => {
   });
 });
 
-describe("last bite arming (the single kitchen hook)", () => {
-  it("arms only a terrace party on an is_last_bite course, only once", () => {
-    expect(shouldArmOnFire({ is_last_bite: true }, { visit_state: "terrace", terrace_table: "T23" })).toBe(true);
-    // no terrace assignment → no-op
-    expect(shouldArmOnFire({ is_last_bite: true }, {})).toBe(false);
-    expect(shouldArmOnFire({ is_last_bite: true }, { visit_state: "dining" })).toBe(false);
-    // not the flagged course
-    expect(shouldArmOnFire({ is_last_bite: false }, { visit_state: "terrace" })).toBe(false);
-    // already armed — extra courses after the last bite never re-arm
-    expect(shouldArmOnFire({ is_last_bite: true }, { visit_state: "terrace", last_bite_fired_at: NOW })).toBe(false);
-  });
-
-  it("fireLastBite stamps once; ARMED is derived, never a visit_state", () => {
-    const armed = fireLastBite({ visit_state: "terrace", terrace_table: "T23" }, NOW);
-    expect(armed.last_bite_fired_at).toBe(NOW);
-    expect(armed.visit_state).toBe("terrace"); // badge only, NO auto-move
-    expect(isArmed(armed)).toBe(true);
-    expect(fireLastBite(armed, NOW)).toBeNull();
-    expect(fireLastBite({ visit_state: "dining" }, NOW)).toBeNull();
-  });
-
-  it("terrace table cleared meanwhile → still ARMED, MOVE still reachable", () => {
-    let d = fireLastBite({ visit_state: "terrace", terrace_table: "T23" }, NOW);
-    d = clearTerraceTable(d);
-    expect(d.terrace_table).toBeNull();
-    expect(isArmed(d)).toBe(true);
-    expect(moveToDining(d, NOW)).toMatchObject({ visit_state: "arriving" });
-  });
-
-  it("clearing an UN-armed terrace party returns it to 'booked' — never a dead end (10.07 stuck party)", () => {
+describe("clearTerraceTable", () => {
+  it("clearing a terrace party returns it to 'booked' — never a dead end (10.07 stuck party)", () => {
     const d = clearTerraceTable({ visit_state: "terrace", terrace_table: "T23", resName: "NOVAK" });
     expect(d.terrace_table).toBeNull();
     expect(d.visit_state).toBe("booked");
     expect(d.resName).toBe("NOVAK"); // rest of the reservation untouched
     // ...so every normal action is available again:
     expect(assignTerrace(d, "T24")).toMatchObject({ visit_state: "terrace", terrace_table: "T24" });
-    expect(isArmed(d)).toBe(false);
   });
 
-  it("clearing an UN-armed party who is SEATED INSIDE heals to 'dining' — not back into the waiting pool", () => {
+  it("a retired last_bite_fired_at stamp on an old row changes nothing", () => {
+    const d = clearTerraceTable({ visit_state: "terrace", terrace_table: "T23", last_bite_fired_at: NOW });
+    expect(d.visit_state).toBe("booked");
+    expect(d.terrace_table).toBeNull();
+  });
+
+  it("clearing a party who is SEATED INSIDE heals to 'dining' — not back into the waiting pool", () => {
     // Dessert-outside party: dining table still active, tile struck early.
     const d = clearTerraceTable(
       { visit_state: "terrace", terrace_table: "T23" },
@@ -90,24 +66,24 @@ describe("last bite arming (the single kitchen hook)", () => {
     );
     expect(d.terrace_table).toBeNull();
     expect(d.visit_state).toBe("dining"); // still eating inside — NOT 'booked'
-    // an ARMED party keeps 'terrace' regardless (the stranded MOVE owns it)
-    const armed = clearTerraceTable(
-      { visit_state: "terrace", terrace_table: "T23", last_bite_fired_at: NOW },
-      { seatedInside: true },
-    );
-    expect(armed.visit_state).toBe("terrace");
+  });
+
+  it("only a terrace party can be cleared", () => {
+    expect(clearTerraceTable({ visit_state: "dining" })).toBeNull();
+    expect(clearTerraceTable({})).toBeNull();
+    expect(clearTerraceTable(undefined)).toBeNull();
   });
 });
 
 describe("MOVE / SEATED", () => {
-  const onTerrace = { visit_state: "terrace", terrace_table: "T23", last_bite_fired_at: NOW };
+  const onTerrace = { visit_state: "terrace", terrace_table: "T23" };
 
   it("MOVE → arriving, stamps moved_at, keeps terrace_table as history", () => {
     const next = moveToDining(onTerrace, NOW);
     expect(next).toMatchObject({ visit_state: "arriving", moved_at: NOW, terrace_table: "T23" });
   });
 
-  it("MOVE is never blocked: works armed or not, from terrace only", () => {
+  it("MOVE is never blocked or gated: works from terrace only", () => {
     expect(moveToDining({ visit_state: "terrace", terrace_table: "T21" }, NOW).visit_state).toBe("arriving");
     expect(moveToDining({ visit_state: "booked" }, NOW)).toBeNull();
     expect(moveToDining({ visit_state: "arriving" }, NOW)).toBeNull();
@@ -130,16 +106,20 @@ describe("pickFlowKeys (edit-form carry-through)", () => {
     expect(pickFlowKeys({ resName: "NOVAK", notes: "window" })).toEqual({});
     const full = {
       resName: "NOVAK", visit_state: "terrace", terrace_table: "T23",
-      terrace_map_id: "terrace_main", last_bite_fired_at: NOW, moved_at: null,
+      terrace_map_id: "terrace_main", moved_at: null,
     };
     expect(pickFlowKeys(full)).toEqual({
       visit_state: "terrace", terrace_table: "T23",
-      terrace_map_id: "terrace_main", last_bite_fired_at: NOW, moved_at: null,
+      terrace_map_id: "terrace_main", moved_at: null,
     });
     // null is a real value (terrace_table: null after a clear) — only
     // undefined means "key never entered the flow".
     expect(pickFlowKeys({ terrace_table: null })).toEqual({ terrace_table: null });
     expect(Object.keys(pickFlowKeys(full)).every((k) => FLOW_KEYS.includes(k))).toBe(true);
+    // the retired arming stamp is no longer a flow key — edits drop it
+    expect(FLOW_KEYS).not.toContain("last_bite_fired_at");
+    expect(pickFlowKeys({ visit_state: "terrace", last_bite_fired_at: NOW }))
+      .toEqual({ visit_state: "terrace" });
   });
 });
 

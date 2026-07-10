@@ -41,7 +41,7 @@ function resolveGuestTemplate(table, profiles, assignments) {
   return isShort ? (p.shortMenuTemplate || p.menuTemplate) : p.menuTemplate;
 }
 
-export function KitchenTicket({ table, menuCourses, upd, onCourseFired, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, inlineMods = false, quickAccess = false, roomGaps = [], historyGaps = [] }) {
+export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, inlineMods = false, quickAccess = false, roomGaps = [], historyGaps = [] }) {
   // Density. Compact tightens the vertical rhythm so two full rows of tickets
   // fit a 720px-tall kitchen display (32" 1280×720 → 5 columns × 2 rows = 10
   // tickets). Gated to large boards by the caller; the physical pixels on such
@@ -161,7 +161,7 @@ export function KitchenTicket({ table, menuCourses, upd, onCourseFired, dragHand
     setCustomNote("");
   };
 
-  const fire = (courseKey, course) => {
+  const fire = (courseKey) => {
     const now = fmt(new Date());
     // Functional update: two fires in quick succession on the same table must
     // both land — building from the render-captured `log` dropped the earlier
@@ -169,9 +169,6 @@ export function KitchenTicket({ table, menuCourses, upd, onCourseFired, dragHand
     upd(table.id, "kitchenLog", (prev) => ({ ...(prev || {}), [courseKey]: { firedAt: now } }));
     // Firing the course service asked for fulfils the "table is set" signal.
     if (table.courseReady?.key === courseKey) upd(table.id, "courseReady", null);
-    // The ONLY terrace-flow hook in the kitchen: App checks is_last_bite +
-    // visit_state and arms the party's move. No new kitchen buttons.
-    if (onCourseFired && course) onCourseFired(table.id, course);
   };
   const unfire = (courseKey) => {
     upd(table.id, "kitchenLog", (prev) => {
@@ -747,7 +744,7 @@ export function KitchenTicket({ table, menuCourses, upd, onCourseFired, dragHand
               borderLeft: fired ? `4px solid ${tokens.green.border}` : kcNote.name || kcNote.note ? `4px solid ${tokens.red.text}` : "4px solid transparent",
             }}>
               <div
-                onClick={() => { if (editable && showEdit) return; fired ? unfire(key) : fire(key, course); }}
+                onClick={() => { if (editable && showEdit) return; fired ? unfire(key) : fire(key); }}
                 style={{ display: "flex", alignItems: "center", padding: dz.coursePad, gap: dz.courseGap, cursor: editable && showEdit ? "default" : "pointer" }}>
                 <span style={{ fontFamily: FONT, fontSize: dz.courseGlyph, color: fired ? tokens.green.border : tokens.ink[4], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
                 {(() => {
@@ -916,7 +913,7 @@ export function KitchenTicket({ table, menuCourses, upd, onCourseFired, dragHand
   );
 }
 
-export function SortableTicket({ table, menuCourses, upd, onCourseFired = null, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, inlineMods = false, quickAccess = false, roomGaps = [], historyGaps = [] }) {
+export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, inlineMods = false, quickAccess = false, roomGaps = [], historyGaps = [] }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
@@ -947,7 +944,6 @@ export function SortableTicket({ table, menuCourses, upd, onCourseFired = null, 
           table={table}
           menuCourses={menuCourses}
           upd={upd}
-          onCourseFired={onCourseFired}
           dragHandleRef={setActivatorNodeRef}
           dragListeners={listeners}
           profiles={profiles}
@@ -1097,10 +1093,10 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
   );
 }
 
-export default function KitchenBoard({ tables, menuCourses, upd, updMany, onCourseFired = null, profiles = [], assignments = {}, historyGapsByMenu = null, persistedOrder = null, onOrderChange = null }) {
+export default function KitchenBoard({ tables, menuCourses, upd, updMany, profiles = [], assignments = {}, historyGapsByMenu = null, persistedOrder = null, onOrderChange = null }) {
   // A party still out on the terrace (t._visit, decorated by App) gets its
   // ticket BEFORE the dining table is seated — the kitchen fires the opening
-  // courses (and the LAST BITE arming) from here while the guests are outside.
+  // courses from here while the guests are outside.
   const activeTables = tables
     .filter(t => (t.active || t._visit?.visit === "terrace") && !t.kitchenArchived)
     .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
@@ -1292,7 +1288,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, onCour
                 table={t}
                 menuCourses={menuCourses}
                 upd={upd}
-                onCourseFired={onCourseFired}
                 isDragging={activeId === t.id}
                 anyDragging={activeId !== null}
                 profiles={profiles}

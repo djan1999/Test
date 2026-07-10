@@ -352,7 +352,7 @@ export function getShortMenuCourseList(menuCourses = []) {
 
 /**
  * Walk a row-based menuTemplate and return ordered course keys, deduplicated.
- * Used by KitchenBoard / SheetView to translate an assigned kitchen profile
+ * Used by KitchenBoard to translate an assigned kitchen profile
  * (or any guest profile) into operational course order.
  *
  * Rules (per the brief):

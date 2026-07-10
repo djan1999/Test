@@ -5,7 +5,7 @@ import {
   getActiveDiningMap, getTerraceMap, terraceOccupancy, floorStatusOf, boardIdsOf,
   resolveReservationTable,
 } from "../../utils/floorMaps.js";
-import { visitStateOf, isArmed } from "../../utils/terraceFlow.js";
+import { visitStateOf } from "../../utils/terraceFlow.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 
 const FONT = tokens.font;
@@ -13,7 +13,7 @@ const FONT = tokens.font;
 // Kitchen floor view — STRICTLY read-only. The kitchen sees the room the way
 // FOH sees it: terrace (default tab) + the active dining layout, ×pax,
 // course progress C4/12 (the kitchen's core info — FOH drops it, we keep
-// it), LAST BITE ✓ arming, chair marks with restrictions in the app red,
+// it), chair marks with restrictions in the app red,
 // and the FOH SET markers (service mode with no tap handlers — the kitchen
 // watches hands-calls, never sets them). NO guest names, same as
 // the FOH floor. The
@@ -59,7 +59,6 @@ export default function KitchenFloorView({
           // a terrace party's identity is its DINING table (per Djan):
           // terrace B occupied by T8's party reads "B / T8" — no pax/course
           name: resolveReservationTable(diningMap, r.table_id).table?.label || `T${r.table_id}`,
-          badge: isArmed(r.data) ? { text: "LAST BITE ✓" } : undefined,
           strip,
         };
         const restr = (r.data?.restrictions || []).filter((x) => x && x.note);

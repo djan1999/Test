@@ -23,7 +23,8 @@ const tables = [
 ];
 
 const reservations = [
-  // out on the terrace, armed
+  // out on the terrace (the last_bite_fired_at stamp is a retired field old
+  // rows may still carry — it must change nothing anywhere)
   { id: "r1", table_id: 9, data: { resName: "WEISS", guests: 4, visit_state: "terrace", terrace_table: "T23", last_bite_fired_at: "2026-07-05T18:00:00Z" } },
   // waiting for a terrace assignment
   { id: "r2", table_id: 5, data: { resName: "MURN", guests: 2, visit_state: "booked", resTime: "20:00" } },
@@ -101,7 +102,7 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).not.toContain("WEISS"); // no names on the floor
     expect(container.textContent).toContain("T9");        // the party's identity = its dining table
     expect(container.textContent).toContain("XC");        // the party's seat notes travel to the terrace table
-    expect(container.textContent).toContain("LAST BITE ✓");
+    expect(container.textContent).not.toContain("LAST BITE"); // retired concept — stamp on r1 renders nothing
     fireEvent.click(findTable(container, "T23"));
     expect(container.textContent).toContain("×4");        // pax lives in the sheet header
     // the sheet: waters by seat position + pairings, reservation name omitted
@@ -159,13 +160,18 @@ describe("stranded terrace parties (no reachable tile)", () => {
     expect(handlers.onAssign).toHaveBeenCalledWith(stranded, "T25");
   });
 
-  it("armed party with NO table still gets the banner (regression pin) — with its LAST BITE badge", () => {
-    const armedNoTable = { id: "r8", table_id: 7, data: { resName: "KRANJC", guests: 2, visit_state: "terrace", terrace_table: null, last_bite_fired_at: "2026-07-10T20:00:00Z" } };
-    const { handlers, getByText, getAllByText } = setup({ reservations: [...reservations, armedNoTable] });
+  it("a table-less terrace row (old armed rows included) self-heals to booked — picker, not banner", () => {
+    // Before 10.07 an ARMED party could sit in 'terrace' with no table; the
+    // arming concept is retired, so visitStateOf heals ANY table-less
+    // terrace row to 'booked' — it re-enters the ASSIGN PARTY picker.
+    const noTable = { id: "r8", table_id: 7, data: { resName: "KRANJC", guests: 2, visit_state: "terrace", terrace_table: null, last_bite_fired_at: "2026-07-10T20:00:00Z" } };
+    const { container, handlers, getByText, queryByText } = setup({ reservations: [...reservations, noTable] });
     fireEvent.click(getByText("TERRACE"));
-    expect(getAllByText("LAST BITE ✓").length).toBeGreaterThan(0);
-    fireEvent.click(getByText(/MOVE TO T7/));
-    expect(handlers.onMove).toHaveBeenCalledWith(armedNoTable);
+    expect(queryByText(/MOVE TO T7/)).toBeNull();          // no rescue banner
+    expect(container.textContent).not.toContain("LAST BITE");
+    fireEvent.click(findTable(container, "T25"));          // free tile → picker
+    fireEvent.click(getByText(/KRANJC ×2/));
+    expect(handlers.onAssign).toHaveBeenCalledWith(noTable, "T25");
   });
 });
 

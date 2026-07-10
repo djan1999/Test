@@ -2,7 +2,6 @@ import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT, baseInp } from "./adminStyles.js";
 import { DIETARY_KEYS } from "../../constants/dietary.js";
-import { setLastBiteExclusive } from "../../utils/menuUtils.js";
 
 // ── Pairing types ─────────────────────────────────────────────────────────────
 const PAIRING_KEYS = [
@@ -13,7 +12,7 @@ const PAIRING_KEYS = [
 ];
 
 // ── CourseCard — inline editor for a single course row ───────────────────────
-function CourseCard({ course, onUpdate, onToggleLastBite, onDelete, onMoveUp, onMoveDown, isFirst, isLast }) {
+function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst, isLast }) {
   const [expanded, setExpanded] = useState(false);
   const inpSm = { ...baseInp, padding: "5px 8px", fontSize: 11 };
   const labelSm = { fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[3], textTransform: "uppercase", marginBottom: 2 };
@@ -108,19 +107,6 @@ function CourseCard({ course, onUpdate, onToggleLastBite, onDelete, onMoveUp, on
           {course.menu?.sub && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginLeft: 8 }}>{course.menu.sub}</span>}
         </div>
         {!isActive && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[1], background: tokens.ink[4], border: `1px solid ${tokens.ink[3]}`, borderRadius: 0, padding: "2px 6px" }}>ARCHIVED</span>}
-        {/* LAST BITE — fires the terrace move arming. One per menu: turning it
-            on here clears it on every other course (panel-level exclusivity). */}
-        <button
-          onClick={e => { e.stopPropagation(); onToggleLastBite(!course.is_last_bite); }}
-          title="LAST BITE — kitchen firing this course arms the terrace party's move (one per menu)"
-          style={{
-            fontFamily: FONT, fontSize: 8, letterSpacing: 1,
-            padding: "3px 8px", cursor: "pointer", borderRadius: 0,
-            border: `1px solid ${course.is_last_bite ? tokens.ink[0] : tokens.ink[4]}`,
-            background: course.is_last_bite ? tokens.ink[0] : "transparent",
-            color: course.is_last_bite ? tokens.neutral[0] : tokens.ink[3],
-          }}
-        >{course.is_last_bite ? "◼ LAST BITE" : "LAST BITE"}</button>
         {isOptional && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[1], background: tokens.tint.parchment, border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "2px 6px" }}>OPTIONAL · {course.optional_flag}</span>}
 
         {activeRestrictions.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.red.text, border: `1px solid ${tokens.red.border}`, borderRadius: 0, padding: "2px 6px" }}>{activeRestrictions.length}R</span>}
@@ -370,11 +356,6 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
   const updateCourse = (position, updated) =>
     onUpdateCourses(menuCourses.map(c => c.position === position ? updated : c));
 
-  // LAST BITE is unique per menu — pure helper so the exclusivity rule is
-  // unit-tested against the real code, not a copy.
-  const setLastBite = (position, on) =>
-    onUpdateCourses(setLastBiteExclusive(menuCourses, position, on));
-
   const deleteCourse = (position) => {
     if (!window.confirm("Delete this course?")) return;
     onUpdateCourses(menuCourses.filter(c => c.position !== position));
@@ -481,7 +462,6 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
             key={course.position}
             course={course}
             onUpdate={updated => updateCourse(course.position, updated)}
-            onToggleLastBite={on => setLastBite(course.position, on)}
             onDelete={() => deleteCourse(course.position)}
             onMoveUp={() => moveCourse(course.position, -1)}
             onMoveDown={() => moveCourse(course.position, +1)}

@@ -1,6 +1,6 @@
 /**
- * Shared course visibility and progression logic used by SheetView,
- * KitchenBoard, and any future service views.
+ * Shared course visibility and progression logic used by KitchenBoard,
+ * the floor views, and any future service views.
  *
  * Layout-driven (preferred) vs. legacy (fallback):
  *   - When the caller passes profiles + assignments (or a resolved kitchen
