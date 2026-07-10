@@ -3,6 +3,14 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  // Visible build identity (admin SYSTEM panel): ends the "which version is
+  // this tablet actually running" guessing that stalled the 10.07 rollout —
+  // installed PWAs can serve a stale cached bundle long after a deploy.
+  define: {
+    __BUILD_ID__: JSON.stringify(
+      `${(process.env.VERCEL_GIT_COMMIT_SHA || "local").slice(0, 7)} · ${new Date().toISOString().slice(0, 16).replace("T", " ")}Z`,
+    ),
+  },
   plugins: [
     react(),
     VitePWA({

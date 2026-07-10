@@ -63,6 +63,8 @@ export default function AdminLayout({
   // System
   syncStatus,
   powerSync = null,
+  sqlitePrimary = false,
+  lastSyncError = null,
   supabaseUrl,
   hasSupabase,
   logoDataUri,
@@ -489,6 +491,8 @@ export default function AdminLayout({
             <SystemPanel
               syncStatus={syncStatus}
               powerSync={powerSync}
+              sqlitePrimary={sqlitePrimary}
+              lastSyncError={lastSyncError}
               supabaseUrl={supabaseUrl}
               hasSupabase={hasSupabase}
               onSyncWines={onSyncWines}
