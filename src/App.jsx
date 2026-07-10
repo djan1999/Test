@@ -56,10 +56,10 @@ import {
   sanitizeFloorStatus, setFloorStatus, cycleFloorStatus, pruneFloorStatus,
 } from "./utils/floorMaps.js";
 import {
-  visitStateOf, isArmed as isVisitArmed,
+  visitStateOf,
   assignTerrace as assignTerraceData, clearTerraceTable as clearTerraceData,
   moveToDining as moveToDiningData, markSeated as markSeatedData,
-  shouldArmOnFire, fireLastBite, closeVisit as closeVisitData,
+  closeVisit as closeVisitData,
 } from "./utils/terraceFlow.js";
 import { getVisibleCoursesForTable, getCourseProgressState, isStaleCourseReady } from "./utils/courseProgress.js";
 import { useIsMobile, BP } from "./hooks/useIsMobile.js";
@@ -111,7 +111,6 @@ const MenuPage = lazy(() => import("./components/menu/MenuPage.jsx"));
 const SummaryModal = lazy(() => import("./components/modals/SummaryModal.jsx"));
 const ArchiveModal = lazy(() => import("./components/modals/ArchiveModal.jsx"));
 const InventoryModal = lazy(() => import("./components/modals/InventoryModal.jsx"));
-const SheetView = lazy(() => import("./components/service/SheetView.jsx"));
 const KitchenFloorView = lazy(() => import("./components/kitchen/KitchenFloorView.jsx"));
 
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -1406,13 +1405,6 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                 background: tokens.ink[5], fontWeight: 600, textTransform: "uppercase",
               }}>ON TERRACE{visit.terraceLabel ? ` · ${visit.terraceLabel}` : ""}</span>
             )}
-            {onTerrace && visit.armed && (
-              <span style={{
-                fontFamily: FONT, fontSize: "8px", letterSpacing: "0.08em",
-                padding: "2px 6px", borderRadius: 0,
-                background: tokens.ink[0], color: tokens.neutral[0], fontWeight: 600,
-              }}>LAST BITE ✓</span>
-            )}
             {isArriving && onMarkSeated && (
               <button
                 onClick={e => { e.stopPropagation(); onMarkSeated(t.id); }}
@@ -2301,22 +2293,20 @@ export default function App() {
   // Which table (if any) is currently expanded into Quick Access on the board.
   // Clicking a reservation name toggles this; the rest of the board stays compact.
   const [quickTableId, setQuickTableId] = useState(null);
-  // Service board presentation: "board" (card grid), "sheet" (single-table
-  // operational sheet with table index + intelligence rails) or "floor" (the
-  // spatial floor map). Persisted so a device keeps its preferred working
-  // view across reloads; anything unknown falls back to "board".
+  // Service board presentation: "board" (card grid) or "floor" (the spatial
+  // floor map). Persisted so a device keeps its preferred working view across
+  // reloads; anything unknown — including "sheet", removed 10.07 — falls back
+  // to "board".
   const [serviceView, setServiceView] = useState(() => {
     try {
       const v = localStorage.getItem(workspaceKey("milka_service_view"));
-      return v === "sheet" || v === "floor" ? v : "board";
+      return v === "floor" ? v : "board";
     } catch { return "board"; }
   });
   const changeServiceView = v => {
     setServiceView(v);
     try { localStorage.setItem(workspaceKey("milka_service_view"), v); } catch {}
   };
-  // Table currently focused in the sheet view (independent of quickTableId).
-  const [sheetTableId, setSheetTableId] = useState(null);
   // 60s heartbeat keeps clock-derived readout values (arrival radar) live
   // even when nothing else triggers a render. Service mode only.
   const [, bumpReadoutClock] = useState(0);
@@ -3048,17 +3038,6 @@ export default function App() {
       ["booked", "dining"].includes(visitStateOf(r.data)) && !r.data?.clearedFromBoard &&
       reservationTableIds(r.data, r.table_id).includes(Number(tableId)));
     if (owner) setTerraceAssignFor(owner);
-  };
-
-  // The ONLY kitchen-ticket hook of the terrace flow: when the kitchen marks
-  // a course out, arm the party's move iff it's the LAST BITE course and the
-  // party is still on the terrace (pure decision in utils/terraceFlow —
-  // no-ops for everything else, never re-arms).
-  const handleKitchenCourseFired = (tableId, course) => {
-    const owner = serviceReservations.find(r =>
-      !r.data?.clearedFromBoard && reservationTableIds(r.data, r.table_id).includes(Number(tableId)));
-    if (!owner || !shouldArmOnFire(course, owner.data)) return;
-    persistVisitData(owner, fireLastBite(owner.data, new Date().toISOString()));
   };
 
   // Apply a confirmed layout-switch diff: only 'move' rows are written
@@ -5486,7 +5465,6 @@ export default function App() {
             menuCourses={activeMenuCourses}
             upd={upd}
             updMany={updMany}
-            onCourseFired={handleKitchenCourseFired}
             profiles={profilesState.profiles}
             assignments={profilesState.assignments}
             historyGapsByMenu={historyGapsByMenu}
@@ -5692,10 +5670,9 @@ export default function App() {
                 );
               })()}
             </div>
-            {/* [VIEW] toggle — BOARD (card grid) / SHEET (single-table sheet)
-                / FLOOR (the spatial floor map) */}
+            {/* [VIEW] toggle — BOARD (card grid) / FLOOR (the spatial floor map) */}
             <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-              {["board", "sheet", "floor"].map(v => {
+              {["board", "floor"].map(v => {
                 const on = serviceView === v;
                 return (
                   <button
@@ -5773,64 +5750,6 @@ export default function App() {
               }}
               isMobile={appIsMobile}
             />
-          ) : serviceView === "sheet" ? (
-            /* SHEET view — single-table operational sheet (table index +
-               course state + guest matrix + intelligence rails). */
-            <Suspense fallback={lazyViewFallback}>
-              <SheetView
-                tables={tables}
-                menuCourses={activeMenuCourses}
-                selectedId={sheetTableId}
-                onSelect={setSheetTableId}
-                onOpenDetail={id => setSel(id)}
-                onSetNext={(tableId, course) => {
-                  // "Table is set for the next course" — raise the kitchen
-                  // alert and stamp courseReady on the table. The alert carries
-                  // ONLY the set course (see onSendSetToKitchen: re-attaching
-                  // the previous unconfirmed order delta made SET re-send
-                  // pairings and every earlier change). The kitchen ticket
-                  // shows the banner until it fires the course.
-                  const t = tablesRef.current?.find(x => x.id === tableId);
-                  const ready = { key: course.key, index: course.index, name: course.name, at: fmt(new Date()) };
-                  updMany(tableId, {
-                    courseReady: ready,
-                    kitchenAlert: {
-                      timestamp: new Date().toISOString(),
-                      tableName: t?.resName || null,
-                      seats: [],
-                      confirmed: false,
-                      course: ready,
-                    },
-                    // a SET to an archived ticket proves it's still live —
-                    // bring it back next to its alert (Archive mis-taps)
-                    ...(t?.kitchenArchived ? { kitchenArchived: false } : {}),
-                  });
-                }}
-                onUnset={tableId => {
-                  const t = tablesRef.current?.find(x => x.id === tableId);
-                  const changes = { courseReady: null };
-                  const alert = t?.kitchenAlert;
-                  // Retract the course from a still-pending alert; keep the
-                  // alert alive only if it still carries an order delta.
-                  if (alert && !alert.confirmed && alert.course) {
-                    const { course: _drop, ...rest } = alert;
-                    changes.kitchenAlert = rest.seats?.length ? rest : null;
-                  }
-                  updMany(tableId, changes);
-                }}
-                onUndoFire={(tableId, courseKey) => {
-                  const t = tablesRef.current?.find(x => x.id === tableId);
-                  const newLog = { ...(t?.kitchenLog || {}) };
-                  delete newLog[courseKey];
-                  upd(tableId, "kitchenLog", newLog);
-                }}
-                onSeat={seatTable}
-                onUnseat={unseatTable}
-                profiles={profilesState.profiles}
-                assignments={profilesState.assignments}
-                historyGapsByMenu={historyGapsByMenu}
-              />
-            </Suspense>
           ) : (
             /* Combined Board + per-table Quick Access view */
             (() => {
@@ -5845,7 +5764,6 @@ export default function App() {
                   visitByTable[id] = {
                     visit: vs,
                     terraceLabel: r.data?.terrace_table || null,
-                    armed: isVisitArmed(r.data),
                   };
                 });
               });

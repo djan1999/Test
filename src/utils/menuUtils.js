@@ -411,14 +411,3 @@ export function mergeDishes(list) {
   });
   return merged.sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
 }
-
-// LAST BITE is unique per menu: setting it on one course clears it on every
-// other. The flag lives on the course object (not its list index), so the
-// caller's renumbering on insert/reorder never moves it — each row keeps its
-// own is_last_bite through position reshuffles.
-export function setLastBiteExclusive(courses, position, on) {
-  return (Array.isArray(courses) ? courses : []).map(c => ({
-    ...c,
-    is_last_bite: on ? c.position === position : (c.position === position ? false : c.is_last_bite === true),
-  }));
-}

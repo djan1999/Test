@@ -19,15 +19,15 @@ describe("FloorMap renderer", () => {
     expect(seats.container.textContent).toContain("1?");
   });
 
-  it("occupied tables show party name ×pax; armed badge renders", () => {
+  it("occupied tables show party name ×pax; a badge renders", () => {
     const { container } = render(
       <FloorMap map={terrace} mode="view" tableState={{
-        T23: { status: "occupied", name: "NOVAK", pax: 2, sub: "C4/12", badge: { text: "LAST BITE ✓" } },
+        T23: { status: "occupied", name: "NOVAK", pax: 2, sub: "C4/12", badge: { text: "ARRIVING · KV" } },
       }} />,
     );
     expect(container.textContent).toContain("NOVAK ×2");
     expect(container.textContent).toContain("C4/12");
-    expect(container.textContent).toContain("LAST BITE ✓");
+    expect(container.textContent).toContain("ARRIVING · KV");
   });
 
   it("picker mode: free tables tap through, occupied tables are inert + dimmed", () => {

@@ -5,22 +5,25 @@
 //
 //   booked ──assignTerrace──────────────▶ terrace
 //   booked ──(existing seat flow)───────▶ dining        (terrace skipped)
-//   terrace ─kitchen fires LAST BITE────▶ terrace+ARMED (badge only, derived)
-//   ARMED  ──MOVE TO {dining_table}─────▶ arriving      (or dining, single-tap)
+//   terrace ──MOVE TO {dining_table}────▶ arriving      (or dining, single-tap)
 //   arriving ─MARK SEATED───────────────▶ dining
 //   dining ──(existing clear flow)──────▶ done
 //
-// ARMED is not a visit_state — it is derived (last_bite_fired_at set while
-// still on terrace), so nothing here auto-moves a party. All writers must
-// persist the returned data via App's persistReservationRow seam.
+// The LAST BITE arming concept (kitchen fire → ARMED badge → move cue) was
+// removed 10.07 per Djan — too much signal for the efficiency it bought. MOVE
+// is always available from the occupied tile's sheet / stranded banner, and
+// the crew decides the moment themselves. Old rows may still carry a
+// last_bite_fired_at stamp; it is ignored everywhere and drops naturally on
+// the next reservation edit. All writers must persist the returned data via
+// App's persistReservationRow seam.
 
 export const VISIT_STATES = ["booked", "terrace", "arriving", "dining", "done"];
 
 /** The reservation-data keys that carry the visit through the flow. Any code
  *  that REBUILDS a reservation's data blob (the edit form) must carry these,
  *  or a routine mid-service edit teleports a live terrace party back to
- *  'booked' — ghost tile, lost LAST BITE arming. */
-export const FLOW_KEYS = ["visit_state", "terrace_table", "terrace_map_id", "last_bite_fired_at", "moved_at"];
+ *  'booked' (ghost tile). */
+export const FLOW_KEYS = ["visit_state", "terrace_table", "terrace_map_id", "moved_at"];
 
 /** Pick only the flow keys PRESENT on a data blob — legacy rows (none of the
  *  keys) come back as {} so rebuilt blobs stay byte-identical for them. */
@@ -30,23 +33,14 @@ export const pickFlowKeys = (data) =>
 export const visitStateOf = (data) => {
   const s = data?.visit_state;
   if (!VISIT_STATES.includes(s)) return "booked";
-  // Self-heal the dead-end state: 'terrace' with NO table and NO fired last
-  // bite is a party the flow has nothing left to offer — not on any terrace
-  // tile, no MOVE (that needs ARMED), and 'terrace' locks it out of every
+  // Self-heal the dead-end state: 'terrace' with NO table is a party the map
+  // can't show — no tile, no sheet — and 'terrace' locks it out of every
   // (re)assign gate and keeps its ghost ticket on the kitchen board. Reading
   // it as 'booked' returns the party to the normal pool everywhere at once,
-  // including rows already stuck in the store from before this fix. An ARMED
-  // party without a table stays 'terrace' on purpose — the stranded banner's
-  // MOVE is its designed path in.
-  if (s === "terrace" && !data?.terrace_table && !data?.last_bite_fired_at) return "booked";
+  // including rows already stuck in the store from before this fix.
+  if (s === "terrace" && !data?.terrace_table) return "booked";
   return s;
 };
-
-// LAST BITE ✓ badge. Kept true after a manual terrace-table clear (the clear
-// nulls terrace_table but leaves visit_state) so MOVE stays reachable from
-// the reservation row — the "table cleared meanwhile" edge case.
-export const isArmed = (data) =>
-  visitStateOf(data) === "terrace" && !!data?.last_bite_fired_at;
 
 // FOH assigns a terrace table (mini-map picker). Valid from 'booked'
 // (arrival snacks), from 'terrace' as a re-assign, and from 'dining' —
@@ -65,33 +59,20 @@ export function assignTerrace(data, label, mapId) {
 }
 
 // FOH clears the terrace table without moving the party (spilled drink, table
-// broken down early). An ARMED party keeps visit_state 'terrace' so its MOVE
-// stays reachable (the stranded banner). An UN-armed party — nothing fired
-// yet — leaves 'terrace': keeping it locked the party out of every
-// seat/assign surface with no way back (the stuck "ON TERRACE" party). The
-// heal target depends on where the guests actually are: `seatedInside` (the
-// caller checks the board) means a dessert-outside party still eating at its
-// ACTIVE dining table → 'dining', so they don't reappear in the ASSIGN PARTY
-// picker as a waiting party (the double-seat hazard). Otherwise → 'booked'.
+// broken down early). The party leaves 'terrace' — keeping it locked the
+// party out of every seat/assign surface with no way back (the stuck
+// "ON TERRACE" party, 10.07). The heal target depends on where the guests
+// actually are: `seatedInside` (the caller checks the board) means a
+// dessert-outside party still eating at its ACTIVE dining table → 'dining',
+// so they don't reappear in the ASSIGN PARTY picker as a waiting party (the
+// double-seat hazard). Otherwise → 'booked'.
 export function clearTerraceTable(data, { seatedInside = false } = {}) {
   if (visitStateOf(data) !== "terrace") return null;
-  const next = { ...(data || {}), terrace_table: null };
-  if (!next.last_bite_fired_at) next.visit_state = seatedInside ? "dining" : "booked";
-  return next;
-}
-
-// The ONLY kitchen hook: called when a course is marked out on the ticket.
-// Arms only a terrace party, only once — extra courses ordered after the last
-// bite never re-arm, and a party with no terrace leg is a no-op.
-export function shouldArmOnFire(course, data) {
-  return !!course?.is_last_bite &&
-    visitStateOf(data) === "terrace" &&
-    !data?.last_bite_fired_at;
-}
-
-export function fireLastBite(data, nowIso) {
-  if (visitStateOf(data) !== "terrace" || data?.last_bite_fired_at) return null;
-  return { ...(data || {}), last_bite_fired_at: nowIso };
+  return {
+    ...(data || {}),
+    terrace_table: null,
+    visit_state: seatedInside ? "dining" : "booked",
+  };
 }
 
 // MOVE TO {dining_table}. Never blocked or warned by the dining table's

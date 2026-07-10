@@ -1,11 +1,11 @@
 // ── ResvForm — terrace-flow keys survive an edit ─────────────────────────────
 // The form rebuilds the reservation's data blob from its fields on SAVE. It
 // used to carry over only courseOverrides/kitchenCourseNotes, silently
-// dropping visit_state / terrace_table / last_bite_fired_at — so the most
-// routine mid-service edit (allergy, guest count) teleported a live terrace
-// party back to 'booked': ghost tile, lost LAST BITE arming. These tests pin
-// the carry-through, and the one deliberate exception: a booking cleared off
-// the board re-enters as a FRESH visit (flow keys + clearedFromBoard drop).
+// dropping visit_state / terrace_table — so the most routine mid-service
+// edit (allergy, guest count) teleported a live terrace party back to
+// 'booked': ghost tile. These tests pin the carry-through, and the one
+// deliberate exception: a booking cleared off the board re-enters as a
+// FRESH visit (flow keys + clearedFromBoard drop).
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
@@ -55,14 +55,22 @@ describe("ResvForm — flow-key carry-through", () => {
   it("a live terrace party's flow state survives an edit", async () => {
     const saved = await saveForm(makeInitial({
       visit_state: "terrace", terrace_table: "T23", terrace_map_id: "terrace_main",
-      last_bite_fired_at: NOW, moved_at: null,
+      moved_at: null,
     }));
     expect(saved.data).toMatchObject({
       resName: "NOVAK",
       visit_state: "terrace", terrace_table: "T23", terrace_map_id: "terrace_main",
-      last_bite_fired_at: NOW, moved_at: null,
+      moved_at: null,
     });
     expect(saved.data.clearedFromBoard).toBeUndefined();
+  });
+
+  it("the retired last_bite_fired_at stamp drops on edit (no longer a flow key)", async () => {
+    const saved = await saveForm(makeInitial({
+      visit_state: "terrace", terrace_table: "T23", last_bite_fired_at: NOW,
+    }));
+    expect(saved.data.visit_state).toBe("terrace");
+    expect("last_bite_fired_at" in saved.data).toBe(false);
   });
 
   it("a booking cleared off the board re-enters as a fresh visit — no flow keys, no clearedFromBoard", async () => {

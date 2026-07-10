@@ -103,7 +103,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
       // Carry the terrace-flow keys through the edit — this form rebuilds
       // `data` from its fields, and dropping visit_state/terrace_table
       // mid-service teleported live terrace parties back to 'booked' (ghost
-      // tile, lost LAST BITE arming). EXCEPTION: a booking cleared off the
+      // tile). EXCEPTION: a booking cleared off the
       // board was visit-closed by clear(); editing it re-enables the booking
       // as a FRESH visit, so clearedFromBoard AND the flow keys both
       // intentionally drop there.
