@@ -106,13 +106,14 @@ describe("KitchenBoard — upcoming reservation banners", () => {
         updMany={vi.fn()}
       />
     );
-    expect(screen.getByText(/UPCOMING · 1/)).toBeTruthy();
     expect(screen.getByText("19:30")).toBeTruthy();
     expect(screen.getByText("T3")).toBeTruthy();
     expect(screen.getByText("No Ricotta")).toBeTruthy();
     // The banner carries no courses — the ticket only appears once seated.
     expect(screen.queryByText("Course 1")).toBeNull();
-    expect(screen.getByText("No active tables")).toBeTruthy();
+    // The banner lives IN the grid (holding the ticket's slot) — not above an
+    // empty-state message.
+    expect(screen.queryByText("No active tables")).toBeNull();
   });
 
   it("seating the table promotes the banner to a full ticket", () => {
@@ -150,7 +151,7 @@ describe("KitchenBoard — upcoming reservation banners", () => {
   });
 });
 
-describe("KitchenTicket — pace visible in the header banner", () => {
+describe("KitchenTicket — pace in the header badge, buttons only in quick access", () => {
   const liveTable = (extra = {}) => ({
     id: 1, active: true, guests: 2, tableGroup: [], restrictions: [],
     seats: [{ id: 1, ...seatDefaults }],
@@ -159,7 +160,7 @@ describe("KitchenTicket — pace visible in the header banner", () => {
     ...extra,
   });
 
-  it("a set pace renders as a header badge (not only in the PACE row / quick drawer)", () => {
+  it("a set pace renders as a header badge; the standalone PACE row is gone", () => {
     render(
       <KitchenBoard
         tables={[liveTable({ pace: "Fast" })]}
@@ -168,11 +169,12 @@ describe("KitchenTicket — pace visible in the header banner", () => {
         updMany={vi.fn()}
       />
     );
-    // The PACE row's toggle button is one "Fast"; the header badge is a second.
-    expect(screen.getAllByText("Fast").length).toBeGreaterThanOrEqual(2);
+    // Exactly one "Fast" — the header badge. No PACE row toggles on the ticket.
+    expect(screen.getAllByText("Fast")).toHaveLength(1);
+    expect(screen.queryByText("Slow")).toBeNull();
   });
 
-  it("no header badge when no pace is set", () => {
+  it("no pace set → no badge; the toggles live in the quick-access drawer only", () => {
     render(
       <KitchenBoard
         tables={[liveTable()]}
@@ -181,9 +183,13 @@ describe("KitchenTicket — pace visible in the header banner", () => {
         updMany={vi.fn()}
       />
     );
-    // Only the PACE row toggles remain — exactly one "Fast" and one "Slow".
-    expect(screen.getAllByText("Fast")).toHaveLength(1);
-    expect(screen.getAllByText("Slow")).toHaveLength(1);
+    expect(screen.queryByText("Fast")).toBeNull();
+    expect(screen.queryByText("Slow")).toBeNull();
+    // Tap the header → the quick-access drawer offers the pace toggles.
+    fireEvent.click(screen.getByLabelText(/tap for quick access/i));
+    expect(screen.getByText("Fast")).toBeTruthy();
+    expect(screen.getByText("Slow")).toBeTruthy();
+    expect(screen.getByText("PACE")).toBeTruthy();
   });
 });
 
