@@ -10,12 +10,14 @@
 //   dining ──(existing clear flow)──────▶ done
 //
 // The LAST BITE arming concept (kitchen fire → ARMED badge → move cue) was
-// removed 10.07 per Djan — too much signal for the efficiency it bought. MOVE
-// is always available from the occupied tile's sheet / stranded banner, and
-// the crew decides the moment themselves. Old rows may still carry a
-// last_bite_fired_at stamp; it is ignored everywhere and drops naturally on
-// the next reservation edit. All writers must persist the returned data via
-// App's persistReservationRow seam.
+// removed 10.07 per Djan — too much signal for the efficiency it bought — and
+// returned the same day in a harder form: a course flagged is_last_bite now
+// AUTO-RUNS the move when the kitchen fires it (App's fire-to-clear effect →
+// moveTerracePartyIn), freeing the terrace table immediately. Manual MOVE
+// stays available from the occupied tile's sheet / stranded banner. Old rows
+// may still carry a last_bite_fired_at stamp; it is ignored everywhere and
+// drops naturally on the next reservation edit. All writers must persist the
+// returned data via App's persistReservationRow seam.
 
 export const VISIT_STATES = ["booked", "terrace", "arriving", "dining", "done"];
 

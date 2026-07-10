@@ -103,14 +103,14 @@ describe("FloorMap service mode", () => {
     expect(onTap.mock.calls[0][0].label).toBe("T21");
   });
 
-  it("renders the SET chip under the table and the allergy ▲", () => {
+  it("renders the SET chip under the table; the label ▲ is retired (chairs carry restrictions)", () => {
     const { container } = render(
       <FloorMap map={terrace} mode="service" tableState={{
         T21: { status: "occupied", name: "NOVAK", pax: 2, strip: "SET", allergy: true },
       }} />,
     );
     expect(container.textContent).toContain("SET");
-    expect(container.textContent).toContain("▲");
+    expect(container.textContent).not.toContain("▲");
     // the chip sits in the badge slot BELOW the shape — never inside it
     const chip = [...container.querySelectorAll("text")].find((x) => x.textContent === "SET");
     const t21 = terrace.tables.find((t) => t.label === "T21");

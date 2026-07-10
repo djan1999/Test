@@ -69,11 +69,13 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).toContain("RES 2");
     expect(container.textContent).toContain("SET 1");
     // FOH tables are label-only (per Djan): no names, no ×pax, no course on
-    // the shape — the ▲ and the ARRIVING badge stay
+    // the shape — the ARRIVING badge stays; the label ▲ is retired and the
+    // restriction CODE at the red chair is the signal instead
     expect(container.textContent).not.toContain("×2");
     expect(container.textContent).not.toContain("NOVAK");
     expect(container.textContent).not.toContain("WEISS");
-    expect(container.textContent).toContain("▲");
+    expect(container.textContent).not.toContain("▲");
+    expect(container.textContent).toContain("SHF"); // T1 P1 shellfish, at the chair
     expect(container.textContent).toContain("ARRIVING · KV");
     // waters/pairings BY POSITION at T9's chairs — the HOUSE shortcuts as
     // stored, stacked water-over-pairing in the chair pill (Wine → WP)
@@ -273,7 +275,6 @@ describe("seat presentation — gender outlines + positional restrictions", () =
     // the live board restriction even though the reservation blob has none.
     const t23 = findTable(container, "T23");
     expect(t23.querySelector('rect[fill="#b84a3a"]')).toBeTruthy();
-    expect(t23.textContent).toContain("▲");
   });
 });
 
