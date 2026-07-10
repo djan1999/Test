@@ -167,7 +167,7 @@ describe("app harness — terrace floor view through the real App", () => {
 
     // Free tile → sheet → assign Bruno. The write must ride the store seam.
     fireEvent.click(findSvgTable(container, "T23"));
-    fireEvent.click(await screen.findByText(/BRUNO HARNESS ×3|Bruno Harness ×3/i, {}, { timeout: 5000 }));
+    fireEvent.click(await screen.findByText(/^Bruno Harness ×3/, {}, { timeout: 5000 }));
     await waitFor(() => {
       expect(resRow("res-bruno")?.data).toMatchObject({ visit_state: "terrace", terrace_table: "T23" });
     }, { timeout: 5000 });
@@ -184,7 +184,7 @@ describe("app harness — terrace floor view through the real App", () => {
 
     // ...and Bruno is back in the ASSIGN PARTY picker — no dead end.
     fireEvent.click(findSvgTable(container, "T24"));
-    await screen.findByText(/Bruno Harness ×3/i, {}, { timeout: 5000 });
+    await screen.findByText(/^Bruno Harness ×3/, {}, { timeout: 5000 }); // exact case: the picker entry, never the uppercase assign flash
   }, 25000);
 
   it("a party SEATED INSIDE whose tile is cleared heals to 'dining' — not back into the waiting pool", async () => {
@@ -202,7 +202,7 @@ describe("app harness — terrace floor view through the real App", () => {
     fireEvent.click(screen.getByText("floor"));
     fireEvent.click(await screen.findByText("TERRACE", {}, { timeout: 5000 }));
     fireEvent.click(findSvgTable(container, "T23"));
-    fireEvent.click(await screen.findByText(/Bruno Harness ×3/i, {}, { timeout: 5000 }));
+    fireEvent.click(await screen.findByText(/^Bruno Harness ×3/, {}, { timeout: 5000 }));
     await waitFor(() => {
       expect(resRow("res-bruno")?.data?.visit_state).toBe("terrace");
     }, { timeout: 5000 });
@@ -216,6 +216,6 @@ describe("app harness — terrace floor view through the real App", () => {
     // NOT re-offered as a waiting party (the double-seat hazard).
     fireEvent.click(findSvgTable(container, "T24"));
     await screen.findByText("ASSIGN PARTY", {}, { timeout: 5000 });
-    expect(screen.queryByText(/Bruno Harness ×3/i)).toBeNull();
+    expect(screen.queryByText(/^Bruno Harness ×3/)).toBeNull(); // exact case: the uppercase assign FLASH may linger — only the picker entry matters
   }, 25000);
 });

@@ -26,6 +26,9 @@ const RULE_SOFT = tokens.neutral[200];
 const CARD_BORDER = tokens.neutral[300];
 
 const FONT = tokens.font;
+// Shared empty-notes fallback — MUST be module-stable (see the comment at its
+// use site): an inline {} here re-armed an infinite render loop every render.
+const NO_COURSE_NOTES = {};
 
 // Resolve course list template from the guest menu profile — same logic as the
 // print generator — so both live board and ticket preview show the same courses.
@@ -60,7 +63,14 @@ export function KitchenTicket({ table, menuCourses, upd, onCourseFired, dragHand
   const restrictions = table.restrictions || [];
   const log = table.kitchenLog || {};
   const [assigningRestrIdx, setAssigningRestrIdx] = useState(null);
-  const kitchenCourseNotes = table.kitchenCourseNotes || {};
+  // STABLE fallback, never an inline {}: kitchenCourseNotes is a dependency
+  // of the draft-sync effect below, and a table without the field (walk-ins,
+  // directly-seeded tables — reservation templating is what usually adds it)
+  // got a NEW {} identity every render. First re-render after mount → effect
+  // fires → setDraftNotes(new {}) → re-render → new {} → … an infinite
+  // synchronous render loop that froze the kitchen display the moment such a
+  // ticket was on screen and ANY state changed (a fired course, a send).
+  const kitchenCourseNotes = table.kitchenCourseNotes || NO_COURSE_NOTES;
   // Edit mode (only when `editable` prop set — i.e. ticket preview in reservations).
   // Per-course edits stage into draftNotes and commit explicitly via the Save button,
   // so the user can review changes before persisting them to the reservation row.
