@@ -199,6 +199,18 @@ export function getVisibleCoursesForTable(table, menuCourses, options) {
 }
 
 /**
+ * A courseReady ("SET FOR …") whose key isn't among the table's visible
+ * courses can never be fired — fire() clears the banner only on an EXACT key
+ * match, so a menu edit/renumber mid-service (course keys are mutable) left
+ * the kitchen banner and the sheet's SET lock stuck until end of service
+ * with no kitchen-side dismiss. Callers use this to self-heal (null the
+ * stale courseReady). Callers must gate on a NON-EMPTY visible list — a
+ * transiently empty menu must never judge a banner stale.
+ */
+export const isStaleCourseReady = (table, visibleCourses) =>
+  !!table?.courseReady?.key && !(visibleCourses || []).some(c => c.key === table.courseReady.key);
+
+/**
  * Derive PREVIOUS / CURRENT / NEXT FIRE state from a visible-courses list.
  *
  * - current   = latest fired course in menu order (what is on the table)

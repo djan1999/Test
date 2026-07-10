@@ -60,7 +60,7 @@ import {
   moveToDining as moveToDiningData, markSeated as markSeatedData,
   shouldArmOnFire, fireLastBite, closeVisit as closeVisitData,
 } from "./utils/terraceFlow.js";
-import { getVisibleCoursesForTable, getCourseProgressState } from "./utils/courseProgress.js";
+import { getVisibleCoursesForTable, getCourseProgressState, isStaleCourseReady } from "./utils/courseProgress.js";
 import { useIsMobile, BP } from "./hooks/useIsMobile.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
 import {
@@ -4014,6 +4014,25 @@ export default function App() {
   useModalEscape(() => changeMode(null), !!mode);
   useModalEscape(() => setSel(null), !!sel);
   useModalEscape(() => setAddResOpen(false), addResOpen);
+
+  // ── Self-heal stale SET banners ──────────────────────────────────────────────
+  // courseReady snapshots {key,index,name} at SET time and fire() clears it
+  // only on an EXACT key match — a menu edit/renumber mid-service mints new
+  // course keys, leaving the kitchen's "SET FOR …" banner and the sheet's
+  // SET lock stuck with no kitchen-side dismiss. Null any courseReady whose
+  // key is no longer among the table's visible courses; the write rides the
+  // normal autosave so every device converges. Gated on a LOADED menu and a
+  // non-empty per-table visible list — transient emptiness never judges.
+  useEffect(() => {
+    if ((mode !== "service" && mode !== "display") || !activeMenuCourses.length) return;
+    tables.forEach(t => {
+      if (!t.courseReady?.key) return;
+      const visible = getVisibleCoursesForTable(t, activeMenuCourses, {
+        profiles: profilesState.profiles, assignments: profilesState.assignments,
+      });
+      if (visible.length && isStaleCourseReady(t, visible)) upd(t.id, "courseReady", null);
+    });
+  }, [activeMenuCourses, tablesJson, mode, profilesState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Autosave: write changed board rows to the store ─────────────────────────
   // Diffs the sanitized tables against the last-written baseline and writes
