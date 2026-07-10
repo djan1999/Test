@@ -358,6 +358,19 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             {table.resName && <span style={{ fontFamily: FONT, fontSize: dz.nameFont, fontWeight: 700, color: tokens.ink[0], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{table.resName}</span>}
             {table.menuType && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 600, letterSpacing: "0.08em", padding: dz.badgePad, borderRadius: 0, background: tokens.ink[5], color: tokens.ink[3], flexShrink: 0 }}>{isShort ? "SHORT" : "LONG"}</span>}
             <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 600, letterSpacing: "0.08em", padding: dz.badgePad, borderRadius: 0, background: table.lang === "si" ? tokens.red.bg : tokens.green.bg, color: table.lang === "si" ? tokens.red.text : tokens.green.text, border: "1px solid", borderColor: table.lang === "si" ? tokens.red.border : tokens.green.border, flexShrink: 0 }}>{table.lang === "si" ? "SI" : "EN"}</span>
+            {/* Pace badge — on compact boards pace is SET from the quick-access
+                drawer, but nothing showed it once the drawer closed. The header
+                banner is the ticket's always-visible surface, so the active
+                pace lives here (same colors as the toggle buttons). */}
+            {table.pace && (
+              <span style={{
+                fontFamily: FONT, fontSize: "8px", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase",
+                padding: dz.badgePad, borderRadius: 0, flexShrink: 0,
+                background: table.pace === "Fast" ? tokens.red.bg : tokens.neutral[0],
+                color: table.pace === "Fast" ? tokens.red.text : tokens.ink[0],
+                border: `1px solid ${table.pace === "Fast" ? tokens.red.border : tokens.charcoal.default}`,
+              }}>{table.pace}</span>
+            )}
             {table.birthday && <span style={{ fontSize: "10px" }}>🎂</span>}
             {table.guestType === "hotel" && (() => {
               const rs = Array.isArray(table.rooms) && table.rooms.length ? table.rooms.filter(Boolean) : (table.room ? [table.room] : []);
@@ -1102,6 +1115,15 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
   const activeIds = activeTables.map(t => t.id).join(",");
 
+  // Reservations that haven't been seated yet — surfaced as slim banners so
+  // the chef sees what's coming (time, table, pax, restrictions) without the
+  // ticket itself. The full ticket only appears when the table is seated
+  // (t.active) or the party is already out on the terrace.
+  const upcomingTables = tables
+    .filter(t => !t.active && t._visit?.visit !== "terrace" && (t.resTime || t.resName))
+    .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup))
+    .sort((a, b) => (parseHHMM(a.resTime) ?? 24 * 60) - (parseHHMM(b.resTime) ?? 24 * 60));
+
   // Tickets archived while their table/party is still LIVE. Archive was a
   // one-way door from the kitchen's side — a mis-tap hid a live ticket and
   // the only restore lived inside the END SERVICE modal (next to CLEAR ALL,
@@ -1190,6 +1212,44 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     updMany(tableId, snap ? { kitchenAlert: null, kitchenSent: snap } : { kitchenAlert: null });
   };
 
+  // Upcoming banner strip — rendered in BOTH branches below: before the first
+  // seat of the night the grid is empty, and that is exactly when the chef
+  // needs to see what's booked.
+  const upcomingStrip = upcomingTables.length > 0 && (
+    <div style={{ marginBottom: compact ? 8 : 12 }}>
+      <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.16em", textTransform: "uppercase", color: tokens.ink[3], marginBottom: 5 }}>
+        UPCOMING · {upcomingTables.length}
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {upcomingTables.map(t => {
+          const label = t.tableGroup?.length > 1 ? `T${t.tableGroup.join("-")}` : `T${t.id}`;
+          const pax = t.guests || (t.seats || []).length || 0;
+          const isShort = String(t.menuType || "").trim().toLowerCase() === "short";
+          const restrNotes = [...new Set((t.restrictions || []).map(r => r?.note).filter(Boolean).map(restrLabel))];
+          const rooms = Array.isArray(t.rooms) && t.rooms.length ? t.rooms.filter(Boolean) : (t.room ? [t.room] : []);
+          return (
+            <div key={t.id} style={{
+              border: `1px solid ${CARD_BORDER}`, borderRadius: 0, background: tokens.neutral[0],
+              padding: compact ? "4px 9px" : "6px 11px", display: "flex", alignItems: "baseline",
+              gap: 8, flexWrap: "wrap", maxWidth: "100%",
+            }}>
+              {t.resTime && <span style={{ fontFamily: FONT, fontSize: compact ? 12 : 13, fontWeight: 800, color: tokens.ink[0], letterSpacing: "-0.01em" }}>{t.resTime}</span>}
+              <span style={{ fontFamily: FONT, fontSize: compact ? 11 : 12, fontWeight: 700, color: tokens.ink[1] }}>{label}</span>
+              <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: tokens.ink[0] }}>{pax} <span style={{ fontWeight: 400, fontSize: 9, letterSpacing: "0.06em" }}>PAX</span></span>
+              {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 600, letterSpacing: "0.08em", padding: "0 3px", background: tokens.ink[5], color: tokens.ink[3] }}>{isShort ? "SHORT" : "LONG"}</span>}
+              {t.resName && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{t.resName}</span>}
+              {t.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3], letterSpacing: "0.06em" }}>{rooms.length ? `#${rooms.join(", ")}` : "Hotel"}</span>}
+              {t.birthday && <span style={{ fontSize: 10 }}>🎂</span>}
+              {restrNotes.length > 0 && (
+                <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 600, color: tokens.red.text, letterSpacing: "0.04em" }}>{restrNotes.join(" · ")}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   // Rendered in BOTH branches below — with every live ticket archived the
   // grid is empty, and that is exactly when the way back matters most.
   const archivedStrip = archivedTables.length > 0 && (
@@ -1230,7 +1290,8 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
 
   if (activeTables.length === 0) return (
     <>
-      <div style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[4], textAlign: "center", paddingTop: 80 }}>
+      {upcomingStrip}
+      <div style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[4], textAlign: "center", paddingTop: upcomingTables.length > 0 ? 40 : 80 }}>
         No active tables
       </div>
       {archivedStrip}
@@ -1270,6 +1331,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     >
       <SortableContext items={order} strategy={rectSortingStrategy}>
         <div style={{ paddingBottom: 8 }}>
+          {upcomingStrip}
           {/* Responsive grid. Large boards (≥1100px, e.g. a 32" 1280×720 panel)
               always run 5 fixed columns so 10 tickets show as two full rows
               and a sparse board keeps the same ticket size. Narrower screens

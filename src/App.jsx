@@ -5427,6 +5427,19 @@ export default function App() {
       <GlobalStyle />
       <Header modeLabel={mode === "kitchen_floor" ? "KITCHEN · FLOOR" : "KITCHEN"} showSummary={false} showMenu={false} showArchive={mode === "display"} showInventory={false} {...hProps} />
       {pastDateWarningEl}
+      {!serviceDate ? (
+        /* No service running — the kitchen idles here, nothing can pop up.
+           The screen goes live on its own the moment FOH starts the service
+           (the shared service_date lifecycle is adopted via watch/realtime). */
+        <div style={{ minHeight: "70vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
+          <div style={{ fontFamily: FONT, fontSize: appIsMobile ? "14px" : "18px", fontWeight: 600, letterSpacing: "0.35em", textTransform: "uppercase", color: tokens.ink[2], paddingLeft: "0.35em", textAlign: "center" }}>
+            NO ACTIVE SERVICE
+          </div>
+          <div style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.18em", textTransform: "uppercase", color: tokens.ink[4], textAlign: "center" }}>
+            WAITING FOR SERVICE TO START
+          </div>
+        </div>
+      ) : (<>
       {/* TICKETS / FLOOR toggle — same auth + workspace gate for both views;
           the floor view carries no mutation handlers at all. */}
       <div style={{ display: "flex", gap: 0, padding: appIsMobile ? "10px 10px 0" : "10px 16px 0" }}>
@@ -5474,6 +5487,7 @@ export default function App() {
           )}
         </Suspense>
       </div>
+      </>)}
       {archiveOpen && (
         <Suspense fallback={null}>
           <ArchiveModal

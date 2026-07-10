@@ -134,6 +134,30 @@ describe("app harness — kitchen board through the real App", () => {
     await screen.findByText("Amuse", {}, { timeout: 5000 }); // ticket is back
   }, 25000);
 
+  it("with no live service the kitchen idles on NO ACTIVE SERVICE — no board, no popups", async () => {
+    // Nothing seeded: no service_date, blank board. The kitchen screen must
+    // hold a plain "no active service" state until FOH starts the service.
+    seed("menu_courses", [courseRow(1, "amuse", "Amuse")]);
+    render(<App />);
+    fireEvent.click(await screen.findByText("[Kitchen]", {}, { timeout: 5000 }));
+    await screen.findByText("NO ACTIVE SERVICE", {}, { timeout: 5000 });
+    expect(screen.queryByText("No active tables")).toBeNull();
+    expect(screen.queryByText("TICKETS")).toBeNull();
+  }, 20000);
+
+  it("an unseated reservation shows as an UPCOMING banner on the kitchen board, not a ticket", async () => {
+    seedLiveService();
+    render(<App />);
+    await enterKitchen();
+
+    // Bruno (20:15, table 2) is booked but not seated — banner only.
+    await screen.findByText(/UPCOMING · 1/, {}, { timeout: 5000 });
+    expect(screen.getByText("Bruno Harness")).toBeTruthy();
+    expect(screen.getByText("20:15")).toBeTruthy();
+    // Anna's seated ticket carries the courses; Bruno's banner must not.
+    expect(screen.getAllByText("Amuse")).toHaveLength(1);
+  }, 20000);
+
   it("a stale SET banner (course key no longer on the menu) self-heals on the kitchen board", async () => {
     // The SET snapshot points at a course key that a mid-service menu edit
     // removed — fire() clears only on an exact key match, so this banner
