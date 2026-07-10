@@ -16,6 +16,17 @@
 
 export const VISIT_STATES = ["booked", "terrace", "arriving", "dining", "done"];
 
+/** The reservation-data keys that carry the visit through the flow. Any code
+ *  that REBUILDS a reservation's data blob (the edit form) must carry these,
+ *  or a routine mid-service edit teleports a live terrace party back to
+ *  'booked' — ghost tile, lost LAST BITE arming. */
+export const FLOW_KEYS = ["visit_state", "terrace_table", "terrace_map_id", "last_bite_fired_at", "moved_at"];
+
+/** Pick only the flow keys PRESENT on a data blob — legacy rows (none of the
+ *  keys) come back as {} so rebuilt blobs stay byte-identical for them. */
+export const pickFlowKeys = (data) =>
+  Object.fromEntries(FLOW_KEYS.filter((k) => (data || {})[k] !== undefined).map((k) => [k, data[k]]));
+
 export const visitStateOf = (data) => {
   const s = data?.visit_state;
   if (!VISIT_STATES.includes(s)) return "booked";
@@ -56,12 +67,16 @@ export function assignTerrace(data, label, mapId) {
 // FOH clears the terrace table without moving the party (spilled drink, table
 // broken down early). An ARMED party keeps visit_state 'terrace' so its MOVE
 // stays reachable (the stranded banner). An UN-armed party — nothing fired
-// yet — returns to 'booked': keeping it 'terrace' locked it out of every
-// seat/assign surface with no way back (the stuck "ON TERRACE" party).
-export function clearTerraceTable(data) {
+// yet — leaves 'terrace': keeping it locked the party out of every
+// seat/assign surface with no way back (the stuck "ON TERRACE" party). The
+// heal target depends on where the guests actually are: `seatedInside` (the
+// caller checks the board) means a dessert-outside party still eating at its
+// ACTIVE dining table → 'dining', so they don't reappear in the ASSIGN PARTY
+// picker as a waiting party (the double-seat hazard). Otherwise → 'booked'.
+export function clearTerraceTable(data, { seatedInside = false } = {}) {
   if (visitStateOf(data) !== "terrace") return null;
   const next = { ...(data || {}), terrace_table: null };
-  if (!next.last_bite_fired_at) next.visit_state = "booked";
+  if (!next.last_bite_fired_at) next.visit_state = seatedInside ? "dining" : "booked";
   return next;
 }
 

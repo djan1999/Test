@@ -155,6 +155,26 @@ export const tableHasServiceContent = (t, ignoreExtraKeys = null) => {
   return (t.seats || []).some((s) => seatHasContent(s, ignore));
 };
 
+// Indices of tables an autosave pass would BLANK that previously HELD service
+// content — the input to App's mass-blank guard (refuse a blank of 2+ such
+// tables unless a legitimate whole-board clear flagged it). Pure so the
+// refusal logic is testable: the branch is unreachable through honest UI
+// vectors (reconcile shields contentful tables, adoption advances the diff
+// baseline, every legit clear sets the flag) — which is exactly why it needs
+// unit coverage rather than an end-to-end drive.
+// `prevJsonList` entries are sanitized-table JSON; unparseable/missing prev
+// is treated as "held no content" (a blank of it is not a loss).
+export const massBlankedIndices = (prevJsonList, nextTables, nextJsonList) => {
+  const out = [];
+  (nextTables || []).forEach((table, idx) => {
+    if (nextJsonList[idx] === prevJsonList[idx]) return; // untouched
+    let prevHadContent = false;
+    try { prevHadContent = tableHasServiceContent(JSON.parse(prevJsonList[idx])); } catch { /* no content */ }
+    if (prevHadContent && !tableHasServiceContent(sanitizeTable(table))) out.push(idx);
+  });
+  return out;
+};
+
 const sameReservationKey = (t) => {
   const n = String(t?.resName || "").trim().toLowerCase();
   const r = String(t?.resTime || "").trim();

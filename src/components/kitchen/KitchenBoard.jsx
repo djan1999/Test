@@ -26,6 +26,9 @@ const RULE_SOFT = tokens.neutral[200];
 const CARD_BORDER = tokens.neutral[300];
 
 const FONT = tokens.font;
+// Shared empty-notes fallback — MUST be module-stable (see the comment at its
+// use site): an inline {} here re-armed an infinite render loop every render.
+const NO_COURSE_NOTES = {};
 
 // Resolve course list template from the guest menu profile — same logic as the
 // print generator — so both live board and ticket preview show the same courses.
@@ -60,7 +63,14 @@ export function KitchenTicket({ table, menuCourses, upd, onCourseFired, dragHand
   const restrictions = table.restrictions || [];
   const log = table.kitchenLog || {};
   const [assigningRestrIdx, setAssigningRestrIdx] = useState(null);
-  const kitchenCourseNotes = table.kitchenCourseNotes || {};
+  // STABLE fallback, never an inline {}: kitchenCourseNotes is a dependency
+  // of the draft-sync effect below, and a table without the field (walk-ins,
+  // directly-seeded tables — reservation templating is what usually adds it)
+  // got a NEW {} identity every render. First re-render after mount → effect
+  // fires → setDraftNotes(new {}) → re-render → new {} → … an infinite
+  // synchronous render loop that froze the kitchen display the moment such a
+  // ticket was on screen and ANY state changed (a fired course, a send).
+  const kitchenCourseNotes = table.kitchenCourseNotes || NO_COURSE_NOTES;
   // Edit mode (only when `editable` prop set — i.e. ticket preview in reservations).
   // Per-course edits stage into draftNotes and commit explicitly via the Save button,
   // so the user can review changes before persisting them to the reservation row.
@@ -1096,6 +1106,16 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, onCour
     .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
   const activeIds = activeTables.map(t => t.id).join(",");
 
+  // Tickets archived while their table/party is still LIVE. Archive was a
+  // one-way door from the kitchen's side — a mis-tap hid a live ticket and
+  // the only restore lived inside the END SERVICE modal (next to CLEAR ALL,
+  // not a surface for mid-service kitchen staff). The strip below is the
+  // kitchen's own way back.
+  const archivedTables = tables
+    .filter(t => (t.active || t._visit?.visit === "terrace") && t.kitchenArchived)
+    .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
+  const [showArchived, setShowArchived] = useState(false);
+
   // Seed from the persisted expediter order (it used to be local state only,
   // so a refresh scrambled the board back to table-id order).
   const [order, setOrder] = useState(() => {
@@ -1174,11 +1194,50 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, onCour
     updMany(tableId, snap ? { kitchenAlert: null, kitchenSent: snap } : { kitchenAlert: null });
   };
 
+  // Rendered in BOTH branches below — with every live ticket archived the
+  // grid is empty, and that is exactly when the way back matters most.
+  const archivedStrip = archivedTables.length > 0 && (
+    <div style={{ marginTop: 14, borderTop: `1px solid ${tokens.ink[5]}`, paddingTop: 8 }}>
+      <button
+        onClick={() => setShowArchived(v => !v)}
+        style={{
+          fontFamily: FONT, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase",
+          padding: "7px 12px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0,
+          background: tokens.neutral[0], color: tokens.ink[3], cursor: "pointer", touchAction: "manipulation",
+        }}
+      >ARCHIVED ({archivedTables.length}) {showArchived ? "▾" : "▸"}</button>
+      {showArchived && archivedTables.map(t => (
+        <div key={t.id} style={{
+          display: "flex", alignItems: "center", gap: 10, padding: "7px 12px", marginTop: 6,
+          border: `1px solid ${tokens.ink[5]}`, background: tokens.neutral[50],
+        }}>
+          <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: tokens.ink[1] }}>
+            T{String(t.id).padStart(2, "0")}
+          </span>
+          {t.resName && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3] }}>{t.resName}</span>}
+          <span style={{ flex: 1 }} />
+          {upd && (
+            <button
+              onClick={() => upd(t.id, "kitchenArchived", false)}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase",
+                padding: "6px 14px", border: `1px solid ${tokens.green.border}`, borderRadius: 0,
+                background: tokens.green.bg, color: tokens.green.text, fontWeight: 700,
+                cursor: "pointer", touchAction: "manipulation",
+              }}
+            >RESTORE</button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+
   if (activeTables.length === 0) return (
     <>
       <div style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[4], textAlign: "center", paddingTop: 80 }}>
         No active tables
       </div>
+      {archivedStrip}
       <KitchenAlertOverlay alerts={pendingAlerts} onConfirm={confirmAlert} />
     </>
   );
@@ -1246,6 +1305,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, onCour
               />
             ))}
           </div>
+          {archivedStrip}
         </div>
       </SortableContext>
       <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>

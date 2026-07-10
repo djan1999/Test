@@ -1,6 +1,6 @@
 # Service Drills — PowerSync-primary contract
 
-Manual acceptance drills for the sync architecture. Run all five against the
+Manual acceptance drills for the sync architecture. Run all six core drills against the
 Demo workspace before promoting any sync-layer change to production, and again
 after enabling it for a restaurant. Each drill states the exact steps and the
 observable result that counts as a pass.
@@ -9,10 +9,10 @@ Architecture under test: the on-device SQLite database (PowerSync) is the
 single read/write path for all synced tables (`service_tables`,
 `service_settings`, `reservations`, `menu_courses`, `wines`, `beverages`);
 `SupabaseConnector.uploadData()` drains local writes back to Postgres.
-Accounts whose sync stream delivers nothing (the platform admin is not a
-workspace member — see `powersync/sync-rules.yaml`) fall back to direct
-Supabase reads/writes. `service_archive` writes stay direct-to-Supabase in
-both modes (append-only, not latency-sensitive).
+If PowerSync is unavailable or deliberately disabled, the app falls back to
+direct Supabase reads/writes plus realtime. Service ending is one local
+transaction; its upload is collapsed into one Postgres transaction before
+other devices receive it.
 
 ---
 
@@ -53,9 +53,9 @@ online, observing.
 - On reconnect, every offline edit uploads (watch the `service_tables` rows in
   Supabase or device 2's board) within a few seconds — **no edit is lost, no
   table is blanked**, and no duplicate rows appear.
-- Device 2's concurrent edits to *other* tables survive; for a table edited on
-  both sides, the row converges to one device's version (row-level
-  last-write-wins — no torn/merged half-state).
+- Device 2's concurrent edits to *other* tables survive. Edits to different
+  seats on the same table are merged. If both devices change the exact same
+  seat at the same time, the last committed edit wins.
 
 ## Drill C — Fresh device joins mid-service, no blanking
 
@@ -106,14 +106,34 @@ restore available.
 - Both rows carry the correct `workspace_id` and survive on every device after
   the sync's realtime/watch refresh.
 
+## Drill F — Ending service is atomic and live
+
+**Setup:** Two devices in the same live service, with several active tables.
+Keep device 2 on the Service board.
+
+1. On device 1 choose Archive & Clear and confirm.
+2. Observe device 2 without touching or refreshing it.
+3. Confirm the database has one archive row, ten blank `service_tables` rows,
+   and an empty `service_date` setting for the workspace.
+4. Start another Demo service, take device 1 offline, add one seat note, then
+   Archive & Clear while still offline. Reconnect device 1.
+
+**Pass:**
+- Device 1 exits service immediately in both the online and offline cases.
+- Online, device 2 exits the service automatically and sees the cleared board
+  in under one second, without a refresh or a half-cleared intermediate state.
+- Offline, device 2 keeps the old live service until device 1 reconnects; after
+  reconnect it receives the archive/board/date transition together.
+- Each run creates exactly one archive entry. The offline seat note is present
+  in that archive, and no table or lifecycle write remains stuck in the queue.
+
 ---
 
-## Fallback drill (platform admin)
+## Fallback drill (PowerSync outage)
 
-The master/platform-admin account is not a `workspace_members` row, so the
-sync stream delivers nothing to it. Log in as the platform admin, open a
-restaurant workspace:
+Use a preview deployment with `VITE_POWERSYNC_URL` set to an empty string (or
+block the PowerSync origin), then log into the ordinary Demo test account.
 
 **Pass:** the board/menu/reservations load via direct Supabase reads (slower
-is fine), admin edits persist via direct writes, and nothing the admin does
-blanks or duplicates the workspace's rows on member devices.
+is fine), realtime changes still appear without refreshing, admin edits persist
+via direct writes, and nothing blanks or duplicates the Demo workspace rows.

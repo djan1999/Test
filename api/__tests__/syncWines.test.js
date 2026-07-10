@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // like .single()/.maybeSingle()) resolves to a per-table configured result.
 const sb = vi.hoisted(() => {
   const builders = [];
+  const rpcCalls = [];
   // Terminal results keyed by table. Defaults to { data: null, error: null }.
   let resultsByTable = {};
   const VERBS = [
@@ -32,18 +33,28 @@ const sb = vi.hoisted(() => {
   };
   return {
     builders,
+    rpcCalls,
     reset(results = {}) {
       builders.length = 0;
+      rpcCalls.length = 0;
       resultsByTable = results;
     },
     from: (table) => makeBuilder(table),
+    rpc: (name, args) => {
+      rpcCalls.push({ name, args });
+      return Promise.resolve(resultsByTable[`rpc:${name}`] || { data: {}, error: null });
+    },
     // Helper: all recorded builders for a given table.
     forTable: (table) => builders.filter((b) => b._table === table),
   };
 });
 
 vi.mock("@supabase/supabase-js", () => ({
-  createClient: () => ({ from: (t) => sb.from(t) }),
+  createClient: () => ({
+    from: (t) => sb.from(t),
+    rpc: (name, args) => sb.rpc(name, args),
+    auth: { getUser: async () => ({ data: { user: { id: "user-1" } }, error: null }) },
+  }),
 }));
 
 import {
@@ -394,7 +405,7 @@ describe("isAuthorizedSyncSecret", () => {
 
 describe("parseSyncConfigFromRequestUrl", () => {
   it("returns null when config param is absent", () => {
-    expect(parseSyncConfigFromRequestUrl("http://localhost/api/sync-wines?secret=x")).toBeNull();
+    expect(parseSyncConfigFromRequestUrl("http://localhost/api/sync-wines?dry=true")).toBeNull();
   });
 
   it("parses JSON config from query string", () => {
@@ -437,6 +448,75 @@ describe("sync-wines handler auth", () => {
       else process.env.CRON_SECRET = prevSecret;
     }
   });
+
+  it("allows any authenticated workspace member to sync only its active workspace", async () => {
+    const req = {
+      method: "POST",
+      url: "http://localhost/api/sync-wines?dry=true",
+      headers: { authorization: "Bearer user-access-token" },
+      body: { workspaceId: "demo-ws", config: { winesEnabled: false, beveragesEnabled: false } },
+    };
+    const res = {
+      statusCode: 200,
+      payload: null,
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.payload = body; return this; },
+    };
+    const previous = {
+      url: process.env.SUPABASE_URL,
+      key: process.env.SUPABASE_SERVICE_KEY,
+    };
+    process.env.SUPABASE_URL = "https://fake.supabase.co";
+    process.env.SUPABASE_SERVICE_KEY = "server-only-key";
+    sb.reset({
+      workspace_members: { data: { user_id: "user-1" }, error: null },
+    });
+    try {
+      await handler(req, res);
+      expect(res.statusCode).toBe(200);
+      expect(res.payload).toMatchObject({ ok: true, dry: true });
+      expect(sb.forTable("workspaces")).toHaveLength(0);
+      expect(sb.forTable("workspace_members")[0]._calls).toContainEqual(["eq", "workspace_id", "demo-ws"]);
+    } finally {
+      if (previous.url === undefined) delete process.env.SUPABASE_URL;
+      else process.env.SUPABASE_URL = previous.url;
+      if (previous.key === undefined) delete process.env.SUPABASE_SERVICE_KEY;
+      else process.env.SUPABASE_SERVICE_KEY = previous.key;
+    }
+  });
+
+  it("rejects an account that is not a member of the requested workspace", async () => {
+    const req = {
+      method: "POST",
+      url: "http://localhost/api/sync-wines?dry=true",
+      headers: { authorization: "Bearer user-access-token" },
+      body: { workspaceId: "milka-ws", config: { winesEnabled: false, beveragesEnabled: false } },
+    };
+    const res = {
+      statusCode: 200,
+      payload: null,
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.payload = body; return this; },
+    };
+    const previous = {
+      url: process.env.SUPABASE_URL,
+      key: process.env.SUPABASE_SERVICE_KEY,
+    };
+    process.env.SUPABASE_URL = "https://fake.supabase.co";
+    process.env.SUPABASE_SERVICE_KEY = "server-only-key";
+    sb.reset({
+      workspace_members: { data: null, error: null },
+    });
+    try {
+      await handler(req, res);
+      expect(res.statusCode).toBe(403);
+    } finally {
+      if (previous.url === undefined) delete process.env.SUPABASE_URL;
+      else process.env.SUPABASE_URL = previous.url;
+      if (previous.key === undefined) delete process.env.SUPABASE_SERVICE_KEY;
+      else process.env.SUPABASE_SERVICE_KEY = previous.key;
+    }
+  });
 });
 
 describe("sync-wines handler — all-wine-pages-failed returns 502", () => {
@@ -445,8 +525,8 @@ describe("sync-wines handler — all-wine-pages-failed returns 502", () => {
 
   it("returns 502 with descriptive error when all wine countries fail", async () => {
     const req = {
-      url: `http://localhost/api/sync-wines?secret=s&dry=false`,
-      headers: { authorization: undefined },
+      url: `http://localhost/api/sync-wines?dry=false`,
+      headers: { authorization: "Bearer s" },
     };
     const res = {
       statusCode: 200,
@@ -516,10 +596,10 @@ describe("sync-wines handler — workspace scoping (Milka)", () => {
     <tr><td>Negroni</td><td>Classic cocktail</td></tr>
   </table>`;
 
-  it("stamps inserted wine & beverage rows with the Milka workspace_id and scopes deletes by it", async () => {
+  it("sends one workspace-scoped atomic catalog replacement RPC", async () => {
     const req = {
-      url: `http://localhost/api/sync-wines?secret=s&dry=false`,
-      headers: { authorization: undefined },
+      url: `http://localhost/api/sync-wines?dry=false`,
+      headers: { authorization: "Bearer s" },
     };
     const res = {
       statusCode: 200,
@@ -566,39 +646,14 @@ describe("sync-wines handler — workspace scoping (Milka)", () => {
       expect(res.statusCode).toBe(200);
       expect(res.payload.ok).toBe(true);
 
-      // ── wines: upsert rows stamped (ignoreDuplicates protects manual-flipped
-      // copy-on-edit rows from being overwritten), delete scoped to workspace ──
-      const wineInserts = sb.forTable("wines")
-        .flatMap((b) => b._calls.filter((c) => c[0] === "upsert"));
-      expect(wineInserts.length).toBeGreaterThan(0);
-      expect(wineInserts.every((c) =>
-        c[2]?.onConflict === "workspace_id,key" && c[2]?.ignoreDuplicates === true
-      )).toBe(true);
-      const insertedWineRows = wineInserts.flatMap((c) => c[1]);
-      expect(insertedWineRows.length).toBeGreaterThan(0);
-      expect(insertedWineRows.every((r) => r.workspace_id === "milka-ws")).toBe(true);
-
-      const wineDeletes = sb.forTable("wines").filter((b) =>
-        b._calls.some((c) => c[0] === "delete"));
-      expect(wineDeletes.length).toBeGreaterThan(0);
-      expect(wineDeletes.every((b) =>
-        b._calls.some((c) => c[0] === "eq" && c[1] === "workspace_id" && c[2] === "milka-ws")
-      )).toBe(true);
-
-      // ── beverages: insert rows stamped, delete scoped to workspace ──────────
-      const bevInserts = sb.forTable("beverages")
-        .flatMap((b) => b._calls.filter((c) => c[0] === "insert"));
-      expect(bevInserts.length).toBeGreaterThan(0);
-      const insertedBevRows = bevInserts.flatMap((c) => c[1]);
-      expect(insertedBevRows.length).toBeGreaterThan(0);
-      expect(insertedBevRows.every((r) => r.workspace_id === "milka-ws")).toBe(true);
-
-      const bevDeletes = sb.forTable("beverages").filter((b) =>
-        b._calls.some((c) => c[0] === "delete"));
-      expect(bevDeletes.length).toBeGreaterThan(0);
-      expect(bevDeletes.every((b) =>
-        b._calls.some((c) => c[0] === "eq" && c[1] === "workspace_id" && c[2] === "milka-ws")
-      )).toBe(true);
+      expect(sb.rpcCalls).toHaveLength(1);
+      const call = sb.rpcCalls[0];
+      expect(call.name).toBe("replace_synced_catalog");
+      expect(call.args.p_workspace_id).toBe("milka-ws");
+      expect(call.args.p_wines.length).toBeGreaterThan(0);
+      expect(call.args.p_beverages.length).toBeGreaterThan(0);
+      expect(call.args.p_wine_countries).toEqual(expect.arrayContaining(["SI", "AT", "IT", "FR", "HR"]));
+      expect(call.args.p_beverage_categories).toEqual(expect.arrayContaining(["cocktail", "beer", "spirit"]));
 
       // ── service_settings read is scoped to the workspace too ────────────────
       const settingsReads = sb.forTable("service_settings");

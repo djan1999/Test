@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 export const TABLES = {
-  SERVICE_TABLES: import.meta.env.VITE_SUPABASE_SERVICE_TABLES || "service_tables",
+  SERVICE_TABLES: "service_tables",
   SERVICE_SETTINGS: "service_settings",
   SERVICE_ARCHIVE: "service_archive",
   MENU_COURSES: "menu_courses",

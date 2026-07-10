@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   calls: [],
   rows: new Set(), // `${table}|${id}|${workspace_id}`
   workspaceId: "ws-1",
+  transactions: 0,
 }));
 
 vi.mock("../powersync/system.js", () => {
@@ -36,7 +37,11 @@ vi.mock("../powersync/system.js", () => {
     return h.rows.has(key(table, String(params[0]), params[1])) ? { id: String(params[0]) } : null;
   };
   const ctx = { execute, getOptional };
-  return { getPowerSync: () => ({ execute, getOptional, writeTransaction: async (fn) => fn(ctx) }) };
+  return { getPowerSync: () => ({
+    execute,
+    getOptional,
+    writeTransaction: async (fn) => { h.transactions += 1; return fn(ctx); },
+  }) };
 });
 
 vi.mock("../lib/supabaseClient.js", () => ({
@@ -47,6 +52,7 @@ vi.mock("../lib/supabaseClient.js", () => ({
 import {
   writeServiceTables, writeSetting, writeReservation, deleteReservationRow,
   writeMenuCourses, writeWines, deleteWines, replaceManualBeverages,
+  finishServiceLocally,
 } from "../powersync/writes.js";
 
 const callsLike = (verb) => h.calls.filter((c) => c.sql.toUpperCase().startsWith(verb));
@@ -55,21 +61,22 @@ beforeEach(() => {
   h.calls = [];
   h.rows = new Set();
   h.workspaceId = "ws-1";
+  h.transactions = 0;
 });
 
 describe("powersync/writes — board rows", () => {
   it("updates an existing row in place (no insert) with jsonb as text", async () => {
-    h.rows.add("service_tables|3|ws-1");
+    h.rows.add("service_tables|ws-1|3|ws-1");
     await writeServiceTables([{ table_id: 3, data: { resName: "Kovač" }, updated_at: "t1" }]);
     const updates = callsLike("UPDATE");
     expect(updates).toHaveLength(1);
     expect(updates[0].sql).toContain("UPDATE service_tables SET");
-    expect(updates[0].params).toEqual([3, '{"resName":"Kovač"}', "t1", "3", "ws-1"]);
+    expect(updates[0].params).toEqual([3, '{"resName":"Kovač"}', "t1", "ws-1|3", "ws-1"]);
     expect(callsLike("INSERT")).toHaveLength(0);
   });
 
   it("REGRESSION: saving a synced row repeatedly never duplicate-INSERTs even though view UPDATEs report rowsAffected 0", async () => {
-    h.rows.add("service_tables|3|ws-1");
+    h.rows.add("service_tables|ws-1|3|ws-1");
     // The pre-fix code fell through to INSERT here and died on the ps_data__*
     // primary key — the crash that blocked all saves on sqlite-primary.
     await writeServiceTables([{ table_id: 3, data: { resName: "a" }, updated_at: "t1" }]);
@@ -83,7 +90,7 @@ describe("powersync/writes — board rows", () => {
     const inserts = callsLike("INSERT");
     expect(inserts).toHaveLength(1);
     expect(inserts[0].sql).toContain("INSERT INTO service_tables (id, workspace_id, table_id, data, updated_at)");
-    expect(inserts[0].params).toEqual(["7", "ws-1", 7, "{}", "t1"]);
+    expect(inserts[0].params).toEqual(["ws-1|7", "ws-1", 7, "{}", "t1"]);
     // …and a second save of the now-existing row goes through UPDATE.
     await writeServiceTables([{ table_id: 7, data: { x: 1 }, updated_at: "t2" }]);
     expect(callsLike("INSERT")).toHaveLength(1);
@@ -102,12 +109,12 @@ describe("powersync/writes — settings", () => {
     await writeSetting("menu_logo", { dataUri: "data:x" });
     const insert = callsLike("INSERT")[0];
     expect(insert.sql).toContain("INSERT INTO service_settings (id, workspace_id, state, updated_at)");
-    expect(insert.params[0]).toBe("menu_logo");
+    expect(insert.params[0]).toBe("ws-1|menu_logo");
     expect(insert.params[2]).toBe('{"dataUri":"data:x"}');
   });
 
   it("REGRESSION: re-saving a synced setting updates in place (the 'Settings save failed (service_date)' crash)", async () => {
-    h.rows.add("service_settings|service_date|ws-1");
+    h.rows.add("service_settings|ws-1|service_date|ws-1");
     await writeSetting("service_date", { date: "2026-07-05" });
     expect(callsLike("INSERT")).toHaveLength(0);
     expect(callsLike("UPDATE")).toHaveLength(1);
@@ -166,7 +173,7 @@ describe("powersync/writes — menu courses", () => {
     ], [1, 2]);
     const inserts = h.calls.filter(c => c.sql.startsWith("INSERT INTO menu_courses"));
     expect(inserts).toHaveLength(2);
-    expect(inserts[0].params[0]).toBe("1"); // aliased id = String(position)
+    expect(inserts[0].params[0]).toBe("ws-1|1");
     const cols = inserts[0].sql.match(/\(([^)]+)\)/)[1].split(", ");
     const row1 = Object.fromEntries(cols.map((c, i) => [c, inserts[0].params[i]]));
     expect(row1.menu).toBe('{"name":"Trout"}');
@@ -181,13 +188,20 @@ describe("powersync/writes — menu courses", () => {
     await writeMenuCourses([{ position: 3, menu: null, kitchen_note: "" }], null);
     expect(h.calls.some(c => c.sql.startsWith("DELETE FROM menu_courses"))).toBe(false);
   });
+
+  it("deletes every stored course when the saved menu is intentionally empty", async () => {
+    await writeMenuCourses([], []);
+    const del = h.calls.find(c => c.sql.startsWith("DELETE FROM menu_courses"));
+    expect(del.sql).toBe("DELETE FROM menu_courses WHERE workspace_id = ?");
+    expect(del.params).toEqual(["ws-1"]);
+  });
 });
 
 describe("powersync/writes — wines & beverages", () => {
   it("wines upsert under the key alias; deletes are key+workspace scoped", async () => {
     await writeWines([{ key: "manual|rebula", by_glass: true, wine_name: "Rebula", producer: "X", name: "X – Rebula", vintage: "2022", region: "", country: "", source: "manual" }]);
     const insert = h.calls.find(c => c.sql.startsWith("INSERT INTO wines"));
-    expect(insert.params[0]).toBe("manual|rebula");
+    expect(insert.params[0]).toBe("ws-1|manual|rebula");
     const cols = insert.sql.match(/\(([^)]+)\)/)[1].split(", ");
     const row = Object.fromEntries(cols.map((c, i) => [c, insert.params[i]]));
     expect(row.by_glass).toBe(1);
@@ -212,5 +226,34 @@ describe("powersync/writes — wines & beverages", () => {
     expect(typeof inserts[0].params[0]).toBe("string"); // placeholder uuid
     expect(inserts[0].params).toContain("Negroni");
     expect(inserts[1].params).toContain("0.5l");
+  });
+});
+
+describe("powersync/writes — finish service", () => {
+  it("archives, clears ten tables, and clears service_date in one local transaction", async () => {
+    await finishServiceLocally({
+      archive: { id: "archive-1", date: "2026-07-10", label: "10. 07. 2026 – DINNER", state: { tables: [] } },
+      blankRows: Array.from({ length: 10 }, (_, i) => ({ table_id: i + 1, data: {}, updated_at: "end" })),
+    });
+
+    expect(h.transactions).toBe(1);
+    expect(h.calls.some(c => c.sql.startsWith("INSERT INTO service_archive"))).toBe(true);
+    expect(h.calls.filter(c => c.sql.startsWith("INSERT INTO service_tables"))).toHaveLength(10);
+    const setting = h.calls.find(c => c.sql.startsWith("INSERT INTO service_settings"));
+    expect(setting.params[0]).toBe("ws-1|service_date");
+    expect(setting.params[2]).toBe("{}");
+  });
+
+  it("is idempotent for the same deterministic archive id", async () => {
+    const payload = {
+      archive: { id: "archive-1", date: "2026-07-10", label: "Dinner", state: {} },
+      blankRows: [{ table_id: 1, data: {}, updated_at: "end" }],
+    };
+    await finishServiceLocally(payload);
+    h.calls = [];
+    await finishServiceLocally(payload);
+    expect(h.calls.some(c => c.sql.startsWith("INSERT INTO service_archive"))).toBe(false);
+    expect(h.calls.some(c => c.sql.startsWith("UPDATE service_tables"))).toBe(true);
+    expect(h.calls.some(c => c.sql.startsWith("UPDATE service_settings"))).toBe(true);
   });
 });

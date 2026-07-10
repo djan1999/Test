@@ -2,7 +2,7 @@
 //
 // All reads and writes of workspace data must go through a store seam
 // (lib/stateStore, lib/archiveStore, App's persistBoardRows /
-// persistReservationRow / persistArchiveEntry / fetchBoardRows, or
+// persistReservationRow / persistServiceEnd / fetchBoardRows, or
 // powersync/writes|reads) so that SQLite-primary devices read and write the
 // same store the watches re-read from. A `scopedFrom(...)` or
 // `supabase.from(...)` call anywhere else is a silent seam bypass: on the
@@ -36,16 +36,15 @@ const SRC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const ALLOWLIST = {
   "App.jsx": {
     // Direct-Supabase fallback branches of the store seams and one-shot
-    // loaders. They run only when sqlitePrimary is false (master/platform
-    // admin, or PowerSync disabled), so the watches never fight them.
-    "TABLES.SERVICE_TABLES.upsert": 1,   // persistBoardRows fallback
+    // loaders. They run only when sqlitePrimary is false (PowerSync unavailable
+    // or disabled), so the watches never fight them.
     "TABLES.SERVICE_TABLES.select": 2,   // fetchBoardRows fallback + board poll
     "TABLES.RESERVATIONS.update": 1,     // persistReservationRow fallback
+    "TABLES.RESERVATIONS.upsert": 1,     // atomic multi-reservation swap fallback
     "TABLES.RESERVATIONS.insert": 1,     // saveRes create (id comes from DB)
     "TABLES.RESERVATIONS.delete": 1,     // deleteReservation fallback
     "TABLES.RESERVATIONS.select": 1,     // fallback one-shot load
     "TABLES.SERVICE_ARCHIVE.select": 2,  // fallback archive list + dedup check
-    "TABLES.SERVICE_ARCHIVE.insert": 1,  // persistArchiveEntry fallback
     "TABLES.MENU_COURSES.select": 1,     // fetchMenuCourses (admin surface)
     "TABLES.MENU_COURSES.upsert": 2,     // saveMenuCourses + legacy-shape retry
     "TABLES.MENU_COURSES.delete": 1,     // saveMenuCourses prune
@@ -55,10 +54,9 @@ const ALLOWLIST = {
     "TABLES.BEVERAGES.select": 1,        // fallback one-shot load
     "TABLES.BEVERAGES.insert": 1,        // beverage sync write
     "TABLES.BEVERAGES.delete": 1,        // beverage sync prune
-    // Auth bootstrap: platform_admins / workspaces are NOT workspace-scoped
-    // tables (they're what workspace scoping is derived FROM) and are read
-    // before a workspace id exists.
-    "supabase.from": 2,
+    // Auth bootstrap: workspaces is read before an active workspace exists;
+    // its RLS policy returns only explicit memberships.
+    "supabase.from": 1,
   },
   "components/reservations/GuestMemory.jsx": {
     "TABLES.SERVICE_ARCHIVE.select": 1,  // fallback read when SQLite not primary
@@ -71,7 +69,7 @@ const ALLOWLIST = {
   },
   "lib/stateStore.js": {
     // IS the service_settings seam — same deal.
-    "TABLES.SERVICE_SETTINGS.select": 1,
+    "TABLES.SERVICE_SETTINGS.select": 2, // exact-key and prefix reads
     "TABLES.SERVICE_SETTINGS.upsert": 1,
   },
   "lib/scopedDb.js": {
@@ -122,7 +120,7 @@ const GUIDANCE =
   "next tick (the PR #44 table-switch duplication bug). Route the call " +
   "through a seam instead: lib/stateStore (readStateKey/saveStateKey), " +
   "lib/archiveStore, App's persistBoardRows / persistReservationRow / " +
-  "persistArchiveEntry / fetchBoardRows, or powersync/writes|reads. Only if " +
+  "persistServiceEnd / fetchBoardRows, or powersync/writes|reads. Only if " +
   "this call genuinely must go direct (a seam's own fallback branch, auth " +
   "bootstrap on non-workspace tables), consciously update the allowlist in " +
   "src/__tests__/seamDiscipline.test.js with a comment saying why.";

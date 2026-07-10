@@ -5,16 +5,8 @@
 // actual SDK lives in ./system.js and is only ever reached through a dynamic
 // import() gated by isPowerSyncEnabled() below, so the heavy WASM loads lazily.
 //
-// PowerSync is the app-wide default: it runs for EVERY workspace — Demo and
-// every restaurant (e.g. Hotel Milka) alike — not just a pilot. Accounts whose
-// sync stream delivers nothing for the active workspace (the platform admin is
-// not a workspace member) run on the direct-Supabase fallback, kept live by
-// the Supabase realtime channels in App.jsx.
-
-// Demo workspace id — kept for reference (sync rules now scope per-tenant by
-// workspace membership, so this is no longer used for gating; PowerSync is on
-// for all workspaces, not just Demo).
-export const DEMO_WORKSPACE_ID = "547ffccc-cc93-42bd-942e-23eb0dc3a99e";
+// PowerSync is the app-wide default: it runs for EVERY explicitly authorized
+// workspace — the separate Demo account and every restaurant alike.
 
 // PowerSync instance URL. Defaults to the instance baked in here so it works
 // without any Vercel env config; VITE_POWERSYNC_URL overrides it (e.g. to point
@@ -28,9 +20,7 @@ export const POWERSYNC_URL =
 
 // Enabled app-wide: on for every workspace whenever a URL is configured and a
 // workspace is active (Demo and restaurants alike). Per-workspace data isolation
-// is enforced server-side by the sync rules, not here. Accounts with no synced
-// rows (e.g. the platform-admin, which isn't a workspace member) simply find an
-// empty local DB and fall back to Supabase.
+// is enforced server-side by explicit workspace membership, not here.
 export function isPowerSyncEnabled(workspaceId) {
   return Boolean(POWERSYNC_URL) && Boolean(workspaceId);
 }

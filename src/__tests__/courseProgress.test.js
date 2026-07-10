@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getVisibleCoursesForTable, getCourseProgressState } from "../utils/courseProgress.js";
+import { getVisibleCoursesForTable, getCourseProgressState, isStaleCourseReady } from "../utils/courseProgress.js";
 import { makeProfile } from "../utils/menuLayoutProfiles.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -488,5 +488,32 @@ describe("getVisibleCoursesForTable — assigned guest profile (row-based)", () 
     const template = { version: 2, rows: [{ id: "r1", left: { type: "course", courseKey: "venison" }, right: null }] };
     const visible = getVisibleCoursesForTable(makeTable(), courses, { kitchenTemplate: template });
     expect(visible.map(c => c.key)).toEqual(["venison"]);
+  });
+});
+
+// ── isStaleCourseReady — the stuck "SET FOR …" banner detector ────────────────
+// fire() clears courseReady only on an exact key match; a menu edit mid-service
+// mints new course keys and the banner could never be dismissed from the
+// kitchen. The App-level heal nulls a courseReady whose key left the table's
+// visible course list — these pin the predicate.
+describe("isStaleCourseReady", () => {
+  const visible = [{ key: "amuse" }, { key: "venison" }];
+
+  it("false when the SET course is still visible", () => {
+    expect(isStaleCourseReady({ courseReady: { key: "venison" } }, visible)).toBe(false);
+  });
+
+  it("true when the SET course's key vanished (menu edited/renumbered)", () => {
+    expect(isStaleCourseReady({ courseReady: { key: "old_venison" } }, visible)).toBe(true);
+  });
+
+  it("false when there is no courseReady at all", () => {
+    expect(isStaleCourseReady({}, visible)).toBe(false);
+    expect(isStaleCourseReady({ courseReady: null }, visible)).toBe(false);
+    expect(isStaleCourseReady(undefined, visible)).toBe(false);
+  });
+
+  it("an empty visible list reads stale — CALLERS must gate on non-empty (transient loads never judge)", () => {
+    expect(isStaleCourseReady({ courseReady: { key: "venison" } }, [])).toBe(true);
   });
 });

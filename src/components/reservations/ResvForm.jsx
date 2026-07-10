@@ -4,6 +4,7 @@ import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, circleButton } from "../../styles/mixins.js";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { reservationTableIds } from "../../utils/tableHelpers.js";
+import { pickFlowKeys } from "../../utils/terraceFlow.js";
 import GuestMemory from "./GuestMemory.jsx";
 
 const FONT = tokens.font;
@@ -99,6 +100,14 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
       tableGroup: sortedGroup,
       courseOverrides: initial?.data?.courseOverrides || {},
       kitchenCourseNotes: initial?.data?.kitchenCourseNotes || {},
+      // Carry the terrace-flow keys through the edit — this form rebuilds
+      // `data` from its fields, and dropping visit_state/terrace_table
+      // mid-service teleported live terrace parties back to 'booked' (ghost
+      // tile, lost LAST BITE arming). EXCEPTION: a booking cleared off the
+      // board was visit-closed by clear(); editing it re-enables the booking
+      // as a FRESH visit, so clearedFromBoard AND the flow keys both
+      // intentionally drop there.
+      ...(initial?.data?.clearedFromBoard ? {} : pickFlowKeys(initial?.data)),
     };
     await onSave({ id: initial?.id, date: initial?.date, table_id: primaryId, data });
     setSaving(false);

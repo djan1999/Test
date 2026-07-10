@@ -10,8 +10,9 @@
 
 The hard multi‑tenant plumbing exists and looks solid:
 
-- Workspaces, `workspace_members`, `platform_admins`, per‑tenant **RLS** with
-  security‑definer helpers in a `private` schema (`schema.sql`).
+- Workspaces, explicit `workspace_members`, and per-tenant **RLS** with a
+  security-definer helper in a `private` schema (`schema.sql`). Demo is a
+  separate sandbox membership, not a master account.
 - `scopedFrom()` scopes every read/write; realtime is workspace‑filtered; the
   offline queue stamps the workspace.
 - PowerSync is on app‑wide with per‑workspace sync rules (durable, offline,
@@ -87,7 +88,7 @@ this is sharper than typical SaaS compliance. Supabase is already EU (`eu‑cent
 | # | Task | Notes | Effort |
 |---|------|-------|--------|
 | 3.1 | **Formal security review** | Run `/security-review`; audit RLS on every table for cross‑tenant leaks. | M |
-| 3.2 | **Remove client‑exposed secrets** | `VITE_SYNC_SECRET` ships to the browser. Move sync triggers behind an authenticated server endpoint; drop the client secret. | S |
+| 3.2 | **Remove client‑exposed secrets — COMPLETE** | Manual catalog sync now verifies the signed-in owner server-side; cron secrets never enter the browser bundle. | S |
 | 3.3 | **Legal docs** | Privacy Policy, Terms, and a **DPA** (you're a *processor*; the restaurant is *controller*). Needs a lawyer. | M (+legal) |
 | 3.4 | **Data lifecycle** | Per‑workspace **export & delete**, retention policy for reservations/allergy data, breach process. | M |
 | 3.5 | **Backups** | Supabase PITR (paid tier) + a tested restore runbook. | S |
@@ -103,7 +104,7 @@ data export/delete works, backups verified.
 |---|------|-------|--------|
 | 4.1 | **Invite / remove staff** | Email invite → accept → membership; remove member; transfer ownership. | M |
 | 4.2 | **Password reset UI** | Wire Supabase reset flow. | S |
-| 4.3 | **Roles → permissions** | Today only `owner`/`staff`. Add manager/server/kitchen and gate who can edit menu vs only run service. | M |
+| 4.3 | **Roles → permissions** | The schema reserves `owner`/`staff`, but polishing currently grants every explicit member full access. Later add manager/server/kitchen and gate menu editing vs service operation. | M |
 
 ---
 

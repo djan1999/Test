@@ -46,3 +46,15 @@ export async function saveStateKey(id, state) {
     return { ok: false, error };
   }
 }
+
+export async function readStatePrefix(prefix) {
+  if (!supabase || !getWorkspaceId()) throw new Error("no active workspace");
+  if (isSqlitePrimary()) {
+    const { readSettingsPrefix } = await import("../powersync/reads.js");
+    return readSettingsPrefix(prefix);
+  }
+  const { data, error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
+    .select("id,state,updated_at").like("id", `${prefix}%`).order("id");
+  if (error) throw error;
+  return data || [];
+}

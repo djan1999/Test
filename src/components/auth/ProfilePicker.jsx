@@ -12,9 +12,10 @@ const KIND_LABEL = {
 };
 
 // ── ProfilePicker — choose which restaurant (workspace) to work in ────────────
-// A normal restaurant login only ever sees its own workspace (App auto-selects
-// it and skips this screen). The master/super-admin sees every restaurant here.
-export default function ProfilePicker({ workspaces = [], isAdmin = false, onPick, onSignOut }) {
+// A normal restaurant or Demo login sees only its explicit membership and App
+// auto-selects it. This generic picker remains for an account deliberately
+// linked to more than one workspace later.
+export default function ProfilePicker({ workspaces = [], onPick, onSignOut }) {
   return (
     <div style={{
       minHeight: "100vh", background: ink.bg,
@@ -31,7 +32,7 @@ export default function ProfilePicker({ workspaces = [], isAdmin = false, onPick
         <div style={{
           fontFamily: FONT, fontSize: "8px", letterSpacing: "0.22em",
           textTransform: "uppercase", color: ink[3],
-        }}>{isAdmin ? "master · choose a restaurant" : "choose a profile"}</div>
+        }}>choose a restaurant</div>
       </div>
 
       {workspaces.length === 0 ? (

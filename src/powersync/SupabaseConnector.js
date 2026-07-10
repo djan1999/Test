@@ -15,12 +15,14 @@
 // the sync streams alias each composite-key table's natural key into it
 // (service_tables→table_id, menu_courses→position, wines→key,
 // service_settings→id). Upload rebuilds the real Postgres row from the op's
-// column data + that alias, and targets the SAME conflict columns the legacy
+// column data + that workspace-qualified alias, and targets the SAME conflict columns the legacy
 // scopedFrom() writes used (lib/scopedDb.js COMPOSITE_CONFLICT — verified
 // against the composite primary keys in schema.sql).
 
 import { supabase, getWorkspaceId } from "../lib/supabaseClient.js";
 import { POWERSYNC_URL } from "./config.js";
+import { naturalKeyFromLocalId } from "./rowId.js";
+import { saveServiceTableWithCas } from "../lib/serviceTableCas.js";
 
 // @powersync/common UpdateType values, inlined so this module stays importable
 // without the SDK (unit tests exercise uploadData with mock transactions).
@@ -74,6 +76,13 @@ const KNOWN_TABLES = new Set([
   ...Object.keys(NATURAL_KEY), ...UUID_ID_TABLES, "beverages",
 ]);
 
+// Operational writes are never disposable. A schema/permission error here is
+// an outage to surface and retry, not permission to tell PowerSync the tap was
+// uploaded and silently erase it from the queue.
+const NEVER_DROP_TABLES = new Set([
+  "service_tables", "service_settings", "reservations", "service_archive",
+]);
+
 // Postgres error classes that will fail identically on every retry —
 // constraint violations, bad data, missing columns/permissions, and PostgREST
 // schema-cache errors. Retrying these would wedge the queue forever.
@@ -106,7 +115,10 @@ function buildRow(op, workspaceId) {
   }
   const nat = NATURAL_KEY[op.table];
   if (nat) {
-    if (row[nat.column] == null) row[nat.column] = nat.int ? Number(op.id) : op.id;
+    const opKey = naturalKeyFromLocalId(op.id, workspaceId);
+    if (row[nat.column] == null || String(row[nat.column]) === String(op.id)) {
+      row[nat.column] = nat.int ? Number(opKey) : opKey;
+    }
     else if (nat.int) row[nat.column] = Number(row[nat.column]);
     if (nat.int && !Number.isFinite(row[nat.column])) {
       throw new PermanentOpError(`non-numeric ${op.table}.${nat.column} key: ${op.id}`);
@@ -133,6 +145,82 @@ function workspaceForOp(op) {
   return ws;
 }
 
+const isEmptyObjectValue = (table, column, value) => {
+  const parsed = convertValue(table, column, value);
+  return Boolean(parsed)
+    && typeof parsed === "object"
+    && !Array.isArray(parsed)
+    && Object.keys(parsed).length === 0;
+};
+
+// `finishServiceLocally()` deliberately emits one very distinctive SQLite
+// transaction: ten blank service-table rows, one blank service_date setting,
+// and optionally one archive insert. Replaying those as twelve independent
+// HTTP writes would be durable (PowerSync retries the batch) but not atomic on
+// Postgres: another tablet could briefly see a cleared table while the service
+// date was still live. Recognize only the exact transaction and collapse it
+// into the server-side archive_and_finish_service transaction.
+function finishServicePayload(crud) {
+  if (!Array.isArray(crud) || (crud.length !== 11 && crud.length !== 12)) return null;
+  if (crud.some((op) => op.op === OP_DELETE)) return null;
+
+  const tableOps = crud.filter((op) => op.table === "service_tables");
+  const settingOps = crud.filter((op) => op.table === "service_settings");
+  const archiveOps = crud.filter((op) => op.table === "service_archive");
+  if (tableOps.length !== 10 || settingOps.length !== 1 || archiveOps.length > 1) return null;
+  if (tableOps.length + settingOps.length + archiveOps.length !== crud.length) return null;
+
+  const workspaces = new Set(crud.map(workspaceForOp));
+  if (workspaces.size !== 1) return null;
+  const workspaceId = [...workspaces][0];
+
+  const tableIds = tableOps.map((op) => {
+    const row = buildRow(op, workspaceId);
+    if (!isEmptyObjectValue("service_tables", "data", row.data)) return NaN;
+    return Number(row.table_id ?? naturalKeyFromLocalId(op.id, workspaceId));
+  });
+  if (new Set(tableIds).size !== 10 || !tableIds.every((id) => id >= 1 && id <= 10)) return null;
+
+  const setting = buildRow(settingOps[0], workspaceId);
+  if (setting.id !== "service_date"
+      || !isEmptyObjectValue("service_settings", "state", setting.state)) return null;
+
+  const archive = archiveOps.length === 1 ? buildRow(archiveOps[0], workspaceId) : null;
+  if (archive && (!archive.id || !archive.date || !archive.label)) return null;
+
+  return {
+    p_workspace_id: workspaceId,
+    p_archive_id: archive?.id || null,
+    p_archive_date: archive?.date || null,
+    p_archive_label: archive?.label || null,
+    p_archive_state: archive?.state || null,
+  };
+}
+
+// Service-board rows are busy shared documents: two tablets often edit
+// different seats on the same table within seconds. A plain row UPDATE makes
+// the last uploader erase the other tablet's work. Read the current server
+// row, fold it with PowerSync's tracked ancestor, then commit with a database
+// compare-and-swap. If somebody wins the race first, retry against their copy.
+async function applyServiceTableWrite(op, ws, row) {
+  const tableId = Number(row.table_id ?? naturalKeyFromLocalId(op.id, ws));
+  if (!Number.isFinite(tableId)) {
+    throw new PermanentOpError(`non-numeric service_tables.table_id key: ${op.id}`);
+  }
+  try {
+    await saveServiceTableWithCas({
+      client: supabase,
+      workspaceId: ws,
+      tableId,
+      data: row.data ?? {},
+      ancestor: convertValue("service_tables", "data", op.previousValues?.data),
+    });
+    return { error: null };
+  } catch (error) {
+    return { error };
+  }
+}
+
 async function applyOp(op) {
   if (!KNOWN_TABLES.has(op.table)) {
     throw new PermanentOpError(`unknown table: ${op.table}`);
@@ -150,7 +238,9 @@ async function applyOp(op) {
     }
     const nat = NATURAL_KEY[op.table];
     if (nat) {
-      const key = op.previousValues?.[nat.column] ?? (nat.int ? Number(op.id) : op.id);
+      const rawKey = op.previousValues?.[nat.column]
+        ?? naturalKeyFromLocalId(op.id, ws);
+      const key = nat.int ? Number(rawKey) : rawKey;
       if (nat.int && !Number.isFinite(Number(key))) {
         throw new PermanentOpError(`non-numeric ${op.table}.${nat.column} key: ${op.id}`);
       }
@@ -160,6 +250,10 @@ async function applyOp(op) {
   }
 
   const row = buildRow(op, ws);
+
+  if (op.table === "service_tables") {
+    return applyServiceTableWrite(op, ws, row);
+  }
 
   if (op.table === "beverages") {
     // beverages.id is GENERATED ALWAYS — the server mints ids, so inserts must
@@ -188,7 +282,8 @@ async function applyOp(op) {
   // dropped — a deleted row must stay deleted, not be resurrected half-empty.
   if (op.op === OP_PATCH) {
     if (nat) {
-      const key = nat.int ? Number(op.id) : op.id;
+      const rawKey = row[nat.column] ?? naturalKeyFromLocalId(op.id, ws);
+      const key = nat.int ? Number(rawKey) : rawKey;
       return from.update(row).match({ [nat.column]: key, workspace_id: ws });
     }
     const { id: _rowId, ...cols } = row;
@@ -217,11 +312,19 @@ export class SupabaseConnector {
     const transaction = await database.getNextCrudTransaction();
     if (!transaction) return;
 
+    const finishPayload = finishServicePayload(transaction.crud);
+    if (finishPayload) {
+      const { error } = await supabase.rpc("archive_and_finish_service", finishPayload);
+      if (error) throw error;
+      await transaction.complete();
+      return;
+    }
+
     for (const op of transaction.crud) {
       try {
         const result = await applyOp(op);
         if (result?.error) {
-          if (isPermanentError(result.error)) {
+          if (isPermanentError(result.error) && !NEVER_DROP_TABLES.has(op.table)) {
             // Will fail on every retry — log the full op and move on rather
             // than wedging the whole queue behind it.
             console.error("[PowerSync] permanent upload failure — skipping op:", op, result.error);

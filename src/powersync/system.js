@@ -1,7 +1,7 @@
 // PowerSync system — HEAVY module. Pulls in the PowerSync SDK + wa-sqlite WASM,
 // so it must ONLY ever be reached through a dynamic import() gated by
 // isPowerSyncEnabled() (see ./config.js). Static-importing this anywhere would
-// ship the SDK to every user and defeat the "prod stays byte-for-byte" promise.
+// ship the SDK to sessions that use the direct-Supabase fallback unnecessarily.
 
 import { PowerSyncDatabase } from "@powersync/web";
 import { AppSchema } from "./AppSchema.js";
@@ -14,10 +14,9 @@ let _connected = false;
 // The device remembers which Supabase user last synced the local DB. One
 // dbFilename serves whoever is logged in, so when a DIFFERENT account signs in
 // (admin → restaurant handover, a shared tablet changing hands) the previous
-// user's rows and sync state MUST NOT carry over: stale hasSynced flags let the
-// new session go sqlite-primary on the old account's data, and leftover rows
-// from workspaces the new user can't sync trip the foreign-rows tripwire and
-// wedge the device on the fallback. Clearing before the first connect forces a
+// user's rows and sync state MUST NOT carry over: stale hasSynced flags can let
+// the new session go sqlite-primary on the old account's data. Clearing before
+// the first connect forces a
 // clean first sync for the new user (PowerSync's documented logout behaviour).
 const LAST_SYNC_USER_KEY = "milka-powersync-last-user";
 
@@ -42,7 +41,9 @@ export function getPowerSync() {
   if (!_db) {
     _db = new PowerSyncDatabase({
       schema: AppSchema,
-      database: { dbFilename: "milka-powersync.db" },
+      // v2 uses workspace-qualified ids. A new file prevents legacy aliases
+      // from contaminating the corrected schema after an in-place upgrade.
+      database: { dbFilename: "milka-powersync-v2.db" },
     });
   }
   return _db;
@@ -88,13 +89,9 @@ function snapshot(s) {
   };
 }
 
-// Wipe the local DB and reconnect the stream — the self-heal for a local DB
-// contaminated with another account's rows. Devices that switched logins
-// BEFORE the account-switch guard existed (the 07.07 admin → restaurant
-// handover) still carry the previous user's workspaces; the foreign-rows
-// tripwire spots them and calls this instead of wedging on the fallback
-// forever. Safe because the stream can only re-deliver the CURRENT user's
-// workspaces. Registered status listeners survive the reconnect.
+// Manual recovery primitive: wipe the local DB and reconnect the current
+// account's authorized streams. Normal multi-workspace rows are safe and do
+// not call this automatically; account changes are handled before connect.
 export async function clearLocalAndResync() {
   const db = getPowerSync();
   await db.disconnectAndClear();

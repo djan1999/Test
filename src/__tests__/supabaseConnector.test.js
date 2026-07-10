@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   errorFor: () => null,
   workspaceId: "ws-active",
   session: { access_token: "tok-1" },
+  remoteServiceTable: null,
 }));
 
 vi.mock("../lib/supabaseClient.js", () => ({
@@ -18,12 +19,22 @@ vi.mock("../lib/supabaseClient.js", () => ({
         h.calls.push(call);
         return Promise.resolve({ error: h.errorFor(call) });
       };
+      const read = {
+        eq: () => read,
+        maybeSingle: async () => ({ data: h.remoteServiceTable, error: null }),
+      };
       return {
+        select: () => read,
         upsert: (payload, opts) => record("upsert", { payload, opts }),
         insert: (payload) => record("insert", { payload }),
         update: (payload) => ({ match: (match) => record("update", { payload, match }) }),
         delete: () => ({ match: (match) => record("delete", { match }) }),
       };
+    },
+    rpc: (name, payload) => {
+      const call = { table: "service_tables", op: "rpc", name, payload };
+      h.calls.push(call);
+      return Promise.resolve({ data: true, error: h.errorFor(call) });
     },
     auth: { getSession: async () => ({ data: { session: h.session }, error: null }) },
   },
@@ -44,35 +55,110 @@ beforeEach(() => {
   h.errorFor = () => null;
   h.workspaceId = "ws-active";
   h.session = { access_token: "tok-1" };
+  h.remoteServiceTable = null;
   vi.restoreAllMocks();
 });
 
 describe("SupabaseConnector.uploadData — natural-key rebuild per table", () => {
-  it("service_tables PUT → upsert on workspace_id,table_id with parsed jsonb and no id column", async () => {
-    const tx = makeTx([put("service_tables", "3", {
-      id: "3", table_id: 3, data: '{"resName":"Kovač","seats":[]}',
+  it("uploads an end-service SQLite batch through one atomic Postgres RPC", async () => {
+    const workspace_id = "ws-a";
+    const crud = [put("service_archive", "archive-1", {
+      workspace_id,
+      date: "2026-07-10",
+      label: "10. 07. 2026 – DINNER",
+      state: '{"tables":[]}',
+      created_at: "2026-07-10T23:00:00Z",
+    })];
+    for (let table_id = 1; table_id <= 10; table_id += 1) {
+      crud.push(patch("service_tables", `${workspace_id}|${table_id}`, {
+        workspace_id, table_id, data: "{}", updated_at: "2026-07-10T23:00:01Z",
+      }));
+    }
+    crud.push(patch("service_settings", `${workspace_id}|service_date`, {
+      workspace_id, id: "service_date", state: "{}", updated_at: "2026-07-10T23:00:01Z",
+    }));
+    const tx = makeTx(crud);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0].name).toBe("archive_and_finish_service");
+    expect(h.calls[0].payload).toEqual({
+      p_workspace_id: workspace_id,
+      p_archive_id: "archive-1",
+      p_archive_date: "2026-07-10",
+      p_archive_label: "10. 07. 2026 – DINNER",
+      p_archive_state: { tables: [] },
+    });
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an atomic end-service batch queued when its server RPC fails", async () => {
+    h.errorFor = (call) => call.name === "archive_and_finish_service"
+      ? { code: "", message: "network down" }
+      : null;
+    const workspace_id = "ws-a";
+    const crud = Array.from({ length: 10 }, (_, index) => patch(
+      "service_tables", `${workspace_id}|${index + 1}`,
+      { workspace_id, table_id: index + 1, data: "{}" },
+    ));
+    crud.push(patch("service_settings", `${workspace_id}|service_date`, {
+      workspace_id, id: "service_date", state: "{}",
+    }));
+    const tx = makeTx(crud);
+
+    await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toBeTruthy();
+    expect(tx.complete).not.toHaveBeenCalled();
+  });
+
+  it("service_tables PUT → compare-and-swap RPC with parsed jsonb and workspace-safe id", async () => {
+    const tx = makeTx([put("service_tables", "ws-a|3", {
+      id: "ws-a|3", table_id: 3, data: '{"resName":"Kovač","seats":[]}',
       updated_at: "2026-06-06T18:00:00Z", workspace_id: "ws-a",
     })]);
     await new SupabaseConnector().uploadData(makeDb(tx));
 
     expect(h.calls).toHaveLength(1);
     const c = h.calls[0];
-    expect(c.op).toBe("upsert");
-    expect(c.opts).toEqual({ onConflict: "workspace_id,table_id" });
-    expect(c.payload.table_id).toBe(3);
-    expect(c.payload.data).toEqual({ resName: "Kovač", seats: [] });
-    expect(c.payload.workspace_id).toBe("ws-a");
-    expect("id" in c.payload).toBe(false);
+    expect(c.op).toBe("rpc");
+    expect(c.name).toBe("save_service_table_if_current");
+    expect(c.payload.p_table_id).toBe(3);
+    expect(c.payload.p_data).toEqual({ resName: "Kovač", seats: [] });
+    expect(c.payload.p_workspace_id).toBe("ws-a");
+    expect(c.payload.p_expected_updated_at).toBeNull();
     expect(tx.complete).toHaveBeenCalledTimes(1);
   });
 
-  it("service_tables PATCH → plain UPDATE matched on the natural key (never an upsert)", async () => {
-    const tx = makeTx([patch("service_tables", "7", { data: "{}", updated_at: "t" })]);
+  it("service_tables PATCH → compare-and-swap RPC matched on the natural key", async () => {
+    const tx = makeTx([patch("service_tables", "ws-active|7", { data: "{}", updated_at: "t" })]);
     await new SupabaseConnector().uploadData(makeDb(tx));
     const c = h.calls[0];
-    expect(c.op).toBe("update");
-    expect(c.match).toEqual({ table_id: 7, workspace_id: "ws-active" }); // falls back to active workspace
-    expect(c.payload.data).toEqual({});
+    expect(c.op).toBe("rpc");
+    expect(c.payload.p_table_id).toBe(7);
+    expect(c.payload.p_data).toEqual({});
+  });
+
+  it("merges different-seat concurrent edits before the compare-and-swap", async () => {
+    h.remoteServiceTable = {
+      data: { id: 3, resName: "A", seats: [{ id: 1, water: "Still" }, { id: 2, water: "Sparkling" }] },
+      updated_at: "2026-07-10T18:00:01Z",
+    };
+    const tx = makeTx([{
+      ...patch("service_tables", "ws-a|3", {
+        table_id: 3,
+        data: JSON.stringify({ id: 3, resName: "A", seats: [{ id: 1, water: "Tap" }, { id: 2, water: "Still" }] }),
+        workspace_id: "ws-a",
+      }),
+      previousValues: {
+        workspace_id: "ws-a",
+        data: JSON.stringify({ id: 3, resName: "A", seats: [{ id: 1, water: "Still" }, { id: 2, water: "Still" }] }),
+      },
+    }]);
+    await new SupabaseConnector().uploadData(makeDb(tx));
+    expect(h.calls[0].payload.p_data.seats).toEqual([
+      { id: 1, water: "Tap" },
+      { id: 2, water: "Sparkling" },
+    ]);
   });
 
   it("REGRESSION (09.07): reservations PATCH without date → UPDATE by id, NOT an upsert", async () => {
@@ -233,6 +319,17 @@ describe("SupabaseConnector.uploadData — error policy", () => {
   it("transient errors rethrow WITHOUT completing, so the engine retries", async () => {
     h.errorFor = () => ({ code: "", message: "fetch failed" });
     const tx = makeTx([put("service_tables", "1", { table_id: 1, data: "{}", workspace_id: "ws-a" })]);
+    await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toBeTruthy();
+    expect(tx.complete).not.toHaveBeenCalled();
+  });
+
+  it("never drops an operational write when its required RPC/migration is missing", async () => {
+    h.errorFor = (call) => call.op === "rpc"
+      ? { code: "PGRST202", message: "save_service_table_if_current not found" }
+      : null;
+    const tx = makeTx([put("service_tables", "ws-a|1", {
+      table_id: 1, data: "{}", workspace_id: "ws-a",
+    })]);
     await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toBeTruthy();
     expect(tx.complete).not.toHaveBeenCalled();
   });

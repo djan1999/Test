@@ -11,6 +11,7 @@ import {
   setTableMembers, setTableBoardIds,
   addMap, renameMap, duplicateMap, deleteMap, hasDefaultGeometry, resetMapToDefaults,
   sanitizeFloorStatus, floorStatusOf, setFloorStatus, cycleFloorStatus, mapTicker,
+  pruneFloorStatus,
   sheetOf, doorGeometry, hitTestSheet,
   addWall, setWallDashed, deleteWall, addDoorAt, patchOpening, deleteOpening,
   addZoneAt, patchZone, deleteZone, addPlanterAt, patchPlanter, deletePlanter,
@@ -440,6 +441,38 @@ describe("floor status (SET markers)", () => {
   it("statuses are keyed per map — layouts don't share markers", () => {
     const st = setFloorStatus({}, "dining_a", "T3", "SET");
     expect(floorStatusOf(st, "dining_b", "T3")).toBeNull();
+  });
+
+  it("prune drops strips whose map or label no longer exists, keeps valid ones", () => {
+    const st = {
+      dining_a: { T4: "SET", T99: "SET" }, // T99 never existed on dining_a
+      ghost_map: { T1: "SET" },            // map deleted
+    };
+    expect(pruneFloorStatus(st, state)).toEqual({ dining_a: { T4: "SET" } });
+    expect(pruneFloorStatus(null, state)).toEqual({});
+    expect(pruneFloorStatus({ dining_a: { T4: "SET" } }, null)).toEqual({});
+  });
+
+  it("a strip does NOT survive delete → re-add of the same label (the phantom-SET vector)", () => {
+    // SET T4, delete T4 (strip orphans — geometry ops are strip-blind), then
+    // addTable re-mints the first free label, which is T4 again.
+    let maps = state;
+    let st = setFloorStatus({}, "dining_a", "T4", "SET");
+    maps = deleteTable(maps, "dining_a", "T4");
+    st = pruneFloorStatus(st, maps);           // the editing device prunes
+    expect(st).toEqual({});
+    maps = addTable(maps, "dining_a");
+    const readded = maps.maps.find((m) => m.id === "dining_a").tables.map((t) => t.label);
+    expect(readded).toContain("T4");           // label reuse is real
+    expect(floorStatusOf(st, "dining_a", "T4")).toBeNull(); // ...and clean
+  });
+
+  it("rename prunes the old label's strip (re-SET is one tap; a wrong SET reaches the kitchen)", () => {
+    let maps = state;
+    let st = setFloorStatus({}, "dining_a", "T4", "SET");
+    maps = renameTable(maps, "dining_a", "T4", "T44");
+    st = pruneFloorStatus(st, maps);
+    expect(st).toEqual({});
   });
 });
 

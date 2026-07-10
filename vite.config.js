@@ -62,37 +62,18 @@ export default defineConfig({
             },
           },
 
-          // Supabase REST + Auth APIs — network-first so live updates come
-          // through when online; falls back to the last cached response when
-          // WiFi drops mid-service so the board stays readable.
-          {
-            urlPattern: /^https:\/\/[^/]+\.supabase\.co\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'supabase-api',
-              // Give up waiting for the network after 5 s and serve stale.
-              networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-
           // Sync endpoint — long-running scrape, never cache, no SW timeout.
           {
             urlPattern: /\/api\/sync-wines.*/i,
             handler: 'NetworkOnly',
           },
 
-          // Local serverless API routes (/api/*) — network-first with fallback.
+          // Server APIs can contain account-specific, changing data. The app
+          // shell is offline-capable, but API responses must never be replayed
+          // from a service-worker cache as if they were live.
           {
             urlPattern: /\/api\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'local-api',
-              networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
+            handler: 'NetworkOnly',
           },
         ],
       },

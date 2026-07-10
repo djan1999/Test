@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import GlobalStyle from "../ui/GlobalStyle.jsx";
 
@@ -12,19 +12,32 @@ const PINS = {
   menu:  String(import.meta.env.VITE_PIN_MENU  || "").trim(),
 };
 
-export default function LoginScreen({ onEnter, onSyncAll, workspaceName = "", canSwitchProfile = false, onSwitchProfile, onSignOut }) {
+export default function LoginScreen({ onEnter, onSyncAll, canAdmin = false, workspaceName = "", canSwitchProfile = false, onSwitchProfile, onSignOut }) {
   const MODES = [
     { id: "display",     label: "Kitchen",      sub: "fire courses · KDS",  pin: false },
     { id: "service",     label: "Service",      sub: "full service access", pin: false },
     { id: "reservation", label: "Reservations", sub: "weekly planner",      pin: false },
     { id: "admin",       label: "Admin",        sub: "pin required",        pin: true  },
     { id: "menu",        label: "Menu",         sub: "preview + print",     pin: true  },
-  ];
+  ].filter((mode) => mode.id !== "admin" || canAdmin);
 
   const [picking, setPicking] = useState(null);
   const [pin, setPin]         = useState("");
   const [shake, setShake]     = useState(false);
   const [syncSt, setSyncSt]   = useState(null);
+  const timersRef = useRef(new Set());
+  const schedule = (fn, delay) => {
+    const timer = setTimeout(() => {
+      timersRef.current.delete(timer);
+      fn();
+    }, delay);
+    timersRef.current.add(timer);
+  };
+
+  useEffect(() => () => {
+    for (const timer of timersRef.current) clearTimeout(timer);
+    timersRef.current.clear();
+  }, []);
 
   const handleSync = async () => {
     if (!onSyncAll || syncSt === "syncing") return;
@@ -37,7 +50,7 @@ export default function LoginScreen({ onEnter, onSyncAll, workspaceName = "", ca
       console.error("[LoginSync] threw:", e);
       setSyncSt("err");
     }
-    setTimeout(() => setSyncSt(null), 3000);
+    schedule(() => setSyncSt(null), 3000);
   };
 
   const handleTile = mode => {
@@ -57,7 +70,7 @@ export default function LoginScreen({ onEnter, onSyncAll, workspaceName = "", ca
       } else {
         setShake(true);
         setPin("");
-        setTimeout(() => setShake(false), 500);
+        schedule(() => setShake(false), 500);
       }
     }
   };
@@ -157,7 +170,7 @@ export default function LoginScreen({ onEnter, onSyncAll, workspaceName = "", ca
           </div>
 
           {/* Sync button */}
-          {onSyncAll && (
+          {onSyncAll && canAdmin && (
             <button
               onClick={handleSync}
               disabled={syncSt === "syncing"}

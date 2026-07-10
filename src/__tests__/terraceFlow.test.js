@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   visitStateOf, isArmed, assignTerrace, clearTerraceTable, shouldArmOnFire,
-  fireLastBite, moveToDining, markSeated, closeVisit,
+  fireLastBite, moveToDining, markSeated, closeVisit, FLOW_KEYS, pickFlowKeys,
 } from "../utils/terraceFlow.js";
 
 const NOW = "2026-07-05T19:30:00.000Z";
@@ -81,6 +81,22 @@ describe("last bite arming (the single kitchen hook)", () => {
     expect(assignTerrace(d, "T24")).toMatchObject({ visit_state: "terrace", terrace_table: "T24" });
     expect(isArmed(d)).toBe(false);
   });
+
+  it("clearing an UN-armed party who is SEATED INSIDE heals to 'dining' — not back into the waiting pool", () => {
+    // Dessert-outside party: dining table still active, tile struck early.
+    const d = clearTerraceTable(
+      { visit_state: "terrace", terrace_table: "T23" },
+      { seatedInside: true },
+    );
+    expect(d.terrace_table).toBeNull();
+    expect(d.visit_state).toBe("dining"); // still eating inside — NOT 'booked'
+    // an ARMED party keeps 'terrace' regardless (the stranded MOVE owns it)
+    const armed = clearTerraceTable(
+      { visit_state: "terrace", terrace_table: "T23", last_bite_fired_at: NOW },
+      { seatedInside: true },
+    );
+    expect(armed.visit_state).toBe("terrace");
+  });
 });
 
 describe("MOVE / SEATED", () => {
@@ -105,6 +121,25 @@ describe("MOVE / SEATED", () => {
     expect(markSeated({ visit_state: "arriving" }).visit_state).toBe("dining");
     expect(markSeated({ visit_state: "terrace" })).toBeNull();
     expect(markSeated({})).toBeNull();
+  });
+});
+
+describe("pickFlowKeys (edit-form carry-through)", () => {
+  it("picks only the flow keys that are present — legacy rows stay byte-identical", () => {
+    expect(pickFlowKeys(undefined)).toEqual({});
+    expect(pickFlowKeys({ resName: "NOVAK", notes: "window" })).toEqual({});
+    const full = {
+      resName: "NOVAK", visit_state: "terrace", terrace_table: "T23",
+      terrace_map_id: "terrace_main", last_bite_fired_at: NOW, moved_at: null,
+    };
+    expect(pickFlowKeys(full)).toEqual({
+      visit_state: "terrace", terrace_table: "T23",
+      terrace_map_id: "terrace_main", last_bite_fired_at: NOW, moved_at: null,
+    });
+    // null is a real value (terrace_table: null after a clear) — only
+    // undefined means "key never entered the flow".
+    expect(pickFlowKeys({ terrace_table: null })).toEqual({ terrace_table: null });
+    expect(Object.keys(pickFlowKeys(full)).every((k) => FLOW_KEYS.includes(k))).toBe(true);
   });
 });
 

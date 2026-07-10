@@ -8,15 +8,15 @@
 //
 // Conventions (mirror AppSchema.js / the sync streams):
 //   • every row is stamped with the active workspace_id + a fresh updated_at
-//   • the aliased local `id` is set to the natural key (service_tables→table_id,
-//     menu_courses→position, wines→key, service_settings→its id) so a synced
-//     copy of the same row lands on the same local PK instead of duplicating
+//   • aliased local ids are `${workspace_id}|${natural_key}` so the same key
+//     in two restaurants can never collide in the local database
 //   • jsonb columns are stored as JSON text, booleans as 0/1 integers
 //   • updates go through UPDATE (not INSERT OR REPLACE) so columns cleared to
 //     null travel in the PATCH op and null out the Postgres column too
 
 import { getPowerSync } from "./system.js";
 import { getWorkspaceId } from "../lib/supabaseClient.js";
+import { localRowId } from "./rowId.js";
 
 // JS value → SQLite storage value (JSON text for objects, 0/1 for booleans).
 const sqlite = (v) => {
@@ -68,7 +68,7 @@ export async function writeServiceTables(rows) {
   const ws = requireWorkspace();
   await getPowerSync().writeTransaction(async (tx) => {
     for (const row of rows) {
-      await upsertLocalRow(tx, "service_tables", ws, row.table_id, {
+      await upsertLocalRow(tx, "service_tables", ws, localRowId(ws, row.table_id), {
         table_id: Number(row.table_id),
         data: sqlite(row.data ?? {}),
         updated_at: row.updated_at || new Date().toISOString(),
@@ -81,7 +81,7 @@ export async function writeServiceTables(rows) {
 export async function writeSetting(id, state) {
   const ws = requireWorkspace();
   await getPowerSync().writeTransaction(async (tx) => {
-    await upsertLocalRow(tx, "service_settings", ws, id, {
+    await upsertLocalRow(tx, "service_settings", ws, localRowId(ws, id), {
       state: sqlite(state ?? {}),
       updated_at: new Date().toISOString(),
     });
@@ -90,9 +90,7 @@ export async function writeSetting(id, state) {
 
 // Reservation upsert. The caller supplies the uuid id (crypto.randomUUID() for
 // new rows); created_at is only written on insert so edits never restamp it.
-export async function writeReservation({ id, date, table_id, data, created_at }) {
-  const ws = requireWorkspace();
-  await getPowerSync().writeTransaction(async (tx) => {
+async function writeReservationInTransaction(tx, ws, { id, date, table_id, data, created_at }) {
     // Probe-then-write, NOT rowsAffected (see upsertLocalRow): view UPDATEs
     // report 0 changes even on success, which turned every edit of a synced
     // reservation into a duplicate INSERT that died on the local PK.
@@ -119,6 +117,19 @@ export async function writeReservation({ id, date, table_id, data, created_at })
         [String(id), ws, date, Number(table_id), sqlite(data ?? {}), created_at || new Date().toISOString()],
       );
     }
+}
+
+export async function writeReservation(row) {
+  const ws = requireWorkspace();
+  await getPowerSync().writeTransaction(async (tx) => {
+    await writeReservationInTransaction(tx, ws, row);
+  });
+}
+
+export async function writeReservations(rows) {
+  const ws = requireWorkspace();
+  await getPowerSync().writeTransaction(async (tx) => {
+    for (const row of rows) await writeReservationInTransaction(tx, ws, row);
   });
 }
 
@@ -141,18 +152,22 @@ export async function writeMenuCourses(changedRows, keptPositions = null) {
       const { position, ...cols } = row;
       const converted = {};
       for (const [k, v] of Object.entries(cols)) converted[k] = sqlite(v);
-      await upsertLocalRow(tx, "menu_courses", ws, position, {
+      await upsertLocalRow(tx, "menu_courses", ws, localRowId(ws, position), {
         position: Number(position),
         ...converted,
         updated_at: new Date().toISOString(),
       });
     }
     const positions = (keptPositions || []).map(Number).filter(Number.isFinite);
-    if (keptPositions && positions.length > 0) {
-      await tx.execute(
-        `DELETE FROM menu_courses WHERE workspace_id = ? AND position NOT IN (${positions.map(() => "?").join(",")})`,
-        [ws, ...positions],
-      );
+    if (keptPositions) {
+      if (positions.length > 0) {
+        await tx.execute(
+          `DELETE FROM menu_courses WHERE workspace_id = ? AND position NOT IN (${positions.map(() => "?").join(",")})`,
+          [ws, ...positions],
+        );
+      } else {
+        await tx.execute("DELETE FROM menu_courses WHERE workspace_id = ?", [ws]);
+      }
     }
   });
 }
@@ -165,7 +180,7 @@ export async function writeWines(rows) {
       const { key, ...cols } = row;
       const converted = {};
       for (const [k, v] of Object.entries(cols)) converted[k] = sqlite(v);
-      await upsertLocalRow(tx, "wines", ws, key, {
+      await upsertLocalRow(tx, "wines", ws, localRowId(ws, key), {
         key,
         ...converted,
         updated_at: new Date().toISOString(),
@@ -186,14 +201,49 @@ export async function deleteWines(keys) {
 // File a service archive entry locally (works offline; uploads like any other
 // write). The uuid is minted client-side so the local row, the uploaded row,
 // and any immediate re-read all share one identity.
-export async function writeArchiveEntry({ date, label, state }) {
-  const ws = requireWorkspace();
-  const id = crypto.randomUUID();
-  await getPowerSync().execute(
-    "INSERT INTO service_archive (id, workspace_id, date, label, state, created_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, NULL)",
-    [id, ws, date, label, sqlite(state ?? {}), new Date().toISOString()],
+async function writeArchiveInTransaction(tx, ws, { id, date, label, state }) {
+  const archiveId = id || crypto.randomUUID();
+  const existing = await tx.getOptional(
+    "SELECT id FROM service_archive WHERE id = ? AND workspace_id = ?",
+    [archiveId, ws],
   );
+  if (!existing) {
+    await tx.execute(
+      "INSERT INTO service_archive (id, workspace_id, date, label, state, created_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, NULL)",
+      [archiveId, ws, date, label, sqlite(state ?? {}), new Date().toISOString()],
+    );
+  }
+  return archiveId;
+}
+
+export async function writeArchiveEntry(entry) {
+  const ws = requireWorkspace();
+  let id;
+  await getPowerSync().writeTransaction(async (tx) => {
+    id = await writeArchiveInTransaction(tx, ws, entry);
+  });
   return id;
+}
+
+// Archive (optional), clear all board rows, and clear the shared service date
+// in ONE local SQLite transaction. PowerSync uploads the resulting CRUD batch
+// durably; a transient server failure keeps the entire batch queued for retry.
+export async function finishServiceLocally({ archive = null, blankRows }) {
+  const ws = requireWorkspace();
+  await getPowerSync().writeTransaction(async (tx) => {
+    if (archive) await writeArchiveInTransaction(tx, ws, archive);
+    for (const row of blankRows || []) {
+      await upsertLocalRow(tx, "service_tables", ws, localRowId(ws, row.table_id), {
+        table_id: Number(row.table_id),
+        data: sqlite(row.data ?? {}),
+        updated_at: row.updated_at || new Date().toISOString(),
+      });
+    }
+    await upsertLocalRow(tx, "service_settings", ws, localRowId(ws, "service_date"), {
+      state: sqlite({}),
+      updated_at: new Date().toISOString(),
+    });
+  });
 }
 
 // Soft-delete / restore an archive entry (deleted_at timestamp or null).

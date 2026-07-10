@@ -1,15 +1,15 @@
 /**
- * Milka Full Menu Sync — Vercel Cron Function
+ * Workspace Catalog Sync — Vercel Cron + authenticated manual function
  * Runs nightly at 02:00 UTC (configured in vercel.json)
  *
  * Scrapes vinska-karta.hotelmilka.si and syncs:
  *   → wines table      : all wines by country
  *   → beverages table  : cocktails, beers, and all spirits subcategories
  *
- * Manual trigger (secret must match CRON_SECRET or SYNC_SECRET):
- *   GET /api/sync-wines?secret=...                     → full sync
- *   GET /api/sync-wines?secret=...&dry=true            → parse only, no DB write
- * Optional `config=` (URL-encoded JSON) overrides wine_sync_config for that request.
+ * Cron trigger: GET with Vercel's Authorization: Bearer CRON_SECRET header.
+ * Manual trigger: POST with the signed-in Supabase access token and active
+ * workspace id. Cron targets Milka; manual sync targets only that membership.
+ * Browser-visible build variables must never contain a server secret.
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -255,6 +255,9 @@ async function fetchWineCountry({ param, label }) {
     `wines ${label}`
   );
   const wines = parseWinesFromHtml(html, label);
+  if (wines.length === 0) {
+    throw new Error(`Source page for ${label} returned no wine rows; preserving existing data`);
+  }
   console.log(`[sync] wines ${label} → ${wines.length}`);
   return { label, wines };
 }
@@ -262,23 +265,22 @@ async function fetchWineCountry({ param, label }) {
 async function fetchBeveragePage({ url, category, label }) {
   const html = await withRetry(() => fetchHtml(url), label);
   const items = parseBeveragesFromHtml(html, category, label);
+  if (items.length === 0) {
+    throw new Error(`Source page for ${label} returned no beverage rows; preserving existing data`);
+  }
   console.log(`[sync] ${label} → ${items.length}`);
   return items;
 }
 
 export default async function handler(req, res) {
-  const cronSecret = String(process.env.CRON_SECRET || "").trim();
-  const syncSecret = String(process.env.SYNC_SECRET || "").trim();
   const authHeader = req.headers.authorization;
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  const provided = bearerToken ||
-    req.headers["x-cron-secret"] ||
-    new URL(req.url, "http://localhost").searchParams.get("secret");
-  if (!cronSecret && !syncSecret) {
-    return res.status(500).json({ error: "CRON_SECRET or SYNC_SECRET not configured" });
+  const serverAuthorized = isAuthorizedSyncSecret(
+    bearerToken || req.headers["x-cron-secret"],
+  );
+  if (String(req.method || "GET").toUpperCase() !== "POST" && !serverAuthorized) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
-  if (!isAuthorizedSyncSecret(provided)) return res.status(401).json({ error: "Unauthorized" });
-
   const dry = new URL(req.url, "http://localhost").searchParams.get("dry") === "true";
 
   try {
@@ -291,36 +293,67 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_KEY ||
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
       process.env.SUPABASE_SECRET_KEY;
-    const supabaseKey = serviceKey || process.env.VITE_SUPABASE_ANON_KEY;
+    const supabaseKey = serviceKey;
     if (!supabaseUrl || !supabaseKey) {
       throw new Error("Supabase not configured: set SUPABASE_URL and SUPABASE_SERVICE_KEY in the deployment environment.");
     }
-    if (!serviceKey) {
-      console.warn("[sync] No service key (SUPABASE_SERVICE_KEY) found — falling back to the anon key; inserts/deletes will fail under RLS.");
-    }
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // The cron uses a service-role client which bypasses row-level security, so
-    // every read/write below must be explicitly scoped to the real Milka
-    // workspace. The Demo/sandbox copy is intentionally left frozen.
-    const { data: milkaWs, error: wsErr } = await supabase
-      .from("workspaces")
-      .select("id")
-      .eq("slug", "milka")
-      .single();
-    if (wsErr || !milkaWs) {
-      const msg = wsErr?.message || "not found";
-      // An "Invalid API key" / JWT error means the SERVER key is wrong, not that
-      // the workspace is missing — surface a fix-it message instead of the
-      // misleading "workspace" wording so the admin knows exactly what to do.
-      if (/invalid api key|jwt|api ?key/i.test(msg)) {
-        throw new Error(
-          `Supabase rejected the server key ("${msg}"). Set SUPABASE_SERVICE_KEY to the current service_role / secret key for the project at SUPABASE_URL (${supabaseUrl}) and redeploy. A stale key — or a URL and key that belong to different projects — is the usual cause.`
-        );
+    // A cron may authenticate with a server-only secret. A person pressing the
+    // admin button must authenticate with their normal short-lived Supabase
+    // access token, which is verified server-side before any service-role work.
+    let requestingUserId = null;
+    let requestBody = {};
+    if (String(req.method || "GET").toUpperCase() === "POST" && req.body != null) {
+      try {
+        requestBody = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+        if (!requestBody || typeof requestBody !== "object") requestBody = {};
+      } catch {
+        return res.status(400).json({ error: "Invalid JSON request body" });
       }
-      throw new Error(`Could not resolve Milka workspace: ${msg}`);
     }
-    const WORKSPACE_ID = milkaWs.id;
+    if (!serverAuthorized) {
+      if (String(req.method || "GET").toUpperCase() !== "POST" || !bearerToken) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const { data: authData, error: authError } = await supabase.auth.getUser(bearerToken);
+      if (authError || !authData?.user?.id) {
+        return res.status(401).json({ error: "Your login expired. Sign in again and retry." });
+      }
+      requestingUserId = authData.user.id;
+    }
+
+    let WORKSPACE_ID;
+    if (requestingUserId) {
+      // A manual sync belongs to the active restaurant, including the isolated
+      // Demo sandbox. Never infer Milka here: that made a test-account button
+      // overwrite the production catalogue.
+      WORKSPACE_ID = String(requestBody.workspaceId || "").trim();
+      if (!WORKSPACE_ID) {
+        return res.status(400).json({ error: "No active restaurant was supplied." });
+      }
+      const { data: membership, error: membershipError } = await supabase
+        .from("workspace_members").select("user_id")
+        .eq("workspace_id", WORKSPACE_ID).eq("user_id", requestingUserId).maybeSingle();
+      if (membershipError || !membership) {
+        return res.status(403).json({ error: "This account is not linked to that restaurant." });
+      }
+    } else {
+      // Scheduled server sync remains deliberately fixed to Milka. The
+      // service-role client bypasses RLS, so the target must be explicit.
+      const { data: milkaWs, error: wsErr } = await supabase
+        .from("workspaces").select("id").eq("slug", "milka").single();
+      if (wsErr || !milkaWs) {
+        const msg = wsErr?.message || "not found";
+        if (/invalid api key|jwt|api ?key/i.test(msg)) {
+          throw new Error(
+            `Supabase rejected the server key ("${msg}"). Set SUPABASE_SERVICE_KEY to the current service_role / secret key for the project at SUPABASE_URL (${supabaseUrl}) and redeploy. A stale key — or a URL and key that belong to different projects — is the usual cause.`
+          );
+        }
+        throw new Error(`Could not resolve Milka workspace: ${msg}`);
+      }
+      WORKSPACE_ID = milkaWs.id;
+    }
 
     const { data: syncSettingsRow } = await supabase
       .from("service_settings")
@@ -328,9 +361,10 @@ export default async function handler(req, res) {
       .eq("id", "wine_sync_config")
       .eq("workspace_id", WORKSPACE_ID)
       .maybeSingle();
-    const configFromQuery = parseSyncConfigFromRequestUrl(req.url);
+    let configFromRequest = parseSyncConfigFromRequestUrl(req.url);
+    if (requestBody.config && typeof requestBody.config === "object") configFromRequest = requestBody.config;
     const syncConfig = normalizeSyncConfig(
-      configFromQuery !== null ? configFromQuery : (syncSettingsRow?.state || DEFAULT_SYNC_CONFIG)
+      configFromRequest !== null ? configFromRequest : (syncSettingsRow?.state || DEFAULT_SYNC_CONFIG)
     );
     const enabledWineCountries = WINE_COUNTRIES.filter((c) => syncConfig.wineCountries.includes(String(c.label || "").toUpperCase()));
     const enabledBeveragePages = BEVERAGE_PAGES.filter((page) => {
@@ -341,22 +375,24 @@ export default async function handler(req, res) {
       );
     });
 
+    const wineTargets = syncConfig.winesEnabled ? enabledWineCountries : [];
+    const beverageTargets = syncConfig.beveragesEnabled ? enabledBeveragePages : [];
     const [wineResults, bevResults] = await Promise.all([
-      Promise.allSettled((syncConfig.winesEnabled ? enabledWineCountries : []).map(fetchWineCountry)),
-      Promise.allSettled((syncConfig.beveragesEnabled ? enabledBeveragePages : []).map(fetchBeveragePage)),
+      Promise.allSettled(wineTargets.map(fetchWineCountry)),
+      Promise.allSettled(beverageTargets.map(fetchBeveragePage)),
     ]);
 
     const successfulCountries = wineResults.filter(r => r.status === "fulfilled").map(r => r.value);
-    const failedCountries = enabledWineCountries.filter((_, i) => wineResults[i].status !== "fulfilled");
+    const failedCountries = wineTargets.filter((_, i) => wineResults[i].status !== "fulfilled");
     if (failedCountries.length > 0) {
       console.warn(`[sync] failed countries: ${failedCountries.map(c => c.label).join(", ")}`);
     }
     const allWines = successfulCountries.flatMap(r => r.wines);
     const successfulBeveragePages = bevResults
-      .map((r, i) => ({ result: r, page: enabledBeveragePages[i] }))
+      .map((r, i) => ({ result: r, page: beverageTargets[i] }))
       .filter(x => x.result.status === "fulfilled");
     const failedBeveragePages = bevResults
-      .map((r, i) => ({ result: r, page: enabledBeveragePages[i] }))
+      .map((r, i) => ({ result: r, page: beverageTargets[i] }))
       .filter(x => x.result.status !== "fulfilled")
       .map(x => x.page.label);
     if (failedBeveragePages.length > 0) {
@@ -382,80 +418,8 @@ export default async function handler(req, res) {
       });
     }
 
-    // Sync wines — delete existing rows for synced countries, then insert fresh ones.
-    // This avoids a huge NOT IN query (400+ keys would exceed PostgREST URL limits).
-    let winesUpserted = 0;
-    if (syncConfig.winesEnabled && successfulCountries.length > 0) {
-      const seen = new Set();
-      const uniqueWines = allWines.filter(w => { if (seen.has(w.key)) return false; seen.add(w.key); return true; });
-      const syncedCountryLabels = successfulCountries.map(r => r.label);
-
-      // Delete all existing wines for successfully-fetched countries first.
-      // Countries that failed are left untouched so their wines remain available.
-      const { error: deleteError } = await supabase
-        .from("wines")
-        .delete()
-        .eq("workspace_id", WORKSPACE_ID)
-        .eq("source", "sync")
-        .in("country", syncedCountryLabels);
-      if (deleteError) console.warn("[sync] wines delete error:", deleteError.message);
-
-      // Insert all fresh wines in batches, stamping each row with the workspace.
-      // ignoreDuplicates: a wine the staff has hand-corrected keeps its key but
-      // is flipped to source:'manual' (copy-on-edit in the app). The delete
-      // above skips it, so the scraped row collides on (workspace_id, key) —
-      // skip it and let the human correction win.
-      const BATCH = 200;
-      for (let i = 0; i < uniqueWines.length; i += BATCH) {
-        const batch = uniqueWines.slice(i, i + BATCH).map(w => ({ ...w, workspace_id: WORKSPACE_ID }));
-        const { error } = await supabase.from("wines")
-          .upsert(batch, { onConflict: "workspace_id,key", ignoreDuplicates: true });
-        if (error) throw error;
-        winesUpserted += batch.length;
-      }
-    }
-
-    // Sync beverages — replace each category independently so partial failures
-    // don't wipe good data. A category is only deleted and re-written if every
-    // page feeding it succeeded; failed categories keep their existing rows.
-    let beveragesUpserted = 0;
-    const skippedCategories = [];
-    if (syncConfig.beveragesEnabled && enabledBeveragePages.length > 0) {
-      const failedPagesByCategory = new Set(
-        bevResults
-          .map((r, i) => ({ r, page: enabledBeveragePages[i] }))
-          .filter(x => x.r.status !== "fulfilled")
-          .map(x => x.page.category)
-      );
-      const categoriesToWrite = [...new Set(enabledBeveragePages.map(p => p.category))]
-        .filter(cat => !failedPagesByCategory.has(cat));
-      skippedCategories.push(...failedPagesByCategory);
-
-      if (categoriesToWrite.length > 0) {
-        const rowsToWrite = [];
-        for (const cat of categoriesToWrite) {
-          let position = 0;
-          for (const b of allBeverages.filter(x => x.category === cat)) {
-            rowsToWrite.push({ category: cat, name: b.name, notes: b.notes || "", position: position++, source: "sync", workspace_id: WORKSPACE_ID });
-          }
-        }
-        await supabase.from("beverages").delete().eq("workspace_id", WORKSPACE_ID).eq("source", "sync").in("category", categoriesToWrite);
-        if (rowsToWrite.length > 0) {
-          const BATCH = 200;
-          for (let i = 0; i < rowsToWrite.length; i += BATCH) {
-            const { error } = await supabase.from("beverages").insert(rowsToWrite.slice(i, i + BATCH));
-            if (error) throw error;
-            beveragesUpserted += rowsToWrite.slice(i, i + BATCH).length;
-          }
-        }
-      }
-      if (skippedCategories.length > 0) {
-        console.warn(`[sync] preserved existing rows for failed categories: ${skippedCategories.join(", ")}`);
-      }
-    }
-
-    // If every enabled wine country failed (e.g. source site blocked all requests),
-    // surface that as an explicit error so the UI shows "FAILED" rather than "0 wines".
+    // If every enabled wine country failed, do not modify either catalog. A
+    // source site outage must never look like a valid empty menu.
     const allWinesFailed =
       syncConfig.winesEnabled &&
       enabledWineCountries.length > 0 &&
@@ -470,6 +434,63 @@ export default async function handler(req, res) {
         failedBeveragePages,
       });
     }
+
+    const seenWineKeys = new Set();
+    const uniqueWines = allWines.filter((wine) => {
+      if (seenWineKeys.has(wine.key)) return false;
+      seenWineKeys.add(wine.key);
+      return true;
+    });
+    const syncedCountryLabels = successfulCountries.map((result) => result.label);
+
+    const skippedCategories = [];
+    const categoriesToWrite = [];
+    const rowsToWrite = [];
+    if (syncConfig.beveragesEnabled && enabledBeveragePages.length > 0) {
+      const failedPagesByCategory = new Set(
+        bevResults
+          .map((r, i) => ({ r, page: enabledBeveragePages[i] }))
+          .filter(x => x.r.status !== "fulfilled")
+          .map(x => x.page.category)
+      );
+      categoriesToWrite.push(
+        ...[...new Set(enabledBeveragePages.map(p => p.category))]
+          .filter(cat => !failedPagesByCategory.has(cat)),
+      );
+      skippedCategories.push(...failedPagesByCategory);
+
+      if (categoriesToWrite.length > 0) {
+        for (const cat of categoriesToWrite) {
+          let position = 0;
+          for (const b of allBeverages.filter(x => x.category === cat)) {
+            rowsToWrite.push({ category: cat, name: b.name, notes: b.notes || "", position: position++, source: "sync" });
+          }
+        }
+      }
+      if (skippedCategories.length > 0) {
+        console.warn(`[sync] preserved existing rows for failed categories: ${skippedCategories.join(", ")}`);
+      }
+    }
+
+    // One Postgres function owns the replacement transaction. Any delete or
+    // insert failure rolls the whole catalog change back, and only categories
+    // whose source pages succeeded are touched.
+    const { error: replaceError } = await supabase.rpc("replace_synced_catalog", {
+      p_workspace_id: WORKSPACE_ID,
+      p_wines: uniqueWines,
+      p_wine_countries: syncedCountryLabels,
+      p_beverages: rowsToWrite,
+      p_beverage_categories: categoriesToWrite,
+    });
+    if (replaceError) {
+      const hint = /replace_synced_catalog|schema cache|function/i.test(replaceError.message || "")
+        ? " Apply the bundled Supabase migration before deploying this build."
+        : "";
+      throw new Error(`Catalog transaction failed: ${replaceError.message}.${hint}`);
+    }
+
+    const winesUpserted = uniqueWines.length;
+    const beveragesUpserted = rowsToWrite.length;
 
     const partial = failedCountries.length > 0 || failedBeveragePages.length > 0;
     return res.status(200).json({

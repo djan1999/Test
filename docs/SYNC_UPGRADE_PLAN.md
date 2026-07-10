@@ -3,7 +3,7 @@
 Status: proposal · Owner: engineering · Context: the live service board is a
 multi-device, realtime, offline-tolerant app whose sync was hand-rolled inside
 `src/App.jsx`. A run of production incidents (board wipe on a joining device,
-service-date pinning, master-account picker bounce, slow sync) all trace to
+service-date pinning, account/workspace picker bounce, slow sync) all trace to
 that one foundation. This document is the plan to fix it properly.
 
 ---
@@ -144,14 +144,12 @@ floor.
 
 ---
 
-## 5. FUTURE — natural-key aliasing fix (before any multi-workspace membership)
+## 5. COMPLETE — workspace-qualified PowerSync ids
 
-**Status: not needed today. Deploy only before a single user is ever made a
-member of more than one workspace.** Membership is 1:1 (each restaurant login
-belongs to exactly one workspace), so this hazard cannot fire in production
-right now. A runtime tripwire (`detectForeignWorkspaceRows` in
-`src/powersync/reads.js`) will `console.error` and refuse to go sqlite-primary
-if it ever does — that error is the signal to run this runbook.
+**Status: implemented in the 2026-07-10 hardening release.** The app, sync
+rules, connector mapping, tests, and v2 local database filename are coordinated.
+Reads remain explicitly workspace-scoped; an authenticated multi-workspace user
+may safely retain authorized rows for more than one workspace.
 
 ### The hazard
 PowerSync requires a text `id` primary key on every local table. The composite-
@@ -203,7 +201,7 @@ wines:
     WHERE ...
 service_settings:
   query: >-
-    SELECT (workspace_id || '|' || id) AS id, *
+      SELECT (workspace_id || '|' || id) AS id, state, updated_at, workspace_id
     FROM service_settings
     WHERE ...
 ```
@@ -233,10 +231,10 @@ local `id` PK is written or matched:
   no id collisions) before trusting any client read.
 
 ### Checklist to close this out
-- [ ] sync-rules aliases workspace-qualified for the 4 tables
-- [ ] `writes.js` local id = `${ws}|${key}` for the 4 tables
-- [ ] `SupabaseConnector` natural-key rebuild splits on `'|'`
-- [ ] `dbFilename` bumped so local DBs rebuild
-- [ ] connector + writes unit tests updated for the composite id
+- [x] sync-rules aliases workspace-qualified for the 4 tables
+- [x] `writes.js` local id = `${ws}|${key}` for the 4 tables
+- [x] `SupabaseConnector` natural-key rebuild removes the workspace prefix
+- [x] `dbFilename` bumped so local DBs rebuild
+- [x] connector + writes unit tests updated for the composite id
 - [ ] Sync Test: a two-workspace user sees no collisions
-- [ ] tripwire (`detectForeignWorkspaceRows`) no longer the gate — can relax it
+- [x] obsolete foreign-row tripwire removed; account changes still clear the v2 local DB
