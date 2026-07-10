@@ -77,6 +77,16 @@ export const optionalPairingsFromCourses = (menuCourses = []) => {
   return [...byKey.values()];
 };
 
+// Celebration-category dish keys (cake…). These extras are SEEDED onto every
+// seat of a birthday reservation — including secondary tables of a group — by
+// saveRes/reconcile, so consumers judging whether a seat holds real
+// guest-entered content must ignore them (reconcile's tableHasServiceContent
+// and mergeTableGroups both take this list).
+export const celebrationKeysFromCourses = (menuCourses = []) => (menuCourses || [])
+  .filter((c) => normalizeCourseCategory(c?.course_category, c?.optional_flag) === "celebration")
+  .map((c) => normalizeOptionalKey(c?.optional_flag))
+  .filter(Boolean);
+
 export const optionalExtrasFromCourses = (menuCourses = []) => {
   const byKey = new Map();
   (menuCourses || []).forEach((c) => {

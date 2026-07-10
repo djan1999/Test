@@ -254,8 +254,15 @@ const sameReservationKey = (t) => {
 //   - `seats`: concatenated, renumbered seats from all members
 //   - `_groupGuests`: total guest count across the group (callers prefer this
 //     over `guests` for display since each member's `guests` is independent)
-export const mergeTableGroups = (tables = []) => {
+//
+// `ignoreExtraKeys` (celebration dish keys, e.g. cake): those extras are
+// SEEDED onto every seat of every group member by the birthday flag, so they
+// must not make a secondary table's placeholder seats count as "real" —
+// a 4-guest birthday party on T02-03 showed 8 seat rows in the archive
+// (P5-P8 empty) because each of T03's blanks carried the seeded cake.
+export const mergeTableGroups = (tables = [], ignoreExtraKeys = null) => {
   if (!Array.isArray(tables) || tables.length === 0) return [];
+  const ignore = Array.isArray(ignoreExtraKeys) && ignoreExtraKeys.length ? ignoreExtraKeys : null;
   // Build group ids: prefer explicit tableGroup, else fall back to resName|resTime
   const byPrimary = new Map(); // primaryId -> sorted member-id list
   const idToPrimary = new Map(); // memberId -> primaryId
@@ -295,7 +302,7 @@ export const mergeTableGroups = (tables = []) => {
     const mergedSeats = [];
     let contentSeatCount = 0;
     for (const m of members) {
-      const memberSeats = (m.seats || []).filter(seatHasContent);
+      const memberSeats = (m.seats || []).filter(s => seatHasContent(s, ignore));
       contentSeatCount += memberSeats.length;
       memberSeats.forEach(s => { mergedSeats.push({ ...s, id: nextSeatId++ }); });
     }

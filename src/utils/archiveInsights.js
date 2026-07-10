@@ -8,6 +8,7 @@
 import { getVisibleCoursesForTable } from "./courseProgress.js";
 import { fireGapsForTable, median, toMonotonicMinutes } from "./fireCadence.js";
 import { mergeTableGroups } from "./tableHelpers.js";
+import { celebrationKeysFromCourses } from "./menuUtils.js";
 
 // A party seated across several tables (a "group") has the full reservation
 // guest count stamped on EVERY member table, and each member carries its own
@@ -15,7 +16,12 @@ import { mergeTableGroups } from "./tableHelpers.js";
 // and fire timelines. mergeTableGroups() collapses each group to one primary
 // row (with combined seats/kitchenLog and a correct `_groupGuests`), exactly
 // as the archive screen already does — so every scan here runs on it first.
-const partyTables = (entry) => mergeTableGroups(entry?.state?.tables || []);
+// Judged against the entry's OWN menu: birthday-seeded celebration extras
+// must not make a secondary table's blank seats count as covers.
+const partyTables = (entry) => mergeTableGroups(
+  entry?.state?.tables || [],
+  celebrationKeysFromCourses(entry?.state?.menuCourses || []),
+);
 const tableGuests = (t) => Number(t?._groupGuests ?? t?.guests) || 0;
 
 const normName = (v) => String(v || "").trim().toLowerCase();

@@ -5,7 +5,7 @@ import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
 import { supabase } from "../../lib/supabaseClient.js";
 import { fetchArchive, archiveSetDeleted, archiveSetAllDeleted, archivePurgeTrash } from "../../lib/archiveStore.js";
 import { parseHHMM, mergeTableGroups, tableGroupLabel } from "../../utils/tableHelpers.js";
-import { optionalPairingsFromCourses } from "../../utils/menuUtils.js";
+import { optionalPairingsFromCourses, celebrationKeysFromCourses } from "../../utils/menuUtils.js";
 import { aggregateInsights } from "../../utils/archiveInsights.js";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
@@ -103,7 +103,13 @@ export default function ArchiveModal({
     setDeleting(null);
   };
 
-  const activeTables = mergeTableGroups(tables.filter((t) => t.active || t.arrivedAt || t.resName || t.resTime));
+  // Celebration extras (cake) are birthday-seeded on EVERY seat of a group —
+  // they must not make a secondary table's blank seats read as guests.
+  const liveCelebrationKeys = celebrationKeysFromCourses(menuCourses);
+  const activeTables = mergeTableGroups(
+    tables.filter((t) => t.active || t.arrivedAt || t.resName || t.resTime),
+    liveCelebrationKeys,
+  );
 
   const archiveActions = (
     <div style={{ display: "flex", gap: isMobile ? 6 : 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -121,7 +127,7 @@ export default function ArchiveModal({
   // Merge multi-table reservations (T02 + T03 → "T02-03" with all seats combined)
   // so the archive view doesn't show ghost rows for the secondary tables that
   // only carry empty placeholder seats.
-  const archivedTickets = mergeTableGroups((tables || []).filter((t) => t.kitchenArchived));
+  const archivedTickets = mergeTableGroups((tables || []).filter((t) => t.kitchenArchived), liveCelebrationKeys);
   const [expandedTicket, setExpandedTicket] = useState(null);
   const fmtDuration = (mins) => {
     if (mins == null) return null;
@@ -218,8 +224,10 @@ export default function ArchiveModal({
           // Merge tableGroup members so a past T02-03 reservation collapses to
           // one row across both the summary count and the per-table cards.
           const rawTables = entry.state?.tables || [];
-          const entryTables = mergeTableGroups(rawTables);
           const entryMenuCourses = entry.state?.menuCourses || [];
+          // Judge seeded celebration extras against the ENTRY's own menu —
+          // the night the party was served, not whatever menu is live now.
+          const entryTables = mergeTableGroups(rawTables, celebrationKeysFromCourses(entryMenuCourses));
           const entryOptionalPairings = optionalPairingsFromCourses(entryMenuCourses);
           const totalGuests = entryTables.reduce((a, t) => a + (t._groupGuests || t.guests || 0), 0);
           // Drink summary still walks the merged list — bottles, glasses, etc.
@@ -276,7 +284,7 @@ export default function ArchiveModal({
             {showTrash && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {deleted.map((entry) => {
-                  const entryTables = mergeTableGroups(entry.state?.tables || []);
+                  const entryTables = mergeTableGroups(entry.state?.tables || [], celebrationKeysFromCourses(entry.state?.menuCourses || []));
                   const totalGuests = entryTables.reduce((a, t) => a + (t._groupGuests || t.guests || 0), 0);
                   const deletedDate = entry.deleted_at ? new Date(entry.deleted_at).toLocaleDateString() : "";
                   return (
