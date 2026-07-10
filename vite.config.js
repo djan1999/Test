@@ -2,6 +2,27 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Rewrite dependency calls to AbortSignal.timeout(ms) into a self-contained
+// compatible expression. The kitchen display's embedded browser (pre-Chrome
+// 103) lacks the API and @powersync/web calls it on the WRITE path — INSIDE
+// ITS WEB WORKERS, where a main-thread polyfill (src/lib/abortSignalPolyfill)
+// can never reach (workers have their own global scope; that's why the 10.07
+// f864e1a build still failed on the display). A build-time rewrite fixes the
+// call in every context: main bundle, workers, shared workers.
+const abortSignalTimeoutCompat = () => ({
+  name: 'abort-signal-timeout-compat',
+  transform(code, id) {
+    if (!id.includes('node_modules') || !code.includes('AbortSignal.timeout(')) return null;
+    return {
+      code: code.replaceAll(
+        'AbortSignal.timeout(',
+        '((typeof AbortSignal!=="undefined"&&AbortSignal.timeout)?AbortSignal.timeout.bind(AbortSignal):function(ms){var c=new AbortController();setTimeout(function(){try{c.abort(new DOMException("The operation timed out.","TimeoutError"))}catch(e){c.abort()}},ms);return c.signal})(',
+      ),
+      map: null,
+    };
+  },
+});
+
 export default defineConfig({
   // Visible build identity (admin SYSTEM panel): ends the "which version is
   // this tablet actually running" guessing that stalled the 10.07 rollout —
@@ -12,6 +33,7 @@ export default defineConfig({
     ),
   },
   plugins: [
+    abortSignalTimeoutCompat(),
     react(),
     VitePWA({
       // Let main.jsx call registerSW() explicitly so we have full control.
@@ -95,6 +117,9 @@ export default defineConfig({
   },
   worker: {
     format: 'es',
+    // Worker bundles get their own plugin pipeline — the compat rewrite must
+    // run there too (that's where @powersync/web's failing call lives).
+    plugins: () => [abortSignalTimeoutCompat()],
   },
   server: {
     host: true,
