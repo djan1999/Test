@@ -615,8 +615,6 @@ function MoveTablePicker({ currentTable, tables = [], reservationOnTable, onCanc
 // ── Detail View ───────────────────────────────────────────────────────────────
 function Detail({ table, tables = [], optionalExtras = [], optionalPairings = [], wines = [], cocktails = [], spirits = [], beers = [], menuCourses = MENU_DATA, aperitifOptions = [], mode, onBack, upd, updSeat, setGuests, swapSeats, onApplySeatToAll, onClearBeverages, onClearTable, onMoveTable, reservationOnTable, mapSeatCap = null }) {
   const isMobile = useIsMobile(860);
-  const isNarrow = useIsMobile(520);
-  const row1 = isNarrow ? "30px 1fr 28px" : isMobile ? "34px 68px 1fr 28px" : "38px 75px 1fr 28px";
   const seatCount = table.seats?.length || 0;
   const canApplySeatToAll = typeof onApplySeatToAll === "function" && seatCount > 1;
   const hasAnyBeverageData = (table.seats || []).some(s =>
@@ -629,9 +627,45 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
   );
   const [showMoveTable, setShowMoveTable] = useState(false);
   const [copySourceOpen, setCopySourceOpen] = useState(false);
-  // One drink search for the whole table view; the phase decides whether a
-  // pick lands as an aperitif or with the menu (glasses/cocktails/…).
-  const [drinkPhase, setDrinkPhase] = useState("aperitif");
+  // Per-seat drink phase: the phase chip decides whether a search pick lands
+  // as an aperitif or with the menu (glasses/cocktails/…). Kept per seat —
+  // one shared value made toggling P2 silently flip P1's chips too.
+  const [drinkPhaseBySeat, setDrinkPhaseBySeat] = useState({});
+
+  // ── Detail design grammar — micro labels + chip buttons shared below ──
+  const microLabel = {
+    fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
+    textTransform: "uppercase", color: tokens.ink[3], fontWeight: 400,
+  };
+  const chipBtn = (on) => ({
+    fontFamily: FONT, fontSize: 9, letterSpacing: "0.06em",
+    padding: isMobile ? "9px 10px" : "5px 10px",
+    border: `1px solid ${on ? tokens.charcoal.default : tokens.ink[4]}`,
+    borderRadius: 0, cursor: "pointer",
+    background: on ? tokens.tint.parchment : tokens.neutral[0],
+    color: on ? tokens.ink[0] : tokens.ink[3],
+    fontWeight: on ? 600 : 400,
+    transition: "all 0.1s", touchAction: "manipulation",
+  });
+  // Segmented 3-state (OFF / ALCO / N/A). Green is reserved for "ordered" —
+  // an active OFF renders muted, not green, so it can't be misread as a
+  // confirmed order (the old view showed OFF in the same green as YES).
+  const segBtn = (on, kind = "off") => ({
+    fontFamily: FONT, fontSize: 8, letterSpacing: "0.06em", flex: 1,
+    padding: isMobile ? "9px 6px" : "4px 6px",
+    border: `1px solid ${on
+      ? (kind === "alco" ? tokens.charcoal.default : kind === "nonalc" ? tokens.ink[3] : tokens.ink[4])
+      : tokens.ink[5]}`,
+    borderRadius: 0, cursor: "pointer",
+    background: on
+      ? (kind === "alco" ? tokens.tint.parchment : kind === "nonalc" ? tokens.neutral[100] : tokens.neutral[50])
+      : tokens.neutral[0],
+    color: on
+      ? (kind === "alco" ? tokens.ink[0] : kind === "nonalc" ? tokens.ink[1] : tokens.ink[2])
+      : tokens.ink[4],
+    fontWeight: on ? 600 : 400,
+    transition: "all 0.1s", touchAction: "manipulation",
+  });
   useModalEscape(() => setShowMoveTable(false), showMoveTable);
   const canMoveTable = mode === "service" && typeof onMoveTable === "function"
     && (table.active || table.arrivedAt || table.resName || table.resTime);
@@ -856,36 +890,32 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
         </div>
       </div>
 
-      {/* [SEATS] column header */}
-      <div style={{
-        display: "grid", gridTemplateColumns: row1, gap: 10, alignItems: "center",
-        padding: isMobile ? "6px 12px" : "6px 20px",
-        borderBottom: `1px solid ${tokens.ink[4]}`,
-        background: tokens.neutral[0],
-      }}>
-        {(isNarrow ? ["SEAT", "WATER", ""] : ["SEAT", "WATER", "PAIRING", ""]).map((h, i) => (
-          <div key={i} style={{
-            fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
-            color: tokens.ink[3], textTransform: "uppercase",
-          }}>{h}</div>
-        ))}
-      </div>
-
-      {/* [GUEST MATRIX] seat rows */}
-      {table.seats.map((seat, si) => {
-        const glasses   = seat.glasses   || [];
-        const cocktailList = seat.cocktails || [];
-        const spiritList   = seat.spirits   || [];
+      {/* [SEATS] section — one card per guest, matching the app's card grammar */}
+      <div style={{ padding: isMobile ? "14px 12px 0" : "16px 20px 0" }}>
+        <div style={{ ...microLabel, marginBottom: 10 }}>[SEATS]</div>
+      {table.seats.map(seat => {
         const seatRestrictions = (table.restrictions || []).filter(r => r.pos === seat.id);
+        const drinkPhase = drinkPhaseBySeat[seat.id] || "aperitif";
+        const seatHasDrinks =
+          (seat.aperitifs?.length || 0) > 0 || (seat.glasses?.length || 0) > 0 ||
+          (seat.cocktails?.length || 0) > 0 || (seat.spirits?.length || 0) > 0 ||
+          (seat.beers?.length || 0) > 0 || (seat.pairing && seat.pairing !== "—");
+        // "" and "—" both mean no pairing — MenuGenerator/board write "—",
+        // this view used to write "" so the "—" chip never lit up.
+        const pairingCur = (seat.pairing && seat.pairing !== "—") ? seat.pairing : "—";
         return (
           <div key={seat.id} style={{
+            borderTop:    `1px solid ${tokens.ink[4]}`,
+            borderRight:  `1px solid ${tokens.ink[4]}`,
             borderBottom: `1px solid ${tokens.ink[4]}`,
+            borderLeft:   `3px solid ${seatRestrictions.length ? tokens.red.border : seatHasDrinks ? tokens.charcoal.default : tokens.ink[4]}`,
+            borderRadius: 0, marginBottom: 10,
             background: tokens.neutral[0],
           }}>
-            {/* ── Line 1: P · Water · Pairing · Swap ── */}
+            {/* ── Header: P · Water · Pairing · Restrictions · Swap ── */}
             <div style={{
-              display: "grid", gridTemplateColumns: row1, gap: 10, alignItems: "start",
-              padding: isMobile ? "8px 12px" : "10px 20px",
+              display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+              padding: isMobile ? "10px 12px" : "10px 14px",
             }}>
               {/* P position label */}
               <div style={{
@@ -895,120 +925,80 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontFamily: FONT, fontSize: "9px", fontWeight: 700,
                 color: seatRestrictions.length ? tokens.red.text : tokens.ink[1],
-                letterSpacing: "0.06em", flexShrink: 0, marginTop: 2,
+                letterSpacing: "0.06em", flexShrink: 0,
               }}>P{seat.id}</div>
 
               {/* Water */}
-              <WaterPicker value={seat.water} onChange={v => updSeat(seat.id, "water", v)} />
+              <div style={{ width: 62, flexShrink: 0 }}>
+                <WaterPicker value={seat.water} onChange={v => updSeat(seat.id, "water", v)} />
+              </div>
 
-              {/* Pairing (inline on wider screens) */}
-              {!isNarrow && (
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  {PAIRINGS.map(p => {
-                    const ps = pairingStyle[p];
-                    const on = seat.pairing === p;
-                    return (
-                      <button key={p} onClick={() => updSeat(seat.id, "pairing", p === "—" ? "" : (on ? "" : p))} style={{
-                        fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
-                        padding: "5px 8px", border: "1px solid",
-                        borderColor: on ? ps.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
-                        background: on ? ps.bg : tokens.neutral[0], color: on ? ps.color : tokens.text.secondary,
-                        transition: "all 0.1s",
-                      }}>{p}</button>
-                    );
-                  })}
-                  {seatRestrictions.map((r, i) => (
-                    <span key={i} style={{
-                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
-                      padding: "4px 8px", borderRadius: 0,
-                      background: tokens.red.bg, border: `1px solid ${tokens.red.border}`,
-                      color: tokens.red.text, whiteSpace: "nowrap",
-                    }}>⚠ {restrLabel(r.note)}</span>
-                  ))}
-                </div>
-              )}
+              <div style={{ width: 1, height: 20, background: tokens.ink[5], flexShrink: 0 }} />
 
-              {/* Swap */}
-              {table.seats.length > 1
-                ? <SwapPicker seatId={seat.id} totalSeats={table.seats.length} onSwap={t => swapSeats(seat.id, t)} />
-                : <div />}
-            </div>
-
-            {/* Pairing on its own row on narrow phones */}
-            {isNarrow && (
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }}>
-                <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.text.secondary, textTransform: "uppercase", alignSelf: "center", marginRight: 2 }}>Pairing</div>
+              {/* Pairing chips */}
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", flex: 1, minWidth: 160 }}>
                 {PAIRINGS.map(p => {
-                  const ps = pairingStyle[p];
-                  const on = seat.pairing === p;
+                  const on = pairingCur === p;
                   return (
-                    <button key={p} onClick={() => updSeat(seat.id, "pairing", p === "—" ? "" : (on ? "" : p))} style={{
-                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
-                      padding: "6px 10px", border: "1px solid",
-                      borderColor: on ? ps.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
-                      background: on ? ps.bg : tokens.neutral[0], color: on ? ps.color : tokens.text.secondary,
-                      transition: "all 0.1s",
-                    }}>{p}</button>
+                    <button key={p} onClick={() => updSeat(seat.id, "pairing", p === "—" ? "" : (on ? "" : p))}
+                      style={chipBtn(on)}>{p}</button>
                   );
                 })}
                 {seatRestrictions.map((r, i) => (
                   <span key={i} style={{
-                    fontFamily: FONT, fontSize: 9, letterSpacing: 0.5,
-                    padding: "5px 8px", borderRadius: 0,
+                    fontFamily: FONT, fontSize: 9, letterSpacing: "0.04em",
+                    padding: "5px 8px", borderRadius: 0, alignSelf: "center",
                     background: tokens.red.bg, border: `1px solid ${tokens.red.border}`,
                     color: tokens.red.text, whiteSpace: "nowrap",
                   }}>⚠ {restrLabel(r.note)}</span>
                 ))}
               </div>
-            )}
-            {/* ── Beverages + Extras ── */}
-            <div style={{ paddingLeft: isMobile ? 0 : 48, display: "flex", flexDirection: "column", gap: 10 }}>
-              {/* ── Drinks — one entry point. Two identical search bars
-                  (aperitif / by-the-glass) used to double-enter the same
-                  catalogue; now the phase chip decides where a pick lands. */}
-              <div style={{
-                background: tokens.neutral[50],
-                borderTop: `1px solid ${tokens.ink[4]}`,
-                borderBottom: `1px solid ${tokens.ink[4]}`,
-                padding: isMobile ? "8px 0" : "10px 0",
-              }}>
+
+              {/* Swap */}
+              {table.seats.length > 1 && (
+                <div style={{ marginLeft: "auto", flexShrink: 0 }}>
+                  <SwapPicker seatId={seat.id} totalSeats={table.seats.length} onSwap={t => swapSeats(seat.id, t)} />
+                </div>
+              )}
+            </div>
+
+            {/* ── Drinks — one entry point. The phase chip decides whether a
+                search pick lands as an aperitif or with the menu. ── */}
+            <div style={{
+              background: tokens.neutral[50],
+              borderTop: `1px solid ${tokens.ink[5]}`,
+              padding: isMobile ? "10px 12px" : "10px 14px",
+            }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-                  <div style={{
-                    fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
-                    textTransform: "uppercase", color: tokens.ink[3], fontWeight: 400,
-                  }}>[DRINKS]</div>
+                  <div style={microLabel}>[DRINKS]</div>
                   <div style={{ display: "flex", gap: 4 }}>
-                    {[["aperitif", "APERITIF"], ["menu", "WITH MENU"]].map(([ph, label]) => {
-                      const on = drinkPhase === ph;
-                      return (
-                        <button key={ph} onClick={() => setDrinkPhase(ph)} style={{
-                          fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: isMobile ? "8px 10px" : "4px 9px",
-                          border: `1px solid ${on ? tokens.charcoal.default : tokens.neutral[200]}`, borderRadius: 0,
-                          cursor: "pointer", background: on ? tokens.tint.parchment : tokens.neutral[0],
-                          color: on ? tokens.ink[1] : tokens.text.secondary, fontWeight: on ? 600 : 400,
-                          textTransform: "uppercase", touchAction: "manipulation",
-                        }}>{label}</button>
-                      );
-                    })}
+                    {[["aperitif", "APERITIF"], ["menu", "WITH MENU"]].map(([ph, label]) => (
+                      <button key={ph}
+                        onClick={() => setDrinkPhaseBySeat(prev => ({ ...prev, [seat.id]: ph }))}
+                        style={{ ...chipBtn(drinkPhase === ph), fontSize: 8, letterSpacing: "0.10em", textTransform: "uppercase" }}
+                      >{label}</button>
+                    ))}
                   </div>
                 </div>
                 {/* Quick-add buttons — aperitif presets, always land as aperitif */}
-                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-                  {aperitifOptions.map(ap => {
-                    const found = resolveAperitifFromQuickAccessOption(ap, { wines, cocktails, spirits, beers });
-                    return (
-                      <button key={ap.label} onClick={() => {
-                        const item = found || { name: ap.searchKey || ap.label, notes: "", __cocktail: true };
-                        updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
-                      }} style={{
-                        fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: isMobile ? "10px 9px" : "4px 9px",
-                        border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer",
-                        background: tokens.neutral[0], color: tokens.neutral[700], transition: "all 0.1s",
-                        touchAction: "manipulation",
-                      }}>{ap.label}</button>
-                    );
-                  })}
-                </div>
+                {aperitifOptions.length > 0 && (
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
+                    {aperitifOptions.map(ap => {
+                      const found = resolveAperitifFromQuickAccessOption(ap, { wines, cocktails, spirits, beers });
+                      return (
+                        <button key={ap.label} onClick={() => {
+                          const item = found || { name: ap.searchKey || ap.label, notes: "", __cocktail: true };
+                          updSeat(seat.id, "aperitifs", [...(seat.aperitifs || []), item]);
+                        }} style={{
+                          fontFamily: FONT, fontSize: 9, letterSpacing: "0.04em", padding: isMobile ? "10px 9px" : "4px 9px",
+                          border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
+                          background: tokens.neutral[0], color: tokens.ink[2], transition: "all 0.1s",
+                          touchAction: "manipulation",
+                        }}>{ap.label}</button>
+                      );
+                    })}
+                  </div>
+                )}
                 <BeverageSearch
                   wines={wines} cocktails={cocktails} spirits={spirits} beers={beers}
                   onAdd={({ type, item }) => {
@@ -1055,143 +1045,113 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
                 })()}
               </div>
 
-              {/* Optional extras (derived from optional_flag) */}
-              {optionalExtras.length > 0 && (
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  {optionalExtras.map(dish => {
-                    const extra = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
-                    const linkedPairing = optionalPairings.find(op => op.extraKey === dish.key || op.extraKey === dish.id);
-                    const lpCur = linkedPairing ? (seat.optionalPairings?.[linkedPairing.key] || {}) : null;
-                    const lpMode = lpCur?.mode || null;
-                    const lpActive = lpCur?.ordered ?? false;
-                    const alcoOn = lpActive && lpMode === "alco";
-                    const naOn = lpActive && lpMode === "nonalc";
-                    const updLp = (patch) => linkedPairing && updSeat(seat.id, "optionalPairings", {
-                      ...(seat.optionalPairings || {}), [linkedPairing.key]: { ...(lpCur || {}), ...patch },
-                    });
-                    return (
-                      <div key={dish.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
-                        <div style={{ ...fieldLabel, marginBottom: 4 }}>
-                          {dish.name}
+            {/* ── Extras + standalone pairings footer ── */}
+            {(optionalExtras.length > 0 || optionalPairings.some(opt => !opt.extraKey)) && (
+              <div style={{
+                borderTop: `1px solid ${tokens.ink[5]}`,
+                padding: isMobile ? "10px 12px" : "10px 14px",
+                display: "flex", gap: isMobile ? 12 : 18, flexWrap: "wrap", alignItems: "flex-start",
+              }}>
+                {/* Optional extras (derived from optional_flag) */}
+                {optionalExtras.map(dish => {
+                  const extra = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                  const linkedPairing = optionalPairings.find(op => op.extraKey === dish.key || op.extraKey === dish.id);
+                  const lpCur = linkedPairing ? (seat.optionalPairings?.[linkedPairing.key] || {}) : null;
+                  const lpMode = lpCur?.mode || null;
+                  const lpActive = lpCur?.ordered ?? false;
+                  const alcoOn = lpActive && lpMode === "alco";
+                  const naOn = lpActive && lpMode === "nonalc";
+                  const updLp = (patch) => linkedPairing && updSeat(seat.id, "optionalPairings", {
+                    ...(seat.optionalPairings || {}), [linkedPairing.key]: { ...(lpCur || {}), ...patch },
+                  });
+                  return (
+                    <div key={dish.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 96 }}>
+                      <div style={microLabel}>{dish.name}</div>
+                      <button onClick={() => {
+                        updSeat(seat.id, "extras", {
+                          ...seat.extras, [dish.key]: { ...extra, ordered: !extra.ordered }
+                        });
+                      }} style={{
+                        fontFamily: FONT, fontSize: 9, letterSpacing: "0.08em", padding: isMobile ? "10px 8px" : "5px 8px",
+                        border: `1px solid ${extra.ordered ? tokens.green.border : tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
+                        background: extra.ordered ? tokens.green.bg : tokens.neutral[0],
+                        color: extra.ordered ? tokens.green.text : tokens.ink[3],
+                        fontWeight: extra.ordered ? 600 : 400,
+                        transition: "all 0.1s", touchAction: "manipulation",
+                      }}>{extra.ordered ? "YES" : "NO"}</button>
+                      {linkedPairing ? (
+                        <div style={{ display: "flex", gap: 3, opacity: extra.ordered ? 1 : 0.35, pointerEvents: extra.ordered ? "auto" : "none" }}>
+                          <button onClick={() => updLp({ ordered: false, mode: null })} style={segBtn(!lpActive, "off")}>OFF</button>
+                          {linkedPairing.hasAlco && (
+                            <button onClick={() => updLp({ ordered: true, mode: "alco" })} style={segBtn(alcoOn, "alco")}>ALCO</button>
+                          )}
+                          {linkedPairing.hasNonAlco && (
+                            <button onClick={() => updLp({ ordered: true, mode: "nonalc" })} style={segBtn(naOn, "nonalc")}>N/A</button>
+                          )}
                         </div>
-                        <button onClick={() => {
-                          updSeat(seat.id, "extras", {
-                            ...seat.extras, [dish.key]: { ...extra, ordered: !extra.ordered }
-                          });
-                        }} style={{
-                          fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: isMobile ? "10px 8px" : "5px 8px", border: "1px solid",
-                          borderColor: extra.ordered ? tokens.green.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
-                          background: extra.ordered ? tokens.green.bg : tokens.neutral[0], color: extra.ordered ? tokens.green.text : tokens.text.secondary,
-                          transition: "all 0.1s", touchAction: "manipulation",
-                        }}>{extra.ordered ? "YES" : "NO"}</button>
-                        {linkedPairing ? (
-                          <div style={{ display: "flex", gap: 3, opacity: extra.ordered ? 1 : 0.3, pointerEvents: extra.ordered ? "auto" : "none" }}>
-                            <button onClick={() => updLp({ ordered: false, mode: null })} style={{
-                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: isMobile ? "9px 6px" : "3px 6px", border: "1px solid",
-                              borderColor: !lpActive ? tokens.green.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
-                              background: !lpActive ? tokens.green.bg : tokens.neutral[0], color: !lpActive ? tokens.green.text : tokens.text.disabled, flex: 1,
-                            }}>OFF</button>
-                            {linkedPairing.hasAlco && (
-                              <button onClick={() => updLp({ ordered: true, mode: "alco" })} style={{
-                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: isMobile ? "9px 6px" : "3px 6px", border: "1px solid",
-                                borderColor: alcoOn ? tokens.neutral[300] : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
-                                background: alcoOn ? tokens.tint.parchment : tokens.neutral[0], color: alcoOn ? tokens.neutral[700] : tokens.text.disabled, flex: 1,
-                              }}>ALCO</button>
-                            )}
-                            {linkedPairing.hasNonAlco && (
-                              <button onClick={() => updLp({ ordered: true, mode: "nonalc" })} style={{
-                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: isMobile ? "9px 6px" : "3px 6px", border: "1px solid",
-                                borderColor: naOn ? tokens.neutral[300] : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
-                                background: naOn ? tokens.neutral[100] : tokens.neutral[0], color: naOn ? tokens.neutral[600] : tokens.text.disabled, flex: 1,
-                              }}>N/A</button>
-                            )}
-                          </div>
-                        ) : (
-                          <select value={extra.pairing || dish.pairings[0]} disabled={!extra.ordered}
-                            onChange={e => updSeat(seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, pairing: e.target.value } })}
-                            style={{
-                              fontFamily: FONT, fontSize: 10, padding: "4px 5px",
-                              border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0,
-                              background: tokens.neutral[0], color: tokens.text.primary, outline: "none",
-                              opacity: extra.ordered ? 1 : 0.3, width: "100%",
-                            }}>
-                            {dish.pairings.map(p => <option key={p}>{p}</option>)}
-                          </select>
+                      ) : (
+                        <select value={extra.pairing || dish.pairings[0]} disabled={!extra.ordered}
+                          onChange={e => updSeat(seat.id, "extras", { ...seat.extras, [dish.key]: { ...extra, pairing: e.target.value } })}
+                          style={{
+                            fontFamily: FONT, fontSize: 10, padding: "4px 5px",
+                            border: `1px solid ${tokens.ink[5]}`, borderRadius: 0,
+                            background: tokens.neutral[0], color: tokens.ink[1], outline: "none",
+                            opacity: extra.ordered ? 1 : 0.35, width: "100%",
+                          }}>
+                          {dish.pairings.map(p => <option key={p}>{p}</option>)}
+                        </select>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Standalone optional pairings (no linked extra dish) */}
+                {optionalPairings.filter(opt => !opt.extraKey).map(opt => {
+                  const cur = seat.optionalPairings?.[opt.key] || { ordered: opt.defaultOn !== false };
+                  const active = !!cur.ordered;
+                  const mode = cur.mode || null;
+                  const seatPairing = String(seat.pairing || "").trim();
+                  const seatIsNonAlc = seatPairing === "Non-Alc";
+                  const seatSet = seatPairing && seatPairing !== "—";
+                  const alcoOn = active && (mode === "alco" || (mode === null && seatSet && !seatIsNonAlc));
+                  const naOn = active && (mode === "nonalc" || (mode === null && seatIsNonAlc));
+                  const updOpt = (patch) => updSeat(seat.id, "optionalPairings", {
+                    ...(seat.optionalPairings || {}),
+                    [opt.key]: { ...cur, ...patch },
+                  });
+                  return (
+                    <div key={opt.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 96 }}>
+                      <div style={microLabel}>{opt.label}</div>
+                      <div style={{ display: "flex", gap: 3 }}>
+                        <button onClick={() => updOpt({ ordered: false })} style={segBtn(!active, "off")}>OFF</button>
+                        {opt.hasAlco && (
+                          <button onClick={() => updOpt({ ordered: true, mode: "alco" })} style={segBtn(alcoOn, "alco")}>ALCO</button>
+                        )}
+                        {opt.hasNonAlco && (
+                          <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} style={segBtn(naOn, "nonalc")}>N/A</button>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-              {(() => {
-                const visPairings = optionalPairings.filter(opt => !opt.extraKey);
-                if (!visPairings.length) return null;
-                return (
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
-                    {visPairings.map(opt => {
-                      const cur = seat.optionalPairings?.[opt.key] || { ordered: opt.defaultOn !== false };
-                      const active = !!cur.ordered;
-                      const mode = cur.mode || null;
-                      const seatPairing = String(seat.pairing || "").trim();
-                      const seatIsNonAlc = seatPairing === "Non-Alc";
-                      const seatSet = seatPairing && seatPairing !== "—";
-                      const alcoOn = active && (mode === "alco" || (mode === null && seatSet && !seatIsNonAlc));
-                      const naOn = active && (mode === "nonalc" || (mode === null && seatIsNonAlc));
-                      const updOpt = (patch) => updSeat(seat.id, "optionalPairings", {
-                        ...(seat.optionalPairings || {}),
-                        [opt.key]: { ...cur, ...patch },
-                      });
-                      return (
-                        <div key={opt.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 88 }}>
-                          <div style={{ ...fieldLabel, marginBottom: 4 }}>{opt.label}</div>
-                          <div style={{ display: "flex", gap: 3 }}>
-                            <button onClick={() => updOpt({ ordered: false })} style={{
-                              fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: isMobile ? "9px 6px" : "3px 6px", border: "1px solid",
-                              borderColor: !active ? tokens.green.border : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
-                              background: !active ? tokens.green.bg : tokens.neutral[0], color: !active ? tokens.green.text : tokens.text.disabled, flex: 1,
-                            }}>OFF</button>
-                            {opt.hasAlco && (
-                              <button onClick={() => updOpt({ ordered: true, mode: "alco" })} style={{
-                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: isMobile ? "9px 6px" : "3px 6px", border: "1px solid",
-                                borderColor: alcoOn ? tokens.neutral[300] : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
-                                background: alcoOn ? tokens.tint.parchment : tokens.neutral[0], color: alcoOn ? tokens.neutral[700] : tokens.text.disabled, flex: 1,
-                              }}>ALCO</button>
-                            )}
-                            {opt.hasNonAlco && (
-                              <button onClick={() => updOpt({ ordered: true, mode: "nonalc" })} style={{
-                                fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: isMobile ? "9px 6px" : "3px 6px", border: "1px solid",
-                                borderColor: naOn ? tokens.neutral[300] : tokens.neutral[200], borderRadius: 0, cursor: "pointer",
-                                background: naOn ? tokens.neutral[100] : tokens.neutral[0], color: naOn ? tokens.neutral[600] : tokens.text.disabled, flex: 1,
-                              }}>N/A</button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-            </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}
+      </div>
 
       {/* [TABLE INFO] section */}
       <div style={{
         borderTop: `1px solid ${tokens.ink[4]}`,
-        padding: isMobile ? "10px 12px" : "10px 20px",
+        padding: isMobile ? "14px 12px" : "16px 20px",
         background: tokens.neutral[50],
       }}>
-        <div style={{
-          fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
-          textTransform: "uppercase", color: tokens.ink[3], fontWeight: 400,
-          marginBottom: 16,
-        }}>[TABLE INFO]</div>
+        <div style={{ ...microLabel, marginBottom: 14 }}>[TABLE INFO]</div>
 
       {/* Table-wide fields */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 }}>
         <div>
-          <div style={fieldLabel}>🍾 Bottles</div>
+          <div style={{ ...microLabel, marginBottom: 6 }}>[BOTTLES]</div>
           {(table.bottleWines || []).map((w, i) => (
             <div key={i} style={{ marginBottom: 6 }}>
               <WineSearch
@@ -1209,14 +1169,14 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
           />
         </div>
         <div>
-          <div style={fieldLabel}>⚠️ Restrictions</div>
+          <div style={{ ...microLabel, marginBottom: 6 }}>[RESTRICTIONS]</div>
           {table.restrictions?.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               {table.restrictions.map((r, i) => (
                 <div key={i} style={{
                   display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
-                  padding: "6px 10px", background: r.pos ? tokens.neutral[50] : tokens.red.bg,
-                  border: `1px solid ${r.pos ? tokens.neutral[100] : tokens.red.border}`, borderRadius: 0,
+                  padding: "6px 10px", background: r.pos ? tokens.neutral[0] : tokens.red.bg,
+                  border: `1px solid ${r.pos ? tokens.ink[5] : tokens.red.border}`, borderRadius: 0,
                 }}>
                   <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.red.text, fontWeight: 500, flex: 1, minWidth: 80 }}>
                     {restrLabel(r.note)}
@@ -1244,17 +1204,24 @@ function Detail({ table, tables = [], optionalExtras = [], optionalPairings = []
               ))}
             </div>
           ) : (
-            <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[300] }}>none</div>
+            <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[4] }}>none</div>
           )}
         </div>
         <div>
-          <div style={fieldLabel}>🎂 Birthday Cake</div>
-          <div style={{ fontFamily: FONT, fontSize: 12, color: table.birthday ? tokens.neutral[600] : tokens.text.secondary }}>
-            {table.birthday ? "YES" : "NO"}
-          </div>
+          <div style={{ ...microLabel, marginBottom: 6 }}>[BIRTHDAY CAKE]</div>
+          {/* Editable — the old view only displayed the flag, so a birthday
+              learned mid-service couldn't be recorded from this screen. */}
+          <button onClick={() => upd("birthday", !table.birthday)} style={{
+            fontFamily: FONT, fontSize: 9, letterSpacing: "0.08em", padding: isMobile ? "10px 14px" : "6px 14px",
+            border: `1px solid ${table.birthday ? tokens.green.border : tokens.ink[4]}`, borderRadius: 0,
+            cursor: "pointer", background: table.birthday ? tokens.green.bg : tokens.neutral[0],
+            color: table.birthday ? tokens.green.text : tokens.ink[3],
+            fontWeight: table.birthday ? 600 : 400,
+            transition: "all 0.1s", touchAction: "manipulation",
+          }}>{table.birthday ? "YES" : "NO"}</button>
         </div>
         <div>
-          <div style={fieldLabel}>📝 Notes</div>
+          <div style={{ ...microLabel, marginBottom: 6 }}>[NOTES]</div>
           <textarea value={table.notes} onChange={e => upd("notes", e.target.value)}
             placeholder="VIP, pace, special requests…"
             style={{ ...baseInp, minHeight: 68, resize: "vertical", lineHeight: 1.5 }} />
