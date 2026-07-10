@@ -1,3 +1,7 @@
+// MUST stay the first import: shims AbortSignal.timeout/any for the older
+// tablet/display browsers before any library module evaluates (10.07 board
+// saves crashed on the kitchen display without it).
+import './lib/abortSignalPolyfill.js';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
