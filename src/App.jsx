@@ -1978,6 +1978,9 @@ function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetai
                     snapshot: kitchenCurrent,
                   });
                   upd(t.id, "kitchenSent", kitchenCurrent);
+                  // a Send to an archived ticket proves it's still live —
+                  // bring it back next to its alert (Archive mis-taps)
+                  if (t.kitchenArchived) upd(t.id, "kitchenArchived", false);
                   setJustSent(true);
                   setTimeout(() => setJustSent(false), 2000);
                 }}
@@ -5692,6 +5695,9 @@ export default function App() {
                       confirmed: false,
                       course: ready,
                     },
+                    // a SET to an archived ticket proves it's still live —
+                    // bring it back next to its alert (Archive mis-taps)
+                    ...(t.kitchenArchived ? { kitchenArchived: false } : {}),
                   });
                 }
               }}
@@ -5725,6 +5731,9 @@ export default function App() {
                       confirmed: false,
                       course: ready,
                     },
+                    // a SET to an archived ticket proves it's still live —
+                    // bring it back next to its alert (Archive mis-taps)
+                    ...(t?.kitchenArchived ? { kitchenArchived: false } : {}),
                   });
                 }}
                 onUnset={tableId => {

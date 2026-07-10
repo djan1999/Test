@@ -32,6 +32,60 @@ const makeCourse = (position) => ({
 
 const seatDefaults = { water: "—", pairing: "", extras: {}, aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [] };
 
+describe("KitchenBoard — archived-ticket recovery strip", () => {
+  const liveTable = (id, extra = {}) => ({
+    id, active: true, guests: 2, tableGroup: [], restrictions: [],
+    seats: [{ id: 1, ...seatDefaults }, { id: 2, ...seatDefaults }],
+    kitchenLog: {}, kitchenAlert: null, courseOverrides: {},
+    kitchenCourseNotes: {}, menuType: "", lang: "en", resName: "", resTime: "",
+    ...extra,
+  });
+
+  it("an archived-but-live ticket is recoverable from the kitchen: strip → expand → RESTORE", () => {
+    // Archive used to be a one-way door from the kitchen's side — the only
+    // restore lived inside the END SERVICE modal, next to CLEAR ALL.
+    const upd = vi.fn();
+    render(
+      <KitchenBoard
+        tables={[liveTable(1, { kitchenArchived: true, resName: "NOVAK" }), liveTable(2)]}
+        menuCourses={[makeCourse(1)]}
+        upd={upd}
+        updMany={vi.fn()}
+      />
+    );
+    // hidden from the grid, present in the collapsed strip
+    fireEvent.click(screen.getByText(/ARCHIVED \(1\)/));
+    expect(screen.getByText("NOVAK")).toBeTruthy();
+    fireEvent.click(screen.getByText("RESTORE"));
+    expect(upd).toHaveBeenCalledWith(1, "kitchenArchived", false);
+  });
+
+  it("the strip renders even when EVERY live ticket is archived (empty grid)", () => {
+    render(
+      <KitchenBoard
+        tables={[liveTable(1, { kitchenArchived: true })]}
+        menuCourses={[makeCourse(1)]}
+        upd={vi.fn()}
+        updMany={vi.fn()}
+      />
+    );
+    expect(screen.getByText("No active tables")).toBeTruthy();
+    expect(screen.getByText(/ARCHIVED \(1\)/)).toBeTruthy();
+  });
+
+  it("no strip when nothing is archived-but-live (a cleared table doesn't count)", () => {
+    render(
+      <KitchenBoard
+        tables={[liveTable(1), liveTable(2, { active: false, kitchenArchived: true })]}
+        menuCourses={[makeCourse(1)]}
+        upd={vi.fn()}
+        updMany={vi.fn()}
+      />
+    );
+    expect(screen.queryByText(/ARCHIVED/)).toBeNull();
+  });
+});
+
 describe("KitchenBoard fire — rapid taps", () => {
   it("two quick fires on the same table both land (functional updates, no stale-closure drop)", () => {
     const table = {
