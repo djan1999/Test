@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
 import {
   RESTRICTION_KEYS, RESTRICTION_COLUMN_MAP, normalizeCourseCategory,
-  normalizeOptionalKey, optionalPairingsFromCourses,
+  normalizeOptionalKey, optionalPairingsFromCourses, celebrationKeysFromCourses,
 } from "./utils/menuUtils.js";
 import { DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
 import { buildDefaultTemplate } from "./utils/menuTemplateSchema.js";
@@ -2749,11 +2749,9 @@ export default function App() {
   const dishes = useMemo(() => optionalExtrasFromCourses(activeMenuCourses), [activeMenuCourses]);
   const pairings = useMemo(() => optionalPairingsFromCourses(activeMenuCourses), [activeMenuCourses]);
   // Celebration-category dish keys, synced with the reservation birthday flag
-  // (shared by saveRes and reconcileBoardWithReservations).
-  const celebrationKeys = useMemo(() => (activeMenuCourses || [])
-    .filter(c => normalizeCourseCategory(c?.course_category, c?.optional_flag) === "celebration")
-    .map(c => normalizeOptionalKey(c?.optional_flag))
-    .filter(Boolean), [activeMenuCourses]);
+  // (shared by saveRes, reconcileBoardWithReservations and the group-merge
+  // views, which must ignore these seeded extras when judging seat content).
+  const celebrationKeys = useMemo(() => celebrationKeysFromCourses(activeMenuCourses), [activeMenuCourses]);
 
   // Adopt a full set of store rows into React state. The store (local SQLite
   // when primary, Supabase on the fallback) is the source of truth; a table
@@ -5997,7 +5995,7 @@ export default function App() {
 
       {summaryOpen && (
         <Suspense fallback={null}>
-          <SummaryModal tables={tables} optionalExtras={dishes} optionalPairings={pairings} onClose={() => setSummaryOpen(false)} />
+          <SummaryModal tables={tables} optionalExtras={dishes} optionalPairings={pairings} celebrationKeys={celebrationKeys} onClose={() => setSummaryOpen(false)} />
         </Suspense>
       )}
       {archiveOpen && (

@@ -440,6 +440,29 @@ describe("mergeTableGroups", () => {
     expect(merged[0].seats).toHaveLength(2);
   });
 
+  it("birthday-seeded celebration extras don't turn secondary blanks into seat rows", () => {
+    // The reconcile stamps cake { ordered: true } on EVERY seat of EVERY
+    // group member of a birthday reservation — a 4-guest party on T02-03
+    // showed 8 archive rows (P5-P8 empty) because T03's placeholders carried
+    // the seeded cake and passed the content check.
+    const withCake = (s) => ({ ...s, extras: { cake: { ordered: true, pairing: "—" } } });
+    const tables = [
+      makeTbl(2, {
+        resName: "Finn", resTime: "18:00", guests: 4, birthday: true, tableGroup: [2, 3],
+        seats: [seatWith(1), seatWith(2), seatWith(3), seatWith(4)].map(withCake),
+      }),
+      makeTbl(3, {
+        resName: "Finn", resTime: "18:00", guests: 4, birthday: true, tableGroup: [2, 3],
+        seats: makeSeats(4).map(withCake), // blanks + seeded cake only
+      }),
+    ];
+    const merged = mergeTableGroups(tables, ["cake"]);
+    expect(merged[0].seats).toHaveLength(4); // the real guests, not 8
+    expect(merged[0]._groupGuests).toBe(4);
+    // …and the real guests' seeded cake still travels with them.
+    expect(merged[0].seats.every(s => s.extras?.cake?.ordered)).toBe(true);
+  });
+
   it("does not double-count guests across group members (reconcile sets the same count on each)", () => {
     // Regression: the service-board reconcile assigns the full reservation
     // guest count to every member of a multi-table group. A previous version

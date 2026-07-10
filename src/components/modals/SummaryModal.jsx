@@ -5,10 +5,11 @@ import { mergeTableGroups, tableGroupLabel } from "../../utils/tableHelpers.js";
 
 const FONT = tokens.font;
 
-export default function SummaryModal({ tables, optionalExtras = [], optionalPairings = [], onClose }) {
+export default function SummaryModal({ tables, optionalExtras = [], optionalPairings = [], celebrationKeys = [], onClose }) {
   // Collapse multi-table reservations into one virtual row so a party
-  // spanning T02-T03 shows up once with all seats merged.
-  const active = mergeTableGroups(tables).filter(t => t.active || t.arrivedAt);
+  // spanning T02-T03 shows up once with all seats merged. celebrationKeys:
+  // birthday-seeded extras must not make secondary blanks read as guests.
+  const active = mergeTableGroups(tables, celebrationKeys).filter(t => t.active || t.arrivedAt);
   const groupLabel = tableGroupLabel;
 
   const copyText = () => {
