@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, fireEvent } from "@testing-library/react";
 import FloorView from "../components/floor/FloorView.jsx";
+import FloorMap from "../components/floor/FloorMap.jsx";
 import { buildDefaultFloorMaps } from "../utils/floorMaps.js";
 
 // FLOOR view smoke: the FOH surface — tabs, ticker, two-zone taps, and the
@@ -227,11 +228,15 @@ describe("terrace SET → KITCHEN (same handshake as the dining room)", () => {
 });
 
 describe("seat presentation — gender outlines + positional restrictions", () => {
-  it("chairs outline in the seat's gender color (Mrs pink / Mr blue)", () => {
-    const { container } = setup();
-    // T9's P1 is Mrs (pink outline), P2 is Mr (blue outline) — note pills
-    expect(container.querySelector('rect[stroke="#f9a8d4"]')).toBeTruthy();
-    expect(container.querySelector('rect[stroke="#93c5fd"]')).toBeTruthy();
+  it("unrestricted chairs fill with the soft gender tint under the gender outline", () => {
+    const { container } = setup({
+      tables: tables.map((t) => t.id === 9 ? { ...t, restrictions: [] } : t),
+    });
+    // T9's P1 is Mrs (pink outline + soft pink fill), P2 is Mr (blue + soft blue)
+    const mrs = container.querySelector('rect[stroke="#f9a8d4"]');
+    const mr = container.querySelector('rect[stroke="#93c5fd"]');
+    expect(mrs.getAttribute("fill")).toBe("#fce7f3");
+    expect(mr.getAttribute("fill")).toBe("#dbeafe");
   });
 
   it("a restricted Mrs seat reads red-filled with the pink gender outline", () => {
@@ -243,6 +248,22 @@ describe("seat presentation — gender outlines + positional restrictions", () =
     const pill = container.querySelector('rect[stroke="#f9a8d4"]');
     expect(pill).toBeTruthy();
     expect(pill.getAttribute("fill")).toBe("#b84a3a"); // signal.alert
+  });
+
+  it("kitchen register: seatPositionLabels renders chairs as P1/P2 blocks", () => {
+    const { container } = render(
+      <FloorMap
+        map={floorMaps.maps.find((m) => m.id === "dining_a")}
+        mode="service"
+        tableState={{ T1: { status: "occupied", pax: 2 } }}
+        restrictionsByLabel={{ T1: [{ pos: 1, note: "gluten" }] }}
+        seatPositionLabels
+      />,
+    );
+    const t1 = findTable(container, "T1");
+    expect(t1.textContent).toContain("P1");
+    expect(t1.textContent).toContain("P2");
+    expect(t1.textContent).toContain("GLU"); // the restriction code still rides beside the block
   });
 
   it("terrace chairs mark restrictions by position from the party's BOARD table", () => {
