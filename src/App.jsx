@@ -37,6 +37,7 @@ import {
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { foldTable } from "./utils/foldTable.js";
+import { randomUuid } from "./utils/uuid.js";
 import { reconcileTables } from "./utils/reconcile.js";
 import { isSameServiceLabel, nextArchiveLabel } from "./utils/archiveDedup.js";
 import { archiveIdForService } from "./utils/archiveIdentity.js";
@@ -3900,7 +3901,7 @@ export default function App() {
     }
     // New reservation: mint the uuid client-side so the local write, the
     // uploaded row, and the optimistic React state all share one identity.
-    const local = { ...dbRow, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    const local = { ...dbRow, id: randomUuid(), created_at: new Date().toISOString() };
     if (supabase) {
       let inserted = local;
       if (sqlitePrimaryRef.current) {

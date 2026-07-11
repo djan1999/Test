@@ -17,6 +17,7 @@
 import { getPowerSync } from "./system.js";
 import { getWorkspaceId } from "../lib/supabaseClient.js";
 import { localRowId } from "./rowId.js";
+import { randomUuid } from "../utils/uuid.js";
 
 // JS value → SQLite storage value (JSON text for objects, 0/1 for booleans).
 const sqlite = (v) => {
@@ -88,8 +89,8 @@ export async function writeSetting(id, state) {
   });
 }
 
-// Reservation upsert. The caller supplies the uuid id (crypto.randomUUID() for
-// new rows); created_at is only written on insert so edits never restamp it.
+// Reservation upsert. The caller supplies the uuid id (utils/uuid randomUuid
+// for new rows); created_at is only written on insert so edits never restamp it.
 async function writeReservationInTransaction(tx, ws, { id, date, table_id, data, created_at }) {
     // Probe-then-write, NOT rowsAffected (see upsertLocalRow): view UPDATEs
     // report 0 changes even on success, which turned every edit of a synced
@@ -202,7 +203,7 @@ export async function deleteWines(keys) {
 // write). The uuid is minted client-side so the local row, the uploaded row,
 // and any immediate re-read all share one identity.
 async function writeArchiveInTransaction(tx, ws, { id, date, label, state }) {
-  const archiveId = id || crypto.randomUUID();
+  const archiveId = id || randomUuid();
   const existing = await tx.getOptional(
     "SELECT id FROM service_archive WHERE id = ? AND workspace_id = ?",
     [archiveId, ws],
@@ -289,7 +290,7 @@ export async function replaceManualBeverages(rows, categories = ["cocktail", "sp
     for (const row of rows) {
       await tx.execute(
         "INSERT INTO beverages (id, workspace_id, category, name, notes, position, source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [crypto.randomUUID(), ws, row.category, row.name, row.notes || "", Number(row.position) || 0, "manual", new Date().toISOString()],
+        [randomUuid(), ws, row.category, row.name, row.notes || "", Number(row.position) || 0, "manual", new Date().toISOString()],
       );
     }
   });
