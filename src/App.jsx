@@ -5716,6 +5716,11 @@ export default function App() {
             historyGapsByMenu={historyGapsByMenu}
             persistedOrder={kitchenTicketOrder}
             onOrderChange={saveKitchenTicketOrder}
+            // Tap an upcoming banner → seat-only sheet. The kitchen display
+            // must be able to seat a walked-in party itself: its local-first
+            // writes work with the wifi down, when no other device's seat
+            // would reach it (11.07, per Djan).
+            onSeat={seatTable}
           />
           )}
         </Suspense>

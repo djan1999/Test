@@ -157,6 +157,31 @@ describe("app harness — kitchen board through the real App", () => {
     expect(screen.getAllByText("Amuse")).toHaveLength(1);
   }, 20000);
 
+  it("tapping an upcoming banner opens the seat-only sheet; SEAT persists and expands the ticket (11.07)", async () => {
+    // The kitchen must be able to seat an arrived party itself — with the
+    // wifi down no other device's seat can reach the display, and its
+    // local-first write drains once the link returns.
+    seedLiveService();
+    render(<App />);
+    await enterKitchen();
+
+    fireEvent.click(await screen.findByText("Bruno Harness", {}, { timeout: 5000 }));
+    // The sheet is deliberately single-action: SEAT TABLE and nothing else.
+    const seatBtn = await screen.findByText("SEAT TABLE", {}, { timeout: 5000 });
+    expect(screen.queryByText("Slow")).toBeNull(); // no pace / extras / dietaries
+    fireEvent.click(seatBtn);
+
+    // The seat lands in the store and the banner expands into a full ticket
+    // (Bruno's courses appear — two "Amuse" cells now, Anna's and Bruno's).
+    await waitFor(() => {
+      expect(rowFor(remoteRows("service_tables"), 2)?.data?.active).toBe(true);
+    }, { timeout: 5000 });
+    await waitFor(() => {
+      expect(screen.getAllByText("Amuse")).toHaveLength(2);
+    }, { timeout: 5000 });
+    expect(screen.queryByText("SEAT TABLE")).toBeNull(); // sheet closed itself
+  }, 25000);
+
   it("firing the SET course drops the floor SET strip by itself (no manual un-tap)", async () => {
     // FOH sent SET for Anna's next course (amuse): courseReady on the table,
     // SET strip on her dining tile. The strip must clear the moment the
