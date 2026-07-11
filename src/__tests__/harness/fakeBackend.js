@@ -207,6 +207,20 @@ export const fakeSupabase = {
       return { data: true, error: null };
     }
     if (name === "archive_and_finish_service") {
+      // Mirror the identity guard: when the caller names the service it is
+      // ending and the store no longer holds it, the call is a full NO-OP.
+      const expectedStarted = args.p_expected_started_at ?? null;
+      const expectedDate = args.p_expected_date ?? null;
+      if (expectedStarted != null || expectedDate != null) {
+        const row = tableOf(backend.remote, "service_settings")
+          .find((r) => r.workspace_id === args.p_workspace_id && r.id === "service_date");
+        const state = row?.state || null;
+        const startedOk = expectedStarted == null || state?.startedAt === expectedStarted;
+        const dateOk = expectedDate == null || state?.date === expectedDate;
+        if (!state?.date || !startedOk || !dateOk) {
+          return { data: { superseded: true }, error: null };
+        }
+      }
       applyFinishedServiceToStore(backend.remote, args.p_workspace_id, {
         archive: args.p_archive_id ? {
           id: args.p_archive_id,
@@ -215,7 +229,7 @@ export const fakeSupabase = {
           state: args.p_archive_state || {},
         } : null,
       });
-      return { data: null, error: null };
+      return { data: { superseded: false }, error: null };
     }
     return { data: null, error: null };
   },
@@ -385,11 +399,21 @@ export const fakeWrites = {
     await fireWatches();
     return row.id;
   },
-  finishServiceLocally: async ({ archive = null, blankRows = [] }) => {
+  finishServiceLocally: async ({ archive = null, blankRows = [], expected = null }) => {
     const ws = requireWorkspace();
+    // Mirror the local identity guard (see powersync/writes.js).
+    if (expected && (expected.startedAt || expected.date)) {
+      const row = tableOf(backend.local, "service_settings")
+        .find((r) => r.workspace_id === ws && r.id === "service_date");
+      const state = row?.state || null;
+      const startedOk = !expected.startedAt || state?.startedAt === expected.startedAt;
+      const dateOk = !expected.date || state?.date === expected.date;
+      if (!state?.date || !startedOk || !dateOk) return { superseded: true };
+    }
     applyFinishedServiceToStore(backend.local, ws, { archive, blankRows });
     mirror((store) => applyFinishedServiceToStore(store, ws, { archive, blankRows }));
     await fireWatches();
+    return { superseded: false };
   },
   setArchiveDeleted: async (id, deletedAt) => {
     const set = (store) => {

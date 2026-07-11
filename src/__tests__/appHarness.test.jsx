@@ -478,6 +478,46 @@ describe.each([
   }, 15000);
 });
 
+// ── Stale-device END cannot wipe a newer service ─────────────────────────────
+// The store-side finish clear used to be unconditional: a device that slept
+// through "D1 ended, D2 started" and then ended "its" D1 blanked D2's fresh
+// board for everyone. The pre-check + identity-guarded finish refuse it and
+// adopt the store's reality instead.
+describe("app harness — stale END cannot clear a newer service (fallback)", () => {
+  beforeEach(() => {
+    resetBackend({ psMode: false });
+  });
+
+  it("END SERVICE on a stale device is refused; the new service's board survives", async () => {
+    seedLiveService();
+    render(<App />);
+    await enterService();
+
+    // Elsewhere: the service is ended AND a fresh one started — new startedAt,
+    // new guest on T1. This device gets NO realtime event (it is stale).
+    const stamp = new Date(Date.now() + 1500).toISOString();
+    const dateRow = remoteRows("service_settings").find((r) => r.id === "service_date");
+    dateRow.state = { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: stamp };
+    dateRow.updated_at = stamp;
+    const t1 = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
+    t1.data = { ...blankTable(1), active: true, arrivedAt: "12:05", resName: "Fresh Service Guest", guests: 2 };
+    t1.updated_at = stamp;
+
+    const alerts = [];
+    window.alert = (msg) => alerts.push(String(msg));
+    fireEvent.click(screen.getByText("END SERVICE"));
+    await waitFor(() => expect(alerts.length).toBeGreaterThan(0), { timeout: 5000 });
+    expect(alerts[0]).toMatch(/already ended|new one started/i);
+
+    // Nothing was cleared or filed: the fresh service is intact.
+    const row = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
+    expect(row.data.resName).toBe("Fresh Service Guest");
+    expect(row.data.active).toBe(true);
+    expect(remoteRows("service_archive")).toHaveLength(0);
+    expect(remoteRows("service_settings").find((r) => r.id === "service_date").state.startedAt).toBe(stamp);
+  }, 20000);
+});
+
 // ── Floor SET markers sync live ───────────────────────────────────────────────
 // floor_status_v1 was boot-read only until 11.07: a SET marker tapped on one
 // tablet reached the store but no other device until a full reload. It now

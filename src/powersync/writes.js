@@ -229,9 +229,29 @@ export async function writeArchiveEntry(entry) {
 // Archive (optional), clear all board rows, and clear the shared service date
 // in ONE local SQLite transaction. PowerSync uploads the resulting CRUD batch
 // durably; a transient server failure keeps the entire batch queued for retry.
-export async function finishServiceLocally({ archive = null, blankRows }) {
+//
+// `expected` ({ startedAt, date }) names WHICH service this ends. If the
+// local DB's service_date no longer holds that service (a newer one already
+// synced in), the whole transaction is skipped and { superseded: true }
+// returns — a stale device's late finish must not blank the fresh service.
+// (An offline device that never synced the new service can't be caught here;
+// the server-side guard in archive_and_finish_service is the backstop for
+// the fallback path, and the CAS upload path bounds the local one.)
+export async function finishServiceLocally({ archive = null, blankRows, expected = null }) {
   const ws = requireWorkspace();
+  let superseded = false;
   await getPowerSync().writeTransaction(async (tx) => {
+    if (expected && (expected.startedAt || expected.date)) {
+      const row = await tx.getOptional(
+        "SELECT state FROM service_settings WHERE id = ? AND workspace_id = ?",
+        [localRowId(ws, "service_date"), ws],
+      );
+      let state = null;
+      try { state = row?.state ? JSON.parse(row.state) : null; } catch { state = null; }
+      const startedOk = !expected.startedAt || state?.startedAt === expected.startedAt;
+      const dateOk = !expected.date || state?.date === expected.date;
+      if (!state?.date || !startedOk || !dateOk) { superseded = true; return; }
+    }
     if (archive) await writeArchiveInTransaction(tx, ws, archive);
     for (const row of blankRows || []) {
       await upsertLocalRow(tx, "service_tables", ws, localRowId(ws, row.table_id), {
@@ -245,6 +265,7 @@ export async function finishServiceLocally({ archive = null, blankRows }) {
       updated_at: new Date().toISOString(),
     });
   });
+  return { superseded };
 }
 
 // Soft-delete / restore an archive entry (deleted_at timestamp or null).
