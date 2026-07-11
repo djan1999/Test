@@ -550,9 +550,9 @@ describe.each([
       });
     }
 
-    // Switch to the floor view — the strip is already adopted (the ticker
-    // counts it), no reload involved.
-    fireEvent.click(await screen.findByText("floor", {}, { timeout: 5000 }));
+    // Switch to the dining-room view — the strip is already adopted (the
+    // ticker counts it), no reload involved.
+    fireEvent.click(await screen.findByText("dining room", {}, { timeout: 5000 }));
     await waitFor(() => {
       expect(document.body.textContent).toContain("SET 1");
     }, { timeout: 5000 });

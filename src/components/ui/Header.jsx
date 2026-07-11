@@ -28,6 +28,10 @@ export default function Header({
   onInventory,
   onSyncAll,
   onEndService,
+  // Compact in-header view switch, rendered next to the logo. On the 720px
+  // kitchen panel a separate toggle row cost a whole row of ticket space —
+  // { options: [[key, label], …], active, onChange }.
+  viewSwitch = null,
 }) {
   const isMobile = useIsMobile(BP.sm);
   const [sSt, setSSt] = useState(null);
@@ -119,6 +123,33 @@ export default function Header({
               fontWeight:    400,
               color:         ink[3],
             }}>[{modeLabel}]</span>
+          )}
+
+          {viewSwitch && (
+            <div style={{ display: "flex", alignItems: "center", gap: 0, flexShrink: 0 }}>
+              {viewSwitch.options.map(([key, label]) => {
+                const on = viewSwitch.active === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => viewSwitch.onChange(key)}
+                    style={{
+                      fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em",
+                      textTransform: "uppercase", fontWeight: on ? 600 : 400,
+                      padding: isMobile ? "8px 10px" : "5px 10px", marginLeft: -1,
+                      border: `1px solid ${on ? charcoal.default : ink[4]}`,
+                      background: on ? charcoal.default : neutral[0],
+                      color: on ? neutral[0] : ink[2],
+                      borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
 

@@ -970,18 +970,34 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
 // Upcoming banners join the same sortable grid as the tickets — the expediter
 // can drag one out of the way (or slot a party that arrived early wherever the
 // wall needs it), exactly like an unexpanded ticket. The whole card is the
-// drag handle; the sensors' hold-delay keeps scrolling working.
-export function SortableBanner({ table, isDragging, anyDragging, compact = false }) {
+// drag handle; the sensors' hold-delay keeps scrolling working. A TAP (same
+// gesture split as the ticket header: short, no movement) opens the
+// seat-only sheet — the kitchen can seat an arrived party itself.
+export function SortableBanner({ table, isDragging, anyDragging, compact = false, onTap = null }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
+  const tapRef = useRef(null);
+  const onPointerDown = (e) => {
+    tapRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+    listeners?.onPointerDown?.(e);
+  };
+  const onClick = (e) => {
+    if (!onTap) return;
+    const h = tapRef.current;
+    // Ignore the synthetic click after a drag / long-hold.
+    if (h && (Date.now() - h.t > 500 || Math.abs(e.clientX - h.x) > 12 || Math.abs(e.clientY - h.y) > 12)) return;
+    onTap(table.id);
+  };
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
+      onPointerDown={onPointerDown}
+      onClick={onClick}
       role="button"
-      aria-label="Drag to reorder upcoming table"
+      aria-label={onTap ? "Tap to seat, drag to reorder" : "Drag to reorder upcoming table"}
       style={{
         width: "100%", minWidth: 0,
         transform: anyDragging && transform ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : undefined,
@@ -1173,7 +1189,7 @@ export function UpcomingBanner({ table: t, compact = false }) {
   );
 }
 
-export default function KitchenBoard({ tables, menuCourses, upd, updMany, profiles = [], assignments = {}, historyGapsByMenu = null, persistedOrder = null, onOrderChange = null }) {
+export default function KitchenBoard({ tables, menuCourses, upd, updMany, profiles = [], assignments = {}, historyGapsByMenu = null, persistedOrder = null, onOrderChange = null, onSeat = null }) {
   // A party still out on the terrace (t._visit, decorated by App) gets its
   // ticket BEFORE the dining table is seated — the kitchen fires the opening
   // courses from here while the guests are outside.
@@ -1206,6 +1222,18 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     .filter(t => (t.active || t._visit?.visit === "terrace") && t.kitchenArchived)
     .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup));
   const [showArchived, setShowArchived] = useState(false);
+
+  // Seat-only sheet for a tapped upcoming banner. Deliberately ONE action —
+  // the kitchen seats the arrived party (its local-first write works with
+  // the wifi down, when no other device's seat can reach this display) and
+  // the banner expands into the full ticket. Everything else stays FOH's.
+  const [seatSheetId, setSeatSheetId] = useState(null);
+  const seatTarget = seatSheetId != null ? upcomingTables.find(t => t.id === seatSheetId) : null;
+  useEffect(() => {
+    // Auto-close if the table got seated (here or on another device) or the
+    // reservation left the board while the sheet was open.
+    if (seatSheetId != null && !seatTarget) setSeatSheetId(null);
+  }, [seatSheetId, seatTarget]);
 
   // Seed from the persisted expediter order (it used to be local state only,
   // so a refresh scrambled the board back to table-id order). The order now
@@ -1389,6 +1417,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 isDragging={activeId === t.id}
                 anyDragging={activeId !== null}
                 compact={compact}
+                onTap={onSeat && upd ? setSeatSheetId : null}
               />
             ) : (
               <SortableTicket
@@ -1435,6 +1464,53 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
         )}
       </DragOverlay>
     </DndContext>
+    {seatTarget && onSeat && (
+      <>
+        <div onClick={() => setSeatSheetId(null)}
+          style={{ position: "fixed", inset: 0, background: tokens.surface.overlay, zIndex: 60 }} />
+        <div role="dialog" aria-label="Seat table" style={{
+          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 61,
+          maxWidth: 520, margin: "0 auto", background: tokens.neutral[0],
+          borderTop: `2px solid ${tokens.ink[0]}`,
+          padding: "14px 18px calc(24px + env(safe-area-inset-bottom))",
+        }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
+            <span style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: tokens.ink[0], letterSpacing: "-0.02em" }}>
+              {seatTarget.tableGroup?.length > 1 ? `T${seatTarget.tableGroup.join("-")}` : `T${seatTarget.id}`}
+            </span>
+            {seatTarget.resTime && (
+              <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: tokens.ink[1] }}>{seatTarget.resTime}</span>
+            )}
+            {seatTarget.resName && (
+              <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[3], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{seatTarget.resName}</span>
+            )}
+            <span style={{ flex: 1 }} />
+            <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: tokens.ink[0] }}>
+              {seatTarget.guests || (seatTarget.seats || []).length || 0} <span style={{ fontWeight: 400, fontSize: 9, letterSpacing: "0.06em" }}>PAX</span>
+            </span>
+            <button onClick={() => setSeatSheetId(null)}
+              style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, border: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0], color: tokens.ink[2], width: 32, height: 32, cursor: "pointer", borderRadius: 0 }}>
+              ✕
+            </button>
+          </div>
+          {/* ONE action, deliberately: the kitchen seats the arrived party
+              (works offline — local-first write) and the banner expands into
+              its ticket. Guest details stay a FOH surface. */}
+          <button
+            onClick={() => { onSeat(seatTarget.id); setSeatSheetId(null); }}
+            style={{
+              width: "100%", fontFamily: FONT, fontSize: 13, letterSpacing: "0.14em",
+              textTransform: "uppercase", fontWeight: 700, padding: "16px 0",
+              border: `1px solid ${tokens.green.border}`, background: tokens.green.bg,
+              color: tokens.green.text, borderRadius: 0, cursor: "pointer",
+              touchAction: "manipulation",
+            }}
+          >
+            SEAT TABLE
+          </button>
+        </div>
+      </>
+    )}
     </>
   );
 }

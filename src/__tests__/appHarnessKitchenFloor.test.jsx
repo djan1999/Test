@@ -17,7 +17,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import {
-  backend, resetBackend, seed, remoteRows, WORKSPACE_ID,
+  backend, resetBackend, seed, remoteRows, WORKSPACE_ID, emitRealtime,
 } from "./harness/fakeBackend.js";
 import { currentServiceDay } from "../utils/serviceDay.js";
 import { blankTable } from "../utils/tableHelpers.js";
@@ -157,6 +157,102 @@ describe("app harness — kitchen board through the real App", () => {
     expect(screen.getAllByText("Amuse")).toHaveLength(1);
   }, 20000);
 
+  it("kitchen view switch lives IN the header — TICKETS/TERRACE/DINING ROOM, no toggle row, no inner tabs (11.07)", async () => {
+    seedLiveService();
+    const { container } = render(<App />);
+    await enterKitchen();
+
+    // The old separate TICKETS/FLOOR row is gone (it cost a row of tickets
+    // on the 720px panel); the switch sits next to the logo instead.
+    expect(screen.queryByText("FLOOR")).toBeNull();
+    expect(screen.getByText("tickets")).toBeTruthy();
+
+    // TERRACE: one tap, straight to the terrace map — no inner tab bar.
+    fireEvent.click(screen.getByText("terrace"));
+    await waitFor(() => expect(findSvgTable(container, "T23")).toBeTruthy(), { timeout: 5000 });
+    expect(screen.queryByText("TERRACE")).toBeNull(); // the old tab row
+
+    // DINING ROOM: same, dining map.
+    fireEvent.click(screen.getByText("dining room"));
+    await waitFor(() => expect(findSvgTable(container, "T4")).toBeTruthy(), { timeout: 5000 });
+
+    // Back to TICKETS: Anna's board returns.
+    fireEvent.click(screen.getByText("tickets"));
+    await screen.findByText("Amuse", {}, { timeout: 5000 });
+  }, 25000);
+
+  it("kitchen's OFFLINE seat + FOH seating the SAME table converge on reconnect — one row, no crash, nothing lost", async () => {
+    // The double-seat collision the offline escape hatch makes possible:
+    // wifi dies, the kitchen seats Bruno from the banner, and FOH — not
+    // seeing the kitchen's seat — seats the same table on its own device.
+    // When the link returns the two writes must merge into ONE seated table.
+    seedLiveService();
+    render(<App />);
+    await enterKitchen();
+
+    // Wait for Bruno's reservation template to be confirmed in the store, so
+    // the offline seat is the only unsaved delta.
+    await waitFor(() => {
+      expect(rowFor(remoteRows("service_tables"), 2)?.data?.resName).toBe("Bruno Harness");
+    }, { timeout: 5000 });
+
+    // Wifi dies. The kitchen seats Bruno from the banner sheet — instant
+    // locally, every upload attempt fails.
+    backend.failRemoteWrites = true;
+    fireEvent.click(await screen.findByText("Bruno Harness", {}, { timeout: 5000 }));
+    fireEvent.click(await screen.findByText("SEAT TABLE", {}, { timeout: 5000 }));
+    await waitFor(() => expect(screen.getAllByText("Amuse")).toHaveLength(2), { timeout: 5000 });
+    await new Promise((r) => setTimeout(r, 3600)); // retries exhausted, write pending
+    expect(rowFor(remoteRows("service_tables"), 2)?.data?.active).not.toBe(true);
+
+    // FOH seats the same table on ITS device (newer stamp, its own arrival
+    // minute) — the store takes FOH's write, the kitchen gets the echo.
+    const t2 = rowFor(remoteRows("service_tables"), 2);
+    t2.data = { ...t2.data, active: true, arrivedAt: "20:22" };
+    t2.updated_at = new Date(Date.now() + 2000).toISOString();
+    await new Promise((r) => setTimeout(r, 0));
+    emitRealtime("service_tables", { eventType: "UPDATE", new: { ...t2 }, old: null });
+
+    // Wifi returns: the kitchen's pending seat drains and MERGES with FOH's.
+    backend.failRemoteWrites = false;
+    window.dispatchEvent(new Event("online"));
+    await waitFor(() => {
+      const rows = remoteRows("service_tables").filter((r) => Number(r.table_id) === 2);
+      expect(rows).toHaveLength(1);                 // same slot — never a duplicate
+      expect(rows[0].data.active).toBe(true);       // seated once, for everyone
+      expect(rows[0].data.resName).toBe("Bruno Harness");
+      expect(typeof rows[0].data.arrivedAt).toBe("string"); // one device's minute won
+    }, { timeout: 6000 });
+    // The kitchen still shows exactly one Bruno ticket, courses intact.
+    expect(screen.getAllByText("Bruno Harness")).toHaveLength(1);
+    expect(screen.getAllByText("Amuse")).toHaveLength(2);
+  }, 30000);
+
+  it("tapping an upcoming banner opens the seat-only sheet; SEAT persists and expands the ticket (11.07)", async () => {
+    // The kitchen must be able to seat an arrived party itself — with the
+    // wifi down no other device's seat can reach the display, and its
+    // local-first write drains once the link returns.
+    seedLiveService();
+    render(<App />);
+    await enterKitchen();
+
+    fireEvent.click(await screen.findByText("Bruno Harness", {}, { timeout: 5000 }));
+    // The sheet is deliberately single-action: SEAT TABLE and nothing else.
+    const seatBtn = await screen.findByText("SEAT TABLE", {}, { timeout: 5000 });
+    expect(screen.queryByText("Slow")).toBeNull(); // no pace / extras / dietaries
+    fireEvent.click(seatBtn);
+
+    // The seat lands in the store and the banner expands into a full ticket
+    // (Bruno's courses appear — two "Amuse" cells now, Anna's and Bruno's).
+    await waitFor(() => {
+      expect(rowFor(remoteRows("service_tables"), 2)?.data?.active).toBe(true);
+    }, { timeout: 5000 });
+    await waitFor(() => {
+      expect(screen.getAllByText("Amuse")).toHaveLength(2);
+    }, { timeout: 5000 });
+    expect(screen.queryByText("SEAT TABLE")).toBeNull(); // sheet closed itself
+  }, 25000);
+
   it("firing the SET course drops the floor SET strip by itself (no manual un-tap)", async () => {
     // FOH sent SET for Anna's next course (amuse): courseReady on the table,
     // SET strip on her dining tile. The strip must clear the moment the
@@ -247,9 +343,9 @@ describe("app harness — terrace floor view through the real App", () => {
     const { container } = render(<App />);
     await enterService();
 
-    // Service → FLOOR view → TERRACE tab (default maps: terrace T21–T26).
-    fireEvent.click(screen.getByText("floor"));
-    fireEvent.click(await screen.findByText("TERRACE", {}, { timeout: 5000 }));
+    // Service → TERRACE view, one tap (11.07 flattened toggle; default maps:
+    // terrace T21–T26).
+    fireEvent.click(screen.getByText("terrace"));
 
     // Free tile → sheet → assign Bruno. The write must ride the store seam.
     fireEvent.click(findSvgTable(container, "T23"));
@@ -285,8 +381,7 @@ describe("app harness — terrace floor view through the real App", () => {
       expect(rowFor(remoteRows("service_tables"), 2)?.data?.active).toBe(true);
     }, { timeout: 5000 });
 
-    fireEvent.click(screen.getByText("floor"));
-    fireEvent.click(await screen.findByText("TERRACE", {}, { timeout: 5000 }));
+    fireEvent.click(screen.getByText("terrace"));
     fireEvent.click(findSvgTable(container, "T23"));
     fireEvent.click(await screen.findByText(/^Bruno Harness ×3/, {}, { timeout: 5000 }));
     await waitFor(() => {
