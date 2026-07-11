@@ -2288,12 +2288,29 @@ export default function App() {
   const [serviceView, setServiceView] = useState(() => {
     try {
       const v = localStorage.getItem(workspaceKey("milka_service_view"));
-      return v === "floor" ? v : "board";
+      // 11.07 flattening (per Djan): BOARD / TERRACE / DINING ROOM in ONE
+      // row — the old "floor" view with its inner map tabs was an extra
+      // button press for nothing. A persisted "floor" heals to "dining".
+      if (v === "terrace" || v === "dining") return v;
+      return v === "floor" ? "dining" : "board";
     } catch { return "board"; }
   });
   const changeServiceView = v => {
     setServiceView(v);
     try { localStorage.setItem(workspaceKey("milka_service_view"), v); } catch {}
+  };
+  // Which map the kitchen's flattened header switch shows when it's not on
+  // TICKETS (11.07: TICKETS / TERRACE / DINING ROOM live IN the header —
+  // a separate toggle row cost a row of tickets on the 720px panel).
+  const [kitchenFloorMap, setKitchenFloorMap] = useState(() => {
+    try { return localStorage.getItem(workspaceKey("milka_kitchen_floor_map")) === "dining" ? "dining" : "terrace"; }
+    catch { return "terrace"; }
+  });
+  const changeKitchenView = (key) => {
+    if (key === "tickets") { enterMode("display"); return; }
+    setKitchenFloorMap(key);
+    try { localStorage.setItem(workspaceKey("milka_kitchen_floor_map"), key); } catch {}
+    if (mode !== "kitchen_floor") enterMode("kitchen_floor");
   };
   // 60s heartbeat keeps clock-derived readout values (arrival radar) live
   // even when nothing else triggers a render. Service mode only.
@@ -5658,7 +5675,18 @@ export default function App() {
     {serviceDatePickerEl}
     <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
-      <Header modeLabel={mode === "kitchen_floor" ? "KITCHEN · FLOOR" : "KITCHEN"} showSummary={false} showMenu={false} showArchive={mode === "display"} showInventory={false} {...hProps} />
+      <Header
+        modeLabel="KITCHEN"
+        showSummary={false} showMenu={false} showArchive={mode === "display"} showInventory={false}
+        // The view switch lives IN the header next to the logo — a separate
+        // toggle row cost a full row of tickets on the 720px panel.
+        viewSwitch={serviceDate ? {
+          options: [["tickets", "tickets"], ["terrace", "terrace"], ["dining", "dining room"]],
+          active: mode === "display" ? "tickets" : kitchenFloorMap,
+          onChange: changeKitchenView,
+        } : null}
+        {...hProps}
+      />
       {pastDateWarningEl}
       {!serviceDate ? (
         /* No service running — the kitchen idles here, nothing can pop up.
@@ -5673,29 +5701,14 @@ export default function App() {
           </div>
         </div>
       ) : (<>
-      {/* TICKETS / FLOOR toggle — same auth + workspace gate for both views;
-          the floor view carries no mutation handlers at all. */}
-      <div style={{ display: "flex", gap: 0, padding: appIsMobile ? "10px 10px 0" : "10px 16px 0" }}>
-        {[["display", "TICKETS"], ["kitchen_floor", "FLOOR"]].map(([m, label]) => {
-          const on = mode === m;
-          return (
-            <button key={m} onClick={() => enterMode(m)} style={{
-              fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase",
-              padding: "7px 14px", marginLeft: -1, borderRadius: 0, cursor: "pointer",
-              border: `1px solid ${on ? tokens.charcoal.default : tokens.ink[4]}`,
-              background: on ? tokens.charcoal.default : tokens.neutral[0],
-              color: on ? tokens.neutral[0] : tokens.ink[2], fontWeight: on ? 600 : 400,
-              touchAction: "manipulation",
-            }}>{label}</button>
-          );
-        })}
-      </div>
       {/* Slim desktop padding: on a 720px-tall kitchen panel every vertical px
-          counts toward fitting two full rows of tickets. */}
+          counts toward fitting two full rows of tickets. The TICKETS/TERRACE/
+          DINING ROOM switch lives in the Header (viewSwitch) — no toggle row. */}
       <div style={{ padding: appIsMobile ? "12px 10px" : "10px 16px" }}>
         <Suspense fallback={lazyViewFallback}>
           {mode === "kitchen_floor" ? (
             <KitchenFloorView
+              mapKind={kitchenFloorMap}
               floorMaps={floorMapsState}
               floorStatus={floorStatus}
               reservations={serviceReservations}
@@ -5922,9 +5935,10 @@ export default function App() {
                 );
               })()}
             </div>
-            {/* [VIEW] toggle — BOARD (card grid) / FLOOR (the spatial floor map) */}
+            {/* [VIEW] toggle — BOARD / TERRACE / DINING ROOM, one flat row
+                (the old two-step floor → map-tab navigation, flattened). */}
             <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-              {["board", "floor"].map(v => {
+              {[["board", "board"], ["terrace", "terrace"], ["dining", "dining room"]].map(([v, label]) => {
                 const on = serviceView === v;
                 return (
                   <button
@@ -5942,19 +5956,20 @@ export default function App() {
                       borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
                     }}
                   >
-                    {v}
+                    {label}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {serviceView === "floor" ? (
+          {serviceView === "terrace" || serviceView === "dining" ? (
             /* FLOOR view — the spatial projection of the same board state.
                A dining table is one big SET toggle (tap to flip);
                terrace tables and ARRIVING tables open their action sheet.
                The old TerracePanel's whole terrace leg lives in here. */
             <FloorView
+              mapKind={serviceView}
               floorMaps={floorMapsState}
               floorStatus={floorStatus}
               reservations={serviceReservations}

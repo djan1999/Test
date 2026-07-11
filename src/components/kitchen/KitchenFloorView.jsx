@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import FloorMap, { restrictionCode } from "../floor/FloorMap.jsx";
 import {
@@ -23,6 +23,10 @@ const FONT = tokens.font;
 // data is the same App state the kitchen board renders from (PowerSync sync
 // stream / realtime safety net) — no new subscription.
 export default function KitchenFloorView({
+  // "terrace" | "dining": the header's flattened TICKETS/TERRACE/DINING ROOM
+  // switch owns the map (11.07) — the inner tab row disappears. Unset →
+  // legacy self-owned tabs.
+  mapKind = null,
   floorMaps, floorStatus, reservations = [], tables = [], menuCourses = [],
   profiles = [], assignments = {}, isMobile,
 }) {
@@ -32,7 +36,11 @@ export default function KitchenFloorView({
   const [tabId, setTabId] = useState(terraceMap?.id || diningMap?.id || null); // default TERRACE
   const [popover, setPopover] = useState(null); // { label, name, rows: [{seat, code, note}] }
 
-  const map = mapTabs.find((m) => m.id === tabId) || mapTabs[0];
+  const forcedMap = mapKind === "terrace" ? terraceMap : mapKind === "dining" ? diningMap : null;
+  const map = forcedMap || mapTabs.find((m) => m.id === tabId) || mapTabs[0];
+  useEffect(() => {
+    if (mapKind) setPopover(null); // leaving the map drops its open popover
+  }, [mapKind]);
   if (!map) return null;
 
   const progressOf = (boardTable) => {
@@ -145,21 +153,24 @@ export default function KitchenFloorView({
 
   return (
     <div style={{ maxWidth: 980, margin: "0 auto", padding: isMobile ? "0 10px" : 0 }}>
-      {/* map tabs — identical set to FOH, TERRACE first/default */}
-      <div style={{ display: "flex", gap: 0, marginBottom: 10 }}>
-        {mapTabs.map((m) => {
-          const on = m.id === map.id;
-          return (
-            <button key={m.id} onClick={() => { setTabId(m.id); setPopover(null); }} style={{
-              fontFamily: FONT, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase",
-              padding: "8px 16px", marginLeft: -1, borderRadius: 0, cursor: "pointer",
-              border: `1px solid ${on ? tokens.charcoal.default : tokens.ink[4]}`,
-              background: on ? tokens.charcoal.default : tokens.neutral[0],
-              color: on ? tokens.neutral[0] : tokens.ink[2], fontWeight: on ? 600 : 400,
-            }}>{m.name}</button>
-          );
-        })}
-      </div>
+      {/* map tabs — only when this view still owns the map choice (legacy);
+          with mapKind the header's switch owns it and the row is dead space */}
+      {!mapKind && (
+        <div style={{ display: "flex", gap: 0, marginBottom: 10 }}>
+          {mapTabs.map((m) => {
+            const on = m.id === map.id;
+            return (
+              <button key={m.id} onClick={() => { setTabId(m.id); setPopover(null); }} style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase",
+                padding: "8px 16px", marginLeft: -1, borderRadius: 0, cursor: "pointer",
+                border: `1px solid ${on ? tokens.charcoal.default : tokens.ink[4]}`,
+                background: on ? tokens.charcoal.default : tokens.neutral[0],
+                color: on ? tokens.neutral[0] : tokens.ink[2], fontWeight: on ? 600 : 400,
+              }}>{m.name}</button>
+            );
+          })}
+        </div>
+      )}
 
       {/* service mode with no tap handlers beyond the popover: the SET
           markers render read-only — the kitchen never writes them */}

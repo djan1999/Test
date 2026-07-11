@@ -157,6 +157,30 @@ describe("app harness — kitchen board through the real App", () => {
     expect(screen.getAllByText("Amuse")).toHaveLength(1);
   }, 20000);
 
+  it("kitchen view switch lives IN the header — TICKETS/TERRACE/DINING ROOM, no toggle row, no inner tabs (11.07)", async () => {
+    seedLiveService();
+    const { container } = render(<App />);
+    await enterKitchen();
+
+    // The old separate TICKETS/FLOOR row is gone (it cost a row of tickets
+    // on the 720px panel); the switch sits next to the logo instead.
+    expect(screen.queryByText("FLOOR")).toBeNull();
+    expect(screen.getByText("tickets")).toBeTruthy();
+
+    // TERRACE: one tap, straight to the terrace map — no inner tab bar.
+    fireEvent.click(screen.getByText("terrace"));
+    await waitFor(() => expect(findSvgTable(container, "T23")).toBeTruthy(), { timeout: 5000 });
+    expect(screen.queryByText("TERRACE")).toBeNull(); // the old tab row
+
+    // DINING ROOM: same, dining map.
+    fireEvent.click(screen.getByText("dining room"));
+    await waitFor(() => expect(findSvgTable(container, "T4")).toBeTruthy(), { timeout: 5000 });
+
+    // Back to TICKETS: Anna's board returns.
+    fireEvent.click(screen.getByText("tickets"));
+    await screen.findByText("Amuse", {}, { timeout: 5000 });
+  }, 25000);
+
   it("kitchen's OFFLINE seat + FOH seating the SAME table converge on reconnect — one row, no crash, nothing lost", async () => {
     // The double-seat collision the offline escape hatch makes possible:
     // wifi dies, the kitchen seats Bruno from the banner, and FOH — not
@@ -319,9 +343,9 @@ describe("app harness — terrace floor view through the real App", () => {
     const { container } = render(<App />);
     await enterService();
 
-    // Service → FLOOR view → TERRACE tab (default maps: terrace T21–T26).
-    fireEvent.click(screen.getByText("floor"));
-    fireEvent.click(await screen.findByText("TERRACE", {}, { timeout: 5000 }));
+    // Service → TERRACE view, one tap (11.07 flattened toggle; default maps:
+    // terrace T21–T26).
+    fireEvent.click(screen.getByText("terrace"));
 
     // Free tile → sheet → assign Bruno. The write must ride the store seam.
     fireEvent.click(findSvgTable(container, "T23"));
@@ -357,8 +381,7 @@ describe("app harness — terrace floor view through the real App", () => {
       expect(rowFor(remoteRows("service_tables"), 2)?.data?.active).toBe(true);
     }, { timeout: 5000 });
 
-    fireEvent.click(screen.getByText("floor"));
-    fireEvent.click(await screen.findByText("TERRACE", {}, { timeout: 5000 }));
+    fireEvent.click(screen.getByText("terrace"));
     fireEvent.click(findSvgTable(container, "T23"));
     fireEvent.click(await screen.findByText(/^Bruno Harness ×3/, {}, { timeout: 5000 }));
     await waitFor(() => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import FloorMap from "./FloorMap.jsx";
 import {
@@ -46,6 +46,10 @@ const actionBtn = (primary) => ({
 });
 
 export default function FloorView({
+  // "terrace" | "dining": the caller owns which map shows (the 11.07
+  // flattening — BOARD/TERRACE/DINING ROOM one row up in App); the inner
+  // tab bar disappears. Unset → legacy self-owned tabs.
+  mapKind = null,
   floorMaps, floorStatus, reservations = [], tables = [],
   menuCourses = [], profiles = [], assignments = {},
   onCycleStatus,
@@ -63,7 +67,13 @@ export default function FloorView({
   const [movingParty, setMovingParty] = useState(null); // terrace CHANGE TABLE: the reservation being re-seated
   const [toast, setToast] = useState(null);
 
-  const map = tabs.find((m) => m.id === tabId) || tabs[0];
+  const forcedMap = mapKind === "terrace" ? terraceMap : mapKind === "dining" ? diningMap : null;
+  const map = forcedMap || tabs.find((m) => m.id === tabId) || tabs[0];
+  // Leaving the map (App's toggle) must drop the open sheet / pending CHANGE
+  // TABLE, exactly like the old tab switch did.
+  useEffect(() => {
+    if (mapKind) { setSheetLabel(null); setMovingParty(null); }
+  }, [mapKind]);
   if (!map) return null;
 
   const flash = (msg) => {
@@ -384,18 +394,25 @@ export default function FloorView({
 
   return (
     <div style={{ margin: isMobile ? "0 12px 40px" : "0 24px 48px" }}>
-      {/* map tabs */}
-      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0, marginBottom: 8 }}>
-        {tabs.map((m) => (
-          <button key={m.id} style={btn(m.id === map.id)} onClick={() => switchTab(m.id)}>
-            {m.name}
-          </button>
-        ))}
-        <span style={{ flex: 1 }} />
-        {toast && (
+      {/* map tabs — hidden when the caller owns the map choice (mapKind);
+          the toast still needs a home then. */}
+      {!mapKind ? (
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0, marginBottom: 8 }}>
+          {tabs.map((m) => (
+            <button key={m.id} style={btn(m.id === map.id)} onClick={() => switchTab(m.id)}>
+              {m.name}
+            </button>
+          ))}
+          <span style={{ flex: 1 }} />
+          {toast && (
+            <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.text, letterSpacing: "0.08em", fontWeight: 700, marginRight: 10 }}>{toast}</span>
+          )}
+        </div>
+      ) : toast && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
           <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.text, letterSpacing: "0.08em", fontWeight: 700, marginRight: 10 }}>{toast}</span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ticker — the visible map's live counts */}
       <div style={{
