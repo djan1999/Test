@@ -551,27 +551,63 @@ revoke all on function public.save_service_table_if_current(uuid, integer, times
 grant execute on function public.save_service_table_if_current(uuid, integer, timestamptz, jsonb, timestamptz)
   to authenticated, service_role;
 
+-- Identity-checked finish (11.07): the clear names WHICH service it ends.
+-- Passing p_expected_started_at / p_expected_date makes the whole call a
+-- NO-OP with {superseded:true} when the store no longer holds that service
+-- — a stale device can never blank a freshly started one. The guard lives
+-- in the UPDATE's WHERE clause, re-evaluated on the row's current version,
+-- so it is atomic against a concurrent start. Identity-less calls keep the
+-- legacy unconditional behavior.
 create or replace function public.archive_and_finish_service(
   p_workspace_id uuid,
   p_archive_id uuid default null,
   p_archive_date date default null,
   p_archive_label text default null,
-  p_archive_state jsonb default null
+  p_archive_state jsonb default null,
+  p_expected_started_at text default null,
+  p_expected_date text default null
 )
-returns void
+returns jsonb
 language plpgsql
 security invoker
 set search_path = ''
 as $$
+declare
+  guarded boolean := (p_expected_started_at is not null or p_expected_date is not null);
+  cleared integer := 0;
 begin
   if p_workspace_id is null then
     raise exception 'workspace_id is required';
   end if;
+  if p_archive_id is not null and (p_archive_date is null or nullif(p_archive_label, '') is null) then
+    raise exception 'archive date and label are required';
+  end if;
+
+  update public.service_settings
+     set state = '{}'::jsonb, updated_at = clock_timestamp()
+   where workspace_id = p_workspace_id
+     and id = 'service_date'
+     and (
+       not guarded
+       or (
+         (p_expected_started_at is null or state->>'startedAt' = p_expected_started_at)
+         and (p_expected_date is null or state->>'date' = p_expected_date)
+       )
+     );
+  get diagnostics cleared = row_count;
+
+  if guarded and cleared = 0 then
+    return jsonb_build_object('superseded', true);
+  end if;
+
+  if cleared = 0 then
+    insert into public.service_settings(workspace_id, id, state, updated_at)
+    values (p_workspace_id, 'service_date', '{}'::jsonb, clock_timestamp())
+    on conflict (workspace_id, id)
+    do update set state = '{}'::jsonb, updated_at = excluded.updated_at;
+  end if;
 
   if p_archive_id is not null then
-    if p_archive_date is null or nullif(p_archive_label, '') is null then
-      raise exception 'archive date and label are required';
-    end if;
     insert into public.service_archive(
       id, workspace_id, date, label, state, created_at, deleted_at
     )
@@ -588,17 +624,19 @@ begin
   on conflict (workspace_id, table_id)
   do update set data = '{}'::jsonb, updated_at = excluded.updated_at;
 
-  insert into public.service_settings(workspace_id, id, state, updated_at)
-  values (p_workspace_id, 'service_date', '{}'::jsonb, clock_timestamp())
-  on conflict (workspace_id, id)
-  do update set state = '{}'::jsonb, updated_at = excluded.updated_at;
+  return jsonb_build_object('superseded', false);
 end;
 $$;
 
-revoke all on function public.archive_and_finish_service(uuid, uuid, date, text, jsonb)
+revoke all on function public.archive_and_finish_service(uuid, uuid, date, text, jsonb, text, text)
   from public, anon;
-grant execute on function public.archive_and_finish_service(uuid, uuid, date, text, jsonb)
+grant execute on function public.archive_and_finish_service(uuid, uuid, date, text, jsonb, text, text)
   to authenticated, service_role;
+
+-- Realtime DELETE events carry only the old row; the workspace_id channel
+-- filter needs it, so PK-only replica identity silently dropped deletes for
+-- fallback devices.
+alter table public.reservations replica identity full;
 
 
 do $$

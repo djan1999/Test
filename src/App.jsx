@@ -3436,15 +3436,20 @@ export default function App() {
   // SQLite-primary devices commit one local transaction; the fallback calls
   // one Postgres function/transaction. This removes the old half-ended states
   // (archive saved but board/date clear failed, or board cleared before date).
-  const persistServiceEnd = useCallback(async ({ archive = null }) => {
+  // `expected` carries the identity of the service being ended; the STORE
+  // itself refuses the whole operation (superseded: true, nothing written)
+  // when it no longer holds that service — the atomic backstop behind the
+  // client-side serviceEndSuperseded pre-check below.
+  const persistServiceEnd = useCallback(async ({ archive = null, expected = null }) => {
     try {
-      const rows = await finishServiceStore({
+      const { rows, superseded } = await finishServiceStore({
         client: supabase,
         workspaceId: getWorkspaceId(),
         sqlitePrimary: sqlitePrimaryRef.current,
         archive,
+        expected,
       });
-      return { ok: true, rows };
+      return { ok: !superseded, superseded, rows };
     } catch (error) {
       return { ok: false, error };
     }
@@ -3543,7 +3548,18 @@ export default function App() {
           state: { ...snap, tables: activeTables, menuCourses, serviceSession: activeServiceSession, startedAt },
         };
       }
-      const result = await persistServiceEnd({ archive });
+      const result = await persistServiceEnd({
+        archive,
+        // Identity of the service we believe we are ending — the store
+        // refuses atomically if it has moved on (stale-device backstop).
+        expected: { startedAt: serviceStartedAtRef.current || null, date: serviceDate || null },
+      });
+      if (result.superseded) {
+        adoptServiceLifecycleRef.current?.((await readStateKey("service_date").catch(() => null)) || {}, new Date().toISOString());
+        setArchiveOpen(false);
+        window.alert("This service was already ended (or a new one started) on another device — nothing was cleared. The board has been updated.");
+        return;
+      }
       if (!result.ok) {
         window.alert("Service was not ended; the live board is unchanged. Please retry: " + (result.error?.message || result.error));
         return;
@@ -3663,7 +3679,16 @@ export default function App() {
       return;
     }
 
-    const result = await persistServiceEnd({ archive });
+    const result = await persistServiceEnd({
+      archive,
+      expected: { startedAt: serviceStartedAtRef.current || null, date: staleDate || null },
+    });
+    if (result.superseded) {
+      console.warn("[auto-end] Store refused the finish (service moved on) — adopting instead.");
+      adoptServiceLifecycleRef.current?.((await readStateKey("service_date").catch(() => null)) || {}, new Date().toISOString());
+      autoEndingRef.current = false;
+      return;
+    }
     if (!result.ok) {
       console.error("Auto-end transaction failed; leaving service visible:", result.error);
       autoEndingRef.current = false;
