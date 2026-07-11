@@ -8,6 +8,7 @@ import App from './App.jsx';
 import { ErrorBoundary } from './components/ui/ErrorBoundary.jsx';
 import './styles.css';
 import { registerSW } from 'virtual:pwa-register';
+import { setUpdateReady } from './lib/swUpdate.js';
 
 const PRELOAD_RELOAD_GUARD_KEY = 'milka_preload_reload_once';
 
@@ -25,20 +26,23 @@ window.addEventListener('vite:preloadError', (event) => {
   } catch {}
 });
 
-// Register the service worker. With registerType:'autoUpdate' in vite.config.js
-// the worker silently updates in the background whenever a new build is deployed.
-// When WiFi drops mid-service the app shell and last-known Supabase responses are
-// served from cache; when connectivity returns the SW re-fetches automatically.
+// Register the service worker (registerType:'prompt' in vite.config.js). A
+// new build downloads in the background and WAITS — applying it immediately
+// (the old updateSW(true) here) reloaded every device the moment a deploy
+// landed, mid-service included. The waiting build activates when the app is
+// next fully closed and reopened, or on demand from the admin SYSTEM panel
+// (the kitchen display never closes by itself). While it waits, the running
+// service worker keeps serving the CURRENT build's precache, so lazy chunks
+// stay loadable and offline behavior is unchanged.
 const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
-    // Apply newly available SW immediately so users don't stay on stale assets.
-    updateSW(true);
+    setUpdateReady(() => updateSW(true));
   },
   onRegistered(registration) {
     if (registration) {
-      // Poll for updates every 60 s so a freshly deployed build is picked up
-      // without requiring a full page reload during a live service.
+      // Poll every 60 s so a fresh deploy starts downloading in the
+      // background right away (it still only ACTIVATES per the rule above).
       setInterval(() => registration.update(), 60_000);
     }
   },

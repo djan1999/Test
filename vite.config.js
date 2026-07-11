@@ -1,27 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
-
-// Rewrite dependency calls to AbortSignal.timeout(ms) into a self-contained
-// compatible expression. The kitchen display's embedded browser (pre-Chrome
-// 103) lacks the API and @powersync/web calls it on the WRITE path — INSIDE
-// ITS WEB WORKERS, where a main-thread polyfill (src/lib/abortSignalPolyfill)
-// can never reach (workers have their own global scope; that's why the 10.07
-// f864e1a build still failed on the display). A build-time rewrite fixes the
-// call in every context: main bundle, workers, shared workers.
-const abortSignalTimeoutCompat = () => ({
-  name: 'abort-signal-timeout-compat',
-  transform(code, id) {
-    if (!id.includes('node_modules') || !code.includes('AbortSignal.timeout(')) return null;
-    return {
-      code: code.replaceAll(
-        'AbortSignal.timeout(',
-        '((typeof AbortSignal!=="undefined"&&AbortSignal.timeout)?AbortSignal.timeout.bind(AbortSignal):function(ms){var c=new AbortController();setTimeout(function(){try{c.abort(new DOMException("The operation timed out.","TimeoutError"))}catch(e){c.abort()}},ms);return c.signal})(',
-      ),
-      map: null,
-    };
-  },
-});
+// Build-time rewrites of modern-API calls INSIDE dependency code — the only
+// fix that reaches @powersync/wa-sqlite's WEB WORKERS on the old kitchen
+// display (page polyfills never do; that's why the 10.07 f864e1a build still
+// failed there). AbortSignal.timeout, crypto.randomUUID, toSorted/findLast,
+// structuredClone — see vite/compat-plugins.js (unit-tested).
+import { compatPlugins } from './vite/compat-plugins.js';
 
 export default defineConfig({
   // Visible build identity (admin SYSTEM panel): ends the "which version is
@@ -33,11 +18,17 @@ export default defineConfig({
     ),
   },
   plugins: [
-    abortSignalTimeoutCompat(),
+    ...compatPlugins(),
     react(),
     VitePWA({
       // Let main.jsx call registerSW() explicitly so we have full control.
-      registerType: 'autoUpdate',
+      // 'prompt': a deployed build downloads in the background and WAITS —
+      // 'autoUpdate' baked skipWaiting/clientsClaim into the worker, which
+      // (with main.jsx's old updateSW(true)) force-reloaded live devices the
+      // moment a deploy landed, mid-service included. Activation now happens
+      // on next full app reopen or via the SYSTEM panel's APPLY UPDATE
+      // (see lib/swUpdate.js).
+      registerType: 'prompt',
       injectRegister: null,
 
       includeAssets: ['icon.svg', 'logo.svg'],
@@ -117,9 +108,9 @@ export default defineConfig({
   },
   worker: {
     format: 'es',
-    // Worker bundles get their own plugin pipeline — the compat rewrite must
-    // run there too (that's where @powersync/web's failing call lives).
-    plugins: () => [abortSignalTimeoutCompat()],
+    // Worker bundles get their own plugin pipeline — the compat rewrites must
+    // run there too (that's where @powersync/web's failing calls live).
+    plugins: () => [...compatPlugins()],
   },
   server: {
     host: true,
@@ -136,6 +127,15 @@ export default defineConfig({
     port: 4173,
   },
   build: {
+    // Explicit conservative syntax floor — the kitchen display's embedded
+    // browser is frozen pre-Chrome-103 (exact age unknown; APIs as old as
+    // Chrome 92 have been missing). This matches Vite 6's 'modules' default
+    // TODAY but pins it: a future Vite major quietly raising its default
+    // (Vite 7 emits ~Chrome-107-level syntax) must not brick the display.
+    // Applies to worker bundles too. Runtime APIs are NOT transpiled by this
+    // — those are handled by the polyfills/guards (abortSignalPolyfill,
+    // utils/uuid, the AbortSignal build rewrite above).
+    target: ['es2020', 'chrome87', 'safari14', 'firefox78'],
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
       output: {
