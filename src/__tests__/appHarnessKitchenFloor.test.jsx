@@ -17,7 +17,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import {
-  backend, resetBackend, seed, remoteRows, WORKSPACE_ID,
+  backend, resetBackend, seed, remoteRows, WORKSPACE_ID, emitRealtime,
 } from "./harness/fakeBackend.js";
 import { currentServiceDay } from "../utils/serviceDay.js";
 import { blankTable } from "../utils/tableHelpers.js";
@@ -156,6 +156,53 @@ describe("app harness — kitchen board through the real App", () => {
     // Anna's seated ticket carries the courses; Bruno's banner must not.
     expect(screen.getAllByText("Amuse")).toHaveLength(1);
   }, 20000);
+
+  it("kitchen's OFFLINE seat + FOH seating the SAME table converge on reconnect — one row, no crash, nothing lost", async () => {
+    // The double-seat collision the offline escape hatch makes possible:
+    // wifi dies, the kitchen seats Bruno from the banner, and FOH — not
+    // seeing the kitchen's seat — seats the same table on its own device.
+    // When the link returns the two writes must merge into ONE seated table.
+    seedLiveService();
+    render(<App />);
+    await enterKitchen();
+
+    // Wait for Bruno's reservation template to be confirmed in the store, so
+    // the offline seat is the only unsaved delta.
+    await waitFor(() => {
+      expect(rowFor(remoteRows("service_tables"), 2)?.data?.resName).toBe("Bruno Harness");
+    }, { timeout: 5000 });
+
+    // Wifi dies. The kitchen seats Bruno from the banner sheet — instant
+    // locally, every upload attempt fails.
+    backend.failRemoteWrites = true;
+    fireEvent.click(await screen.findByText("Bruno Harness", {}, { timeout: 5000 }));
+    fireEvent.click(await screen.findByText("SEAT TABLE", {}, { timeout: 5000 }));
+    await waitFor(() => expect(screen.getAllByText("Amuse")).toHaveLength(2), { timeout: 5000 });
+    await new Promise((r) => setTimeout(r, 3600)); // retries exhausted, write pending
+    expect(rowFor(remoteRows("service_tables"), 2)?.data?.active).not.toBe(true);
+
+    // FOH seats the same table on ITS device (newer stamp, its own arrival
+    // minute) — the store takes FOH's write, the kitchen gets the echo.
+    const t2 = rowFor(remoteRows("service_tables"), 2);
+    t2.data = { ...t2.data, active: true, arrivedAt: "20:22" };
+    t2.updated_at = new Date(Date.now() + 2000).toISOString();
+    await new Promise((r) => setTimeout(r, 0));
+    emitRealtime("service_tables", { eventType: "UPDATE", new: { ...t2 }, old: null });
+
+    // Wifi returns: the kitchen's pending seat drains and MERGES with FOH's.
+    backend.failRemoteWrites = false;
+    window.dispatchEvent(new Event("online"));
+    await waitFor(() => {
+      const rows = remoteRows("service_tables").filter((r) => Number(r.table_id) === 2);
+      expect(rows).toHaveLength(1);                 // same slot — never a duplicate
+      expect(rows[0].data.active).toBe(true);       // seated once, for everyone
+      expect(rows[0].data.resName).toBe("Bruno Harness");
+      expect(typeof rows[0].data.arrivedAt).toBe("string"); // one device's minute won
+    }, { timeout: 6000 });
+    // The kitchen still shows exactly one Bruno ticket, courses intact.
+    expect(screen.getAllByText("Bruno Harness")).toHaveLength(1);
+    expect(screen.getAllByText("Amuse")).toHaveLength(2);
+  }, 30000);
 
   it("tapping an upcoming banner opens the seat-only sheet; SEAT persists and expands the ticket (11.07)", async () => {
     // The kitchen must be able to seat an arrived party itself — with the
