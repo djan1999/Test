@@ -215,7 +215,10 @@ export const fakeSupabase = {
         const row = tableOf(backend.remote, "service_settings")
           .find((r) => r.workspace_id === args.p_workspace_id && r.id === "service_date");
         const state = row?.state || null;
-        const startedOk = expectedStarted == null || state?.startedAt === expectedStarted;
+        // A state with NO startedAt has no identity to mismatch — the date
+        // decides alone (mirrors the production function).
+        const startedOk = expectedStarted == null || state?.startedAt == null
+          || state.startedAt === expectedStarted;
         const dateOk = expectedDate == null || state?.date === expectedDate;
         if (!state?.date || !startedOk || !dateOk) {
           return { data: { superseded: true }, error: null };
@@ -406,7 +409,8 @@ export const fakeWrites = {
       const row = tableOf(backend.local, "service_settings")
         .find((r) => r.workspace_id === ws && r.id === "service_date");
       const state = row?.state || null;
-      const startedOk = !expected.startedAt || state?.startedAt === expected.startedAt;
+      const startedOk = !expected.startedAt || state?.startedAt == null
+        || state.startedAt === expected.startedAt;
       const dateOk = !expected.date || state?.date === expected.date;
       if (!state?.date || !startedOk || !dateOk) return { superseded: true };
     }

@@ -3643,14 +3643,22 @@ export default function App() {
         setServiceDateChosenOn(healDay);
         serviceDateRef.current = healDay;
         serviceDateChosenOnRef.current = healDay;
+        // The re-dated state must keep a FULL identity: writing this device's
+        // empty stamp would strip startedAt from the shared state, and an
+        // identity-less live state deadlocks every other device's guarded end
+        // (nothing to adopt back). Mint one if we don't hold one — a device
+        // holding an older stamp is refused once, adopts, and retries fine.
+        const healStartedAt = serviceStartedAtRef.current || new Date().toISOString();
+        serviceStartedAtRef.current = healStartedAt;
         try {
           localStorage.setItem(workspaceKey("milka_service_date"), healDay);
           localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), healDay);
+          localStorage.setItem(workspaceKey("milka_service_started_at"), healStartedAt);
         } catch {}
         await saveStateKey("service_date", {
           date: healDay, chosenOn: healDay,
           session: activeServiceSessionRef.current,
-          startedAt: serviceStartedAtRef.current,
+          startedAt: healStartedAt,
         });
         autoEndingRef.current = false;
         return;
@@ -3745,13 +3753,28 @@ export default function App() {
         .reduce((a, b) => Math.max(a, b), -Infinity);
       day = serviceDayForActivity(latestMs);
       if (!day) return null;
+      // The re-attached service gets a FULL identity: session + a fresh
+      // startedAt, adopted locally too. This heal used to write a bare
+      // {date, chosenOn} blob — an identity-less state the guarded end
+      // (store-side since 11.07) compared its startedAt against forever,
+      // so END SERVICE was refused all night while the board kept showing
+      // the whole service (the 11.07 "can't end service" incident). A fresh
+      // stamp is deliberate: the original start's stamp is unknowable here,
+      // and any device still holding an older one is refused once, adopts
+      // this identity, and its retry succeeds.
+      const startedAt = new Date().toISOString();
+      const session = activeServiceSessionRef.current;
       setServiceDate(day);
       setServiceDateChosenOn(day);
+      serviceDateRef.current = day;
+      serviceDateChosenOnRef.current = day;
+      serviceStartedAtRef.current = startedAt;
       try {
         localStorage.setItem(workspaceKey("milka_service_date"), day);
         localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), day);
+        localStorage.setItem(workspaceKey("milka_service_started_at"), startedAt);
       } catch {}
-      await saveStateKey("service_date", { date: day, chosenOn: day });
+      await saveStateKey("service_date", { date: day, chosenOn: day, session, startedAt });
     } catch (e) {
       console.warn("Orphaned-service heal skipped; leaving board intact:", e);
       return null;
@@ -3872,6 +3895,14 @@ export default function App() {
     if (state.startedAt) {
       serviceStartedAtRef.current = state.startedAt;
       try { localStorage.setItem(workspaceKey("milka_service_started_at"), state.startedAt); } catch {}
+    } else if (state.date) {
+      // A live service with NO identity (a legacy/degraded writer). Presenting
+      // a stamp kept from an EARLIER service is worse than none: the guarded
+      // end refuses it forever (nothing to adopt back), and the deterministic
+      // archive id would collide with that earlier night's entry — silently
+      // dropping the new archive ("on conflict do nothing").
+      serviceStartedAtRef.current = null;
+      try { localStorage.removeItem(workspaceKey("milka_service_started_at")); } catch {}
     }
     const remoteDate = state.date || null;
     const localDate = serviceDateRef.current;
@@ -4112,7 +4143,12 @@ export default function App() {
           // clears the board or rewrites the date — just adopt the live one.
           setServiceDate(entry.date);
           setServiceDateChosenOn(entry.chosenOn);
-          serviceStartedAtRef.current = entry.startedAt || serviceStartedAtRef.current;
+          // Adopt the live identity EXACTLY — including "none". Falling back
+          // to the stamp this device kept from an earlier service made it
+          // present an identity the store never held: the guarded end refused
+          // every attempt (nothing to adopt back), and the deterministic
+          // archive id collided with that earlier night's archive.
+          serviceStartedAtRef.current = entry.startedAt || null;
           // Adopt the LIVE session so this device filters the board to the same
           // session the service is actually running (not its own local default).
           if (entry.session === "lunch" || entry.session === "dinner") {
@@ -4123,6 +4159,7 @@ export default function App() {
             localStorage.setItem(workspaceKey("milka_service_date"), entry.date);
             if (entry.chosenOn) localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), entry.chosenOn);
             if (entry.startedAt) localStorage.setItem(workspaceKey("milka_service_started_at"), entry.startedAt);
+            else localStorage.removeItem(workspaceKey("milka_service_started_at"));
             if (entry.session === "lunch" || entry.session === "dinner") localStorage.setItem(workspaceKey("milka_service_session"), entry.session);
           } catch {}
           enterMode("service");
@@ -5228,7 +5265,18 @@ export default function App() {
         }
         setServiceDate(d => d || persisted); // local state wins if already set
         setServiceDateChosenOn(c => c || persistedChosenOn);
-        serviceStartedAtRef.current = persistedStartedAt || serviceStartedAtRef.current;
+        // Adopt the persisted identity as-is. If the LIVE service carries no
+        // startedAt, a stamp left over from an earlier service must not stand
+        // in for it — the guarded end refuses a stamp the store never held,
+        // and the deterministic archive id would collide with that earlier
+        // night's entry. Keep the local stamp only while a locally-started
+        // service on a DIFFERENT day still owns it.
+        if (persistedStartedAt) {
+          serviceStartedAtRef.current = persistedStartedAt;
+        } else if (!serviceDateRef.current || serviceDateRef.current === persisted) {
+          serviceStartedAtRef.current = null;
+          try { localStorage.removeItem(workspaceKey("milka_service_started_at")); } catch {}
+        }
         // Adopt the live service's shared session so this device's board reconcile
         // shows the right session's reservations (not its own local default).
         if (persistedSession === "lunch" || persistedSession === "dinner") {

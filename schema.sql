@@ -583,6 +583,9 @@ begin
     raise exception 'archive date and label are required';
   end if;
 
+  -- A state with NO startedAt has no identity to mismatch — date decides
+  -- (an identity-less live state used to refuse every guarded end forever,
+  -- because NULL = '<stamp>' is never true and adoption had nothing to adopt).
   update public.service_settings
      set state = '{}'::jsonb, updated_at = clock_timestamp()
    where workspace_id = p_workspace_id
@@ -590,7 +593,9 @@ begin
      and (
        not guarded
        or (
-         (p_expected_started_at is null or state->>'startedAt' = p_expected_started_at)
+         (p_expected_started_at is null
+           or state->>'startedAt' is null
+           or state->>'startedAt' = p_expected_started_at)
          and (p_expected_date is null or state->>'date' = p_expected_date)
        )
      );

@@ -56,4 +56,19 @@ describe("database migration contracts", () => {
     expect(syncApi).not.toContain('from("platform_admins")');
     expect(syncRules).toContain("workspace_members WHERE user_id = auth.user_id()");
   });
+
+  it("the end-of-service guard treats a startedAt-less state as date-checked (12.07)", () => {
+    const identitylessEnd = fs.readFileSync(
+      path.join(ROOT, "supabase/migrations/20260712000000_identityless_end_guard.sql"),
+      "utf8",
+    );
+    // Migration and fresh-install schema must carry the same guard: an
+    // identity-less live state (no startedAt) is judged by date alone, so it
+    // can never refuse every guarded end forever (the 11.07 incident).
+    for (const source of [identitylessEnd, schema]) {
+      expect(source).toContain("state->>'startedAt' is null");
+      expect(source).toContain("state->>'startedAt' = p_expected_started_at");
+      expect(source).toContain("state->>'date' = p_expected_date");
+    }
+  });
 });

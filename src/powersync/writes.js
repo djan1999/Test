@@ -248,7 +248,12 @@ export async function finishServiceLocally({ archive = null, blankRows, expected
       );
       let state = null;
       try { state = row?.state ? JSON.parse(row.state) : null; } catch { state = null; }
-      const startedOk = !expected.startedAt || state?.startedAt === expected.startedAt;
+      // A state with NO startedAt has no identity to mismatch — the date
+      // decides alone (mirrors archive_and_finish_service and the client
+      // pre-check; an identity-less live state used to refuse every guarded
+      // end forever, with nothing for adoption to heal from).
+      const startedOk = !expected.startedAt || state?.startedAt == null
+        || state.startedAt === expected.startedAt;
       const dateOk = !expected.date || state?.date === expected.date;
       if (!state?.date || !startedOk || !dateOk) { superseded = true; return; }
     }
