@@ -99,27 +99,32 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     setQuickPick(null);
     setShowDietList(false);
   };
+  // Functional update (same rule as fire() below): building the array from
+  // the render-captured `seats` overwrote whatever landed on the table
+  // between render and tap — a fold from another device, a second rapid tap.
   const setExtraOrdered = (key, seatId, ordered) => {
-    const next = seats.map(s => (seatId == null || s.id === seatId)
+    upd(table.id, "seats", (prev) => (prev || []).map(s => (seatId == null || s.id === seatId)
       ? { ...s, extras: { ...(s.extras || {}), [key]: { ...((s.extras || {})[key] || {}), ordered } } }
-      : s);
-    upd(table.id, "seats", next);
+      : s));
   };
 
   useEffect(() => {
     if (!showEdit) setDraftNotes(kitchenCourseNotes);
   }, [showEdit, kitchenCourseNotes]);
 
+  // Functional updates — restrictions are ALLERGY data. Building the next
+  // array from the render-captured `restrictions` and writing it whole meant
+  // a kitchen "extra spicy" tap could persist an array missing the nut
+  // allergy service added a beat earlier (whole-field last-write-wins).
   const addKitchenRestr = (note, seatId) => {
     if (!note?.trim()) return;
-    const next = [...restrictions, { note: note.trim(), pos: (seatId ?? null), kitchenAdded: true }];
-    upd(table.id, "restrictions", next);
+    upd(table.id, "restrictions", (prev) =>
+      [...(prev || []), { note: note.trim(), pos: (seatId ?? null), kitchenAdded: true }]);
     setPickingRestr(null);
     setCustomNote("");
   };
   const removeKitchenRestr = (origIdx) => {
-    const next = restrictions.filter((_, i) => i !== origIdx);
-    upd(table.id, "restrictions", next);
+    upd(table.id, "restrictions", (prev) => (prev || []).filter((_, i) => i !== origIdx));
   };
   const updateDraftEntry = (key, patch) => {
     setDraftNotes((prev) => {
@@ -180,10 +185,9 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
   const assignRestrToSeat = (seatId) => {
     if (assigningRestrIdx === null) return;
-    const updated = restrictions.map((r, i) =>
+    upd(table.id, "restrictions", (prev) => (prev || []).map((r, i) =>
       i === assigningRestrIdx ? { ...r, pos: seatId } : r
-    );
-    upd(table.id, "restrictions", updated);
+    ));
     setAssigningRestrIdx(null);
   };
 

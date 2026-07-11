@@ -478,6 +478,47 @@ describe.each([
   }, 15000);
 });
 
+// ── Floor SET markers sync live ───────────────────────────────────────────────
+// floor_status_v1 was boot-read only until 11.07: a SET marker tapped on one
+// tablet reached the store but no other device until a full reload. It now
+// rides the live settings adoption on both storage modes.
+describe.each([
+  ["fallback", false],
+  ["sqlite-primary", true],
+])("app harness — floor SET markers sync live (%s)", (modeName, psMode) => {
+  beforeEach(() => {
+    resetBackend({ psMode });
+  });
+
+  it("a SET strip written on another device appears here without a reload", async () => {
+    seedLiveService();
+    render(<App />);
+    await enterService();
+
+    // Another device marks dining T4 as SET.
+    const stamp = new Date(Date.now() + 1500).toISOString();
+    const row = {
+      workspace_id: WORKSPACE_ID, id: "floor_status_v1",
+      state: { dining_a: { T4: "SET" } }, updated_at: stamp,
+    };
+    remoteRows("service_settings").push({ ...row });
+    if (psMode) {
+      await act(async () => { await syncDown(); });
+    } else {
+      await act(async () => {
+        emitRealtime("service_settings", { eventType: "UPDATE", new: { ...row }, old: null });
+      });
+    }
+
+    // Switch to the floor view — the strip is already adopted (the ticker
+    // counts it), no reload involved.
+    fireEvent.click(await screen.findByText("floor", {}, { timeout: 5000 }));
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("SET 1");
+    }, { timeout: 5000 });
+  }, 20000);
+});
+
 // ── Workspace-qualified local rows ────────────────────────────────────────────
 // A legitimate multi-workspace membership can sync more than one restaurant.
 // Local ids and every read are workspace-scoped, so those rows may coexist

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
+import { isUpdateReady, onUpdateReady, applyUpdate } from "../../lib/swUpdate.js";
 
 // Baked in at build time (vite define) — "which version is this tablet
 // actually running" must be answerable from a phone screenshot.
@@ -35,6 +36,11 @@ export default function SystemPanel({
   const [syncResult, setSyncResult] = useState(null);
   const [syncMsg, setSyncMsg] = useState("");
   const [syncConfigSaving, setSyncConfigSaving] = useState(false);
+  // A deployed build waiting for activation (PWA updates never force-reload
+  // mid-service; the kitchen display never closes, so this button is its
+  // only update path). Applying reloads THIS device deliberately.
+  const [updateReady, setUpdateReady] = useState(isUpdateReady());
+  useEffect(() => onUpdateReady(() => setUpdateReady(true)), []);
 
   const handleManualSync = async () => {
     setSyncResult("syncing");
@@ -103,6 +109,23 @@ export default function SystemPanel({
           <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "12px 16px", minWidth: 200 }}>
             <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 6 }}>App Build</div>
             <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[1], wordBreak: "break-word" }}>{BUILD_ID}</span>
+            {updateReady && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[2], marginBottom: 6 }}>
+                  New build downloaded — waiting. Applies on next app reopen.
+                </div>
+                <button
+                  onClick={() => applyUpdate()}
+                  style={{
+                    fontFamily: FONT, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase",
+                    padding: "7px 12px", border: `1px solid ${tokens.ink[0]}`, background: tokens.ink[0],
+                    color: tokens.neutral[0], borderRadius: 0, cursor: "pointer", fontWeight: 600,
+                  }}
+                >
+                  Apply update now (reloads)
+                </button>
+              </div>
+            )}
           </div>
           {lastSyncError && (
             <div style={{ border: `1px solid ${tokens.red.border}`, background: tokens.red.bg, borderRadius: 0, padding: "12px 16px", minWidth: 220, maxWidth: 420 }}>

@@ -236,7 +236,8 @@ export const fakeReads = {
   whenSyncedPriority: async () => true,
   readSetting: async (id) => clone(wsRows("service_settings").find((r) => asKey(r.id) === asKey(id))?.state ?? null),
   readLiveSettings: async () =>
-    clone(wsRows("service_settings").filter((r) => r.id === "kitchen_ticket_order" || r.id === "service_date")
+    clone(wsRows("service_settings")
+      .filter((r) => ["kitchen_ticket_order", "service_date", "floor_status_v1", "floor_maps_v1"].includes(r.id))
       .map((r) => ({ id: r.id, state: r.state, updated_at: r.updated_at }))),
   readServiceTables: async () =>
     clone(wsRows("service_tables").map((r) => ({ table_id: Number(r.table_id), data: r.data, updated_at: r.updated_at }))

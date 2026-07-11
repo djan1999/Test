@@ -2970,7 +2970,7 @@ export default function App() {
   // Clear the terrace table's SET strip when its party departs.
   const clearTerraceStrip = (label) => {
     const terraceMapId = getTerraceMap(floorMapsState)?.id || null;
-    if (label && terraceMapId) updateFloorStatus(setFloorStatus(floorStatus, terraceMapId, label, null));
+    if (label && terraceMapId) updateFloorStatus(fs => setFloorStatus(fs, terraceMapId, label, null));
   };
 
   const clearTerracePartyTable = (resv) => {
@@ -3479,6 +3479,29 @@ export default function App() {
     } catch {}
   };
 
+  // The store-side finish (RPC / finishServiceLocally) blanks the board and
+  // service_date UNCONDITIONALLY — it takes no service identity. So a device
+  // that slept through "D1 ended, D2 started" and then taps Archive & Clear
+  // for what it still shows as D1 would wipe D2's fresh board for everyone.
+  // Before ending, confirm the store still holds THE SERVICE WE ARE ENDING;
+  // if it moved on, adopt the store's reality instead of clearing it.
+  // Read-then-act (not atomic — a true fix needs an identity-checked RPC),
+  // but it shrinks the wipe window from hours to one round-trip. Store
+  // unreachable → proceed (offline local-first reads its own local truth).
+  const serviceEndSuperseded = async (expectedDate, expectedStartedAt) => {
+    try {
+      const live = await readStateKey("service_date");
+      const liveDate = live?.date || null;
+      const liveStartedAt = live?.startedAt || null;
+      if (!liveDate) return { superseded: true, live: live || {} }; // already ended
+      if (expectedDate && liveDate !== expectedDate) return { superseded: true, live };
+      if (expectedStartedAt && liveStartedAt && liveStartedAt !== expectedStartedAt) {
+        return { superseded: true, live };
+      }
+      return { superseded: false };
+    } catch { return { superseded: false }; }
+  };
+
   // Guards a manual archive in flight so a double-tap (or a second device a few
   // seconds later) can't file the same service twice — the cause of the two
   // identical 23:53 entries in the 10.06 incident.
@@ -3488,6 +3511,13 @@ export default function App() {
     if (typeof window !== "undefined" && !window.confirm("Archive today's service and clear all tables?")) return;
     archivingRef.current = true;
     try {
+      const superseded = await serviceEndSuperseded(serviceDate, serviceStartedAtRef.current);
+      if (superseded.superseded) {
+        adoptServiceLifecycleRef.current?.(superseded.live, new Date().toISOString());
+        setArchiveOpen(false);
+        window.alert("This service was already ended (or a new one started) on another device — nothing was cleared. The board has been updated.");
+        return;
+      }
       const snap = boardStateRef.current; // stable reference, never stale
       // Stamp the archive with the service's actual date, not whatever today
       // happens to be — otherwise a service ended after midnight (or a stale
@@ -3623,6 +3653,16 @@ export default function App() {
       return;
     }
 
+    // A late auto-end (device asleep through the real end + a fresh start)
+    // must not blank the NEW service — the store-side clear is unconditional.
+    const superseded = await serviceEndSuperseded(staleDate, serviceStartedAtRef.current);
+    if (superseded.superseded) {
+      console.warn("[auto-end] Store already ended/replaced this service — adopting instead of clearing.");
+      adoptServiceLifecycleRef.current?.(superseded.live, new Date().toISOString());
+      autoEndingRef.current = false;
+      return;
+    }
+
     const result = await persistServiceEnd({ archive });
     if (!result.ok) {
       console.error("Auto-end transaction failed; leaving service visible:", result.error);
@@ -3689,9 +3729,11 @@ export default function App() {
   const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, rooms, birthday, cakeNote, restrictions, notes, lang }) => {
     const group = tableIds ?? (tableId ? [tableId] : [id]);
     const sortedGroup = [...group].sort((a, b) => a - b);
-    // Find old group to clear tables that are no longer part of it
-    const oldGroup = tables.find(t => t.id === id)?.tableGroup || [id];
-    setTables(p => p.map(t => {
+    setTables(p => p.map((t, _i, arr) => {
+      // Old group read from p, not the render-scope tables: a regroup that
+      // landed remotely after this form rendered must not make us blank the
+      // wrong tables.
+      const oldGroup = arr.find(x => x.id === id)?.tableGroup || [id];
       // Clear tables that were in the old group but aren't in the new group
       if (oldGroup.includes(t.id) && !sortedGroup.includes(t.id)) {
         return { ...blankTable(t.id), active: t.active, arrivedAt: t.arrivedAt, kitchenLog: t.kitchenLog };
@@ -3890,7 +3932,20 @@ export default function App() {
         const srcStarted = src && (src.active || src.arrivedAt
           || (src.kitchenLog && Object.keys(src.kitchenLog).length > 0)
           || src.kitchenArchived);
-        if (srcStarted) moveTableState(prevTableId, nextTableId);
+        if (srcStarted) {
+          const moved = moveTableState(prevTableId, nextTableId);
+          if (!moved?.ok) {
+            // Destination occupied: the live service could NOT follow the
+            // reservation. Refusing the whole edit keeps one truth — writing
+            // the new table_id anyway left the guest eating on the old table
+            // while the reservation (and the started-table sync, which then
+            // overwrote the destination guest's details) pointed at the new.
+            if (typeof window !== "undefined") {
+              window.alert(`Table move refused: T${nextTableId} is occupied. The reservation was not changed — clear or swap T${nextTableId} first.`);
+            }
+            return { ok: false, error: new Error(moved?.reason || "destination-occupied") };
+          }
+        }
       }
       const result = await persistReservationRow({ id, ...dbRow });
       if (result.ok) {
@@ -4122,8 +4177,7 @@ export default function App() {
     if (!floorStatusHydratedRef.current || !pendingStripClearsRef.current.length) return;
     const ids = pendingStripClearsRef.current;
     pendingStripClearsRef.current = [];
-    const next = clearStripsForBoardGroup(floorStatus, floorMapsState, serviceReservations, ids);
-    if (JSON.stringify(next) !== JSON.stringify(sanitizeFloorStatus(floorStatus))) updateFloorStatus(next);
+    updateFloorStatus(fs => clearStripsForBoardGroup(fs, floorMapsState, serviceReservations, ids));
   }, [tablesJson, floorStatus, floorMapsState, serviceReservations]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fire-to-clear terrace (course-flagged) ──────────────────────────────────
@@ -4653,27 +4707,80 @@ export default function App() {
       .catch(() => {});
   }, [workspaceId, psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Always-current mirrors of the two floor blobs + the time of this device's
+  // last local write. Two reasons: (1) writers used to compute the next blob
+  // from the RENDER-scope value — two taps in the same render window (or a
+  // remote adoption in between) made the second write silently erase the
+  // first (whole-blob replace, no fold); every writer now derives from the
+  // ref via an updater. (2) The write timestamp lets the live adoption below
+  // drop stale echoes of our own writes (same 60s window as the board's
+  // lastBoardWriteRef).
+  const floorStatusRef = useRef(floorStatus);
+  floorStatusRef.current = floorStatus;
+  const floorMapsRef = useRef(floorMapsState);
+  floorMapsRef.current = floorMapsState;
+  const floorStatusWriteTsRef = useRef(0);
+  const floorMapsWriteTsRef = useRef(0);
+
   const updateFloorMaps = (next) => {
-    const s = sanitizeFloorMaps(next);
+    const s = sanitizeFloorMaps(typeof next === "function" ? next(floorMapsRef.current) : next);
+    floorMapsRef.current = s;
+    floorMapsWriteTsRef.current = Date.now();
     setFloorMapsState(s);
     if (supabase) saveStateKey(FLOOR_MAPS_KEY, s).catch?.(() => {});
     // A map edit (rename/delete/re-add) can orphan SET strips — and addTable
     // re-mints freed labels, so a stale strip would resurrect on the next
     // table with that name and reach the kitchen as a phantom SET. The
     // EDITING device prunes and persists the cleaned strips.
-    const pruned = pruneFloorStatus(floorStatus, s);
-    if (JSON.stringify(pruned) !== JSON.stringify(sanitizeFloorStatus(floorStatus))) {
-      updateFloorStatus(pruned);
-    }
+    updateFloorStatus(fs => pruneFloorStatus(fs, s));
     return s;
   };
 
+  // Accepts a value OR an updater(prev). Prefer the updater: it reads the
+  // ref (current even mid-render-window), so SET toggles from two surfaces
+  // in quick succession compose instead of the later one erasing the earlier.
+  // A no-op result skips the persist entirely.
   const updateFloorStatus = (next) => {
-    const s = sanitizeFloorStatus(next);
+    const s = sanitizeFloorStatus(typeof next === "function" ? next(floorStatusRef.current) : next);
+    if (JSON.stringify(s) === JSON.stringify(sanitizeFloorStatus(floorStatusRef.current))) return s;
+    floorStatusRef.current = s;
+    floorStatusWriteTsRef.current = Date.now();
     setFloorStatusState(s);
     if (supabase) saveStateKey(FLOOR_STATUS_KEY, s).catch?.(() => {});
     return s;
   };
+
+  // Live adoption of the floor blobs from other devices (adopt-only — never
+  // writes back). Until 11.07 these two keys were read ONCE at boot and never
+  // again: a SET marker tapped on one tablet reached the store but no other
+  // device until its next full reload — despite comments claiming otherwise.
+  // The 60s-window echo guard mirrors adoptRemoteTables' stale-echo rule: an
+  // incoming copy older than what this device just wrote is a late echo of a
+  // superseded blob, not news.
+  const adoptFloorStatus = (state, updatedAt) => {
+    if (state == null) return;
+    const incoming = Date.parse(updatedAt || "") || 0;
+    if (floorStatusWriteTsRef.current && Date.now() - floorStatusWriteTsRef.current < 60000
+      && incoming && incoming < floorStatusWriteTsRef.current) return;
+    const s = sanitizeFloorStatus(state);
+    if (JSON.stringify(s) === JSON.stringify(sanitizeFloorStatus(floorStatusRef.current))) return;
+    floorStatusRef.current = s;
+    setFloorStatusState(s);
+  };
+  const adoptFloorMaps = (state, updatedAt) => {
+    if (state == null) return;
+    const incoming = Date.parse(updatedAt || "") || 0;
+    if (floorMapsWriteTsRef.current && Date.now() - floorMapsWriteTsRef.current < 60000
+      && incoming && incoming < floorMapsWriteTsRef.current) return;
+    const s = sanitizeFloorMaps(state);
+    if (JSON.stringify(s) === JSON.stringify(floorMapsRef.current)) return;
+    floorMapsRef.current = s;
+    setFloorMapsState(s);
+  };
+  const adoptFloorStatusRef = useRef(null);
+  adoptFloorStatusRef.current = adoptFloorStatus;
+  const adoptFloorMapsRef = useRef(null);
+  adoptFloorMapsRef.current = adoptFloorMaps;
 
   // ── Quick Access persistence ──────────────────────────────────────────────
   useEffect(() => {
@@ -4742,6 +4849,9 @@ export default function App() {
   // Live updates come from the Supabase realtime channels below, which refetch
   // through fallbackBoardReloadRef on every service_tables event.
   const fallbackBoardReloadRef = useRef(null);
+  // Fallback planner reload (set by the reservations load effect) — the
+  // realtime catch-up path re-runs it after every reconnect.
+  const reloadReservationsRef = useRef(null);
   useEffect(() => {
     if (!supabase || !workspaceId || !psResolved || sqlitePrimary) return;
     let isMounted = true;
@@ -4946,6 +5056,10 @@ export default function App() {
                 // Shared service lifecycle: a service started/ended on another
                 // device applies here too (adopt-only — never writes back).
                 adoptServiceLifecycleRef.current?.(row.state, row.updated_at);
+              } else if (row.id === FLOOR_STATUS_KEY) {
+                adoptFloorStatusRef.current?.(row.state, row.updated_at);
+              } else if (row.id === FLOOR_MAPS_KEY) {
+                adoptFloorMapsRef.current?.(row.state, row.updated_at);
               }
             }
           },
@@ -5089,24 +5203,32 @@ export default function App() {
       .catch(() => {}); // keep whatever local service date we already have
 
     // Fallback planner load (-7…+30 days). When the local DB is primary the
-    // reservations watch seeds + refreshes the planner instead.
+    // reservations watch seeds + refreshes the planner instead. Kept callable
+    // via reloadReservationsRef: the realtime channel's post-reconnect
+    // catch-up re-runs it as the authoritative read — a FULL REPLACE, so
+    // rows deleted while the socket was dead disappear here too (a merge
+    // would resurrect them).
     if (!sqlitePrimary) {
-      const past   = new Date(); past.setDate(past.getDate() - 7);
-      const future = new Date(); future.setDate(future.getDate() + 30);
-      withRetry(async () => {
-        const { data, error } = await scopedFrom(TABLES.RESERVATIONS).select("*")
-          .gte("date", toLocalDateISO(past))
-          .lte("date", toLocalDateISO(future))
-          .order("date").order("created_at");
-        if (error) throw error;
-        return data || [];
-      })
-        .then(data => { if (mounted) setReservations(data); })
-        .catch(e => { console.warn("Reservations load failed — keeping cached list:", e); })
-        .finally(() => { if (mounted) setReservationsLoaded(true); });
+      const loadPlanner = () => {
+        const past   = new Date(); past.setDate(past.getDate() - 7);
+        const future = new Date(); future.setDate(future.getDate() + 30);
+        withRetry(async () => {
+          const { data, error } = await scopedFrom(TABLES.RESERVATIONS).select("*")
+            .gte("date", toLocalDateISO(past))
+            .lte("date", toLocalDateISO(future))
+            .order("date").order("created_at");
+          if (error) throw error;
+          return data || [];
+        })
+          .then(data => { if (mounted) setReservations(data); })
+          .catch(e => { console.warn("Reservations load failed — keeping cached list:", e); })
+          .finally(() => { if (mounted) setReservationsLoaded(true); });
+      };
+      reloadReservationsRef.current = loadPlanner;
+      loadPlanner();
     }
 
-    return () => { mounted = false; };
+    return () => { mounted = false; reloadReservationsRef.current = null; };
   }, [workspaceId, psResolved, sqlitePrimary]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep the reservations cache in step with live state (initial load, realtime
@@ -5195,6 +5317,10 @@ export default function App() {
         fallbackBoardReloadRef.current?.();
       }
     },
+    // Reconnect catch-up: taps made on other devices while this socket was
+    // dead were never delivered — re-read the whole board (adoptive: folds
+    // around any unsaved local edits, so it can't clobber in-flight work).
+    onResubscribe: () => { fallbackBoardReloadRef.current?.(); },
     enabled: fallbackRealtime,
   });
 
@@ -5213,6 +5339,10 @@ export default function App() {
         });
       }
     },
+    // Reconnect catch-up: a full authoritative replace. Critically this also
+    // reconciles DELETIONS missed while offline — merging events back in
+    // would leave ghost reservations no device can explain.
+    onResubscribe: () => { reloadReservationsRef.current?.(); },
     enabled: fallbackRealtime,
   });
 
@@ -5233,7 +5363,26 @@ export default function App() {
         // Shared service lifecycle: a service started/ended on another device
         // applies here too (adopt-only — never writes back).
         adoptServiceLifecycleRef.current?.(payload.new?.state, payload.new?.updated_at);
+      } else if (id === FLOOR_STATUS_KEY) {
+        adoptFloorStatusRef.current?.(payload.new?.state, payload.new?.updated_at);
+      } else if (id === FLOOR_MAPS_KEY) {
+        adoptFloorMapsRef.current?.(payload.new?.state, payload.new?.updated_at);
       }
+    },
+    // Reconnect catch-up: re-read the owned live keys — a service started,
+    // ended, or re-dated while this socket was dead must apply on rejoin
+    // (the old display waking into an already-ended service, most of all).
+    onResubscribe: () => {
+      readStateKey("kitchen_ticket_order").then(state => {
+        const ids = state?.ids;
+        if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
+      }).catch(() => {});
+      readStateKey("service_date").then(state => {
+        if (state) adoptServiceLifecycleRef.current?.(state, new Date().toISOString());
+      }).catch(() => {});
+      readStateKey(FLOOR_STATUS_KEY).then(state => {
+        adoptFloorStatusRef.current?.(state, new Date().toISOString());
+      }).catch(() => {});
     },
     enabled: fallbackRealtime,
   });
@@ -5244,6 +5393,7 @@ export default function App() {
     filter: wsFilter,
     table: TABLES.BEVERAGES,
     onChange: () => { loadBeverages(); },
+    onResubscribe: () => { loadBeverages(); },
     enabled: fallbackRealtime,
   });
 
@@ -5253,6 +5403,7 @@ export default function App() {
     filter: wsFilter,
     table: TABLES.WINES,
     onChange: () => { loadWines(); },
+    onResubscribe: () => { loadWines(); },
     enabled: fallbackRealtime,
   });
 
@@ -5262,6 +5413,7 @@ export default function App() {
     filter: wsFilter,
     table: TABLES.MENU_COURSES,
     onChange: () => { loadMenuCoursesRef.current?.(); },
+    onResubscribe: () => { loadMenuCoursesRef.current?.(); },
     enabled: fallbackRealtime,
   });
 
@@ -5780,7 +5932,7 @@ export default function App() {
               menuCourses={activeMenuCourses}
               profiles={profilesState.profiles}
               assignments={profilesState.assignments}
-              onCycleStatus={(mapId, label) => updateFloorStatus(cycleFloorStatus(floorStatus, mapId, label))}
+              onCycleStatus={(mapId, label) => updateFloorStatus(fs => cycleFloorStatus(fs, mapId, label))}
               onUpdateFloorMaps={updateFloorMaps}
               onAssign={assignTerraceTable}
               onClear={clearTerracePartyTable}
