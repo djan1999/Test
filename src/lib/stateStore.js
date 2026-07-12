@@ -8,6 +8,7 @@
 import { supabase, getWorkspaceId, TABLES } from "./supabaseClient.js";
 import { scopedFrom } from "./scopedDb.js";
 import { isSqlitePrimary } from "../powersync/primary.js";
+import { isSandbox } from "./sandbox.js";
 
 // → the state object, or null when the row doesn't exist. Throws on real
 // read failures (callers that seed defaults on "empty" rely on the
@@ -100,6 +101,9 @@ async function flushStateKey(id) {
 
 export async function saveStateKey(id, state) {
   if (!supabase || !getWorkspaceId()) return { ok: true };
+  // Test service: never persist. The UI keeps its in-memory state; the store
+  // (service_date, floor markers, kitchen order, logo, …) is left untouched.
+  if (isSandbox()) return { ok: true };
   const q = queueOf(id);
   q.latest = state;
   // A newer value supersedes any scheduled retry of the older one.

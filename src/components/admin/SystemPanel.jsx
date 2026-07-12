@@ -29,6 +29,7 @@ export default function SystemPanel({
   wineSyncConfig,
   onUpdateWineSyncConfig,
   onSaveWineSyncConfig,
+  onStartTestService,
 }) {
   const safeProfiles = Array.isArray(layoutProfiles) ? layoutProfiles : [];
   const safeWineSyncConfig = wineSyncConfig || { wineCountries: [], beveragePages: [] };
@@ -74,6 +75,29 @@ export default function SystemPanel({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      {/* Test service — a full, live-feeling service that persists NOTHING */}
+      {onStartTestService && (
+        <div style={{ border: `1px solid ${tokens.signal.warn}`, borderRadius: 0, padding: "14px 16px", background: tokens.neutral[0] }}>
+          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 8 }}>Test Service</div>
+          <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[2], lineHeight: 1.5, marginBottom: 12, maxWidth: 520 }}>
+            Open a fully-working service on a blank board for today. Seat tables, fire courses,
+            work the floor — everything behaves exactly like a live service, but <strong style={{ color: tokens.ink[0] }}>nothing
+            is saved</strong> and the real service data is never touched. Tap END TEST (bottom bar) to discard it.
+          </div>
+          <button
+            onClick={onStartTestService}
+            style={{
+              fontFamily: FONT, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase",
+              fontWeight: 700, padding: "10px 18px", border: `1px solid ${tokens.ink[0]}`,
+              background: tokens.signal.warn, color: tokens.ink[0], borderRadius: 0, cursor: "pointer",
+              touchAction: "manipulation",
+            }}
+          >
+            ▶ Start Test Service
+          </button>
+        </div>
+      )}
+
       {/* Connection Status */}
       <div>
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 14 }}>Supabase Connection</div>
