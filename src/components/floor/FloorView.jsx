@@ -89,6 +89,24 @@ export default function FloorView({
     return p.total ? `C${p.firedCount}/${p.total}` : "";
   };
 
+  // The course a board table would announce right now (its next unfired one).
+  const nextFireKeyOf = (bt) => {
+    if (!bt) return null;
+    const visible = getVisibleCoursesForTable(bt, menuCourses, { profiles, assignments });
+    return getCourseProgressState(bt, visible).nextFire?.key || null;
+  };
+  // A SET table has ALREADY been sent when the kitchen already holds a "SET
+  // FOR …" banner for the exact course we'd send now — courseReady.key (written
+  // by onSendSetToKitchen) equals its current nextFire. Re-sending it is a pure
+  // duplicate: pressing SEND after setting a second table used to re-fire the
+  // first one too. Already-sent tables drop out of the send set and wear an
+  // amber ring instead; they clear on their own when the course fires
+  // (courseReady resolves → SET strip drops).
+  const alreadySent = (bt) => {
+    const nk = nextFireKeyOf(bt);
+    return nk != null && bt?.courseReady?.key === nk;
+  };
+
   const diningLabelOf = (r) =>
     resolveReservationTable(diningMap, r.table_id).table?.label || `T${r.table_id}`;
 
@@ -200,6 +218,9 @@ export default function FloorView({
           pax: bt.guests || undefined, // ticker covers; not rendered
           allergy: restr.length > 0,
           strip,
+          // SET and already announced to the kitchen for its next course →
+          // amber ring, and excluded from the next SEND (no duplicate).
+          sent: strip === "SET" && alreadySent(bt),
         };
         const notes = seatNotesOf(bt, positionKey);
         if (notes) seatNotesByLabel[t.label] = notes;
@@ -261,14 +282,16 @@ export default function FloorView({
   const bookedParties = reservations.filter((r) =>
     visitStateOf(r.data) === "booked" && !r.data?.clearedFromBoard);
 
-  // SET tables with a live board ticket — what SEND forwards to the kitchen.
-  const sendableIds = map.kind === "terrace" ? [] : [...new Set(
+  // SET tables with a live board ticket, grouped by board id (a merge shares one
+  // ticket). SEND forwards only the ones not yet announced for their next course.
+  const setBoardTables = map.kind === "terrace" ? [] : [...new Map(
     (map.tables || [])
       .filter((t) => floorStatusOf(floorStatus, map.id, t.label) === "SET")
       .map((t) => boardTableOf(t))
       .filter((bt) => bt?.active)
-      .map((bt) => bt.id),
-  )];
+      .map((bt) => [bt.id, bt]),
+  ).values()];
+  const sendableIds = setBoardTables.filter((bt) => !alreadySent(bt)).map((bt) => bt.id);
 
   // ── sheet content for the tapped table ────────────────────────────────────
   const sheetTable = sheetLabel ? (map.tables || []).find((t) => t.label === sheetLabel) : null;

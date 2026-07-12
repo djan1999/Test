@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
-import { getCourseMod, optionalPairingsFromCourses, resolveSeatRestrictionKeys } from "../../utils/menuUtils.js";
+import { optionalPairingsFromCourses, courseRestrictionModCounts } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
@@ -190,10 +190,6 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     ));
     setAssigningRestrIdx(null);
   };
-
-  // Unassigned restrictions (pos: null) apply to every seat so their course mods
-  // surface on the kitchen board until staff pick a position from the UNASSIGNED bar.
-  const seatRestrKeys = (seat) => resolveSeatRestrictionKeys(restrictions, seat.id);
 
   const pairingColor = { Wine: tokens.ink[2], "Non-Alc": tokens.ink[2], Premium: tokens.ink[2], "Our Story": tokens.ink[2] };
   const pairingBg   = { Wine: tokens.neutral[0], "Non-Alc": tokens.neutral[0], Premium: tokens.neutral[0], "Our Story": tokens.neutral[0] };
@@ -692,12 +688,11 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const mods = (() => {
             const counts = {};
             if (showRestrictions && !fired) {
-              seats.forEach(seat => {
-                const restrKeys = seatRestrKeys(seat);
-                if (!restrKeys.length) return;
-                const mod = getCourseMod(course, restrKeys);
-                if (mod) counts[mod] = (counts[mod] || 0) + 1;
-              });
+              // Count per GUEST, not per seat: an unassigned restriction is one
+              // prospective guest and reads "1×" from entry, not "N×" broadcast
+              // across every chair until it's pinned to a seat.
+              const restrCounts = courseRestrictionModCounts(course, seats, restrictions);
+              if (restrCounts) Object.assign(counts, restrCounts);
             }
             // Per-course quick-note presets are applied in reservations mode
             // and stored as { [label]: count }. Merge them in so they render

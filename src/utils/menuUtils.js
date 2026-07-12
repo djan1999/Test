@@ -318,6 +318,45 @@ export const resolveSeatRestrictionKeys = (tableRestrictions, seatId) =>
     .filter(Boolean);
 
 /**
+ * Count, per course modification, how many GUESTS need it — the source of the
+ * kitchen ticket's "N× MOD" line.
+ *
+ * A restriction ASSIGNED to a seat (pos === seat.id) counts once for that seat,
+ * resolving all of that seat's dietaries together (getCourseMod picks one by
+ * priority). A restriction still UNASSIGNED (pos == null) is ONE prospective
+ * guest — it counts once, on its own, NOT once per seat. The old kitchen count
+ * resolved every seat with resolveSeatRestrictionKeys, which broadcasts an
+ * unassigned restriction to every seat, so a single vegetarian on a four-top
+ * read as "4× " until someone pinned it to a chair (then it snapped to "1× ").
+ * Now it reads "1× " from the moment it's entered — the count is the number of
+ * guests who actually have it, in advance of seat assignment.
+ *
+ * The printed menu keeps the broadcast semantics (resolveSeatRestrictionKeys)
+ * on purpose — an unassigned "table has a vegetarian" must still vary every
+ * seat's menu until a chair is chosen. This helper is kitchen-ticket only.
+ *
+ * Returns { [mod]: count } or null when nothing is modified.
+ */
+export function courseRestrictionModCounts(course, seats, restrictions) {
+  const counts = {};
+  const bump = (mod) => { if (mod) counts[mod] = (counts[mod] || 0) + 1; };
+  // Assigned dietaries: one guest per seat, all that seat's keys together.
+  for (const seat of seats || []) {
+    const keys = (restrictions || [])
+      .filter(r => r && r.note && r.pos === seat.id)
+      .map(r => r.note);
+    if (keys.length) bump(getCourseMod(course, keys));
+  }
+  // Unassigned dietaries: each entry is one guest-to-be — counted individually
+  // so the ticket shows the real headcount, not once per chair at the table.
+  for (const r of restrictions || []) {
+    if (!r || !r.note || r.pos != null) continue;
+    bump(getCourseMod(course, [r.note]));
+  }
+  return Object.keys(counts).length ? counts : null;
+}
+
+/**
  * Parse a single row object into the canonical menu-course shape.
  * This function is kept for data migration and import utilities.
  *

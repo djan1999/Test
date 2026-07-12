@@ -210,6 +210,47 @@ describe("KitchenTicket — pace in the header badge, buttons only in quick acce
   });
 });
 
+describe("KitchenBoard — restriction count reflects guests, not seats", () => {
+  // A course whose "veg" variant renames the dish → a real kitchen mod.
+  const vegCourse = {
+    ...makeCourse(1),
+    course_key: "main", menu: { name: "VENISON", sub: "" },
+    restrictions: { veg: { name: "CELERIAC", sub: "" } },
+  };
+  const seatedTable = (extra = {}) => ({
+    id: 1, active: true, guests: 4, tableGroup: [],
+    seats: [1, 2, 3, 4].map((id) => ({ id, ...seatDefaults })),
+    kitchenLog: {}, kitchenAlert: null, courseOverrides: {},
+    kitchenCourseNotes: {}, menuType: "", lang: "en", resName: "", resTime: "",
+    restrictions: [], ...extra,
+  });
+
+  it("one UNASSIGNED veg on a four-top shows 1× — not 4× (the reported bug)", () => {
+    render(
+      <KitchenBoard
+        tables={[seatedTable({ restrictions: [{ pos: null, note: "veg" }] })]}
+        menuCourses={[vegCourse]}
+        upd={vi.fn()}
+        updMany={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/1× CELERIAC/)).toBeTruthy();
+    expect(screen.queryByText(/4× CELERIAC/)).toBeNull();
+  });
+
+  it("still 1× once the same restriction is pinned to a single seat", () => {
+    render(
+      <KitchenBoard
+        tables={[seatedTable({ restrictions: [{ pos: 2, note: "veg" }] })]}
+        menuCourses={[vegCourse]}
+        upd={vi.fn()}
+        updMany={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/1× CELERIAC/)).toBeTruthy();
+  });
+});
+
 describe("KitchenBoard fire — rapid taps", () => {
   it("two quick fires on the same table both land (functional updates, no stale-closure drop)", () => {
     const table = {
