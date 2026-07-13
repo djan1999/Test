@@ -1,5 +1,6 @@
 import { Component } from "react";
 import { tokens } from "../../styles/tokens.js";
+import { recordClientDiagnostic } from "../../lib/clientDiagnostics.js";
 
 export class ErrorBoundary extends Component {
   state = { hasError: false, error: null };
@@ -10,6 +11,7 @@ export class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error("App crash:", error, info);
+    recordClientDiagnostic("react.error-boundary", error);
     try {
       sessionStorage.setItem(
         "milka_last_runtime_error",
@@ -26,6 +28,7 @@ export class ErrorBoundary extends Component {
     if (!this.state.hasError) return this.props.children;
     return (
       <div
+        role="alert"
         style={{
           height: "100vh",
           display: "flex",
@@ -51,6 +54,7 @@ export class ErrorBoundary extends Component {
           {this.state.error?.message || "Unknown error"}
         </div>
         <button
+          type="button"
           onClick={() => {
             this.setState({ hasError: false, error: null });
             window.location.reload();
@@ -69,6 +73,7 @@ export class ErrorBoundary extends Component {
           RELOAD
         </button>
         <button
+          type="button"
           onClick={() => {
             try {
               localStorage.removeItem("milka_menu_layout_profiles_v1");

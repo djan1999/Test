@@ -549,7 +549,7 @@ export const setTableMembers = (state, mapId, label, members) =>
 export const setTableBoardIds = (state, mapId, label, boardIds) =>
   patchTable(state, mapId, label, (t) => ({
     ...t,
-    boardIds: [...new Set((boardIds || []).map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 10))]
+    boardIds: [...new Set((boardIds || []).map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 999))]
       .sort((a, b) => a - b),
   }));
 
@@ -981,8 +981,8 @@ export function mapTicker(entries) {
 }
 
 // ── terrace occupancy ───────────────────────────────────────────────────────
-// Terrace tables never enter service_tables (its table_id CHECK is 1..10);
-// occupancy is derived from the day's reservations.
+// Terrace labels are physical waiting-area positions, not dining-board ids;
+// their occupancy is derived from the day's reservations.
 export function terraceOccupancy(reservations) {
   const byLabel = {};
   for (const r of reservations || []) {

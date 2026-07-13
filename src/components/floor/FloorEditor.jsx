@@ -44,7 +44,7 @@ const HINTS = {
 };
 
 export default function FloorEditor({
-  floorMaps, onUpdateFloorMaps, reservations = [], isMobile,
+  floorMaps, tableIds = [], onUpdateFloorMaps, reservations = [], isMobile,
 }) {
   const [tabId, setTabId] = useState(null);
   const [selLabel, setSelLabel] = useState(null);
@@ -222,6 +222,7 @@ export default function FloorEditor({
 
       <FloorInspector
         floorMaps={floorMaps}
+        tableIds={tableIds}
         mapId={map.id}
         selLabel={selLabel}
         sheetSel={sheetSel}

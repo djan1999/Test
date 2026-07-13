@@ -15,7 +15,7 @@ import { planLayoutSwitch } from "../../utils/floorMaps.js";
 //    the FOH floor view is service-only.
 //  · MOVE_SINGLE_TAP: MOVE skips the arriving confirm.
 export default function FloorPanel({
-  floorMaps, reservations = [], onUpdateFloorMaps, onApplyLayoutSwitch, isMobile,
+  floorMaps, tableIds = [], reservations = [], onUpdateFloorMaps, onApplyLayoutSwitch, isMobile,
 }) {
   const [pendingSwitch, setPendingSwitch] = useState(null); // { mapId, rows }
 
@@ -87,6 +87,7 @@ export default function FloorPanel({
       <div style={label}>GEOMETRY (drag tables · tap to edit · seats, merges & maps below the canvas)</div>
       <FloorEditor
         floorMaps={floorMaps}
+        tableIds={tableIds}
         onUpdateFloorMaps={onUpdateFloorMaps}
         reservations={reservations}
         isMobile={isMobile}

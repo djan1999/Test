@@ -154,20 +154,20 @@ const isEmptyObjectValue = (table, column, value) => {
 };
 
 // `finishServiceLocally()` deliberately emits one very distinctive SQLite
-// transaction: ten blank service-table rows, one blank service_date setting,
+// transaction: every configured service-table row blanked, one blank service_date setting,
 // and optionally one archive insert. Replaying those as twelve independent
 // HTTP writes would be durable (PowerSync retries the batch) but not atomic on
 // Postgres: another tablet could briefly see a cleared table while the service
 // date was still live. Recognize only the exact transaction and collapse it
 // into the server-side archive_and_finish_service transaction.
 function finishServicePayload(crud) {
-  if (!Array.isArray(crud) || (crud.length !== 11 && crud.length !== 12)) return null;
+  if (!Array.isArray(crud) || crud.length < 2) return null;
   if (crud.some((op) => op.op === OP_DELETE)) return null;
 
   const tableOps = crud.filter((op) => op.table === "service_tables");
   const settingOps = crud.filter((op) => op.table === "service_settings");
   const archiveOps = crud.filter((op) => op.table === "service_archive");
-  if (tableOps.length !== 10 || settingOps.length !== 1 || archiveOps.length > 1) return null;
+  if (tableOps.length < 1 || settingOps.length !== 1 || archiveOps.length > 1) return null;
   if (tableOps.length + settingOps.length + archiveOps.length !== crud.length) return null;
 
   const workspaces = new Set(crud.map(workspaceForOp));
@@ -179,7 +179,8 @@ function finishServicePayload(crud) {
     if (!isEmptyObjectValue("service_tables", "data", row.data)) return NaN;
     return Number(row.table_id ?? naturalKeyFromLocalId(op.id, workspaceId));
   });
-  if (new Set(tableIds).size !== 10 || !tableIds.every((id) => id >= 1 && id <= 10)) return null;
+  if (new Set(tableIds).size !== tableIds.length
+      || !tableIds.every((id) => Number.isInteger(id) && id >= 1 && id <= 999)) return null;
 
   const setting = buildRow(settingOps[0], workspaceId);
   if (setting.id !== "service_date"

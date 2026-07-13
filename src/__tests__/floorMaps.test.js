@@ -383,9 +383,9 @@ describe("merge ops", () => {
     expect(findMapTable(getActiveDiningMap(none), "T6").members).toBeUndefined();
   });
 
-  it("setTableBoardIds sanitizes to sorted unique ints 1..10", () => {
+  it("setTableBoardIds sanitizes to sorted unique configured-table ids", () => {
     const s = setTableBoardIds(state, "dining_a", "T6", [7, "6", 6, 99, 0]);
-    expect(findMapTable(getActiveDiningMap(s), "T6").boardIds).toEqual([6, 7]);
+    expect(findMapTable(getActiveDiningMap(s), "T6").boardIds).toEqual([6, 7, 99]);
   });
 });
 

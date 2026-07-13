@@ -104,8 +104,14 @@ describe.each([
     seedLiveService();
     render(<App />);
 
-    // Wait until the live service has actually loaded on this device.
-    await screen.findByText("[Service]", {}, { timeout: 5000 });
+    // Enter once and see the live guest before taking the store snapshot. The
+    // role/workspace bootstrap and board normalization are intentionally
+    // asynchronous; seeing Anna proves this tablet has finished joining the
+    // real service rather than merely painting the mode picker.
+    fireEvent.click(await screen.findByText("[Service]", {}, { timeout: 5000 }));
+    await screen.findByText(/Anna Harness/, {}, { timeout: 5000 });
+    fireEvent.click(await screen.findByText("EXIT", {}, { timeout: 5000 }));
+    await screen.findByText("[Admin]", {}, { timeout: 5000 });
     const before = snapshotStore();
 
     await startTestFromAdmin();

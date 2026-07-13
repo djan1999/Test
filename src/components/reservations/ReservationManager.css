@@ -1,0 +1,22 @@
+@media (max-width: 700px) {
+  .reservation-week-header {
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .reservation-week-title {
+    text-align: right !important;
+  }
+
+  .reservation-week-controls {
+    display: grid !important;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .reservation-week-controls > button {
+    min-width: 0 !important;
+    width: 100%;
+  }
+}

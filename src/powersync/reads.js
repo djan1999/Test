@@ -111,10 +111,10 @@ export async function readSettingsPrefix(prefix) {
 // tapped on one tablet never reached another device without a full reload.
 export async function readLiveSettings() {
   const ws = getWorkspaceId();
-  const ids = ["kitchen_ticket_order", "service_date", "floor_status_v1", "floor_maps_v1"]
+  const ids = ["kitchen_ticket_order", "service_date", "floor_status_v1", "floor_maps_v1", "restaurant_config_v1"]
     .map((id) => localRowId(ws, id));
   const rows = await getPowerSync().getAll(
-    "SELECT id, state, updated_at FROM service_settings WHERE workspace_id = ? AND id IN (?, ?, ?, ?)",
+    "SELECT id, state, updated_at FROM service_settings WHERE workspace_id = ? AND id IN (?, ?, ?, ?, ?)",
     [ws, ...ids],
   );
   return rows.map((row) => ({

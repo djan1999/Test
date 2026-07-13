@@ -34,6 +34,9 @@ const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01",
 
 export default function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel, onResolveConflict, onSwapReservations }) {
   const isMobile = useIsMobile(560);
+  const availableTableIds = (tables || []).map((table) => Number(table.id)).sort((a, b) => a - b);
+  const tableLabel = (tableId) => (tables || []).find((table) => Number(table.id) === Number(tableId))?.displayLabel
+    || `T${String(tableId).padStart(2, "0")}`;
   const [tableIds, setTableIds] = useState(
     initial?.data?.tableGroup?.length > 1 ? initial.data.tableGroup.map(Number)
       : initial?.table_id ? [Number(initial.table_id)]
@@ -141,7 +144,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
           >{combineMode ? "Combining ✓" : "+ Combine"}</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
-          {Array.from({ length: 10 }, (_, i) => i + 1).map((tid) => {
+          {availableTableIds.map((tid) => {
             const isSel = tableIds.includes(tid);
             const conflictResv = findConflict(tid);
             const conflict = !!conflictResv;
@@ -173,7 +176,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                   cursor: "pointer",
                 }}
               >
-                T{String(tid).padStart(2, "0")}
+                {tableLabel(tid)}
               </button>
             );
           })}
@@ -195,7 +198,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
         const partnerIsGroup = Array.isArray(cd.tableGroup) && cd.tableGroup.length > 1;
         const canSwap = tableIds.length === 1 && !!excludeId
           && typeof onSwapReservations === "function" && !partnerIsGroup;
-        const otherTables = Array.from({ length: 10 }, (_, i) => i + 1)
+        const otherTables = availableTableIds
           // Can't park the displaced resv on the table being freed for *this*
           // resv (the user wants tid for the current edit) or on a table this
           // form is already using.
@@ -231,7 +234,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                 [TABLE OCCUPIED]
               </div>
               <div style={{ fontSize: "12px", color: tokens.ink[0], marginBottom: 12, lineHeight: 1.5 }}>
-                <strong>T{String(tid).padStart(2, "0")}</strong> is held by <strong>{cd.resName || "(unnamed)"}</strong>
+                <strong>{tableLabel(tid)}</strong> is held by <strong>{cd.resName || "(unnamed)"}</strong>
                 {cd.resTime ? ` at ${cd.resTime}` : ""}{cd.guests ? ` · ${cd.guests} pax` : ""}.
               </div>
               {!conflictResolveMode ? (
@@ -262,7 +265,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                           padding: "8px 16px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0,
                           cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[0], fontWeight: 600,
                         }}
-                      >SWAP T{String(tableIds[0]).padStart(2, "0")} ↔ T{String(tid).padStart(2, "0")}</button>
+                      >SWAP {tableLabel(tableIds[0])} ↔ {tableLabel(tid)}</button>
                     )}
                     <button
                       onClick={() => setConflictResolveMode(true)}

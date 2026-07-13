@@ -14,6 +14,7 @@ import ServiceBreakdown from "../ServiceBreakdown.jsx";
 import GlobalStyle from "../ui/GlobalStyle.jsx";
 import { useFocusChain } from "../../hooks/useFocusChain.js";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
+import "./ReservationManager.css";
 
 const FONT = tokens.font;
 
@@ -252,6 +253,8 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
 }
 
 export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onSwapReservations, onExit, serviceDate, activeServiceSession = "dinner", onSetServiceDate, onSetServiceSession, onOpenArchive, courseQuickNotes = {}, profiles = [], assignments = {}, resolveTableFlag = null }) {
+  const tableLabel = (tableId) => (tables || []).find((table) => Number(table.id) === Number(tableId))?.displayLabel
+    || `T${String(tableId).padStart(2, "0")}`;
   const [weekOffset,  setWeekOffset]  = useState(0);
   const [selectedDay, setSelectedDay] = useState(null);   // "YYYY-MM-DD" or null (week view)
   const [editingId,   setEditingId]   = useState(null);   // reservation id being edited, or "new"
@@ -459,8 +462,8 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
             const d = r.data || {};
             const group = d.tableGroup?.length > 1 ? d.tableGroup.map(Number) : [r.table_id];
             const tLabel = group.length > 1
-              ? `T${[...group].sort((a, b) => a - b).join("-")}`
-              : `T${String(r.table_id).padStart(2, "0")}`;
+              ? [...group].sort((a, b) => a - b).map(tableLabel).join("-")
+              : tableLabel(r.table_id);
             const isEditing = editingId === r.id;
             const showTicket = ticketId === r.id;
 
@@ -588,10 +591,10 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
       <GlobalStyle />
 
       {/* Sticky header */}
-      <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: tokens.neutral[0], zIndex: 50, gap: 12 }}>
+      <div className="reservation-week-header" style={{ borderBottom: `1px solid ${tokens.ink[4]}`, padding: "8px 16px", minHeight: 52, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: tokens.neutral[0], zIndex: 50, gap: 12 }}>
         <button onClick={onExit} style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "10px 12px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[1], flexShrink: 0, touchAction: "manipulation" }}>← EXIT</button>
-        <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.22em", textTransform: "uppercase", color: tokens.ink[3], flex: 1, textAlign: "center" }}>[RESERVATIONS]</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+        <span className="reservation-week-title" style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.22em", textTransform: "uppercase", color: tokens.ink[3], flex: "1 1 100px", minWidth: 100, textAlign: "center" }}>[RESERVATIONS]</span>
+        <div className="reservation-week-controls" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, rowGap: 6, flex: "1 1 440px", flexWrap: "wrap", minWidth: 0 }}>
           <button onClick={() => setWeeklyPreview(weeklyPreview === "reservations" ? null : "reservations")}
             style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.10em", textTransform: "uppercase", padding: "10px 8px", border: `1px solid ${weeklyPreview === "reservations" ? tokens.charcoal.default : tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: weeklyPreview === "reservations" ? tokens.tint.parchment : tokens.neutral[0], color: weeklyPreview === "reservations" ? tokens.ink[0] : tokens.ink[2], fontWeight: 600, flexShrink: 0, touchAction: "manipulation" }}>OVERVIEW</button>
           <button onClick={() => setWeeklyPreview(weeklyPreview === "allergies" ? null : "allergies")}

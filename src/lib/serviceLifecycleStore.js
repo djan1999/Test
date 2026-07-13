@@ -1,8 +1,11 @@
 import { isSandbox } from "./sandbox.js";
 
-export function makeBlankServiceRows(now = new Date().toISOString()) {
-  return Array.from({ length: 10 }, (_, index) => ({
-    table_id: index + 1,
+export function makeBlankServiceRows(now = new Date().toISOString(), tableIds = null) {
+  const ids = Array.isArray(tableIds) && tableIds.length
+    ? [...new Set(tableIds.map(Number).filter((id) => Number.isInteger(id) && id > 0))].sort((a, b) => a - b)
+    : Array.from({ length: 10 }, (_, index) => index + 1);
+  return ids.map((tableId) => ({
+    table_id: tableId,
     data: {},
     updated_at: now,
   }));
@@ -19,8 +22,8 @@ export function makeBlankServiceRows(now = new Date().toISOString()) {
 // transaction. A refused end returns { superseded: true } and writes NOTHING:
 // no archive, no board blanking, no date clear. This is the store-side half
 // of the 11.07 fix for "a stale device's late finish wiped the next service".
-export async function finishServiceStore({ client, workspaceId, sqlitePrimary, archive = null, expected = null }) {
-  const blankRows = makeBlankServiceRows();
+export async function finishServiceStore({ client, workspaceId, sqlitePrimary, archive = null, expected = null, tableIds = null }) {
+  const blankRows = makeBlankServiceRows(new Date().toISOString(), tableIds);
   if (!client || !workspaceId) return { rows: blankRows, superseded: false };
   // Test service: file no archive, clear no store rows — the end is a local
   // discard only (App routes sandbox END to endTestService; this is the
