@@ -70,7 +70,7 @@ const Row = ({ title, children }) => (
 );
 
 export default function FloorInspector({
-  floorMaps, mapId, selLabel, sheetSel = null, reservations = [],
+  floorMaps, mapId, selLabel, sheetSel = null, reservations = [], tableIds = [],
   onUpdate, onSelect, onSheetSelect, onSwitchMap, onRenumber, renumbering = false,
 }) {
   const map = floorMaps.maps.find((m) => m.id === mapId);
@@ -92,7 +92,10 @@ export default function FloorInspector({
     ? planLayoutSwitch(map, reservations).filter((r) => r.status === "conflict" || r.status === "needs_table")
     : [];
 
-  const memberOptions = [...Array(10)].map((_, i) => `T${i + 1}`);
+  const configuredIds = [...new Set((tableIds || []).map(Number).filter((id) => Number.isInteger(id) && id > 0))]
+    .sort((a, b) => a - b);
+  const slotOptions = configuredIds.length > 0 ? configuredIds : [...Array(10)].map((_, i) => i + 1);
+  const memberOptions = slotOptions.map((id) => `T${id}`);
 
   return (
     <div style={{
@@ -222,8 +225,7 @@ export default function FloorInspector({
                 })}
               </Row>
               <Row title="SLOTS">
-                {[...Array(10)].map((_, i) => {
-                  const id = i + 1;
+                {slotOptions.map((id) => {
                   const on = (table.boardIds || []).includes(id);
                   return (
                     <button key={id} style={{ ...btn(on), padding: "8px 10px" }}

@@ -19,6 +19,7 @@ export default function AuthScreen() {
   const [err, setErr]       = useState("");
   const [shake, setShake]   = useState(false);
   const [remember, setRemember] = useState(() => getRememberMe());
+  const [resetSent, setResetSent] = useState(false);
 
   const submit = async () => {
     if (busy) return;
@@ -44,6 +45,25 @@ export default function AuthScreen() {
     }
   };
 
+  const requestPasswordReset = async () => {
+    if (busy) return;
+    const e = email.trim();
+    if (!e) { setErr("Enter your email first."); return; }
+    setBusy(true);
+    setErr("");
+    setResetSent(false);
+    try {
+      const redirectTo = `${window.location.origin}${window.location.pathname}?set-password=1`;
+      const { error } = await supabase.auth.resetPasswordForEmail(e, { redirectTo });
+      if (error) throw error;
+      setResetSent(true);
+    } catch (ex) {
+      setErr(ex?.message || "Could not send the reset email.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div style={{
       minHeight: "100vh", background: tokens.surface.card,
@@ -57,16 +77,19 @@ export default function AuthScreen() {
         <div style={{ fontSize: 9, letterSpacing: 4, color: tokens.text.secondary }}>{APP_SUBTITLE}</div>
       </div>
 
-      <div style={{ width: "100%", maxWidth: 320, textAlign: "center", animation: shake ? "shake 0.4s ease" : "none" }}>
+      <form
+        onSubmit={(event) => { event.preventDefault(); submit(); }}
+        style={{ width: "100%", maxWidth: 320, textAlign: "center", animation: shake ? "shake 0.4s ease" : "none" }}
+      >
         <div style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 3, color: tokens.text.muted, marginBottom: 24, textTransform: "uppercase" }}>
           sign in
         </div>
 
         <input
           type="email"
+          aria-label="Email address"
           value={email}
           onChange={e => setEmail(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && submit()}
           autoFocus
           autoComplete="email"
           autoCorrect="off"
@@ -79,9 +102,9 @@ export default function AuthScreen() {
         <div style={{ position: "relative", marginBottom: 12 }}>
           <input
             type={show ? "text" : "password"}
+            aria-label="Password"
             value={pw}
             onChange={e => setPw(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && submit()}
             autoComplete="current-password"
             placeholder="password"
             style={{
@@ -91,7 +114,7 @@ export default function AuthScreen() {
               transition: "border-color 0.2s",
             }}
           />
-          <button onClick={() => setShow(s => !s)} style={{
+          <button type="button" onClick={() => setShow(s => !s)} style={{
             position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
             background: "none", border: "none", cursor: "pointer",
             color: tokens.neutral[400], fontSize: 13, padding: 0, lineHeight: 1,
@@ -99,7 +122,13 @@ export default function AuthScreen() {
         </div>
 
         {err ? (
-          <div style={{ fontSize: 11, color: tokens.red.text, marginBottom: 12, lineHeight: 1.4 }}>{err}</div>
+          <div role="alert" style={{ fontSize: 11, color: tokens.red.text, marginBottom: 12, lineHeight: 1.4 }}>{err}</div>
+        ) : null}
+
+        {resetSent ? (
+          <div role="status" style={{ fontSize: 11, color: tokens.green.text, marginBottom: 12, lineHeight: 1.5 }}>
+            Reset email sent. Open it on this device and choose a new password.
+          </div>
         ) : null}
 
         <label style={{
@@ -117,14 +146,26 @@ export default function AuthScreen() {
           </span>
         </label>
 
-        <button onClick={submit} disabled={busy} style={{
+        <button type="submit" disabled={busy} style={{
           width: "100%", fontFamily: FONT, fontSize: 11, letterSpacing: 3,
           padding: "14px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0,
           cursor: busy ? "not-allowed" : "pointer", background: tokens.surface.card,
           color: tokens.text.primary, textTransform: "uppercase", marginTop: 4,
           opacity: busy ? 0.6 : 1,
         }}>{busy ? "Signing in…" : "Sign in"}</button>
-      </div>
+        <button
+          type="button"
+          onClick={requestPasswordReset}
+          disabled={busy}
+          style={{
+            marginTop: 14, border: "none", background: "transparent", cursor: busy ? "not-allowed" : "pointer",
+            color: tokens.text.secondary, fontFamily: FONT, fontSize: 10, letterSpacing: 1.5,
+            textDecoration: "underline", textUnderlineOffset: 3,
+          }}
+        >
+          Forgot password?
+        </button>
+      </form>
 
       <style>{`@keyframes shake {
         0%,100%{transform:translateX(0)}

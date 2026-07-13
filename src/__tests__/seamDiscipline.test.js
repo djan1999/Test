@@ -54,9 +54,6 @@ const ALLOWLIST = {
     "TABLES.BEVERAGES.select": 1,        // fallback one-shot load
     "TABLES.BEVERAGES.insert": 1,        // beverage sync write
     "TABLES.BEVERAGES.delete": 1,        // beverage sync prune
-    // Auth bootstrap: workspaces is read before an active workspace exists;
-    // its RLS policy returns only explicit memberships.
-    "supabase.from": 1,
   },
   "components/reservations/GuestMemory.jsx": {
     "TABLES.SERVICE_ARCHIVE.select": 1,  // fallback read when SQLite not primary
@@ -66,6 +63,11 @@ const ALLOWLIST = {
     "TABLES.SERVICE_ARCHIVE.select": 2,
     "TABLES.SERVICE_ARCHIVE.update": 2,
     "TABLES.SERVICE_ARCHIVE.delete": 1,
+  },
+  "lib/auditStore.js": {
+    // Audit history stays on the server and is not synchronized into each
+    // operational tablet's local PowerSync database.
+    "TABLES.AUDIT_LOG.select": 1,
   },
   "lib/stateStore.js": {
     // IS the service_settings seam — same deal.
@@ -77,6 +79,11 @@ const ALLOWLIST = {
   },
   "powersync/SupabaseConnector.js": {
     "supabase.from": 1,                  // uploadData IS the upload seam
+  },
+  "hooks/useWorkspaceAccess.js": {
+    // Auth bootstrap runs before an active workspace exists: workspace list,
+    // own roles, and a live own-role refresh.
+    "supabase.from": 3,
   },
 };
 

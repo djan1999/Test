@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
 import { isUpdateReady, onUpdateReady, applyUpdate } from "../../lib/swUpdate.js";
+import { clearClientDiagnostics, readClientDiagnostics } from "../../lib/clientDiagnostics.js";
 
 // Baked in at build time (vite define) — "which version is this tablet
 // actually running" must be answerable from a phone screenshot.
@@ -37,11 +38,21 @@ export default function SystemPanel({
   const [syncResult, setSyncResult] = useState(null);
   const [syncMsg, setSyncMsg] = useState("");
   const [syncConfigSaving, setSyncConfigSaving] = useState(false);
+  const [diagnostics, setDiagnostics] = useState(() => readClientDiagnostics());
   // A deployed build waiting for activation (PWA updates never force-reload
   // mid-service; the kitchen display never closes, so this button is its
   // only update path). Applying reloads THIS device deliberately.
   const [updateReady, setUpdateReady] = useState(isUpdateReady());
   useEffect(() => onUpdateReady(() => setUpdateReady(true)), []);
+  useEffect(() => {
+    const refresh = () => setDiagnostics(readClientDiagnostics());
+    window.addEventListener("milka:diagnostic", refresh);
+    window.addEventListener("milka:diagnostics-cleared", refresh);
+    return () => {
+      window.removeEventListener("milka:diagnostic", refresh);
+      window.removeEventListener("milka:diagnostics-cleared", refresh);
+    };
+  }, []);
 
   const handleManualSync = async () => {
     setSyncResult("syncing");
@@ -162,6 +173,30 @@ export default function SystemPanel({
               </div>
             </div>
           )}
+          <div style={{ border: `1px solid ${diagnostics.length ? tokens.red.border : tokens.ink[4]}`, background: diagnostics.length ? tokens.red.bg : tokens.neutral[0], borderRadius: 0, padding: "12px 16px", minWidth: 220, maxWidth: 420 }}>
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: diagnostics.length ? tokens.red.text : tokens.ink[4], textTransform: "uppercase", marginBottom: 6 }}>Device Diagnostics</div>
+            {diagnostics.length ? (
+              <>
+                <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, wordBreak: "break-word", marginBottom: 8 }}>
+                  {diagnostics.length} recorded issue{diagnostics.length === 1 ? "" : "s"}. Latest: {diagnostics[0].message}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText(JSON.stringify(diagnostics, null, 2))}
+                    style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${tokens.ink[3]}`, background: tokens.neutral[0], cursor: "pointer" }}
+                  >COPY REPORT</button>
+                  <button
+                    type="button"
+                    onClick={clearClientDiagnostics}
+                    style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "5px 8px", border: `1px solid ${tokens.red.border}`, background: tokens.neutral[0], color: tokens.red.text, cursor: "pointer" }}
+                  >CLEAR</button>
+                </div>
+              </>
+            ) : (
+              <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.green.text }}>No browser crashes recorded on this device.</div>
+            )}
+          </div>
           {/* Sync engine (PowerSync) — the STREAM's own state and, crucially,
               its last error string, so a device stuck on LINK/ERROR tells us
               WHY from this panel alone (no DevTools needed on a phone). */}
@@ -262,7 +297,7 @@ export default function SystemPanel({
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <select
-              value={activeLayoutProfileId}
+              value={activeLayoutProfileId || ""}
               onChange={(e) => onSelectLayoutProfile?.(e.target.value)}
               style={{ fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, minWidth: 220 }}
             >

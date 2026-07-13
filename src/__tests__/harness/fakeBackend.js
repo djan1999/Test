@@ -65,6 +65,14 @@ export function resetBackend({ psMode = false } = {}) {
   tableOf(backend.remote, "workspaces").push({
     id: WORKSPACE_ID, name: "Harness Milka", kind: "member", slug: "harness",
   });
+  // Harness scenarios exercise every operating surface, so this signed-in
+  // account is an Admin (which also has Service and Kitchen access).
+  tableOf(backend.remote, "workspace_members").push({
+    workspace_id: WORKSPACE_ID,
+    user_id: "user-harness",
+    role: "admin",
+    created_at: nowISO(),
+  });
 }
 
 // Seed a table in BOTH stores (a fully synced device), stamping workspace_id.

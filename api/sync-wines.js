@@ -273,12 +273,30 @@ async function fetchBeveragePage({ url, category, label }) {
 }
 
 export default async function handler(req, res) {
+  const startedAt = Date.now();
+  const requestId = req.headers["x-vercel-id"] || req.headers["x-request-id"] || null;
+  const log = (level, event, details = {}) => {
+    const entry = JSON.stringify({
+      level,
+      event,
+      route: "/api/sync-wines",
+      requestId,
+      duration_ms: Date.now() - startedAt,
+      ...details,
+    });
+    if (level === "error") console.error(entry);
+    else if (level === "warn") console.warn(entry);
+    else console.log(entry);
+  };
+
+  log("info", "catalog_sync_started", { method: String(req.method || "GET").toUpperCase() });
   const authHeader = req.headers.authorization;
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const serverAuthorized = isAuthorizedSyncSecret(
     bearerToken || req.headers["x-cron-secret"],
   );
   if (String(req.method || "GET").toUpperCase() !== "POST" && !serverAuthorized) {
+    log("warn", "catalog_sync_denied", { reason: "unauthorized_method" });
     return res.status(401).json({ error: "Unauthorized" });
   }
   const dry = new URL(req.url, "http://localhost").searchParams.get("dry") === "true";
@@ -333,10 +351,15 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "No active restaurant was supplied." });
       }
       const { data: membership, error: membershipError } = await supabase
-        .from("workspace_members").select("user_id")
+        .from("workspace_members").select("user_id, role")
         .eq("workspace_id", WORKSPACE_ID).eq("user_id", requestingUserId).maybeSingle();
       if (membershipError || !membership) {
+        log("warn", "catalog_sync_denied", { reason: "not_workspace_member" });
         return res.status(403).json({ error: "This account is not linked to that restaurant." });
+      }
+      if (String(membership.role || "").toLowerCase() !== "admin") {
+        log("warn", "catalog_sync_denied", { reason: "admin_required" });
+        return res.status(403).json({ error: "Only an Admin can replace the restaurant catalogue." });
       }
     } else {
       // Scheduled server sync remains deliberately fixed to Milka. The
@@ -406,6 +429,12 @@ export default async function handler(req, res) {
     const spiritCount   = allBeverages.filter(b => b.category === "spirit").length;
 
     if (dry) {
+      log("info", "catalog_sync_completed", {
+        dry: true,
+        workspaceId: WORKSPACE_ID,
+        wines: allWines.length,
+        beverages: allBeverages.length,
+      });
       return res.status(200).json({
         ok: true, dry: true,
         wines: allWines.length, byGlass: byGlassCount,
@@ -493,6 +522,13 @@ export default async function handler(req, res) {
     const beveragesUpserted = rowsToWrite.length;
 
     const partial = failedCountries.length > 0 || failedBeveragePages.length > 0;
+    log("info", "catalog_sync_completed", {
+      dry: false,
+      partial,
+      workspaceId: WORKSPACE_ID,
+      wines: winesUpserted,
+      beverages: beveragesUpserted,
+    });
     return res.status(200).json({
       ok: true,
       partial,
@@ -505,7 +541,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("[sync] Error:", err);
+    log("error", "catalog_sync_failed", { error: err?.message || String(err) });
     return res.status(500).json({ ok: false, error: err.message });
   }
 }

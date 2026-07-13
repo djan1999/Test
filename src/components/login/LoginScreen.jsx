@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
+import { WORKSPACE_ROLES, normalizeWorkspaceRole, visibleEntryModes } from "../../auth/roles.js";
 import GlobalStyle from "../ui/GlobalStyle.jsx";
 
 const FONT = tokens.font;
@@ -12,14 +13,24 @@ const PINS = {
   menu:  String(import.meta.env.VITE_PIN_MENU  || "").trim(),
 };
 
-export default function LoginScreen({ onEnter, onSyncAll, canAdmin = false, workspaceName = "", canSwitchProfile = false, onSwitchProfile, onSignOut }) {
+export default function LoginScreen({ onEnter, onSyncAll, role = null, canAdmin = false, appName = APP_NAME, workspaceName = "", canSwitchProfile = false, onSwitchProfile, onSignOut }) {
+  // `canAdmin` remains as a compatibility bridge for old callers/tests. New
+  // code passes the actual workspace role so a Kitchen login cannot even see
+  // the Service or Admin entry points.
+  const explicitRole = normalizeWorkspaceRole(role);
+  const effectiveRole = explicitRole || (canAdmin ? WORKSPACE_ROLES.ADMIN : WORKSPACE_ROLES.SERVICE);
+  // Old isolated component tests/callers did not know about roles and expect
+  // the historical non-admin mode list. App always passes an explicit role.
+  const visibleModes = new Set(explicitRole
+    ? visibleEntryModes(effectiveRole)
+    : ["display", "service", "reservation", ...(canAdmin ? ["admin"] : []), "menu"]);
   const MODES = [
     { id: "display",     label: "Kitchen",      sub: "fire courses · KDS",  pin: false },
     { id: "service",     label: "Service",      sub: "full service access", pin: false },
     { id: "reservation", label: "Reservations", sub: "weekly planner",      pin: false },
     { id: "admin",       label: "Admin",        sub: "pin required",        pin: true  },
     { id: "menu",        label: "Menu",         sub: "preview + print",     pin: true  },
-  ].filter((mode) => mode.id !== "admin" || canAdmin);
+  ].filter((mode) => visibleModes.has(mode.id));
 
   const [picking, setPicking] = useState(null);
   const [pin, setPin]         = useState("");
@@ -132,7 +143,7 @@ export default function LoginScreen({ onEnter, onSyncAll, canAdmin = false, work
           color:         ink[0],
           marginBottom:  10,
           textTransform: "uppercase",
-        }}>{APP_NAME}</div>
+        }}>{appName}</div>
         <div style={{
           fontFamily:    FONT,
           fontSize:      "8px",
@@ -170,7 +181,7 @@ export default function LoginScreen({ onEnter, onSyncAll, canAdmin = false, work
           </div>
 
           {/* Sync button */}
-          {onSyncAll && canAdmin && (
+          {onSyncAll && effectiveRole === WORKSPACE_ROLES.ADMIN && (
             <button
               onClick={handleSync}
               disabled={syncSt === "syncing"}

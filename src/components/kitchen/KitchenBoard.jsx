@@ -350,7 +350,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           }}>⋮⋮</span>
         )}
         <span style={{ fontFamily: FONT, fontSize: table.tableGroup?.length > 1 ? dz.tNumGroup : dz.tNum, fontWeight: 800, color: tokens.ink[0], lineHeight: 1, letterSpacing: "-0.02em", flexShrink: 0 }}>
-          {table.tableGroup?.length > 1 ? `T${table.tableGroup.join("-")}` : `T${table.id}`}
+          {table.displayGroupLabel || table.displayLabel || (table.tableGroup?.length > 1 ? `T${table.tableGroup.join("-")}` : `T${table.id}`)}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: dz.nameWrap, overflow: "hidden" }}>
@@ -1154,7 +1154,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
 // ticket will occupy once the table is seated, so it stays small (dashed
 // border = "not in yet") and simply expands in place on the seat.
 export function UpcomingBanner({ table: t, compact = false }) {
-  const label = t.tableGroup?.length > 1 ? `T${t.tableGroup.join("-")}` : `T${t.id}`;
+  const label = t.displayGroupLabel || t.displayLabel || (t.tableGroup?.length > 1 ? `T${t.tableGroup.join("-")}` : `T${t.id}`);
   const pax = t.guests || (t.seats || []).length || 0;
   const isShort = String(t.menuType || "").trim().toLowerCase() === "short";
   const restrNotes = [...new Set((t.restrictions || []).map(r => r?.note).filter(Boolean).map(restrLabel))];
@@ -1471,7 +1471,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
         }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
             <span style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: tokens.ink[0], letterSpacing: "-0.02em" }}>
-              {seatTarget.tableGroup?.length > 1 ? `T${seatTarget.tableGroup.join("-")}` : `T${seatTarget.id}`}
+              {seatTarget.displayGroupLabel || seatTarget.displayLabel || (seatTarget.tableGroup?.length > 1 ? `T${seatTarget.tableGroup.join("-")}` : `T${seatTarget.id}`)}
             </span>
             {seatTarget.resTime && (
               <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: tokens.ink[1] }}>{seatTarget.resTime}</span>

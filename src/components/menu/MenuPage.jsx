@@ -30,9 +30,9 @@ export default function MenuPage({ tables, menuCourses, upd, logoDataUri = "", w
             .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup))
             .map(t => {
             const hasData = t.active || t.resName || t.resTime;
-            const groupLabel = t.tableGroup?.length > 1
+            const groupLabel = t.displayGroupLabel || t.displayLabel || (t.tableGroup?.length > 1
               ? `T${Math.min(...t.tableGroup)}-${Math.max(...t.tableGroup)}`
-              : `T${t.id}`;
+              : `T${t.id}`);
             return (
               <div
                 key={t.id}

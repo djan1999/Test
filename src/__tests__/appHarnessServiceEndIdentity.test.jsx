@@ -147,12 +147,16 @@ describe.each([
       expect(tonight.state?.startedAt ?? null).not.toBe(STALE_STARTED_AT);
     }, { timeout: 5000 });
 
-    // Board blanked and date released in the store this device writes to.
-    const store = psMode ? localRows : remoteRows;
-    expect(store("service_tables").filter((r) => r?.data?.resName).length).toBe(0);
-    expect(store("service_settings").find((r) => r.id === "service_date")?.state?.date).toBeUndefined();
-    // The stale stamp is gone from this device, not re-presented next boot.
-    expect(localStorage.getItem(`milka_service_started_at:${WORKSPACE_ID}`)).toBeNull();
+    // Board clearing follows the archive write asynchronously. Wait for the
+    // complete end-service transaction instead of racing the final store
+    // writes on faster/slower CI workers.
+    await waitFor(() => {
+      const store = psMode ? localRows : remoteRows;
+      expect(store("service_tables").filter((r) => r?.data?.resName).length).toBe(0);
+      expect(store("service_settings").find((r) => r.id === "service_date")?.state?.date).toBeUndefined();
+      // The stale stamp is gone from this device, not re-presented next boot.
+      expect(localStorage.getItem(`milka_service_started_at:${WORKSPACE_ID}`)).toBeNull();
+    }, { timeout: 5000 });
   }, 30000);
 
   it("healOrphanedService re-attaches an orphaned live board with a FULL identity, and that service ends cleanly", async () => {

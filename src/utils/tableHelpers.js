@@ -526,6 +526,8 @@ export const swapTableRows = (tables, aId, bId) => {
 
 // Render a "T02-03" label from a table that may belong to a group.
 export const tableGroupLabel = (t) => {
+  if (t?.displayGroupLabel) return t.displayGroupLabel;
+  if (t?.displayLabel) return t.displayLabel;
   const g = Array.isArray(t?.tableGroup) && t.tableGroup.length > 1
     ? [...t.tableGroup].sort((a, b) => a - b)
     : null;

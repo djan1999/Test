@@ -93,6 +93,24 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     expect(tx.complete).toHaveBeenCalledTimes(1);
   });
 
+  it("recognizes an atomic end for a custom table set", async () => {
+    const workspace_id = "ws-a";
+    const crud = [2, 7, 12].map((table_id) => patch(
+      "service_tables", `${workspace_id}|${table_id}`,
+      { workspace_id, table_id, data: "{}", updated_at: "end" },
+    ));
+    crud.push(patch("service_settings", `${workspace_id}|service_date`, {
+      workspace_id, id: "service_date", state: "{}", updated_at: "end",
+    }));
+    const tx = makeTx(crud);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0].name).toBe("archive_and_finish_service");
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps an atomic end-service batch queued when its server RPC fails", async () => {
     h.errorFor = (call) => call.name === "archive_and_finish_service"
       ? { code: "", message: "network down" }

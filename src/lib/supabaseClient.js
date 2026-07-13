@@ -8,6 +8,8 @@ export const TABLES = {
   WINES: "wines",
   BEVERAGES: "beverages",
   RESERVATIONS: "reservations",
+  AUDIT_LOG: "audit_log",
+  WORKSPACE_MEMBERS: "workspace_members",
 };
 
 const url = import.meta.env.VITE_SUPABASE_URL;
@@ -60,7 +62,10 @@ export const supabase = hasSupabaseConfig
         // custom storage adapter honours the "remember me" preference.
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: false,
+        // Required for password-recovery and staff-invitation links. Supabase
+        // consumes the one-time URL credentials, establishes the short-lived
+        // session, then App shows the password-creation screen.
+        detectSessionInUrl: true,
         storageKey: "milka-auth",
         storage: authStorage,
       },

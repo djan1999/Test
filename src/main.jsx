@@ -9,6 +9,9 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary.jsx';
 import './styles.css';
 import { registerSW } from 'virtual:pwa-register';
 import { setUpdateReady } from './lib/swUpdate.js';
+import { installGlobalDiagnostics, recordClientDiagnostic } from './lib/clientDiagnostics.js';
+
+installGlobalDiagnostics();
 
 const PRELOAD_RELOAD_GUARD_KEY = 'milka_preload_reload_once';
 
@@ -47,6 +50,7 @@ const updateSW = registerSW({
     }
   },
   onRegisterError(error) {
+    recordClientDiagnostic('service-worker-registration', error);
     console.warn('Service worker registration failed:', error);
   },
 });

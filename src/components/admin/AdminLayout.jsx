@@ -12,11 +12,17 @@ import SystemPanel from "./SystemPanel.jsx";
 import ArchivePanel from "./ArchivePanel.jsx";
 import QuickAccessPanel from "./QuickAccessPanel.jsx";
 import FloorPanel from "./FloorPanel.jsx";
+import RestaurantConfigPanel from "./RestaurantConfigPanel.jsx";
+import MembersPanel from "./MembersPanel.jsx";
+import AuditLogPanel from "./AuditLogPanel.jsx";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
 
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
 
 const SECTIONS = [
+  { id: "restaurant",  label: "Restaurant Setup",       icon: "R" },
+  { id: "staff",       label: "Staff & Roles",          icon: "S" },
+  { id: "audit",       label: "Audit Trail",             icon: "A" },
   { id: "menu",        label: "Menu Layout",           icon: "▨" },
   { id: "dishes",      label: "Dishes & Restrictions",  icon: "◈" },
   { id: "drinks",      label: "Drinks & Pairings",      icon: "◎" },
@@ -30,6 +36,7 @@ const SECTIONS = [
 // ── AdminLayout — modular admin control panel ──
 // Pure control panel. No service UI, no reservations, no seating.
 export default function AdminLayout({
+  appName = APP_NAME,
   // Menu data
   menuCourses,
   onUpdateMenuCourses,
@@ -102,10 +109,15 @@ export default function AdminLayout({
   courseQuickNotes = {},
   onSaveCourseQuickNotes,
   onStartTestService,
+  restaurantConfig = null,
+  onSaveRestaurantConfig = null,
+  accessToken = null,
+  workspaceId = null,
+  currentUserId = null,
   // Navigation
   onExit,
 }) {
-  const [activeSection, setActiveSection] = useState("menu");
+  const [activeSection, setActiveSection] = useState("restaurant");
   const [dishesCoursesOpen, setDishesCoursesOpen] = useState(true);
   const [dishesRestrictionsOpen, setDishesRestrictionsOpen] = useState(false);
   const [dishesQuickNotesOpen, setDishesQuickNotesOpen] = useState(false);
@@ -139,7 +151,7 @@ export default function AdminLayout({
         gap: 8,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 16, minWidth: 0 }}>
-          <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 600, letterSpacing: isMobile ? 3 : 4, color: tokens.ink[0] }}>{APP_NAME}</span>
+          <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 600, letterSpacing: isMobile ? 3 : 4, color: tokens.ink[0] }}>{appName}</span>
           <span style={{ width: 1, height: 14, background: tokens.ink[4] }} />
           <span style={{ fontSize: 10, letterSpacing: isMobile ? 2 : 3, color: tokens.ink[2], textTransform: "uppercase", fontWeight: 700 }}>ADMIN</span>
         </div>
@@ -291,6 +303,23 @@ export default function AdminLayout({
           overflowY: "auto",
           overflowX: "hidden",
         }}>
+          {activeSection === "restaurant" && restaurantConfig && (
+            <RestaurantConfigPanel
+              config={restaurantConfig}
+              onSave={onSaveRestaurantConfig}
+            />
+          )}
+
+          {activeSection === "staff" && (
+            <MembersPanel
+              accessToken={accessToken}
+              workspaceId={workspaceId}
+              currentUserId={currentUserId}
+            />
+          )}
+
+          {activeSection === "audit" && <AuditLogPanel />}
+
           {activeSection === "menu" && (
             <div>
               <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.ink[3], textTransform: "uppercase", marginBottom: 20 }}>
@@ -474,6 +503,7 @@ export default function AdminLayout({
           {activeSection === "floor" && floorMaps && (
             <FloorPanel
               floorMaps={floorMaps}
+              tableIds={(restaurantConfig?.tables || []).map((table) => Number(table.id))}
               reservations={floorReservations}
               onUpdateFloorMaps={onUpdateFloorMaps}
               onApplyLayoutSwitch={onApplyLayoutSwitch}

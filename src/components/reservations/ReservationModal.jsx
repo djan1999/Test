@@ -26,6 +26,8 @@ const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01",
 
 export default function ReservationModal({ table, tables = [], onSave, onClose }) {
   const isMobile = useIsMobile(BP.md);
+  const tableLabel = (tableId) => tables.find((entry) => Number(entry.id) === Number(tableId))?.displayLabel
+    || `T${String(tableId).padStart(2, "0")}`;
   const [tableIds, setTableIds]   = useState(table.tableGroup?.length > 1 ? table.tableGroup : [table.id]);
   const [name, setName]           = useState(table.resName || "");
   const [time, setTime]           = useState(table.resTime || "");
@@ -80,7 +82,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
             )}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(5, 1fr)" : "repeat(5, 1fr)", gap: isMobile ? 5 : 6 }}>
-            {Array.from({ length: 10 }, (_, i) => i + 1).map(tid => {
+            {tables.map((entry) => Number(entry.id)).sort((a, b) => a - b).map(tid => {
               const tObj     = tables.find(t => t.id === tid);
               const isActive = tObj?.active;
               const isBooked = tObj && (tObj.resName || tObj.resTime) && !table.tableGroup?.includes(tid) && tid !== table.id;
@@ -105,7 +107,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                     color: isSel ? tokens.text.secondary : isActive ? tokens.text.disabled : isBooked ? tokens.text.muted : tokens.text.body,
                     transition: "all 0.1s",
                   }}>
-                  T{String(tid).padStart(2, "0")}
+                  {tableLabel(tid)}
                 </button>
               );
             })}

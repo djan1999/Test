@@ -449,7 +449,7 @@ describe("sync-wines handler auth", () => {
     }
   });
 
-  it("allows any authenticated workspace member to sync only its active workspace", async () => {
+  it("allows an Admin to sync only its active workspace", async () => {
     const req = {
       method: "POST",
       url: "http://localhost/api/sync-wines?dry=true",
@@ -469,7 +469,7 @@ describe("sync-wines handler auth", () => {
     process.env.SUPABASE_URL = "https://fake.supabase.co";
     process.env.SUPABASE_SERVICE_KEY = "server-only-key";
     sb.reset({
-      workspace_members: { data: { user_id: "user-1" }, error: null },
+      workspace_members: { data: { user_id: "user-1", role: "admin" }, error: null },
     });
     try {
       await handler(req, res);
@@ -477,6 +477,41 @@ describe("sync-wines handler auth", () => {
       expect(res.payload).toMatchObject({ ok: true, dry: true });
       expect(sb.forTable("workspaces")).toHaveLength(0);
       expect(sb.forTable("workspace_members")[0]._calls).toContainEqual(["eq", "workspace_id", "demo-ws"]);
+    } finally {
+      if (previous.url === undefined) delete process.env.SUPABASE_URL;
+      else process.env.SUPABASE_URL = previous.url;
+      if (previous.key === undefined) delete process.env.SUPABASE_SERVICE_KEY;
+      else process.env.SUPABASE_SERVICE_KEY = previous.key;
+    }
+  });
+
+  it("rejects a non-Admin member before service-role catalogue work", async () => {
+    const req = {
+      method: "POST",
+      url: "http://localhost/api/sync-wines?dry=true",
+      headers: { authorization: "Bearer user-access-token" },
+      body: { workspaceId: "demo-ws", config: { winesEnabled: false, beveragesEnabled: false } },
+    };
+    const res = {
+      statusCode: 200,
+      payload: null,
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.payload = body; return this; },
+    };
+    const previous = {
+      url: process.env.SUPABASE_URL,
+      key: process.env.SUPABASE_SERVICE_KEY,
+    };
+    process.env.SUPABASE_URL = "https://fake.supabase.co";
+    process.env.SUPABASE_SERVICE_KEY = "server-only-key";
+    sb.reset({
+      workspace_members: { data: { user_id: "user-1", role: "service" }, error: null },
+    });
+    try {
+      await handler(req, res);
+      expect(res.statusCode).toBe(403);
+      expect(res.payload).toEqual({ error: "Only an Admin can replace the restaurant catalogue." });
+      expect(sb.rpcCalls).toHaveLength(0);
     } finally {
       if (previous.url === undefined) delete process.env.SUPABASE_URL;
       else process.env.SUPABASE_URL = previous.url;
