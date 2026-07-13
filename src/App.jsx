@@ -84,6 +84,7 @@ import { readStateKey, saveStateKey } from "./lib/stateStore.js";
 import { finishServiceStore } from "./lib/serviceLifecycleStore.js";
 import { isPowerSyncEnabled } from "./powersync/config.js";
 import { setSqlitePrimaryFlag } from "./powersync/primary.js";
+import { setSandbox, isSandbox } from "./lib/sandbox.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { tokens } from "./styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, chip as mixinChip, circleButton as mixinCircleButton } from "./styles/mixins.js";
@@ -2554,6 +2555,16 @@ export default function App() {
   // texts) pick the same store. Declared before every consumer effect.
   useEffect(() => { setSqlitePrimaryFlag(sqlitePrimary); }, [sqlitePrimary]);
 
+  // ── Test service (sandbox) ──────────────────────────────────────────────────
+  // A fully-functional service that persists NOTHING: every write seam no-ops
+  // and every inbound adoption is suspended while it runs, so real service data
+  // is never touched, shared, or archived. `sandboxRef` is the render-safe
+  // mirror the seams/adoptions read; the module flag (setSandbox) covers the
+  // out-of-tree helpers. See lib/sandbox.js.
+  const [sandboxActive, setSandboxActive] = useState(false);
+  const sandboxRef = useRef(false);
+  sandboxRef.current = sandboxActive;
+
   // ── Store seams ────────────────────────────────────────────────────────────
   // The service_settings blobs (logo, layouts, quick access, service date, …)
   // go through the shared lib/stateStore.js helpers; the board, reservation
@@ -2562,6 +2573,8 @@ export default function App() {
   // Persist board rows: [{ table_id, data, updated_at }] (update-or-insert).
   const persistBoardRows = useCallback(async (rows) => {
     if (!supabase || !getWorkspaceId() || !rows?.length) return { ok: true };
+    // Test service: keep the board entirely in memory — write nothing.
+    if (sandboxRef.current) return { ok: true };
     // Record what this device is writing (all callers funnel through here —
     // autosave, CLEAR ALL blanks) so adoptRemoteTables can drop older echoes.
     for (const r of rows) {
@@ -2680,6 +2693,8 @@ export default function App() {
   // Persist one reservation row (update-or-insert by id).
   const persistReservationRow = useCallback(async ({ id, date, table_id, data, created_at }) => {
     if (!supabase || !getWorkspaceId()) return { ok: true };
+    if (sandboxRef.current) return { ok: true }; // test service: memory only
+
     try {
       if (sqlitePrimaryRef.current) {
         const { writeReservation } = await import("./powersync/writes.js");
@@ -2706,6 +2721,8 @@ export default function App() {
   // both parties assigned to the same table if one succeeds and one fails.
   const persistReservationRows = useCallback(async (rows) => {
     if (!supabase || !getWorkspaceId() || !rows?.length) return { ok: true };
+    if (sandboxRef.current) return { ok: true }; // test service: memory only
+
     try {
       if (sqlitePrimaryRef.current) {
         const { writeReservations } = await import("./powersync/writes.js");
@@ -2746,6 +2763,7 @@ export default function App() {
   // table both keep their work. The folded result still differs from the new
   // baseline, so the pending autosave writes it and every device converges.
   const adoptRemoteTables = rows => {
+    if (sandboxRef.current) return; // test service: ignore the real board
     const arr = Array.isArray(rows) ? rows : [];
     const rawById = new Map(arr.map(row => [Number(row.table_id), row]));
     const cur = tablesRef.current && tablesRef.current.length ? tablesRef.current : initTables;
@@ -3159,6 +3177,7 @@ export default function App() {
   };
 
   const syncWines = async () => {
+    if (sandboxRef.current) return { ok: false, error: new Error("Sync is disabled during a test service") };
     // Client-side budget. Vercel function caps at 60 s (see sync-wines.js);
     // give it 30 s of slack for headers + DB writes + return trip then hard-abort
     // so the UI doesn't hang. Previously 70 s, which was too close to the 60 s
@@ -3213,6 +3232,7 @@ export default function App() {
   // Save menu courses directly to Supabase (the app is now the source of truth)
   const saveMenuCourses = async (courses) => {
     if (!supabase) return { ok: true };
+    if (sandboxRef.current) return { ok: true }; // test service: catalog not persisted
     // Auto-generate course_key from dish name when empty so the layout editor
     // can always reference every course (keyless courses produce value="" which
     // collides with the "(none)" dropdown option and silently clears the block).
@@ -3319,6 +3339,7 @@ export default function App() {
   };
 
   const saveWines = async (updatedWines) => {
+    if (sandboxRef.current) return { ok: true }; // test service: catalog not persisted
     // Copy-on-edit: a human correction to a synced wine flips it to
     // source:'manual' (same key), which the nightly website sync never deletes
     // and never re-inserts over (the sync skips keys that already exist).
@@ -3373,6 +3394,7 @@ export default function App() {
   };
 
   const saveBeverages = async ({ cocktails: newC, spirits: newS, beers: newB }) => {
+    if (sandboxRef.current) return { ok: true }; // test service: catalog not persisted
     // Only categories whose list actually changed are rewritten (the write is
     // a replace-all within its category), so saving a cocktail edit can't
     // race another device's concurrent beer edit.
@@ -3595,7 +3617,116 @@ export default function App() {
   };
 
   const endService = async () => {
+    if (sandboxRef.current) { endTestService(); return; }
     await archiveAndClearAll();
+  };
+
+  // ── Test service (sandbox) start / end ──────────────────────────────────────
+  // A fully-functional service that never persists. On start we snapshot the
+  // real in-memory state, flip the kill-switch ON (every seam no-ops, every
+  // adoption suspends — see lib/sandbox.js and the guards above), and seed a
+  // blank in-memory board for today. On end we put the real state back exactly
+  // and flip the switch OFF; a background re-read then catches up on anything
+  // the real service changed while we were isolated. NOTHING here writes to the
+  // store or localStorage, so real data is untouched throughout.
+  const sandboxSnapshotRef = useRef(null);
+
+  const startTestService = () => {
+    if (sandboxRef.current) return;
+    // Snapshot everything the sandbox is about to overwrite (verbatim restore).
+    sandboxSnapshotRef.current = {
+      tables: tablesRef.current,
+      prevJson: [...prevTablesJsonRef.current],
+      confirmedJson: [...confirmedTablesJsonRef.current],
+      reservations: reservationsRef.current,
+      serviceDate: serviceDateRef.current,
+      serviceDateChosenOn: serviceDateChosenOnRef.current,
+      activeServiceSession: activeServiceSessionRef.current,
+      serviceStartedAt: serviceStartedAtRef.current,
+      floorStatus: floorStatusRef.current,
+      mode,
+      sel,
+    };
+    // Kill-switch ON before any state changes, so the seeding below can never
+    // reach the store even for a tick.
+    setSandbox(true);
+    sandboxRef.current = true;
+    setSandboxActive(true);
+
+    const today = currentServiceDay();
+    const blank = Array.from({ length: 10 }, (_, i) => blankTable(i + 1));
+    const blankJson = blank.map(t => JSON.stringify(sanitizeTable(t)));
+    // Blanking a live board would trip the mass-blank guard — flag it as an
+    // intentional whole-board clear so the (no-op) autosave lets it through.
+    intentionalBoardClearRef.current = true;
+    prevTablesJsonRef.current = [...blankJson];
+    confirmedTablesJsonRef.current = [...blankJson];
+    pendingBoardWritesRef.current = new Set();
+    tablesRef.current = blank;
+    setTables(blank);
+    setReservations([]);            // blank slate — add test bookings live
+    setFloorStatusState(sanitizeFloorStatus({}));
+    floorStatusRef.current = sanitizeFloorStatus({});
+    setSel(null);
+    setArchiveOpen(false);
+
+    serviceDateRef.current = today;
+    serviceDateChosenOnRef.current = today;
+    serviceStartedAtRef.current = new Date().toISOString();
+    setServiceDate(today);
+    setServiceDateChosenOn(today);
+
+    // Enter service WITHOUT persisting the mode/date (a reload must resume the
+    // real state, never a stranded non-sandbox "service" on today's date).
+    setMode("service");
+    try { localStorage.removeItem(workspaceKey("milka_mode")); } catch { /* noop */ }
+  };
+
+  const endTestService = () => {
+    const snap = sandboxSnapshotRef.current;
+    if (snap) {
+      const restored = snap.tables || Array.from({ length: 10 }, (_, i) => blankTable(i + 1));
+      // Restore the baselines FIRST so the autosave sees the restored board as
+      // unchanged (no diff → no write) once the switch flips off.
+      prevTablesJsonRef.current = [...snap.prevJson];
+      confirmedTablesJsonRef.current = [...snap.confirmedJson];
+      pendingBoardWritesRef.current = new Set();
+      tablesRef.current = restored;
+      setTables(restored);
+      setReservations(snap.reservations || []);
+      setFloorStatusState(snap.floorStatus || sanitizeFloorStatus({}));
+      floorStatusRef.current = snap.floorStatus || sanitizeFloorStatus({});
+      serviceDateRef.current = snap.serviceDate || null;
+      serviceDateChosenOnRef.current = snap.serviceDateChosenOn || null;
+      serviceStartedAtRef.current = snap.serviceStartedAt || null;
+      setServiceDate(snap.serviceDate || null);
+      setServiceDateChosenOn(snap.serviceDateChosenOn || null);
+      setActiveServiceSession(snap.activeServiceSession || activeServiceSessionRef.current);
+      activeServiceSessionRef.current = snap.activeServiceSession || activeServiceSessionRef.current;
+      setSel(snap.sel ?? null);
+    }
+    sandboxSnapshotRef.current = null;
+    // Switch OFF — real writes and adoptions resume from here.
+    setSandbox(false);
+    sandboxRef.current = false;
+    setSandboxActive(false);
+    setArchiveOpen(false);
+
+    // Re-read the real state in the background: a real service may have moved on
+    // while we were isolated (adoptions were suspended). Best-effort, adopt-only.
+    if (supabase && getWorkspaceId()) {
+      fetchBoardRows().then(rows => { if (Array.isArray(rows)) adoptRemoteTables(rows); }).catch(() => {});
+      readStateKey("service_date").then(st => adoptServiceLifecycleRef.current?.(st, new Date().toISOString())).catch(() => {});
+      reloadReservationsRef.current?.();
+    }
+
+    // Back to where the test was launched from (Admin).
+    const backMode = snap?.mode ?? null;
+    setMode(backMode);
+    try {
+      if (backMode) localStorage.setItem(workspaceKey("milka_mode"), backMode);
+      else localStorage.removeItem(workspaceKey("milka_mode"));
+    } catch { /* noop */ }
   };
 
   // Guards the rollover auto-end so the boot check and the interval tick can't
@@ -3643,14 +3774,22 @@ export default function App() {
         setServiceDateChosenOn(healDay);
         serviceDateRef.current = healDay;
         serviceDateChosenOnRef.current = healDay;
+        // The re-dated state must keep a FULL identity: writing this device's
+        // empty stamp would strip startedAt from the shared state, and an
+        // identity-less live state deadlocks every other device's guarded end
+        // (nothing to adopt back). Mint one if we don't hold one — a device
+        // holding an older stamp is refused once, adopts, and retries fine.
+        const healStartedAt = serviceStartedAtRef.current || new Date().toISOString();
+        serviceStartedAtRef.current = healStartedAt;
         try {
           localStorage.setItem(workspaceKey("milka_service_date"), healDay);
           localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), healDay);
+          localStorage.setItem(workspaceKey("milka_service_started_at"), healStartedAt);
         } catch {}
         await saveStateKey("service_date", {
           date: healDay, chosenOn: healDay,
           session: activeServiceSessionRef.current,
-          startedAt: serviceStartedAtRef.current,
+          startedAt: healStartedAt,
         });
         autoEndingRef.current = false;
         return;
@@ -3745,13 +3884,28 @@ export default function App() {
         .reduce((a, b) => Math.max(a, b), -Infinity);
       day = serviceDayForActivity(latestMs);
       if (!day) return null;
+      // The re-attached service gets a FULL identity: session + a fresh
+      // startedAt, adopted locally too. This heal used to write a bare
+      // {date, chosenOn} blob — an identity-less state the guarded end
+      // (store-side since 11.07) compared its startedAt against forever,
+      // so END SERVICE was refused all night while the board kept showing
+      // the whole service (the 11.07 "can't end service" incident). A fresh
+      // stamp is deliberate: the original start's stamp is unknowable here,
+      // and any device still holding an older one is refused once, adopts
+      // this identity, and its retry succeeds.
+      const startedAt = new Date().toISOString();
+      const session = activeServiceSessionRef.current;
       setServiceDate(day);
       setServiceDateChosenOn(day);
+      serviceDateRef.current = day;
+      serviceDateChosenOnRef.current = day;
+      serviceStartedAtRef.current = startedAt;
       try {
         localStorage.setItem(workspaceKey("milka_service_date"), day);
         localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), day);
+        localStorage.setItem(workspaceKey("milka_service_started_at"), startedAt);
       } catch {}
-      await saveStateKey("service_date", { date: day, chosenOn: day });
+      await saveStateKey("service_date", { date: day, chosenOn: day, session, startedAt });
     } catch (e) {
       console.warn("Orphaned-service heal skipped; leaving board intact:", e);
       return null;
@@ -3856,6 +4010,9 @@ export default function App() {
   // (the boot/auto-end healing paths own those).
   const serviceLifecycleTsRef = useRef(0);
   const adoptServiceLifecycle = (st, rowUpdatedAt) => {
+    // Test service: never adopt the real service's start/end/date — the
+    // sandbox owns its own lifecycle and must not be ended or re-dated by it.
+    if (sandboxRef.current) return;
     const ts = Date.parse(rowUpdatedAt || "");
     if (Number.isFinite(ts)) {
       if (ts <= serviceLifecycleTsRef.current) return; // stale echo / replay
@@ -3872,6 +4029,14 @@ export default function App() {
     if (state.startedAt) {
       serviceStartedAtRef.current = state.startedAt;
       try { localStorage.setItem(workspaceKey("milka_service_started_at"), state.startedAt); } catch {}
+    } else if (state.date) {
+      // A live service with NO identity (a legacy/degraded writer). Presenting
+      // a stamp kept from an EARLIER service is worse than none: the guarded
+      // end refuses it forever (nothing to adopt back), and the deterministic
+      // archive id would collide with that earlier night's entry — silently
+      // dropping the new archive ("on conflict do nothing").
+      serviceStartedAtRef.current = null;
+      try { localStorage.removeItem(workspaceKey("milka_service_started_at")); } catch {}
     }
     const remoteDate = state.date || null;
     const localDate = serviceDateRef.current;
@@ -3999,7 +4164,7 @@ export default function App() {
     // New reservation: mint the uuid client-side so the local write, the
     // uploaded row, and the optimistic React state all share one identity.
     const local = { ...dbRow, id: randomUuid(), created_at: new Date().toISOString() };
-    if (supabase) {
+    if (supabase && !sandboxRef.current) {
       let inserted = local;
       if (sqlitePrimaryRef.current) {
         try {
@@ -4027,7 +4192,7 @@ export default function App() {
   };
 
   const deleteReservation = async (id) => {
-    if (!supabase) {
+    if (!supabase || sandboxRef.current) {
       setReservations(prev => prev.filter(r => r.id !== id));
       return { ok: true };
     }
@@ -4112,7 +4277,12 @@ export default function App() {
           // clears the board or rewrites the date — just adopt the live one.
           setServiceDate(entry.date);
           setServiceDateChosenOn(entry.chosenOn);
-          serviceStartedAtRef.current = entry.startedAt || serviceStartedAtRef.current;
+          // Adopt the live identity EXACTLY — including "none". Falling back
+          // to the stamp this device kept from an earlier service made it
+          // present an identity the store never held: the guarded end refused
+          // every attempt (nothing to adopt back), and the deterministic
+          // archive id collided with that earlier night's archive.
+          serviceStartedAtRef.current = entry.startedAt || null;
           // Adopt the LIVE session so this device filters the board to the same
           // session the service is actually running (not its own local default).
           if (entry.session === "lunch" || entry.session === "dinner") {
@@ -4123,6 +4293,7 @@ export default function App() {
             localStorage.setItem(workspaceKey("milka_service_date"), entry.date);
             if (entry.chosenOn) localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), entry.chosenOn);
             if (entry.startedAt) localStorage.setItem(workspaceKey("milka_service_started_at"), entry.startedAt);
+            else localStorage.removeItem(workspaceKey("milka_service_started_at"));
             if (entry.session === "lunch" || entry.session === "dinner") localStorage.setItem(workspaceKey("milka_service_session"), entry.session);
           } catch {}
           enterMode("service");
@@ -4800,7 +4971,7 @@ export default function App() {
   // incoming copy older than what this device just wrote is a late echo of a
   // superseded blob, not news.
   const adoptFloorStatus = (state, updatedAt) => {
-    if (state == null) return;
+    if (sandboxRef.current || state == null) return; // test service: ignore real SET markers
     const incoming = Date.parse(updatedAt || "") || 0;
     if (floorStatusWriteTsRef.current && Date.now() - floorStatusWriteTsRef.current < 60000
       && incoming && incoming < floorStatusWriteTsRef.current) return;
@@ -5062,6 +5233,7 @@ export default function App() {
           },
           onReservations: (rows) => {
             if (cancelled) return;
+            if (sandboxRef.current) { setReservationsLoaded(true); return; } // test service: keep the in-memory planner
             setReservations(rows);
             setReservationsLoaded(true);
           },
@@ -5228,7 +5400,18 @@ export default function App() {
         }
         setServiceDate(d => d || persisted); // local state wins if already set
         setServiceDateChosenOn(c => c || persistedChosenOn);
-        serviceStartedAtRef.current = persistedStartedAt || serviceStartedAtRef.current;
+        // Adopt the persisted identity as-is. If the LIVE service carries no
+        // startedAt, a stamp left over from an earlier service must not stand
+        // in for it — the guarded end refuses a stamp the store never held,
+        // and the deterministic archive id would collide with that earlier
+        // night's entry. Keep the local stamp only while a locally-started
+        // service on a DIFFERENT day still owns it.
+        if (persistedStartedAt) {
+          serviceStartedAtRef.current = persistedStartedAt;
+        } else if (!serviceDateRef.current || serviceDateRef.current === persisted) {
+          serviceStartedAtRef.current = null;
+          try { localStorage.removeItem(workspaceKey("milka_service_started_at")); } catch {}
+        }
         // Adopt the live service's shared session so this device's board reconcile
         // shows the right session's reservations (not its own local default).
         if (persistedSession === "lunch" || persistedSession === "dinner") {
@@ -5262,7 +5445,7 @@ export default function App() {
           if (error) throw error;
           return data || [];
         })
-          .then(data => { if (mounted) setReservations(data); })
+          .then(data => { if (mounted && !sandboxRef.current) setReservations(data); })
           .catch(e => { console.warn("Reservations load failed — keeping cached list:", e); })
           .finally(() => { if (mounted) setReservationsLoaded(true); });
       };
@@ -5275,7 +5458,10 @@ export default function App() {
 
   // Keep the reservations cache in step with live state (initial load, realtime
   // pushes, and local edits) so the planner paints instantly next launch.
-  useEffect(() => { writeLocalReservations(reservations); }, [reservations]);
+  // The device-local planner cache must not capture the test service's
+  // in-memory bookings (it would paint them on the next real boot until the
+  // store refresh lands). Sandbox leaves the real cache untouched.
+  useEffect(() => { if (!sandboxRef.current) writeLocalReservations(reservations); }, [reservations]);
 
   // While the app is left open (e.g. overnight), automatically end a service
   // once it rolls past the service-day cutoff. The auto-end archives first, so
@@ -5372,6 +5558,7 @@ export default function App() {
     filter: wsFilter,
     table: TABLES.RESERVATIONS,
     onChange: (payload) => {
+      if (sandboxRef.current) return; // test service: keep the in-memory planner
       if (payload.eventType === "DELETE") {
         setReservations(prev => prev.filter(r => r.id !== payload.old?.id));
       } else if (payload.new) {
@@ -5623,7 +5810,34 @@ export default function App() {
     />
   ) : null;
 
-  if (!mode) return <>{serviceDatePickerEl}<LoginScreen
+  // Persistent, mode-independent test-service banner. Fixed to the bottom so it
+  // rides above every surface (service, kitchen, floor, admin) and END TEST is
+  // always one tap away, whatever the operator navigated into.
+  const sandboxBannerEl = sandboxActive ? (
+    <div style={{
+      position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 300,
+      display: "flex", alignItems: "center", justifyContent: "center", gap: 14,
+      padding: "9px 14px", flexWrap: "wrap",
+      paddingBottom: "max(9px, env(safe-area-inset-bottom))",
+      background: tokens.signal.warn, borderTop: `2px solid ${tokens.ink[0]}`,
+      fontFamily: FONT,
+    }}>
+      <span style={{ fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", fontWeight: 700, color: tokens.ink[0] }}>
+        ● TEST SERVICE — nothing is saved
+      </span>
+      <button
+        onClick={endTestService}
+        style={{
+          fontFamily: FONT, fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase",
+          fontWeight: 700, padding: "8px 16px", border: `1px solid ${tokens.ink[0]}`,
+          borderRadius: 0, cursor: "pointer", background: tokens.ink[0], color: tokens.neutral[0],
+          touchAction: "manipulation", minHeight: 40,
+        }}
+      >END TEST</button>
+    </div>
+  ) : null;
+
+  if (!mode) return <>{serviceDatePickerEl}{sandboxBannerEl}<LoginScreen
       onEnter={m => { if (m !== "admin" || canAdmin) { changeMode(m); setSel(null); } }}
       onSyncAll={canAdmin ? syncWines : undefined}
       canAdmin={canAdmin}
@@ -5634,7 +5848,7 @@ export default function App() {
     /></>;
 
   // Reservation Manager mode
-  if (mode === "reservation") return (<>{serviceDatePickerEl}<Suspense fallback={lazyViewFallback}><ReservationManager
+  if (mode === "reservation") return (<>{serviceDatePickerEl}{sandboxBannerEl}<Suspense fallback={lazyViewFallback}><ReservationManager
       reservations={reservations}
       menuCourses={activeMenuCourses}
       tables={tables}
@@ -5672,7 +5886,7 @@ export default function App() {
   // staff need to fire/unfire and edit notes here, so this is NOT read-only.
   // The FLOOR sibling view (mode "kitchen_floor") is strictly read-only.
   if (mode === "display" || mode === "kitchen_floor") return (<>
-    {serviceDatePickerEl}
+    {serviceDatePickerEl}{sandboxBannerEl}
     <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
       <Header
@@ -5758,6 +5972,7 @@ export default function App() {
   if (mode === "menu") return (
     <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
+      {sandboxBannerEl}
       <Suspense fallback={lazyViewFallback}><MenuPage
         tables={tables}
         menuCourses={activeMenuCourses}
@@ -5780,6 +5995,7 @@ export default function App() {
   if (mode === "admin") return (
     <div style={{ minHeight: "100vh", background: tokens.neutral[0], fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
+      {sandboxBannerEl}
       <Suspense fallback={lazyViewFallback}><AdminLayout
         menuCourses={menuCourses}
         onUpdateMenuCourses={(next) => { menuCoursesDirtyRef.current = true; setMenuCourses(next); }}
@@ -5839,6 +6055,7 @@ export default function App() {
         onSaveRestrictions={saveRestrictions}
         courseQuickNotes={courseQuickNotes}
         onSaveCourseQuickNotes={saveCourseQuickNotes}
+        onStartTestService={startTestService}
         onExit={() => changeMode(null)}
       /></Suspense>
     </div>
@@ -5846,7 +6063,7 @@ export default function App() {
 
   // Service mode only
   return (<>
-    {serviceDatePickerEl}
+    {serviceDatePickerEl}{sandboxBannerEl}
     <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
 

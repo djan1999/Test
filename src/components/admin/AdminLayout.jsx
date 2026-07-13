@@ -101,6 +101,7 @@ export default function AdminLayout({
   onSaveRestrictions,
   courseQuickNotes = {},
   onSaveCourseQuickNotes,
+  onStartTestService,
   // Navigation
   onExit,
 }) {
@@ -509,6 +510,7 @@ export default function AdminLayout({
               wineSyncConfig={wineSyncConfig}
               onUpdateWineSyncConfig={onUpdateWineSyncConfig}
               onSaveWineSyncConfig={onSaveWineSyncConfig}
+              onStartTestService={onStartTestService}
             />
           )}
 

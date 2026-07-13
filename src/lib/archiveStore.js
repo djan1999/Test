@@ -6,6 +6,7 @@
 import { getWorkspaceId, TABLES } from "./supabaseClient.js";
 import { scopedFrom } from "./scopedDb.js";
 import { isSqlitePrimary } from "../powersync/primary.js";
+import { isSandbox } from "./sandbox.js";
 
 // → { active, deleted } — active newest-first ≤60, trash newest-first ≤30
 // (the shapes the modal always consumed). Throws on a failed fallback read.
@@ -23,6 +24,9 @@ export async function fetchArchive() {
 }
 
 const attempt = async (run) => {
+  // Test service: archive edits (delete / restore / purge) must never touch
+  // the real archive — report success and change nothing.
+  if (isSandbox()) return { ok: true };
   try {
     await run();
     return { ok: true };

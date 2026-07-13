@@ -454,6 +454,9 @@ export default function FloorMap({
         const arriving = st.status === "arriving";
         const reserved = st.status === "reserved";
         const strip = mode === "service" ? (st.strip || null) : null;
+        // A SET table already announced to the kitchen — amber ring, so staff
+        // see at a glance it's been sent and don't re-send the same course.
+        const sent = mode === "service" && !!st.sent;
         const pickable = mode === "picker" ? st.selectable !== false && !occupied && !arriving : false;
         const seatEditing = mode === "seats" && seatsEditLabel === t.label;
         const selected = editing && selectedLabel === t.label;
@@ -508,6 +511,10 @@ export default function FloorMap({
             <TableShape t={t} fill={fill} stroke={stroke}
               strokeWidth={strip ? 0.7 : blueprint ? 0.45 : 0.35}
               dash={arriving || reserved ? "1.4 1" : undefined} />
+            {sent && (
+              <TableShape t={{ ...t, x: t.x - 1.1, y: t.y - 1.1, w: t.w + 2.2, h: t.h + 2.2 }}
+                fill="none" stroke={tokens.signal.warn} strokeWidth={0.7} />
+            )}
             {selected && (
               <>
                 <TableShape t={{ ...t, x: t.x - 1.2, y: t.y - 1.2, w: t.w + 2.4, h: t.h + 2.4 }}

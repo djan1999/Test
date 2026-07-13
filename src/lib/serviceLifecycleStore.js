@@ -1,3 +1,5 @@
+import { isSandbox } from "./sandbox.js";
+
 export function makeBlankServiceRows(now = new Date().toISOString()) {
   return Array.from({ length: 10 }, (_, index) => ({
     table_id: index + 1,
@@ -20,6 +22,10 @@ export function makeBlankServiceRows(now = new Date().toISOString()) {
 export async function finishServiceStore({ client, workspaceId, sqlitePrimary, archive = null, expected = null }) {
   const blankRows = makeBlankServiceRows();
   if (!client || !workspaceId) return { rows: blankRows, superseded: false };
+  // Test service: file no archive, clear no store rows — the end is a local
+  // discard only (App routes sandbox END to endTestService; this is the
+  // fail-safe backstop so a stray call can never write either).
+  if (isSandbox()) return { rows: blankRows, superseded: false };
 
   if (sqlitePrimary) {
     const { finishServiceLocally } = await import("../powersync/writes.js");

@@ -13,6 +13,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 const h = vi.hoisted(() => ({
   calls: [],
   rows: new Set(), // `${table}|${id}|${workspace_id}`
+  rowState: {},    // row id → stored `state` column (JSON text), for getOptional
   workspaceId: "ws-1",
   transactions: 0,
 }));
@@ -34,7 +35,10 @@ vi.mock("../powersync/system.js", () => {
   const getOptional = async (sql, params) => {
     record(sql, params);
     const table = sql.match(/FROM\s+(\w+)/i)[1];
-    return h.rows.has(key(table, String(params[0]), params[1])) ? { id: String(params[0]) } : null;
+    if (!h.rows.has(key(table, String(params[0]), params[1]))) return null;
+    const row = { id: String(params[0]) };
+    if (String(params[0]) in h.rowState) row.state = h.rowState[String(params[0])];
+    return row;
   };
   const ctx = { execute, getOptional };
   return { getPowerSync: () => ({
@@ -60,6 +64,7 @@ const callsLike = (verb) => h.calls.filter((c) => c.sql.toUpperCase().startsWith
 beforeEach(() => {
   h.calls = [];
   h.rows = new Set();
+  h.rowState = {};
   h.workspaceId = "ws-1";
   h.transactions = 0;
 });
@@ -255,5 +260,43 @@ describe("powersync/writes — finish service", () => {
     expect(h.calls.some(c => c.sql.startsWith("INSERT INTO service_archive"))).toBe(false);
     expect(h.calls.some(c => c.sql.startsWith("UPDATE service_tables"))).toBe(true);
     expect(h.calls.some(c => c.sql.startsWith("UPDATE service_settings"))).toBe(true);
+  });
+});
+
+describe("powersync/writes — finish service identity guard", () => {
+  const seedServiceDate = (state) => {
+    h.rows.add("service_settings|ws-1|service_date|ws-1");
+    h.rowState["ws-1|service_date"] = JSON.stringify(state);
+  };
+  const blankRows = [{ table_id: 1, data: {}, updated_at: "end" }];
+
+  it("refuses the whole end when the local state holds a DIFFERENT startedAt", async () => {
+    seedServiceDate({ date: "2026-07-11", startedAt: "S2" });
+    const result = await finishServiceLocally({
+      blankRows, expected: { startedAt: "S1", date: "2026-07-11" },
+    });
+    expect(result.superseded).toBe(true);
+    expect(h.calls.some(c => /INTO service_tables|UPDATE service_tables/.test(c.sql))).toBe(false);
+  });
+
+  it("a state with NO startedAt has no identity to mismatch — the date alone decides (11.07 incident)", async () => {
+    // The production trap: {date, chosenOn} in the store, a stale stamp on
+    // the device. Comparing undefined === 'S-stale' refused every end.
+    seedServiceDate({ date: "2026-07-11", chosenOn: "2026-07-11" });
+    const result = await finishServiceLocally({
+      blankRows, expected: { startedAt: "S-stale", date: "2026-07-11" },
+    });
+    expect(result.superseded).toBe(false);
+    expect(h.calls.some(c => /^(INSERT INTO|UPDATE) service_tables/.test(c.sql))).toBe(true);
+    expect(h.calls.some(c => c.sql.startsWith("UPDATE service_settings"))).toBe(true);
+  });
+
+  it("an identity-less state still refuses a DATE mismatch", async () => {
+    seedServiceDate({ date: "2026-07-12", chosenOn: "2026-07-12" });
+    const result = await finishServiceLocally({
+      blankRows, expected: { startedAt: "S-stale", date: "2026-07-11" },
+    });
+    expect(result.superseded).toBe(true);
+    expect(h.calls.some(c => /INTO service_tables|UPDATE service_tables/.test(c.sql))).toBe(false);
   });
 });

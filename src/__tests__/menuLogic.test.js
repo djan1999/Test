@@ -5,6 +5,7 @@ import {
   mergeDishes,
   getCourseMod,
   resolveSeatRestrictionKeys,
+  courseRestrictionModCounts,
 } from "../utils/menuUtils.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -353,5 +354,41 @@ describe("resolveSeatRestrictionKeys", () => {
     expect(resolveSeatRestrictionKeys(undefined, 1)).toEqual([]);
     expect(resolveSeatRestrictionKeys([], 1)).toEqual([]);
     expect(resolveSeatRestrictionKeys([{ pos: null, note: "" }], 1)).toEqual([]);
+  });
+});
+
+// ── courseRestrictionModCounts (kitchen ticket "N× MOD" line) ─────────────────
+
+describe("courseRestrictionModCounts", () => {
+  // A course where a "veg" restriction swaps the dish name → a real mod.
+  const vegCourse = { course_key: "main", menu: { name: "VENISON", sub: "" }, restrictions: { veg: { name: "CELERIAC", sub: "" } } };
+  const seats4 = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
+
+  it("one UNASSIGNED restriction counts once — not once per seat (the bug)", () => {
+    // The whole point: a single vegetarian on a four-top must read 1×, not 4×,
+    // BEFORE anyone pins it to a chair.
+    const restrictions = [{ pos: null, note: "veg" }];
+    expect(courseRestrictionModCounts(vegCourse, seats4, restrictions)).toEqual({ CELERIAC: 1 });
+  });
+
+  it("two unassigned entries of the same restriction count as two guests", () => {
+    const restrictions = [{ pos: null, note: "veg" }, { pos: null, note: "veg" }];
+    expect(courseRestrictionModCounts(vegCourse, seats4, restrictions)).toEqual({ CELERIAC: 2 });
+  });
+
+  it("an ASSIGNED restriction counts once for its seat — same 1× as before assignment", () => {
+    const restrictions = [{ pos: 2, note: "veg" }];
+    expect(courseRestrictionModCounts(vegCourse, seats4, restrictions)).toEqual({ CELERIAC: 1 });
+  });
+
+  it("mixes assigned + unassigned guests additively", () => {
+    const restrictions = [{ pos: 2, note: "veg" }, { pos: null, note: "veg" }];
+    expect(courseRestrictionModCounts(vegCourse, seats4, restrictions)).toEqual({ CELERIAC: 2 });
+  });
+
+  it("returns null when nothing modifies this course", () => {
+    expect(courseRestrictionModCounts(vegCourse, seats4, [{ pos: null, note: "gluten" }])).toBeNull();
+    expect(courseRestrictionModCounts(vegCourse, seats4, [])).toBeNull();
+    expect(courseRestrictionModCounts(vegCourse, [], null)).toBeNull();
   });
 });

@@ -343,3 +343,55 @@ describe("SEND SET → KITCHEN", () => {
     expect(queryByText(/SEND SET → KITCHEN/)).toBeNull(); // T4 SET is reserved-only
   });
 });
+
+describe("SEND SET → KITCHEN — no double-send of an already-announced course", () => {
+  const menuCourses = [
+    { position: 1, course_key: "amuse", menu: { name: "Amuse" }, is_active: true, is_snack: false, optional_flag: "", course_category: "main" },
+    { position: 2, course_key: "main", menu: { name: "Main" }, is_active: true, is_snack: false, optional_flag: "", course_category: "main" },
+  ];
+  // T1 has already been sent for its next course (courseReady === its nextFire);
+  // T9 is freshly SET and never sent.
+  const withReady = tables.map((t) =>
+    t.id === 1 ? { ...t, courseReady: { key: "amuse", index: 1, name: "Amuse" } } : t);
+
+  it("an already-sent SET table is excluded from SEND and wears an amber ring", () => {
+    const onSend = vi.fn();
+    const { container, queryByText } = setup({
+      floorStatus: { dining_a: { T1: "SET" } },
+      tables: withReady,
+      menuCourses,
+      onSendSetToKitchen: onSend,
+    });
+    // Nothing left to send — T1 already holds the kitchen's SET banner.
+    expect(queryByText(/SEND SET → KITCHEN/)).toBeNull();
+    // …and it shows the amber ring (signal.warn) so staff see it's been sent.
+    const t1 = findTable(container, "T1");
+    expect(t1.querySelector('[stroke="#c49a4a"]')).toBeTruthy();
+  });
+
+  it("SEND forwards ONLY the table not yet announced (the new one), not the already-sent one", () => {
+    const onSend = vi.fn();
+    const { getByText } = setup({
+      floorStatus: { dining_a: { T1: "SET", T9: "SET" } },
+      tables: withReady, // T1 sent, T9 fresh
+      menuCourses,
+      onSendSetToKitchen: onSend,
+    });
+    fireEvent.click(getByText(/SEND SET → KITCHEN \(1\)/));
+    expect(onSend).toHaveBeenCalledWith([9]); // T1 (already sent) is not re-fired
+  });
+
+  it("a fresh SET table (no courseReady) still sends and shows no ring", () => {
+    const onSend = vi.fn();
+    const { container, getByText } = setup({
+      floorStatus: { dining_a: { T1: "SET" } },
+      tables, // T1 has no courseReady
+      menuCourses,
+      onSendSetToKitchen: onSend,
+    });
+    const t1 = findTable(container, "T1");
+    expect(t1.querySelector('[stroke="#c49a4a"]')).toBeNull(); // not sent → no ring
+    fireEvent.click(getByText(/SEND SET → KITCHEN \(1\)/));
+    expect(onSend).toHaveBeenCalledWith([1]);
+  });
+});
