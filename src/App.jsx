@@ -2170,6 +2170,47 @@ export default function App() {
       : t)));
   };
 
+  // SEND SET → KITCHEN: every SET table raises the same kitchen banner the
+  // sheet's SET NEXT does — courseReady for the table's next unfired course.
+  // The alert carries ONLY the set course: previously it re-attached the last
+  // unconfirmed order delta, so 'send SET' also re-sent pairings and every
+  // earlier change to the kitchen (orders were already sent once — the ticket
+  // still shows them; the alert must not repeat them). Board tables whose party
+  // is still out on the terrace already have a live kitchen ticket, so a
+  // terrace SET must reach it even though the dining table isn't seated yet.
+  // Shared by the FOH floor and the (now interactive) kitchen terrace.
+  const sendSetToKitchen = (boardIds) => {
+    const terraceIds = new Set();
+    serviceReservations.forEach(r => {
+      if (visitStateOf(r.data) !== "terrace") return;
+      reservationTableIds(r.data, r.table_id).forEach(tid => terraceIds.add(Number(tid)));
+    });
+    for (const id of boardIds) {
+      const t = tablesRef.current?.find(x => x.id === id);
+      if (!t) continue;
+      if (!t.active && !terraceIds.has(t.id)) continue;
+      const visible = getVisibleCoursesForTable(t, activeMenuCourses, {
+        profiles: profilesState.profiles, assignments: profilesState.assignments,
+      });
+      const { nextFire } = getCourseProgressState(t, visible);
+      if (!nextFire) continue; // menu complete — nothing to announce
+      const ready = { key: nextFire.key, index: nextFire.index, name: nextFire.name, at: fmt(new Date()) };
+      updMany(id, {
+        courseReady: ready,
+        kitchenAlert: {
+          timestamp: new Date().toISOString(),
+          tableName: t.resName || null,
+          seats: [],
+          confirmed: false,
+          course: ready,
+        },
+        // a SET to an archived ticket proves it's still live — bring it back
+        // next to its alert (Archive mis-taps)
+        ...(t.kitchenArchived ? { kitchenArchived: false } : {}),
+      });
+    }
+  };
+
   const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, rooms, birthday, cakeNote, restrictions, notes, lang }) => {
     const group = tableIds ?? (tableId ? [tableId] : [id]);
     const sortedGroup = [...group].sort((a, b) => a - b);
@@ -4210,6 +4251,14 @@ export default function App() {
               profiles={profilesState.profiles}
               assignments={profilesState.assignments}
               isMobile={appIsMobile}
+              // The kitchen can seat/assign a walked-in party to a terrace
+              // table, change its table, set it to the pass, and swap seats /
+              // move restrictions — the same service-mode handlers, so its
+              // local-first writes work even with the Wi-Fi down (per Djan).
+              onAssign={assignTerraceTable}
+              onSwapSeats={swapSeats}
+              onCycleStatus={(mapId, label) => updateFloorStatus(fs => cycleFloorStatus(fs, mapId, label))}
+              onSendSetToKitchen={sendSetToKitchen}
             />
           ) : (
           <KitchenBoard
@@ -4486,48 +4535,7 @@ export default function App() {
               onMove={moveTerracePartyIn}
               onMarkSeated={markTerracePartySeated}
               onSwapSeats={swapSeats}
-              onSendSetToKitchen={(boardIds) => {
-                // SEND on the floor: every SET table raises the SAME kitchen
-                // banner the sheet view's SET NEXT does — courseReady for the
-                // table's next unfired course. The alert carries ONLY the set
-                // course: previously it re-attached the last unconfirmed order
-                // delta, so 'send SET' also re-sent pairings and every earlier
-                // change to the kitchen (orders were already sent once — the
-                // ticket still shows them; the alert must not repeat them).
-                // Board tables whose party is still out on the terrace already
-                // have a live kitchen ticket (kitchenTables decoration), so a
-                // terrace SET must reach it even though the dining table isn't
-                // seated yet.
-                const terraceIds = new Set();
-                serviceReservations.forEach(r => {
-                  if (visitStateOf(r.data) !== "terrace") return;
-                  reservationTableIds(r.data, r.table_id).forEach(tid => terraceIds.add(Number(tid)));
-                });
-                for (const id of boardIds) {
-                  const t = tablesRef.current?.find(x => x.id === id);
-                  if (!t) continue;
-                  if (!t.active && !terraceIds.has(t.id)) continue;
-                  const visible = getVisibleCoursesForTable(t, activeMenuCourses, {
-                    profiles: profilesState.profiles, assignments: profilesState.assignments,
-                  });
-                  const { nextFire } = getCourseProgressState(t, visible);
-                  if (!nextFire) continue; // menu complete — nothing to announce
-                  const ready = { key: nextFire.key, index: nextFire.index, name: nextFire.name, at: fmt(new Date()) };
-                  updMany(id, {
-                    courseReady: ready,
-                    kitchenAlert: {
-                      timestamp: new Date().toISOString(),
-                      tableName: t.resName || null,
-                      seats: [],
-                      confirmed: false,
-                      course: ready,
-                    },
-                    // a SET to an archived ticket proves it's still live —
-                    // bring it back next to its alert (Archive mis-taps)
-                    ...(t.kitchenArchived ? { kitchenArchived: false } : {}),
-                  });
-                }
-              }}
+              onSendSetToKitchen={sendSetToKitchen}
               isMobile={appIsMobile}
             />
           ) : (

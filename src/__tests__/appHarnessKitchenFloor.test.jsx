@@ -369,6 +369,36 @@ describe("app harness — terrace floor view through the real App", () => {
     await screen.findByText(/^Bruno Harness ×3/, {}, { timeout: 5000 }); // exact case: the picker entry, never the uppercase assign flash
   }, 25000);
 
+  it("the KITCHEN terrace can now seat/assign a waiting party (per Djan — a walk-in the kitchen sees first)", async () => {
+    // Previously the kitchen floor was strictly read-only; a tap only opened
+    // the restriction popover. It now shares the FOH assign flow so the
+    // kitchen — whose local-first writes survive a Wi-Fi drop — can put a
+    // walked-in party onto a terrace table itself.
+    seedLiveService();
+    const { container } = render(<App />);
+    await enterKitchen();
+
+    // Kitchen → TERRACE (header switch), then a free tile opens the sheet.
+    fireEvent.click(screen.getByText("terrace"));
+    await waitFor(() => expect(findSvgTable(container, "T23")).toBeTruthy(), { timeout: 5000 });
+    fireEvent.click(findSvgTable(container, "T23"));
+    fireEvent.click(await screen.findByText(/^Bruno Harness ×3/, {}, { timeout: 5000 }));
+
+    // The assign rides the store seam exactly as the service floor's does.
+    await waitFor(() => {
+      expect(resRow("res-bruno")?.data).toMatchObject({ visit_state: "terrace", terrace_table: "T23" });
+    }, { timeout: 5000 });
+
+    // And the kitchen can change the party's table: CHANGE TABLE → tap a free
+    // terrace tile re-seats them there.
+    fireEvent.click(findSvgTable(container, "T23"));
+    fireEvent.click(await screen.findByText("CHANGE TABLE", {}, { timeout: 5000 }));
+    fireEvent.click(findSvgTable(container, "T24"));
+    await waitFor(() => {
+      expect(resRow("res-bruno")?.data?.terrace_table).toBe("T24");
+    }, { timeout: 5000 });
+  }, 25000);
+
   it("a party SEATED INSIDE whose tile is cleared heals to 'dining' — not back into the waiting pool", async () => {
     seedLiveService();
     const { container } = render(<App />);
