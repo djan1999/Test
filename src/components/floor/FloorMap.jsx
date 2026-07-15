@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import {
   seatDisplayPoints, MAP_W, MAP_H,
@@ -221,6 +221,22 @@ export default function FloorMap({
   // would toggle SET on a dining table) — the click that follows is consumed.
   const swallowTapRef = useRef(false);
 
+  // iOS Safari ignores touch-action on SVG *children*, so the chair drag's
+  // per-element touchAction:"none" never engages on tablets — the browser
+  // claims the gesture for page scroll / pull-to-refresh and kills the drag
+  // with pointercancel ("it tries to refresh instead of moving the seat").
+  // Block native scrolling only while a drag gesture is actually armed
+  // (chair swap, edit drags): plain taps and scrolls that start on the map's
+  // dead space stay native. React attaches touchmove passively, so this must
+  // be a manual non-passive listener.
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const block = (e) => { if (gestureRef.current) e.preventDefault(); };
+    svg.addEventListener("touchmove", block, { passive: false });
+    return () => svg.removeEventListener("touchmove", block);
+  }, []);
+
   if (!map) return null;
   const editing = mode === "edit";
   const sheetData = sheetOf(map);
@@ -393,8 +409,9 @@ export default function FloorMap({
         boxShadow: blueprint ? `6px 6px 0 ${tokens.ink[5]}` : undefined,
         touchAction: editing ? "none" : undefined,
         // The map is a control surface — drag gestures (tables, seats, seat
-        // swap) must never read as a text selection sweep across the labels.
-        userSelect: "none", WebkitUserSelect: "none",
+        // swap) must never read as a text selection sweep across the labels,
+        // and holding a chair must not raise iOS's long-press callout.
+        userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none",
       }}
       role="img"
       aria-label={`${map.name} floor map`}

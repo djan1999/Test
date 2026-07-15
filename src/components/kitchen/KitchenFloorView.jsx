@@ -24,8 +24,10 @@ const FONT = tokens.font;
 // (per Djan — a party can walk in and the kitchen, whose local-first writes
 // work with the Wi-Fi down, must be able to seat/assign it, change its table,
 // set it to the pass, swap seats and move restrictions — exactly like service
-// mode). The dining tab stays read-only: a tap opens the restriction popover.
-// With no handlers passed the whole view falls back to read-only.
+// mode). The dining tab keeps its tap → restriction popover, but its chairs
+// take the same swap drag (a dining drag renumbers positions for real — the
+// chair is the plate position). With no handlers passed the whole view falls
+// back to read-only.
 export default function KitchenFloorView({
   // "terrace" | "dining": the header's flattened TICKETS/TERRACE/DINING ROOM
   // switch owns the map (11.07) — the inner tab row disappears. Unset →
@@ -193,14 +195,25 @@ export default function KitchenFloorView({
 
   const terraceInteractive = interactive && map.kind === "terrace";
 
-  // Drag a chair onto another chair of the same terrace party to swap those
-  // two positions' guests (restrictions ride the guest — same as service).
+  // Drag a chair onto another chair of the same table — the kitchen has the
+  // same gesture service does (per Djan). TERRACE: the guest keeps their
+  // P-number, only their aperitif chair changes. DINING: the chair is the
+  // plate position — a real swap, so P-numbers and restriction positions
+  // renumber and the ticket "→ P4" follows the drag.
   const swapSeatPositions = (label, aNo, bNo) => {
     if (!onSwapSeats) return;
-    const bt = terracePartyBoardTable(occ[label]);
+    const bt = map.kind === "terrace"
+      ? terracePartyBoardTable(occ[label])
+      : (() => {
+          const t = (map.tables || []).find((x) => x.label === label);
+          return t ? tables.find((x) => x.id === boardIdsOf(t)[0]) || null : null;
+        })();
     if (!bt) return;
     const positionKey = floorPositionKey(map.id, label);
-    onSwapSeats(bt.id, Number(aNo), Number(bNo), positionKey);
+    const source = (bt.seats || []).find((seat) => seatFloorPosition(seat, positionKey) === Number(aNo));
+    if (!source) return;
+    if (map.kind === "terrace") onSwapSeats(bt.id, Number(aNo), Number(bNo), positionKey);
+    else onSwapSeats(bt.id, Number(aNo), Number(bNo), positionKey, { identity: true });
     flash(`${label} · P${aNo} ⇄ P${bNo}`);
   };
 
@@ -302,7 +315,7 @@ export default function KitchenFloorView({
         seatGendersByLabel={seatGendersByLabel}
         seatLabelsByLabel={seatLabelsByLabel}
         seatPositionLabels
-        onSeatSwap={terraceInteractive && onSwapSeats ? swapSeatPositions : undefined}
+        onSeatSwap={interactive && onSwapSeats ? swapSeatPositions : undefined}
         height={isMobile ? 300 : 440}
         onTableTap={(t) => {
           if (terraceInteractive) { handleTerraceTap(t); return; }

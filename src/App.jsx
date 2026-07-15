@@ -34,7 +34,7 @@ import {
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
   reservationTableIds, mergeRestrictionPositions, startedTablePatchFromReservation,
   repointReservation, moveTableRows, swapTableRows, massBlankedIndices,
-  swapSeatData, moveSeatOnFloor,
+  swapSeatData, moveSeatOnFloor, materializeFloorPositions,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { foldTable } from "./utils/foldTable.js";
@@ -2161,13 +2161,22 @@ export default function App() {
     return day;
   };
 
-  // Board swaps exchange P-slot payloads. Floor drags instead change only the
+  // Board swaps exchange P-slot payloads. TERRACE drags change only the
   // guest's physical chair for that concrete map/table, keeping P1..P{pax}
-  // stable when (for example) P2 moves to terrace chair 6.
-  const swapSeats = (tid, aId, bId, floorKey = null) => {
-    setTables(p => p.map(t => (t.id === tid
-      ? (floorKey ? moveSeatOnFloor(t, aId, bId, floorKey) : swapSeatData(t, aId, bId))
-      : t)));
+  // stable when (for example) P2 moves to terrace chair 6 — the aperitif
+  // chair must not rewrite the party's dining plate positions. DINING-map
+  // drags ({ identity: true }) are REAL seat changes: the kitchen plates by
+  // chair, so P-numbers and restriction positions renumber with the move and
+  // every kitchen surface (ticket "→ P4", floor map, print) reads the new
+  // chair (per Djan — dragging a restriction on the map must move it in the
+  // kitchen too).
+  const swapSeats = (tid, aId, bId, floorKey = null, opts = {}) => {
+    setTables(p => p.map(t => {
+      if (t.id !== tid) return t;
+      if (!floorKey) return swapSeatData(t, aId, bId);
+      if (opts.identity) return swapSeatData(materializeFloorPositions(t, floorKey), aId, bId);
+      return moveSeatOnFloor(t, aId, bId, floorKey);
+    }));
   };
 
   // SEND SET → KITCHEN: every SET table raises the same kitchen banner the
