@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { tokens } from "../../styles/tokens.js";
-import { restrCompact } from "../../constants/dietary.js";
+import { restrCompact, restrLabel } from "../../constants/dietary.js";
 import { PAIRINGS, waterStyle, extraPairingForSeat } from "../../constants/pairings.js";
 import { kitchenSnapshot, kitchenDelta } from "../../utils/kitchenAlerts.js";
 import {
