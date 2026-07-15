@@ -110,6 +110,39 @@ const seedLiveService = ({ serviceDate = TODAY(), boardUpdatedAt = new Date().to
   ]);
 };
 
+const seedSeatlessCombinedService = () => {
+  const now = new Date().toISOString();
+  const grouped = (id) => ({
+    ...blankTable(id),
+    active: true,
+    arrivedAt: "19:07",
+    resName: "Seatless Group",
+    resTime: "19:00",
+    guests: 0,
+    seats: [],
+    tableGroup: [2, 3],
+  });
+  seed("service_settings", [{
+    id: "service_date",
+    state: { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: now },
+    updated_at: now,
+  }]);
+  seed("service_tables", [
+    { table_id: 2, data: grouped(2), updated_at: now },
+    { table_id: 3, data: grouped(3), updated_at: now },
+  ]);
+  seed("reservations", [{
+    id: "res-seatless-group",
+    date: TODAY(),
+    table_id: 2,
+    created_at: now,
+    data: {
+      resName: "Seatless Group", resTime: "19:00", guests: 5,
+      tableGroup: [2, 3], service_session: "dinner",
+    },
+  }]);
+};
+
 const enterService = async () => {
   fireEvent.click(await screen.findByText("[Service]", {}, { timeout: 5000 }));
   await screen.findByText(/Anna Harness/, {}, { timeout: 5000 });
@@ -149,6 +182,26 @@ describe.each([
       expect(rowFor(remoteRows("service_tables"), 1)?.data?.active).toBe(true);
     }, { timeout: 5000 });
   });
+
+  it("unseats every row of a seatless combined table without the mass-blank guard restoring it", async () => {
+    seedSeatlessCombinedService();
+    render(<App />);
+    fireEvent.click(await screen.findByText("[Service]", {}, { timeout: 5000 }));
+    await screen.findByText("Seatless Group", {}, { timeout: 5000 });
+    fireEvent.click(screen.getByText("Unseat"));
+
+    const activeRows = () => (psMode ? localRows("service_tables") : remoteRows("service_tables"));
+    await waitFor(() => {
+      expect(rowFor(activeRows(), 2)?.data?.active).toBe(false);
+      expect(rowFor(activeRows(), 3)?.data?.active).toBe(false);
+    }, { timeout: 5000 });
+
+    if (psMode) {
+      await act(async () => { await drainUploads(); });
+      expect(rowFor(remoteRows("service_tables"), 2)?.data?.active).toBe(false);
+      expect(rowFor(remoteRows("service_tables"), 3)?.data?.active).toBe(false);
+    }
+  }, 20000);
 
   it("table switch repoints board rows AND the reservation through the store, with no bounce-back", async () => {
     seedLiveService();
