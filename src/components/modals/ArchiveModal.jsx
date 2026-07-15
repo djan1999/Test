@@ -18,6 +18,7 @@ export default function ArchiveModal({
   optionalPairings = [],
   onArchiveAndClear,
   onClearAll,
+  canClearAll = false,
   onClose,
   onRestoreTicket,
   menuCourses,
@@ -113,10 +114,10 @@ export default function ArchiveModal({
 
   const archiveActions = (
     <div style={{ display: "flex", gap: isMobile ? 6 : 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-      <button onClick={onClearAll} style={{
+      {canClearAll && <button onClick={onClearAll} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: isMobile ? 1.5 : 2, padding: isMobile ? "6px 10px" : "8px 14px",
         border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.neutral[500],
-      }}>{isMobile ? "CLEAR" : "CLEAR ALL"}</button>
+      }}>{isMobile ? "CLEAR" : "CLEAR ALL"}</button>}
       <button onClick={async () => { await onArchiveAndClear(); loadEntries(); }} style={{
         fontFamily: FONT, fontSize: 9, letterSpacing: isMobile ? 1.5 : 2, padding: isMobile ? "6px 10px" : "8px 16px",
         border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.tint.parchment, color: tokens.text.body,

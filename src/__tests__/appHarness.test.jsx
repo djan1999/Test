@@ -203,6 +203,31 @@ describe.each([
     }
   }, 20000);
 
+  it("CLEAR TABLE on grouped T02-03 blanks both rows and remains cleared in the store", async () => {
+    seedSeatlessCombinedService();
+    render(<App />);
+    fireEvent.click(await screen.findByText("[Service]", {}, { timeout: 5000 }));
+    await screen.findByText("Seatless Group", {}, { timeout: 5000 });
+    fireEvent.click(screen.getByText("Details"));
+    fireEvent.click(await screen.findByText("CLEAR TABLE"));
+
+    const activeRows = () => (psMode ? localRows("service_tables") : remoteRows("service_tables"));
+    await waitFor(() => {
+      expect(rowFor(activeRows(), 2)?.data?.resName || "").toBe("");
+      expect(rowFor(activeRows(), 3)?.data?.resName || "").toBe("");
+      const reservation = (psMode ? localRows("reservations") : remoteRows("reservations"))
+        .find((row) => row.id === "res-seatless-group");
+      expect(reservation?.data?.clearedFromBoard).toBe(true);
+    }, { timeout: 5000 });
+
+    if (psMode) await act(async () => { await drainUploads(); });
+    await waitFor(() => {
+      expect(rowFor(remoteRows("service_tables"), 2)?.data?.resName || "").toBe("");
+      expect(rowFor(remoteRows("service_tables"), 3)?.data?.resName || "").toBe("");
+      expect(remoteRows("reservations").find((row) => row.id === "res-seatless-group")?.data?.clearedFromBoard).toBe(true);
+    }, { timeout: 5000 });
+  }, 20000);
+
   it("table switch repoints board rows AND the reservation through the store, with no bounce-back", async () => {
     seedLiveService();
     render(<App />);
@@ -336,23 +361,25 @@ describe.each([
         expect(Number(remoteRows("reservations").find((r) => r.id === "res-anna")?.table_id)).toBe(4);
       }, { timeout: 5000 });
     } else {
-      // Fallback: the autosave retries 4× (~3 s) then re-queues the rows so a
-      // later flush can still deliver them — nothing is silently dropped.
-      await new Promise((r) => setTimeout(r, 3600));
-      expect(rowFor(remoteRows("service_tables"), 4)?.data?.resName ?? "").toBe("");
+      // Fallback reservation batch failed: reverse the optimistic table move
+      // so the board and reservation keep the same original assignment.
+      await waitFor(() => {
+        expect(rowFor(remoteRows("service_tables"), 1)?.data?.resName).toBe("Anna Harness");
+        expect(Number(remoteRows("reservations").find((r) => r.id === "res-anna")?.table_id)).toBe(1);
+      }, { timeout: 5000 });
 
-      // Reconnect, then make any next edit: seating Bruno flushes the pending
-      // map, carrying the offline switch along with it.
+      // Reconnect and retry the operator action explicitly; it now commits.
       backend.failRemoteWrites = false;
-      fireEvent.click(await screen.findByText("← TABLES"));
-      fireEvent.click(await screen.findByText("SEAT", {}, { timeout: 5000 }));
+      const retryT4 = (await screen.findAllByText("T04"))
+        .map((el) => el.closest("button")).find(Boolean);
+      fireEvent.click(retryT4);
 
       await waitFor(() => {
         const tables = remoteRows("service_tables");
         expect(rowFor(tables, 4)?.data?.resName).toBe("Anna Harness");
         expect(rowFor(tables, 1)?.data?.resName || "").toBe("");
-        expect(rowFor(tables, 2)?.data?.active).toBe(true); // Bruno seated
         expect(annaRowCount(tables)).toBe(1);
+        expect(Number(remoteRows("reservations").find((r) => r.id === "res-anna")?.table_id)).toBe(4);
       }, { timeout: 6000 });
     }
   }, 20000);

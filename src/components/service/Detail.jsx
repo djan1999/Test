@@ -199,8 +199,8 @@ export default function Detail({ table, tables = [], optionalExtras = [], option
           tables={tables}
           reservationOnTable={reservationOnTable}
           onCancel={() => setShowMoveTable(false)}
-          onPick={(toId, mode) => {
-            const r = onMoveTable(table.id, toId, mode);
+          onPick={async (toId, mode) => {
+            const r = await onMoveTable(table.id, toId, mode);
             if (r?.ok) setShowMoveTable(false);
           }}
         />
