@@ -99,6 +99,7 @@ export default function FloorPanel({
         tableIds={tableIds}
         onUpdateFloorMaps={onUpdateFloorMaps}
         reservations={reservations}
+        boardTables={boardTables}
         isMobile={isMobile}
       />
 

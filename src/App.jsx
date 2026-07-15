@@ -818,6 +818,12 @@ export default function App() {
   const endingServiceRef = useRef(false);
   const flushBoardWrites = useCallback(async () => {
     if (endingServiceRef.current) return; // the end clears pending itself
+    // Test service: leave the pending set alone. Draining it here would
+    // consume the ids while persistBoardRows no-ops — REAL edits queued just
+    // before the sandbox started were silently dropped that way. They stay
+    // queued and the drain heartbeat flushes them after exit (the flush
+    // derives rows from post-exit state, so sandbox ids diff to nothing).
+    if (sandboxRef.current) return;
     if (flushingBoardRef.current) { flushAgainRef.current = true; return; }
     flushingBoardRef.current = true;
     try {
@@ -1952,6 +1958,10 @@ export default function App() {
       tables: tablesRef.current,
       prevJson: new Map(prevTablesJsonRef.current),
       confirmedJson: new Map(confirmedTablesJsonRef.current),
+      // Real edits still waiting to reach the store must survive the sandbox
+      // — clearing them without this snapshot silently lost them (and a
+      // reload mid-sandbox lost them for good).
+      pendingWrites: new Set(pendingBoardWritesRef.current),
       reservations: reservationsRef.current,
       serviceDate: serviceDateRef.current,
       serviceDateChosenOn: serviceDateChosenOnRef.current,
@@ -2003,7 +2013,9 @@ export default function App() {
       // unchanged (no diff → no write) once the switch flips off.
       prevTablesJsonRef.current = new Map(snap.prevJson);
       confirmedTablesJsonRef.current = new Map(snap.confirmedJson);
-      pendingBoardWritesRef.current = new Set();
+      // Real pre-sandbox pending edits come back; the drain heartbeat (or
+      // the next local edit) flushes them now that writes work again.
+      pendingBoardWritesRef.current = new Set(snap.pendingWrites || []);
       tablesRef.current = restored;
       setTables(restored);
       setReservations(snap.reservations || []);
@@ -2025,11 +2037,22 @@ export default function App() {
     setSandboxActive(false);
     setArchiveOpen(false);
 
+    // The sandbox's local strip taps stamped the floor write refs — left in
+    // place they make adoptFloorStatus/adoptFloorMaps reject REAL incoming
+    // blobs for 60s after exit. Nothing the sandbox "wrote" ever reached the
+    // store (every seam no-ops), so there is no echo to guard against.
+    floorStatusWriteTsRef.current = 0;
+    floorMapsWriteTsRef.current = 0;
+
     // Re-read the real state in the background: a real service may have moved on
     // while we were isolated (adoptions were suspended). Best-effort, adopt-only.
+    // Floor blobs included — they were restored from the snapshot, but another
+    // device may have SET/un-SET strips or edited maps during the test.
     if (supabase && getWorkspaceId()) {
       fetchBoardRows().then(rows => { if (Array.isArray(rows)) adoptRemoteTables(rows); }).catch(() => {});
       readStateKey("service_date").then(st => adoptServiceLifecycleRef.current?.(st, new Date().toISOString())).catch(() => {});
+      readStateKey(FLOOR_STATUS_KEY).then(st => adoptFloorStatusRef.current?.(st, new Date().toISOString())).catch(() => {});
+      readStateKey(FLOOR_MAPS_KEY).then(st => adoptFloorMapsRef.current?.(st, new Date().toISOString())).catch(() => {});
       reloadReservationsRef.current?.();
     }
 
