@@ -702,6 +702,14 @@ export default function App() {
    *  & clear, rollover auto-end, a real day-switch) so the autosave mass-blank
    *  guard lets THOSE blanks through. Any OTHER mass-blank is refused. */
   const intentionalBoardClearRef = useRef(false);
+  /** Table ids deliberately transitioned from seated -> reserved by Unseat,
+   *  mapped to the two pre-click fields needed by the fallback CAS ancestor.
+   *  A seatless combined booking can make 2+ rows lose their only live-service
+   *  markers (active/arrivedAt) in one render. Without this narrow one-shot
+   *  allowance, the mass-blank safety guard mistakes that legitimate grouped
+   *  action for an accidental board wipe and restores the party as seated.
+   *  Entries live until the changed rows are confirmed in the active store. */
+  const intentionalBoardUnseatRef = useRef(new Map());
 
   // ── SQLite-primary gate ────────────────────────────────────────────────────
   // The on-device PowerSync DB is the app's read/write path once (a) its
@@ -772,6 +780,19 @@ export default function App() {
               ? JSON.parse(confirmedTablesJsonRef.current.get(tableId))
               : null;
           } catch { ancestor = null; }
+          // Unseat is an explicit top-level transition. A configuration load
+          // can refresh the generic confirmed baseline while the live board is
+          // painting, so pin these two ancestor fields to what the user
+          // actually clicked away from. Other fields still use the normal
+          // ancestor and retain seat-level concurrent-edit protection.
+          const unseatAncestor = intentionalBoardUnseatRef.current.get(tableId);
+          if (unseatAncestor && ancestor) {
+            ancestor = {
+              ...ancestor,
+              active: unseatAncestor.active,
+              arrivedAt: unseatAncestor.arrivedAt,
+            };
+          }
           await saveServiceTableWithCas({
             client: supabase,
             workspaceId: ws,
@@ -792,6 +813,7 @@ export default function App() {
             JSON.stringify(sanitizeTable({ id: tableId, ...(r.data || {}) })),
           );
         }
+        intentionalBoardUnseatRef.current.delete(tableId);
       }
       return { ok: true };
     } catch (error) {
@@ -1212,6 +1234,13 @@ export default function App() {
   const unseatTable = id => {
     const group = tables.find(t => t.id === id)?.tableGroup;
     const ids = group?.length > 1 ? group : [id];
+    ids.forEach(tid => {
+      const current = tables.find(t => Number(t.id) === Number(tid));
+      intentionalBoardUnseatRef.current.set(Number(tid), {
+        active: current?.active ?? true,
+        arrivedAt: current?.arrivedAt ?? null,
+      });
+    });
     setTables(p => p.map(t =>
       !ids.includes(t.id) ? t : { ...t, active: false, arrivedAt: null }
     ));
@@ -1366,6 +1395,12 @@ export default function App() {
     ));
     const moves = new Map(moveRows.filter(r => !blockedIds.has(r.id)).map(r => [r.id, r]));
     if (!moves.size) return;
+    // A group move vacates 2+ contentful source rows in one pass — without
+    // this flag the autosave mass-blank guard reads that as an accidental
+    // wipe, restores the sources AND keeps the filled destinations: the
+    // party duplicates. This is an admin-confirmed whole-board transition —
+    // exactly what the flag exists for.
+    intentionalBoardClearRef.current = true;
     setTables(prev => applyLayoutSwitchToTables(prev, [...moves.values()]).tables);
     const current = reservations.filter(r => moves.has(r.id));
     setReservations(prev => prev.map(r => {
@@ -1962,6 +1997,10 @@ export default function App() {
       // — clearing them without this snapshot silently lost them (and a
       // reload mid-sandbox lost them for good).
       pendingWrites: new Set(pendingBoardWritesRef.current),
+      // The unseat allowances ride along too: a real unseat still in flight
+      // must keep its mass-blank exemption for the post-exit flush, while a
+      // SANDBOX unseat must not leave exemptions behind on real table ids.
+      unseatAllowances: new Map(intentionalBoardUnseatRef.current),
       reservations: reservationsRef.current,
       serviceDate: serviceDateRef.current,
       serviceDateChosenOn: serviceDateChosenOnRef.current,
@@ -1985,6 +2024,7 @@ export default function App() {
     prevTablesJsonRef.current = makeTableJsonMap(blank);
     confirmedTablesJsonRef.current = makeTableJsonMap(blank);
     pendingBoardWritesRef.current = new Set();
+    intentionalBoardUnseatRef.current = new Map();
     tablesRef.current = blank;
     setTables(blank);
     setReservations([]);            // blank slate — add test bookings live
@@ -2016,6 +2056,7 @@ export default function App() {
       // Real pre-sandbox pending edits come back; the drain heartbeat (or
       // the next local edit) flushes them now that writes work again.
       pendingBoardWritesRef.current = new Set(snap.pendingWrites || []);
+      intentionalBoardUnseatRef.current = new Map(snap.unseatAllowances || []);
       tablesRef.current = restored;
       setTables(restored);
       setReservations(snap.reservations || []);
@@ -2861,13 +2902,17 @@ export default function App() {
     // (Predicate extracted to utils/tableHelpers for unit coverage — the
     // refusal branch is unreachable through honest UI vectors by design.)
     const emptiedIdx = massBlankedIndices(prevJson, tables, nextJson);
-    if (emptiedIdx.length >= 2 && !intentionalBoardClearRef.current) {
+    const intentionalUnseats = intentionalBoardUnseatRef.current;
+    const unexpectedEmptiedIdx = emptiedIdx.filter(
+      idx => !intentionalUnseats.has(Number(tables[idx]?.id)),
+    );
+    if (unexpectedEmptiedIdx.length >= 2 && !intentionalBoardClearRef.current) {
       console.error(
-        "[board-guard] Refused to blank live tables", emptiedIdx.map(i => tables[i].id),
+        "[board-guard] Refused to blank live tables", unexpectedEmptiedIdx.map(i => tables[i].id),
         "— an unexpected mass-blank was prevented from reaching the store; restoring from last good state.",
       );
       setTables(cur => cur.map((t, idx) => {
-        if (!emptiedIdx.includes(idx)) return t;
+        if (!unexpectedEmptiedIdx.includes(idx)) return t;
         try { return sanitizeTable(JSON.parse(prevJson[idx])); } catch { return t; }
       }));
       return; // baseline NOT advanced; the restore re-runs this effect cleanly
