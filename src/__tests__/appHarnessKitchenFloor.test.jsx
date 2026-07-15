@@ -399,7 +399,7 @@ describe("app harness — terrace floor view through the real App", () => {
     }, { timeout: 5000 });
   }, 25000);
 
-  it("a party SEATED INSIDE whose tile is cleared heals to 'dining' — not back into the waiting pool", async () => {
+  it("a party SEATED INSIDE whose tile is cleared heals to 'dining' — offered back as a marked RETURN, never as a waiting party", async () => {
     seedLiveService();
     const { container } = render(<App />);
     await enterService();
@@ -424,9 +424,19 @@ describe("app harness — terrace floor view through the real App", () => {
       expect(resRow("res-bruno")?.data?.visit_state).toBe("dining"); // still eating inside
     }, { timeout: 5000 });
 
-    // NOT re-offered as a waiting party (the double-seat hazard).
+    // Offered back OUT for the last course (per Djan, 15.07) — but marked as
+    // a RETURN with the party's dining table, never as a bare waiting party
+    // (the double-seat hazard the old rule guarded stays covered by the mark).
     fireEvent.click(findSvgTable(container, "T24"));
     await screen.findByText("ASSIGN PARTY", {}, { timeout: 5000 });
-    expect(screen.queryByText(/^Bruno Harness ×3/)).toBeNull(); // exact case: the uppercase assign FLASH may linger — only the picker entry matters
+    const entry = screen.getByText(/^Bruno Harness ×3/); // exact case: the uppercase assign FLASH may linger — only the picker entry matters
+    expect(entry.textContent).toContain("↩");
+    expect(entry.textContent).toContain("T2-3"); // his dining table, via the label fallback
+    // and the return actually assigns: Bruno heads back outside
+    fireEvent.click(entry);
+    await waitFor(() => {
+      expect(resRow("res-bruno")?.data?.visit_state).toBe("terrace");
+      expect(resRow("res-bruno")?.data?.terrace_table).toBe("T24");
+    }, { timeout: 5000 });
   }, 25000);
 });

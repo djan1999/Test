@@ -180,10 +180,27 @@ export function resolveReservationTable(map, tableId) {
   return { table: null, match: null };
 }
 
+// Labels usually encode the board slots ("T4" → 4, "T2-3" → 2 and 3), so an
+// UNLINKED table falls back to reading its label rather than resolving to
+// nothing. A fresh map built in the editor never claims slots (addTable
+// doesn't, duplicate deliberately drops them) — before this fallback,
+// activating a new dining room rendered every table dead mid-service: no
+// seats, no status, no SET (15.07 incident). Explicit boardIds always win,
+// so the Layout-B T6-7/T7 aliasing stays expressible exactly as before; a
+// duplicate's primed label ("T4'") stays unlinked by design.
+const labelBoardIds = (label) => {
+  const m = /^T?(\d+)(?:-(\d+))?$/.exec(String(label || "").trim().toUpperCase());
+  if (!m) return [];
+  const a = Number(m[1]);
+  const b = m[2] == null ? a : Number(m[2]);
+  if (b < a || b - a > 11) return [];
+  return Array.from({ length: b - a + 1 }, (_, i) => a + i);
+};
+
 export const boardIdsOf = (mapTable) =>
   Array.isArray(mapTable?.boardIds) && mapTable.boardIds.length
     ? mapTable.boardIds.map(Number)
-    : [];
+    : labelBoardIds(mapTable?.label);
 
 // Seat count for the board table a party is assigned to, under a given map —
 // caps the restriction seat selector ("T9 offers 3 seats under Layout B,
