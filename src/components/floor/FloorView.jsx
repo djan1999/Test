@@ -284,6 +284,18 @@ export default function FloorView({
         visitStateOf(r.data) === "terrace" && !mapLabels.has(r.data?.terrace_table))
     : [];
 
+  // The dining-side counterpart: LIVE board parties whose slot no tile on
+  // this map claims (a mid-service rename/delete, or an unlinked table).
+  // They used to vanish from the floor silently — no tile, no SET, only the
+  // admin editor's RESOLVE list knew (15.07 audit). The floor itself warns.
+  const floorInvisible = map.kind === "terrace" ? [] : (() => {
+    const claimed = new Set((map.tables || []).flatMap((t) => boardIdsOf(t).map(Number)));
+    return (tables || []).filter((t) =>
+      (t.active || t.resName || t.resTime) &&
+      (!t.tableGroup?.length || t.id === Math.min(...t.tableGroup)) &&
+      !(t.tableGroup?.length > 1 ? t.tableGroup : [t.id]).some((id) => claimed.has(Number(id))));
+  })();
+
   // Parties eligible for a terrace assignment: anyone without a terrace leg
   // yet. Seated-inside parties stay eligible — Djan seats the board table
   // first (courses start) while the party physically sits outside — and so
@@ -505,6 +517,28 @@ export default function FloorView({
           <span style={{ flex: 1 }} />
           <button style={actionBtn(false)} onClick={() => setMovingParty(r)}>CHANGE TABLE</button>
           <button style={actionBtn(true)} onClick={() => onMove(r)}>MOVE TO {diningLabelOf(r)} →</button>
+        </div>
+      ))}
+
+      {/* live parties this dining map can't show — no tile claims their
+          board slot. The board/kitchen still serve them; the floor says WHY
+          they're missing here instead of hiding them. */}
+      {floorInvisible.map((t) => (
+        <div key={t.id} style={{
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+          padding: "8px 12px", border: `1px solid ${tokens.signal.warn}`,
+          background: tokens.neutral[0], marginBottom: 6,
+        }}>
+          <span style={{
+            fontFamily: FONT, fontSize: 8, letterSpacing: "0.12em", fontWeight: 700,
+            textTransform: "uppercase", color: tokens.signal.warn,
+          }}>NOT ON THIS MAP</span>
+          <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: tokens.ink[0] }}>
+            {t.resName || "—"} {t.guests ? `×${t.guests}` : ""}
+          </span>
+          <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3] }}>
+            board {t.tableGroup?.length > 1 ? t.tableGroup.join("-") : t.id} — no table here claims this slot (Admin → Floor → SLOTS)
+          </span>
         </div>
       ))}
 

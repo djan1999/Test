@@ -2,7 +2,7 @@ import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import BlurInput from "../ui/BlurInput.jsx";
 import {
-  findMapTable, planLayoutSwitch, hasDefaultGeometry,
+  findMapTable, planLayoutSwitch, hasDefaultGeometry, boardIdsOf,
   moveTable, resizeTable, rotateTable, setTableShape, renameTable,
   duplicateTable, addTable, deleteTable, addSeat, removeSeat,
   setTableMembers, setTableBoardIds,
@@ -180,7 +180,9 @@ export default function FloorInspector({
               onCommit={(v) => {
                 const clean = String(v || "").trim().toUpperCase();
                 const next = renameTable(floorMaps, mapId, table.label, clean);
-                if (next !== floorMaps) { onUpdate(next); onSelect(clean); }
+                // meta lets App carry the label-keyed data (SET strip, chair
+                // assignments) to the new name instead of orphaning it
+                if (next !== floorMaps) { onUpdate(next, { renamedTable: { mapId, from: table.label, to: clean } }); onSelect(clean); }
               }}
               style={inputStyle}
             />
@@ -227,14 +229,37 @@ export default function FloorInspector({
               <Row title="SLOTS">
                 {slotOptions.map((id) => {
                   const on = (table.boardIds || []).includes(id);
+                  // label-fallback linkage (boardIdsOf reads "T4"/"T2-3" when
+                  // no explicit claim exists) renders as a dashed claim — the
+                  // operator can finally SEE what an editor-built table reads,
+                  // and that a primed duplicate ("T4'") reads nothing.
+                  const viaLabel = !on && !(table.boardIds || []).length && boardIdsOf(table).includes(id);
                   return (
-                    <button key={id} style={{ ...btn(on), padding: "8px 10px" }}
+                    <button key={id}
+                      style={{
+                        ...btn(on), padding: "8px 10px",
+                        ...(viaLabel ? {
+                          border: `1px dashed ${tokens.charcoal.default}`,
+                          color: tokens.ink[1], fontWeight: 600,
+                        } : {}),
+                      }}
+                      title={viaLabel ? "Linked via the table's label — tap to make it explicit" : undefined}
                       onClick={() => apply(setTableBoardIds(floorMaps, mapId, table.label,
                         on ? (table.boardIds || []).filter((x) => x !== id) : [...(table.boardIds || []), id]))}>
                       {id}
                     </button>
                   );
                 })}
+                {!(table.boardIds || []).length && (
+                  <span style={{
+                    fontFamily: FONT, fontSize: 8, letterSpacing: "0.1em", textTransform: "uppercase",
+                    color: boardIdsOf(table).length ? tokens.ink[3] : tokens.signal.alert, fontWeight: 700,
+                  }}>
+                    {boardIdsOf(table).length
+                      ? `via label → ${boardIdsOf(table).join(", ")}`
+                      : "UNLINKED — this table reads no board slot"}
+                  </span>
+                )}
               </Row>
             </>
           )}

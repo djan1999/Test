@@ -11,7 +11,7 @@ import {
   setTableMembers, setTableBoardIds,
   addMap, renameMap, duplicateMap, deleteMap, hasDefaultGeometry, resetMapToDefaults,
   sanitizeFloorStatus, floorStatusOf, setFloorStatus, cycleFloorStatus, mapTicker,
-  pruneFloorStatus, clearStripsForBoardGroup,
+  pruneFloorStatus, clearStripsForBoardGroup, renameFloorStatusLabel,
   sheetOf, doorGeometry, hitTestSheet,
   addWall, setWallDashed, deleteWall, addDoorAt, patchOpening, deleteOpening,
   addZoneAt, patchZone, deleteZone, addPlanterAt, patchPlanter, deletePlanter,
@@ -69,6 +69,22 @@ describe("seed maps (house diagrams appendix)", () => {
     expect(findMapTable(mapA, "T8").seats.every((s) => s.confirm)).toBe(true);
     expect(findMapTable(mapB, "T7").seats.every((s) => s.confirm)).toBe(true);
     expect(findMapTable(mapA, "T4").seats.some((s) => s.confirm)).toBe(false);
+  });
+});
+
+describe("renameFloorStatusLabel (a rename carries the SET strip instead of orphaning it)", () => {
+  it("moves the strip to the new label within the map", () => {
+    const next = renameFloorStatusLabel({ dining_a: { T4: "SET", T7: "SET" } }, "dining_a", "T4", "T12");
+    expect(next.dining_a.T12).toBe("SET");
+    expect(next.dining_a.T4).toBeUndefined();
+    expect(next.dining_a.T7).toBe("SET"); // bystander untouched
+  });
+
+  it("no strip / same label / other map → unchanged content", () => {
+    const s = { dining_a: { T7: "SET" } };
+    expect(renameFloorStatusLabel(s, "dining_a", "T4", "T12").dining_a).toEqual({ T7: "SET" });
+    expect(renameFloorStatusLabel(s, "dining_a", "T7", "T7").dining_a).toEqual({ T7: "SET" });
+    expect(renameFloorStatusLabel(s, "terrace", "T7", "T12").dining_a).toEqual({ T7: "SET" });
   });
 });
 

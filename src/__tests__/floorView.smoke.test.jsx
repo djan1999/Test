@@ -292,6 +292,22 @@ describe("seat presentation — gender outlines + positional restrictions", () =
   });
 });
 
+describe("dining floor-invisible warning (a live party whose slot no tile claims)", () => {
+  it("shows NOT ON THIS MAP when the party's tile was deleted mid-service", () => {
+    const maps = JSON.parse(JSON.stringify(floorMaps));
+    const dining = maps.maps.find((m) => m.id === maps.activeDiningMapId);
+    dining.tables = dining.tables.filter((t) => t.label !== "T1");
+    const { container, getByText } = setup({ floorMaps: maps });
+    getByText("NOT ON THIS MAP");
+    expect(container.textContent).toContain("NOVAK"); // board 1 is active
+  });
+
+  it("no banner when every live slot is claimed", () => {
+    const { queryByText } = setup();
+    expect(queryByText("NOT ON THIS MAP")).toBeNull();
+  });
+});
+
 describe("seat swap — drag a chair onto another chair of the same table", () => {
   const mockBox = (container) => {
     const svg = container.querySelector("svg");

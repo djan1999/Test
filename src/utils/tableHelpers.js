@@ -555,6 +555,89 @@ export const swapTableRows = (tables, aId, bId) => {
   });
 };
 
+// Rename follow-through for the seats: per-map chair assignments key on
+// "mapId:label" (floorPositionKey) — a table rename orphaned every guest's
+// chair on that table (assignments silently reverted to seat-id defaults,
+// 15.07 audit). Move the entries to the new key.
+export const renameFloorPositionsKey = (tables, fromKey, toKey) =>
+  (tables || []).map((t) => {
+    if (!fromKey || !toKey || fromKey === toKey) return t;
+    if (!(t.seats || []).some((s) => s?.floorPositions && fromKey in s.floorPositions)) return t;
+    return {
+      ...t,
+      seats: t.seats.map((s) => {
+        if (!s?.floorPositions || !(fromKey in s.floorPositions)) return s;
+        const { [fromKey]: chair, ...rest } = s.floorPositions;
+        return { ...s, floorPositions: { ...rest, [toKey]: chair } };
+      }),
+    };
+  });
+
+// A layout switch repoints reservations to new board slots — the LIVE board
+// state (active, arrivedAt, kitchenLog, seat orders) must move with them or
+// the party strands invisibly: the reservation says T12, the service sits on
+// T9, and the new map's tile reads free while the kitchen keeps firing from
+// the old slot (15.07 audit). Slots pair by sorted order; the whole switch
+// applies as ONE atomic mapping so crossing moves (two parties trading
+// slots) can't clobber each other. A row whose destination holds live
+// content that is NOT itself moving away is BLOCKED — returned so the
+// caller skips its reservation repoint too (blocking cascades: content that
+// stays keeps blocking rows that wanted its slot).
+export const applyLayoutSwitchToTables = (tables, rows) => {
+  const byId = new Map((tables || []).map((t) => [Number(t.id), t]));
+  const hasContent = (t) => !!(t && (t.active || t.arrivedAt || t.resName || t.resTime
+    || (t.kitchenLog && Object.keys(t.kitchenLog).length > 0) || t.kitchenArchived));
+  const candidates = (rows || [])
+    .filter((r) => r?.status === "move" && Array.isArray(r.from) && Array.isArray(r.to) && r.to.length)
+    .map((r) => ({ row: r, from: r.from.map(Number), to: r.to.map(Number) }))
+    .filter(({ from, to }) => from.join(",") !== to.join(","));
+  if (!candidates.length) return { tables, blocked: [] };
+
+  // Fixed-point blocking: start with every row accepted; a row is blocked
+  // when any destination slot is missing from the board or holds content
+  // that no accepted row is moving away. Blocking a row makes its content a
+  // "stayer", which can block further rows — iterate until stable.
+  let ok = candidates;
+  for (;;) {
+    const sources = new Set(ok.flatMap(({ from }) => from));
+    const next = ok.filter(({ from, to }) => to.every((dst) => {
+      if (!byId.has(dst)) return false; // slot not on this board — nowhere to host the state
+      if (from.includes(dst)) return true; // shuffling within the own group
+      return !(hasContent(byId.get(dst)) && !sources.has(dst));
+    }));
+    if (next.length === ok.length) { ok = next; break; }
+    ok = next;
+  }
+  const blocked = candidates.filter((c) => !ok.includes(c)).map((c) => c.row);
+  if (!ok.length) return { tables, blocked };
+
+  const destOf = new Map();  // newId → oldId whose state arrives
+  const vacated = new Set(); // oldIds whose state leaves (blank unless refilled)
+  const slotMap = new Map(); // oldId → newId, for tableGroup remapping
+  for (const { from, to } of ok) {
+    const n = Math.min(from.length, to.length);
+    for (let i = 0; i < n; i++) {
+      slotMap.set(from[i], to[i]);
+      if (from[i] !== to[i]) { destOf.set(to[i], from[i]); vacated.add(from[i]); }
+    }
+    for (let i = n; i < from.length; i++) vacated.add(from[i]); // group shrank
+  }
+  const nextTables = (tables || []).map((t) => {
+    const id = Number(t.id);
+    const srcId = destOf.get(id);
+    if (srcId != null) {
+      const src = byId.get(srcId);
+      const group = (src.tableGroup || [])
+        .map((g) => slotMap.get(Number(g)) ?? null)
+        .filter((g) => g != null);
+      return { ...src, id: t.id, tableGroup: group.length > 1 ? group : [] };
+    }
+    if (vacated.has(id)) return blankTable(t.id);
+    return t;
+  });
+  return { tables: nextTables, blocked };
+};
+
 // Render a "T02-03" label from a table that may belong to a group.
 export const tableGroupLabel = (t) => {
   if (t?.displayGroupLabel) return t.displayGroupLabel;

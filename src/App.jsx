@@ -34,6 +34,7 @@ import {
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
   reservationTableIds, mergeRestrictionPositions, startedTablePatchFromReservation,
   repointReservation, moveTableRows, swapTableRows, massBlankedIndices,
+  applyLayoutSwitchToTables, renameFloorPositionsKey, floorPositionKey,
   swapSeatData, moveSeatOnFloor, materializeFloorPositions,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
@@ -53,6 +54,7 @@ import {
   getActiveDiningMap, getTerraceMap, mapSeatCountForBoardTable,
   terraceOccupancy, applyLayoutSwitchRow, resolveReservationTable,
   sanitizeFloorStatus, setFloorStatus, cycleFloorStatus, pruneFloorStatus,
+  renameFloorStatusLabel,
   clearStripsForBoardGroup,
 } from "./utils/floorMaps.js";
 import {
@@ -71,6 +73,7 @@ import {
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES, getWorkspaceId } from "./lib/supabaseClient.js";
 import { scopedFrom } from "./lib/scopedDb.js";
 import { readStateKey, saveStateKey, dropPendingStateKey } from "./lib/stateStore.js";
+import { createWriteQueue } from "./lib/writeQueue.js";
 import { finishServiceStore } from "./lib/serviceLifecycleStore.js";
 import { isPowerSyncEnabled } from "./powersync/config.js";
 import { setSqlitePrimaryFlag } from "./powersync/primary.js";
@@ -914,6 +917,26 @@ export default function App() {
     return data || [];
   }, []);
 
+  // Fallback-path reservation writes ride a per-id serialized latest-wins
+  // retry queue (lib/writeQueue): two rapid visit transitions (assign terrace
+  // → CLEAR TABLE) used to race as independent PATCHes — the older one
+  // landing last resurrected the assign in the store — and a failed write
+  // was console.warn'd and lost forever. The sqlite-primary path needs none
+  // of this: its local transactions + the PowerSync upload queue are ordered.
+  const reservationQueueRef = useRef(null);
+  if (!reservationQueueRef.current) {
+    reservationQueueRef.current = createWriteQueue(async (_id, row) => {
+      // Never SET a null date: Postgres rejects it (NOT NULL — the 08.07
+      // null-date incident) and the write dies silently. Omitting the column
+      // keeps the store's existing date, matching the sqlite path's COALESCE.
+      const patch = { table_id: row.table_id, data: row.data };
+      if (row.date != null) patch.date = row.date;
+      const { error } = await scopedFrom(TABLES.RESERVATIONS)
+        .update(patch).eq("id", row.id);
+      if (error) throw error;
+    });
+  }
+
   // Persist one reservation row (update-or-insert by id).
   const persistReservationRow = useCallback(async ({ id, date, table_id, data, created_at }) => {
     if (!supabase || !getWorkspaceId()) return { ok: true };
@@ -923,17 +946,11 @@ export default function App() {
       if (sqlitePrimaryRef.current) {
         const { writeReservation } = await import("./powersync/writes.js");
         await writeReservation({ id, date, table_id, data, created_at });
-      } else {
-        // Never SET a null date: Postgres rejects it (NOT NULL — the 08.07
-        // null-date incident) and the write dies silently. Omitting the column
-        // keeps the store's existing date, matching the sqlite path's COALESCE.
-        const patch = { table_id, data };
-        if (date != null) patch.date = date;
-        const { error } = await scopedFrom(TABLES.RESERVATIONS)
-          .update(patch).eq("id", id);
-        if (error) throw error;
+        return { ok: true };
       }
-      return { ok: true };
+      const result = await reservationQueueRef.current.save(id, { id, date, table_id, data });
+      if (!result.ok) console.warn("Reservation persist failed (retained for retry):", result.error);
+      return result;
     } catch (error) {
       console.warn("Reservation persist failed:", error);
       return { ok: false, error };
@@ -1326,10 +1343,24 @@ export default function App() {
 
   // Apply a confirmed layout-switch diff: only 'move' rows are written
   // (conflicts and NEEDS TABLE rows stay untouched for the operator to fix).
-  // Same seam as every reservation write — persistReservationRow.
+  // Same seam as every reservation write — persistReservationRow. The LIVE
+  // board state moves WITH the reservations (one atomic mapping — see
+  // applyLayoutSwitchToTables): repointing only the reservation stranded a
+  // seated party's service on the old slot while the new map's tile read
+  // free (15.07 audit). A row whose destination slot holds non-moving live
+  // content (a walk-in the plan can't see) is blocked entirely — neither
+  // its board state nor its reservation move, so the two never disagree.
   const applyLayoutSwitchRows = (rows) => {
-    const moves = new Map((rows || []).filter(r => r.status === "move").map(r => [r.id, r]));
+    const moveRows = (rows || []).filter(r => r.status === "move");
+    if (!moveRows.length) return;
+    const { blocked } = applyLayoutSwitchToTables(tablesRef.current || [], moveRows);
+    const blockedIds = new Set(blocked.map(b => b.id));
+    blocked.forEach(b => console.warn(
+      "[layout-switch] Row blocked — destination slot holds live content that is not moving:", b.name, "→", b.label,
+    ));
+    const moves = new Map(moveRows.filter(r => !blockedIds.has(r.id)).map(r => [r.id, r]));
     if (!moves.size) return;
+    setTables(prev => applyLayoutSwitchToTables(prev, [...moves.values()]).tables);
     const current = reservations.filter(r => moves.has(r.id));
     setReservations(prev => prev.map(r => {
       const next = moves.has(r.id) ? applyLayoutSwitchRow(moves.get(r.id), r) : null;
@@ -3290,12 +3321,27 @@ export default function App() {
   const floorStatusWriteTsRef = useRef(0);
   const floorMapsWriteTsRef = useRef(0);
 
-  const updateFloorMaps = (next) => {
+  const updateFloorMaps = (next, meta = null) => {
     const s = sanitizeFloorMaps(typeof next === "function" ? next(floorMapsRef.current) : next);
     floorMapsRef.current = s;
     floorMapsWriteTsRef.current = Date.now();
     setFloorMapsState(s);
     if (supabase) saveStateKey(FLOOR_MAPS_KEY, s).catch?.(() => {});
+    // A RENAME carries its keyed data along before the prune: the SET strip
+    // and every guest's per-map chair assignment key on "mapId:label" — they
+    // used to orphan silently (strip pruned away, chairs reverting to seat
+    // defaults) the moment the label changed mid-service.
+    const rename = meta?.renamedTable;
+    if (rename && rename.from !== rename.to) {
+      updateFloorStatus(fs => pruneFloorStatus(
+        renameFloorStatusLabel(fs, rename.mapId, rename.from, rename.to), s));
+      setTables(prev => renameFloorPositionsKey(
+        prev,
+        floorPositionKey(rename.mapId, rename.from),
+        floorPositionKey(rename.mapId, rename.to),
+      ));
+      return s;
+    }
     // A map edit (rename/delete/re-add) can orphan SET strips — and addTable
     // re-mints freed labels, so a stale strip would resurrect on the next
     // table with that name and reach the kitchen as a phantom SET. The
@@ -4439,6 +4485,7 @@ export default function App() {
         aperitifOptions={aperitifOptions}
         floorMaps={floorMapsState}
         floorReservations={serviceReservations}
+        boardTables={displayTables}
         onUpdateFloorMaps={updateFloorMaps}
         onApplyLayoutSwitch={applyLayoutSwitchRows}
         restrictionsList={restrictionsList}
