@@ -15,7 +15,7 @@ import { planLayoutSwitch } from "../../utils/floorMaps.js";
 //    the FOH floor view is service-only.
 //  · MOVE_SINGLE_TAP: MOVE skips the arriving confirm.
 export default function FloorPanel({
-  floorMaps, tableIds = [], reservations = [], onUpdateFloorMaps, onApplyLayoutSwitch, isMobile,
+  floorMaps, tableIds = [], reservations = [], boardTables = [], onUpdateFloorMaps, onApplyLayoutSwitch, isMobile,
 }) {
   const [pendingSwitch, setPendingSwitch] = useState(null); // { mapId, rows }
 
@@ -33,7 +33,7 @@ export default function FloorPanel({
   const requestSwitch = (mapId) => {
     if (mapId === floorMaps.activeDiningMapId) return;
     const nextMap = floorMaps.maps.find((m) => m.id === mapId);
-    setPendingSwitch({ mapId, rows: planLayoutSwitch(nextMap, reservations) });
+    setPendingSwitch({ mapId, rows: planLayoutSwitch(nextMap, reservations, boardTables) });
   };
 
   const confirmSwitch = () => {
@@ -72,6 +72,15 @@ export default function FloorPanel({
               <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3] }}>
                 T{r.from.join("-")}{r.to ? ` → ${r.label} (T${r.to.join("-")})` : " → unresolved in this layout"}
               </span>
+              {r.seated && r.status === "move" && (
+                <span style={{
+                  fontFamily: FONT, fontSize: 8, letterSpacing: "0.1em", fontWeight: 700,
+                  color: tokens.green.text, border: `1px solid ${tokens.green.border}`,
+                  background: tokens.green.bg, padding: "1px 6px", textTransform: "uppercase",
+                }}>
+                  SEATED · live state moves too
+                </span>
+              )}
             </div>
           ))}
           {pendingSwitch.rows.every((r) => r.status === "unchanged") && pendingSwitch.rows.length > 0 && (
@@ -90,6 +99,7 @@ export default function FloorPanel({
         tableIds={tableIds}
         onUpdateFloorMaps={onUpdateFloorMaps}
         reservations={reservations}
+        boardTables={boardTables}
         isMobile={isMobile}
       />
 

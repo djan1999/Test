@@ -101,6 +101,7 @@ export default function AdminLayout({
   // Floor maps + terrace flow
   floorMaps = null,
   floorReservations = [],
+  boardTables = [],
   onUpdateFloorMaps = null,
   onApplyLayoutSwitch = null,
   // Restrictions + Quick Notes (per-dish presets)
@@ -505,6 +506,7 @@ export default function AdminLayout({
               floorMaps={floorMaps}
               tableIds={(restaurantConfig?.tables || []).map((table) => Number(table.id))}
               reservations={floorReservations}
+              boardTables={boardTables}
               onUpdateFloorMaps={onUpdateFloorMaps}
               onApplyLayoutSwitch={onApplyLayoutSwitch}
               isMobile={isMobile}

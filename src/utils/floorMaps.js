@@ -217,7 +217,7 @@ export function mapSeatCountForBoardTable(map, tableId) {
 // NEEDS TABLE rows. Nothing is applied here — the caller shows the diff first.
 const sameIds = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
-export function planLayoutSwitch(nextMap, reservations) {
+export function planLayoutSwitch(nextMap, reservations, tables = null) {
   const rows = (reservations || []).map((r) => {
     const from = reservationTableIds(r.data, r.table_id).slice().sort((a, b) => a - b);
     const { table, match } = resolveReservationTable(nextMap, r.table_id);
@@ -230,6 +230,12 @@ export function planLayoutSwitch(nextMap, reservations) {
       to,
       label: table ? table.label : null,
       match,
+      // A SEATED party's move carries live service state (kitchen progress,
+      // seat orders) with it — the confirm dialog must say so, not present
+      // it as a routine re-label (15.07: the state used to stay behind).
+      seated: Array.isArray(tables)
+        ? from.some((id) => !!tables.find((t) => Number(t.id) === Number(id))?.active)
+        : false,
       status: !to ? "needs_table" : sameIds(from, to) ? "unchanged" : "move",
     };
   });
@@ -952,6 +958,19 @@ export function cycleFloorStatus(status, mapId, label) {
   const cur = floorStatusOf(status, mapId, label);
   return setFloorStatus(status, mapId, label, cur ? null : "SET");
 }
+
+// Rename follow-through: the maps blob renames the table, but the SET strip
+// is keyed by the OLD label — without this it was pruned away on the edit
+// (a live hands-call silently lost mid-service, 15.07 audit). Move it.
+export const renameFloorStatusLabel = (status, mapId, from, to) => {
+  const s = sanitizeFloorStatus(status);
+  const strip = s?.[mapId]?.[from];
+  if (!strip || !to || from === to) return s;
+  const mapStrips = { ...s[mapId] };
+  delete mapStrips[from];
+  mapStrips[to] = strip;
+  return { ...s, [mapId]: mapStrips };
+};
 
 // A SET strip announces ONE course — when that course goes out the marker is
 // done and must drop by itself (strips used to persist until someone un-tapped

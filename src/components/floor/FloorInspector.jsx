@@ -2,7 +2,7 @@ import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import BlurInput from "../ui/BlurInput.jsx";
 import {
-  findMapTable, planLayoutSwitch, hasDefaultGeometry,
+  findMapTable, planLayoutSwitch, hasDefaultGeometry, boardIdsOf,
   moveTable, resizeTable, rotateTable, setTableShape, renameTable,
   duplicateTable, addTable, deleteTable, addSeat, removeSeat,
   setTableMembers, setTableBoardIds,
@@ -70,7 +70,7 @@ const Row = ({ title, children }) => (
 );
 
 export default function FloorInspector({
-  floorMaps, mapId, selLabel, sheetSel = null, reservations = [], tableIds = [],
+  floorMaps, mapId, selLabel, sheetSel = null, reservations = [], tableIds = [], boardTables = [],
   onUpdate, onSelect, onSheetSelect, onSwitchMap, onRenumber, renumbering = false,
 }) {
   const map = floorMaps.maps.find((m) => m.id === mapId);
@@ -91,6 +91,24 @@ export default function FloorInspector({
   const trouble = map.kind === "dining"
     ? planLayoutSwitch(map, reservations).filter((r) => r.status === "conflict" || r.status === "needs_table")
     : [];
+
+  // A destructive edit (DELETE / RESET) with a live party on the claimed
+  // slot loses their floor presence mid-service (only the FOH "NOT ON THIS
+  // MAP" banner remains). The two-step confirm stays; this makes the stake
+  // visible BEFORE the second tap.
+  const liveBoardPartyOf = (mapTable) => {
+    const ids = boardIdsOf(mapTable).map(Number);
+    return (boardTables || []).find((bt) =>
+      ids.includes(Number(bt.id)) && (bt.active || bt.resName || bt.resTime)) || null;
+  };
+  const anyLiveParty = (boardTables || []).some((bt) => bt.active || bt.resName || bt.resTime);
+  const liveWarn = (text) => (
+    <span style={{
+      fontFamily: FONT, fontSize: 8, letterSpacing: "0.1em", fontWeight: 700,
+      textTransform: "uppercase", color: tokens.red.text,
+      border: `1px solid ${tokens.red.border}`, background: tokens.red.bg, padding: "2px 7px",
+    }}>{text}</span>
+  );
 
   const configuredIds = [...new Set((tableIds || []).map(Number).filter((id) => Number.isInteger(id) && id > 0))]
     .sort((a, b) => a - b);
@@ -180,7 +198,9 @@ export default function FloorInspector({
               onCommit={(v) => {
                 const clean = String(v || "").trim().toUpperCase();
                 const next = renameTable(floorMaps, mapId, table.label, clean);
-                if (next !== floorMaps) { onUpdate(next); onSelect(clean); }
+                // meta lets App carry the label-keyed data (SET strip, chair
+                // assignments) to the new name instead of orphaning it
+                if (next !== floorMaps) { onUpdate(next, { renamedTable: { mapId, from: table.label, to: clean } }); onSelect(clean); }
               }}
               style={inputStyle}
             />
@@ -227,14 +247,37 @@ export default function FloorInspector({
               <Row title="SLOTS">
                 {slotOptions.map((id) => {
                   const on = (table.boardIds || []).includes(id);
+                  // label-fallback linkage (boardIdsOf reads "T4"/"T2-3" when
+                  // no explicit claim exists) renders as a dashed claim — the
+                  // operator can finally SEE what an editor-built table reads,
+                  // and that a primed duplicate ("T4'") reads nothing.
+                  const viaLabel = !on && !(table.boardIds || []).length && boardIdsOf(table).includes(id);
                   return (
-                    <button key={id} style={{ ...btn(on), padding: "8px 10px" }}
+                    <button key={id}
+                      style={{
+                        ...btn(on), padding: "8px 10px",
+                        ...(viaLabel ? {
+                          border: `1px dashed ${tokens.charcoal.default}`,
+                          color: tokens.ink[1], fontWeight: 600,
+                        } : {}),
+                      }}
+                      title={viaLabel ? "Linked via the table's label — tap to make it explicit" : undefined}
                       onClick={() => apply(setTableBoardIds(floorMaps, mapId, table.label,
                         on ? (table.boardIds || []).filter((x) => x !== id) : [...(table.boardIds || []), id]))}>
                       {id}
                     </button>
                   );
                 })}
+                {!(table.boardIds || []).length && (
+                  <span style={{
+                    fontFamily: FONT, fontSize: 8, letterSpacing: "0.1em", textTransform: "uppercase",
+                    color: boardIdsOf(table).length ? tokens.ink[3] : tokens.signal.alert, fontWeight: 700,
+                  }}>
+                    {boardIdsOf(table).length
+                      ? `via label → ${boardIdsOf(table).join(", ")}`
+                      : "UNLINKED — this table reads no board slot"}
+                  </span>
+                )}
               </Row>
             </>
           )}
@@ -244,6 +287,9 @@ export default function FloorInspector({
             <Confirm onConfirm={() => { apply(deleteTable(floorMaps, mapId, table.label)); onSelect(null); }}>
               DELETE {table.label}
             </Confirm>
+            {liveBoardPartyOf(table) && liveWarn(
+              `LIVE: ${liveBoardPartyOf(table).resName || `board ${liveBoardPartyOf(table).id}`} — deleting hides them from this floor`,
+            )}
           </Row>
         </>
       ) : (
@@ -283,6 +329,9 @@ export default function FloorInspector({
               <Confirm onConfirm={() => apply(resetMapToDefaults(floorMaps, mapId))} wide>
                 RESET TO DEFAULTS
               </Confirm>
+            )}
+            {anyLiveParty && liveWarn(
+              "LIVE SERVICE ON THE BOARD — deleting or resetting this map loses custom tables/links mid-service",
             )}
           </Row>
         </>

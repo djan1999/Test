@@ -4,7 +4,7 @@ import {
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
   remapTableGroup, reservationTableIds, mergeRestrictionPositions, swapSeatData,
   moveSeatOnFloor, seatFloorPosition, restrictionsAtFloorPositions,
-  materializeFloorPositions,
+  materializeFloorPositions, applyLayoutSwitchToTables, renameFloorPositionsKey,
   startedTablePatchFromReservation,
 } from "../utils/tableHelpers.js";
 
@@ -143,6 +143,102 @@ describe("swapSeatData (guests trade places — payloads AND restrictions follow
   it("dragging FROM an empty position is a no-op (nobody to move)", () => {
     const t = table();
     expect(swapSeatData(t, 9, 1)).toBe(t);
+  });
+});
+
+describe("renameFloorPositionsKey (a table rename carries the chair assignments)", () => {
+  const from = "dining_a:T4", to = "dining_a:T12";
+  it("moves each seat's chair entry to the new key, other maps untouched", () => {
+    const tables = [{
+      id: 4,
+      seats: [
+        { id: 1, floorPositions: { [from]: 3, "terrace:B2": 6 } },
+        { id: 2, floorPositions: {} },
+      ],
+    }];
+    const next = renameFloorPositionsKey(tables, from, to);
+    expect(next[0].seats[0].floorPositions).toEqual({ [to]: 3, "terrace:B2": 6 });
+    expect(next[0].seats[1]).toBe(tables[0].seats[1]); // untouched seat, same ref
+  });
+
+  it("tables without the key pass through by reference; degenerate keys are no-ops", () => {
+    const tables = [{ id: 1, seats: [{ id: 1, floorPositions: { "x:y": 2 } }] }];
+    expect(renameFloorPositionsKey(tables, from, to)[0]).toBe(tables[0]);
+    expect(renameFloorPositionsKey(tables, from, from)[0]).toBe(tables[0]);
+    expect(renameFloorPositionsKey(tables, "", to)[0]).toBe(tables[0]);
+  });
+});
+
+describe("applyLayoutSwitchToTables (live board state follows a layout switch)", () => {
+  const live = (id, extra = {}) => ({
+    id, active: true, arrivedAt: "19:07", resName: `P${id}`, resTime: "19:00",
+    guests: 2, kitchenLog: { amuse: { firedAt: "19:30" } }, tableGroup: [], ...extra,
+  });
+  const blank = (id) => ({ id, active: false, arrivedAt: null, resName: "", resTime: "", guests: 0, tableGroup: [] });
+  const board = (rows) => [1, 2, 3, 4, 5].map((id) => rows.find((r) => r.id === id) || blank(id));
+  const moveRow = (id, from, to) => ({ id, name: `res-${id}`, status: "move", from, to, label: `T${to.join("-")}` });
+
+  it("a seated party's state moves to the new slot; the old slot blanks", () => {
+    const { tables, blocked } = applyLayoutSwitchToTables(board([live(2)]), [moveRow("a", [2], [4])]);
+    expect(blocked).toEqual([]);
+    const dst = tables.find((t) => t.id === 4);
+    expect(dst.active).toBe(true);
+    expect(dst.resName).toBe("P2");
+    expect(dst.kitchenLog.amuse.firedAt).toBe("19:30"); // kitchen progress follows
+    expect(tables.find((t) => t.id === 2).active).toBe(false);
+    expect(tables.find((t) => t.id === 2).resName).toBe("");
+  });
+
+  it("two parties TRADING slots both arrive intact (one atomic mapping, no clobber)", () => {
+    const { tables, blocked } = applyLayoutSwitchToTables(
+      board([live(1), live(3)]),
+      [moveRow("a", [1], [3]), moveRow("b", [3], [1])],
+    );
+    expect(blocked).toEqual([]);
+    expect(tables.find((t) => t.id === 3).resName).toBe("P1");
+    expect(tables.find((t) => t.id === 1).resName).toBe("P3");
+  });
+
+  it("a group move remaps the tableGroup with the slots", () => {
+    const grouped = [live(2, { tableGroup: [2, 3] }), live(3, { tableGroup: [2, 3] })];
+    const { tables } = applyLayoutSwitchToTables(board(grouped), [moveRow("a", [2, 3], [4, 5])]);
+    expect(tables.find((t) => t.id === 4).tableGroup).toEqual([4, 5]);
+    expect(tables.find((t) => t.id === 5).tableGroup).toEqual([4, 5]);
+    expect(tables.find((t) => t.id === 2).active).toBe(false);
+    expect(tables.find((t) => t.id === 3).active).toBe(false);
+  });
+
+  it("a destination holding a WALK-IN (live content the plan can't see) blocks that row — board untouched", () => {
+    const { tables, blocked } = applyLayoutSwitchToTables(
+      board([live(2), live(4, { resName: "WALKIN", resTime: "" })]),
+      [moveRow("a", [2], [4])],
+    );
+    expect(blocked.map((b) => b.id)).toEqual(["a"]);
+    expect(tables.find((t) => t.id === 2).resName).toBe("P2"); // stayed put
+    expect(tables.find((t) => t.id === 4).resName).toBe("WALKIN");
+  });
+
+  it("blocking cascades: a row aiming at a blocked row's slot is blocked too", () => {
+    // c wants slot 4 (walk-in) → blocked; a wants slot 3 which c now never vacates → blocked too
+    const { blocked } = applyLayoutSwitchToTables(
+      board([live(1), live(3), live(4, { resName: "WALKIN" })]),
+      [moveRow("a", [1], [3]), moveRow("c", [3], [4])],
+    );
+    expect(blocked.map((b) => b.id).sort()).toEqual(["a", "c"]);
+  });
+
+  it("a destination slot missing from the board blocks the row (nowhere to host the state)", () => {
+    const { blocked } = applyLayoutSwitchToTables(board([live(2)]), [moveRow("a", [2], [12])]);
+    expect(blocked.map((b) => b.id)).toEqual(["a"]);
+  });
+
+  it("unchanged and needs_table rows are ignored", () => {
+    const { tables, blocked } = applyLayoutSwitchToTables(board([live(2)]), [
+      { id: "u", status: "unchanged", from: [2], to: [2] },
+      { id: "n", status: "needs_table", from: [2], to: null },
+    ]);
+    expect(blocked).toEqual([]);
+    expect(tables.find((t) => t.id === 2).resName).toBe("P2");
   });
 });
 
