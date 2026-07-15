@@ -70,7 +70,7 @@ import {
 } from "./constants/dietary.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES, getWorkspaceId } from "./lib/supabaseClient.js";
 import { scopedFrom } from "./lib/scopedDb.js";
-import { readStateKey, saveStateKey } from "./lib/stateStore.js";
+import { readStateKey, saveStateKey, dropPendingStateKey } from "./lib/stateStore.js";
 import { finishServiceStore } from "./lib/serviceLifecycleStore.js";
 import { isPowerSyncEnabled } from "./powersync/config.js";
 import { setSqlitePrimaryFlag } from "./powersync/primary.js";
@@ -806,7 +806,15 @@ export default function App() {
    *  could land out of order and regress the store. */
   const flushingBoardRef = useRef(false);
   const flushAgainRef = useRef(false);
+  // TRUE while a service end is executing against the store. A board flush
+  // that lands AFTER the store-side clear resurrects the archived board in
+  // the store (last-write-wins upsert) — the straggler-autosave race the
+  // end-identity harness kept catching. persistServiceEnd raises this and
+  // waits out any in-flight flush; it drops on the local apply (success) or
+  // immediately (refused/failed end).
+  const endingServiceRef = useRef(false);
   const flushBoardWrites = useCallback(async () => {
+    if (endingServiceRef.current) return; // the end clears pending itself
     if (flushingBoardRef.current) { flushAgainRef.current = true; return; }
     flushingBoardRef.current = true;
     try {
@@ -967,7 +975,7 @@ export default function App() {
   const dishes = useMemo(() => optionalExtrasFromCourses(activeMenuCourses), [activeMenuCourses]);
   const pairings = useMemo(() => optionalPairingsFromCourses(activeMenuCourses), [activeMenuCourses]);
   // Celebration-category dish keys, synced with the reservation birthday flag
-  // (shared by saveRes, reconcileBoardWithReservations and the group-merge
+  // (shared by reconcileBoardWithReservations and the group-merge
   // views, which must ignore these seeded extras when judging seat content).
   const celebrationKeys = useMemo(() => celebrationKeysFromCourses(activeMenuCourses), [activeMenuCourses]);
 
@@ -1165,6 +1173,11 @@ export default function App() {
       if (visitStateOf(owner.data) === "arriving") {
         persistVisitData(owner, markSeatedData(owner.data));
       } else {
+        // Second terrace leg (back outside for the last course — moved_at
+        // from the first move-in marks it): re-seating the DINING table is a
+        // board correction (Unseat → Seat), not the party coming inside —
+        // their terrace leg ends only by explicit gestures.
+        if (owner.data?.moved_at) continue;
         const label = owner.data?.terrace_table || null;
         if (persistVisitData(owner, moveToDiningData(owner.data, new Date().toISOString(), { singleTap: true }))) {
           clearTerraceStrip(label);
@@ -1264,14 +1277,21 @@ export default function App() {
 
   const moveTerracePartyIn = (resv) => {
     const label = resv.data?.terrace_table || null;
+    // A move-in whose dining table is ALREADY seated (the second terrace
+    // leg — dessert outside, courses running inside) must go straight to
+    // 'dining': 'arriving' dead-ends there, because every MARK SEATED
+    // surface gates on the table not being active. And it must not re-seat —
+    // seatTable would stomp arrivedAt with the dessert hour.
+    const ids = reservationTableIds(resv.data, resv.table_id).map(Number);
+    const alreadySeated = ids.some(tid => tablesRef.current?.find(t => t.id === tid)?.active);
     const next = moveToDiningData(resv.data, new Date().toISOString(), {
-      singleTap: !!floorMapsState.config?.moveSingleTap,
+      singleTap: alreadySeated || !!floorMapsState.config?.moveSingleTap,
     });
     if (!persistVisitData(resv, next)) return;
     // the terrace table frees the moment the write lands (occupancy derives
     // from visit_state) — and its bites-SET clears with the departure
     if (next.visit_state === "dining" || next.visit_state === "arriving") clearTerraceStrip(label);
-    if (next.visit_state === "dining") seatTable(Number(resv.table_id)); // MOVE_SINGLE_TAP path
+    if (next.visit_state === "dining" && !alreadySeated) seatTable(Number(resv.table_id)); // MOVE_SINGLE_TAP path
   };
 
   const markTerracePartySeated = (resv) => {
@@ -1723,6 +1743,16 @@ export default function App() {
   // when it no longer holds that service — the atomic backstop behind the
   // client-side serviceEndSuperseded pre-check below.
   const persistServiceEnd = useCallback(async ({ archive = null, expected = null }) => {
+    // Straggler-autosave guard: block NEW board flushes for the duration of
+    // the end and wait out any IN-FLIGHT one (including its retry backoff —
+    // bounded to seconds) before touching the store. Without this, a flush
+    // that derived rows from the pre-end board can land after the store-side
+    // clear and resurrect the archived service in the store. The flag stays
+    // up through the local apply on success (applyFinishedServiceLocally
+    // drops it once the blank baselines are in place) and drops here on a
+    // refused or failed end.
+    endingServiceRef.current = true;
+    while (flushingBoardRef.current) await new Promise((r) => setTimeout(r, 50));
     try {
       const { rows, superseded } = await finishServiceStore({
         client: supabase,
@@ -1735,8 +1765,10 @@ export default function App() {
           ...(tablesRef.current || []).map((table) => Number(table.id)),
         ])],
       });
+      if (superseded) endingServiceRef.current = false;
       return { ok: !superseded, superseded, rows };
     } catch (error) {
+      endingServiceRef.current = false;
       return { ok: false, error };
     }
   }, []);
@@ -1770,6 +1802,8 @@ export default function App() {
       localStorage.removeItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
       localStorage.removeItem(workspaceKey("milka_service_started_at"));
     } catch {}
+    // The blank baselines are in place — board flushes are safe again.
+    endingServiceRef.current = false;
   };
 
   // The store-side finish (RPC / finishServiceLocally) blanks the board and
@@ -2220,37 +2254,6 @@ export default function App() {
     }
   };
 
-  const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, rooms, birthday, cakeNote, restrictions, notes, lang }) => {
-    const group = tableIds ?? (tableId ? [tableId] : [id]);
-    const sortedGroup = [...group].sort((a, b) => a - b);
-    setTables(p => p.map((t, _i, arr) => {
-      // Old group read from p, not the render-scope tables: a regroup that
-      // landed remotely after this form rendered must not make us blank the
-      // wrong tables.
-      const oldGroup = arr.find(x => x.id === id)?.tableGroup || [id];
-      // Clear tables that were in the old group but aren't in the new group
-      if (oldGroup.includes(t.id) && !sortedGroup.includes(t.id)) {
-        return { ...blankTable(t.id), active: t.active, arrivedAt: t.arrivedAt, kitchenLog: t.kitchenLog };
-      }
-      if (!sortedGroup.includes(t.id)) return t;
-      const newSeats = makeSeats(guests, t.seats);
-      const seats = celebrationKeys.length > 0
-        ? newSeats.map(s => ({
-            ...s,
-            extras: {
-              ...s.extras,
-              ...Object.fromEntries(
-                celebrationKeys.map(k => [k, { ordered: !!birthday, pairing: s.extras?.[k]?.pairing || "—" }])
-              ),
-            },
-          }))
-        : newSeats;
-      const normalizedRooms = Array.isArray(rooms) ? rooms.filter(Boolean) : (room ? [room] : []);
-      return { ...t, resName: name, resTime: time, menuType, guestType, room: normalizedRooms[0] || "", rooms: normalizedRooms, guests, seats, birthday, cakeNote: birthday ? (cakeNote || "") : "", restrictions, notes, lang: lang || "en", tableGroup: sortedGroup };
-    }));
-    setResModal(null);
-  };
-
   // ── Service date ──────────────────────────────────────────────────────────
   const persistServiceDate = async (date) => {
     const previousDate = serviceDate;
@@ -2341,6 +2344,10 @@ export default function App() {
     if (remoteDate && remoteDate !== localDate) {
       // STARTED (or re-dated) on another device — adopt the live day.
       if (isStaleServiceDate(remoteDate) && !isActivePastReview(remoteDate, state.chosenOn)) return;
+      // Any floor-strip blob this device retained for retry belongs to the
+      // PREVIOUS service — replaying it (retry backoff / the 'online' flush,
+      // possibly an hour later) would overwrite the new service's strips.
+      dropPendingStateKey?.(FLOOR_STATUS_KEY);
       setServiceDate(remoteDate);
       setServiceDateChosenOn(state.chosenOn || null);
       serviceDateRef.current = remoteDate;
@@ -2355,6 +2362,11 @@ export default function App() {
       // archived and cleared the shared board; this device just releases the
       // date and leaves the live views (the 08.07 phone kept showing a dead
       // service all night because this adoption didn't exist).
+      // Drop any retained floor-strip retry first: a strip write that failed
+      // on a flaky link before the end would otherwise replay on the next
+      // 'online' signal and overwrite the ending device's {} wipe with the
+      // dead service's SET markers.
+      dropPendingStateKey?.(FLOOR_STATUS_KEY);
       applyFinishedServiceLocally([]);
       setMode(prev => {
         if (prev !== "service" && prev !== "display") return prev;
@@ -2380,8 +2392,21 @@ export default function App() {
     if (!supabase) return;
     const date = serviceDateRef.current;
     if (!date) return;
-    saveStateKey("service_date", { date, chosenOn: serviceDateChosenOnRef.current, session, startedAt: serviceStartedAtRef.current })
-      .then((r) => { if (!r.ok) console.warn("Service session share failed:", r.error); });
+    // Merge into the STORE's live blob, not this device's refs: a device
+    // that slept through a service re-start still holds the OLD startedAt —
+    // writing the whole blob from refs would clobber the live identity, and
+    // every other device's guarded END would then be refused (the 11.07
+    // "can't end service" symptom through a side door). Store unreachable →
+    // fall back to local refs, exactly the old behavior.
+    (async () => {
+      let live = null;
+      try { live = await readStateKey("service_date"); } catch { /* offline — refs below */ }
+      const base = live?.date
+        ? live
+        : { date, chosenOn: serviceDateChosenOnRef.current, startedAt: serviceStartedAtRef.current };
+      const r = await saveStateKey("service_date", { ...base, session });
+      if (!r.ok) console.warn("Service session share failed:", r.error);
+    })();
   };
 
   // ── Reservations CRUD ─────────────────────────────────────────────────────
@@ -2683,11 +2708,27 @@ export default function App() {
   // the strip would survive after all. Local-only mode has nothing to wait for.
   const floorStatusHydratedRef = useRef(!supabase);
   const pendingStripClearsRef = useRef([]);
+  // Content snapshot alongside the courseReady keys: a courseReady that
+  // vanished because the whole BOARD blanked (END SERVICE adopted from
+  // another device) is not a served course. Without this, the adopting
+  // device judged every resolve at once and PERSISTED a partial old-service
+  // strip blob AFTER the ending device's {} wipe — resurrecting dead SET
+  // strips into the next service (and its fresh write stamp then made it
+  // reject the real wipe for 60s).
+  const prevBoardContentRef = useRef(null);
   useEffect(() => {
     const prev = prevReadyKeysRef.current;
     const cur = {};
     tables.forEach(t => { cur[t.id] = t.courseReady?.key || null; });
     prevReadyKeysRef.current = cur;
+    const content = {};
+    tables.forEach(t => { content[t.id] = !!(t.active || t.resName); });
+    const prevContent = prevBoardContentRef.current;
+    prevBoardContentRef.current = content;
+    const massBlank = prevContent
+      ? tables.filter(t => prevContent[t.id] && !content[t.id]).length >= 2
+      : false;
+    if (massBlank) { pendingStripClearsRef.current = []; return; }
     if (prev) {
       tables.forEach(t => {
         if (prev[t.id] && !cur[t.id]) {
@@ -2730,6 +2771,12 @@ export default function App() {
     if (!newlyFired.length) return;
     serviceReservations.forEach(r => {
       if (visitStateOf(r.data) !== "terrace") return;
+      // A party back OUTSIDE for the last course (second terrace leg — the
+      // moved_at stamp from their first move-in marks it) must never be
+      // auto-moved: the fire would free the terrace table they are
+      // physically sitting at and hand it to the ASSIGN PARTY picker. The
+      // second leg ends only by explicit gestures (MOVE / CLEAR TABLE).
+      if (r.data?.moved_at) return;
       const ids = reservationTableIds(r.data, r.table_id).map(Number);
       if (newlyFired.some(t => ids.includes(Number(t.id)))) moveTerracePartyIn(r);
     });

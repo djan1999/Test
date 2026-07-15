@@ -106,10 +106,11 @@ export default function KitchenFloorView({
     return bt?.tableGroup?.length ? Math.min(...bt.tableGroup.map(Number)) : tid;
   };
 
-  // Waiting parties eligible for a terrace assignment: anyone not yet on the
-  // terrace and not cleared off the board. Same rule the FOH floor uses.
+  // Parties eligible for a terrace assignment: waiting parties AND 'dining'
+  // parties who may head back out for the last course / dessert. Same rule
+  // the FOH floor uses (per Djan, 15.07).
   const bookedParties = reservations.filter((r) =>
-    visitStateOf(r.data) === "booked" && !r.data?.clearedFromBoard);
+    ["booked", "dining"].includes(visitStateOf(r.data)) && !r.data?.clearedFromBoard);
 
   const occ = map.kind === "terrace" ? terraceOccupancy(reservations) : {};
 
@@ -437,7 +438,9 @@ export default function KitchenFloorView({
                         flash(`${sheetLabel} → ${(r.data?.resName || "—").toUpperCase()} ×${r.data?.guests || "?"}`);
                         setSheetLabel(null);
                       }}>
-                      {r.data?.resName || "—"} ×{r.data?.guests || "?"}{r.data?.resTime ? ` · ${r.data.resTime}` : ""}
+                      {r.data?.resName || "—"} ×{r.data?.guests || "?"}
+                      {visitStateOf(r.data) === "dining" ? ` · ${diningLabelOf(r)} ↩`
+                        : r.data?.resTime ? ` · ${r.data.resTime}` : ""}
                     </button>
                   ))}
                 </div>

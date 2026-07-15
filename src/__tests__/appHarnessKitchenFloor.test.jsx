@@ -316,6 +316,45 @@ describe("app harness — kitchen board through the real App", () => {
     // fire alone (Amuse) would not have moved anyone: the flag did it.
   }, 25000);
 
+  it("a flagged fire never yanks a SECOND-LEG terrace party back in — they are physically outside (15.07)", async () => {
+    const now = new Date().toISOString();
+    seed("service_settings", [{
+      id: "service_date",
+      state: { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: now },
+      updated_at: now,
+    }]);
+    // Bruno already dined INSIDE (table 2 is seated, moved_at from the first
+    // move-in) and went BACK OUT to T23 for dessert — the second terrace leg.
+    seed("service_tables", [{
+      table_id: 2,
+      data: { ...blankTable(2), active: true, arrivedAt: "19:07", resName: "Bruno Harness", resTime: "20:15", guests: 3 },
+      updated_at: now,
+    }]);
+    seed("reservations", [{
+      id: "res-bruno", date: TODAY(), table_id: 2, created_at: now,
+      data: { resName: "Bruno Harness", resTime: "20:15", guests: 3, tableGroup: [],
+        service_session: "dinner", visit_state: "terrace", terrace_table: "T23",
+        moved_at: "2026-07-15T20:40:00.000Z" },
+    }]);
+    seed("menu_courses", [
+      courseRow(1, "amuse", "Amuse"),
+      { ...courseRow(2, "crayfish", "Crayfish"), is_last_bite: true },
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByText("[Kitchen]", {}, { timeout: 5000 }));
+    await screen.findByText(/Bruno Harness/, {}, { timeout: 5000 });
+
+    fireEvent.click(await screen.findByText("Crayfish", {}, { timeout: 5000 }));
+    // The fire lands on the ticket…
+    await waitFor(() => {
+      expect(rowFor(remoteRows("service_tables"), 2)?.data?.kitchenLog?.crayfish?.firedAt).toBeTruthy();
+    }, { timeout: 5000 });
+    // …but Bruno STAYS outside: auto-freeing the terrace table he is sitting
+    // at would hand it to the ASSIGN PARTY picker (double-book hazard).
+    expect(resRow("res-bruno")?.data?.visit_state).toBe("terrace");
+    expect(resRow("res-bruno")?.data?.terrace_table).toBe("T23");
+  }, 25000);
+
   it("a stale SET banner (course key no longer on the menu) self-heals on the kitchen board", async () => {
     // The SET snapshot points at a course key that a mid-service menu edit
     // removed — fire() clears only on an exact key match, so this banner
@@ -399,7 +438,7 @@ describe("app harness — terrace floor view through the real App", () => {
     }, { timeout: 5000 });
   }, 25000);
 
-  it("a party SEATED INSIDE whose tile is cleared heals to 'dining' — not back into the waiting pool", async () => {
+  it("a party SEATED INSIDE whose tile is cleared heals to 'dining' — offered back as a marked RETURN, never as a waiting party", async () => {
     seedLiveService();
     const { container } = render(<App />);
     await enterService();
@@ -424,9 +463,19 @@ describe("app harness — terrace floor view through the real App", () => {
       expect(resRow("res-bruno")?.data?.visit_state).toBe("dining"); // still eating inside
     }, { timeout: 5000 });
 
-    // NOT re-offered as a waiting party (the double-seat hazard).
+    // Offered back OUT for the last course (per Djan, 15.07) — but marked as
+    // a RETURN with the party's dining table, never as a bare waiting party
+    // (the double-seat hazard the old rule guarded stays covered by the mark).
     fireEvent.click(findSvgTable(container, "T24"));
     await screen.findByText("ASSIGN PARTY", {}, { timeout: 5000 });
-    expect(screen.queryByText(/^Bruno Harness ×3/)).toBeNull(); // exact case: the uppercase assign FLASH may linger — only the picker entry matters
+    const entry = screen.getByText(/^Bruno Harness ×3/); // exact case: the uppercase assign FLASH may linger — only the picker entry matters
+    expect(entry.textContent).toContain("↩");
+    expect(entry.textContent).toContain("T2-3"); // his dining table, via the label fallback
+    // and the return actually assigns: Bruno heads back outside
+    fireEvent.click(entry);
+    await waitFor(() => {
+      expect(resRow("res-bruno")?.data?.visit_state).toBe("terrace");
+      expect(resRow("res-bruno")?.data?.terrace_table).toBe("T24");
+    }, { timeout: 5000 });
   }, 25000);
 });

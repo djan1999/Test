@@ -691,7 +691,11 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
             )}
           </div>
         ) : null}
-        {seats.length > 0 && (isSeated || quickMode) && (
+        {/* Footer must not hide behind seats.length: a seated table with NO
+            seat rows (guest count never set) is exactly the state that needs
+            the Unseat/Details escape hatch — gating on seats locked table
+            2-3 out of Unseat mid-service (15.07). */}
+        {(isSeated || quickMode) && (
           <div style={{ padding: "6px 14px", borderTop: `1px solid ${tokens.neutral[100]}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             {onOpenDetail && (

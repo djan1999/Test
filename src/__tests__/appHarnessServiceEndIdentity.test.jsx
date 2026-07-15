@@ -149,15 +149,20 @@ describe.each([
 
     // Board clearing follows the archive write asynchronously. Wait for the
     // complete end-service transaction instead of racing the final store
-    // writes on faster/slower CI workers.
+    // writes on faster/slower CI workers. This wait used to flake for real:
+    // a straggler board autosave (in flight when END was tapped) landed
+    // AFTER the store-side clear and resurrected the archived board in the
+    // store — persistServiceEnd now waits out in-flight flushes and blocks
+    // new ones for the duration (the recurring red on #105/#107). The wide
+    // window is slow-runner headroom; it only costs time on genuine failure.
     await waitFor(() => {
       const store = psMode ? localRows : remoteRows;
       expect(store("service_tables").filter((r) => r?.data?.resName).length).toBe(0);
       expect(store("service_settings").find((r) => r.id === "service_date")?.state?.date).toBeUndefined();
       // The stale stamp is gone from this device, not re-presented next boot.
       expect(localStorage.getItem(`milka_service_started_at:${WORKSPACE_ID}`)).toBeNull();
-    }, { timeout: 5000 });
-  }, 30000);
+    }, { timeout: 20000 });
+  }, 45000);
 
   it("healOrphanedService re-attaches an orphaned live board with a FULL identity, and that service ends cleanly", async () => {
     // No service_date anywhere — but the board carries a live dinner (the

@@ -286,9 +286,12 @@ export default function FloorView({
 
   // Parties eligible for a terrace assignment: anyone without a terrace leg
   // yet. Seated-inside parties stay eligible — Djan seats the board table
-  // first (courses start) while the party physically sits outside.
+  // first (courses start) while the party physically sits outside — and so
+  // do 'dining' parties who already came IN from the terrace: they may go
+  // back out for the last course / dessert (per Djan, 15.07). Only the
+  // mid-transition states (terrace/arriving) and cleared rows are out.
   const bookedParties = reservations.filter((r) =>
-    visitStateOf(r.data) === "booked" && !r.data?.clearedFromBoard);
+    ["booked", "dining"].includes(visitStateOf(r.data)) && !r.data?.clearedFromBoard);
 
   // SET tables with a live board ticket, grouped by board id (a merge shares one
   // ticket). SEND forwards only the ones not yet announced for their next course.
@@ -406,7 +409,10 @@ export default function FloorView({
                   flash(`${sheetLabel} → ${(r.data?.resName || "—").toUpperCase()} ×${r.data?.guests || "?"}`);
                   setSheetLabel(null);
                 }}>
-                {r.data?.resName || "—"} ×{r.data?.guests || "?"}{r.data?.resTime ? ` · ${r.data.resTime}` : ""}
+                {/* a dining party's identity is its table — going back OUT */}
+                {r.data?.resName || "—"} ×{r.data?.guests || "?"}
+                {visitStateOf(r.data) === "dining" ? ` · ${diningLabelOf(r)} ↩`
+                  : r.data?.resTime ? ` · ${r.data.resTime}` : ""}
               </button>
             ))}
           </div>

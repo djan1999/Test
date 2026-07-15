@@ -515,6 +515,9 @@ const remoteSettingsRow = (id) =>
   tableOf(backend.remote, "service_settings").find((r) => r.workspace_id === getWorkspaceId() && asKey(r.id) === asKey(id));
 
 export const fakeStateStore = {
+  // The fake writes synchronously — nothing is ever retained for retry, so
+  // dropping pending values is a no-op here.
+  dropPendingStateKey: () => {},
   readStateKey: async (id) => {
     if (isSqlitePrimary()) return fakeReads.readSetting(id);
     return clone(remoteSettingsRow(id)?.state ?? null);

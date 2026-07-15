@@ -126,6 +126,16 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(handlers.onAssign).toHaveBeenCalledWith(reservations[1], "T21");
   });
 
+  it("a 'dining' party stays assignable — back OUT for the last course (per Djan, 15.07)", () => {
+    const backOut = { id: "r4", table_id: 1, data: { resName: "NOVAK", guests: 2, visit_state: "dining" } };
+    const { container, handlers, getByText } = setup({ reservations: [...reservations, backOut] });
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(findTable(container, "T21"));
+    // the picker labels the dining party by its table, marked as a return
+    fireEvent.click(getByText(/NOVAK ×2 · T1 ↩/));
+    expect(handlers.onAssign).toHaveBeenCalledWith(backOut, "T21");
+  });
+
 });
 
 describe("terrace CHANGE TABLE (re-seat on the terrace)", () => {

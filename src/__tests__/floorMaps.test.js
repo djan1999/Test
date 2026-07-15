@@ -72,6 +72,29 @@ describe("seed maps (house diagrams appendix)", () => {
   });
 });
 
+describe("boardIdsOf label fallback (a fresh editor-built map is live without hand-linking — 15.07)", () => {
+  it("an UNLINKED table reads its label: T4 → [4], T2-3 → [2,3], bare 2-3 too", () => {
+    expect(boardIdsOf({ label: "T4" })).toEqual([4]);
+    expect(boardIdsOf({ label: "T2-3" })).toEqual([2, 3]);
+    expect(boardIdsOf({ label: "2-3" })).toEqual([2, 3]);
+    expect(boardIdsOf({ label: "t10" })).toEqual([10]);
+  });
+
+  it("explicit boardIds always win over the label (Layout-B T6-7 claims slot 6 only)", () => {
+    expect(boardIdsOf({ label: "T6-7", boardIds: [6] })).toEqual([6]);
+    expect(boardIdsOf({ label: "T7", boardIds: [7] })).toEqual([7]);
+  });
+
+  it("unparseable labels stay unlinked — a duplicate's primed copy must not claim its source's slot", () => {
+    expect(boardIdsOf({ label: "T4'" })).toEqual([]);
+    expect(boardIdsOf({ label: "B" })).toEqual([]);
+    expect(boardIdsOf({ label: "" })).toEqual([]);
+    expect(boardIdsOf({})).toEqual([]);
+    expect(boardIdsOf({ label: "T9-2" })).toEqual([]);   // backwards range
+    expect(boardIdsOf({ label: "T1-99" })).toEqual([]);  // absurd span
+  });
+});
+
 describe("sanitizeFloorMaps", () => {
   it("junk / empty → defaults", () => {
     expect(sanitizeFloorMaps(null).maps.length).toBe(3);
