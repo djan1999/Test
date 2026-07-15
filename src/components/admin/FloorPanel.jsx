@@ -18,6 +18,8 @@ export default function FloorPanel({
   floorMaps, tableIds = [], reservations = [], boardTables = [], onUpdateFloorMaps, onApplyLayoutSwitch, isMobile,
 }) {
   const [pendingSwitch, setPendingSwitch] = useState(null); // { mapId, rows }
+  const [savingSwitch, setSavingSwitch] = useState(false);
+  const [switchError, setSwitchError] = useState("");
 
   const diningMaps = floorMaps.maps.filter((m) => m.kind === "dining");
 
@@ -33,13 +35,31 @@ export default function FloorPanel({
   const requestSwitch = (mapId) => {
     if (mapId === floorMaps.activeDiningMapId) return;
     const nextMap = floorMaps.maps.find((m) => m.id === mapId);
+    setSwitchError("");
     setPendingSwitch({ mapId, rows: planLayoutSwitch(nextMap, reservations, boardTables) });
   };
 
-  const confirmSwitch = () => {
-    onApplyLayoutSwitch(pendingSwitch.rows);
-    onUpdateFloorMaps({ ...floorMaps, activeDiningMapId: pendingSwitch.mapId });
-    setPendingSwitch(null);
+  const confirmSwitch = async () => {
+    if (!pendingSwitch || savingSwitch) return;
+    if (pendingSwitch.rows.some((row) => row.status === "conflict" || row.status === "needs_table")) {
+      setSwitchError("Resolve every conflict and NEEDS TABLE assignment before activating this layout.");
+      return;
+    }
+    setSavingSwitch(true);
+    setSwitchError("");
+    try {
+      const result = await onApplyLayoutSwitch?.(pendingSwitch.rows);
+      if (result?.ok === false) {
+        setSwitchError(result.error?.message || result.error || "The layout switch could not be saved.");
+        return;
+      }
+      onUpdateFloorMaps({ ...floorMaps, activeDiningMapId: pendingSwitch.mapId });
+      setPendingSwitch(null);
+    } catch (error) {
+      setSwitchError(error?.message || "The layout switch could not be saved.");
+    } finally {
+      setSavingSwitch(false);
+    }
   };
 
   const statusColor = { move: tokens.ink[1], conflict: tokens.red.text, needs_table: tokens.signal.warn, unchanged: tokens.ink[4] };
@@ -86,9 +106,18 @@ export default function FloorPanel({
           {pendingSwitch.rows.every((r) => r.status === "unchanged") && pendingSwitch.rows.length > 0 && (
             <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginBottom: 4 }}>all assignments resolve unchanged</div>
           )}
+          {(switchError || pendingSwitch.rows.some((row) => row.status === "conflict" || row.status === "needs_table")) && (
+            <div role="alert" aria-live="assertive" style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text, marginTop: 10 }}>
+              {switchError || "Resolve every conflict and NEEDS TABLE assignment before activating this layout."}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <button style={btn(true)} onClick={confirmSwitch}>CONFIRM SWITCH</button>
-            <button style={btn(false)} onClick={() => setPendingSwitch(null)}>CANCEL</button>
+            <button
+              style={{ ...btn(true), opacity: savingSwitch || pendingSwitch.rows.some((row) => row.status === "conflict" || row.status === "needs_table") ? 0.5 : 1 }}
+              onClick={confirmSwitch}
+              disabled={savingSwitch || pendingSwitch.rows.some((row) => row.status === "conflict" || row.status === "needs_table")}
+            >{savingSwitch ? "SAVING…" : "CONFIRM SWITCH"}</button>
+            <button style={btn(false)} onClick={() => { setPendingSwitch(null); setSwitchError(""); }} disabled={savingSwitch}>CANCEL</button>
           </div>
         </div>
       )}

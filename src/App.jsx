@@ -74,6 +74,7 @@ import { supabase, hasSupabaseConfig, supabaseUrl, TABLES, getWorkspaceId } from
 import { scopedFrom } from "./lib/scopedDb.js";
 import { readStateKey, saveStateKey, dropPendingStateKey } from "./lib/stateStore.js";
 import { createWriteQueue } from "./lib/writeQueue.js";
+import { recordClientDiagnostic } from "./lib/clientDiagnostics.js";
 import { finishServiceStore } from "./lib/serviceLifecycleStore.js";
 import { isPowerSyncEnabled } from "./powersync/config.js";
 import { setSqlitePrimaryFlag } from "./powersync/primary.js";
@@ -499,6 +500,7 @@ export default function App() {
     at: Date.now(), source,
     msg: String(error?.message || error?.code || error || "unknown"),
   });
+  const [watchRecoveryPending, setWatchRecoveryPending] = useState(false);
   const [logoDataUri,  setLogoDataUri]  = useState(() => readLocalLogo() || "");
   const [wineSyncConfig, setWineSyncConfig] = useState(() => {
     try { return normalizeSyncConfig(JSON.parse(localStorage.getItem(workspaceKey(SYNC_CONFIG_KEY)) || "null")); } catch { return DEFAULT_SYNC_CONFIG; }
@@ -710,6 +712,9 @@ export default function App() {
    *  action for an accidental board wipe and restores the party as seated.
    *  Entries live until the changed rows are confirmed in the active store. */
   const intentionalBoardUnseatRef = useRef(new Map());
+  /** Row-scoped allowance for explicit CLEAR TABLE actions. It deliberately
+   * does not grant a whole-board bypass and survives until those rows land. */
+  const intentionalBoardBlankRef = useRef(new Set());
 
   // ── SQLite-primary gate ────────────────────────────────────────────────────
   // The on-device PowerSync DB is the app's read/write path once (a) its
@@ -814,6 +819,7 @@ export default function App() {
           );
         }
         intentionalBoardUnseatRef.current.delete(tableId);
+        intentionalBoardBlankRef.current.delete(tableId);
       }
       return { ok: true };
     } catch (error) {
@@ -831,6 +837,7 @@ export default function App() {
    *  could land out of order and regress the store. */
   const flushingBoardRef = useRef(false);
   const flushAgainRef = useRef(false);
+  const boardFlushPromiseRef = useRef(null);
   // TRUE while a service end is executing against the store. A board flush
   // that lands AFTER the store-side clear resurrects the archived board in
   // the store (last-write-wins upsert) — the straggler-autosave race the
@@ -839,21 +846,26 @@ export default function App() {
   // immediately (refused/failed end).
   const endingServiceRef = useRef(false);
   const flushBoardWrites = useCallback(async () => {
-    if (endingServiceRef.current) return; // the end clears pending itself
+    if (endingServiceRef.current) return { ok: false }; // the end clears pending itself
     // Test service: leave the pending set alone. Draining it here would
     // consume the ids while persistBoardRows no-ops — REAL edits queued just
     // before the sandbox started were silently dropped that way. They stay
     // queued and the drain heartbeat flushes them after exit (the flush
     // derives rows from post-exit state, so sandbox ids diff to nothing).
-    if (sandboxRef.current) return;
-    if (flushingBoardRef.current) { flushAgainRef.current = true; return; }
+    if (sandboxRef.current) return { ok: true };
+    if (flushingBoardRef.current) {
+      flushAgainRef.current = true;
+      return boardFlushPromiseRef.current;
+    }
     flushingBoardRef.current = true;
-    try {
+    boardFlushPromiseRef.current = (async () => {
+      let allOk = true;
+      try {
       do {
         flushAgainRef.current = false;
         const ids = [...pendingBoardWritesRef.current];
         pendingBoardWritesRef.current = new Set();
-        if (ids.length === 0) return;
+        if (ids.length === 0) continue;
         const stamp = new Date().toISOString();
         const cur = tablesRef.current || [];
         const rows = [];
@@ -878,6 +890,7 @@ export default function App() {
         if (ok) {
           setSyncStatus("live");
         } else {
+          allOk = false;
           // Confirmed baseline stays put for these tables, so adoptRemoteTables
           // keeps folding around them; the re-added ids retry on the heartbeat.
           rows.forEach(r => pendingBoardWritesRef.current.add(r.table_id));
@@ -885,16 +898,41 @@ export default function App() {
           noteSyncError("board save", lastError);
           console.error("Save failed after 4 attempts:", lastError);
         }
-      } while (flushAgainRef.current);
-    } finally {
-      flushingBoardRef.current = false;
-    }
+        } while (flushAgainRef.current);
+        return { ok: allOk };
+      } finally {
+        flushingBoardRef.current = false;
+        boardFlushPromiseRef.current = null;
+      }
+    })();
+    return boardFlushPromiseRef.current;
   }, [persistBoardRows]);
 
   const saveRestaurantConfiguration = useCallback(async (draft) => {
     if (!canAdmin) return { ok: false, error: "Admin access is required." };
     const nextConfig = sanitizeRestaurantConfig(draft, restaurantConfigRef.current);
     const currentTables = tablesRef.current || [];
+    // Configuration changes can add/remove rows. First protect every service
+    // edit that differs from the store-confirmed ancestor; otherwise replacing
+    // the table list can make an unsaved course/drink edit disappear.
+    const dirtyIds = currentTables
+      .filter((table) => JSON.stringify(sanitizeTable(table)) !== confirmedTablesJsonRef.current.get(Number(table.id)))
+      .map((table) => Number(table.id));
+    dirtyIds.forEach((id) => pendingBoardWritesRef.current.add(id));
+    if (dirtyIds.length > 0) {
+      clearTimeout(saveTimerRef.current);
+      const flushResult = await flushBoardWrites();
+      const unsavedIds = currentTables
+        .filter((table) => JSON.stringify(sanitizeTable(table)) !== confirmedTablesJsonRef.current.get(Number(table.id)))
+        .map((table) => Number(table.id));
+      if (!flushResult?.ok || unsavedIds.length > 0) {
+        return {
+          ok: false,
+          error: `Restaurant setup was not changed because service edit${unsavedIds.length === 1 ? "" : "s"} on ${unsavedIds.map((id) => `T${id}`).join(", ") || "the board"} could not be saved. Reconnect and try again.`,
+          unsavedTableIds: unsavedIds,
+        };
+      }
+    }
     const blocked = removedLiveTableIds(currentTables, nextConfig);
     if (blocked.length > 0) {
       return {
@@ -927,11 +965,19 @@ export default function App() {
     }
 
     prevTablesJsonRef.current = makeTableJsonMap(nextTables);
-    confirmedTablesJsonRef.current = makeTableJsonMap(nextTables);
+    // Preserve confirmed ancestors for existing rows. Only rows created by this
+    // save are newly confirmed here; current React state is not store proof.
+    const nextIds = new Set(nextTables.map((table) => Number(table.id)));
+    for (const id of [...confirmedTablesJsonRef.current.keys()]) {
+      if (!nextIds.has(id)) confirmedTablesJsonRef.current.delete(id);
+    }
+    for (const row of addedRows) {
+      confirmedTablesJsonRef.current.set(Number(row.table_id), JSON.stringify(row.data));
+    }
     setRestaurantConfig(nextConfig);
     setTables(nextTables);
     return { ok: true, config: nextConfig };
-  }, [canAdmin, persistBoardRows]);
+  }, [canAdmin, flushBoardWrites, persistBoardRows]);
 
   // Read the full board from the source of truth (SQLite when primary).
   const fetchBoardRows = useCallback(async () => {
@@ -1246,28 +1292,47 @@ export default function App() {
     ));
   };
 
-  const clear = id => {
+  const clear = async id => {
     if (typeof window !== "undefined" && !window.confirm("Clear this table and reset its details?")) return;
-    setTables(p => p.map(t => t.id !== id ? t : blankTable(id)));
-    setSel(null);
+    const boardRow = tablesRef.current?.find(t => Number(t.id) === Number(id));
+    const owner = serviceDate && (mode === "service" || mode === "display")
+      ? reservationOnTable(id)
+      : null;
+    const ids = [...new Set([
+      Number(id),
+      ...((boardRow?.tableGroup?.length > 1 ? boardRow.tableGroup : []).map(Number)),
+      ...((owner?.data?.tableGroup?.length > 1 ? owner.data.tableGroup : []).map(Number)),
+    ].filter(Number.isFinite))];
     // If a reservation is templating this table for the live service, flag it
     // cleared so the board↔reservations reconcile doesn't immediately restore it
     // (the "cleared table comes back when I switch views / on the next poll"
     // bug). The booking row is kept for the planner/archive — just taken off the
     // live board. Editing the reservation later rebuilds its data and re-enables
     // it. The flag lives on the reservation so every device's reconcile honours it.
-    if (serviceDate && (mode === "service" || mode === "display")) {
-      const owner = reservationOnTable(id);
-      if (owner && !owner.data?.clearedFromBoard) {
+    if (owner && !owner.data?.clearedFromBoard) {
         // Close the terrace-flow visit too (the plan's dining → done arrow —
         // it was never wired): a cleared table must not leave a dangling
         // visit_state that keeps badges or kitchen tickets alive elsewhere.
         const closed = closeVisitData(owner.data) || owner.data;
         const nextData = { ...closed, clearedFromBoard: true };
+        const result = await persistReservationRow({ id: owner.id, date: owner.date, table_id: owner.table_id, data: nextData });
+        if (!result.ok) {
+          // Fallback writes retain failed values for retry. This action aborted,
+          // so the retained clear must not land later and hide an uncleared board.
+          if (!sqlitePrimaryRef.current) reservationQueueRef.current?.drop(owner.id);
+          const error = result.error || new Error("The reservation could not be cleared.");
+          setSyncStatus("sync-error");
+          noteSyncError("clear table reservation", error);
+          recordClientDiagnostic("clear table reservation", error);
+          if (typeof window !== "undefined") window.alert("CLEAR TABLE failed. Nothing was cleared; reconnect and try again.");
+          return { ok: false, error };
+        }
         setReservations(prev => prev.map(r => r.id === owner.id ? { ...r, data: nextData } : r));
-        persistReservationRow({ id: owner.id, date: owner.date, table_id: owner.table_id, data: nextData });
       }
-    }
+    ids.forEach((tableId) => intentionalBoardBlankRef.current.add(tableId));
+    setTables(p => p.map(t => ids.includes(Number(t.id)) ? blankTable(t.id) : t));
+    setSel(null);
+    return { ok: true };
   };
 
   // Returns the active reservation (if any) whose primary or grouped table matches `tableId`
@@ -1385,37 +1450,46 @@ export default function App() {
   // free (15.07 audit). A row whose destination slot holds non-moving live
   // content (a walk-in the plan can't see) is blocked entirely — neither
   // its board state nor its reservation move, so the two never disagree.
-  const applyLayoutSwitchRows = (rows) => {
+  const applyLayoutSwitchRows = async (rows) => {
+    if ((rows || []).some(r => r.status === "conflict" || r.status === "needs_table")) {
+      return { ok: false, error: new Error("Resolve every conflict and NEEDS TABLE row before switching layouts.") };
+    }
     const moveRows = (rows || []).filter(r => r.status === "move");
-    if (!moveRows.length) return;
+    if (!moveRows.length) return { ok: true };
     const { blocked } = applyLayoutSwitchToTables(tablesRef.current || [], moveRows);
     const blockedIds = new Set(blocked.map(b => b.id));
     blocked.forEach(b => console.warn(
       "[layout-switch] Row blocked — destination slot holds live content that is not moving:", b.name, "→", b.label,
     ));
     const moves = new Map(moveRows.filter(r => !blockedIds.has(r.id)).map(r => [r.id, r]));
-    if (!moves.size) return;
+    if (!moves.size) return { ok: false, error: new Error("The layout switch is blocked by live destination tables.") };
     // A group move vacates 2+ contentful source rows in one pass — without
     // this flag the autosave mass-blank guard reads that as an accidental
     // wipe, restores the sources AND keeps the filled destinations: the
     // party duplicates. This is an admin-confirmed whole-board transition —
     // exactly what the flag exists for.
     intentionalBoardClearRef.current = true;
+    const originalTables = tablesRef.current || [];
+    const originalReservations = reservations;
     setTables(prev => applyLayoutSwitchToTables(prev, [...moves.values()]).tables);
     const current = reservations.filter(r => moves.has(r.id));
     setReservations(prev => prev.map(r => {
       const next = moves.has(r.id) ? applyLayoutSwitchRow(moves.get(r.id), r) : null;
       return next || r;
     }));
-    if (supabase) {
-      current.forEach(r => {
-        const next = applyLayoutSwitchRow(moves.get(r.id), r);
-        if (next) {
-          persistReservationRow({ id: next.id, date: next.date, table_id: next.table_id, data: next.data })
-            .catch(e => console.warn("Layout switch persist failed:", e));
-        }
-      });
+    const reservationRows = current.map(r => applyLayoutSwitchRow(moves.get(r.id), r)).filter(Boolean);
+    const result = await persistReservationRows(reservationRows);
+    if (!result.ok) {
+      setTables(originalTables);
+      setReservations(originalReservations);
+      const error = result.error || new Error("Layout switch persistence failed.");
+      setSyncStatus("sync-error");
+      noteSyncError("layout switch", error);
+      recordClientDiagnostic("layout switch", error);
+      if (typeof window !== "undefined") window.alert("Layout switch failed. The current layout and assignments were retained.");
+      return { ok: false, error };
     }
+    return { ok: true };
   };
 
   // Kitchen sees terrace parties' tickets before the dining table is seated:
@@ -1775,6 +1849,10 @@ export default function App() {
   };
 
   const clearAll = () => {
+    if (!canAdmin) {
+      if (typeof window !== "undefined") window.alert("Admin access is required to clear all tables.");
+      return { ok: false, error: new Error("admin-required") };
+    }
     // CLEAR ALL discards without archiving. If a live service is on the board
     // this is destructive and unrecoverable, so warn explicitly and point at
     // Archive & Clear instead — an accidental tap here can wipe a whole shift.
@@ -2551,6 +2629,7 @@ export default function App() {
       const prevResv = reservations.find(r => r.id === id);
       const prevTableId = prevResv ? Number(prevResv.table_id) : null;
       const nextTableId = Number(table_id);
+      let originalTablesBeforeMove = null;
       if (!_skipAutoMove && prevTableId && nextTableId && prevTableId !== nextTableId
           && date === serviceDate && (mode === "service" || mode === "display")) {
         const src = tablesRef.current?.find(t => t.id === prevTableId);
@@ -2558,6 +2637,7 @@ export default function App() {
           || (src.kitchenLog && Object.keys(src.kitchenLog).length > 0)
           || src.kitchenArchived);
         if (srcStarted) {
+          originalTablesBeforeMove = tablesRef.current || [];
           const moved = moveTableState(prevTableId, nextTableId);
           if (!moved?.ok) {
             // Destination occupied: the live service could NOT follow the
@@ -2576,6 +2656,14 @@ export default function App() {
       if (result.ok) {
         setReservations(prev => prev.map(r => r.id === id ? { ...r, ...dbRow } : r));
         syncStartedTablesFromReservation(date, rData, Number(table_id));
+      } else if (originalTablesBeforeMove) {
+        if (!sqlitePrimaryRef.current) reservationQueueRef.current?.drop(id);
+        setTables(originalTablesBeforeMove);
+        const error = result.error || new Error("Reservation edit persistence failed.");
+        setSyncStatus("sync-error");
+        noteSyncError("reservation table move", error);
+        recordClientDiagnostic("reservation table move", error);
+        if (typeof window !== "undefined") window.alert("Reservation save failed. The live table move was reversed.");
       }
       return { ok: result.ok, error: result.error };
     }
@@ -2904,7 +2992,8 @@ export default function App() {
     const emptiedIdx = massBlankedIndices(prevJson, tables, nextJson);
     const intentionalUnseats = intentionalBoardUnseatRef.current;
     const unexpectedEmptiedIdx = emptiedIdx.filter(
-      idx => !intentionalUnseats.has(Number(tables[idx]?.id)),
+      idx => !intentionalUnseats.has(Number(tables[idx]?.id))
+        && !intentionalBoardBlankRef.current.has(Number(tables[idx]?.id)),
     );
     if (unexpectedEmptiedIdx.length >= 2 && !intentionalBoardClearRef.current) {
       console.error(
@@ -3658,6 +3747,10 @@ export default function App() {
   useEffect(() => {
     if (!hasSupabaseConfig || !sqlitePrimary) return undefined;
     if (anyTransportUp) {
+      if (watchRecoveryPending) {
+        setSyncStatus("sync-error");
+        return undefined;
+      }
       // On the LOCAL-FIRST path a connected stream with no upload/download
       // error IS healthy — clear a stale sync-error instead of keeping it
       // sticky. The sticky rule exists for the FALLBACK path (where "live"
@@ -3673,7 +3766,7 @@ export default function App() {
       setSyncStatus(prev => (prev === "local-only" || prev === "sync-error") ? prev : "connecting");
     }, 7000);
     return () => clearTimeout(t);
-  }, [anyTransportUp, hasSupabaseConfig, sqlitePrimary, powerSyncStatus?.streamError]);
+  }, [anyTransportUp, hasSupabaseConfig, sqlitePrimary, powerSyncStatus?.streamError, watchRecoveryPending]);
 
   // ── Primary read path: SQLite watches drive every load + live update ─────────
   // Each watch re-runs its reader whenever the underlying table changes — a
@@ -3686,9 +3779,29 @@ export default function App() {
     if (!sqlitePrimary) return undefined;
     let dispose;
     let cancelled = false;
-    (async () => {
+    let retryTimer;
+    let watchAttempt = 0;
+    const reportWatchFailure = ({ source, phase, error }) => {
+      if (cancelled) return;
+      const label = `PowerSync ${source} ${phase}`;
+      const failure = error || new Error(`${label} failed`);
+      console.error(`[${label}]`, failure);
+      setWatchRecoveryPending(true);
+      setSyncStatus("sync-error");
+      noteSyncError(label, failure);
+      recordClientDiagnostic(label, failure);
+      dispose?.();
+      dispose = undefined;
+      if (!retryTimer) {
+        const delay = Math.min(30000, 1000 * 2 ** Math.min(watchAttempt, 5));
+        watchAttempt += 1;
+        retryTimer = setTimeout(() => { retryTimer = undefined; void start(); }, delay);
+      }
+    };
+    const start = async () => {
       try {
         const { startWatches } = await import("./powersync/watch.js");
+        if (cancelled) return;
         const lo = new Date(); lo.setDate(lo.getDate() - 7);
         const hi = new Date(); hi.setDate(hi.getDate() + 30);
         const range = { from: toLocalDateISO(lo), to: toLocalDateISO(hi) };
@@ -3748,11 +3861,27 @@ export default function App() {
               }
             }
           },
-        }, range);
+        }, range, {
+          onError: reportWatchFailure,
+          onReady: () => {
+            if (cancelled) return;
+            watchAttempt = 0;
+            setWatchRecoveryPending(false);
+            setLastSyncError(null);
+            setSyncStatus("live");
+          },
+        });
         if (cancelled) dispose?.();
-      } catch (e) { console.error("[PowerSync] watches failed:", e); }
-    })();
-    return () => { cancelled = true; dispose?.(); };
+      } catch (error) {
+        reportWatchFailure({ source: "module", phase: "start", error });
+      }
+    };
+    void start();
+    return () => {
+      cancelled = true;
+      clearTimeout(retryTimer);
+      dispose?.();
+    };
   }, [sqlitePrimary, workspaceId, powerSyncStatus?.hasSynced]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Beverages: fallback direct-Supabase loader ───────────────────────────────
@@ -4364,6 +4493,7 @@ export default function App() {
         tables={displayTables} optionalExtras={dishes} optionalPairings={pairings}
         onArchiveAndClear={archiveAndClearAll}
         onClearAll={clearAll}
+        canClearAll={canAdmin}
         onClose={() => setArchiveOpen(false)}
         onRestoreTicket={id => upd(id, "kitchenArchived", false)}
         menuCourses={menuCourses}
@@ -4457,6 +4587,7 @@ export default function App() {
             tables={displayTables} optionalExtras={dishes}
             onArchiveAndClear={archiveAndClearAll}
             onClearAll={clearAll}
+            canClearAll={canAdmin}
             onClose={() => setArchiveOpen(false)}
             onRestoreTicket={id => upd(id, "kitchenArchived", false)}
             menuCourses={menuCourses}
@@ -4777,9 +4908,11 @@ export default function App() {
           onApplySeatToAll={(tableId, sourceSeatId) => applySeatTemplateToAll(tableId, sourceSeatId)}
           onClearBeverages={tableId => clearSeatBeverages(tableId)}
           onClearTable={tableId => clear(tableId)}
-          onMoveTable={(fromId, toId, mvMode = "auto") => {
+          onMoveTable={async (fromId, toId, mvMode = "auto") => {
             const from = Number(fromId);
             const to = Number(toId);
+            const originalTables = tablesRef.current || [];
+            const originalReservations = reservations;
             const dst = tablesRef.current?.find(t => t.id === to);
             const dstStarted = dst && (dst.active || dst.arrivedAt
               || (dst.kitchenLog && Object.keys(dst.kitchenLog).length > 0)
@@ -4789,7 +4922,6 @@ export default function App() {
             const useSwap = mvMode === "swap" || (mvMode === "auto" && dstOccupied);
             const result = useSwap ? swapTableState(from, to) : moveTableState(from, to);
             if (!result.ok) return result;
-            setSel(to);
 
             // Repoint the owning reservation(s) so they follow the live state we
             // just moved/swapped. CRITICAL: do it in ONE atomic setReservations
@@ -4826,11 +4958,22 @@ export default function App() {
                 // and the switch would bounce back — leaving the guest on both
                 // tables (the duplicate) and the other table hidden.
                 const writes = [];
-                if (srcResv) { const rp = repoint(srcResv); writes.push(persistReservationRow({ id: srcResv.id, date: srcResv.date, table_id: rp.table_id, data: rp.data })); }
-                if (dstResv && dstResv.id !== srcResv?.id) { const rp = repoint(dstResv); writes.push(persistReservationRow({ id: dstResv.id, date: dstResv.date, table_id: rp.table_id, data: rp.data })); }
-                Promise.all(writes).catch(e => console.warn("Reservation table move persist failed:", e));
+                if (srcResv) { const rp = repoint(srcResv); writes.push({ id: srcResv.id, date: srcResv.date, table_id: rp.table_id, data: rp.data }); }
+                if (dstResv && dstResv.id !== srcResv?.id) { const rp = repoint(dstResv); writes.push({ id: dstResv.id, date: dstResv.date, table_id: rp.table_id, data: rp.data }); }
+                const persisted = await persistReservationRows(writes);
+                if (!persisted.ok) {
+                  setTables(originalTables);
+                  setReservations(originalReservations);
+                  const error = persisted.error || new Error("Reservation table move persistence failed.");
+                  setSyncStatus("sync-error");
+                  noteSyncError("detail table move", error);
+                  recordClientDiagnostic("detail table move", error);
+                  if (typeof window !== "undefined") window.alert("Table move failed. The original assignments were restored.");
+                  return { ok: false, reason: "persist-failed", error };
+                }
               }
             }
+            setSel(to);
             return { ...result, swapped: useSwap };
           }}
           reservationOnTable={reservationOnTable}
@@ -4849,6 +4992,7 @@ export default function App() {
             tables={displayTables} optionalExtras={dishes} optionalPairings={pairings}
             onArchiveAndClear={archiveAndClearAll}
             onClearAll={clearAll}
+            canClearAll={canAdmin}
             onClose={() => setArchiveOpen(false)}
             onRestoreTicket={id => upd(id, "kitchenArchived", false)}
             menuCourses={menuCourses}

@@ -391,6 +391,22 @@ export const fakeWrites = {
     mirror((store) => upsertInto(store, "reservations", ["workspace_id", "id"], row));
     await fireWatches();
   },
+  writeReservations: async (inputRows) => {
+    const ws = requireWorkspace();
+    const applyRows = (store) => {
+      const rows = tableOf(store, "reservations");
+      for (const input of inputRows) {
+        const hit = rows.find((r) => asKey(r.id) === asKey(input.id) && r.workspace_id === ws);
+        const row = hit
+          ? { ...hit, date: input.date ?? hit.date, table_id: input.table_id, data: clone(input.data), updated_at: nowISO() }
+          : { workspace_id: ws, id: input.id ?? crypto.randomUUID(), date: input.date, table_id: input.table_id, data: clone(input.data), created_at: input.created_at || nowISO(), updated_at: nowISO() };
+        upsertInto(store, "reservations", ["workspace_id", "id"], row);
+      }
+    };
+    applyRows(backend.local);
+    mirror(applyRows);
+    await fireWatches();
+  },
   deleteReservationRow: async (id) => {
     const ws = requireWorkspace();
     const drop = (store) => {
