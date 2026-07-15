@@ -975,7 +975,7 @@ export default function App() {
   const dishes = useMemo(() => optionalExtrasFromCourses(activeMenuCourses), [activeMenuCourses]);
   const pairings = useMemo(() => optionalPairingsFromCourses(activeMenuCourses), [activeMenuCourses]);
   // Celebration-category dish keys, synced with the reservation birthday flag
-  // (shared by saveRes, reconcileBoardWithReservations and the group-merge
+  // (shared by reconcileBoardWithReservations and the group-merge
   // views, which must ignore these seeded extras when judging seat content).
   const celebrationKeys = useMemo(() => celebrationKeysFromCourses(activeMenuCourses), [activeMenuCourses]);
 
@@ -2240,37 +2240,6 @@ export default function App() {
         ...(t.kitchenArchived ? { kitchenArchived: false } : {}),
       });
     }
-  };
-
-  const saveRes = (id, { tableIds, tableId, name, time, menuType, guests, guestType, room, rooms, birthday, cakeNote, restrictions, notes, lang }) => {
-    const group = tableIds ?? (tableId ? [tableId] : [id]);
-    const sortedGroup = [...group].sort((a, b) => a - b);
-    setTables(p => p.map((t, _i, arr) => {
-      // Old group read from p, not the render-scope tables: a regroup that
-      // landed remotely after this form rendered must not make us blank the
-      // wrong tables.
-      const oldGroup = arr.find(x => x.id === id)?.tableGroup || [id];
-      // Clear tables that were in the old group but aren't in the new group
-      if (oldGroup.includes(t.id) && !sortedGroup.includes(t.id)) {
-        return { ...blankTable(t.id), active: t.active, arrivedAt: t.arrivedAt, kitchenLog: t.kitchenLog };
-      }
-      if (!sortedGroup.includes(t.id)) return t;
-      const newSeats = makeSeats(guests, t.seats);
-      const seats = celebrationKeys.length > 0
-        ? newSeats.map(s => ({
-            ...s,
-            extras: {
-              ...s.extras,
-              ...Object.fromEntries(
-                celebrationKeys.map(k => [k, { ordered: !!birthday, pairing: s.extras?.[k]?.pairing || "—" }])
-              ),
-            },
-          }))
-        : newSeats;
-      const normalizedRooms = Array.isArray(rooms) ? rooms.filter(Boolean) : (room ? [room] : []);
-      return { ...t, resName: name, resTime: time, menuType, guestType, room: normalizedRooms[0] || "", rooms: normalizedRooms, guests, seats, birthday, cakeNote: birthday ? (cakeNote || "") : "", restrictions, notes, lang: lang || "en", tableGroup: sortedGroup };
-    }));
-    setResModal(null);
   };
 
   // ── Service date ──────────────────────────────────────────────────────────
