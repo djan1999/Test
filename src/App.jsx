@@ -806,7 +806,15 @@ export default function App() {
    *  could land out of order and regress the store. */
   const flushingBoardRef = useRef(false);
   const flushAgainRef = useRef(false);
+  // TRUE while a service end is executing against the store. A board flush
+  // that lands AFTER the store-side clear resurrects the archived board in
+  // the store (last-write-wins upsert) — the straggler-autosave race the
+  // end-identity harness kept catching. persistServiceEnd raises this and
+  // waits out any in-flight flush; it drops on the local apply (success) or
+  // immediately (refused/failed end).
+  const endingServiceRef = useRef(false);
   const flushBoardWrites = useCallback(async () => {
+    if (endingServiceRef.current) return; // the end clears pending itself
     if (flushingBoardRef.current) { flushAgainRef.current = true; return; }
     flushingBoardRef.current = true;
     try {
@@ -1723,6 +1731,16 @@ export default function App() {
   // when it no longer holds that service — the atomic backstop behind the
   // client-side serviceEndSuperseded pre-check below.
   const persistServiceEnd = useCallback(async ({ archive = null, expected = null }) => {
+    // Straggler-autosave guard: block NEW board flushes for the duration of
+    // the end and wait out any IN-FLIGHT one (including its retry backoff —
+    // bounded to seconds) before touching the store. Without this, a flush
+    // that derived rows from the pre-end board can land after the store-side
+    // clear and resurrect the archived service in the store. The flag stays
+    // up through the local apply on success (applyFinishedServiceLocally
+    // drops it once the blank baselines are in place) and drops here on a
+    // refused or failed end.
+    endingServiceRef.current = true;
+    while (flushingBoardRef.current) await new Promise((r) => setTimeout(r, 50));
     try {
       const { rows, superseded } = await finishServiceStore({
         client: supabase,
@@ -1735,8 +1753,10 @@ export default function App() {
           ...(tablesRef.current || []).map((table) => Number(table.id)),
         ])],
       });
+      if (superseded) endingServiceRef.current = false;
       return { ok: !superseded, superseded, rows };
     } catch (error) {
+      endingServiceRef.current = false;
       return { ok: false, error };
     }
   }, []);
@@ -1770,6 +1790,8 @@ export default function App() {
       localStorage.removeItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
       localStorage.removeItem(workspaceKey("milka_service_started_at"));
     } catch {}
+    // The blank baselines are in place — board flushes are safe again.
+    endingServiceRef.current = false;
   };
 
   // The store-side finish (RPC / finishServiceLocally) blanks the board and
