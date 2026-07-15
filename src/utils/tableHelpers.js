@@ -428,6 +428,37 @@ export const moveSeatOnFloor = (table, aChair, bChair, positionKey) => {
   };
 };
 
+// A DINING-map drag is a real seat change — the kitchen plates by chair, so
+// chair, P-number and restriction position must agree after the move. Fold any
+// per-map chair overrides this table accumulated (from the older cosmetic
+// drags) into the seat identities: every guest's P becomes the chair they sit
+// at on this map, restriction positions follow, and the map's overrides drop.
+// After this, chair numbers ARE seat ids, so swapSeatData on chair numbers is
+// exact. A corrupted mapping (two guests projected onto one chair) leaves the
+// identities untouched rather than minting duplicate P-numbers.
+export const materializeFloorPositions = (table, positionKey) => {
+  const seats = table?.seats || [];
+  if (!seats.length || !positionKey) return table;
+  const chairs = seats.map((seat) => seatFloorPosition(seat, positionKey));
+  if (!seats.some((seat, i) => Number(seat.id) !== chairs[i])) return table;
+  if (new Set(chairs).size !== chairs.length) return table;
+  const chairOfGuest = new Map(seats.map((seat, i) => [Number(seat.id), chairs[i]]));
+  return {
+    ...table,
+    seats: seats
+      .map((seat, i) => {
+        const { [positionKey]: _folded, ...rest } = seat.floorPositions || {};
+        return { ...seat, id: chairs[i], floorPositions: rest };
+      })
+      .sort((x, y) => Number(x.id) - Number(y.id)),
+    restrictions: (table.restrictions || []).map((r) => {
+      if (r?.pos == null) return r;
+      const chair = chairOfGuest.get(Number(r.pos));
+      return chair == null ? r : { ...r, pos: chair };
+    }),
+  };
+};
+
 // Rearrange seat POSITIONS on one table. Both positions occupied → the guests
 // trade places (payloads exchange ids). Target position EMPTY → the guest
 // simply moves there, taking the new position number, and their old position

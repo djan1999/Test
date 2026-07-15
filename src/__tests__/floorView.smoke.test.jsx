@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, fireEvent } from "@testing-library/react";
 import FloorView from "../components/floor/FloorView.jsx";
 import FloorMap from "../components/floor/FloorMap.jsx";
+import KitchenFloorView from "../components/kitchen/KitchenFloorView.jsx";
 import { buildDefaultFloorMaps } from "../utils/floorMaps.js";
 
 // FLOOR view smoke: the FOH surface — tabs, ticker, two-zone taps, and the
@@ -288,7 +289,7 @@ describe("seat swap — drag a chair onto another chair of the same table", () =
     svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 368, right: 400, bottom: 368 });
   };
 
-  it("dropping P1 on P2 swaps those positions on the board table", () => {
+  it("dropping P1 on P2 swaps those positions on the board table — a DINING drag is an identity swap (the chair is the plate position, so the kitchen ticket follows)", () => {
     const onSwapSeats = vi.fn();
     const { container } = setup({ onSwapSeats });
     mockBox(container);
@@ -298,7 +299,27 @@ describe("seat swap — drag a chair onto another chair of the same table", () =
     fireEvent.pointerDown(seat, { clientX: 22, clientY: 50 });
     fireEvent.pointerMove(seat, { clientX: 60, clientY: 50 });
     fireEvent.pointerUp(seat, { clientX: 90, clientY: 50 });
-    expect(onSwapSeats).toHaveBeenCalledWith(1, 1, 2, "dining_a:T1");
+    expect(onSwapSeats).toHaveBeenCalledWith(1, 1, 2, "dining_a:T1", { identity: true });
+  });
+
+  it("the KITCHEN dining map takes the same drag (per Djan) — identity swap, ticket position follows", () => {
+    const onSwapSeats = vi.fn();
+    const { container } = render(
+      <KitchenFloorView
+        mapKind="dining"
+        floorMaps={floorMaps}
+        floorStatus={{}}
+        reservations={reservations}
+        tables={tables}
+        onSwapSeats={onSwapSeats}
+      />,
+    );
+    mockBox(container);
+    const seat = findTable(container, "T1").querySelector('[data-seat="0"]');
+    fireEvent.pointerDown(seat, { clientX: 22, clientY: 50 });
+    fireEvent.pointerMove(seat, { clientX: 60, clientY: 50 });
+    fireEvent.pointerUp(seat, { clientX: 90, clientY: 50 });
+    expect(onSwapSeats).toHaveBeenCalledWith(1, 1, 2, "dining_a:T1", { identity: true });
   });
 
   it("a drag that lands on empty floor swaps nothing", () => {

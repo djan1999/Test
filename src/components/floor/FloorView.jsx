@@ -247,8 +247,11 @@ export default function FloorView({
 
   const ticker = mapTicker(Object.values(tableState));
 
-  // Drag a chair onto another chair of the same table. P-numbers stay tied to
-  // guests; only their physical chair assignment for this map/table changes.
+  // Drag a chair onto another chair of the same table. TERRACE: P-numbers
+  // stay tied to guests; only the chair assignment for this map changes (the
+  // aperitif chair must not rewrite the dining plan). DINING: the chair IS
+  // the kitchen's plate position — a real swap, so P-numbers and restriction
+  // positions renumber and the kitchen ticket reads the new chair.
   const swapSeatPositions = (label, aNo, bNo) => {
     if (!onSwapSeats) return;
     const bt = map.kind === "terrace"
@@ -259,10 +262,15 @@ export default function FloorView({
     const source = (bt.seats || []).find((seat) => seatFloorPosition(seat, positionKey) === Number(aNo));
     if (!source) return;
     const target = (bt.seats || []).find((seat) => seatFloorPosition(seat, positionKey) === Number(bNo));
-    onSwapSeats(bt.id, Number(aNo), Number(bNo), positionKey);
-    flash(target
-      ? `${label} · P${source.id} ⇄ P${target.id}`
-      : `${label} · P${source.id} → CHAIR ${bNo}`);
+    if (map.kind === "terrace") {
+      onSwapSeats(bt.id, Number(aNo), Number(bNo), positionKey);
+      flash(target
+        ? `${label} · P${source.id} ⇄ P${target.id}`
+        : `${label} · P${source.id} → CHAIR ${bNo}`);
+      return;
+    }
+    onSwapSeats(bt.id, Number(aNo), Number(bNo), positionKey, { identity: true });
+    flash(target ? `${label} · P${aNo} ⇄ P${bNo}` : `${label} · P${aNo} → P${bNo}`);
   };
 
   // Parties the terrace tab must keep reachable even without a tile: any

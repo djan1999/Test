@@ -4,6 +4,7 @@ import {
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
   remapTableGroup, reservationTableIds, mergeRestrictionPositions, swapSeatData,
   moveSeatOnFloor, seatFloorPosition, restrictionsAtFloorPositions,
+  materializeFloorPositions,
   startedTablePatchFromReservation,
 } from "../utils/tableHelpers.js";
 
@@ -142,6 +143,62 @@ describe("swapSeatData (guests trade places — payloads AND restrictions follow
   it("dragging FROM an empty position is a no-op (nobody to move)", () => {
     const t = table();
     expect(swapSeatData(t, 9, 1)).toBe(t);
+  });
+});
+
+describe("materializeFloorPositions (dining drags renumber for real — the chair IS the plate position)", () => {
+  const key = "dining:T9";
+  const table = () => ({
+    id: 1,
+    seats: [
+      { id: 1, water: "XC", floorPositions: {} },
+      { id: 2, water: "OW", floorPositions: { [key]: 4 } }, // an older cosmetic drag
+      { id: 4, water: "—", floorPositions: { [key]: 2 } },
+    ],
+    restrictions: [{ note: "shellfish", pos: 2 }],
+  });
+
+  it("folds this map's chair overrides into the seat identities — restriction positions follow", () => {
+    const next = materializeFloorPositions(table(), key);
+    expect(next.seats.map((s) => Number(s.id))).toEqual([1, 2, 4]);
+    // the shellfish guest (was P2, sitting at chair 4) IS P4 now
+    expect(next.seats.find((s) => Number(s.id) === 4).water).toBe("OW");
+    expect(next.seats.find((s) => Number(s.id) === 2).water).toBe("—");
+    expect(next.restrictions).toEqual([{ note: "shellfish", pos: 4 }]);
+    // the folded map's overrides are gone; identities carry the truth
+    expect(next.seats.every((s) => !(key in (s.floorPositions || {})))).toBe(true);
+  });
+
+  it("leaves other maps' chair assignments alone", () => {
+    const t = table();
+    t.seats[0].floorPositions = { "terrace:B2": 6 };
+    const next = materializeFloorPositions(t, key);
+    expect(next.seats.find((s) => Number(s.id) === 1).floorPositions).toEqual({ "terrace:B2": 6 });
+  });
+
+  it("is a no-op when identities already match the chairs", () => {
+    const t = { id: 1, seats: [{ id: 1 }, { id: 2 }], restrictions: [] };
+    expect(materializeFloorPositions(t, key)).toBe(t);
+  });
+
+  it("refuses a corrupted mapping (two guests on one chair) rather than minting duplicate P-numbers", () => {
+    const t = {
+      id: 1,
+      seats: [
+        { id: 1, floorPositions: { [key]: 2 } },
+        { id: 2, floorPositions: {} },
+      ],
+      restrictions: [],
+    };
+    expect(materializeFloorPositions(t, key)).toBe(t);
+  });
+
+  it("then a plain swap on chair numbers moves the restriction where the kitchen ticket reads it", () => {
+    // the full dining-drag pipeline App.swapSeats runs: materialize → swapSeatData
+    const next = swapSeatData(materializeFloorPositions(table(), key), 4, 1);
+    // the shellfish guest dragged from chair 4 onto chair 1
+    expect(next.restrictions).toEqual([{ note: "shellfish", pos: 1 }]);
+    expect(next.seats.find((s) => Number(s.id) === 1).water).toBe("OW");
   });
 });
 
