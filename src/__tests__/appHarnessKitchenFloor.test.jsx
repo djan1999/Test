@@ -316,6 +316,45 @@ describe("app harness — kitchen board through the real App", () => {
     // fire alone (Amuse) would not have moved anyone: the flag did it.
   }, 25000);
 
+  it("a flagged fire never yanks a SECOND-LEG terrace party back in — they are physically outside (15.07)", async () => {
+    const now = new Date().toISOString();
+    seed("service_settings", [{
+      id: "service_date",
+      state: { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: now },
+      updated_at: now,
+    }]);
+    // Bruno already dined INSIDE (table 2 is seated, moved_at from the first
+    // move-in) and went BACK OUT to T23 for dessert — the second terrace leg.
+    seed("service_tables", [{
+      table_id: 2,
+      data: { ...blankTable(2), active: true, arrivedAt: "19:07", resName: "Bruno Harness", resTime: "20:15", guests: 3 },
+      updated_at: now,
+    }]);
+    seed("reservations", [{
+      id: "res-bruno", date: TODAY(), table_id: 2, created_at: now,
+      data: { resName: "Bruno Harness", resTime: "20:15", guests: 3, tableGroup: [],
+        service_session: "dinner", visit_state: "terrace", terrace_table: "T23",
+        moved_at: "2026-07-15T20:40:00.000Z" },
+    }]);
+    seed("menu_courses", [
+      courseRow(1, "amuse", "Amuse"),
+      { ...courseRow(2, "crayfish", "Crayfish"), is_last_bite: true },
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByText("[Kitchen]", {}, { timeout: 5000 }));
+    await screen.findByText(/Bruno Harness/, {}, { timeout: 5000 });
+
+    fireEvent.click(await screen.findByText("Crayfish", {}, { timeout: 5000 }));
+    // The fire lands on the ticket…
+    await waitFor(() => {
+      expect(rowFor(remoteRows("service_tables"), 2)?.data?.kitchenLog?.crayfish?.firedAt).toBeTruthy();
+    }, { timeout: 5000 });
+    // …but Bruno STAYS outside: auto-freeing the terrace table he is sitting
+    // at would hand it to the ASSIGN PARTY picker (double-book hazard).
+    expect(resRow("res-bruno")?.data?.visit_state).toBe("terrace");
+    expect(resRow("res-bruno")?.data?.terrace_table).toBe("T23");
+  }, 25000);
+
   it("a stale SET banner (course key no longer on the menu) self-heals on the kitchen board", async () => {
     // The SET snapshot points at a course key that a mid-service menu edit
     // removed — fire() clears only on an exact key match, so this banner

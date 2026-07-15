@@ -129,6 +129,22 @@ export function pendingStateKeys() {
   return [...queues.entries()].filter(([, q]) => q.latest !== undefined).map(([id]) => id);
 }
 
+// Drop a key's retained value and cancel its retry — for values that became
+// LIES while they waited. The concrete case: a floor-strip write fails on a
+// flaky link, its blob is retained for retry, the service then ENDS on
+// another device — the retained old-service strips would replay on the next
+// 'online' signal (even an hour later) and overwrite the ending device's {}
+// wipe. Lifecycle adoption calls this the moment a service end/replace is
+// observed; an in-flight attempt can no longer be stopped, but `latest`
+// clearing stops the retry/online replays.
+export function dropPendingStateKey(id) {
+  const q = queues.get(id);
+  if (!q) return;
+  q.latest = undefined;
+  q.attempts = 0;
+  if (q.retryTimer) { clearTimeout(q.retryTimer); q.retryTimer = null; }
+}
+
 export async function readStatePrefix(prefix) {
   if (!supabase || !getWorkspaceId()) throw new Error("no active workspace");
   if (isSqlitePrimary()) {

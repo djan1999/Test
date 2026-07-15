@@ -70,7 +70,7 @@ import {
 } from "./constants/dietary.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES, getWorkspaceId } from "./lib/supabaseClient.js";
 import { scopedFrom } from "./lib/scopedDb.js";
-import { readStateKey, saveStateKey } from "./lib/stateStore.js";
+import { readStateKey, saveStateKey, dropPendingStateKey } from "./lib/stateStore.js";
 import { finishServiceStore } from "./lib/serviceLifecycleStore.js";
 import { isPowerSyncEnabled } from "./powersync/config.js";
 import { setSqlitePrimaryFlag } from "./powersync/primary.js";
@@ -1173,6 +1173,11 @@ export default function App() {
       if (visitStateOf(owner.data) === "arriving") {
         persistVisitData(owner, markSeatedData(owner.data));
       } else {
+        // Second terrace leg (back outside for the last course — moved_at
+        // from the first move-in marks it): re-seating the DINING table is a
+        // board correction (Unseat → Seat), not the party coming inside —
+        // their terrace leg ends only by explicit gestures.
+        if (owner.data?.moved_at) continue;
         const label = owner.data?.terrace_table || null;
         if (persistVisitData(owner, moveToDiningData(owner.data, new Date().toISOString(), { singleTap: true }))) {
           clearTerraceStrip(label);
@@ -1272,14 +1277,21 @@ export default function App() {
 
   const moveTerracePartyIn = (resv) => {
     const label = resv.data?.terrace_table || null;
+    // A move-in whose dining table is ALREADY seated (the second terrace
+    // leg — dessert outside, courses running inside) must go straight to
+    // 'dining': 'arriving' dead-ends there, because every MARK SEATED
+    // surface gates on the table not being active. And it must not re-seat —
+    // seatTable would stomp arrivedAt with the dessert hour.
+    const ids = reservationTableIds(resv.data, resv.table_id).map(Number);
+    const alreadySeated = ids.some(tid => tablesRef.current?.find(t => t.id === tid)?.active);
     const next = moveToDiningData(resv.data, new Date().toISOString(), {
-      singleTap: !!floorMapsState.config?.moveSingleTap,
+      singleTap: alreadySeated || !!floorMapsState.config?.moveSingleTap,
     });
     if (!persistVisitData(resv, next)) return;
     // the terrace table frees the moment the write lands (occupancy derives
     // from visit_state) — and its bites-SET clears with the departure
     if (next.visit_state === "dining" || next.visit_state === "arriving") clearTerraceStrip(label);
-    if (next.visit_state === "dining") seatTable(Number(resv.table_id)); // MOVE_SINGLE_TAP path
+    if (next.visit_state === "dining" && !alreadySeated) seatTable(Number(resv.table_id)); // MOVE_SINGLE_TAP path
   };
 
   const markTerracePartySeated = (resv) => {
@@ -2332,6 +2344,10 @@ export default function App() {
     if (remoteDate && remoteDate !== localDate) {
       // STARTED (or re-dated) on another device — adopt the live day.
       if (isStaleServiceDate(remoteDate) && !isActivePastReview(remoteDate, state.chosenOn)) return;
+      // Any floor-strip blob this device retained for retry belongs to the
+      // PREVIOUS service — replaying it (retry backoff / the 'online' flush,
+      // possibly an hour later) would overwrite the new service's strips.
+      dropPendingStateKey?.(FLOOR_STATUS_KEY);
       setServiceDate(remoteDate);
       setServiceDateChosenOn(state.chosenOn || null);
       serviceDateRef.current = remoteDate;
@@ -2346,6 +2362,11 @@ export default function App() {
       // archived and cleared the shared board; this device just releases the
       // date and leaves the live views (the 08.07 phone kept showing a dead
       // service all night because this adoption didn't exist).
+      // Drop any retained floor-strip retry first: a strip write that failed
+      // on a flaky link before the end would otherwise replay on the next
+      // 'online' signal and overwrite the ending device's {} wipe with the
+      // dead service's SET markers.
+      dropPendingStateKey?.(FLOOR_STATUS_KEY);
       applyFinishedServiceLocally([]);
       setMode(prev => {
         if (prev !== "service" && prev !== "display") return prev;
@@ -2371,8 +2392,21 @@ export default function App() {
     if (!supabase) return;
     const date = serviceDateRef.current;
     if (!date) return;
-    saveStateKey("service_date", { date, chosenOn: serviceDateChosenOnRef.current, session, startedAt: serviceStartedAtRef.current })
-      .then((r) => { if (!r.ok) console.warn("Service session share failed:", r.error); });
+    // Merge into the STORE's live blob, not this device's refs: a device
+    // that slept through a service re-start still holds the OLD startedAt —
+    // writing the whole blob from refs would clobber the live identity, and
+    // every other device's guarded END would then be refused (the 11.07
+    // "can't end service" symptom through a side door). Store unreachable →
+    // fall back to local refs, exactly the old behavior.
+    (async () => {
+      let live = null;
+      try { live = await readStateKey("service_date"); } catch { /* offline — refs below */ }
+      const base = live?.date
+        ? live
+        : { date, chosenOn: serviceDateChosenOnRef.current, startedAt: serviceStartedAtRef.current };
+      const r = await saveStateKey("service_date", { ...base, session });
+      if (!r.ok) console.warn("Service session share failed:", r.error);
+    })();
   };
 
   // ── Reservations CRUD ─────────────────────────────────────────────────────
@@ -2674,11 +2708,27 @@ export default function App() {
   // the strip would survive after all. Local-only mode has nothing to wait for.
   const floorStatusHydratedRef = useRef(!supabase);
   const pendingStripClearsRef = useRef([]);
+  // Content snapshot alongside the courseReady keys: a courseReady that
+  // vanished because the whole BOARD blanked (END SERVICE adopted from
+  // another device) is not a served course. Without this, the adopting
+  // device judged every resolve at once and PERSISTED a partial old-service
+  // strip blob AFTER the ending device's {} wipe — resurrecting dead SET
+  // strips into the next service (and its fresh write stamp then made it
+  // reject the real wipe for 60s).
+  const prevBoardContentRef = useRef(null);
   useEffect(() => {
     const prev = prevReadyKeysRef.current;
     const cur = {};
     tables.forEach(t => { cur[t.id] = t.courseReady?.key || null; });
     prevReadyKeysRef.current = cur;
+    const content = {};
+    tables.forEach(t => { content[t.id] = !!(t.active || t.resName); });
+    const prevContent = prevBoardContentRef.current;
+    prevBoardContentRef.current = content;
+    const massBlank = prevContent
+      ? tables.filter(t => prevContent[t.id] && !content[t.id]).length >= 2
+      : false;
+    if (massBlank) { pendingStripClearsRef.current = []; return; }
     if (prev) {
       tables.forEach(t => {
         if (prev[t.id] && !cur[t.id]) {
@@ -2721,6 +2771,12 @@ export default function App() {
     if (!newlyFired.length) return;
     serviceReservations.forEach(r => {
       if (visitStateOf(r.data) !== "terrace") return;
+      // A party back OUTSIDE for the last course (second terrace leg — the
+      // moved_at stamp from their first move-in marks it) must never be
+      // auto-moved: the fire would free the terrace table they are
+      // physically sitting at and hand it to the ASSIGN PARTY picker. The
+      // second leg ends only by explicit gestures (MOVE / CLEAR TABLE).
+      if (r.data?.moved_at) return;
       const ids = reservationTableIds(r.data, r.table_id).map(Number);
       if (newlyFired.some(t => ids.includes(Number(t.id)))) moveTerracePartyIn(r);
     });
