@@ -47,6 +47,20 @@ describe("fuzzy (wine search)", () => {
     expect(fuzzy("mosel", wines, null)).toHaveLength(2);
   });
 
+  it("bottle search (byGlass false) also surfaces by-the-glass wines", () => {
+    // Every wine can be ordered by the bottle, so a bottle search must not
+    // hide wines that are also poured by the glass.
+    const bottle = fuzzy("mosel", wines, false);
+    expect(bottle).toHaveLength(2);
+    expect(bottle.some(w => w.byGlass === true)).toBe(true);
+  });
+
+  it("bottle search finds a wine that is only offered by the glass", () => {
+    const bottle = fuzzy("riesling", wines, false);
+    expect(bottle).toHaveLength(1);
+    expect(bottle[0].name).toBe("Riesling Spätlese");
+  });
+
   it("caps results at 6", () => {
     const big = Array.from({ length: 10 }, (_, i) => ({
       name: `Wine ${i}`, producer: "Same", vintage: "2020", byGlass: true,
