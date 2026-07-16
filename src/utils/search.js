@@ -9,7 +9,12 @@ export const fuzzy = (q, wineList, byGlass = null) => {
     const hit = (w.name || "").toLowerCase().includes(lq)
       || (w.producer || "").toLowerCase().includes(lq)
       || (w.vintage || "").includes(lq);
-    return hit && (byGlass === null || w.byGlass === byGlass);
+    // Every wine can be ordered by the bottle, so a bottle search
+    // (byGlass === false) also surfaces wines poured by the glass. Only a
+    // by-the-glass search (byGlass === true) stays restricted to glass wines.
+    const modeMatch =
+      byGlass === null || byGlass === false || w.byGlass === true;
+    return hit && modeMatch;
   }).slice(0, 6);
 };
 
