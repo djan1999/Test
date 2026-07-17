@@ -1,27 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
+import FloorMap from "../floor/FloorMap.jsx";
 import {
-  getActiveDiningMap, getTerraceMap, seatDisplayPoints,
-  resolveReservationTable, MAP_W, MAP_H,
+  getActiveDiningMap, getTerraceMap, resolveReservationTable, emptySheet,
 } from "../../utils/floorMaps.js";
+import {
+  floorPositionKey, seatFloorPosition, restrictionsAtFloorPositions,
+} from "../../utils/tableHelpers.js";
 
-// KitchenMinimap — a persistent spatial-awareness crib for the pass. It sits
-// in the empty bottom-right of the ticket board (never over a ticket) so a
-// chef plating a dish knows WHERE it goes without reading table numbers or
-// leaving the board. It is NOT the interactive kitchen floor view: no walls,
-// no chairs-as-controls, no seating actions — just the room's tables, their
-// numbers, and guest positions, rendered as small as it can be while staying
-// legible. The heavy renderer (FloorMap) draws the architecture layer and a
-// dozen chair registers; reusing it here would fight the "extremely minimal"
-// brief and cost renders the board can't spare — so this paints its own tiny
-// SVG straight from the SAME pure geometry (seatDisplayPoints) FloorMap uses.
+// KitchenMinimap — a small, always-on room map docked in the board's spare
+// bottom-right, so the pass reads WHERE a dish goes (room, table, guests)
+// without leaving the ticket wall. It is NOT the full interactive kitchen
+// floor view (no seating actions, no tabs, no walls), but it renders through
+// the SAME FloorMap component that view uses, so it looks and highlights
+// exactly like the kitchen floor map: occupied tables solid, guest positions
+// labelled at every chair, restricted chairs in the app red. The architecture
+// layer (walls/zones/planters) is stripped — a corner crib wants the tables,
+// not the blueprint.
 //
-// Interaction, per Djan's brief: the chef touches/hovers a ticket → that
-// table lights up here with its guest positions, everything else dims, and
-// the map follows the party into the room it's actually in (a terrace party's
-// ticket shows the terrace; a seated party shows the dining layout). Swipe
-// left/right (or tap the header) to browse the other room; the last room
-// browsed is remembered across reloads.
+// It stays live at all times (occupied tables + guest labels always drawn,
+// like the floor map), and the ticket the chef is touching gets an extra ring
+// so "this one" is unmistakable; the map also follows that party into the room
+// it's actually in (terrace vs. dining). Swipe or tap the header to browse the
+// other room; the last room is remembered across reloads.
 
 const FONT = tokens.font;
 const LS_KEY = "milka_kitchen_minimap_map"; // "dining" | "terrace"
@@ -32,11 +33,10 @@ const readStoredKind = () => {
 };
 const storeKind = (kind) => { try { localStorage.setItem(LS_KEY, kind); } catch {} };
 
-// Where does a live ticket sit right now? A party out on the terrace carries
-// its terrace label on the derived `_visit` decoration (App builds it); an
-// active dining party resolves to a tile through the active layout exactly
-// like FOH does. Anything else (an upcoming banner, a party between rooms)
-// has no place on the map yet → null, and the minimap just stays put.
+// Where a live ticket sits right now. A party out on the terrace carries its
+// terrace label on the derived `_visit` decoration (App builds it); a seated
+// party resolves to a dining tile through the active layout, exactly as FOH
+// does. Anything else (upcoming banner, between rooms) has no place yet → null.
 function locateTable(table, diningMap) {
   if (!table) return null;
   if (table._visit?.visit === "terrace") {
@@ -50,60 +50,6 @@ function locateTable(table, diningMap) {
   return null;
 }
 
-function TableGlyph({ t, focused, dimmed, liveSeatNos }) {
-  const cx = t.x + t.w / 2;
-  const cy = t.y + t.h / 2;
-  // Focused = solid green (matches the seated-table register on the real
-  // floor); otherwise a quiet hairline outline. Dim the rest so the lit table
-  // is the only thing the eye lands on.
-  const stroke = focused ? tokens.green.strong : tokens.ink[4];
-  const fill = focused ? tokens.green.strong : "none";
-  const labelFill = focused ? tokens.neutral[0] : tokens.ink[3];
-  const shape = t.shape === "round"
-    ? <circle cx={cx} cy={cy} r={Math.min(t.w, t.h) / 2} fill={fill} stroke={stroke} strokeWidth={focused ? 0.7 : 0.4} />
-    : <rect x={t.x} y={t.y} width={t.w} height={t.h} fill={fill} stroke={stroke} strokeWidth={focused ? 0.7 : 0.4} />;
-
-  // Table number without the "T" so it stays legible at this size ("8", not
-  // "T8"); merges keep their compound label.
-  const num = String(t.label || "").replace(/^T/i, "");
-
-  return (
-    <g opacity={dimmed ? 0.28 : 1}>
-      {shape}
-      <text x={cx} y={cy + 1} textAnchor="middle" fontFamily={FONT}
-        fontSize={t.label.length > 3 ? 2.6 : 3.4} fontWeight={700} fill={labelFill}>
-        {num}
-      </text>
-      {/* Guest positions. On the focused table the seats a guest actually
-          occupies (matched by P-number to the live cover) light up with their
-          number — "T8, guests 2 and 4" reads straight off the map; empty
-          chairs of the tile stay faint. Off the focused table the dots are
-          just quiet position markers. */}
-      {seatDisplayPoints(t).map((p, i) => {
-        const sx = p.x + p.out.x * 1.9;
-        const sy = p.y + p.out.y * 1.9;
-        const live = focused && p.no != null && liveSeatNos.has(Number(p.no));
-        if (focused) {
-          return (
-            <g key={i}>
-              <circle cx={sx} cy={sy} r={live ? 1.7 : 1}
-                fill={live ? tokens.green.border : "none"}
-                stroke={live ? tokens.green.strong : tokens.ink[4]} strokeWidth={0.3} />
-              {live && (
-                <text x={sx} y={sy + 0.7} textAnchor="middle" fontFamily={FONT}
-                  fontSize={1.8} fontWeight={700} fill={tokens.neutral[0]}>
-                  {p.no}
-                </text>
-              )}
-            </g>
-          );
-        }
-        return <circle key={i} cx={sx} cy={sy} r={0.7} fill={tokens.ink[4]} />;
-      })}
-    </g>
-  );
-}
-
 export default function KitchenMinimap({ floorMaps, tables = [], focusedTableId = null }) {
   const diningMap = getActiveDiningMap(floorMaps);
   const terraceMap = getTerraceMap(floorMaps);
@@ -114,8 +60,8 @@ export default function KitchenMinimap({ floorMaps, tables = [], focusedTableId 
     : null;
   const located = useMemo(() => locateTable(focusedTable, diningMap), [focusedTable, diningMap]);
 
-  // The map follows the focused party into its room — the whole point is that
-  // the chef sees where THIS ticket's food goes, not whichever room they last
+  // The map follows the focused party into its room — the point is that the
+  // chef sees where THIS ticket's food goes, not whichever room they last
   // browsed. Manual swipes (below) still win until the next ticket is touched.
   useEffect(() => {
     if (located && located.kind !== kind) { setKind(located.kind); storeKind(located.kind); }
@@ -124,7 +70,7 @@ export default function KitchenMinimap({ floorMaps, tables = [], focusedTableId 
   const setKindManual = (next) => { setKind(next); storeKind(next); };
   const toggleKind = () => setKindManual(kind === "dining" ? "terrace" : "dining");
 
-  // Horizontal swipe → switch rooms. A short flick, no vertical bias, so a
+  // Horizontal swipe → switch rooms. A short flick with no vertical bias, so a
   // scroll of the board underneath never reads as a room change.
   const swipe = useRef(null);
   const onPointerDown = (e) => { swipe.current = { x: e.clientX, y: e.clientY }; };
@@ -137,21 +83,67 @@ export default function KitchenMinimap({ floorMaps, tables = [], focusedTableId 
 
   const map = kind === "terrace" ? terraceMap : diningMap;
   const otherAvailable = !!(diningMap && terraceMap);
-  if (!map) return null;
 
-  // Only the focused table (when it lives on the room now showing) drives the
-  // highlight/dim split — browsing the other room shows a calm, undimmed plan.
-  const activeLabel = located && located.kind === kind ? located.label : null;
-  const liveSeatNos = new Set((focusedTable?.seats || []).map(s => Number(s.id)));
+  // Live occupancy for THIS room, keyed by tile label. Terrace tiles match a
+  // party through its `_visit.terraceLabel`; dining tiles through the active
+  // layout resolution. Built before the early return so hooks stay ordered.
+  const liveByLabel = useMemo(() => {
+    const out = {};
+    if (!map) return out;
+    for (const t of tables) {
+      let label = null;
+      if (map.kind === "terrace") {
+        if (t._visit?.visit === "terrace") label = t._visit.terraceLabel;
+      } else if (t.active) {
+        label = resolveReservationTable(diningMap, t.id).table?.label || null;
+      }
+      if (label) out[label] = t;
+    }
+    return out;
+  }, [tables, map, diningMap]);
+
+  // The focused ticket's tile — only when it lives on the room now showing —
+  // gets the "you are here" ring on top of the normal occupied highlight.
+  const focusLabel = located && located.kind === kind ? located.label : null;
+
+  // Same per-tile presentation the kitchen floor view feeds FloorMap: occupied
+  // status, guest labels at the physical chairs, restrictions projected onto
+  // those chairs, gender outlines. Empty tiles fall back to the layout's own
+  // seat numbers, so every chair shows its P-label like the floor map.
+  const { tableState, restrictionsByLabel, seatLabelsByLabel, seatGendersByLabel } = useMemo(() => {
+    const ts = {}, rb = {}, sl = {}, sg = {};
+    for (const mt of map?.tables || []) {
+      const live = liveByLabel[mt.label] || null;
+      ts[mt.label] = { status: live ? "occupied" : "free", ...(mt.label === focusLabel ? { sent: true } : {}) };
+      if (!live) continue;
+      const pk = floorPositionKey(map.id, mt.label);
+      const restr = restrictionsAtFloorPositions(live.seats || [], live.restrictions || [], pk)
+        .filter(r => r && r.note);
+      if (restr.length) rb[mt.label] = restr;
+      sl[mt.label] = Object.fromEntries((live.seats || []).map(s => [seatFloorPosition(s, pk), Number(s.id)]));
+      const g = {};
+      for (const s of live.seats || []) {
+        if (s.gender === "Mr" || s.gender === "Mrs") g[seatFloorPosition(s, pk)] = s.gender;
+      }
+      if (Object.keys(g).length) sg[mt.label] = g;
+    }
+    return { tableState: ts, restrictionsByLabel: rb, seatLabelsByLabel: sl, seatGendersByLabel: sg };
+  }, [map, liveByLabel, focusLabel]);
+
+  // Strip the architecture layer — the crib wants tables + guests, not walls.
+  const bareMap = useMemo(() => (map ? { ...map, sheet: emptySheet() } : null), [map]);
+
+  if (!map || !bareMap) return null;
 
   return (
     <div
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
       style={{
-        width: 150, maxWidth: "100%",
-        display: "flex", flexDirection: "column", gap: 3,
-        touchAction: "pan-y", userSelect: "none", WebkitUserSelect: "none",
+        width: 260, maxWidth: "42vw",
+        display: "flex", flexDirection: "column", gap: 4,
+        background: tokens.ink.bg, border: `1px solid ${tokens.ink[4]}`,
+        padding: 6, touchAction: "pan-y", userSelect: "none", WebkitUserSelect: "none",
       }}
       aria-label="Kitchen minimap"
     >
@@ -160,41 +152,34 @@ export default function KitchenMinimap({ floorMaps, tables = [], focusedTableId 
       <div
         onClick={otherAvailable ? toggleKind : undefined}
         style={{
-          display: "flex", alignItems: "center", gap: 5,
-          cursor: otherAvailable ? "pointer" : "default",
+          display: "flex", alignItems: "center", gap: 6,
+          cursor: otherAvailable ? "pointer" : "default", padding: "0 1px",
         }}
       >
-        <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.12em", textTransform: "uppercase", color: tokens.ink[3], whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {map.name}
         </span>
         <span style={{ flex: 1 }} />
         {otherAvailable && ["dining", "terrace"].map(k => (
           <span key={k} aria-hidden style={{
-            width: 4, height: 4, borderRadius: 4,
+            width: 5, height: 5, borderRadius: 5,
             background: k === kind ? tokens.ink[2] : tokens.ink[4],
           }} />
         ))}
       </div>
 
-      <svg
-        viewBox={`0 0 ${MAP_W} ${MAP_H}`}
-        style={{
-          width: "100%", aspectRatio: `${MAP_W} / ${MAP_H}`, display: "block",
-          background: tokens.ink.bg, border: `1px solid ${tokens.ink[4]}`,
-        }}
-        role="img"
-        aria-label={`${map.name} minimap`}
-      >
-        {(map.tables || []).map((t) => (
-          <TableGlyph
-            key={t.label}
-            t={t}
-            focused={activeLabel === t.label}
-            dimmed={!!activeLabel && activeLabel !== t.label}
-            liveSeatNos={liveSeatNos}
-          />
-        ))}
-      </svg>
+      <FloorMap
+        map={bareMap}
+        mode="service"
+        tableState={tableState}
+        restrictionsByLabel={restrictionsByLabel}
+        seatLabelsByLabel={seatLabelsByLabel}
+        seatGendersByLabel={seatGendersByLabel}
+        seatPositionLabels
+        seatCodes
+        showPartyLines={false}
+        height={230}
+      />
     </div>
   );
 }
