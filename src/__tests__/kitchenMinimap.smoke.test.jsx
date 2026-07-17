@@ -8,24 +8,26 @@ const floorMaps = buildDefaultFloorMaps();
 describe("KitchenMinimap", () => {
   // The remembered-room preference lives in localStorage; isolate each case.
   beforeEach(() => { try { localStorage.clear(); } catch {} });
-  it("renders the active dining layout with bare table numbers", () => {
-    const { container, queryByText } = render(
+
+  it("renders the active dining layout through the floor map, with guest labels", () => {
+    const { container, queryByText, getAllByText } = render(
       <KitchenMinimap floorMaps={floorMaps} tables={[]} focusedTableId={null} />
     );
-    expect(queryByText("1")).toBeTruthy(); // T1
-    expect(queryByText("5")).toBeTruthy(); // T5 (dining only)
+    expect(queryByText("T1")).toBeTruthy(); // dining tile
+    expect(queryByText("T5")).toBeTruthy(); // dining only
+    // every chair carries its P-label even when the room is empty
+    expect(getAllByText(/^P\d+$/).length).toBeGreaterThan(0);
     expect(container.querySelector("svg")).toBeTruthy();
   });
 
-  it("highlights a focused dining table and labels its live guest positions", () => {
+  it("marks a focused dining table occupied and labels its live guests", () => {
     const table = { id: 8, active: true, seats: [{ id: 1 }, { id: 2 }] };
-    const { getAllByText } = render(
+    const { queryByText, getAllByText } = render(
       <KitchenMinimap floorMaps={floorMaps} tables={[table]} focusedTableId={8} />
     );
-    expect(getAllByText("8").length).toBeGreaterThanOrEqual(1); // T8 number
-    // live guest positions P1/P2 render their numbers on the lit table
-    expect(getAllByText("1").length).toBeGreaterThanOrEqual(1);
-    expect(getAllByText("2").length).toBeGreaterThanOrEqual(1);
+    expect(queryByText("T8")).toBeTruthy();
+    expect(getAllByText("P1").length).toBeGreaterThanOrEqual(1);
+    expect(getAllByText("P2").length).toBeGreaterThanOrEqual(1);
   });
 
   it("follows a terrace party onto the terrace map", () => {
@@ -33,7 +35,7 @@ describe("KitchenMinimap", () => {
     const { queryByText } = render(
       <KitchenMinimap floorMaps={floorMaps} tables={[table]} focusedTableId={21} />
     );
-    expect(queryByText("21")).toBeTruthy(); // terrace tile T21
-    expect(queryByText("5")).toBeFalsy();   // dining-only table gone → map switched
+    expect(queryByText("T21")).toBeTruthy(); // terrace tile
+    expect(queryByText("T5")).toBeFalsy();   // dining-only table gone → map switched
   });
 });

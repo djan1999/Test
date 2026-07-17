@@ -1455,20 +1455,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 onFocus={showMinimap ? setFocusedTableId : null}
               />
             ))}
-            {/* Minimap — forced to the last grid column so it always resolves
-                to a free right-edge cell after the tickets flow in, never
-                over one. Only rendered when the board has spare cells. */}
-            {showMinimap && (
-              <div style={{ gridColumn: 5, minWidth: 0, display: "flex", justifyContent: "flex-end", alignItems: "flex-end" }}>
-                <Suspense fallback={null}>
-                  <KitchenMinimap
-                    floorMaps={floorMaps}
-                    tables={displayTables}
-                    focusedTableId={focusedTableId}
-                  />
-                </Suspense>
-              </div>
-            )}
           </div>
           {archivedStrip}
         </div>
@@ -1497,6 +1483,21 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
         )}
       </DragOverlay>
     </DndContext>
+    {/* Minimap — docked to the board's spare bottom-right. Only shown on the
+        large kitchen panel and only when the wall isn't full (≤9 of 10
+        tickets), so it sits in empty space below/beside the cards rather than
+        over them; the 10th ticket takes the space back and it hides. */}
+    {showMinimap && (
+      <div style={{ position: "fixed", right: 16, bottom: 16, zIndex: 20 }}>
+        <Suspense fallback={null}>
+          <KitchenMinimap
+            floorMaps={floorMaps}
+            tables={displayTables}
+            focusedTableId={focusedTableId}
+          />
+        </Suspense>
+      </div>
+    )}
     {seatTarget && onSeat && (
       <>
         <div onClick={() => setSeatSheetId(null)}
