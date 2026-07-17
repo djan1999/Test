@@ -4571,6 +4571,10 @@ export default function App() {
             historyGapsByMenu={historyGapsByMenu}
             persistedOrder={kitchenTicketOrder}
             onOrderChange={saveKitchenTicketOrder}
+            // Feeds the persistent minimap in the board's spare bottom-right
+            // space (terrace + active dining layout), so the pass sees WHERE a
+            // ticket's food goes without leaving the board.
+            floorMaps={floorMapsState}
             // Tap an upcoming banner → seat-only sheet. The kitchen display
             // must be able to seat a walked-in party itself: its local-first
             // writes work with the wifi down, when no other device's seat
