@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
@@ -10,6 +10,10 @@ import { estimateNextFire, fireGapsForTable } from "../../utils/fireCadence.js";
 import { gapsForMenuType } from "../../utils/archiveInsights.js";
 import { extraPairingLabel, extraPairingForSeat } from "../../constants/pairings.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
+
+// Lazy so the minimap's floor geometry only loads on the large kitchen panel
+// that actually shows it — a phone/tablet board never pays for it.
+const KitchenMinimap = lazy(() => import("./KitchenMinimap.jsx"));
 
 // Viewport width from which the board uses the dense large-display layout
 // (5-up grid + compact tickets). A 32" 1280×720 kitchen panel lands above it;
@@ -916,14 +920,21 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   );
 }
 
-export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, inlineMods = false, quickAccess = false, roomGaps = [], historyGaps = [] }) {
+export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, inlineMods = false, quickAccess = false, roomGaps = [], historyGaps = [], onFocus = null }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
+  // Touching or hovering a ticket lights this table up on the minimap. This is
+  // a passive read of the pointer (no preventDefault / stopPropagation), so it
+  // never disturbs the drag-to-reorder or the fire/quick-access taps beneath —
+  // it just records "this is the ticket the chef is looking at right now".
+  const focus = onFocus ? () => onFocus(table.id) : undefined;
   return (
     <div
       ref={setNodeRef}
       {...attributes}
+      onPointerEnter={focus}
+      onPointerDown={focus}
       style={{
         // Fill the grid cell so ticket width tracks the column count.
         width: "100%", minWidth: 0,
@@ -1184,7 +1195,7 @@ export function UpcomingBanner({ table: t, compact = false }) {
   );
 }
 
-export default function KitchenBoard({ tables, menuCourses, upd, updMany, profiles = [], assignments = {}, historyGapsByMenu = null, persistedOrder = null, onOrderChange = null, onSeat = null }) {
+export default function KitchenBoard({ tables, menuCourses, upd, updMany, profiles = [], assignments = {}, historyGapsByMenu = null, persistedOrder = null, onOrderChange = null, onSeat = null, floorMaps = null }) {
   // A party still out on the terrace (t._visit, decorated by App) gets its
   // ticket BEFORE the dining table is seated — the kitchen fires the opening
   // courses from here while the guests are outside.
@@ -1268,6 +1279,18 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
   // same size and a full board is two rows of five.
   const largeBoard = !useIsMobile(LARGE_BOARD_BP);
   const compact = largeBoard;
+
+  // The ticket the chef is currently touching/hovering — drives the minimap
+  // highlight. Kept even after the pointer leaves (the last-touched table
+  // stays lit) so the map is a stable plating reference, not a flicker.
+  const [focusedTableId, setFocusedTableId] = useState(null);
+  // The minimap lives in the empty bottom-right of the board and must NEVER
+  // push a ticket. Only the large kitchen panel runs the fixed 5-up grid where
+  // "spare space" is well defined; there, a full wall is exactly two rows of
+  // five (10 cards), so the map shows at ≤9 cards and the 10th card reclaims
+  // its cell. It renders as a normal grid child forced to the last column, so
+  // it always lands on a free right-edge cell and can't overlap a card.
+  const showMinimap = largeBoard && !!floorMaps && displayTables.length <= 9;
 
   // Keep order in sync when tables/banners are added/removed. A seated table
   // keeps the slot its banner held; brand-new cards slot in by time.
@@ -1429,8 +1452,23 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 quickAccess={!!upd}
                 roomGaps={roomGaps}
                 historyGaps={gapsForMenuType(historyGapsByMenu, t.menuType)}
+                onFocus={showMinimap ? setFocusedTableId : null}
               />
             ))}
+            {/* Minimap — forced to the last grid column so it always resolves
+                to a free right-edge cell after the tickets flow in, never
+                over one. Only rendered when the board has spare cells. */}
+            {showMinimap && (
+              <div style={{ gridColumn: 5, minWidth: 0, display: "flex", justifyContent: "flex-end", alignItems: "flex-end" }}>
+                <Suspense fallback={null}>
+                  <KitchenMinimap
+                    floorMaps={floorMaps}
+                    tables={displayTables}
+                    focusedTableId={focusedTableId}
+                  />
+                </Suspense>
+              </div>
+            )}
           </div>
           {archivedStrip}
         </div>
