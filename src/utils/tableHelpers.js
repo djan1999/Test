@@ -63,27 +63,37 @@ const keepFloorPositionsUnique = (seats) => {
 };
 
 export const makeSeats = (n, ex = []) => {
-  // P-numbers are stable GUEST identities and must always be 1..guest count.
-  // Physical chair placement lives in floorPositions instead. During the
-  // migration from the old positional-id model, keep canonical ids in their
-  // slots and use any overflow id (for example the old P6) to fill the one
-  // missing guest slot. This recovers [P1,P6] as [P1,P2] and [P2,P6] as
-  // [P1,P2] without dropping either guest's service data.
+  // Physical chair placement lives in floorPositions; on DINING maps a chair
+  // drag goes further and makes the P-number the chair itself
+  // (materializeFloorPositions + swapSeatData). So a valid id set is NOT
+  // always 1..n: five guests on a six-chair merge seated at chairs 1,2,3,5,6
+  // hold exactly those P-numbers. When the seat count already matches the
+  // guest count, the ids are the live model and MUST survive verbatim —
+  // sanitizeTable runs this on every sync echo, and the old "fold ids > n
+  // into the first free slot" recovery kept teleporting the chair-6 guest
+  // back to chair 4 a minute after every drag (the sync round-trip).
   const ids = ex.map((e) => Number(e?.id));
   const idBased = ex.length > 0
     && ids.every((v) => Number.isFinite(v) && v >= 1)
     && new Set(ids).size === ex.length;
   if (!idBased) return keepFloorPositionsUnique(Array.from({ length: n }, (_, i) => normSeat(i + 1, ex[i])));
-  const byCanonicalId = new Map(
-    ex.filter((e) => Number(e.id) <= n).map((e) => [Number(e.id), e])
+  const sorted = [...ex].sort((a, b) => Number(a.id) - Number(b.id));
+  // Shrinking drops the highest P-numbers (existing rule).
+  if (ex.length >= n) {
+    return keepFloorPositionsUnique(sorted.slice(0, n).map((e) => normSeat(Number(e.id), e)));
+  }
+  // Growing adds blank guests on the lowest free P-numbers, so a booking
+  // corrected from 5 to 6 pax fills the one empty chair instead of renaming
+  // anyone who already moved.
+  const taken = new Set(ids);
+  const added = [];
+  for (let id = 1; added.length < n - ex.length; id++) {
+    if (!taken.has(id)) added.push(normSeat(id));
+  }
+  return keepFloorPositionsUnique(
+    [...sorted.map((e) => normSeat(Number(e.id), e)), ...added]
+      .sort((a, b) => Number(a.id) - Number(b.id))
   );
-  const overflow = ex
-    .filter((e) => Number(e.id) > n)
-    .sort((a, b) => Number(a.id) - Number(b.id));
-  return keepFloorPositionsUnique(Array.from({ length: n }, (_, i) => {
-    const id = i + 1;
-    return normSeat(id, byCanonicalId.get(id) || overflow.shift());
-  }));
 };
 
 export const fmt = d =>
@@ -358,14 +368,22 @@ export const mergeRestrictionPositions = (prev = [], next = []) => {
 // never rebuilt for a rename.
 export const startedTablePatchFromReservation = (t, d = {}) => {
   const guests = Number(d.guests) > 0 ? Number(d.guests) : Number(t?.guests) || 0;
+  const resized = guests > 0 && guests !== (Number(t?.guests) || 0);
+  const seats = resized ? makeSeats(guests, t?.seats || []) : (t?.seats || []);
+  // Valid restriction positions are the ACTUAL P-numbers, not 1..guests: a
+  // dining-map drag makes P = chair, so P6 is a real guest on a 5-pax table
+  // with six chairs — the old `pos > guests` rule silently unpinned that
+  // guest's allergy on any mid-service reservation edit. No known seats
+  // (never the case for a started table) keeps the old range rule.
+  const validPos = seats.length
+    ? new Set(seats.map((s) => Number(s.id)))
+    : new Set(Array.from({ length: guests }, (_, i) => i + 1));
   const merged = mergeRestrictionPositions(t?.restrictions, d.restrictions);
   return {
     ...reservationDescriptiveFields(d),
     restrictions: merged.map((r) =>
-      (r && r.pos != null && Number(r.pos) > guests) ? { ...r, pos: null } : r),
-    ...(guests > 0 && guests !== (Number(t?.guests) || 0)
-      ? { guests, seats: makeSeats(guests, t?.seats || []) }
-      : {}),
+      (r && r.pos != null && !validPos.has(Number(r.pos))) ? { ...r, pos: null } : r),
+    ...(resized ? { guests, seats } : {}),
   };
 };
 

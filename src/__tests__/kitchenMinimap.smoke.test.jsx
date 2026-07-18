@@ -30,12 +30,15 @@ describe("KitchenMinimap", () => {
     expect(getAllByText("P2").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("follows a terrace party onto the terrace map", () => {
-    const table = { id: 21, _visit: { visit: "terrace", terraceLabel: "T21" }, seats: [{ id: 1 }] };
+  it("follows a terrace party onto the terrace map and names the tile after its dining table", () => {
+    const table = { id: 8, _visit: { visit: "terrace", terraceLabel: "T21" }, seats: [{ id: 1 }] };
     const { queryByText } = render(
-      <KitchenMinimap floorMaps={floorMaps} tables={[table]} focusedTableId={21} />
+      <KitchenMinimap floorMaps={floorMaps} tables={[table]} focusedTableId={8} />
     );
-    expect(queryByText("T21")).toBeTruthy(); // terrace tile
+    // the occupied tile borrows the party's DINING label; its own name drops
+    expect(queryByText("T8")).toBeTruthy();
+    expect(queryByText("T21")).toBeFalsy();
+    expect(queryByText("T22")).toBeTruthy(); // empty tiles keep their own name
     expect(queryByText("T5")).toBeFalsy();   // dining-only table gone → map switched
   });
 });
