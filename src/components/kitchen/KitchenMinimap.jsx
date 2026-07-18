@@ -110,28 +110,47 @@ export default function KitchenMinimap({ floorMaps, tables = [], focusedTableId 
   // status, guest labels at the physical chairs, restrictions projected onto
   // those chairs, gender outlines. Empty tiles fall back to the layout's own
   // seat numbers, so every chair shows its P-label like the floor map.
-  const { tableState, restrictionsByLabel, seatLabelsByLabel, seatGendersByLabel } = useMemo(() => {
+  //
+  // An OCCUPIED terrace tile takes the party's DINING label as its name (per
+  // Djan): a terrace position is only a waiting spot — its identity for the
+  // kitchen is which table's party is out there, so tile "A" with T8's party
+  // reads "T8". The rename happens on the display copy of the map; the stored
+  // floorPositions stay keyed by the REAL tile label. Empty tiles keep their
+  // own name. The architecture layer is stripped (emptySheet) — the crib
+  // wants tables + guests, not walls.
+  const { bareMap, tableState, restrictionsByLabel, seatLabelsByLabel, seatGendersByLabel } = useMemo(() => {
+    if (!map) return { bareMap: null, tableState: {}, restrictionsByLabel: {}, seatLabelsByLabel: {}, seatGendersByLabel: {} };
     const ts = {}, rb = {}, sl = {}, sg = {};
-    for (const mt of map?.tables || []) {
+    const ownLabels = new Set((map.tables || []).map(t => t.label));
+    const displayTables = (map.tables || []).map((mt) => {
       const live = liveByLabel[mt.label] || null;
-      ts[mt.label] = { status: live ? "occupied" : "free", ...(mt.label === focusLabel ? { sent: true } : {}) };
-      if (!live) continue;
-      const pk = floorPositionKey(map.id, mt.label);
-      const restr = restrictionsAtFloorPositions(live.seats || [], live.restrictions || [], pk)
-        .filter(r => r && r.note);
-      if (restr.length) rb[mt.label] = restr;
-      sl[mt.label] = Object.fromEntries((live.seats || []).map(s => [seatFloorPosition(s, pk), Number(s.id)]));
-      const g = {};
-      for (const s of live.seats || []) {
-        if (s.gender === "Mr" || s.gender === "Mrs") g[seatFloorPosition(s, pk)] = s.gender;
+      // display name: terrace tiles borrow the party's dining label, unless it
+      // would collide with another tile's real name
+      let dLabel = mt.label;
+      if (live && map.kind === "terrace") {
+        const dining = resolveReservationTable(diningMap, live.id).table?.label || `T${live.id}`;
+        if (dining === mt.label || !ownLabels.has(dining)) dLabel = dining;
       }
-      if (Object.keys(g).length) sg[mt.label] = g;
-    }
-    return { tableState: ts, restrictionsByLabel: rb, seatLabelsByLabel: sl, seatGendersByLabel: sg };
-  }, [map, liveByLabel, focusLabel]);
-
-  // Strip the architecture layer — the crib wants tables + guests, not walls.
-  const bareMap = useMemo(() => (map ? { ...map, sheet: emptySheet() } : null), [map]);
+      ts[dLabel] = { status: live ? "occupied" : "free", ...(mt.label === focusLabel ? { sent: true } : {}) };
+      if (live) {
+        const pk = floorPositionKey(map.id, mt.label); // REAL tile label — positions live under it
+        const restr = restrictionsAtFloorPositions(live.seats || [], live.restrictions || [], pk)
+          .filter(r => r && r.note);
+        if (restr.length) rb[dLabel] = restr;
+        sl[dLabel] = Object.fromEntries((live.seats || []).map(s => [seatFloorPosition(s, pk), Number(s.id)]));
+        const g = {};
+        for (const s of live.seats || []) {
+          if (s.gender === "Mr" || s.gender === "Mrs") g[seatFloorPosition(s, pk)] = s.gender;
+        }
+        if (Object.keys(g).length) sg[dLabel] = g;
+      }
+      return dLabel === mt.label ? mt : { ...mt, label: dLabel };
+    });
+    return {
+      bareMap: { ...map, sheet: emptySheet(), tables: displayTables },
+      tableState: ts, restrictionsByLabel: rb, seatLabelsByLabel: sl, seatGendersByLabel: sg,
+    };
+  }, [map, diningMap, liveByLabel, focusLabel]);
 
   if (!map || !bareMap) return null;
 

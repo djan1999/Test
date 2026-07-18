@@ -474,14 +474,32 @@ describe("makeSeats", () => {
     expect(seats[0].optionalPairings).toEqual({ crayfish: { ordered: true, mode: "alco" } });
   });
 
-  it("migrates an old out-of-range positional id back into the missing guest slot", () => {
-    const seats = makeSeats(2, [
-      { id: 1, water: "XC" },
-      { id: 6, water: "OW", pairing: "Wine" },
+  it("keeps chair-identity ids verbatim when the count matches (P = chair on dining maps)", () => {
+    // The 17.07 revert bug: 5 guests seated at chairs 1,2,3,5,6 of a 6-chair
+    // merge — sanitizeTable's makeSeats pass on every sync echo folded the
+    // chair-6 guest back into "the missing slot" P4, teleporting them a
+    // minute after every drag. Count matches → ids are the live model.
+    const seats = makeSeats(5, [
+      { id: 1 }, { id: 2 }, { id: 3 },
+      { id: 5, water: "OW" },
+      { id: 6, pairing: "Wine" },
     ]);
-    expect(seats.map((seat) => seat.id)).toEqual([1, 2]);
-    expect(seats[1].water).toBe("OW");
-    expect(seats[1].pairing).toBe("Wine");
+    expect(seats.map((seat) => seat.id)).toEqual([1, 2, 3, 5, 6]);
+    expect(seats[3].water).toBe("OW");
+    expect(seats[4].pairing).toBe("Wine");
+  });
+
+  it("grows onto the lowest free P-numbers and shrinks off the highest", () => {
+    const grown = makeSeats(6, [
+      { id: 1 }, { id: 2 }, { id: 3 }, { id: 5 }, { id: 6, pairing: "Wine" },
+    ]);
+    expect(grown.map((seat) => seat.id)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(grown.find((seat) => seat.id === 6).pairing).toBe("Wine"); // nobody renamed
+    const shrunk = makeSeats(2, [
+      { id: 1, water: "XC" }, { id: 2, water: "OW" }, { id: 6 },
+    ]);
+    expect(shrunk.map((seat) => seat.id)).toEqual([1, 2]);
+    expect(shrunk[1].water).toBe("OW");
   });
 
   it("keeps physical chairs unique when guest count grows into an occupied chair number", () => {
@@ -530,6 +548,22 @@ describe("blankTable", () => {
 });
 
 describe("sanitizeTable", () => {
+  it("survives the sync round-trip without teleporting chair-identity seats", () => {
+    // 17.07: 5 pax on the 6-chair T2-4 merge, seated at chairs 1,2,3,5,6 via
+    // dining-map drags (P = chair). Every sync echo re-sanitizes the row; the
+    // chair-6 guest must NOT fold back into "free slot" P4.
+    const t = {
+      id: 2, active: true, guests: 5,
+      seats: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 5 }, { id: 6, pairing: "Wine" }],
+      restrictions: [{ note: "nut", pos: 6 }],
+    };
+    const once = sanitizeTable(t);
+    expect(once.seats.map(s => s.id)).toEqual([1, 2, 3, 5, 6]);
+    expect(once.restrictions).toEqual([{ note: "nut", pos: 6 }]);
+    const twice = sanitizeTable(JSON.parse(JSON.stringify(once)));
+    expect(twice.seats.map(s => s.id)).toEqual([1, 2, 3, 5, 6]); // idempotent
+  });
+
   it("fills in missing fields from blankTable", () => {
     const t = sanitizeTable({ id: 3, active: true, guests: 4 });
     expect(t.id).toBe(3);
