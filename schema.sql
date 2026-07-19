@@ -1012,6 +1012,19 @@ begin
     raise exception 'archive date and label are required';
   end if;
 
+  -- File the archive first: even a superseded finish carries a genuine
+  -- snapshot of the service it ended. Deterministic ids dedup double-ends.
+  if p_archive_id is not null then
+    insert into public.service_archive(
+      id, workspace_id, date, label, state, created_at, deleted_at
+    )
+    values (
+      p_archive_id, p_workspace_id, p_archive_date, p_archive_label,
+      coalesce(p_archive_state, '{}'::jsonb), clock_timestamp(), null
+    )
+    on conflict (id) do nothing;
+  end if;
+
   update public.service_settings
      set state = '{}'::jsonb, updated_at = clock_timestamp()
    where workspace_id = p_workspace_id
@@ -1036,17 +1049,6 @@ begin
     values (p_workspace_id, 'service_date', '{}'::jsonb, clock_timestamp())
     on conflict (workspace_id, id)
     do update set state = '{}'::jsonb, updated_at = excluded.updated_at;
-  end if;
-
-  if p_archive_id is not null then
-    insert into public.service_archive(
-      id, workspace_id, date, label, state, created_at, deleted_at
-    )
-    values (
-      p_archive_id, p_workspace_id, p_archive_date, p_archive_label,
-      coalesce(p_archive_state, '{}'::jsonb), clock_timestamp(), null
-    )
-    on conflict (id) do nothing;
   end if;
 
   -- Clear exactly the rows this workspace currently owns. This automatically

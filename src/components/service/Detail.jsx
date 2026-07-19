@@ -72,7 +72,13 @@ export default function Detail({ table, tables = [], optionalExtras = [], option
     transition: "all 0.1s", touchAction: "manipulation",
   });
   useModalEscape(() => setShowMoveTable(false), showMoveTable);
+  // Combined bookings can't CHANGE TABLE one member at a time — a partial
+  // move desyncs the other members' tableGroup and the party vanishes from
+  // the board and kitchen. App's moveTableState refuses too; hiding the
+  // button keeps the dead end out of reach.
+  const isGroupedTable = Array.isArray(table.tableGroup) && table.tableGroup.length > 1;
   const canMoveTable = mode === "service" && typeof onMoveTable === "function"
+    && !isGroupedTable
     && (table.active || table.arrivedAt || table.resName || table.resTime);
   return (
     <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "0 0 28px" : "0 0 40px", overflowX: "hidden" }}>
@@ -201,7 +207,10 @@ export default function Detail({ table, tables = [], optionalExtras = [], option
           onCancel={() => setShowMoveTable(false)}
           onPick={async (toId, mode) => {
             const r = await onMoveTable(table.id, toId, mode);
-            if (r?.ok) setShowMoveTable(false);
+            if (r?.ok) { setShowMoveTable(false); return; }
+            if (r?.reason === "grouped-table" && typeof window !== "undefined") {
+              window.alert("Move refused: that table is part of a combined booking. Split the combination first.");
+            }
           }}
         />
       )}

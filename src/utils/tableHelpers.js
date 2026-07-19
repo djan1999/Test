@@ -544,6 +544,20 @@ export const repointReservation = (resv, fromId, toId) => {
   return { table_id, data };
 };
 
+// True when a table id participates in any multi-member tableGroup on the
+// board — as a grouped row itself or listed inside another row's group.
+// Move/swap must refuse such tables: moveTableRows/swapTableRows remap the
+// group only on the two touched rows, so a partial group move desyncs the
+// remaining members' lists and NO row satisfies the board's primary filter
+// (id === min(tableGroup)) — the party stops rendering on the board, the
+// kitchen tickets and the floor.
+export const tableIsGroupMember = (tables, id) => {
+  const n = Number(id);
+  return (tables || []).some(t =>
+    Array.isArray(t?.tableGroup) && t.tableGroup.length > 1
+    && (Number(t.id) === n || t.tableGroup.some(m => Number(m) === n)));
+};
+
 // Pure list transforms behind App's moveTableState / swapTableState setTables
 // updaters. Kept here (not inline in the updater) so the invariants suite can
 // drive the exact production board transition. Both look the source rows up in

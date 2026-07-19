@@ -252,7 +252,7 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Allergy Sheet</title>${ALLERGY_ROBOTO}<style>${css}</style></head><body>${body}</body></html>`;
 }
 
-export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onSwapReservations, onExit, serviceDate, activeServiceSession = "dinner", onSetServiceDate, onSetServiceSession, onOpenArchive, courseQuickNotes = {}, profiles = [], assignments = {}, resolveTableFlag = null }) {
+export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onSwapReservations, onExit, serviceDate, activeServiceSession = "dinner", onSetServiceDate, onOpenArchive, courseQuickNotes = {}, profiles = [], assignments = {}, resolveTableFlag = null }) {
   const tableLabel = (tableId) => (tables || []).find((table) => Number(table.id) === Number(tableId))?.displayLabel
     || `T${String(tableId).padStart(2, "0")}`;
   const [weekOffset,  setWeekOffset]  = useState(0);
@@ -635,11 +635,10 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
           defaultSession={activeServiceSession}
           reservations={reservations}
           onConfirm={(date, session) => {
-            // Persist BOTH the date and the chosen session. Dropping the session
-            // here previously left lunch/dinner mismatched, so the board
-            // reconciled against the wrong session's reservations.
-            if (session && typeof onSetServiceSession === "function") onSetServiceSession(session);
-            onSetServiceDate(date);
+            // Date + session persist as ONE lifecycle write. Two separate
+            // writes to the shared service_date key raced in the per-key
+            // latest-wins queue and could silently revert each other.
+            onSetServiceDate(date, session);
             setShowDatePicker(false);
           }}
           onCancel={() => setShowDatePicker(false)}
