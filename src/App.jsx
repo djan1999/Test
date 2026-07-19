@@ -73,7 +73,7 @@ import {
 } from "./constants/dietary.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES, getWorkspaceId } from "./lib/supabaseClient.js";
 import { scopedFrom } from "./lib/scopedDb.js";
-import { readStateKey, saveStateKey, dropPendingStateKey } from "./lib/stateStore.js";
+import { readStateKey, saveStateKey, dropPendingStateKey, pendingStateKeys } from "./lib/stateStore.js";
 import { createWriteQueue } from "./lib/writeQueue.js";
 import { recordClientDiagnostic } from "./lib/clientDiagnostics.js";
 import { finishServiceStore } from "./lib/serviceLifecycleStore.js";
@@ -1424,6 +1424,13 @@ export default function App() {
 
   // The day's reservations for the active session — the input set for terrace
   // occupancy, the ARRIVING board visuals, and layout re-resolution.
+  // Everything from the active service day forward (both sessions, future
+  // dates) — the input set for layout-switch planning in Admin → Floor.
+  const layoutPlanningReservations = useMemo(() => {
+    const from = serviceDate || currentServiceDay();
+    return (reservations || []).filter(r => r.date && String(r.date) >= String(from));
+  }, [reservations, serviceDate]);
+
   const serviceReservations = useMemo(() => {
     if (!serviceDate) return [];
     return reservations.filter(r =>
@@ -1495,7 +1502,17 @@ export default function App() {
       if (typeof window !== "undefined") window.alert("Layout switch failed. The current layout and assignments were retained.");
       return { ok: false, error };
     }
-    return { ok: true };
+    // The operator confirmed a diff — a silently skipped row means a party
+    // renders on the wrong tile (or NOT ON THIS MAP) with no explanation.
+    // Say exactly which moves did not run and why.
+    if (blocked.length && typeof window !== "undefined") {
+      window.alert(
+        `Layout switched, but ${blocked.length} confirmed move(s) could NOT be applied — the destination gained live content after the plan was made:\n\n`
+        + blocked.map(b => `• ${b.name || "party"} → ${b.label || b.id}`).join("\n")
+        + "\n\nThese parties stayed on their old slots. Re-check them on the new layout.",
+      );
+    }
+    return { ok: true, blocked };
   };
 
   // Kitchen sees terrace parties' tickets before the dining table is seated:
@@ -3639,6 +3656,15 @@ export default function App() {
       && incoming && incoming < floorMapsWriteTsRef.current) return;
     const s = sanitizeFloorMaps(state);
     if (JSON.stringify(s) === JSON.stringify(floorMapsRef.current)) return;
+    // A NEWER maps blob reached the store while this device still holds a
+    // retained (failed) maps write for retry. The maps key is whole-blob
+    // last-writer-wins: replaying the retained snapshot would overwrite the
+    // other admin's newer work wholesale — drop it and adopt the store's.
+    if (incoming && incoming > (floorMapsWriteTsRef.current || 0)
+        && pendingStateKeys().includes(FLOOR_MAPS_KEY)) {
+      console.warn("[floor-maps] Dropped a stale retained maps write — a newer version was adopted from the store.");
+      dropPendingStateKey?.(FLOOR_MAPS_KEY);
+    }
     floorMapsRef.current = s;
     setFloorMapsState(s);
   };
@@ -4828,7 +4854,13 @@ export default function App() {
         onUpdateQuickAccess={updateQuickAccess}
         aperitifOptions={aperitifOptions}
         floorMaps={floorMapsState}
-        floorReservations={serviceReservations}
+        // Layout-switch planning must see MORE than the live session's
+        // bookings: switching the layout during lunch also has to re-resolve
+        // and conflict-check tonight's dinner and every future-dated
+        // reservation, or they surface as NEEDS TABLE only when their service
+        // starts — exactly the mid-service scramble the confirm flow exists
+        // to prevent. planLayoutSwitch keys conflicts per session already.
+        floorReservations={layoutPlanningReservations}
         boardTables={displayTables}
         onUpdateFloorMaps={updateFloorMaps}
         onApplyLayoutSwitch={applyLayoutSwitchRows}

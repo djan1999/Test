@@ -36,6 +36,7 @@ export default function SystemPanel({
   const safeWineSyncConfig = wineSyncConfig || { wineCountries: [], beveragePages: [] };
   const [debugOpen, setDebugOpen] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
+  const [resyncState, setResyncState] = useState(null);
   const [syncMsg, setSyncMsg] = useState("");
   const [syncConfigSaving, setSyncConfigSaving] = useState(false);
   const [diagnostics, setDiagnostics] = useState(() => readClientDiagnostics());
@@ -250,6 +251,41 @@ export default function SystemPanel({
             >
               {syncMsg}
             </span>
+          )}
+          {/* Recovery for a wedged upload queue: one permanently-rejected op
+              on a protected table blocks every later write on this device
+              while the UI keeps accepting input. This was the designed
+              recovery primitive (powersync/system.js clearLocalAndResync)
+              with no product surface — a wedged tablet needed DevTools. */}
+          {sqlitePrimary && (
+            <button
+              onClick={async () => {
+                if (typeof window !== "undefined" && !window.confirm(
+                  "Reset this device's LOCAL sync database and re-download everything from the server?\n\n"
+                  + "Un-uploaded local changes on THIS device are discarded. Use when the sync stream shows a permanent error and writes stopped uploading.",
+                )) return;
+                setResyncState("working");
+                try {
+                  const { clearLocalAndResync } = await import("../../powersync/system.js");
+                  await clearLocalAndResync();
+                  setResyncState("done");
+                  setTimeout(() => { if (typeof window !== "undefined") window.location.reload(); }, 400);
+                } catch (e) {
+                  console.error("Local resync failed:", e);
+                  setResyncState("err");
+                }
+              }}
+              disabled={resyncState === "working"}
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
+                border: `1px solid ${resyncState === "err" ? tokens.red.border : tokens.ink[3]}`,
+                borderRadius: 0, cursor: resyncState === "working" ? "not-allowed" : "pointer",
+                background: tokens.neutral[0],
+                color: resyncState === "err" ? tokens.red.text : tokens.ink[1],
+              }}
+            >
+              {resyncState === "working" ? "RESETTING…" : resyncState === "err" ? "RESET FAILED" : "RESET LOCAL SYNC DB"}
+            </button>
           )}
         </div>
       </div>

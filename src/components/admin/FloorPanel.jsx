@@ -41,14 +41,21 @@ export default function FloorPanel({
 
   const confirmSwitch = async () => {
     if (!pendingSwitch || savingSwitch) return;
-    if (pendingSwitch.rows.some((row) => row.status === "conflict" || row.status === "needs_table")) {
+    // Re-plan against the LIVE board/reservations at confirm time: the dialog
+    // can sit open while another device seats a walk-in — applying the stale
+    // plan silently blocked or mis-moved those rows. The refreshed rows also
+    // repaint the dialog if the confirm is refused below.
+    const nextMap = floorMaps.maps.find((m) => m.id === pendingSwitch.mapId);
+    const rows = nextMap ? planLayoutSwitch(nextMap, reservations, boardTables) : pendingSwitch.rows;
+    if (rows.some((row) => row.status === "conflict" || row.status === "needs_table")) {
+      setPendingSwitch({ mapId: pendingSwitch.mapId, rows });
       setSwitchError("Resolve every conflict and NEEDS TABLE assignment before activating this layout.");
       return;
     }
     setSavingSwitch(true);
     setSwitchError("");
     try {
-      const result = await onApplyLayoutSwitch?.(pendingSwitch.rows);
+      const result = await onApplyLayoutSwitch?.(rows);
       if (result?.ok === false) {
         setSwitchError(result.error?.message || result.error || "The layout switch could not be saved.");
         return;

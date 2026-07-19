@@ -318,6 +318,17 @@ export default function FloorInspector({
               onSwitchMap(next.maps[next.maps.length - 1].id);
             }}>DUPLICATE MAP</button>
             <Confirm onConfirm={() => {
+              // Deleting the ACTIVE dining layout instantly re-resolves every
+              // seated party against whichever map deleteMap falls back to —
+              // with NONE of the guarded layout-switch machinery (no diff, no
+              // conflict check, no reservation repoint, no board-state move).
+              // Force the explicit, guarded switch first.
+              if (map.kind === "dining" && floorMaps.activeDiningMapId === mapId) {
+                if (typeof window !== "undefined") {
+                  window.alert("This is the ACTIVE dining layout. Activate another layout in Admin → Floor (the guarded switch) first, then delete this map.");
+                }
+                return;
+              }
               const next = deleteMap(floorMaps, mapId);
               if (next === floorMaps) return; // last of its kind — guard held
               onUpdate(next);

@@ -56,12 +56,25 @@ async function writeStateKeyOnce(id, state) {
 //     browser's 'online' signal fires.
 // Callers still get an honest result for THEIR attempt ({ok:false} shows
 // their error UI), but the value is retained and keeps retrying.
-const queues = new Map(); // id → { latest, chain, attempts, retryTimer }
+const queues = new Map(); // id → { latest, chain, attempts, retryTimer, retainedAt }
+
+// Whole-blob keys where replaying a LONG-retained failed write is worse than
+// losing it. The floor-map editor writes the ENTIRE multi-map model on every
+// gesture; an offline device reconnecting hours later replayed its stale
+// snapshot over every other admin's newer work (the maps key is whole-blob
+// last-writer-wins, with no version check). Bounded retry: past the age cap
+// the retained value is dropped instead of replayed — the editor's failed-
+// save state is already visible, and re-editing queues a fresh value.
+const RETAINED_MAX_AGE_MS = { floor_maps_v1: 10 * 60 * 1000 };
+const retainedExpired = (id, q) => {
+  const cap = RETAINED_MAX_AGE_MS[id];
+  return Boolean(cap && q.retainedAt && Date.now() - q.retainedAt > cap);
+};
 
 function queueOf(id) {
   let q = queues.get(id);
   if (!q) {
-    q = { latest: undefined, chain: Promise.resolve(), attempts: 0, retryTimer: null };
+    q = { latest: undefined, chain: Promise.resolve(), attempts: 0, retryTimer: null, retainedAt: null };
     queues.set(id, q);
   }
   return q;
@@ -74,6 +87,12 @@ function scheduleRetry(id) {
   q.attempts += 1;
   q.retryTimer = setTimeout(() => {
     q.retryTimer = null;
+    const qq = queues.get(id);
+    if (qq && retainedExpired(id, qq)) {
+      console.warn(`Settings retry dropped (${id}): the retained value aged past its replay cap.`);
+      dropPendingStateKey(id);
+      return;
+    }
     flushStateKey(id);
   }, delay);
 }
@@ -87,7 +106,7 @@ async function flushStateKey(id) {
     try {
       await writeStateKeyOnce(id, value);
       // Only clear if nothing newer arrived while this write was in flight.
-      if (q.latest === value) { q.latest = undefined; q.attempts = 0; }
+      if (q.latest === value) { q.latest = undefined; q.attempts = 0; q.retainedAt = null; }
       return { ok: true };
     } catch (error) {
       console.error(`Settings save failed (${id}):`, error);
@@ -106,6 +125,7 @@ export async function saveStateKey(id, state) {
   if (isSandbox()) return { ok: true };
   const q = queueOf(id);
   q.latest = state;
+  q.retainedAt = Date.now(); // fresh value → fresh replay-age budget
   // A newer value supersedes any scheduled retry of the older one.
   if (q.retryTimer) { clearTimeout(q.retryTimer); q.retryTimer = null; }
   q.attempts = 0;
@@ -117,6 +137,11 @@ if (typeof window !== "undefined") {
   window.addEventListener("online", () => {
     for (const [id, q] of queues) {
       if (q.latest === undefined) continue;
+      if (retainedExpired(id, q)) {
+        console.warn(`Settings online-replay dropped (${id}): the retained value aged past its replay cap.`);
+        dropPendingStateKey(id);
+        continue;
+      }
       if (q.retryTimer) { clearTimeout(q.retryTimer); q.retryTimer = null; }
       q.attempts = 0;
       flushStateKey(id);
@@ -142,6 +167,7 @@ export function dropPendingStateKey(id) {
   if (!q) return;
   q.latest = undefined;
   q.attempts = 0;
+  q.retainedAt = null;
   if (q.retryTimer) { clearTimeout(q.retryTimer); q.retryTimer = null; }
 }
 
