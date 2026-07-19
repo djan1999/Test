@@ -9,7 +9,13 @@ import { DIETARY_KEYS } from "../constants/dietary.js";
 // the internal course model, while this module owns legacy and column details.
 export function supabaseRowToCourse(row) {
   const restrictions = {};
-  DIETARY_KEYS.forEach((key) => {
+  // Union of the live vocabulary and EVERY known DB column key: the four
+  // allergy columns (gluten_free → "gluten", …) must map regardless of what
+  // DIETARY_KEYS currently holds. On a fresh device the menu fetch can win
+  // the boot race against the vocabulary load — mapping only DIETARY_KEYS
+  // then nulled every allergy variant and cached the broken result, so a
+  // celiac guest's printed menu showed the ORIGINAL dish with no warning.
+  new Set([...DIETARY_KEYS, ...Object.keys(RESTRICTION_COLUMN_MAP)]).forEach((key) => {
     const dbKey = RESTRICTION_COLUMN_MAP[key];
     restrictions[key] = dbKey ? (row[dbKey] ?? null) : null;
   });
@@ -125,7 +131,10 @@ export function courseToSupabaseRow(course) {
     is_active: course.is_active !== false,
     restrictions_si: restrictionsSi,
   };
-  DIETARY_KEYS.forEach((key) => {
+  // Same union as supabaseRowToCourse: every DB restriction column persists
+  // even if the live vocabulary is stale/trimmed — otherwise a save from a
+  // device with an incomplete vocabulary silently dropped allergy variants.
+  new Set([...DIETARY_KEYS, ...Object.keys(RESTRICTION_COLUMN_MAP)]).forEach((key) => {
     const dbKey = RESTRICTION_COLUMN_MAP[key];
     if (dbKey) result[dbKey] = course.restrictions?.[key] ?? null;
   });

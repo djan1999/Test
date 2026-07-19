@@ -66,14 +66,16 @@ describe("applyCourseRestriction", () => {
     expect(result.name).toBe("Tofu");
   });
 
-  it("only applies the highest-priority matching restriction (stops after first match)", () => {
+  it("an ALLERGY variant outranks a lifestyle preference (safety first)", () => {
     const course = makeCourse("Beef", "", {
       vegan: { name: "Tofu", sub: "" },
       gluten_free: { name: "Gluten-free beef", sub: "" },
     });
-    // vegan is earlier in priority list, so gluten variant is ignored
+    // One substitution is applied per course, and allergies come first: a
+    // vegan + gluten-intolerant guest gets the gluten-safe variant. The old
+    // order applied the vegan variant and silently skipped the allergy.
     const result = applyCourseRestriction(course, ["vegan", "gluten"]);
-    expect(result.name).toBe("Tofu");
+    expect(result.name).toBe("Gluten-free beef");
   });
 
   it("does not substitute if active restriction has no corresponding restriction data", () => {
@@ -390,5 +392,47 @@ describe("courseRestrictionModCounts", () => {
     expect(courseRestrictionModCounts(vegCourse, seats4, [{ pos: null, note: "gluten" }])).toBeNull();
     expect(courseRestrictionModCounts(vegCourse, seats4, [])).toBeNull();
     expect(courseRestrictionModCounts(vegCourse, [], null)).toBeNull();
+  });
+});
+
+// ── Key-space tolerance & live-vocabulary priority (19.07 hardening) ─────────
+import { restrictionPriorityKeys } from "../utils/menuUtils.js";
+import { setRestrictionsCache, DEFAULT_RESTRICTIONS } from "../constants/dietary.js";
+import { afterEach } from "vitest";
+
+const course = (restrictions) => ({ menu: { name: "Beef", sub: "Jus" }, restrictions });
+
+describe("restriction key-space tolerance", () => {
+  afterEach(() => setRestrictionsCache(DEFAULT_RESTRICTIONS));
+
+  it("a variant stored under the DB column name still substitutes for the runtime key", () => {
+    const c = course({ gluten_free: { name: "GF Beef", sub: "" } });
+    expect(applyCourseRestriction(c, ["gluten"]).name).toBe("GF Beef");
+  });
+
+  it("a variant stored under the runtime key substitutes for a column-name-slug vocabulary key", () => {
+    // The trap: "Gluten Free" deleted and re-added used to mint key
+    // "gluten_free"; guests tagged with it found no variant stored under
+    // "gluten" and silently got the original dish.
+    const c = course({ gluten: { name: "GF Beef", sub: "" } });
+    expect(applyCourseRestriction(c, ["gluten_free"]).name).toBe("GF Beef");
+  });
+
+  it("admin-added custom restrictions participate in substitution via the live vocabulary", () => {
+    setRestrictionsCache([
+      ...DEFAULT_RESTRICTIONS,
+      { key: "pregnant", label: "Pregnant", emoji: "🤰", group: "allergy" },
+    ]);
+    const c = course({ pregnant: { name: "No raw fish", sub: "" } });
+    expect(applyCourseRestriction(c, ["pregnant"]).name).toBe("No raw fish");
+  });
+
+  it("priority: allergy-group keys come before every dietary/lifestyle key", () => {
+    const keys = restrictionPriorityKeys();
+    expect(keys.indexOf("gluten")).toBeLessThan(keys.indexOf("vegan"));
+    expect(keys.indexOf("nut")).toBeLessThan(keys.indexOf("veg"));
+    expect(keys.indexOf("shellfish")).toBeLessThan(keys.indexOf("halal"));
+    // vegan stays ahead of veg inside the dietary group (stricter diet wins)
+    expect(keys.indexOf("vegan")).toBeLessThan(keys.indexOf("veg"));
   });
 });

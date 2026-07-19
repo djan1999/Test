@@ -596,11 +596,17 @@ export default function Detail({ table, tables = [], optionalExtras = [], option
                     {restrLabel(r.note)}
                   </span>
                   <div style={{ display: "flex", gap: 3 }}>
-                    {/* Seat positions cap at the assigned table's seat count in
-                        the ACTIVE floor map (T9 offers 3 under Layout B, 2
-                        under A); a squeezed-in extra guest still gets a chip. */}
-                    {Array.from({ length: mapSeatCap != null ? Math.max(mapSeatCap, Number(table.guests) || 0) : (Number(table.guests) || 0) }, (_, idx) => {
-                      const p = idx + 1; const sel = r.pos === p;
+                    {/* Chips are the REAL seat ids when the table has seats —
+                        chair-identity drags make ids non-contiguous ({1,2,3,5,6}
+                        for 5 guests), so generating 1..N offered a P4 that
+                        matched NO seat: the pinned allergy then disappeared
+                        from every kitchen surface. Fallback (no seats yet):
+                        1..max(map seat cap, guests) as before. */}
+                    {(Array.isArray(table.seats) && table.seats.length > 0
+                      ? table.seats.map(s => Number(s.id)).sort((a, b) => a - b)
+                      : Array.from({ length: mapSeatCap != null ? Math.max(mapSeatCap, Number(table.guests) || 0) : (Number(table.guests) || 0) }, (_, idx) => idx + 1)
+                    ).map((p) => {
+                      const sel = r.pos === p;
                       return (
                         <button key={p} onClick={() => upd("restrictions", table.restrictions.map((x, ii) =>
                           ii === i ? { ...x, pos: p } : x

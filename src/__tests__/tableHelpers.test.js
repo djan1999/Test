@@ -835,3 +835,33 @@ describe("tableIsGroupMember — the group-move guard predicate", () => {
     expect(renderedAfterSwap.map(t => t.id)).toEqual([2]);
   });
 });
+
+describe("mergeRestrictionPositions — kitchen-added entries survive reservation rebuilds", () => {
+  it("unions kitchenAdded entries back in after a reservation edit", () => {
+    const prev = [
+      { note: "gluten", pos: 2 },
+      { note: "nut", pos: 3, kitchenAdded: true },
+    ];
+    const next = [{ note: "gluten", pos: null }]; // waiter renamed the booking; resv only knows gluten
+    const merged = mergeRestrictionPositions(prev, next);
+    expect(merged).toContainEqual({ note: "gluten", pos: 2 }); // pos carried
+    expect(merged).toContainEqual({ note: "nut", pos: 3, kitchenAdded: true }); // kitchen entry KEPT
+  });
+
+  it("dedupes when the reservation later records the same kitchen entry", () => {
+    const prev = [{ note: "shellfish", pos: 1, kitchenAdded: true }];
+    const next = [{ note: "shellfish", pos: 1 }];
+    const merged = mergeRestrictionPositions(prev, next);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].note).toBe("shellfish");
+  });
+
+  it("kitchen-added positions are not donated to unpositioned reservation entries", () => {
+    const prev = [{ note: "dairy", pos: 4, kitchenAdded: true }];
+    const next = [{ note: "dairy", pos: null }]; // a DIFFERENT dairy guest from the booking
+    const merged = mergeRestrictionPositions(prev, next);
+    // reservation entry stays unassigned; kitchen's stays pinned at P4
+    expect(merged).toContainEqual({ note: "dairy", pos: null });
+    expect(merged).toContainEqual({ note: "dairy", pos: 4, kitchenAdded: true });
+  });
+});

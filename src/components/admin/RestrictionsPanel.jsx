@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT, baseInp, saveBtn, dangerBtn, primaryBtn } from "./adminStyles.js";
-import { RESTRICTION_GROUPS } from "../../constants/dietary.js";
+import { DEFAULT_RESTRICTIONS, RESTRICTION_GROUPS } from "../../constants/dietary.js";
+import { RESTRICTION_COLUMN_TO_KEY } from "../../utils/menuUtils.js";
 
 const GROUP_OPTIONS = Object.entries(RESTRICTION_GROUPS);
 
@@ -9,6 +10,19 @@ const slug = (str) => String(str || "").trim().toLowerCase()
   .replace(/&/g, "and")
   .replace(/[^a-z0-9]+/g, "_")
   .replace(/^_+|_+$/g, "");
+
+// Re-adding a deleted built-in must mint its CANONICAL key, not a fresh slug:
+// slug("Gluten Free") is "gluten_free", which matches no course variant, no
+// column mapping and no substitution — gluten guests would silently get zero
+// substitutions forever while everything looked configured. Resolve by label
+// match against the built-ins first, then translate column-name slugs back.
+const canonicalKey = (label, base) => {
+  const builtIn = DEFAULT_RESTRICTIONS.find(
+    (r) => slug(r.label) === base || r.key === base,
+  );
+  if (builtIn) return builtIn.key;
+  return RESTRICTION_COLUMN_TO_KEY[base] || base;
+};
 
 function uniqueKey(base, taken) {
   let candidate = base || "restriction";
@@ -44,7 +58,7 @@ export default function RestrictionsPanel({ restrictions = [], onSave }) {
     const label = newLabel.trim();
     if (!label) return;
     const taken = new Set(draft.map(r => r.key));
-    const key = uniqueKey(slug(label), taken);
+    const key = uniqueKey(canonicalKey(label, slug(label)), taken);
     setDraft(d => [...d, { key, label, emoji: newEmoji.trim(), group: newGroup }]);
     setNewLabel(""); setNewEmoji(""); setNewGroup("dietary");
     setStatus("idle");

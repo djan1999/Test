@@ -343,17 +343,30 @@ export const mergeTableGroups = (tables = [], ignoreExtraKeys = null) => {
 // reset itself after a few seconds" bug). Keep the reservation's restriction
 // SET, but carry each board-assigned `pos` onto a matching (same note)
 // reservation restriction that doesn't already specify one.
+//
+// Entries the KITCHEN added directly to the table (kitchenAdded: true —
+// KitchenBoard's quick allergy drawer) exist only in table state, never on
+// the reservation. Rebuilding purely from the reservation's set deleted them
+// on ANY later reservation edit (a rename, a pax fix by a waiter who never
+// saw the kitchen's entry) — and for terrace tickets the reconcile re-runs
+// on every change, so a kitchen-added nut allergy could vanish within
+// seconds with no user action. They are UNIONED back in, deduped against
+// identical reservation entries.
 export const mergeRestrictionPositions = (prev = [], next = []) => {
   const posByNote = {};
-  (Array.isArray(prev) ? prev : []).forEach((r) => {
-    if (r && r.pos != null) (posByNote[r.note] = posByNote[r.note] || []).push(r.pos);
+  const prevList = Array.isArray(prev) ? prev : [];
+  prevList.forEach((r) => {
+    if (r && r.pos != null && !r.kitchenAdded) (posByNote[r.note] = posByNote[r.note] || []).push(r.pos);
   });
-  return (Array.isArray(next) ? next : []).map((r) => {
+  const merged = (Array.isArray(next) ? next : []).map((r) => {
     if (!r || r.pos != null) return r;
     const q = posByNote[r.note];
     if (q && q.length) return { ...r, pos: q.shift() };
     return r;
   });
+  const kitchenKept = prevList.filter((r) => r && r.kitchenAdded === true
+    && !merged.some((m) => m && m.note === r.note && (m.pos ?? null) === (r.pos ?? null)));
+  return kitchenKept.length ? [...merged, ...kitchenKept] : merged;
 };
 
 // Patch for a STARTED table when its reservation is edited mid-service.

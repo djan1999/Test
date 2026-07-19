@@ -604,9 +604,16 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           })}
         </div>
 
-        {/* Unassigned restrictions — tap to assign to a seat */}
+        {/* Unassigned restrictions — tap to assign to a seat. A restriction
+            pinned to a position that matches NO live seat id (chair-identity
+            seats are non-contiguous; a mid-service resize can drop a P) is
+            treated as unassigned too — it used to match neither the seat
+            chips above nor this strip and the allergy silently vanished
+            from every kitchen surface. */}
         {(() => {
-          const unassigned = restrictions.map((r, i) => ({ ...r, _i: i })).filter(r => !r.pos && r.note);
+          const seatIds = new Set(seats.map(s => s.id));
+          const unassigned = restrictions.map((r, i) => ({ ...r, _i: i }))
+            .filter(r => r.note && (!r.pos || !seatIds.has(r.pos)));
           if (unassigned.length === 0) return null;
           return (
             <div style={{ marginTop: compact ? 3 : 7, paddingTop: compact ? 3 : 7, borderTop: `1px solid ${RULE_SOFT}` }}>
