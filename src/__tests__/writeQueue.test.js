@@ -84,4 +84,26 @@ describe("createWriteQueue", () => {
     expect(landed).toEqual(["new"]);
     expect(q.pending()).toEqual([]);
   });
+
+  it("restores a failed reservation write after a browser reload", async () => {
+    const storageKey = `write-queue-test-${Date.now()}`;
+    localStorage.removeItem(storageKey);
+    const firstPage = createWriteQueue(async () => { throw new Error("offline"); }, { storageKey });
+    await firstPage.save("ws-a\u0000res-1", { state: "terrace", workspaceId: "ws-a" });
+    expect(localStorage.getItem(storageKey)).toContain("terrace");
+
+    const landed = [];
+    const reloadedPage = createWriteQueue(async (key, value) => {
+      landed.push([key, value]);
+    }, { storageKey });
+    await tick(20);
+
+    expect(landed).toEqual([[
+      "ws-a\u0000res-1",
+      { state: "terrace", workspaceId: "ws-a" },
+    ]]);
+    expect(reloadedPage.pending()).toEqual([]);
+    expect(localStorage.getItem(storageKey)).toBeNull();
+    firstPage.drop("ws-a\u0000res-1");
+  });
 });

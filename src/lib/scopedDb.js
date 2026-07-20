@@ -26,8 +26,8 @@ const stamp = (row, ws) => ({ ...row, workspace_id: ws });
  * call `supabase.from(...)` directly and append
  * `.eq('workspace_id', getWorkspaceId())` by hand.
  */
-export function scopedFrom(table) {
-  const ws = getWorkspaceId();
+export function scopedFrom(table, workspaceId = getWorkspaceId()) {
+  const ws = workspaceId;
   const base = () => supabase.from(table);
   return {
     select: (cols, opts) => base().select(cols, opts).eq("workspace_id", ws),

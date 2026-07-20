@@ -776,6 +776,13 @@ export default function App() {
       const ts = Date.parse(r.updated_at || "");
       if (Number.isFinite(ts)) lastBoardWriteRef.current.set(Number(r.table_id), ts);
     }
+    // A CAS fold can include remote fields that were absent from this
+    // device's outgoing row. Track what the store actually accepted so this
+    // device can adopt it immediately, even if Realtime is delayed.
+    const persistedData = new Map(rows.map((row) => [
+      Number(row.table_id),
+      sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) }),
+    ]));
     try {
       if (sqlitePrimaryRef.current) {
         const { writeServiceTables } = await import("./powersync/writes.js");
@@ -783,7 +790,15 @@ export default function App() {
       } else {
         const { saveServiceTableWithCas } = await import("./lib/serviceTableCas.js");
         const ws = getWorkspaceId();
-        for (const row of rows) {
+        // A move is destination=party plus source=blank. Claim destinations
+        // first so a newly occupied destination refuses the batch before its
+        // source can be cleared. (SQLite applies the rows atomically already.)
+        const orderedRows = rows.map((row, index) => {
+          const data = row?.data || {};
+          const hasParty = Boolean(String(data.resName || "").trim() || String(data.resTime || "").trim());
+          return { row, index, priority: tableHasServiceContent(data) || hasParty ? 0 : 2 };
+        }).sort((a, b) => a.priority - b.priority || a.index - b.index);
+        for (const { row } of orderedRows) {
           const tableId = Number(row.table_id);
           let ancestor = null;
           try {
@@ -804,13 +819,17 @@ export default function App() {
               arrivedAt: unseatAncestor.arrivedAt,
             };
           }
-          await saveServiceTableWithCas({
+          const saved = await saveServiceTableWithCas({
             client: supabase,
             workspaceId: ws,
             tableId: row.table_id,
             data: row.data,
             ancestor,
           });
+          persistedData.set(
+            tableId,
+            sanitizeTable({ id: tableId, ...(saved.data || {}) }),
+          );
         }
       }
       // The store now holds exactly these rows — advance the CONFIRMED
@@ -821,11 +840,27 @@ export default function App() {
         if ((tablesRef.current || []).some((table) => table.id === tableId)) {
           confirmedTablesJsonRef.current.set(
             tableId,
-            JSON.stringify(sanitizeTable({ id: tableId, ...(r.data || {}) })),
+            JSON.stringify(persistedData.get(tableId)),
           );
         }
         intentionalBoardUnseatRef.current.delete(tableId);
         intentionalBoardBlankRef.current.delete(tableId);
+      }
+      if (!sqlitePrimaryRef.current) {
+        const sentById = new Map(rows.map((row) => [
+          Number(row.table_id),
+          sanitizeTable({ id: Number(row.table_id), ...(row.data || {}) }),
+        ]));
+        setTables((current) => current.map((table) => {
+          const id = Number(table.id);
+          const saved = persistedData.get(id);
+          const sent = sentById.get(id);
+          if (!saved || !sent || JSON.stringify(saved) === JSON.stringify(sent)) return table;
+          // Preserve a newer tap made while the HTTP request was in flight,
+          // folding it onto the accepted server result instead of replacing
+          // either side wholesale.
+          return sanitizeTable(foldTable(sent, sanitizeTable(table), saved));
+        }));
       }
       return { ok: true };
     } catch (error) {
@@ -1011,9 +1046,12 @@ export default function App() {
       // keeps the store's existing date, matching the sqlite path's COALESCE.
       const patch = { table_id: row.table_id, data: row.data };
       if (row.date != null) patch.date = row.date;
-      const { error } = await scopedFrom(TABLES.RESERVATIONS)
+      const { error } = await scopedFrom(TABLES.RESERVATIONS, row.workspaceId)
         .update(patch).eq("id", row.id);
       if (error) throw error;
+    }, {
+      storageKey: "milka-reservation-write-queue-v1",
+      maxRetainedAgeMs: 24 * 60 * 60 * 1000,
     });
   }
 
@@ -1028,7 +1066,11 @@ export default function App() {
         await writeReservation({ id, date, table_id, data, created_at });
         return { ok: true };
       }
-      const result = await reservationQueueRef.current.save(id, { id, date, table_id, data });
+      const workspaceId = getWorkspaceId();
+      const result = await reservationQueueRef.current.save(
+        `${workspaceId}\u0000${id}`,
+        { id, date, table_id, data, workspaceId },
+      );
       if (!result.ok) console.warn("Reservation persist failed (retained for retry):", result.error);
       return result;
     } catch (error) {
@@ -2030,8 +2072,14 @@ export default function App() {
   // identical 23:53 entries in the 10.06 incident.
   const archivingRef = useRef(false);
   const archiveAndClearAll = async ({ skipConfirm = false } = {}) => {
-    if (archivingRef.current) return;
-    if (!skipConfirm && typeof window !== "undefined" && !window.confirm("Archive today's service and clear all tables?")) return;
+    // Callers that chain another lifecycle step (notably Lunch → Dinner) need
+    // an HONEST verdict. The old function returned undefined on both success
+    // and refusal/failure, so the picker always started the next session even
+    // when the previous one was still live.
+    if (archivingRef.current) return { ok: false, reason: "busy" };
+    if (!skipConfirm && typeof window !== "undefined" && !window.confirm("Archive today's service and clear all tables?")) {
+      return { ok: false, reason: "cancelled" };
+    }
     archivingRef.current = true;
     try {
       const superseded = await serviceEndSuperseded(serviceDate, serviceStartedAtRef.current);
@@ -2039,7 +2087,7 @@ export default function App() {
         adoptServiceLifecycleRef.current?.(superseded.live, new Date().toISOString());
         setArchiveOpen(false);
         window.alert("This service was already ended (or a new one started) on another device — nothing was cleared. The board has been updated.");
-        return;
+        return { ok: false, reason: "superseded" };
       }
       const snap = boardStateRef.current; // stable reference, never stale
       // Stamp the archive with the service's actual date, not whatever today
@@ -2076,11 +2124,11 @@ export default function App() {
         adoptServiceLifecycleRef.current?.((await readStateKey("service_date").catch(() => null)) || {}, new Date().toISOString());
         setArchiveOpen(false);
         window.alert("This service was already ended (or a new one started) on another device — nothing was cleared. The board has been updated.");
-        return;
+        return { ok: false, reason: "superseded" };
       }
       if (!result.ok) {
         window.alert("Service was not ended; the live board is unchanged. Please retry: " + (result.error?.message || result.error));
-        return;
+        return { ok: false, reason: "persist-failed", error: result.error };
       }
       applyFinishedServiceLocally(result.rows);
       // Persist the strip wipe so the store's floor_status doesn't carry this
@@ -2090,6 +2138,15 @@ export default function App() {
       setArchiveOpen(false);
       // Return to mode selection after archiving
       changeMode(null);
+      return { ok: true };
+    } catch (error) {
+      setSyncStatus("sync-error");
+      noteSyncError("end service", error);
+      recordClientDiagnostic("end service", error);
+      if (typeof window !== "undefined") {
+        window.alert("Service was not ended; the live board is unchanged. Please retry: " + (error?.message || error));
+      }
+      return { ok: false, reason: "unexpected-error", error };
     } finally {
       archivingRef.current = false;
     }
@@ -3590,11 +3647,12 @@ export default function App() {
   const floorMapsWriteTsRef = useRef(0);
 
   const updateFloorMaps = (next, meta = null) => {
-    const s = sanitizeFloorMaps(typeof next === "function" ? next(floorMapsRef.current) : next);
+    const ancestor = sanitizeFloorMaps(floorMapsRef.current);
+    const s = sanitizeFloorMaps(typeof next === "function" ? next(ancestor) : next);
     floorMapsRef.current = s;
     floorMapsWriteTsRef.current = Date.now();
     setFloorMapsState(s);
-    if (supabase) saveStateKey(FLOOR_MAPS_KEY, s).catch?.(() => {});
+    if (supabase) saveStateKey(FLOOR_MAPS_KEY, s, { ancestor }).catch?.(() => {});
     // A RENAME carries its keyed data along before the prune: the SET strip
     // and every guest's per-map chair assignment key on "mapId:label" — they
     // used to orphan silently (strip pruned away, chairs reverting to seat
@@ -3623,12 +3681,13 @@ export default function App() {
   // in quick succession compose instead of the later one erasing the earlier.
   // A no-op result skips the persist entirely.
   const updateFloorStatus = (next) => {
-    const s = sanitizeFloorStatus(typeof next === "function" ? next(floorStatusRef.current) : next);
-    if (JSON.stringify(s) === JSON.stringify(sanitizeFloorStatus(floorStatusRef.current))) return s;
+    const ancestor = sanitizeFloorStatus(floorStatusRef.current);
+    const s = sanitizeFloorStatus(typeof next === "function" ? next(ancestor) : next);
+    if (JSON.stringify(s) === JSON.stringify(ancestor)) return s;
     floorStatusRef.current = s;
     floorStatusWriteTsRef.current = Date.now();
     setFloorStatusState(s);
-    if (supabase) saveStateKey(FLOOR_STATUS_KEY, s).catch?.(() => {});
+    if (supabase) saveStateKey(FLOOR_STATUS_KEY, s, { ancestor }).catch?.(() => {});
     return s;
   };
 
@@ -4572,7 +4631,11 @@ export default function App() {
                 + `OK — end ${prevSession.toUpperCase()} now (archive & clear), then start ${session.toUpperCase()} fresh.\n`
                 + `Cancel — keep the board and relabel the running service as ${session.toUpperCase()}.`,
               )) {
-            await archiveAndClearAll({ skipConfirm: true });
+            const ended = await archiveAndClearAll({ skipConfirm: true });
+            // Never mint the next service identity unless the previous
+            // service actually finished. A refused stale-device END, a store
+            // error, or a busy archive must leave the newer/live service as-is.
+            if (!ended?.ok) return;
           }
         }
         // ONE lifecycle write carries date + session + fresh identity —

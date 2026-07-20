@@ -15,15 +15,21 @@ export default function ArchivePanel({ optionalExtras = [] }) {
   const [expanded, setExpanded]       = useState(null);
   const [deleting, setDeleting]       = useState(null);
   const [showTrash, setShowTrash]     = useState(false);
+  const [loadError, setLoadError]     = useState("");
 
   const loadEntries = () => {
     if (!supabase) { setLoading(false); return; }
     setLoading(true);
+    setLoadError("");
     // Reads local SQLite when primary (instant, offline-capable); direct
     // Supabase otherwise.
     fetchArchive()
       .then(({ active, deleted }) => { setEntries(active); setDeleted(deleted); })
-      .catch(() => { setEntries([]); setDeleted([]); })
+      .catch((error) => {
+        setEntries([]);
+        setDeleted([]);
+        setLoadError(error?.message || "Archive could not be loaded.");
+      })
       .finally(() => setLoading(false));
   };
   useEffect(loadEntries, []);
@@ -75,7 +81,10 @@ export default function ArchivePanel({ optionalExtras = [] }) {
 
   const emptyTrash = async () => {
     if (!supabase) return;
-    if (!window.confirm("Permanently delete all trashed entries? This cannot be undone.")) return;
+    const typed = window.prompt(
+      `This permanently deletes ${deleted.length} archived service${deleted.length === 1 ? "" : "s"} and cannot be undone.\n\nType DELETE to continue.`,
+    );
+    if (String(typed || "").trim().toUpperCase() !== "DELETE") return;
     setDeleting("trash");
     const { error } = await archivePurgeTrash();
     if (error) {
@@ -94,7 +103,13 @@ export default function ArchivePanel({ optionalExtras = [] }) {
 
       {!supabase && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[4], padding: "60px 0", textAlign: "center" }}>Supabase not connected</div>}
       {supabase && loading && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[4], padding: "60px 0", textAlign: "center" }}>Loading...</div>}
-      {supabase && !loading && entries.length === 0 && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[4], padding: "60px 0", textAlign: "center" }}>No archived services yet</div>}
+      {supabase && !loading && loadError && (
+        <div role="alert" style={{ fontFamily: FONT, fontSize: 11, color: tokens.red.text, padding: "40px 0", textAlign: "center" }}>
+          Archive load failed: {loadError}<br />
+          <button onClick={loadEntries} style={{ marginTop: 12, fontFamily: FONT, padding: "6px 14px", cursor: "pointer" }}>RETRY</button>
+        </div>
+      )}
+      {supabase && !loading && !loadError && entries.length === 0 && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[4], padding: "60px 0", textAlign: "center" }}>No archived services yet</div>}
 
       {supabase && !loading && entries.length > 0 && (
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>

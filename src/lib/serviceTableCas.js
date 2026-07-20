@@ -1,4 +1,4 @@
-import { foldTable } from "../utils/foldTable.js";
+import { foldTableWithMeta } from "../utils/foldTable.js";
 
 const asObject = (value) => {
   if (value && typeof value === "object") return value;
@@ -35,7 +35,20 @@ export async function saveServiceTableWithCas({
       .maybeSingle();
     if (readError) throw readError;
 
-    const merged = current ? foldTable(base, mine, asObject(current.data)) : mine;
+    const folded = current
+      ? foldTableWithMeta(base, mine, asObject(current.data))
+      : { data: mine, conflict: null };
+    if (folded.conflict) {
+      const error = new Error(
+        folded.conflict === "concurrent-clear"
+          ? `Service table ${id} changed on another device while it was being cleared or moved; the newer table was preserved.`
+          : `Service table ${id} became occupied by another party; the move/start was refused.`,
+      );
+      error.code = "MILKA_TABLE_CONFLICT";
+      error.conflict = folded.conflict;
+      throw error;
+    }
+    const merged = folded.data;
     const { data: saved, error: saveError } = await client.rpc(
       "save_service_table_if_current",
       {
@@ -47,7 +60,7 @@ export async function saveServiceTableWithCas({
       },
     );
     if (saveError) throw saveError;
-    if (saved === true) return { data: merged };
+    if (saved === true) return { data: merged, conflict: null };
   }
   throw new Error(`Service table ${id} kept changing while saving; retrying later`);
 }

@@ -9,6 +9,9 @@ import { supabase, getWorkspaceId, TABLES } from "./supabaseClient.js";
 import { scopedFrom } from "./scopedDb.js";
 import { isSqlitePrimary } from "../powersync/primary.js";
 import { isSandbox } from "./sandbox.js";
+import { saveServiceSettingWithCas } from "./serviceSettingCas.js";
+import { MERGEABLE_SETTING_KEYS } from "../utils/foldSettingState.js";
+import { recordClientDiagnostic } from "./clientDiagnostics.js";
 
 // → the state object, or null when the row doesn't exist. Throws on real
 // read failures (callers that seed defaults on "empty" rely on the
@@ -32,15 +35,36 @@ export async function readStateKey(id) {
 
 // One raw write, path picked at WRITE time — so a queued retry that fires
 // after the device flips to sqlite-primary rides the durable PowerSync queue.
-async function writeStateKeyOnce(id, state) {
-  if (isSqlitePrimary()) {
+async function writeStateKeyOnce(id, state, ancestor = null, workspaceId = getWorkspaceId()) {
+  // A retained write may outlive a workspace switch. It can use the active
+  // SQLite database only while it still belongs to that same workspace;
+  // otherwise send it directly to its captured workspace in Supabase.
+  if (isSqlitePrimary() && workspaceId === getWorkspaceId()) {
     const { writeSetting } = await import("../powersync/writes.js");
     await writeSetting(id, state);
-  } else {
-    const { error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
-      .upsert({ id, state, updated_at: new Date().toISOString() }, { onConflict: "id" });
-    if (error) throw error;
+    return { state, conflicts: [] };
   }
+  if (MERGEABLE_SETTING_KEYS.has(id)) {
+    const result = await saveServiceSettingWithCas({
+      client: supabase,
+      workspaceId,
+      id,
+      state,
+      ancestor,
+    });
+    if (result.conflicts?.length) {
+      const error = new Error(
+        `${id} had concurrent edits; both floor designs were preserved (local edit saved as RECOVERED COPY).`,
+      );
+      console.warn(error.message, result.conflicts);
+      recordClientDiagnostic("floor settings conflict", error);
+    }
+    return result;
+  }
+  const { error } = await scopedFrom(TABLES.SERVICE_SETTINGS, workspaceId)
+    .upsert({ id, state, updated_at: new Date().toISOString() }, { onConflict: "id" });
+  if (error) throw error;
+  return { state, conflicts: [] };
 }
 
 // Per-key write queues. The fallback upsert used to fire-and-forget: on a
@@ -56,61 +80,69 @@ async function writeStateKeyOnce(id, state) {
 //     browser's 'online' signal fires.
 // Callers still get an honest result for THEIR attempt ({ok:false} shows
 // their error UI), but the value is retained and keeps retrying.
-const queues = new Map(); // id → { latest, chain, attempts, retryTimer, retainedAt }
+const queues = new Map(); // workspace+id → { workspaceId,id,latest,chain,attempts,retryTimer,retainedAt }
+const queueKey = (workspaceId, id) => `${workspaceId}\u0000${id}`;
 
-// Whole-blob keys where replaying a LONG-retained failed write is worse than
-// losing it. The floor-map editor writes the ENTIRE multi-map model on every
-// gesture; an offline device reconnecting hours later replayed its stale
-// snapshot over every other admin's newer work (the maps key is whole-blob
-// last-writer-wins, with no version check). Bounded retry: past the age cap
-// the retained value is dropped instead of replayed — the editor's failed-
-// save state is already visible, and re-editing queues a fresh value.
+// Whole-blob keys where replaying a LONG-retained failed write is still worse
+// than losing it. Floor maps now use a per-map three-way fold + version check,
+// but hours-old same-map geometry can only be kept as a recovered copy, not
+// safely auto-published. Bound that retry window; the editor already exposes
+// failed-save state, and re-editing queues a fresh value.
 const RETAINED_MAX_AGE_MS = { floor_maps_v1: 10 * 60 * 1000 };
 const retainedExpired = (id, q) => {
   const cap = RETAINED_MAX_AGE_MS[id];
   return Boolean(cap && q.retainedAt && Date.now() - q.retainedAt > cap);
 };
 
-function queueOf(id) {
-  let q = queues.get(id);
+function queueOf(workspaceId, id) {
+  const key = queueKey(workspaceId, id);
+  let q = queues.get(key);
   if (!q) {
-    q = { latest: undefined, chain: Promise.resolve(), attempts: 0, retryTimer: null, retainedAt: null };
-    queues.set(id, q);
+    q = {
+      workspaceId,
+      id,
+      latest: undefined,
+      chain: Promise.resolve(),
+      attempts: 0,
+      retryTimer: null,
+      retainedAt: null,
+    };
+    queues.set(key, q);
   }
   return q;
 }
 
-function scheduleRetry(id) {
-  const q = queueOf(id);
+function scheduleRetry(workspaceId, id) {
+  const q = queueOf(workspaceId, id);
   if (q.retryTimer) return;
   const delay = Math.min(2000 * 2 ** q.attempts, 30000);
   q.attempts += 1;
   q.retryTimer = setTimeout(() => {
     q.retryTimer = null;
-    const qq = queues.get(id);
+    const qq = queues.get(queueKey(workspaceId, id));
     if (qq && retainedExpired(id, qq)) {
       console.warn(`Settings retry dropped (${id}): the retained value aged past its replay cap.`);
-      dropPendingStateKey(id);
+      dropPendingStateKey(id, workspaceId);
       return;
     }
-    flushStateKey(id);
+    flushStateKey(id, workspaceId);
   }, delay);
 }
 
-async function flushStateKey(id) {
-  const q = queues.get(id);
+async function flushStateKey(id, workspaceId = getWorkspaceId()) {
+  const q = queues.get(queueKey(workspaceId, id));
   if (!q || q.latest === undefined) return { ok: true };
   const attempt = q.chain.then(async () => {
     const value = q.latest; // always the newest — never a stale snapshot
     if (value === undefined) return { ok: true };
     try {
-      await writeStateKeyOnce(id, value);
+      const saved = await writeStateKeyOnce(id, value.state, value.ancestor, workspaceId);
       // Only clear if nothing newer arrived while this write was in flight.
       if (q.latest === value) { q.latest = undefined; q.attempts = 0; q.retainedAt = null; }
-      return { ok: true };
+      return { ok: true, ...saved };
     } catch (error) {
       console.error(`Settings save failed (${id}):`, error);
-      scheduleRetry(id);
+      scheduleRetry(workspaceId, id);
       return { ok: false, error };
     }
   });
@@ -118,40 +150,48 @@ async function flushStateKey(id) {
   return attempt;
 }
 
-export async function saveStateKey(id, state) {
-  if (!supabase || !getWorkspaceId()) return { ok: true };
+export async function saveStateKey(id, state, { ancestor = null } = {}) {
+  const workspaceId = getWorkspaceId();
+  if (!supabase || !workspaceId) return { ok: true };
   // Test service: never persist. The UI keeps its in-memory state; the store
   // (service_date, floor markers, kitchen order, logo, …) is left untouched.
   if (isSandbox()) return { ok: true };
-  const q = queueOf(id);
-  q.latest = state;
+  const q = queueOf(workspaceId, id);
+  // If an earlier value is still unsaved, its ancestor is the last snapshot
+  // known to be durable. A later UI tap was calculated from the optimistic
+  // local state, not from the server. Replacing that durable ancestor with the
+  // optimistic one would make the three-way fold mistake the first tap for
+  // already-saved data and drop it after a failed attempt.
+  q.latest = { state, ancestor: q.latest?.ancestor ?? ancestor };
   q.retainedAt = Date.now(); // fresh value → fresh replay-age budget
   // A newer value supersedes any scheduled retry of the older one.
   if (q.retryTimer) { clearTimeout(q.retryTimer); q.retryTimer = null; }
   q.attempts = 0;
-  return flushStateKey(id);
+  return flushStateKey(id, workspaceId);
 }
 
 // Connectivity returned — push every retained value out immediately.
 if (typeof window !== "undefined") {
   window.addEventListener("online", () => {
-    for (const [id, q] of queues) {
+    for (const q of queues.values()) {
       if (q.latest === undefined) continue;
-      if (retainedExpired(id, q)) {
-        console.warn(`Settings online-replay dropped (${id}): the retained value aged past its replay cap.`);
-        dropPendingStateKey(id);
+      if (retainedExpired(q.id, q)) {
+        console.warn(`Settings online-replay dropped (${q.id}): the retained value aged past its replay cap.`);
+        dropPendingStateKey(q.id, q.workspaceId);
         continue;
       }
       if (q.retryTimer) { clearTimeout(q.retryTimer); q.retryTimer = null; }
       q.attempts = 0;
-      flushStateKey(id);
+      flushStateKey(q.id, q.workspaceId);
     }
   });
 }
 
 // Test seam: pending keys still waiting to reach the store.
-export function pendingStateKeys() {
-  return [...queues.entries()].filter(([, q]) => q.latest !== undefined).map(([id]) => id);
+export function pendingStateKeys(workspaceId = getWorkspaceId()) {
+  return [...queues.values()]
+    .filter((q) => q.workspaceId === workspaceId && q.latest !== undefined)
+    .map((q) => q.id);
 }
 
 // Drop a key's retained value and cancel its retry — for values that became
@@ -162,8 +202,8 @@ export function pendingStateKeys() {
 // wipe. Lifecycle adoption calls this the moment a service end/replace is
 // observed; an in-flight attempt can no longer be stopped, but `latest`
 // clearing stops the retry/online replays.
-export function dropPendingStateKey(id) {
-  const q = queues.get(id);
+export function dropPendingStateKey(id, workspaceId = getWorkspaceId()) {
+  const q = queues.get(queueKey(workspaceId, id));
   if (!q) return;
   q.latest = undefined;
   q.attempts = 0;

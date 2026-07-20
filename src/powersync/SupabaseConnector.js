@@ -23,6 +23,10 @@ import { supabase, getWorkspaceId } from "../lib/supabaseClient.js";
 import { POWERSYNC_URL } from "./config.js";
 import { naturalKeyFromLocalId } from "./rowId.js";
 import { saveServiceTableWithCas } from "../lib/serviceTableCas.js";
+import { saveServiceSettingWithCas } from "../lib/serviceSettingCas.js";
+import { MERGEABLE_SETTING_KEYS } from "../utils/foldSettingState.js";
+import { recordClientDiagnostic } from "../lib/clientDiagnostics.js";
+import { tableHasServiceContent } from "../utils/tableHelpers.js";
 
 // @powersync/common UpdateType values, inlined so this module stays importable
 // without the SDK (unit tests exercise uploadData with mock transactions).
@@ -247,6 +251,48 @@ async function applyServiceTableWrite(op, ws, row) {
   }
 }
 
+// A MOVE is stored locally as "destination receives the party" + "source is
+// blanked". Upload the claim first. If the destination became occupied on the
+// server, its CAS refuses and the transaction stays queued WITHOUT erasing the
+// source. Stable ordering keeps unrelated operations in their original order.
+function serviceTableClaimsFirst(crud) {
+  const boardWrites = (crud || []).filter((op) => op.table === "service_tables" && op.op !== OP_DELETE);
+  const ids = boardWrites.map((op) => String(op.id));
+  if (new Set(ids).size !== ids.length) return crud; // preserve same-row operation order
+  const priority = (op) => {
+    if (op.table !== "service_tables" || op.op === OP_DELETE) return 1;
+    const data = convertValue("service_tables", "data", op.opData?.data);
+    const hasParty = Boolean(String(data?.resName || "").trim() || String(data?.resTime || "").trim());
+    return tableHasServiceContent(data) || hasParty ? 0 : 2;
+  };
+  return (crud || []).map((op, index) => ({ op, index, priority: priority(op) }))
+    .sort((a, b) => a.priority - b.priority || a.index - b.index)
+    .map(({ op }) => op);
+}
+
+async function applyMergeableSettingWrite(op, ws, row) {
+  const id = String(row.id ?? naturalKeyFromLocalId(op.id, ws));
+  try {
+    const result = await saveServiceSettingWithCas({
+      client: supabase,
+      workspaceId: ws,
+      id,
+      state: row.state ?? {},
+      ancestor: convertValue("service_settings", "state", op.previousValues?.state),
+    });
+    if (result.conflicts?.length) {
+      const error = new Error(
+        `${id} had concurrent edits; both floor designs were preserved (local edit saved as RECOVERED COPY).`,
+      );
+      console.warn(error.message, result.conflicts);
+      recordClientDiagnostic("floor settings conflict", error);
+    }
+    return { error: null };
+  } catch (error) {
+    return { error };
+  }
+}
+
 async function applyOp(op) {
   if (!KNOWN_TABLES.has(op.table)) {
     throw new PermanentOpError(`unknown table: ${op.table}`);
@@ -279,6 +325,10 @@ async function applyOp(op) {
 
   if (op.table === "service_tables") {
     return applyServiceTableWrite(op, ws, row);
+  }
+
+  if (op.table === "service_settings" && MERGEABLE_SETTING_KEYS.has(String(row.id))) {
+    return applyMergeableSettingWrite(op, ws, row);
   }
 
   if (op.table === "beverages") {
@@ -356,7 +406,7 @@ export class SupabaseConnector {
       return;
     }
 
-    for (const op of transaction.crud) {
+    for (const op of serviceTableClaimsFirst(transaction.crud)) {
       try {
         const result = await applyOp(op);
         if (result?.error) {

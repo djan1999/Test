@@ -16,6 +16,10 @@ const simplified = fs.readFileSync(
   path.join(ROOT, "supabase/migrations/20260710065543_simplify_workspace_accounts.sql"),
   "utf8",
 );
+const settingCas = fs.readFileSync(
+  path.join(ROOT, "supabase/migrations/20260720190556_service_settings_cas.sql"),
+  "utf8",
+);
 const schema = fs.readFileSync(path.join(ROOT, "schema.sql"), "utf8");
 const app = fs.readFileSync(path.join(ROOT, "src/App.jsx"), "utf8");
 const syncApi = fs.readFileSync(path.join(ROOT, "api/sync-wines.js"), "utf8");
@@ -26,6 +30,16 @@ describe("database migration contracts", () => {
     expect(hardening).toContain("replace_synced_catalog");
     expect(hardening).toContain("save_service_table_if_current");
     expect(hardening).toContain("archive_and_finish_service");
+  });
+
+  it("protects shared floor documents with an RLS-aware compare-and-swap function", () => {
+    for (const source of [settingCas, schema]) {
+      expect(source).toContain("save_service_setting_if_current");
+      expect(source).toContain("security invoker");
+      expect(source).toContain("setting.updated_at = p_expected_updated_at");
+      expect(source).toContain("revoke all on function public.save_service_setting_if_current");
+      expect(source).toContain("to authenticated, service_role");
+    }
   });
 
   it("reconstructs every table required by the PowerSync streams", () => {

@@ -30,6 +30,7 @@ export default function ArchiveModal({
   const [expanded, setExpanded] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [showTrash, setShowTrash] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   const loadEntries = () => {
     if (!supabase) {
@@ -37,11 +38,16 @@ export default function ArchiveModal({
       return;
     }
     setLoading(true);
+    setLoadError("");
     // fetchArchive reads the on-device SQLite DB when it is primary (instant,
     // works offline) and falls back to the direct Supabase pair otherwise.
     fetchArchive()
       .then(({ active, deleted }) => { setEntries(active); setDeleted(deleted); })
-      .catch(() => { setEntries([]); setDeleted([]); })
+      .catch((error) => {
+        setEntries([]);
+        setDeleted([]);
+        setLoadError(error?.message || "Archive could not be loaded.");
+      })
       .finally(() => setLoading(false));
   };
   useEffect(loadEntries, []);
@@ -51,7 +57,7 @@ export default function ArchiveModal({
     setDeleting(id);
     const { error } = await archiveSetDeleted(id, new Date().toISOString());
     if (error) {
-      alert("Delete failed: " + error.message + "\n\nYou may need to enable UPDATE on the service_archive table in Supabase (Policies → anon → UPDATE).");
+      alert("Delete failed: " + error.message + "\n\nCheck Admin → System for sync details, then retry.");
     } else {
       const entry = entries.find((x) => x.id === id);
       setEntries((e) => e.filter((x) => x.id !== id));
@@ -68,7 +74,7 @@ export default function ArchiveModal({
     const now = new Date().toISOString();
     const { error } = await archiveSetAllDeleted(now);
     if (error) {
-      alert("Delete failed: " + error.message + "\n\nYou may need to enable UPDATE on the service_archive table in Supabase (Policies → anon → UPDATE).");
+      alert("Delete failed: " + error.message + "\n\nCheck Admin → System for sync details, then retry.");
     } else {
       setDeleted((d) => [...entries.map((e) => ({ ...e, deleted_at: now })), ...d]);
       setEntries([]);
@@ -93,7 +99,10 @@ export default function ArchiveModal({
 
   const emptyTrash = async () => {
     if (!supabase) return;
-    if (!window.confirm("Permanently delete all trashed entries? This cannot be undone.")) return;
+    const typed = window.prompt(
+      `This permanently deletes ${deleted.length} archived service${deleted.length === 1 ? "" : "s"} and cannot be undone.\n\nType DELETE to continue.`,
+    );
+    if (String(typed || "").trim().toUpperCase() !== "DELETE") return;
     setDeleting("trash");
     const { error } = await archivePurgeTrash();
     if (error) {
@@ -209,7 +218,13 @@ export default function ArchiveModal({
 
         {!supabase && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[400], padding: "60px 0", textAlign: "center" }}>Supabase not connected</div>}
         {supabase && loading && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[400], padding: "60px 0", textAlign: "center" }}>Loading…</div>}
-        {supabase && !loading && entries.length === 0 && archivedTickets.length === 0 && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[400], padding: "60px 0", textAlign: "center" }}>No archived services yet</div>}
+        {supabase && !loading && loadError && (
+          <div role="alert" style={{ fontFamily: FONT, fontSize: 11, color: tokens.red.text, padding: "40px 0", textAlign: "center" }}>
+            Archive load failed: {loadError}<br />
+            <button onClick={loadEntries} style={{ marginTop: 12, fontFamily: FONT, padding: "6px 14px", cursor: "pointer" }}>RETRY</button>
+          </div>
+        )}
+        {supabase && !loading && !loadError && entries.length === 0 && archivedTickets.length === 0 && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[400], padding: "60px 0", textAlign: "center" }}>No archived services yet</div>}
         {supabase && !loading && entries.length > 0 && <InsightsSection entries={entries} />}
         {supabase && !loading && entries.length > 0 && (
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>

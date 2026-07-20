@@ -9,6 +9,9 @@ const h = vi.hoisted(() => ({
   workspaceId: "ws-active",
   session: { access_token: "tok-1" },
   remoteServiceTable: null,
+  remoteServiceTables: {},
+  remoteServiceSetting: null,
+  rpcResponses: {},
 }));
 
 vi.mock("../lib/supabaseClient.js", () => ({
@@ -19,9 +22,15 @@ vi.mock("../lib/supabaseClient.js", () => ({
         h.calls.push(call);
         return Promise.resolve({ error: h.errorFor(call) });
       };
+      const filters = {};
       const read = {
-        eq: () => read,
-        maybeSingle: async () => ({ data: h.remoteServiceTable, error: null }),
+        eq: (column, value) => { filters[column] = value; return read; },
+        maybeSingle: async () => ({
+          data: table === "service_settings"
+            ? h.remoteServiceSetting
+            : (h.remoteServiceTables[filters.table_id] ?? h.remoteServiceTable),
+          error: null,
+        }),
       };
       return {
         select: () => read,
@@ -34,7 +43,9 @@ vi.mock("../lib/supabaseClient.js", () => ({
     rpc: (name, payload) => {
       const call = { table: "service_tables", op: "rpc", name, payload };
       h.calls.push(call);
-      return Promise.resolve({ data: h.rpcData ?? true, error: h.errorFor(call) });
+      const queued = h.rpcResponses[name];
+      const data = Array.isArray(queued) && queued.length ? queued.shift() : (h.rpcData ?? true);
+      return Promise.resolve({ data, error: h.errorFor(call) });
     },
     auth: { getSession: async () => ({ data: { session: h.session }, error: null }) },
   },
@@ -56,6 +67,9 @@ beforeEach(() => {
   h.workspaceId = "ws-active";
   h.session = { access_token: "tok-1" };
   h.remoteServiceTable = null;
+  h.remoteServiceTables = {};
+  h.remoteServiceSetting = null;
+  h.rpcResponses = {};
   h.rpcData = null;
   vi.restoreAllMocks();
 });
@@ -240,6 +254,39 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     ]);
   });
 
+  it("uploads a MOVE destination first and keeps the source when that destination became occupied", async () => {
+    const blank = { id: 7, active: false, resName: "", resTime: "", seats: [] };
+    const alphaAtSource = { id: 3, active: true, resName: "ALPHA", resTime: "19:00", seats: [] };
+    const alphaAtDestination = { ...alphaAtSource, id: 7 };
+    const betaAtDestination = { id: 7, active: true, resName: "BETA", resTime: "19:15", seats: [] };
+    h.remoteServiceTables = {
+      3: { data: alphaAtSource, updated_at: "2026-07-20T18:00:00.000Z" },
+      7: { data: betaAtDestination, updated_at: "2026-07-20T18:00:01.000Z" },
+    };
+    const sourceBlank = {
+      ...patch("service_tables", "ws-a|3", {
+        table_id: 3, data: JSON.stringify({ ...blank, id: 3 }), workspace_id: "ws-a",
+      }),
+      previousValues: { workspace_id: "ws-a", data: JSON.stringify(alphaAtSource) },
+    };
+    const destinationClaim = {
+      ...patch("service_tables", "ws-a|7", {
+        table_id: 7, data: JSON.stringify(alphaAtDestination), workspace_id: "ws-a",
+      }),
+      previousValues: { workspace_id: "ws-a", data: JSON.stringify(blank) },
+    };
+    // Deliberately source-first: the connector must reorder this safely.
+    const tx = makeTx([sourceBlank, destinationClaim]);
+
+    await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toMatchObject({
+      code: "MILKA_TABLE_CONFLICT",
+      conflict: "destination-occupied",
+    });
+
+    expect(h.calls).toHaveLength(0); // no destination overwrite and no source clear RPC
+    expect(tx.complete).not.toHaveBeenCalled();
+  });
+
   it("REGRESSION (09.07): reservations PATCH without date → UPDATE by id, NOT an upsert", async () => {
     // Upserting a partial PATCH builds an INSERT tuple with NULL date, and
     // Postgres checks NOT NULL on that tuple even though the row exists —
@@ -308,6 +355,63 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     expect(opts).toEqual({ onConflict: "workspace_id,id" });
     expect(payload.id).toBe("menu_logo");
     expect(payload.state).toEqual({ dataUri: "data:x" });
+  });
+
+  it("floor-status upload merges independent markers before its version-checked save", async () => {
+    h.remoteServiceSetting = {
+      state: {
+        dining: { T1: "SET" },
+        terrace: { T21: "SET" },
+      },
+      updated_at: "2026-07-20T18:00:01.000Z",
+    };
+    const tx = makeTx([{
+      ...patch("service_settings", "ws-a|floor_status_v1", {
+        id: "floor_status_v1",
+        state: JSON.stringify({ dining: { T1: "SET", T2: "SET" } }),
+        workspace_id: "ws-a",
+      }),
+      previousValues: {
+        workspace_id: "ws-a",
+        id: "floor_status_v1",
+        state: JSON.stringify({ dining: { T1: "SET" } }),
+      },
+    }]);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0].name).toBe("save_service_setting_if_current");
+    expect(h.calls[0].payload.p_expected_updated_at).toBe("2026-07-20T18:00:01.000Z");
+    expect(h.calls[0].payload.p_state).toEqual({
+      dining: { T1: "SET", T2: "SET" },
+      terrace: { T21: "SET" },
+    });
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a floor-setting save when another device wins the version race", async () => {
+    h.remoteServiceSetting = {
+      state: { dining: { T1: "SET" } },
+      updated_at: "2026-07-20T18:00:01.000Z",
+    };
+    h.rpcResponses.save_service_setting_if_current = [false, true];
+    const tx = makeTx([{
+      ...patch("service_settings", "ws-a|floor_status_v1", {
+        id: "floor_status_v1",
+        state: JSON.stringify({ dining: { T1: "SET", T2: "SET" } }),
+        workspace_id: "ws-a",
+      }),
+      previousValues: {
+        workspace_id: "ws-a",
+        state: JSON.stringify({ dining: { T1: "SET" } }),
+      },
+    }]);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls.filter(({ name }) => name === "save_service_setting_if_current")).toHaveLength(2);
+    expect(tx.complete).toHaveBeenCalledTimes(1);
   });
 
   it("reservations PUT → upsert on id with the uuid preserved", async () => {
