@@ -34,7 +34,7 @@ vi.mock("../lib/supabaseClient.js", () => ({
     rpc: (name, payload) => {
       const call = { table: "service_tables", op: "rpc", name, payload };
       h.calls.push(call);
-      return Promise.resolve({ data: true, error: h.errorFor(call) });
+      return Promise.resolve({ data: h.rpcData ?? true, error: h.errorFor(call) });
     },
     auth: { getSession: async () => ({ data: { session: h.session }, error: null }) },
   },
@@ -56,6 +56,7 @@ beforeEach(() => {
   h.workspaceId = "ws-active";
   h.session = { access_token: "tok-1" };
   h.remoteServiceTable = null;
+  h.rpcData = null;
   vi.restoreAllMocks();
 });
 
@@ -89,8 +90,68 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
       p_archive_date: "2026-07-10",
       p_archive_label: "10. 07. 2026 – DINNER",
       p_archive_state: { tables: [] },
+      p_expected_started_at: null,
+      p_expected_date: null,
     });
     expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes the ended service's identity from tracked previousValues so the server guard engages", async () => {
+    const workspace_id = "ws-a";
+    const crud = Array.from({ length: 10 }, (_, index) => patch(
+      "service_tables", `${workspace_id}|${index + 1}`,
+      { workspace_id, table_id: index + 1, data: "{}" },
+    ));
+    crud.push({
+      op: "PATCH",
+      table: "service_settings",
+      id: `${workspace_id}|service_date`,
+      opData: { workspace_id, id: "service_date", state: "{}" },
+      previousValues: {
+        workspace_id,
+        id: "service_date",
+        state: '{"date":"2026-07-18","chosenOn":"2026-07-18","session":"lunch","startedAt":"2026-07-18T09:12:00.000Z"}',
+      },
+    });
+    const tx = makeTx(crud);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0].name).toBe("archive_and_finish_service");
+    expect(h.calls[0].payload.p_expected_started_at).toBe("2026-07-18T09:12:00.000Z");
+    expect(h.calls[0].payload.p_expected_date).toBe("2026-07-18");
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("completes a superseded finish without wiping — the queued blanks are dropped, not replayed", async () => {
+    h.rpcData = { superseded: true };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const workspace_id = "ws-a";
+    const crud = Array.from({ length: 10 }, (_, index) => patch(
+      "service_tables", `${workspace_id}|${index + 1}`,
+      { workspace_id, table_id: index + 1, data: "{}" },
+    ));
+    crud.push({
+      op: "PATCH",
+      table: "service_settings",
+      id: `${workspace_id}|service_date`,
+      opData: { workspace_id, id: "service_date", state: "{}" },
+      previousValues: {
+        workspace_id, id: "service_date",
+        state: '{"date":"2026-07-18","startedAt":"2026-07-18T09:12:00.000Z"}',
+      },
+    });
+    const tx = makeTx(crud);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    // One RPC, no fallthrough into per-op uploads, transaction completed so
+    // the stale finish never replays against the newer live service.
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0].name).toBe("archive_and_finish_service");
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled();
   });
 
   it("recognizes an atomic end for a custom table set", async () => {

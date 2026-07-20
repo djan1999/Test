@@ -72,7 +72,13 @@ export default function Detail({ table, tables = [], optionalExtras = [], option
     transition: "all 0.1s", touchAction: "manipulation",
   });
   useModalEscape(() => setShowMoveTable(false), showMoveTable);
+  // Combined bookings can't CHANGE TABLE one member at a time — a partial
+  // move desyncs the other members' tableGroup and the party vanishes from
+  // the board and kitchen. App's moveTableState refuses too; hiding the
+  // button keeps the dead end out of reach.
+  const isGroupedTable = Array.isArray(table.tableGroup) && table.tableGroup.length > 1;
   const canMoveTable = mode === "service" && typeof onMoveTable === "function"
+    && !isGroupedTable
     && (table.active || table.arrivedAt || table.resName || table.resTime);
   return (
     <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "0 0 28px" : "0 0 40px", overflowX: "hidden" }}>
@@ -201,7 +207,10 @@ export default function Detail({ table, tables = [], optionalExtras = [], option
           onCancel={() => setShowMoveTable(false)}
           onPick={async (toId, mode) => {
             const r = await onMoveTable(table.id, toId, mode);
-            if (r?.ok) setShowMoveTable(false);
+            if (r?.ok) { setShowMoveTable(false); return; }
+            if (r?.reason === "grouped-table" && typeof window !== "undefined") {
+              window.alert("Move refused: that table is part of a combined booking. Split the combination first.");
+            }
           }}
         />
       )}
@@ -587,11 +596,17 @@ export default function Detail({ table, tables = [], optionalExtras = [], option
                     {restrLabel(r.note)}
                   </span>
                   <div style={{ display: "flex", gap: 3 }}>
-                    {/* Seat positions cap at the assigned table's seat count in
-                        the ACTIVE floor map (T9 offers 3 under Layout B, 2
-                        under A); a squeezed-in extra guest still gets a chip. */}
-                    {Array.from({ length: mapSeatCap != null ? Math.max(mapSeatCap, Number(table.guests) || 0) : (Number(table.guests) || 0) }, (_, idx) => {
-                      const p = idx + 1; const sel = r.pos === p;
+                    {/* Chips are the REAL seat ids when the table has seats —
+                        chair-identity drags make ids non-contiguous ({1,2,3,5,6}
+                        for 5 guests), so generating 1..N offered a P4 that
+                        matched NO seat: the pinned allergy then disappeared
+                        from every kitchen surface. Fallback (no seats yet):
+                        1..max(map seat cap, guests) as before. */}
+                    {(Array.isArray(table.seats) && table.seats.length > 0
+                      ? table.seats.map(s => Number(s.id)).sort((a, b) => a - b)
+                      : Array.from({ length: mapSeatCap != null ? Math.max(mapSeatCap, Number(table.guests) || 0) : (Number(table.guests) || 0) }, (_, idx) => idx + 1)
+                    ).map((p) => {
+                      const sel = r.pos === p;
                       return (
                         <button key={p} onClick={() => upd("restrictions", table.restrictions.map((x, ii) =>
                           ii === i ? { ...x, pos: p } : x

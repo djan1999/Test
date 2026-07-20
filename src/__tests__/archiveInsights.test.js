@@ -178,3 +178,28 @@ describe("findGuestHistory", () => {
     expect(findGuestHistory("smith", many, { limit: 2 })).toHaveLength(2);
   });
 });
+
+describe("no-shows in the archive", () => {
+  it("a never-arrived templated reservation is not counted as covers or pairing seats", () => {
+    const e = {
+      date: "2026-06-12", label: "x",
+      state: {
+        menuCourses: [],
+        tables: [
+          // no-show: templated booking, blank seats, no arrival/kitchen markers
+          { id: 4, resName: "Ghost", resTime: "19:00", guests: 2, tableGroup: [],
+            seats: [{ id: 1, aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [] },
+                    { id: 2, aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [] }] },
+          // real party
+          { id: 5, resName: "Real", guests: 2, arrivedAt: "19:10", tableGroup: [],
+            seats: [{ id: 1, pairing: "Wine", aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [] },
+                    { id: 2, aperitifs: [], glasses: [], cocktails: [], spirits: [], beers: [] }] },
+        ],
+      },
+    };
+    const s = archiveEntryStats(e);
+    expect(s.covers).toBe(2);      // Ghost's 2 not counted
+    expect(s.seats).toBe(2);       // pairing denominator = real covers only
+    expect(s.paired).toBe(1);
+  });
+});

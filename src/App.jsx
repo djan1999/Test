@@ -34,6 +34,7 @@ import {
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
   reservationTableIds, mergeRestrictionPositions, startedTablePatchFromReservation,
   repointReservation, moveTableRows, swapTableRows, massBlankedIndices,
+  tableIsGroupMember,
   applyLayoutSwitchToTables, renameFloorPositionsKey, floorPositionKey,
   swapSeatData, moveSeatOnFloor, materializeFloorPositions,
 } from "./utils/tableHelpers.js";
@@ -72,7 +73,7 @@ import {
 } from "./constants/dietary.js";
 import { supabase, hasSupabaseConfig, supabaseUrl, TABLES, getWorkspaceId } from "./lib/supabaseClient.js";
 import { scopedFrom } from "./lib/scopedDb.js";
-import { readStateKey, saveStateKey, dropPendingStateKey } from "./lib/stateStore.js";
+import { readStateKey, saveStateKey, dropPendingStateKey, pendingStateKeys } from "./lib/stateStore.js";
 import { createWriteQueue } from "./lib/writeQueue.js";
 import { recordClientDiagnostic } from "./lib/clientDiagnostics.js";
 import { finishServiceStore } from "./lib/serviceLifecycleStore.js";
@@ -340,6 +341,11 @@ export default function App() {
   // Hydrate the reference lists from the per-workspace device cache so they
   // paint instantly on launch; SQLite/Supabase refresh them right after.
   const [menuCourses, setMenuCourses] = useState(() => readLocalMenuCourses() || []);
+  // Latest-value mirror for long-lived async paths (auto-end archive snapshot):
+  // the boot check / 60s tick close over a render's menuCourses and archived a
+  // STALE menu when the list changed after the effect last ran.
+  const menuCoursesRef = useRef(menuCourses);
+  menuCoursesRef.current = menuCourses;
   /** True while the admin course editor holds UNSAVED edits. menuCourses is
    *  both the live synced list AND the editor's draft (CourseEditorPanel has
    *  no local copy), so a sync repaint mid-edit — typically the checkpoint
@@ -1418,6 +1424,13 @@ export default function App() {
 
   // The day's reservations for the active session — the input set for terrace
   // occupancy, the ARRIVING board visuals, and layout re-resolution.
+  // Everything from the active service day forward (both sessions, future
+  // dates) — the input set for layout-switch planning in Admin → Floor.
+  const layoutPlanningReservations = useMemo(() => {
+    const from = serviceDate || currentServiceDay();
+    return (reservations || []).filter(r => r.date && String(r.date) >= String(from));
+  }, [reservations, serviceDate]);
+
   const serviceReservations = useMemo(() => {
     if (!serviceDate) return [];
     return reservations.filter(r =>
@@ -1489,7 +1502,17 @@ export default function App() {
       if (typeof window !== "undefined") window.alert("Layout switch failed. The current layout and assignments were retained.");
       return { ok: false, error };
     }
-    return { ok: true };
+    // The operator confirmed a diff — a silently skipped row means a party
+    // renders on the wrong tile (or NOT ON THIS MAP) with no explanation.
+    // Say exactly which moves did not run and why.
+    if (blocked.length && typeof window !== "undefined") {
+      window.alert(
+        `Layout switched, but ${blocked.length} confirmed move(s) could NOT be applied — the destination gained live content after the plan was made:\n\n`
+        + blocked.map(b => `• ${b.name || "party"} → ${b.label || b.id}`).join("\n")
+        + "\n\nThese parties stayed on their old slots. Re-check them on the new layout.",
+      );
+    }
+    return { ok: true, blocked };
   };
 
   // Kitchen sees terrace parties' tickets before the dining table is seated:
@@ -1511,12 +1534,19 @@ export default function App() {
   // reservation mid-service so kitchen progress and seat orders follow the guests.
   // Reservation data fields (resName, resTime, guests, …) are also carried over,
   // but the `id` always stays as the destination's id. Returns { ok, reason }.
+  // Combined bookings must move as a WHOLE group — a partial move desyncs the
+  // other members' tableGroup and the party stops rendering anywhere. Until a
+  // group-aware move exists, refuse with a reason the pickers can surface
+  // (predicate: utils/tableHelpers tableIsGroupMember).
+  const tableInGroup = (id) => tableIsGroupMember(tablesRef.current || [], id);
+
   const moveTableState = (fromId, toId) => {
     if (!fromId || !toId) return { ok: false, reason: "missing-id" };
     if (Number(fromId) === Number(toId)) return { ok: true };
     const src = tablesRef.current?.find(t => t.id === Number(fromId));
     const dst = tablesRef.current?.find(t => t.id === Number(toId));
     if (!src || !dst) return { ok: false, reason: "not-found" };
+    if (tableInGroup(fromId) || tableInGroup(toId)) return { ok: false, reason: "grouped-table" };
     const dstStarted = dst.active || dst.arrivedAt
       || (dst.kitchenLog && Object.keys(dst.kitchenLog).length > 0)
       || dst.kitchenArchived;
@@ -1535,6 +1565,7 @@ export default function App() {
     const a = tablesRef.current?.find(t => t.id === Number(aId));
     const b = tablesRef.current?.find(t => t.id === Number(bId));
     if (!a || !b) return { ok: false, reason: "not-found" };
+    if (tableInGroup(aId) || tableInGroup(bId)) return { ok: false, reason: "grouped-table" };
     setTables(prev => swapTableRows(prev, aId, bId));
     return { ok: true };
   };
@@ -1550,8 +1581,23 @@ export default function App() {
     const t1 = Number(r1.table_id);
     const t2 = Number(r2.table_id);
     if (!t1 || !t2 || t1 === t2) return { ok: false, reason: "same-table" };
-    if (r1.date === serviceDate && (mode === "service" || mode === "display")) {
-      swapTableState(t1, t2);
+    // Carry live table state whenever the swap touches the ACTIVE service day,
+    // regardless of which screen initiated it. Gating this on service/display
+    // mode let a mid-service swap from the Reservations screen repoint the
+    // bookings while seats/orders/kitchen progress stayed stranded on the old
+    // tables — the same defect class as the 04.07 duplicated-guest incident.
+    let boardSwapped = false;
+    if (r1.date === serviceDate) {
+      const swapped = swapTableState(t1, t2);
+      if (!swapped.ok && swapped.reason === "grouped-table") {
+        // One side is part of a combined booking: a partial swap would desync
+        // the group and vanish the party. Refuse the whole operation.
+        if (typeof window !== "undefined") {
+          window.alert("Swap refused: one of these bookings spans combined tables. Split the combination first, then swap.");
+        }
+        return { ok: false, reason: "grouped-table" };
+      }
+      boardSwapped = swapped.ok;
     }
     // repointReservation (utils/tableHelpers) remaps each reservation's
     // tableGroup alongside its table_id. Swapping only table_id left
@@ -1577,7 +1623,7 @@ export default function App() {
       setReservations(prev => prev.map(r =>
         r.id === r1Id ? r1 : r.id === r2Id ? r2 : r
       ));
-      if (r1.date === serviceDate && (mode === "service" || mode === "display")) {
+      if (boardSwapped) {
         swapTableState(t1, t2);
       }
       return { ok: false, reason: "persist-failed", error: result.error };
@@ -1983,9 +2029,9 @@ export default function App() {
   // seconds later) can't file the same service twice — the cause of the two
   // identical 23:53 entries in the 10.06 incident.
   const archivingRef = useRef(false);
-  const archiveAndClearAll = async () => {
+  const archiveAndClearAll = async ({ skipConfirm = false } = {}) => {
     if (archivingRef.current) return;
-    if (typeof window !== "undefined" && !window.confirm("Archive today's service and clear all tables?")) return;
+    if (!skipConfirm && typeof window !== "undefined" && !window.confirm("Archive today's service and clear all tables?")) return;
     archivingRef.current = true;
     try {
       const superseded = await serviceEndSuperseded(serviceDate, serviceStartedAtRef.current);
@@ -2256,20 +2302,25 @@ export default function App() {
         .sort((a, b) => a.id - b.id);
 
       if (activeTables.length > 0) {
+        // Read the session through the REF, not the render closure: the boot
+        // check and the 60s tick both hold the closure from when their effect
+        // last ran, so a session adopted/changed since then mislabeled the
+        // archive (an abandoned lunch filed as "… – DINNER").
+        const session = activeServiceSessionRef.current || "dinner";
         const dateStr = new Date(staleDate + "T00:00:00").toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
-        const label = `${dateStr} – ${(activeServiceSession || "dinner").toUpperCase()}`;
+        const label = `${dateStr} – ${session.toUpperCase()}`;
         const startedAt = serviceStartedAtRef.current;
         const label2 = nextArchiveLabel(await fetchSameDayArchives(staleDate, label), label);
-        let courses = menuCourses;
+        let courses = menuCoursesRef.current;
         if (!courses || courses.length === 0) { try { courses = await fetchMenuCourses(); } catch { courses = []; } }
         archive = {
           id: await archiveIdForService(
             getWorkspaceId(),
-            startedAt || `${staleDate}|${activeServiceSession || "dinner"}`,
+            startedAt || `${staleDate}|${session}`,
           ),
           date: staleDate,
           label: label2,
-          state: { tables: activeTables, cocktails, spirits, beers, menuCourses: courses || [], serviceSession: activeServiceSession || "dinner", startedAt, autoEnded: true },
+          state: { tables: activeTables, cocktails, spirits, beers, menuCourses: courses || [], serviceSession: session, startedAt, autoEnded: true },
         };
       }
     } catch (e) {
@@ -2428,8 +2479,23 @@ export default function App() {
   };
 
   // ── Service date ──────────────────────────────────────────────────────────
-  const persistServiceDate = async (date) => {
+  const persistServiceDate = async (date, session = null) => {
     const previousDate = serviceDate;
+    // A genuine day A→day B switch clears the whole board WITHOUT archiving —
+    // the only archiving paths are END SERVICE and the rollover auto-end. When
+    // live content is at stake, make the operator say so explicitly instead of
+    // silently destroying the night (the red past-date banner used to route
+    // users straight into this unarchived wipe).
+    if (shouldClearBoardOnDateChange(previousDate, date)) {
+      const liveCount = (tablesRef.current || []).filter(tableHasServiceContent).length;
+      if (liveCount > 0 && typeof window !== "undefined"
+          && !window.confirm(
+            `Changing the service date will CLEAR ${liveCount} table(s) WITHOUT archiving them.\n\n`
+            + "Use END SERVICE first if this service should be archived. Continue and clear?",
+          )) {
+        return { ok: false, reason: "cancelled" };
+      }
+    }
     // A fresh service starting clears the auto-end guard so this new service can
     // itself be auto-ended once it later rolls past the cutoff.
     if (date) autoEndingRef.current = false;
@@ -2437,12 +2503,27 @@ export default function App() {
     // Fresh instance id per (re)start so two services on the same day+session are
     // distinguishable in the archive.
     const startedAt = date ? new Date().toISOString() : null;
+    const nextSession = (session === "lunch" || session === "dinner")
+      ? session : activeServiceSessionRef.current;
     if (supabase) {
       const result = await saveStateKey(
         "service_date",
-        date ? { date, chosenOn, session: activeServiceSessionRef.current, startedAt } : {},
+        date ? { date, chosenOn, session: nextSession, startedAt } : {},
       );
       if (!result.ok) return result;
+    }
+    // Adopt a picker-chosen session locally as part of the SAME lifecycle
+    // write. The picker used to fire persistServiceSession()'s unawaited
+    // read-merge-write in parallel with this function: whenever that read
+    // resolved after this write was enqueued, its stale base (old date /
+    // old startedAt) landed LAST in the per-key latest-wins queue and
+    // silently reverted the fresh identity in the store — devices then held
+    // a startedAt the store no longer carried, and every guarded END SERVICE
+    // was refused with "already ended on another device".
+    if (session === "lunch" || session === "dinner") {
+      setActiveServiceSession(session);
+      activeServiceSessionRef.current = session;
+      try { localStorage.setItem(workspaceKey("milka_service_session"), session); } catch {}
     }
     setServiceDate(date);
     setServiceDateChosenOn(chosenOn);
@@ -2471,6 +2552,35 @@ export default function App() {
       setTables(configuredTableIds(restaurantConfigRef.current).map(blankTable));
     }
     return { ok: true };
+  };
+
+  // The red past-date banner's action for a LIVE board: a service running
+  // under a stale/rolled-over date is mislabeled, not over — re-date it
+  // FORWARD and keep every table (exactly what the auto-end live guard does
+  // at App's boot check). Routing this through the picker instead ran the
+  // day-switch path, which clears the whole board WITHOUT archiving — the
+  // banner built to fix mislabeled dates was inviting a destructive tap.
+  const redateLiveServiceForward = async () => {
+    const healDay = currentServiceDay();
+    // Keep a FULL identity: stripping startedAt would leave an identity-less
+    // shared state that deadlocks every device's guarded END (11.07 class).
+    const startedAt = serviceStartedAtRef.current || new Date().toISOString();
+    serviceStartedAtRef.current = startedAt;
+    setServiceDate(healDay);
+    setServiceDateChosenOn(healDay);
+    serviceDateRef.current = healDay;
+    serviceDateChosenOnRef.current = healDay;
+    try {
+      localStorage.setItem(workspaceKey("milka_service_date"), healDay);
+      localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), healDay);
+      localStorage.setItem(workspaceKey("milka_service_started_at"), startedAt);
+    } catch {}
+    if (!supabase) return { ok: true };
+    return saveStateKey("service_date", {
+      date: healDay, chosenOn: healDay,
+      session: activeServiceSessionRef.current,
+      startedAt,
+    });
   };
 
   // ── Shared service lifecycle ────────────────────────────────────────────────
@@ -2553,34 +2663,10 @@ export default function App() {
   const adoptServiceLifecycleRef = useRef(adoptServiceLifecycle);
   adoptServiceLifecycleRef.current = adoptServiceLifecycle;
 
-  const persistServiceSession = (session) => {
-    setActiveServiceSession(session);
-    activeServiceSessionRef.current = session;
-    try { localStorage.setItem(workspaceKey("milka_service_session"), session); } catch {}
-    // Share the session with every device on this workspace so their board
-    // reconcile filters and archive labels match the live service. (It used to
-    // live only in localStorage, so a second device kept its own default and
-    // hid the running session's reservations.) Only attach it once a service
-    // date is live — a session toggle with no service yet has nothing to share.
-    if (!supabase) return;
-    const date = serviceDateRef.current;
-    if (!date) return;
-    // Merge into the STORE's live blob, not this device's refs: a device
-    // that slept through a service re-start still holds the OLD startedAt —
-    // writing the whole blob from refs would clobber the live identity, and
-    // every other device's guarded END would then be refused (the 11.07
-    // "can't end service" symptom through a side door). Store unreachable →
-    // fall back to local refs, exactly the old behavior.
-    (async () => {
-      let live = null;
-      try { live = await readStateKey("service_date"); } catch { /* offline — refs below */ }
-      const base = live?.date
-        ? live
-        : { date, chosenOn: serviceDateChosenOnRef.current, startedAt: serviceStartedAtRef.current };
-      const r = await saveStateKey("service_date", { ...base, session });
-      if (!r.ok) console.warn("Service session share failed:", r.error);
-    })();
-  };
+  // (Session changes ride persistServiceDate(date, session) as ONE lifecycle
+  // write. The old standalone persistServiceSession's read-merge-write raced
+  // the date write in the per-key queue and could silently revert the fresh
+  // identity — see persistServiceDate.)
 
   // ── Reservations CRUD ─────────────────────────────────────────────────────
   // Push reservation edits to tables where service has ALREADY started. The
@@ -2630,8 +2716,13 @@ export default function App() {
       const prevTableId = prevResv ? Number(prevResv.table_id) : null;
       const nextTableId = Number(table_id);
       let originalTablesBeforeMove = null;
+      // No mode gate here: a mid-service table change made from the
+      // Reservations screen must carry the live state exactly like one made
+      // on the board — gating on service/display mode left seats/orders/
+      // kitchen progress stranded on the old table while the reservation
+      // (and started-table sync) pointed at the new one.
       if (!_skipAutoMove && prevTableId && nextTableId && prevTableId !== nextTableId
-          && date === serviceDate && (mode === "service" || mode === "display")) {
+          && date === serviceDate) {
         const src = tablesRef.current?.find(t => t.id === prevTableId);
         const srcStarted = src && (src.active || src.arrivedAt
           || (src.kitchenLog && Object.keys(src.kitchenLog).length > 0)
@@ -2640,13 +2731,15 @@ export default function App() {
           originalTablesBeforeMove = tablesRef.current || [];
           const moved = moveTableState(prevTableId, nextTableId);
           if (!moved?.ok) {
-            // Destination occupied: the live service could NOT follow the
-            // reservation. Refusing the whole edit keeps one truth — writing
-            // the new table_id anyway left the guest eating on the old table
-            // while the reservation (and the started-table sync, which then
-            // overwrote the destination guest's details) pointed at the new.
+            // The live service could NOT follow the reservation. Refusing the
+            // whole edit keeps one truth — writing the new table_id anyway
+            // left the guest eating on the old table while the reservation
+            // (and the started-table sync, which then overwrote the
+            // destination guest's details) pointed at the new.
             if (typeof window !== "undefined") {
-              window.alert(`Table move refused: T${nextTableId} is occupied. The reservation was not changed — clear or swap T${nextTableId} first.`);
+              window.alert(moved?.reason === "grouped-table"
+                ? "Table move refused: this booking spans combined tables. Split the combination first, then move it."
+                : `Table move refused: T${nextTableId} is occupied. The reservation was not changed — clear or swap T${nextTableId} first.`);
             }
             return { ok: false, error: new Error(moved?.reason || "destination-occupied") };
           }
@@ -2819,6 +2912,24 @@ export default function App() {
     // This closes saved-mode/deep-link paths where a device previously used by
     // an Admin is later signed into a more limited Kitchen or Service account.
     if (nextMode && !canAccessMode(currentRole, nextMode)) return;
+    // Leaving Admin abandons any unsaved course-editor draft — release the
+    // adoption freeze. The flag otherwise only clears inside save paths, so
+    // one keystroke in the editor followed by exiting without saving froze
+    // menu adoption for the REST OF THE SESSION: another device could 86 a
+    // dish and this device kept firing from the stale list all night.
+    if (mode === "admin" && nextMode !== "admin" && menuCoursesDirtyRef.current) {
+      menuCoursesDirtyRef.current = false;
+      // Re-pull the store's list so the abandoned draft stops painting — the
+      // watches only fire on DATA changes, not on this flag clearing.
+      if (sqlitePrimaryRef.current) {
+        import("./powersync/reads.js")
+          .then(({ readMenuCourses }) => readMenuCourses())
+          .then(raw => { if (raw?.length) setMenuCourses(raw.map(supabaseRowToCourse)); })
+          .catch(() => {});
+      } else {
+        fetchMenuCourses().then(rows => { if (rows?.length) setMenuCourses(rows); }).catch(() => {});
+      }
+    }
     // Service mode joins the live service (or prompts to start one); other
     // modes just switch.
     if (nextMode === "service" && !serviceDate) { enterServiceMode(); return; }
@@ -3545,6 +3656,15 @@ export default function App() {
       && incoming && incoming < floorMapsWriteTsRef.current) return;
     const s = sanitizeFloorMaps(state);
     if (JSON.stringify(s) === JSON.stringify(floorMapsRef.current)) return;
+    // A NEWER maps blob reached the store while this device still holds a
+    // retained (failed) maps write for retry. The maps key is whole-blob
+    // last-writer-wins: replaying the retained snapshot would overwrite the
+    // other admin's newer work wholesale — drop it and adopt the store's.
+    if (incoming && incoming > (floorMapsWriteTsRef.current || 0)
+        && pendingStateKeys().includes(FLOOR_MAPS_KEY)) {
+      console.warn("[floor-maps] Dropped a stale retained maps write — a newer version was adopted from the store.");
+      dropPendingStateKey?.(FLOOR_MAPS_KEY);
+    }
     floorMapsRef.current = s;
     setFloorMapsState(s);
   };
@@ -3985,6 +4105,17 @@ export default function App() {
         const persistedChosenOn = state?.chosenOn || null;
         const persistedSession = state?.session;
         const persistedStartedAt = state?.startedAt || null;
+        // Adopt the shared session BEFORE the stale checks: the auto-end
+        // paths below stamp the session onto the archive label and the
+        // re-date heal writes it back into the shared blob. Adopting it only
+        // in the live branch let a freshly-booted device (local default
+        // "dinner") archive an abandoned LUNCH as "… – DINNER", or flip every
+        // device's live lunch to dinner through the heal write.
+        if (persistedSession === "lunch" || persistedSession === "dinner") {
+          setActiveServiceSession(persistedSession);
+          activeServiceSessionRef.current = persistedSession;
+          try { localStorage.setItem(workspaceKey("milka_service_session"), persistedSession); } catch {}
+        }
         if (!persisted) {
           // No service_date on record. If the board still holds a live service
           // (orphaned — see healOrphanedService), re-attach its day so it stops
@@ -4295,11 +4426,23 @@ export default function App() {
 
   // Loud warning when the active service date is in the past — the silent
   // version of this let a stray "view an old day" pick file a whole night of
-  // service under 10.06. Tapping it opens the date picker to set today.
+  // service under 10.06. Tapping it: LIVE board → re-date forward in place
+  // (board kept — never the picker's clearing day-switch); empty board →
+  // open the date picker to set today.
   const serviceDateIsPast = Boolean(serviceDate && isStaleServiceDate(serviceDate));
   const pastDateWarningEl = serviceDateIsPast ? (
     <div
-      onClick={() => { setPendingModeAfterDate(mode); setShowServiceDatePicker(true); }}
+      onClick={() => {
+        const liveCount = (tablesRef.current || []).filter(tableHasServiceContent).length;
+        if (liveCount > 0) {
+          if (typeof window === "undefined"
+              || window.confirm(`This service is LIVE under a past date. Re-date it to today and KEEP all ${liveCount} table(s)?`)) {
+            redateLiveServiceForward();
+          }
+          return;
+        }
+        setPendingModeAfterDate(mode); setShowServiceDatePicker(true);
+      }}
       style={{
         fontFamily: FONT, cursor: "pointer", background: tokens.red.bg,
         borderBottom: `2px solid ${tokens.red.border}`, color: tokens.red.text,
@@ -4405,12 +4548,37 @@ export default function App() {
   const serviceDatePickerEl = showServiceDatePicker ? (
     <ServiceDatePicker
       appName={effectiveAppName}
-      defaultDate={toLocalDateISO()}
+      // The SERVICE day, not the calendar day: after midnight (before the
+      // 06:00 rollover) tonight's service still files under yesterday's date —
+      // defaulting to the calendar date filed a post-midnight start under the
+      // wrong day and split the night across two archives.
+      defaultDate={currentServiceDay()}
       defaultSession={activeServiceSession}
       reservations={reservations}
       onConfirm={async (date, session = "dinner") => {
-        persistServiceSession(session);
-        await persistServiceDate(date);
+        // A same-day session flip over a LIVE board is a real lifecycle
+        // moment, not a relabel: silently flipping filed the still-seated
+        // lunch tables under "… – DINNER" and lunch itself was never
+        // archived. Offer the honest handover: end (archive & clear) the
+        // running session first, then start the new one fresh.
+        const prevSession = activeServiceSessionRef.current;
+        const sessionFlip = date && date === serviceDateRef.current
+          && (session === "lunch" || session === "dinner") && session !== prevSession;
+        if (sessionFlip) {
+          const liveCount = (tablesRef.current || []).filter(tableHasServiceContent).length;
+          if (liveCount > 0 && typeof window !== "undefined"
+              && window.confirm(
+                `Switching to ${session.toUpperCase()} while ${liveCount} table(s) are still live from ${prevSession.toUpperCase()}.\n\n`
+                + `OK — end ${prevSession.toUpperCase()} now (archive & clear), then start ${session.toUpperCase()} fresh.\n`
+                + `Cancel — keep the board and relabel the running service as ${session.toUpperCase()}.`,
+              )) {
+            await archiveAndClearAll({ skipConfirm: true });
+          }
+        }
+        // ONE lifecycle write carries date + session + fresh identity —
+        // never two racing writes to the same settings key.
+        const saved = await persistServiceDate(date, session);
+        if (!saved?.ok) return; // cancelled/store failure — keep the picker open
         setShowServiceDatePicker(false);
         const target = pendingModeAfterDate;
         setPendingModeAfterDate(null);
@@ -4479,7 +4647,6 @@ export default function App() {
       serviceDate={serviceDate}
       activeServiceSession={activeServiceSession}
       onSetServiceDate={persistServiceDate}
-      onSetServiceSession={persistServiceSession}
       onOpenArchive={() => setArchiveOpen(true)}
       courseQuickNotes={courseQuickNotes}
       profiles={profilesState.profiles}
@@ -4687,7 +4854,13 @@ export default function App() {
         onUpdateQuickAccess={updateQuickAccess}
         aperitifOptions={aperitifOptions}
         floorMaps={floorMapsState}
-        floorReservations={serviceReservations}
+        // Layout-switch planning must see MORE than the live session's
+        // bookings: switching the layout during lunch also has to re-resolve
+        // and conflict-check tonight's dinner and every future-dated
+        // reservation, or they surface as NEEDS TABLE only when their service
+        // starts — exactly the mid-service scramble the confirm flow exists
+        // to prevent. planLayoutSwitch keys conflicts per session already.
+        floorReservations={layoutPlanningReservations}
         boardTables={displayTables}
         onUpdateFloorMaps={updateFloorMaps}
         onApplyLayoutSwitch={applyLayoutSwitchRows}
@@ -4753,11 +4926,15 @@ export default function App() {
                   {serviceDateIsPast ? "⚠ " : ""}{new Date(serviceDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}
                 </span>
               )}
-              <span style={{
-                fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em",
-                textTransform: "uppercase", color: tokens.ink[2], fontWeight: 600,
-                border: `1px solid ${tokens.ink[4]}`, padding: "2px 7px", borderRadius: 0,
-              }}>{activeServiceSession.toUpperCase()}</span>
+              <span
+                title="Click to switch lunch / dinner (opens the service picker)"
+                onClick={() => { setPendingModeAfterDate(mode); setShowServiceDatePicker(true); }}
+                style={{
+                  fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em",
+                  textTransform: "uppercase", color: tokens.ink[2], fontWeight: 600,
+                  border: `1px solid ${tokens.ink[4]}`, padding: "2px 7px", borderRadius: 0,
+                  cursor: "pointer",
+                }}>{activeServiceSession.toUpperCase()}</span>
               {(() => {
                 const seatedNow = tables.filter(t => t.active).filter(isPrimary).length;
                 const guestsNow = tables.filter(t => t.active).filter(isPrimary).reduce((a, t) => a + (t.guests || 0), 0);

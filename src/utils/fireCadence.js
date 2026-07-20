@@ -5,29 +5,35 @@
 
 import { parseHHMM } from "./tableHelpers.js";
 
-// Normalize an ordered list of HH:MM stamps into monotonically increasing
-// minute values, adding 24h whenever a step goes backwards (a dinner service
-// legitimately crosses midnight).
+// Normalize a list of HH:MM stamps onto one service-night timeline, adding
+// 24h only when a step goes backwards by MORE than 12h — that shape is the
+// service genuinely crossing midnight (23:50 → 00:20). A SMALL backwards step
+// is an out-of-menu-order fire (the kitchen fired C3 before C2): it must keep
+// its true time. The old any-backwards wrap shifted such a stamp +24h, which
+// poisoned every later gap and the night's duration — one out-of-order tap
+// silently discarded the whole table's timing samples.
 export function toMonotonicMinutes(stamps) {
   const out = [];
-  let prev = null;
+  let hi = null;
   for (const s of stamps) {
     let m = parseHHMM(s);
     if (m == null) continue;
-    while (prev != null && m < prev) m += 24 * 60;
+    if (hi != null && m < hi && hi - m > 12 * 60) m += 24 * 60;
     out.push(m);
-    prev = m;
+    hi = hi == null ? m : Math.max(hi, m);
   }
   return out;
 }
 
 // Fire intervals for one table tonight: arrival → first fire, then each
-// fire → fire gap. Gaps over 3h are discarded as stale/garbage data.
+// fire → fire gap, in CHRONOLOGICAL order (courses can fire out of menu
+// order — cadence is about real elapsed time between fires, not menu
+// position). Gaps over 3h are discarded as stale/garbage data.
 export function fireGapsForTable(table, courses) {
   const stamps = [];
   if (table?.arrivedAt) stamps.push(table.arrivedAt);
   (courses || []).forEach(c => { if (c.firedAt) stamps.push(c.firedAt); });
-  const mins = toMonotonicMinutes(stamps);
+  const mins = toMonotonicMinutes(stamps).sort((a, b) => a - b);
   const gaps = [];
   for (let i = 1; i < mins.length; i++) {
     const g = mins[i] - mins[i - 1];
@@ -79,7 +85,10 @@ export function estimateNextFire({ table, courses, roomGaps = [], historyGaps = 
   const stamps = [];
   if (table?.arrivedAt) stamps.push(table.arrivedAt);
   fired.forEach(c => stamps.push(c.firedAt));
-  const lastFireMin = toMonotonicMinutes(stamps).pop();
+  const mins = toMonotonicMinutes(stamps);
+  // The LATEST fire anchors the prediction — with out-of-menu-order fires the
+  // last list entry is not necessarily the latest time.
+  const lastFireMin = mins.length ? Math.max(...mins) : null;
   if (lastFireMin == null) return null;
 
   let nowMin = now.getHours() * 60 + now.getMinutes();

@@ -189,12 +189,37 @@ function finishServicePayload(crud) {
   const archive = archiveOps.length === 1 ? buildRow(archiveOps[0], workspaceId) : null;
   if (archive && (!archive.id || !archive.date || !archive.label)) return null;
 
+  // Engage the RPC's identity guard: the settings op's tracked previousValues
+  // (trackPrevious in AppSchema) still hold the {date, startedAt} of the
+  // service the ENDING DEVICE saw when it blanked service_date. The local
+  // check in finishServiceLocally() can only compare against the local DB —
+  // stale by definition on an offline device — so without these params a
+  // finish queued during an outage replayed unguarded and could blank a newer
+  // service that started while the device was away. With them, the server
+  // answers { superseded: true } instead of wiping (see uploadData).
+  // Legacy batches without previousValues fall back to the unguarded call.
+  let expectedStartedAt = null;
+  let expectedDate = null;
+  const prevState = convertValue(
+    "service_settings", "state", settingOps[0].previousValues?.state,
+  );
+  if (prevState && typeof prevState === "object" && !Array.isArray(prevState)) {
+    if (typeof prevState.startedAt === "string" && prevState.startedAt) {
+      expectedStartedAt = prevState.startedAt;
+    }
+    if (typeof prevState.date === "string" && prevState.date) {
+      expectedDate = prevState.date;
+    }
+  }
+
   return {
     p_workspace_id: workspaceId,
     p_archive_id: archive?.id || null,
     p_archive_date: archive?.date || null,
     p_archive_label: archive?.label || null,
     p_archive_state: archive?.state || null,
+    p_expected_started_at: expectedStartedAt,
+    p_expected_date: expectedDate,
   };
 }
 
@@ -315,8 +340,18 @@ export class SupabaseConnector {
 
     const finishPayload = finishServicePayload(transaction.crud);
     if (finishPayload) {
-      const { error } = await supabase.rpc("archive_and_finish_service", finishPayload);
+      const { data, error } = await supabase.rpc("archive_and_finish_service", finishPayload);
       if (error) throw error;
+      if (data && typeof data === "object" && data.superseded === true) {
+        // The store already holds a NEWER service than the one this queued
+        // finish was ending: the guard refused the wipe. The archive (when
+        // present) was still filed server-side; the queued blanks are dropped
+        // and this device adopts the live service on the next sync-down.
+        console.warn(
+          "[PowerSync] queued end-of-service was superseded by a newer service — board wipe skipped.",
+          finishPayload.p_archive_label || "",
+        );
+      }
       await transaction.complete();
       return;
     }

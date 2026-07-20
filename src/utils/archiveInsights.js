@@ -7,7 +7,7 @@
 
 import { getVisibleCoursesForTable } from "./courseProgress.js";
 import { fireGapsForTable, median, toMonotonicMinutes } from "./fireCadence.js";
-import { mergeTableGroups } from "./tableHelpers.js";
+import { mergeTableGroups, parseHHMM } from "./tableHelpers.js";
 import { celebrationKeysFromCourses } from "./menuUtils.js";
 
 // A party seated across several tables (a "group") has the full reservation
@@ -23,6 +23,22 @@ const partyTables = (entry) => mergeTableGroups(
   celebrationKeysFromCourses(entry?.state?.menuCourses || []),
 );
 const tableGuests = (t) => Number(t?._groupGuests ?? t?.guests) || 0;
+
+// A party that actually SAT: arrival/kitchen markers, or seats carrying real
+// service content (pairings/drinks — staff served them even if nobody tapped
+// "seat"). The archive also files never-arrived reservations (a templated
+// resName/resTime row with blank seats) — a no-show must not count as covers
+// or dilute the pairing percentage.
+const seatHasContent = (s) => seatHasPairing(s)
+  || ["aperitifs", "glasses", "cocktails", "spirits", "beers"]
+    .some((k) => (s?.[k] || []).filter(Boolean).length > 0);
+const tableWasSeated = (t) => Boolean(
+  t && (t.active || t.arrivedAt
+    || (t.kitchenLog && Object.keys(t.kitchenLog).length > 0)
+    || t.kitchenArchived
+    || (t.bottleWines || []).length > 0
+    || (t.seats || []).some(seatHasContent)),
+);
 
 const normName = (v) => String(v || "").trim().toLowerCase();
 const normMenuKey = (v) => String(v || "").trim().toLowerCase() || "*";
@@ -54,32 +70,49 @@ export function archiveEntryStats(entry) {
   };
 
   for (const t of tables) {
+    // No-shows (templated reservation, nobody arrived) are filed in the
+    // archive too — they are not covers, and their blank templated seats
+    // must not dilute the pairing percentage.
+    if (!tableWasSeated(t)) continue;
     stats.covers += tableGuests(t);
-    for (const s of t?.seats || []) {
-      stats.seats += 1;
-      if (seatHasPairing(s)) stats.paired += 1;
-    }
+    // Pairing uptake counts GUESTS: a merged group's primary row carries the
+    // concatenated member seats, including blank placeholder seats that
+    // represent nobody — capping at the party size keeps the denominator
+    // honest (paired can never exceed the people at the table).
+    const guestCount = tableGuests(t);
+    const seatList = t?.seats || [];
+    const pairedSeats = seatList.filter(seatHasPairing).length;
+    stats.seats += guestCount > 0 ? guestCount : seatList.length;
+    stats.paired += guestCount > 0 ? Math.min(pairedSeats, guestCount) : pairedSeats;
 
     const courses = getVisibleCoursesForTable(t, menuCourses);
     stats.gaps.push(...fireGapsForTable(t, courses));
 
     // Per-course gap attribution: the wait that *ended* when course X fired
     // belongs to course X — that's the course the kitchen took that long on.
+    // Walked in CHRONOLOGICAL order: courses can fire out of menu order, and
+    // walking menu order attributed nonsense gaps (or discarded the samples).
     const fired = courses.filter(c => c.firedAt);
     const stamps = [];
     if (t?.arrivedAt) stamps.push({ name: null, at: t.arrivedAt });
     fired.forEach(c => stamps.push({ name: c.name, at: c.firedAt }));
-    const mins = toMonotonicMinutes(stamps.map(x => x.at));
-    for (let i = 1; i < mins.length && i < stamps.length; i++) {
-      const g = mins[i] - mins[i - 1];
+    // Drop unparseable stamps FIRST so names stay aligned with their minutes
+    // (toMonotonicMinutes silently skips stamps it can't parse).
+    const valid = stamps.filter(x => parseHHMM(x.at) != null);
+    const mins = toMonotonicMinutes(valid.map(x => x.at));
+    const timeline = valid
+      .map((x, i) => ({ name: x.name, min: mins[i] }))
+      .sort((a, b) => a.min - b.min);
+    for (let i = 1; i < timeline.length; i++) {
+      const g = timeline[i].min - timeline[i - 1].min;
       if (g < 0 || g > 180) continue;
-      const name = stamps[i].name;
+      const name = timeline[i].name;
       if (!name) continue;
       if (!stats.courseGaps.has(name)) stats.courseGaps.set(name, []);
       stats.courseGaps.get(name).push(g);
     }
-    if (mins.length >= 2 && t?.arrivedAt) {
-      const dur = mins[mins.length - 1] - mins[0];
+    if (timeline.length >= 2 && t?.arrivedAt) {
+      const dur = timeline[timeline.length - 1].min - timeline[0].min;
       if (dur > 0 && dur <= 12 * 60) stats.durations.push(dur);
     }
   }

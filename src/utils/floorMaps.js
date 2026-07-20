@@ -427,11 +427,16 @@ export const setTableShape = (state, mapId, label, shape) =>
 // Labels are the identity every other structure points at (statuses, merge
 // members, the renumber flow) — a rename must stay non-empty and unique in
 // its map. Strips keyed by the old label simply orphan (sanitizer-tolerated).
+// Uniqueness includes MERGE MEMBERS (same rule as addTable): renaming a
+// table to "T2" beside the T2-3 merge would win the exact-label reservation
+// resolution and silently shadow the merge — every slot-2 booking would
+// resolve to the renamed table (wrong seats, wrong SET tile, wrong cap).
 export function renameTable(state, mapId, label, nextLabel) {
   const clean = String(nextLabel || "").trim().toUpperCase();
   if (!clean || clean === label) return state;
   return patchMaps(state, mapId, (map) =>
-    map.tables.some((t) => t.label === clean)
+    map.tables.some((t) => t.label === clean
+      || (t.label !== label && Array.isArray(t.members) && t.members.includes(clean)))
       ? map
       : { ...map, tables: map.tables.map((t) => (t.label === label ? { ...t, label: clean } : t)) });
 }

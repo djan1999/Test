@@ -1,7 +1,7 @@
 /**
  * Menu data utility functions shared across the application.
  */
-import { DIETARY_KEYS } from "../constants/dietary.js";
+import { DIETARY_KEYS, RESTRICTIONS } from "../constants/dietary.js";
 
 export const firstFilled = (...vals) => vals.find(v => String(v ?? "").trim()) ?? "";
 
@@ -150,10 +150,13 @@ export const applyMenuOverride = (course, overrides, seatId = null) => {
   };
 };
 
+// Legacy fixed order — kept as the tail of restrictionPriorityKeys() so keys
+// referenced by old data but absent from the live vocabulary still resolve.
 export const RESTRICTION_PRIORITY_KEYS = [
-  "vegan","veg","pescetarian","gluten","dairy","nut","shellfish",
-  "no_red_meat","no_pork","no_game","no_offal","egg_free","no_alcohol",
-  "no_garlic_onion","halal","low_fodmap"
+  "gluten","dairy","nut","shellfish","egg_free","no_garlic_onion",
+  "vegan","veg","pescetarian",
+  "no_red_meat","no_pork","no_game","no_offal","no_alcohol",
+  "halal","low_fodmap"
 ];
 
 export const RESTRICTION_COLUMN_MAP = {
@@ -175,6 +178,45 @@ export const RESTRICTION_COLUMN_MAP = {
   low_fodmap: "low_fodmap",
 };
 
+// Reverse map (DB column → runtime key) so a variant stored under either form
+// resolves: legacy rows, and vocabulary entries re-added under a column-name
+// slug ("gluten_free") after the built-in ("gluten") was deleted.
+export const RESTRICTION_COLUMN_TO_KEY = Object.fromEntries(
+  Object.entries(RESTRICTION_COLUMN_MAP)
+    .filter(([key, col]) => key !== col)
+    .map(([key, col]) => [col, key]),
+);
+
+// The order substitutions are applied in, built from the LIVE vocabulary so
+// admin-added custom restrictions participate at all (the fixed list silently
+// ignored them — a configured variant for a custom key never reached a menu
+// or ticket). ALLERGIES OUTRANK LIFESTYLE: the old order put vegan/veg first,
+// so a vegan + nut-allergic guest got the vegan variant and the nut allergy
+// was silently never applied — a preference beat a safety constraint.
+// Legacy keys not in the live vocabulary are appended so old data still maps.
+const GROUP_RANK = { allergy: 0, dietary: 1, other: 2 };
+export function restrictionPriorityKeys() {
+  const seen = new Set();
+  const live = RESTRICTIONS
+    .map((r, i) => ({ key: r.key, rank: GROUP_RANK[r.group] ?? 1, i }))
+    .sort((a, b) => (a.rank - b.rank) || (a.i - b.i))
+    .map((r) => r.key)
+    .filter((key) => key && !seen.has(key) && seen.add(key));
+  return [...live, ...RESTRICTION_PRIORITY_KEYS.filter((key) => !seen.has(key))];
+}
+
+// A course's variant for one restriction key, tolerant of every storage form:
+// the runtime key ("gluten"), the DB column name ("gluten_free"), and — when
+// the key IS a column-name slug — the canonical runtime key behind it.
+const courseVariantFor = (courseRestrictions, key, suffix = "") => {
+  const mapped = RESTRICTION_COLUMN_MAP[key] || key;
+  const alt = RESTRICTION_COLUMN_TO_KEY[key] || null;
+  return courseRestrictions[`${key}${suffix}`]
+    || (mapped !== key ? courseRestrictions[`${mapped}${suffix}`] : null)
+    || (alt ? courseRestrictions[`${alt}${suffix}`] : null)
+    || null;
+};
+
 export function applyCourseRestriction(course, activeRestrictions, lang = "en") {
   const baseDish = course?.menu || null;
   if (!baseDish) return null;
@@ -186,22 +228,24 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
 
   const courseRestrictions = course?.restrictions || {};
 
-  for (const key of RESTRICTION_PRIORITY_KEYS) {
-    if (!(activeRestrictions || []).includes(key)) continue;
-    const mapped = RESTRICTION_COLUMN_MAP[key] || key;
+  // Normalize the guest's keys to runtime form so "gluten_free" (a column-name
+  // slug on old data / a re-added vocabulary entry) and "gluten" are the SAME
+  // restriction, whichever form the seat chip carries.
+  const active = new Set((activeRestrictions || [])
+    .map((k) => RESTRICTION_COLUMN_TO_KEY[k] || k));
 
-    // Runtime courses (from supabaseRowToCourse / parseMenuRow / CourseEditor)
-    // key their restriction variants by the UI key, e.g. "gluten". The mapped
-    // DB column name, e.g. "gluten_free", is only seen on a raw imported row,
-    // so it is just a fallback. Looking up only the mapped key meant gluten /
-    // dairy / nut / shellfish variants silently never matched once
-    // setRestrictionsCache() switched DIETARY_KEYS to UI keys — leaving
-    // restricted guests on the original dish and absent from the allergy sheet.
-    const variant = courseRestrictions[key] || courseRestrictions[mapped] || null;
+  // Live-vocabulary order, allergies first — see restrictionPriorityKeys().
+  for (const key of restrictionPriorityKeys()) {
+    if (!active.has(RESTRICTION_COLUMN_TO_KEY[key] || key)) continue;
+
+    // courseVariantFor is tolerant of every storage form (runtime key, DB
+    // column name, or a column-name slug minted by re-adding a built-in) —
+    // looking up only one form silently dropped configured variants.
+    const variant = courseVariantFor(courseRestrictions, key);
     if (!variant) continue;
 
     const siVariant = lang === "si"
-      ? (courseRestrictions[`${key}_si`] || courseRestrictions[`${mapped}_si`] || null)
+      ? courseVariantFor(courseRestrictions, key, "_si")
       : null;
     const next = siVariant || variant;
     const altName = String(next?.name || "").trim();
@@ -223,18 +267,15 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
  * Returns null when the dish is standard and no note applies.
  */
 export function deriveKitchenNote(course, restrKey, baseName = "", baseSub = "") {
-  const mapped = RESTRICTION_COLUMN_MAP[restrKey] || restrKey;
+  const cr = course.restrictions || {};
 
-  // Explicit note — check both the mapped and raw key forms
+  // Explicit note — tolerant of every key storage form
   const explicit =
-    course.restrictions?.[`${mapped}_note`] ||
-    course.restrictions?.[`${restrKey}_note`] ||
-    course.restrictions?.[mapped]?.kitchen_note ||
-    course.restrictions?.[restrKey]?.kitchen_note;
+    courseVariantFor(cr, restrKey, "_note") || courseVariantFor(cr, restrKey)?.kitchen_note;
   if (typeof explicit === "string" && explicit.trim()) return explicit.trim();
 
   // Auto-derive from restriction variant
-  const variant = course.restrictions?.[mapped] || course.restrictions?.[restrKey];
+  const variant = courseVariantFor(cr, restrKey);
   if (!variant) return null;
 
   if (variant.name && variant.name !== baseName) return variant.name;
@@ -267,15 +308,14 @@ export function getCourseMod(course, restrKeys) {
   const baseSub  = String(course?.menu?.sub  || "").trim();
 
   // Priority 1: restriction notes — check all storage patterns (flat _note,
-  // raw-key _note, and nested kitchen_note inside the variant object)
-  for (const key of RESTRICTION_PRIORITY_KEYS) {
-    if (!restrKeys.includes(key)) continue;
-    const mapped = RESTRICTION_COLUMN_MAP[key] || key;
-    const note =
-      course.restrictions?.[`${mapped}_note`] ||
-      course.restrictions?.[`${key}_note`] ||
-      course.restrictions?.[mapped]?.kitchen_note ||
-      course.restrictions?.[key]?.kitchen_note;
+  // raw-key _note, and nested kitchen_note inside the variant object), in the
+  // same allergies-first live-vocabulary order (and the same key
+  // normalization) the substitution uses.
+  const activeKeys = new Set(restrKeys.map((k) => RESTRICTION_COLUMN_TO_KEY[k] || k));
+  for (const key of restrictionPriorityKeys()) {
+    if (!activeKeys.has(RESTRICTION_COLUMN_TO_KEY[key] || key)) continue;
+    const cr = course.restrictions || {};
+    const note = courseVariantFor(cr, key, "_note") || courseVariantFor(cr, key)?.kitchen_note;
     if (note) return String(note).toUpperCase();
   }
 
@@ -341,6 +381,7 @@ export function courseRestrictionModCounts(course, seats, restrictions) {
   const counts = {};
   const bump = (mod) => { if (mod) counts[mod] = (counts[mod] || 0) + 1; };
   // Assigned dietaries: one guest per seat, all that seat's keys together.
+  const seatIds = new Set((seats || []).map((s) => s.id));
   for (const seat of seats || []) {
     const keys = (restrictions || [])
       .filter(r => r && r.note && r.pos === seat.id)
@@ -349,8 +390,11 @@ export function courseRestrictionModCounts(course, seats, restrictions) {
   }
   // Unassigned dietaries: each entry is one guest-to-be — counted individually
   // so the ticket shows the real headcount, not once per chair at the table.
+  // A pin that matches NO live seat id (non-contiguous chair-identity ids, or
+  // a mid-service resize dropped that P) counts here too — it used to be
+  // skipped by BOTH loops and the allergy vanished from the mod counts.
   for (const r of restrictions || []) {
-    if (!r || !r.note || r.pos != null) continue;
+    if (!r || !r.note || (r.pos != null && seatIds.has(r.pos))) continue;
     bump(getCourseMod(course, [r.note]));
   }
   return Object.keys(counts).length ? counts : null;

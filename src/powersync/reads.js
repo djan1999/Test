@@ -211,16 +211,24 @@ export async function readActiveArchivesForDate(date) {
 // queries the Archive modal runs (active newest-first ≤60, trash newest-first
 // ≤30). state jsonb is revived to an object.
 export async function readServiceArchive() {
-  const rows = await getPowerSync().getAll(
-    "SELECT id, date, label, state, created_at, deleted_at, workspace_id FROM service_archive WHERE workspace_id = ? ORDER BY created_at DESC",
-    [getWorkspaceId()],
-  );
-  const mapped = rows.map(reviveRow);
+  // LIMIT in SQL, not post-parse: each archive row's `state` is a full board
+  // snapshot (easily 100KB+), and the archive grows forever — selecting the
+  // whole table and JSON-parsing every row just to slice the top 60 made the
+  // Archive open slower every week of operation on the weakest device.
+  const ws = getWorkspaceId();
+  const db = getPowerSync();
+  const [activeRows, deletedRows] = await Promise.all([
+    db.getAll(
+      "SELECT id, date, label, state, created_at, deleted_at, workspace_id FROM service_archive WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 60",
+      [ws],
+    ),
+    db.getAll(
+      "SELECT id, date, label, state, created_at, deleted_at, workspace_id FROM service_archive WHERE workspace_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT 30",
+      [ws],
+    ),
+  ]);
   return {
-    active: mapped.filter((r) => r.deleted_at == null).slice(0, 60),
-    deleted: mapped
-      .filter((r) => r.deleted_at != null)
-      .sort((a, b) => String(b.deleted_at).localeCompare(String(a.deleted_at)))
-      .slice(0, 30),
+    active: activeRows.map(reviveRow),
+    deleted: deletedRows.map(reviveRow),
   };
 }

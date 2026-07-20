@@ -1,25 +1,8 @@
-export const DEFAULT_DIETARY_KEYS = [
-  "veg",
-  "vegan",
-  "pescetarian",
-  "gluten_free",
-  "dairy_free",
-  "nut_free",
-  "shellfish_free",
-  "no_red_meat",
-  "no_pork",
-  "no_game",
-  "no_offal",
-  "egg_free",
-  "no_alcohol",
-  "no_garlic_onion",
-  "halal",
-  "low_fodmap",
-];
-
+// In-group order is also substitution priority (see restrictionPriorityKeys)
+// — vegan precedes veg so the stricter diet wins when a guest carries both.
 export const DEFAULT_RESTRICTIONS = [
-  { key: "veg", label: "Vegetarian", emoji: "🥦", group: "dietary" },
   { key: "vegan", label: "Vegan", emoji: "🌱", group: "dietary" },
+  { key: "veg", label: "Vegetarian", emoji: "🥦", group: "dietary" },
   { key: "pescetarian", label: "Pescetarian", emoji: "🐟", group: "dietary" },
   { key: "no_red_meat", label: "No Red Meat", emoji: "🚫🥩", group: "dietary" },
   { key: "no_pork", label: "No Pork", emoji: "🚫🐷", group: "dietary" },
@@ -35,6 +18,15 @@ export const DEFAULT_RESTRICTIONS = [
   { key: "halal", label: "Halal", emoji: "☪️", group: "other" },
   { key: "low_fodmap", label: "Low FODMAP", emoji: "📋", group: "other" },
 ];
+
+// ONE canonical key space, derived from the vocabulary above. This list used
+// to carry the DB column names (gluten_free, dairy_free, …) while the
+// vocabulary used the short runtime keys (gluten, dairy, …) — so on a device
+// that hadn't loaded the workspace vocabulary yet, course mapping looked up
+// RESTRICTION_COLUMN_MAP["gluten_free"] (undefined), nulled all four allergy
+// variants, and cached the broken mapping. The keys must always be the
+// vocabulary's keys; the column translation lives in RESTRICTION_COLUMN_MAP.
+export const DEFAULT_DIETARY_KEYS = DEFAULT_RESTRICTIONS.map((r) => r.key);
 
 export const RESTRICTION_GROUPS = {
   dietary: "Dietary",

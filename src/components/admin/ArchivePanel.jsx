@@ -4,7 +4,8 @@ import { FONT } from "./adminStyles.js";
 import { supabase } from "../../lib/supabaseClient.js";
 import { fetchArchive, archiveSetDeleted, archiveSetAllDeleted, archivePurgeTrash } from "../../lib/archiveStore.js";
 import TableSummaryCard from "../modals/TableSummaryCard.jsx";
-import { optionalPairingsFromCourses } from "../../utils/menuUtils.js";
+import { optionalPairingsFromCourses, celebrationKeysFromCourses } from "../../utils/menuUtils.js";
+import { mergeTableGroups } from "../../utils/tableHelpers.js";
 
 // ── ArchivePanel — view, restore, delete saved service archives ──
 export default function ArchivePanel({ optionalExtras = [] }) {
@@ -107,9 +108,15 @@ export default function ArchivePanel({ optionalExtras = [] }) {
 
       {entries.map(entry => {
         const isExp       = expanded === entry.id;
-        const entryTables = entry.state?.tables || [];
-        const entryOptionalPairings = optionalPairingsFromCourses(entry.state?.menuCourses || []);
-        const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
+        // Merge tableGroup members exactly like ArchiveModal: the reconcile
+        // stamps the FULL party size on EVERY member row, so summing the raw
+        // list double-counted a 6-top on T02+T03 as 12 guests and rendered a
+        // ghost card of blank placeholder seats for the secondary table —
+        // exactly the numbers the owner audits a night with.
+        const isExpEntryCourses = entry.state?.menuCourses || [];
+        const entryTables = mergeTableGroups(entry.state?.tables || [], celebrationKeysFromCourses(isExpEntryCourses));
+        const entryOptionalPairings = optionalPairingsFromCourses(isExpEntryCourses);
+        const totalGuests = entryTables.reduce((a, t) => a + (t._groupGuests || t.guests || 0), 0);
         return (
           <div key={entry.id} style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, marginBottom: 8, overflow: "hidden" }}>
             <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: isExp ? tokens.ink.bg : tokens.neutral[0] }}>
@@ -158,8 +165,8 @@ export default function ArchivePanel({ optionalExtras = [] }) {
           {showTrash && (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {deleted.map(entry => {
-                const entryTables = entry.state?.tables || [];
-                const totalGuests = entryTables.reduce((a, t) => a + (t.guests || 0), 0);
+                const entryTables = mergeTableGroups(entry.state?.tables || [], celebrationKeysFromCourses(entry.state?.menuCourses || []));
+                const totalGuests = entryTables.reduce((a, t) => a + (t._groupGuests || t.guests || 0), 0);
                 const deletedDate = entry.deleted_at ? new Date(entry.deleted_at).toLocaleDateString() : "";
                 return (
                   <div key={entry.id} style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", background: tokens.tint.parchment, opacity: 0.8 }}>

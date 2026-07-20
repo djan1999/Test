@@ -5,7 +5,7 @@ import {
   remapTableGroup, reservationTableIds, mergeRestrictionPositions, swapSeatData,
   moveSeatOnFloor, seatFloorPosition, restrictionsAtFloorPositions,
   materializeFloorPositions, applyLayoutSwitchToTables, renameFloorPositionsKey,
-  startedTablePatchFromReservation,
+  startedTablePatchFromReservation, tableIsGroupMember, moveTableRows, swapTableRows,
 } from "../utils/tableHelpers.js";
 
 describe("startedTablePatchFromReservation (mid-service reservation edits reach the live table)", () => {
@@ -777,5 +777,91 @@ describe("tableGroupLabel", () => {
   });
   it("sorts group ids ascending regardless of input order", () => {
     expect(tableGroupLabel({ id: 5, tableGroup: [5, 2] })).toBe("02-05");
+  });
+});
+
+describe("tableIsGroupMember — the group-move guard predicate", () => {
+  const board = [
+    { id: 2, resName: "Novak", tableGroup: [2, 3] },
+    { id: 3, resName: "Novak", tableGroup: [2, 3] },
+    { id: 5, resName: "Kovač", tableGroup: [] },
+    { id: 7, tableGroup: [] },
+  ];
+
+  it("flags every member of a multi-table group, by row and by membership", () => {
+    expect(tableIsGroupMember(board, 2)).toBe(true);
+    expect(tableIsGroupMember(board, 3)).toBe(true);
+    expect(tableIsGroupMember(board, "3")).toBe(true);
+  });
+
+  it("does not flag single-table bookings or free tables", () => {
+    expect(tableIsGroupMember(board, 5)).toBe(false);
+    expect(tableIsGroupMember(board, 7)).toBe(false);
+    expect(tableIsGroupMember([], 2)).toBe(false);
+  });
+
+  it("flags a member id even when its own row lost the group (desynced board)", () => {
+    const desynced = [
+      { id: 2, resName: "Novak", tableGroup: [2, 3] },
+      { id: 3, resName: "Novak", tableGroup: [] },
+    ];
+    expect(tableIsGroupMember(desynced, 3)).toBe(true);
+  });
+
+  // WHY the guard exists — the vanish hazard, pinned executable. Moving one
+  // member of a group remaps tableGroup only on the touched rows, so after
+  // the move NO row satisfies the board's primary filter
+  // (id === min(tableGroup)): the party renders nowhere. If a group-aware
+  // move ever replaces the guard, this test must be replaced by one asserting
+  // every reservation still renders exactly one primary card.
+  it("documents the hazard: partial group move leaves no renderable primary row", () => {
+    const isPrimary = (t) => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup.map(Number));
+    const grouped = [
+      { id: 2, resName: "Novak", active: true, tableGroup: [2, 3] },
+      { id: 3, resName: "Novak", active: true, tableGroup: [2, 3] },
+      { id: 5, tableGroup: [] },
+    ];
+    const before = grouped.filter(t => t.resName && isPrimary(t));
+    expect(before.map(t => t.id)).toEqual([2]);
+
+    const after = moveTableRows(grouped, 2, 5); // move the primary to free T5
+    const rendered = after.filter(t => t.resName && isPrimary(t));
+    expect(rendered).toHaveLength(0); // ← the party vanished
+
+    const swappedBoard = swapTableRows(grouped, 3, 5); // swap a member out
+    const renderedAfterSwap = swappedBoard.filter(t => t.resName && isPrimary(t));
+    // Only the (now desynced) old primary still renders; the moved member is
+    // orphaned on T5 with a group that no longer contains it.
+    expect(renderedAfterSwap.map(t => t.id)).toEqual([2]);
+  });
+});
+
+describe("mergeRestrictionPositions — kitchen-added entries survive reservation rebuilds", () => {
+  it("unions kitchenAdded entries back in after a reservation edit", () => {
+    const prev = [
+      { note: "gluten", pos: 2 },
+      { note: "nut", pos: 3, kitchenAdded: true },
+    ];
+    const next = [{ note: "gluten", pos: null }]; // waiter renamed the booking; resv only knows gluten
+    const merged = mergeRestrictionPositions(prev, next);
+    expect(merged).toContainEqual({ note: "gluten", pos: 2 }); // pos carried
+    expect(merged).toContainEqual({ note: "nut", pos: 3, kitchenAdded: true }); // kitchen entry KEPT
+  });
+
+  it("dedupes when the reservation later records the same kitchen entry", () => {
+    const prev = [{ note: "shellfish", pos: 1, kitchenAdded: true }];
+    const next = [{ note: "shellfish", pos: 1 }];
+    const merged = mergeRestrictionPositions(prev, next);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].note).toBe("shellfish");
+  });
+
+  it("kitchen-added positions are not donated to unpositioned reservation entries", () => {
+    const prev = [{ note: "dairy", pos: 4, kitchenAdded: true }];
+    const next = [{ note: "dairy", pos: null }]; // a DIFFERENT dairy guest from the booking
+    const merged = mergeRestrictionPositions(prev, next);
+    // reservation entry stays unassigned; kitchen's stays pinned at P4
+    expect(merged).toContainEqual({ note: "dairy", pos: null });
+    expect(merged).toContainEqual({ note: "dairy", pos: 4, kitchenAdded: true });
   });
 });

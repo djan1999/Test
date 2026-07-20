@@ -343,17 +343,30 @@ export const mergeTableGroups = (tables = [], ignoreExtraKeys = null) => {
 // reset itself after a few seconds" bug). Keep the reservation's restriction
 // SET, but carry each board-assigned `pos` onto a matching (same note)
 // reservation restriction that doesn't already specify one.
+//
+// Entries the KITCHEN added directly to the table (kitchenAdded: true —
+// KitchenBoard's quick allergy drawer) exist only in table state, never on
+// the reservation. Rebuilding purely from the reservation's set deleted them
+// on ANY later reservation edit (a rename, a pax fix by a waiter who never
+// saw the kitchen's entry) — and for terrace tickets the reconcile re-runs
+// on every change, so a kitchen-added nut allergy could vanish within
+// seconds with no user action. They are UNIONED back in, deduped against
+// identical reservation entries.
 export const mergeRestrictionPositions = (prev = [], next = []) => {
   const posByNote = {};
-  (Array.isArray(prev) ? prev : []).forEach((r) => {
-    if (r && r.pos != null) (posByNote[r.note] = posByNote[r.note] || []).push(r.pos);
+  const prevList = Array.isArray(prev) ? prev : [];
+  prevList.forEach((r) => {
+    if (r && r.pos != null && !r.kitchenAdded) (posByNote[r.note] = posByNote[r.note] || []).push(r.pos);
   });
-  return (Array.isArray(next) ? next : []).map((r) => {
+  const merged = (Array.isArray(next) ? next : []).map((r) => {
     if (!r || r.pos != null) return r;
     const q = posByNote[r.note];
     if (q && q.length) return { ...r, pos: q.shift() };
     return r;
   });
+  const kitchenKept = prevList.filter((r) => r && r.kitchenAdded === true
+    && !merged.some((m) => m && m.note === r.note && (m.pos ?? null) === (r.pos ?? null)));
+  return kitchenKept.length ? [...merged, ...kitchenKept] : merged;
 };
 
 // Patch for a STARTED table when its reservation is edited mid-service.
@@ -542,6 +555,20 @@ export const repointReservation = (resv, fromId, toId) => {
   const g = Array.isArray(resv?.data?.tableGroup) ? resv.data.tableGroup : [];
   const data = g.length ? { ...resv.data, tableGroup: remapTableGroup(g, a, b) } : resv?.data;
   return { table_id, data };
+};
+
+// True when a table id participates in any multi-member tableGroup on the
+// board — as a grouped row itself or listed inside another row's group.
+// Move/swap must refuse such tables: moveTableRows/swapTableRows remap the
+// group only on the two touched rows, so a partial group move desyncs the
+// remaining members' lists and NO row satisfies the board's primary filter
+// (id === min(tableGroup)) — the party stops rendering on the board, the
+// kitchen tickets and the floor.
+export const tableIsGroupMember = (tables, id) => {
+  const n = Number(id);
+  return (tables || []).some(t =>
+    Array.isArray(t?.tableGroup) && t.tableGroup.length > 1
+    && (Number(t.id) === n || t.tableGroup.some(m => Number(m) === n)));
 };
 
 // Pure list transforms behind App's moveTableState / swapTableState setTables

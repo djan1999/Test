@@ -71,6 +71,17 @@ export const serviceDayForActivity = (latestActivityMs) =>
 // A genuinely abandoned service — last touched on a past service day — is still
 // stale and auto-ends normally.
 export const isLiveServiceActivity = (latestActivityMs, now = new Date()) => {
+  if (!Number.isFinite(latestActivityMs)) return false;
+  // Absolute recency guard, clock-skew tolerant: seated activity within the
+  // last 6 hours is a LIVE service no matter what the date math says. The
+  // date comparison runs on the DEVICE's clock/timezone but its verdict
+  // writes shared state — a future-skewed clock (or the owner opening the
+  // app from a timezone ahead) computes "today" as tomorrow, reads the live
+  // service as a past-day leftover, and would archive+clear it for the
+  // whole restaurant while staff touched it minutes ago. The absolute delta
+  // is skew-direction-proof; a genuinely abandoned night (last touch before
+  // the small hours, checked the next morning) is well past 6h.
+  if (Math.abs(now.getTime() - latestActivityMs) < 6 * 3600 * 1000) return true;
   const day = serviceDayForActivity(latestActivityMs);
   return Boolean(day) && !isStaleServiceDate(day, currentServiceDay(now));
 };
