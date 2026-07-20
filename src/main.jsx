@@ -10,6 +10,7 @@ import './styles.css';
 import { registerSW } from 'virtual:pwa-register';
 import { setUpdateReady } from './lib/swUpdate.js';
 import { installGlobalDiagnostics, recordClientDiagnostic } from './lib/clientDiagnostics.js';
+import StagingBoundary from './components/environment/StagingBoundary.jsx';
 
 installGlobalDiagnostics();
 
@@ -64,7 +65,9 @@ if (!rootEl) {
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <StagingBoundary>
+        <App />
+      </StagingBoundary>
     </ErrorBoundary>
   </React.StrictMode>
 );

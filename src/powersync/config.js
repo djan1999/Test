@@ -15,8 +15,10 @@
 // Supabase JWT. The deployed Sync Streams hard-scope each client to ONLY its own
 // workspace(s) via workspace_members, so no cross-tenant data can reach a device.
 export const POWERSYNC_URL =
-  import.meta.env.VITE_POWERSYNC_URL ??
-  "https://6a2edf200ef84ed671a1a45e.powersync.journeyapps.com";
+  String(import.meta.env.VITE_DISABLE_POWERSYNC || "").toLowerCase() === "true"
+    ? ""
+    : import.meta.env.VITE_POWERSYNC_URL ??
+      "https://6a2edf200ef84ed671a1a45e.powersync.journeyapps.com";
 
 // Enabled app-wide: on for every workspace whenever a URL is configured and a
 // workspace is active (Demo and restaurants alike). Per-workspace data isolation
