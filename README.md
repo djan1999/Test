@@ -12,6 +12,11 @@ isolated per **restaurant (workspace)**:
   generic picker remains only for a login deliberately linked to multiple
   workspaces later; normal Milka and Demo logins skip it.
 
+New restaurants can be prepared through the separately gated managed
+onboarding path documented in `docs/MANAGED_ONBOARDING.md`. Platform access is
+a server-side UUID allowlist, and optional operator access to a restaurant is
+still an explicit `workspace_members` row subject to normal tenant RLS.
+
 Every data table carries a `workspace_id`; the `scopedFrom()` helper
 (`src/lib/scopedDb.js`) scopes all reads/writes, realtime is filtered per
 workspace, and the offline write-queue stamps the workspace at enqueue time.

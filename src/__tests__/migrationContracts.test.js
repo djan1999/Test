@@ -20,6 +20,10 @@ const settingCas = fs.readFileSync(
   path.join(ROOT, "supabase/migrations/20260720190556_service_settings_cas.sql"),
   "utf8",
 );
+const managedProvisioning = fs.readFileSync(
+  path.join(ROOT, "supabase/migrations/20260720203553_managed_restaurant_provisioning.sql"),
+  "utf8",
+);
 const schema = fs.readFileSync(path.join(ROOT, "schema.sql"), "utf8");
 const app = fs.readFileSync(path.join(ROOT, "src/App.jsx"), "utf8");
 const syncApi = fs.readFileSync(path.join(ROOT, "api/sync-wines.js"), "utf8");
@@ -48,6 +52,19 @@ describe("database migration contracts", () => {
       expect(source).toContain("reservation.data is not distinct from");
       expect(source).toContain("revoke all on function public.save_reservation_if_current");
       expect(source).toContain("to authenticated, service_role");
+    }
+  });
+
+  it("creates restaurants atomically through a server-only security-invoker RPC", () => {
+    for (const source of [managedProvisioning, schema]) {
+      expect(source).toContain("provision_managed_restaurant");
+      expect(source).toContain("security invoker");
+      expect(source).toContain("from public, anon, authenticated");
+      expect(source).toContain("to service_role");
+      expect(source).toContain("insert into public.workspaces");
+      expect(source).toContain("insert into public.workspace_members");
+      expect(source).toContain("insert into public.service_tables");
+      expect(source).toContain("restaurant_operations_v1");
     }
   });
 
