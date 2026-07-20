@@ -25,6 +25,7 @@ isolated backend variables are explicitly present.
 
 Do not configure production SMS, email, payment, cron, or service-role secrets.
 Use fictional guest data. The lab watermark must be visible throughout testing.
+The inherited nightly catalogue cron is deliberately removed from this branch.
 
 ## Release rule
 
