@@ -19,6 +19,13 @@ Server-only variables:
 - `CRON_SECRET`
 - Optional `SYNC_SECRET`
 - Recommended `APP_URL` for staff invitation redirects.
+- For managed onboarding only: `PLATFORM_ADMIN_USER_IDS` containing trusted
+  Supabase Auth UUIDs (never emails or editable user metadata).
+
+Managed onboarding also requires the browser-visible
+`VITE_ENABLE_MANAGED_ONBOARDING=true`. It defaults to disabled; keep it false
+in production until the preview and tenant-isolation drill in
+`docs/MANAGED_ONBOARDING.md` passes.
 
 Never place a service-role key in a `VITE_*` variable. Vite variables are compiled into code sent to every browser.
 
