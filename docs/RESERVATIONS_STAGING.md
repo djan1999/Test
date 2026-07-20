@@ -17,6 +17,12 @@ settings. Use branch-specific Supabase credentials. Staging fails closed before
 login if its URL resolves to the known production Supabase project or its
 PowerSync URL resolves to the known production instance.
 
+Managed onboarding additionally requires `VITE_ENABLE_MANAGED_ONBOARDING=true`,
+the staging user's UUID in `PLATFORM_ADMIN_USER_IDS`, and the lab URL in
+`APP_URL`. When enabled, signed-in Admin users see **CREATE RESTAURANT** in the
+Admin header. The explicit Vercel rewrite keeps `/platform-onboarding` available
+when the page is opened or refreshed directly.
+
 Vercel preview deployments are treated as staging automatically. A new preview
 therefore renders only the blocking screen until the acknowledgement and
 isolated backend variables are explicitly present.

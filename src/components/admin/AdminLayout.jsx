@@ -18,6 +18,7 @@ import AuditLogPanel from "./AuditLogPanel.jsx";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
 
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
+const MANAGED_ONBOARDING_ENABLED = import.meta.env.VITE_ENABLE_MANAGED_ONBOARDING === "true";
 
 const SECTIONS = [
   { id: "restaurant",  label: "Restaurant Setup",       icon: "R" },
@@ -115,6 +116,7 @@ export default function AdminLayout({
   accessToken = null,
   workspaceId = null,
   currentUserId = null,
+  managedOnboardingEnabled = MANAGED_ONBOARDING_ENABLED,
   // Navigation
   onExit,
 }) {
@@ -157,6 +159,22 @@ export default function AdminLayout({
           <span style={{ fontSize: 10, letterSpacing: isMobile ? 2 : 3, color: tokens.ink[2], textTransform: "uppercase", fontWeight: 700 }}>ADMIN</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 8, flexShrink: 0 }}>
+          {managedOnboardingEnabled && !isMobile && (
+            <a
+              href="/platform-onboarding"
+              aria-label="Create restaurant"
+              title="Create a new restaurant workspace"
+              style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: isMobile ? 1 : 1.5,
+                padding: isMobile ? "12px 10px" : "6px 10px",
+                border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0,
+                background: tokens.charcoal.default, color: tokens.neutral[0],
+                fontWeight: 600, whiteSpace: "nowrap", textDecoration: "none",
+                minHeight: isMobile ? 44 : undefined,
+                display: "inline-flex", alignItems: "center",
+              }}
+            >CREATE RESTAURANT</a>
+          )}
           <span style={{
             fontFamily: FONT, fontSize: isMobile ? 10 : 9, letterSpacing: isMobile ? 1.5 : 2,
             padding: isMobile ? "12px 12px" : "6px 10px",
@@ -187,6 +205,20 @@ export default function AdminLayout({
           background: tokens.neutral[0],
           position: "sticky", top: "calc(env(safe-area-inset-top) + 52px)", zIndex: 49,
         }}>
+          {managedOnboardingEnabled && (
+            <a
+              href="/platform-onboarding"
+              aria-label="Create restaurant"
+              style={{
+                display: "flex", alignItems: "center", flexShrink: 0,
+                padding: "14px 16px", borderRight: `1px solid ${tokens.ink[4]}`,
+                color: tokens.neutral[0], background: tokens.charcoal.default,
+                fontFamily: FONT, fontSize: 10, fontWeight: 600,
+                letterSpacing: 1.2, textTransform: "uppercase",
+                textDecoration: "none", whiteSpace: "nowrap", minHeight: 44,
+              }}
+            >+ RESTAURANT</a>
+          )}
           {SECTIONS.map(s => {
             const active = activeSection === s.id;
             return (

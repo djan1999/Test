@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import AdminLayout from "../components/admin/AdminLayout.jsx";
 import KitchenBoard from "../components/kitchen/KitchenBoard.jsx";
 
@@ -86,10 +86,12 @@ describe("split regression smoke tests", () => {
           onSaveWineSyncConfig={vi.fn(async () => {})}
           quickAccessItems={[]}
           onUpdateQuickAccess={vi.fn()}
+          managedOnboardingEnabled
           onExit={vi.fn()}
         />
       )
     ).not.toThrow();
+    expect(screen.getByRole("link", { name: "Create restaurant" })).toHaveAttribute("href", "/platform-onboarding");
   });
 
   it("renders KitchenBoard with optional course safely", () => {
