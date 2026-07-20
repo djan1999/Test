@@ -39,7 +39,6 @@ const ALLOWLIST = {
     // loaders. They run only when sqlitePrimary is false (PowerSync unavailable
     // or disabled), so the watches never fight them.
     "TABLES.SERVICE_TABLES.select": 2,   // fetchBoardRows fallback + board poll
-    "TABLES.RESERVATIONS.update": 1,     // persistReservationRow fallback
     "TABLES.RESERVATIONS.upsert": 1,     // atomic multi-reservation swap fallback
     "TABLES.RESERVATIONS.insert": 1,     // saveRes create (id comes from DB)
     "TABLES.RESERVATIONS.delete": 1,     // deleteReservation fallback
@@ -72,7 +71,7 @@ const ALLOWLIST = {
   "lib/stateStore.js": {
     // IS the service_settings seam — same deal.
     "TABLES.SERVICE_SETTINGS.select": 2, // exact-key and prefix reads
-    "TABLES.SERVICE_SETTINGS.upsert": 1,
+    "TABLES.SERVICE_SETTINGS, workspaceId.upsert": 1, // retained retry pinned to its original workspace
   },
   "lib/scopedDb.js": {
     "supabase.from": 1,                  // the scopedFrom wrapper itself

@@ -596,6 +596,38 @@ describe("app harness — stale END cannot clear a newer service (fallback)", ()
     expect(remoteRows("service_archive")).toHaveLength(0);
     expect(remoteRows("service_settings").find((r) => r.id === "service_date").state.startedAt).toBe(stamp);
   }, 20000);
+
+  it("does not start Lunch when the Dinner handover is refused as stale", async () => {
+    seedLiveService();
+    render(<App />);
+    await enterService();
+
+    // Open the session picker from the live readout and choose Lunch.
+    fireEvent.click(screen.getByTitle("Click to switch lunch / dinner (opens the service picker)"));
+    fireEvent.click(await screen.findByText("LUNCH", { selector: "button" }));
+
+    // Elsewhere, Dinner already ended and a newer service started. This
+    // device receives no realtime event, so its handover request must be
+    // refused by the identity check and MUST NOT mint another Lunch identity.
+    const newerStamp = new Date(Date.now() + 2500).toISOString();
+    const dateRow = remoteRows("service_settings").find((r) => r.id === "service_date");
+    dateRow.state = { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: newerStamp };
+    dateRow.updated_at = newerStamp;
+
+    const alerts = [];
+    window.alert = (msg) => alerts.push(String(msg));
+    fireEvent.click(screen.getByText(/^START LUNCH/));
+
+    await waitFor(() => expect(alerts.some((msg) => /already ended|new one started/i.test(msg))).toBe(true), { timeout: 5000 });
+    expect(dateRow.state).toEqual({
+      date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: newerStamp,
+    });
+    expect(remoteRows("service_tables").find((r) => Number(r.table_id) === 1)?.data?.active).toBe(true);
+    expect(remoteRows("service_archive")).toHaveLength(0);
+    // The picker stays open so the operator can see the adopted service and
+    // decide again instead of being silently dropped into a mixed lifecycle.
+    expect(screen.getByText(/^START LUNCH/)).toBeTruthy();
+  }, 20000);
 });
 
 // ── Floor SET markers sync live ───────────────────────────────────────────────

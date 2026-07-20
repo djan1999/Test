@@ -84,4 +84,41 @@ describe("createWriteQueue", () => {
     expect(landed).toEqual(["new"]);
     expect(q.pending()).toEqual([]);
   });
+
+  it("can keep the earliest durable ancestor while coalescing optimistic edits", async () => {
+    let fail = true;
+    const landed = [];
+    const q = createWriteQueue(async (_key, value) => {
+      if (fail) throw new Error("offline");
+      landed.push(value);
+    }, {
+      mergePending: (previous, next) => ({ ...next, ancestor: previous.ancestor }),
+    });
+    await q.save("reservation", { data: { step: 1 }, ancestor: { step: 0 } });
+    fail = false;
+    await q.save("reservation", { data: { step: 2 }, ancestor: { step: 1 } });
+    expect(landed).toEqual([{ data: { step: 2 }, ancestor: { step: 0 } }]);
+  });
+
+  it("restores a failed reservation write after a browser reload", async () => {
+    const storageKey = `write-queue-test-${Date.now()}`;
+    localStorage.removeItem(storageKey);
+    const firstPage = createWriteQueue(async () => { throw new Error("offline"); }, { storageKey });
+    await firstPage.save("ws-a\u0000res-1", { state: "terrace", workspaceId: "ws-a" });
+    expect(localStorage.getItem(storageKey)).toContain("terrace");
+
+    const landed = [];
+    const reloadedPage = createWriteQueue(async (key, value) => {
+      landed.push([key, value]);
+    }, { storageKey });
+    await tick(20);
+
+    expect(landed).toEqual([[
+      "ws-a\u0000res-1",
+      { state: "terrace", workspaceId: "ws-a" },
+    ]]);
+    expect(reloadedPage.pending()).toEqual([]);
+    expect(localStorage.getItem(storageKey)).toBeNull();
+    firstPage.drop("ws-a\u0000res-1");
+  });
 });

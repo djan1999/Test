@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { foldTable } from "../utils/foldTable.js";
+import { foldTable, unsafeTableTransitionConflict } from "../utils/foldTable.js";
 
 const seat = (id, over = {}) => ({
   id, water: "—", pairing: "—", aperitifs: [], glasses: [], cocktails: [],
@@ -31,6 +31,15 @@ describe("foldTable — two waiters, one table", () => {
     expect(folded.seats[0].water).toBe("Sparkling");
   });
 
+  it("independent fields on the SAME seat both survive", () => {
+    const ancestor = table();
+    const mine = table({ seats: [seat(1, { water: "Sparkling" }), seat(2), seat(3), seat(4)] });
+    const theirs = table({ seats: [seat(1, { pairing: "Wine" }), seat(2), seat(3), seat(4)] });
+    const folded = foldTable(ancestor, mine, theirs);
+    expect(folded.seats[0].water).toBe("Sparkling");
+    expect(folded.seats[0].pairing).toBe("Wine");
+  });
+
   it("top-level fields fold independently of seats", () => {
     const ancestor = table();
     const mine = table({ notes: "VIP" });
@@ -38,6 +47,45 @@ describe("foldTable — two waiters, one table", () => {
     const folded = foldTable(ancestor, mine, theirs);
     expect(folded.notes).toBe("VIP");
     expect(folded.menuType).toBe("short");
+  });
+
+  it("different kitchen courses fired on two devices both survive", () => {
+    const ancestor = table({ kitchenLog: {} });
+    const mine = table({ kitchenLog: { snack: { firedAt: "18:40" } } });
+    const theirs = table({ kitchenLog: { starter: { firedAt: "18:41" } } });
+    expect(foldTable(ancestor, mine, theirs).kitchenLog).toEqual({
+      snack: { firedAt: "18:40" },
+      starter: { firedAt: "18:41" },
+    });
+  });
+
+  it("keeps a kitchen-added allergy while applying a waiter's position", () => {
+    const ancestor = table({ restrictions: [{ note: "gluten", pos: null }] });
+    const mine = table({ restrictions: [{ note: "gluten", pos: 1 }] });
+    const theirs = table({ restrictions: [
+      { note: "gluten", pos: null },
+      { note: "nut", pos: 2, kitchenAdded: true },
+    ] });
+    expect(foldTable(ancestor, mine, theirs).restrictions).toEqual([
+      { note: "gluten", pos: 1 },
+      { note: "nut", pos: 2, kitchenAdded: true },
+    ]);
+  });
+
+  it("refuses to erase an edit that arrived while a live table was cleared", () => {
+    const ancestor = table({ kitchenLog: {} });
+    const mine = table({ active: false, arrivedAt: null, resName: "", resTime: "", kitchenLog: {}, seats: [] });
+    const theirs = table({ kitchenLog: { starter: { firedAt: "18:41" } } });
+    expect(unsafeTableTransitionConflict(ancestor, mine, theirs)).toBe("concurrent-clear");
+    expect(foldTable(ancestor, mine, theirs)).toBe(theirs);
+  });
+
+  it("refuses a destination that another party occupied after our snapshot", () => {
+    const ancestor = table({ active: false, arrivedAt: null, resName: "", resTime: "", seats: [] });
+    const mine = table({ resName: "ALPHA", resTime: "19:00" });
+    const theirs = table({ resName: "BETA", resTime: "19:15" });
+    expect(unsafeTableTransitionConflict(ancestor, mine, theirs)).toBe("destination-occupied");
+    expect(foldTable(ancestor, mine, theirs)).toBe(theirs);
   });
 
   it("their added seat (guest joined) survives my unrelated edit", () => {

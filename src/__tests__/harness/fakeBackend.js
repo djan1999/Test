@@ -214,6 +214,42 @@ export const fakeSupabase = {
       });
       return { data: true, error: null };
     }
+    if (name === "save_service_setting_if_current") {
+      const rows = tableOf(backend.remote, "service_settings");
+      const hit = rows.find((r) => r.workspace_id === args.p_workspace_id && r.id === args.p_id);
+      const expected = args.p_expected_updated_at ?? null;
+      if ((!hit && expected != null) || (hit && expected == null) || (hit && hit.updated_at !== expected)) {
+        return { data: false, error: null };
+      }
+      upsertInto(backend.remote, "service_settings", ["workspace_id", "id"], {
+        workspace_id: args.p_workspace_id,
+        id: args.p_id,
+        state: clone(args.p_state || {}),
+        updated_at: args.p_updated_at || nowISO(),
+      });
+      return { data: true, error: null };
+    }
+    if (name === "save_reservation_if_current") {
+      const rows = tableOf(backend.remote, "reservations");
+      const hit = rows.find((r) => r.workspace_id === args.p_workspace_id && r.id === args.p_id);
+      const expectedDate = args.p_expected_date ?? null;
+      const expectedMatches = hit
+        && hit.date === expectedDate
+        && Number(hit.table_id) === Number(args.p_expected_table_id)
+        && JSON.stringify(hit.data || {}) === JSON.stringify(args.p_expected_data || {});
+      if ((!hit && expectedDate != null) || (hit && expectedDate == null) || (hit && !expectedMatches)) {
+        return { data: false, error: null };
+      }
+      upsertInto(backend.remote, "reservations", ["id"], {
+        id: args.p_id,
+        workspace_id: args.p_workspace_id,
+        date: args.p_date,
+        table_id: Number(args.p_table_id),
+        data: clone(args.p_data || {}),
+        created_at: hit?.created_at || args.p_created_at || nowISO(),
+      });
+      return { data: true, error: null };
+    }
     if (name === "archive_and_finish_service") {
       // Mirror the identity guard: when the caller names the service it is
       // ending and the store no longer holds it, the call is a full NO-OP.

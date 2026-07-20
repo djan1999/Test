@@ -9,6 +9,10 @@ const h = vi.hoisted(() => ({
   workspaceId: "ws-active",
   session: { access_token: "tok-1" },
   remoteServiceTable: null,
+  remoteServiceTables: {},
+  remoteServiceSetting: null,
+  remoteReservation: null,
+  rpcResponses: {},
 }));
 
 vi.mock("../lib/supabaseClient.js", () => ({
@@ -19,9 +23,17 @@ vi.mock("../lib/supabaseClient.js", () => ({
         h.calls.push(call);
         return Promise.resolve({ error: h.errorFor(call) });
       };
+      const filters = {};
       const read = {
-        eq: () => read,
-        maybeSingle: async () => ({ data: h.remoteServiceTable, error: null }),
+        eq: (column, value) => { filters[column] = value; return read; },
+        maybeSingle: async () => ({
+          data: table === "service_settings"
+            ? h.remoteServiceSetting
+            : table === "reservations"
+              ? h.remoteReservation
+              : (h.remoteServiceTables[filters.table_id] ?? h.remoteServiceTable),
+          error: null,
+        }),
       };
       return {
         select: () => read,
@@ -34,7 +46,9 @@ vi.mock("../lib/supabaseClient.js", () => ({
     rpc: (name, payload) => {
       const call = { table: "service_tables", op: "rpc", name, payload };
       h.calls.push(call);
-      return Promise.resolve({ data: h.rpcData ?? true, error: h.errorFor(call) });
+      const queued = h.rpcResponses[name];
+      const data = Array.isArray(queued) && queued.length ? queued.shift() : (h.rpcData ?? true);
+      return Promise.resolve({ data, error: h.errorFor(call) });
     },
     auth: { getSession: async () => ({ data: { session: h.session }, error: null }) },
   },
@@ -56,6 +70,10 @@ beforeEach(() => {
   h.workspaceId = "ws-active";
   h.session = { access_token: "tok-1" };
   h.remoteServiceTable = null;
+  h.remoteServiceTables = {};
+  h.remoteServiceSetting = null;
+  h.remoteReservation = null;
+  h.rpcResponses = {};
   h.rpcData = null;
   vi.restoreAllMocks();
 });
@@ -240,22 +258,108 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     ]);
   });
 
-  it("REGRESSION (09.07): reservations PATCH without date → UPDATE by id, NOT an upsert", async () => {
+  it("uploads a MOVE destination first and keeps the source when that destination became occupied", async () => {
+    const blank = { id: 7, active: false, resName: "", resTime: "", seats: [] };
+    const alphaAtSource = { id: 3, active: true, resName: "ALPHA", resTime: "19:00", seats: [] };
+    const alphaAtDestination = { ...alphaAtSource, id: 7 };
+    const betaAtDestination = { id: 7, active: true, resName: "BETA", resTime: "19:15", seats: [] };
+    h.remoteServiceTables = {
+      3: { data: alphaAtSource, updated_at: "2026-07-20T18:00:00.000Z" },
+      7: { data: betaAtDestination, updated_at: "2026-07-20T18:00:01.000Z" },
+    };
+    const sourceBlank = {
+      ...patch("service_tables", "ws-a|3", {
+        table_id: 3, data: JSON.stringify({ ...blank, id: 3 }), workspace_id: "ws-a",
+      }),
+      previousValues: { workspace_id: "ws-a", data: JSON.stringify(alphaAtSource) },
+    };
+    const destinationClaim = {
+      ...patch("service_tables", "ws-a|7", {
+        table_id: 7, data: JSON.stringify(alphaAtDestination), workspace_id: "ws-a",
+      }),
+      previousValues: { workspace_id: "ws-a", data: JSON.stringify(blank) },
+    };
+    // Deliberately source-first: the connector must reorder this safely.
+    const tx = makeTx([sourceBlank, destinationClaim]);
+
+    await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toMatchObject({
+      code: "MILKA_TABLE_CONFLICT",
+      conflict: "destination-occupied",
+    });
+
+    expect(h.calls).toHaveLength(0); // no destination overwrite and no source clear RPC
+    expect(tx.complete).not.toHaveBeenCalled();
+  });
+
+  it("REGRESSION (09.07): reservations PATCH without date keeps the stored date through CAS", async () => {
     // Upserting a partial PATCH builds an INSERT tuple with NULL date, and
     // Postgres checks NOT NULL on that tuple even though the row exists —
     // 23502 → permanent skip → the next checkpoint reverted the device
     // ("assigned a terrace table, then it unassigned itself").
+    h.remoteReservation = {
+      date: "2026-07-09",
+      table_id: 3,
+      data: { resName: "Smith", visit_state: "booked" },
+      created_at: "2026-07-01T12:00:00Z",
+    };
     const tx = makeTx([patch("reservations", "uuid-1", {
       data: '{"resName":"Smith","visit_state":"terrace_seated","terrace_table":"KV"}',
       workspace_id: "ws-a",
     })]);
     await new SupabaseConnector().uploadData(makeDb(tx));
     const c = h.calls[0];
-    expect(c.op).toBe("update");
-    expect(c.match).toEqual({ id: "uuid-1", workspace_id: "ws-a" });
-    expect(c.payload.data).toEqual({ resName: "Smith", visit_state: "terrace_seated", terrace_table: "KV" });
-    expect("id" in c.payload).toBe(false);
-    expect("date" in c.payload).toBe(false); // absent column stays absent — never NULLed
+    expect(c.name).toBe("save_reservation_if_current");
+    expect(c.payload.p_expected_date).toBe("2026-07-09");
+    expect(c.payload.p_date).toBe("2026-07-09"); // absent PATCH column inherited — never NULLed
+    expect(c.payload.p_table_id).toBe(3);
+    expect(c.payload.p_data).toMatchObject({
+      resName: "Smith",
+      visit_state: "terrace_seated",
+      terrace_table: "KV",
+    });
+  });
+
+  it("merges a planner edit with a concurrent terrace transition", async () => {
+    const ancestorData = {
+      resName: "ALPHA",
+      guests: 2,
+      visit_state: "booked",
+      terrace_table: null,
+      terrace_map_id: null,
+      restrictions: [],
+    };
+    h.remoteReservation = {
+      date: "2026-07-20",
+      table_id: 3,
+      data: { ...ancestorData, guests: 3 },
+      created_at: "2026-07-01T12:00:00Z",
+    };
+    const tx = makeTx([{
+      ...patch("reservations", "uuid-merge", {
+        data: JSON.stringify({
+          ...ancestorData,
+          visit_state: "terrace",
+          terrace_table: "KV",
+          terrace_map_id: "terrace-a",
+        }),
+        workspace_id: "ws-a",
+      }),
+      previousValues: {
+        workspace_id: "ws-a",
+        date: "2026-07-20",
+        table_id: 3,
+        data: JSON.stringify(ancestorData),
+        created_at: "2026-07-01T12:00:00Z",
+      },
+    }]);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls[0].payload.p_data).toMatchObject({
+      guests: 3,
+      visit_state: "terrace",
+      terrace_table: "KV",
+    });
   });
 
   it("REGRESSION (09.07): service_archive PATCH (soft-delete) → UPDATE by id", async () => {
@@ -310,16 +414,74 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     expect(payload.state).toEqual({ dataUri: "data:x" });
   });
 
-  it("reservations PUT → upsert on id with the uuid preserved", async () => {
+  it("floor-status upload merges independent markers before its version-checked save", async () => {
+    h.remoteServiceSetting = {
+      state: {
+        dining: { T1: "SET" },
+        terrace: { T21: "SET" },
+      },
+      updated_at: "2026-07-20T18:00:01.000Z",
+    };
+    const tx = makeTx([{
+      ...patch("service_settings", "ws-a|floor_status_v1", {
+        id: "floor_status_v1",
+        state: JSON.stringify({ dining: { T1: "SET", T2: "SET" } }),
+        workspace_id: "ws-a",
+      }),
+      previousValues: {
+        workspace_id: "ws-a",
+        id: "floor_status_v1",
+        state: JSON.stringify({ dining: { T1: "SET" } }),
+      },
+    }]);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0].name).toBe("save_service_setting_if_current");
+    expect(h.calls[0].payload.p_expected_updated_at).toBe("2026-07-20T18:00:01.000Z");
+    expect(h.calls[0].payload.p_state).toEqual({
+      dining: { T1: "SET", T2: "SET" },
+      terrace: { T21: "SET" },
+    });
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a floor-setting save when another device wins the version race", async () => {
+    h.remoteServiceSetting = {
+      state: { dining: { T1: "SET" } },
+      updated_at: "2026-07-20T18:00:01.000Z",
+    };
+    h.rpcResponses.save_service_setting_if_current = [false, true];
+    const tx = makeTx([{
+      ...patch("service_settings", "ws-a|floor_status_v1", {
+        id: "floor_status_v1",
+        state: JSON.stringify({ dining: { T1: "SET", T2: "SET" } }),
+        workspace_id: "ws-a",
+      }),
+      previousValues: {
+        workspace_id: "ws-a",
+        state: JSON.stringify({ dining: { T1: "SET" } }),
+      },
+    }]);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls.filter(({ name }) => name === "save_service_setting_if_current")).toHaveLength(2);
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("reservations PUT → version-checked insert with the uuid preserved", async () => {
     const tx = makeTx([put("reservations", "uuid-1", {
       date: "2026-06-06", table_id: 2, data: '{"resName":"Smith"}',
       created_at: "t", workspace_id: "ws-a",
     })]);
     await new SupabaseConnector().uploadData(makeDb(tx));
-    const { payload, opts } = h.calls[0];
-    expect(opts).toEqual({ onConflict: "id" });
-    expect(payload.id).toBe("uuid-1");
-    expect(payload.data).toEqual({ resName: "Smith" });
+    const { name, payload } = h.calls[0];
+    expect(name).toBe("save_reservation_if_current");
+    expect(payload.p_id).toBe("uuid-1");
+    expect(payload.p_expected_date).toBeNull();
+    expect(payload.p_data).toEqual({ resName: "Smith" });
   });
 });
 

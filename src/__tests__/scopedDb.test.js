@@ -106,6 +106,18 @@ describe("scopedFrom", () => {
     expect(b._calls).toContainEqual(["eq", "id", "r1"]);
   });
 
+  it("can pin a retained retry to its original workspace", () => {
+    h.ws = "ws-current";
+    scopedFrom("service_settings", "ws-original").update({ state: { safe: true } }).eq("id", "floor_status_v1");
+    const b = lastBuilder();
+    expect(b._calls[0]).toEqual([
+      "update",
+      { state: { safe: true }, workspace_id: "ws-original" },
+      undefined,
+    ]);
+    expect(b._calls).toContainEqual(["eq", "workspace_id", "ws-original"]);
+  });
+
   it("scopes deletes to the current workspace", () => {
     scopedFrom("wines").delete().in("key", ["a", "b"]);
     const b = lastBuilder();

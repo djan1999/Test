@@ -58,7 +58,7 @@ describe("sandbox kill-switch", () => {
 
   it("with sandbox OFF the seams reach the store again (saveStateKey queues)", async () => {
     setSandbox(false);
-    await saveStateKey("floor_status_v1", { dining_a: { T1: "SET" } });
+    await saveStateKey("quick_access", { items: [] });
     // The fallback path went through scopedFrom (our spy throws → swallowed by
     // the queue's retry), proving the guard is what suppressed it above.
     expect(h.scopedSpy).toHaveBeenCalled();
