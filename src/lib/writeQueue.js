@@ -16,6 +16,7 @@
 export function createWriteQueue(writeOnce, {
   storageKey = null,
   maxRetainedAgeMs = 24 * 60 * 60 * 1000,
+  mergePending = (_previous, next) => next,
 } = {}) {
   const queues = new Map(); // key → { latest, chain, attempts, retryTimer, retainedAt }
 
@@ -80,7 +81,7 @@ export function createWriteQueue(writeOnce, {
       const value = q.latest; // always the newest — never a stale snapshot
       if (value === undefined) return { ok: true };
       try {
-        await writeOnce(key, value);
+        const written = await writeOnce(key, value);
         // Only clear if nothing newer arrived while this write was in flight.
         if (q.latest === value) {
           q.latest = undefined;
@@ -88,7 +89,7 @@ export function createWriteQueue(writeOnce, {
           q.retainedAt = null;
           persist();
         }
-        return { ok: true };
+        return { ok: true, value: written };
       } catch (error) {
         scheduleRetry(key);
         return { ok: false, error };
@@ -100,7 +101,7 @@ export function createWriteQueue(writeOnce, {
 
   const save = (key, value) => {
     const q = queueOf(key);
-    q.latest = value;
+    q.latest = q.latest === undefined ? value : mergePending(q.latest, value);
     q.retainedAt = Date.now();
     persist(); // durable before the network attempt starts
     // A newer value supersedes any scheduled retry of the older one.

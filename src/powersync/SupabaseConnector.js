@@ -27,6 +27,7 @@ import { saveServiceSettingWithCas } from "../lib/serviceSettingCas.js";
 import { MERGEABLE_SETTING_KEYS } from "../utils/foldSettingState.js";
 import { recordClientDiagnostic } from "../lib/clientDiagnostics.js";
 import { tableHasServiceContent } from "../utils/tableHelpers.js";
+import { saveReservationWithCas } from "../lib/reservationCas.js";
 
 // @powersync/common UpdateType values, inlined so this module stays importable
 // without the SDK (unit tests exercise uploadData with mock transactions).
@@ -293,6 +294,39 @@ async function applyMergeableSettingWrite(op, ws, row) {
   }
 }
 
+async function applyReservationWrite(op, ws, row) {
+  const previous = op.previousValues;
+  const ancestor = previous ? {
+    date: previous.date ?? null,
+    table_id: previous.table_id ?? null,
+    data: convertValue("reservations", "data", previous.data),
+    created_at: previous.created_at ?? null,
+  } : null;
+  try {
+    const result = await saveReservationWithCas({
+      client: supabase,
+      workspaceId: ws,
+      id: op.id,
+      date: row.date,
+      tableId: row.table_id,
+      data: row.data,
+      createdAt: row.created_at,
+      ancestor,
+      allowInsert: op.op !== OP_PATCH,
+    });
+    if (result.conflicts?.length) {
+      const error = new Error(
+        `Reservation ${op.id} had concurrent edits; independent changes were merged and the server kept any conflicting table/terrace transition.`,
+      );
+      console.warn(error.message, result.conflicts);
+      recordClientDiagnostic("reservation conflict", error);
+    }
+    return { error: null };
+  } catch (error) {
+    return { error };
+  }
+}
+
 async function applyOp(op) {
   if (!KNOWN_TABLES.has(op.table)) {
     throw new PermanentOpError(`unknown table: ${op.table}`);
@@ -329,6 +363,10 @@ async function applyOp(op) {
 
   if (op.table === "service_settings" && MERGEABLE_SETTING_KEYS.has(String(row.id))) {
     return applyMergeableSettingWrite(op, ws, row);
+  }
+
+  if (op.table === "reservations") {
+    return applyReservationWrite(op, ws, row);
   }
 
   if (op.table === "beverages") {

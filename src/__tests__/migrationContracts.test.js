@@ -42,6 +42,15 @@ describe("database migration contracts", () => {
     }
   });
 
+  it("protects reservation/terrace documents with an RLS-aware snapshot CAS", () => {
+    for (const source of [settingCas, schema]) {
+      expect(source).toContain("save_reservation_if_current");
+      expect(source).toContain("reservation.data is not distinct from");
+      expect(source).toContain("revoke all on function public.save_reservation_if_current");
+      expect(source).toContain("to authenticated, service_role");
+    }
+  });
+
   it("reconstructs every table required by the PowerSync streams", () => {
     for (const table of [
       "workspace_members", "service_tables", "reservations", "service_settings",

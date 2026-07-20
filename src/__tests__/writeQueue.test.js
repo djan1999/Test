@@ -85,6 +85,21 @@ describe("createWriteQueue", () => {
     expect(q.pending()).toEqual([]);
   });
 
+  it("can keep the earliest durable ancestor while coalescing optimistic edits", async () => {
+    let fail = true;
+    const landed = [];
+    const q = createWriteQueue(async (_key, value) => {
+      if (fail) throw new Error("offline");
+      landed.push(value);
+    }, {
+      mergePending: (previous, next) => ({ ...next, ancestor: previous.ancestor }),
+    });
+    await q.save("reservation", { data: { step: 1 }, ancestor: { step: 0 } });
+    fail = false;
+    await q.save("reservation", { data: { step: 2 }, ancestor: { step: 1 } });
+    expect(landed).toEqual([{ data: { step: 2 }, ancestor: { step: 0 } }]);
+  });
+
   it("restores a failed reservation write after a browser reload", async () => {
     const storageKey = `write-queue-test-${Date.now()}`;
     localStorage.removeItem(storageKey);

@@ -96,7 +96,7 @@ const restrictionEntries = (list) => {
 // Restrictions are a multiset: two gluten entries can represent two guests.
 // Match each note by occurrence, then merge fields (position, detail,
 // kitchenAdded) independently. New entries from either device are unioned.
-function foldRestrictions(ancestor, mine, theirs) {
+export function foldRestrictions(ancestor, mine, theirs) {
   const aEntries = restrictionEntries(ancestor);
   const mEntries = restrictionEntries(mine);
   const tEntries = restrictionEntries(theirs);

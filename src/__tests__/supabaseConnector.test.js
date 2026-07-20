@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   remoteServiceTable: null,
   remoteServiceTables: {},
   remoteServiceSetting: null,
+  remoteReservation: null,
   rpcResponses: {},
 }));
 
@@ -28,7 +29,9 @@ vi.mock("../lib/supabaseClient.js", () => ({
         maybeSingle: async () => ({
           data: table === "service_settings"
             ? h.remoteServiceSetting
-            : (h.remoteServiceTables[filters.table_id] ?? h.remoteServiceTable),
+            : table === "reservations"
+              ? h.remoteReservation
+              : (h.remoteServiceTables[filters.table_id] ?? h.remoteServiceTable),
           error: null,
         }),
       };
@@ -69,6 +72,7 @@ beforeEach(() => {
   h.remoteServiceTable = null;
   h.remoteServiceTables = {};
   h.remoteServiceSetting = null;
+  h.remoteReservation = null;
   h.rpcResponses = {};
   h.rpcData = null;
   vi.restoreAllMocks();
@@ -287,22 +291,75 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     expect(tx.complete).not.toHaveBeenCalled();
   });
 
-  it("REGRESSION (09.07): reservations PATCH without date → UPDATE by id, NOT an upsert", async () => {
+  it("REGRESSION (09.07): reservations PATCH without date keeps the stored date through CAS", async () => {
     // Upserting a partial PATCH builds an INSERT tuple with NULL date, and
     // Postgres checks NOT NULL on that tuple even though the row exists —
     // 23502 → permanent skip → the next checkpoint reverted the device
     // ("assigned a terrace table, then it unassigned itself").
+    h.remoteReservation = {
+      date: "2026-07-09",
+      table_id: 3,
+      data: { resName: "Smith", visit_state: "booked" },
+      created_at: "2026-07-01T12:00:00Z",
+    };
     const tx = makeTx([patch("reservations", "uuid-1", {
       data: '{"resName":"Smith","visit_state":"terrace_seated","terrace_table":"KV"}',
       workspace_id: "ws-a",
     })]);
     await new SupabaseConnector().uploadData(makeDb(tx));
     const c = h.calls[0];
-    expect(c.op).toBe("update");
-    expect(c.match).toEqual({ id: "uuid-1", workspace_id: "ws-a" });
-    expect(c.payload.data).toEqual({ resName: "Smith", visit_state: "terrace_seated", terrace_table: "KV" });
-    expect("id" in c.payload).toBe(false);
-    expect("date" in c.payload).toBe(false); // absent column stays absent — never NULLed
+    expect(c.name).toBe("save_reservation_if_current");
+    expect(c.payload.p_expected_date).toBe("2026-07-09");
+    expect(c.payload.p_date).toBe("2026-07-09"); // absent PATCH column inherited — never NULLed
+    expect(c.payload.p_table_id).toBe(3);
+    expect(c.payload.p_data).toMatchObject({
+      resName: "Smith",
+      visit_state: "terrace_seated",
+      terrace_table: "KV",
+    });
+  });
+
+  it("merges a planner edit with a concurrent terrace transition", async () => {
+    const ancestorData = {
+      resName: "ALPHA",
+      guests: 2,
+      visit_state: "booked",
+      terrace_table: null,
+      terrace_map_id: null,
+      restrictions: [],
+    };
+    h.remoteReservation = {
+      date: "2026-07-20",
+      table_id: 3,
+      data: { ...ancestorData, guests: 3 },
+      created_at: "2026-07-01T12:00:00Z",
+    };
+    const tx = makeTx([{
+      ...patch("reservations", "uuid-merge", {
+        data: JSON.stringify({
+          ...ancestorData,
+          visit_state: "terrace",
+          terrace_table: "KV",
+          terrace_map_id: "terrace-a",
+        }),
+        workspace_id: "ws-a",
+      }),
+      previousValues: {
+        workspace_id: "ws-a",
+        date: "2026-07-20",
+        table_id: 3,
+        data: JSON.stringify(ancestorData),
+        created_at: "2026-07-01T12:00:00Z",
+      },
+    }]);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls[0].payload.p_data).toMatchObject({
+      guests: 3,
+      visit_state: "terrace",
+      terrace_table: "KV",
+    });
   });
 
   it("REGRESSION (09.07): service_archive PATCH (soft-delete) → UPDATE by id", async () => {
@@ -414,16 +471,17 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     expect(tx.complete).toHaveBeenCalledTimes(1);
   });
 
-  it("reservations PUT → upsert on id with the uuid preserved", async () => {
+  it("reservations PUT → version-checked insert with the uuid preserved", async () => {
     const tx = makeTx([put("reservations", "uuid-1", {
       date: "2026-06-06", table_id: 2, data: '{"resName":"Smith"}',
       created_at: "t", workspace_id: "ws-a",
     })]);
     await new SupabaseConnector().uploadData(makeDb(tx));
-    const { payload, opts } = h.calls[0];
-    expect(opts).toEqual({ onConflict: "id" });
-    expect(payload.id).toBe("uuid-1");
-    expect(payload.data).toEqual({ resName: "Smith" });
+    const { name, payload } = h.calls[0];
+    expect(name).toBe("save_reservation_if_current");
+    expect(payload.p_id).toBe("uuid-1");
+    expect(payload.p_expected_date).toBeNull();
+    expect(payload.p_data).toEqual({ resName: "Smith" });
   });
 });
 

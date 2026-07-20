@@ -7,10 +7,9 @@
 
 import { column, Schema, Table } from "@powersync/web";
 
-// trackPrevious on the composite-key tables: their DELETE ops only carry the
-// aliased natural-key id, so uploadData() needs previousValues.workspace_id
-// (and the natural-key column) to scope the Postgres delete correctly even if
-// the op was queued under a different workspace than the active one.
+// trackPrevious on shared documents/composite-key tables: uploads need the
+// ancestor for three-way folds; DELETE ops also need previous workspace/key
+// values when queued under a different workspace than the active one.
 const service_tables = new Table(
   {
     // id column (text) is automatically included
@@ -41,7 +40,10 @@ const reservations = new Table(
     created_at: column.text,
     workspace_id: column.text,
   },
-  { indexes: {} },
+  // Reservation data is a busy shared document (planner + terrace + service).
+  // Its upload fold needs the device's pre-edit ancestor to preserve changes
+  // made on another device while this op was offline.
+  { indexes: {}, trackPrevious: true },
 );
 
 const menu_courses = new Table(

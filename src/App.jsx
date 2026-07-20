@@ -128,6 +128,7 @@ const InventoryModal = lazy(() => import("./components/modals/InventoryModal.jsx
 const KitchenFloorView = lazy(() => import("./components/kitchen/KitchenFloorView.jsx"));
 
 const pad2 = (n) => String(n).padStart(2, "0");
+const reservationWriteKey = (workspaceId, id) => `${workspaceId}\u0000${id}`;
 const toLocalDateISO = (date = new Date()) =>
   `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
@@ -1041,17 +1042,35 @@ export default function App() {
   const reservationQueueRef = useRef(null);
   if (!reservationQueueRef.current) {
     reservationQueueRef.current = createWriteQueue(async (_id, row) => {
-      // Never SET a null date: Postgres rejects it (NOT NULL — the 08.07
-      // null-date incident) and the write dies silently. Omitting the column
-      // keeps the store's existing date, matching the sqlite path's COALESCE.
-      const patch = { table_id: row.table_id, data: row.data };
-      if (row.date != null) patch.date = row.date;
-      const { error } = await scopedFrom(TABLES.RESERVATIONS, row.workspaceId)
-        .update(patch).eq("id", row.id);
-      if (error) throw error;
+      const { saveReservationWithCas } = await import("./lib/reservationCas.js");
+      const saved = await saveReservationWithCas({
+        client: supabase,
+        workspaceId: row.workspaceId,
+        id: row.id,
+        date: row.date,
+        tableId: row.table_id,
+        data: row.data,
+        ancestor: row.ancestor,
+        allowInsert: false,
+      });
+      if (saved.conflicts?.length) {
+        const error = new Error(
+          `Reservation ${row.id} changed on another device; independent edits were merged and the server kept any conflicting table/terrace move.`,
+        );
+        recordClientDiagnostic("reservation conflict", error);
+        console.warn(error.message, saved.conflicts);
+      }
+      return saved;
     }, {
       storageKey: "milka-reservation-write-queue-v1",
       maxRetainedAgeMs: 24 * 60 * 60 * 1000,
+      // Multiple optimistic edits before a successful write must keep the
+      // oldest durable ancestor. Using the previous optimistic value as the
+      // ancestor would make the fold believe the first edit already landed.
+      mergePending: (previous, next) => ({
+        ...next,
+        ancestor: previous?.ancestor ?? next.ancestor,
+      }),
     });
   }
 
@@ -1067,12 +1086,29 @@ export default function App() {
         return { ok: true };
       }
       const workspaceId = getWorkspaceId();
+      const previous = reservationsRef.current.find((reservation) => reservation.id === id);
+      const ancestor = previous ? {
+        date: previous.date,
+        table_id: previous.table_id,
+        data: previous.data,
+        created_at: previous.created_at,
+      } : null;
       const result = await reservationQueueRef.current.save(
-        `${workspaceId}\u0000${id}`,
-        { id, date, table_id, data, workspaceId },
+        reservationWriteKey(workspaceId, id),
+        { id, date, table_id, data, workspaceId, ancestor },
       );
+      if (result.ok && result.value?.deleted) {
+        return {
+          ok: false,
+          error: new Error("This reservation was deleted on another device; the edit was not applied."),
+        };
+      }
       if (!result.ok) console.warn("Reservation persist failed (retained for retry):", result.error);
-      return result;
+      return {
+        ...result,
+        data: result.value?.row || null,
+        conflicts: result.value?.conflicts || [],
+      };
     } catch (error) {
       console.warn("Reservation persist failed:", error);
       return { ok: false, error };
@@ -1367,7 +1403,9 @@ export default function App() {
         if (!result.ok) {
           // Fallback writes retain failed values for retry. This action aborted,
           // so the retained clear must not land later and hide an uncleared board.
-          if (!sqlitePrimaryRef.current) reservationQueueRef.current?.drop(owner.id);
+          if (!sqlitePrimaryRef.current) {
+            reservationQueueRef.current?.drop(reservationWriteKey(getWorkspaceId(), owner.id));
+          }
           const error = result.error || new Error("The reservation could not be cleared.");
           setSyncStatus("sync-error");
           noteSyncError("clear table reservation", error);
@@ -2807,7 +2845,9 @@ export default function App() {
         setReservations(prev => prev.map(r => r.id === id ? { ...r, ...dbRow } : r));
         syncStartedTablesFromReservation(date, rData, Number(table_id));
       } else if (originalTablesBeforeMove) {
-        if (!sqlitePrimaryRef.current) reservationQueueRef.current?.drop(id);
+        if (!sqlitePrimaryRef.current) {
+          reservationQueueRef.current?.drop(reservationWriteKey(getWorkspaceId(), id));
+        }
         setTables(originalTablesBeforeMove);
         const error = result.error || new Error("Reservation edit persistence failed.");
         setSyncStatus("sync-error");

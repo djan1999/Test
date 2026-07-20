@@ -39,7 +39,6 @@ const ALLOWLIST = {
     // loaders. They run only when sqlitePrimary is false (PowerSync unavailable
     // or disabled), so the watches never fight them.
     "TABLES.SERVICE_TABLES.select": 2,   // fetchBoardRows fallback + board poll
-    "TABLES.RESERVATIONS, row.workspaceId.update": 1, // retained retry pinned to its original workspace
     "TABLES.RESERVATIONS.upsert": 1,     // atomic multi-reservation swap fallback
     "TABLES.RESERVATIONS.insert": 1,     // saveRes create (id comes from DB)
     "TABLES.RESERVATIONS.delete": 1,     // deleteReservation fallback
