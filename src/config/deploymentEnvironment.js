@@ -54,5 +54,11 @@ export function evaluateDeploymentIsolation(env = {}) {
   };
 }
 
-export const deploymentIsolation = evaluateDeploymentIsolation(import.meta.env);
+const deploymentContext = typeof __DEPLOYMENT_CONTEXT__ === "undefined"
+  ? {}
+  : __DEPLOYMENT_CONTEXT__;
 
+export const deploymentIsolation = evaluateDeploymentIsolation({
+  ...deploymentContext,
+  ...import.meta.env,
+});

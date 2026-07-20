@@ -16,6 +16,14 @@ export default defineConfig({
     __BUILD_ID__: JSON.stringify(
       `${(process.env.VERCEL_GIT_COMMIT_SHA || "local").slice(0, 7)} · ${new Date().toISOString().slice(0, 16).replace("T", " ")}Z`,
     ),
+    // Vercel system variables are not exposed to browser code by Vite. Bake
+    // only non-secret deployment context into the bundle so every preview
+    // defaults to the fail-closed staging boundary before env setup.
+    __DEPLOYMENT_CONTEXT__: JSON.stringify({
+      VITE_DEPLOYMENT_ENV: process.env.VITE_DEPLOYMENT_ENV
+        || (process.env.VERCEL_ENV === "preview" ? "staging" : "production"),
+      VITE_GIT_BRANCH: process.env.VERCEL_GIT_COMMIT_REF || "local",
+    }),
   },
   plugins: [
     ...compatPlugins(),
