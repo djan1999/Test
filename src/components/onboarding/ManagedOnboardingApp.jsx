@@ -15,12 +15,12 @@ const initialTimezone = (() => {
   catch { return "Europe/Ljubljana"; }
 })();
 
-function emptyForm() {
+function emptyForm(adminEmail = "") {
   return {
     name: "",
     slug: "",
     subtitle: "SERVICE BOARD",
-    adminEmail: "",
+    adminEmail,
     timezone: initialTimezone,
     keepOperatorAdmin: true,
     tables: defaultOnboardingTables(10),
@@ -43,6 +43,7 @@ export function ManagedOnboardingApp() {
   const [gate, setGate] = useState({ status: "loading", message: "Checking platform access…" });
   const [accessToken, setAccessToken] = useState(null);
   const [operator, setOperator] = useState(null);
+  const [canManageOthers, setCanManageOthers] = useState(false);
   const [restaurants, setRestaurants] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [slugEdited, setSlugEdited] = useState(false);
@@ -70,9 +71,16 @@ export function ManagedOnboardingApp() {
         setAccessToken(token);
         const response = await requestManagedRestaurants({ accessToken: token });
         if (!active) return;
-        setOperator(response.operator || null);
+        const creator = response.creator || response.operator || null;
+        setOperator(creator);
+        setCanManageOthers(response.canManageOtherRestaurants === true);
+        setForm((current) => ({
+          ...current,
+          adminEmail: current.adminEmail || creator?.email || "",
+          keepOperatorAdmin: true,
+        }));
         setRestaurants(response.restaurants || []);
-        setGate({ status: "ready", message: "Platform access confirmed." });
+        setGate({ status: "ready", message: "Account confirmed." });
       } catch (requestError) {
         if (!active) return;
         setGate({ status: "error", message: requestError.message });
@@ -143,7 +151,7 @@ export function ManagedOnboardingApp() {
   };
 
   const startAnother = () => {
-    setForm(emptyForm());
+    setForm(emptyForm(operator?.email || ""));
     setSlugEdited(false);
     setErrors({});
     setResult(null);
@@ -184,12 +192,12 @@ export function ManagedOnboardingApp() {
     <main className="mo-shell" style={palette}>
       <header className="mo-header">
         <div>
-          <p className="mo-kicker">PLATFORM / MANAGED ONBOARDING</p>
+          <p className="mo-kicker">RESTAURANT ONBOARDING</p>
           <h1>Create a restaurant</h1>
-          <p className="mo-lead">An isolated workspace, first Admin, and empty service tables in one safe transaction.</p>
+          <p className="mo-lead">Create an isolated work environment and link your account as its first Admin.</p>
         </div>
         <div className="mo-operator">
-          <span>OPERATOR</span>
+          <span>{canManageOthers ? "PLATFORM ACCOUNT" : "YOUR ACCOUNT"}</span>
           <strong>{operator?.email || operator?.id}</strong>
           <a href="/">Main app →</a>
         </div>
@@ -257,28 +265,38 @@ export function ManagedOnboardingApp() {
 
               <fieldset>
                 <legend>First Admin</legend>
-                <label>
-                  <span>Admin email</span>
-                  <input
-                    type="email"
-                    value={form.adminEmail}
-                    onChange={(event) => updateField("adminEmail", event.target.value)}
-                    autoComplete="email"
-                  />
-                  <small>Existing users are linked. New users receive a secure Supabase invitation.</small>
-                  <FieldError>{errors.adminEmail}</FieldError>
-                </label>
-                <label className="mo-check">
-                  <input
-                    type="checkbox"
-                    checked={form.keepOperatorAdmin}
-                    onChange={(event) => updateField("keepOperatorAdmin", event.target.checked)}
-                  />
-                  <span>
-                    <strong>Add my platform account as an Admin too</strong>
-                    <small>This is an explicit, visible membership—not a hidden tenant bypass.</small>
-                  </span>
-                </label>
+                {canManageOthers ? (
+                  <>
+                    <label>
+                      <span>Admin email</span>
+                      <input
+                        type="email"
+                        value={form.adminEmail}
+                        onChange={(event) => updateField("adminEmail", event.target.value)}
+                        autoComplete="email"
+                      />
+                      <small>Use your own email, link an existing user, or send a secure invitation to a new owner.</small>
+                      <FieldError>{errors.adminEmail}</FieldError>
+                    </label>
+                    <label className="mo-check">
+                      <input
+                        type="checkbox"
+                        checked={form.keepOperatorAdmin}
+                        onChange={(event) => updateField("keepOperatorAdmin", event.target.checked)}
+                      />
+                      <span>
+                        <strong>Add my platform account as an Admin too</strong>
+                        <small>This is an explicit, visible membership—not a hidden tenant bypass.</small>
+                      </span>
+                    </label>
+                  </>
+                ) : (
+                  <div className="mo-review-warning">
+                    <strong>{form.adminEmail}</strong>
+                    <span>Your signed-in account will be linked to this restaurant with the Admin role.</span>
+                    <FieldError>{errors.adminEmail}</FieldError>
+                  </div>
+                )}
               </fieldset>
 
               <fieldset>
@@ -338,7 +356,12 @@ export function ManagedOnboardingApp() {
                 <div><dt>First Admin</dt><dd>{normalized.value.adminEmail}</dd></div>
                 <div><dt>Timezone</dt><dd>{normalized.value.timezone}</dd></div>
                 <div><dt>Tables</dt><dd>{normalized.value.tables.length}</dd></div>
-                <div><dt>Operator access</dt><dd>{normalized.value.keepOperatorAdmin ? "Additional Admin membership" : "No additional membership"}</dd></div>
+                <div>
+                  <dt>{canManageOthers ? "Platform access" : "Account link"}</dt>
+                  <dd>{canManageOthers
+                    ? (normalized.value.keepOperatorAdmin ? "Additional Admin membership" : "No additional membership")
+                    : "Your account becomes Admin"}</dd>
+                </div>
               </dl>
               <div className="mo-table-summary">
                 {normalized.value.tables.map((table) => <span key={table.id}>{table.id} · {table.label}</span>)}
@@ -358,7 +381,9 @@ export function ManagedOnboardingApp() {
               <p className="mo-kicker">RESTAURANT CREATED</p>
               <h2>{result?.restaurant?.name}</h2>
               <p>
-                {result?.invited
+                {result?.mode === "self-service"
+                  ? `${form.adminEmail} is now linked as the restaurant Admin.`
+                  : result?.invited
                   ? `A secure Admin invitation was sent to ${form.adminEmail}.`
                   : `${form.adminEmail} was linked as the first Admin.`}
               </p>
@@ -380,7 +405,7 @@ export function ManagedOnboardingApp() {
           <ul>
             <li>Separate URL and feature flag</li>
             <li>Server-only secret key</li>
-            <li>Operator UUID allowlist</li>
+            <li>{canManageOthers ? "Operator-only invitations" : "Creator becomes first Admin"}</li>
             <li>Atomic database transaction</li>
             <li>Empty tenant—no Milka data copy</li>
             <li>Audited creation event</li>

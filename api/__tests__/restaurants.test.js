@@ -20,8 +20,8 @@ function request(method = "GET", body) {
   return { method, body, headers: { authorization: "Bearer valid-token", host: "preview.example.com" } };
 }
 
-function serverConfig(operatorIds = new Set([OPERATOR_ID])) {
-  return { url: "https://project.supabase.co", secretKey: "server-secret", operatorIds };
+function serverConfig(operatorIds = new Set([OPERATOR_ID]), selfServiceEnabled = false) {
+  return { url: "https://project.supabase.co", secretKey: "server-secret", operatorIds, selfServiceEnabled };
 }
 
 function adminClient({ existingUser = true } = {}) {
@@ -54,11 +54,17 @@ function adminClient({ existingUser = true } = {}) {
   return client;
 }
 
-function handlerWith({ requesterId = OPERATOR_ID, existingUser = true, operatorIds } = {}) {
+function handlerWith({
+  requesterId = OPERATOR_ID,
+  requesterEmail = "operator@example.com",
+  existingUser = true,
+  operatorIds,
+  selfServiceEnabled = false,
+} = {}) {
   const authClient = {
     auth: {
       getUser: vi.fn().mockResolvedValue({
-        data: { user: { id: requesterId, email: "operator@example.com" } },
+        data: { user: { id: requesterId, email: requesterEmail } },
         error: null,
       }),
     },
@@ -72,7 +78,10 @@ function handlerWith({ requesterId = OPERATOR_ID, existingUser = true, operatorI
     handler: createRestaurantsHandler({
       createServerClient,
       makeWorkspaceId: () => WORKSPACE_ID,
-      readServerConfig: () => serverConfig(operatorIds || new Set([OPERATOR_ID])),
+      readServerConfig: () => serverConfig(
+        operatorIds || new Set([OPERATOR_ID]),
+        selfServiceEnabled,
+      ),
     }),
   };
 }
@@ -106,6 +115,89 @@ describe("managed restaurant API", () => {
     await handler(request("POST", validBody), res);
     expect(res.statusCode).toBe(403);
     expect(databaseClient.rpc).not.toHaveBeenCalled();
+  });
+
+  it("lets a signed-in owner create a restaurant linked to their own Admin account", async () => {
+    const { handler, databaseClient } = handlerWith({
+      operatorIds: new Set([ADMIN_ID]),
+      selfServiceEnabled: true,
+    });
+    const res = responseRecorder();
+    await handler(request("POST", { ...validBody, adminEmail: "operator@example.com" }), res);
+
+    expect(res.statusCode).toBe(201);
+    expect(res.payload.mode).toBe("self-service");
+    expect(databaseClient.auth.admin.listUsers).not.toHaveBeenCalled();
+    expect(databaseClient.auth.admin.inviteUserByEmail).not.toHaveBeenCalled();
+    expect(databaseClient.rpc).toHaveBeenCalledWith(
+      "provision_managed_restaurant",
+      expect.objectContaining({
+        p_admin_user_id: OPERATOR_ID,
+        p_operator_user_id: OPERATOR_ID,
+        p_keep_operator_admin: true,
+      }),
+    );
+  });
+
+  it("does not let a self-service account assign a different first Admin", async () => {
+    const { handler, databaseClient } = handlerWith({
+      operatorIds: new Set([ADMIN_ID]),
+      selfServiceEnabled: true,
+    });
+    const res = responseRecorder();
+    await handler(request("POST", validBody), res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.payload.error).toMatch(/only for your own account/i);
+    expect(databaseClient.auth.admin.listUsers).not.toHaveBeenCalled();
+    expect(databaseClient.rpc).not.toHaveBeenCalled();
+  });
+
+  it("lists only the signed-in owner's restaurants in self-service mode", async () => {
+    const authClient = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: OPERATOR_ID, email: "operator@example.com" } },
+          error: null,
+        }),
+      },
+    };
+    const membershipEq = vi.fn().mockResolvedValue({
+      data: [{ workspace_id: WORKSPACE_ID }],
+      error: null,
+    });
+    const workspaceOrder = vi.fn().mockResolvedValue({
+      data: [{ id: WORKSPACE_ID, name: "Nova", slug: "nova", kind: "restaurant" }],
+      error: null,
+    });
+    const workspaceIn = vi.fn(() => ({ order: workspaceOrder }));
+    const databaseClient = {
+      from: vi.fn((table) => ({
+        select: vi.fn(() => (
+          table === "workspace_members"
+            ? { eq: membershipEq }
+            : { in: workspaceIn }
+        )),
+      })),
+    };
+    const createServerClient = vi.fn()
+      .mockReturnValueOnce(authClient)
+      .mockReturnValueOnce(databaseClient);
+    const handler = createRestaurantsHandler({
+      createServerClient,
+      readServerConfig: () => serverConfig(new Set([ADMIN_ID]), true),
+    });
+    const res = responseRecorder();
+
+    await handler(request("GET"), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.payload.canManageOtherRestaurants).toBe(false);
+    expect(res.payload.restaurants).toEqual([
+      expect.objectContaining({ id: WORKSPACE_ID, name: "Nova" }),
+    ]);
+    expect(membershipEq).toHaveBeenCalledWith("user_id", OPERATOR_ID);
+    expect(workspaceIn).toHaveBeenCalledWith("id", [WORKSPACE_ID]);
   });
 
   it("calls the single atomic RPC with normalized configuration", async () => {

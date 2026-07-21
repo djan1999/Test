@@ -23,6 +23,8 @@ describe("managed onboarding screen", () => {
     requestManagedRestaurants.mockResolvedValue({
       ok: true,
       operator: { id: "operator-id", email: "operator@example.com" },
+      creator: { id: "operator-id", email: "operator@example.com" },
+      canManageOtherRestaurants: false,
       restaurants: [],
     });
   });
@@ -32,7 +34,8 @@ describe("managed onboarding screen", () => {
     expect(await screen.findByRole("heading", { name: "Create a restaurant" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Restaurant name"), { target: { value: "Nova" } });
-    fireEvent.change(screen.getByLabelText(/^Admin email/), { target: { value: "admin@example.com" } });
+    expect(screen.queryByLabelText(/^Admin email/)).not.toBeInTheDocument();
+    expect(screen.getByText(/signed-in account will be linked/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /review setup/i }));
 
     expect(await screen.findByText("Nothing live is copied or changed.")).toBeInTheDocument();
@@ -41,14 +44,27 @@ describe("managed onboarding screen", () => {
 
     requestManagedRestaurants.mockResolvedValueOnce({
       ok: true,
-      invited: true,
+      invited: false,
+      mode: "self-service",
       restaurant: { id: "workspace-id", name: "Nova", slug: "nova", tableCount: 10 },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create restaurant" }));
 
     await waitFor(() => expect(requestManagedRestaurants).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("RESTAURANT CREATED")).toBeInTheDocument();
-    expect(screen.getByText(/secure Admin invitation was sent/i)).toBeInTheDocument();
+    expect(screen.getByText(/now linked as the restaurant Admin/i)).toBeInTheDocument();
+  });
+
+  it("keeps invitation controls for an allowlisted platform account", async () => {
+    requestManagedRestaurants.mockResolvedValueOnce({
+      ok: true,
+      creator: { id: "operator-id", email: "operator@example.com" },
+      canManageOtherRestaurants: true,
+      restaurants: [],
+    });
+    render(<ManagedOnboardingApp />);
+    expect(await screen.findByLabelText(/^Admin email/)).toHaveValue("operator@example.com");
+    expect(screen.getByText(/send a secure invitation/i)).toBeInTheDocument();
   });
 
   it("does not expose the form when the signed-in account is denied", async () => {

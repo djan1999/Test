@@ -55,6 +55,7 @@ function serverConfig() {
       || "",
     ).trim(),
     operatorIds: parsePlatformOperatorIds(process.env.PLATFORM_ADMIN_USER_IDS),
+    selfServiceEnabled: process.env.SELF_SERVICE_ONBOARDING_ENABLED === "true",
   };
 }
 
@@ -101,7 +102,7 @@ export function createRestaurantsHandler({
     if (!accessToken) return res.status(401).json({ error: "Sign in to use restaurant onboarding." });
 
     const config = readServerConfig();
-    if (!config.url || !config.secretKey || !config.operatorIds?.size) {
+    if (!config.url || !config.secretKey) {
       log("warn", "restaurant_onboarding_disabled");
       return res.status(503).json({ error: "Managed restaurant onboarding is not enabled." });
     }
@@ -117,31 +118,66 @@ export function createRestaurantsHandler({
       if (authError || !requester?.id) {
         return res.status(401).json({ error: "Your login expired. Sign in again." });
       }
-      if (!config.operatorIds.has(String(requester.id).toLowerCase())) {
+      const requesterId = String(requester.id).toLowerCase();
+      const requesterEmail = String(requester.email || "").trim().toLowerCase();
+      const isPlatformOperator = config.operatorIds?.has(requesterId) === true;
+      if (!isPlatformOperator && !config.selfServiceEnabled) {
         log("warn", "restaurant_onboarding_denied", { reason: "operator_required" });
         return res.status(403).json({ error: "This account cannot create restaurants." });
       }
 
       if (method === "GET") {
-        const { data, error } = await adminClient
-          .from("workspaces")
-          .select("id, name, slug, kind, created_at")
-          .order("created_at", { ascending: false });
-        if (error) throw error;
+        let data = [];
+        if (isPlatformOperator) {
+          const result = await adminClient
+            .from("workspaces")
+            .select("id, name, slug, kind, created_at")
+            .order("created_at", { ascending: false });
+          if (result.error) throw result.error;
+          data = result.data || [];
+        } else {
+          const membershipResult = await adminClient
+            .from("workspace_members")
+            .select("workspace_id")
+            .eq("user_id", requesterId);
+          if (membershipResult.error) throw membershipResult.error;
+          const workspaceIds = [...new Set(
+            (membershipResult.data || []).map((row) => row.workspace_id).filter(Boolean),
+          )];
+          if (workspaceIds.length) {
+            const workspaceResult = await adminClient
+              .from("workspaces")
+              .select("id, name, slug, kind, created_at")
+              .in("id", workspaceIds)
+              .order("created_at", { ascending: false });
+            if (workspaceResult.error) throw workspaceResult.error;
+            data = workspaceResult.data || [];
+          }
+        }
         return res.status(200).json({
           ok: true,
           operator: { id: requester.id, email: requester.email || null },
-          restaurants: data || [],
+          creator: { id: requester.id, email: requester.email || null },
+          canManageOtherRestaurants: isPlatformOperator,
+          restaurants: data,
         });
       }
 
       const body = jsonBody(req);
       if (body == null) return res.status(400).json({ error: "Invalid JSON request body." });
-      const normalized = normalizeManagedRestaurantPayload(body);
+      const normalized = normalizeManagedRestaurantPayload({
+        ...body,
+        adminEmail: body.adminEmail || requesterEmail,
+      });
       if (!normalized.ok) {
         return res.status(400).json({ error: "Check the highlighted setup fields.", fields: normalized.errors });
       }
       const input = normalized.value;
+      const isSelfService = Boolean(requesterEmail) && input.adminEmail === requesterEmail;
+      if (!isSelfService && !isPlatformOperator) {
+        log("warn", "restaurant_onboarding_denied", { reason: "different_admin_requires_operator" });
+        return res.status(403).json({ error: "You can create a restaurant only for your own account." });
+      }
 
       const { data: existingWorkspace, error: existingError } = await adminClient
         .from("workspaces")
@@ -153,7 +189,7 @@ export function createRestaurantsHandler({
         return res.status(409).json({ error: `The restaurant key “${input.slug}” is already in use.` });
       }
 
-      let adminUser = await findUserByEmail(adminClient, input.adminEmail);
+      let adminUser = isSelfService ? requester : await findUserByEmail(adminClient, input.adminEmail);
       let invited = false;
       if (!adminUser) {
         const baseUrl = appUrl(req);
@@ -175,7 +211,7 @@ export function createRestaurantsHandler({
           p_admin_user_id: adminUser.id,
           p_operator_user_id: requester.id,
           p_operator_email: requester.email || null,
-          p_keep_operator_admin: input.keepOperatorAdmin,
+          p_keep_operator_admin: isSelfService ? true : input.keepOperatorAdmin,
           p_restaurant_config: {
             version: 1,
             name: input.name,
@@ -199,6 +235,7 @@ export function createRestaurantsHandler({
       return res.status(201).json({
         ok: true,
         invited,
+        mode: isSelfService ? "self-service" : "managed",
         restaurant: provisioned || {
           id: workspaceId,
           name: input.name,

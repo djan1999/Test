@@ -5,6 +5,7 @@ const FONT = tokens.font;
 const { ink, rule, neutral } = tokens;
 
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
+const MANAGED_ONBOARDING_ENABLED = import.meta.env.VITE_ENABLE_MANAGED_ONBOARDING === "true";
 
 const KIND_LABEL = {
   restaurant: "restaurant",
@@ -15,7 +16,12 @@ const KIND_LABEL = {
 // A normal restaurant or Demo login sees only its explicit membership and App
 // auto-selects it. This generic picker remains for an account deliberately
 // linked to more than one workspace later.
-export default function ProfilePicker({ workspaces = [], onPick, onSignOut }) {
+export default function ProfilePicker({
+  workspaces = [],
+  onPick,
+  onSignOut,
+  managedOnboardingEnabled = MANAGED_ONBOARDING_ENABLED,
+}) {
   return (
     <div style={{
       minHeight: "100vh", background: ink.bg,
@@ -61,6 +67,17 @@ export default function ProfilePicker({ workspaces = [], onPick, onSignOut }) {
           ))}
         </div>
       )}
+
+      {managedOnboardingEnabled ? (
+        <a href="/platform-onboarding" style={{
+          marginTop: 24, fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em",
+          textTransform: "uppercase", color: ink[0], background: neutral[0],
+          border: `${rule.hairline} solid ${ink[2]}`, padding: "12px 18px",
+          textDecoration: "none",
+        }}>
+          {workspaces.length ? "create another restaurant" : "create your restaurant"}
+        </a>
+      ) : null}
 
       {onSignOut ? (
         <button onClick={onSignOut} style={{
