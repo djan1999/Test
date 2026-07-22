@@ -4,72 +4,14 @@ import {
   isStaleServiceDate,
   isDeliberatelyPastDate,
   isActivePastReview,
-  shouldClearBoardOnDateChange,
-  resolveServiceEntry,
   serviceDayForActivity,
   isLiveServiceActivity,
 } from "../utils/serviceDay.js";
 
-describe("resolveServiceEntry (join a live service vs start a new one)", () => {
-  it("JOINs a current live service (second device / re-login just sees it)", () => {
-    const r = resolveServiceEntry({ date: "2026-06-13", chosenOn: "2026-06-13" }, "2026-06-13");
-    expect(r).toEqual({ action: "join", date: "2026-06-13", chosenOn: "2026-06-13", session: null, startedAt: null });
-  });
-
-  it("passes the shared session + instance id through on a join", () => {
-    const r = resolveServiceEntry(
-      { date: "2026-06-13", chosenOn: "2026-06-13", session: "lunch", startedAt: "2026-06-13T11:00:00.000Z" },
-      "2026-06-13",
-    );
-    expect(r).toEqual({
-      action: "join", date: "2026-06-13", chosenOn: "2026-06-13",
-      session: "lunch", startedAt: "2026-06-13T11:00:00.000Z",
-    });
-  });
-
-  it("ignores a bogus session value (keeps null so the device falls back)", () => {
-    const r = resolveServiceEntry({ date: "2026-06-13", chosenOn: "2026-06-13", session: "brunch" }, "2026-06-13");
-    expect(r.session).toBeNull();
-  });
-
-  it("STARTs when there is no persisted service", () => {
-    expect(resolveServiceEntry({}, "2026-06-13").action).toBe("start");
-    expect(resolveServiceEntry(null, "2026-06-13").action).toBe("start");
-  });
-
-  it("STARTs (does not join) when the persisted service is stale/rolled over", () => {
-    const r = resolveServiceEntry({ date: "2026-06-10", chosenOn: "2026-06-10" }, "2026-06-13");
-    expect(r.action).toBe("start");
-  });
-
-  it("JOINs a deliberately-past service still being reviewed on its chosen day", () => {
-    const r = resolveServiceEntry({ date: "2026-06-10", chosenOn: "2026-06-13" }, "2026-06-13");
-    expect(r.action).toBe("join");
-    expect(r.date).toBe("2026-06-10");
-  });
-});
-
-describe("shouldClearBoardOnDateChange", () => {
-  // Regression for "opened the board on the laptop and it wiped the tablet":
-  // a device joining the live service has no previous date, so the old
-  // `next !== prev` check wiped the shared board.
-  it("does NOT clear when a fresh device joins (no previous date)", () => {
-    expect(shouldClearBoardOnDateChange(null, "2026-06-13")).toBe(false);
-    expect(shouldClearBoardOnDateChange("", "2026-06-13")).toBe(false);
-  });
-
-  it("does NOT clear when re-picking the same day", () => {
-    expect(shouldClearBoardOnDateChange("2026-06-13", "2026-06-13")).toBe(false);
-  });
-
-  it("clears only on a genuine switch between two different known days", () => {
-    expect(shouldClearBoardOnDateChange("2026-06-12", "2026-06-13")).toBe(true);
-  });
-
-  it("does not clear when releasing the date (next null, e.g. after archive)", () => {
-    expect(shouldClearBoardOnDateChange("2026-06-13", null)).toBe(false);
-  });
-});
+// (resolveServiceEntry and shouldClearBoardOnDateChange are GONE with the
+// service-entity model: joining reads the live `services` row, and a date
+// switch starts a new namespace — no wipe decision exists to test. Their
+// replacements are pinned in serviceLifecycle.test.js.)
 
 describe("currentServiceDay", () => {
   it("stays on the previous calendar date until the rollover hour", () => {

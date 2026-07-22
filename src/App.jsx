@@ -42,16 +42,13 @@ import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { foldTable } from "./utils/foldTable.js";
 import { randomUuid } from "./utils/uuid.js";
 import { reconcileTables } from "./utils/reconcile.js";
-import { isSameServiceLabel, nextArchiveLabel } from "./utils/archiveDedup.js";
-import { archiveIdForService } from "./utils/archiveIdentity.js";
 import { stampWineSources } from "./utils/wineEdit.js";
 import { historyGapsByMenuType } from "./utils/archiveInsights.js";
 import {
-  currentServiceDay, isStaleServiceDate, isActivePastReview, shouldClearBoardOnDateChange,
-  resolveServiceEntry, serviceDayForActivity, isLiveServiceActivity, SERVICE_DATE_CHOSEN_ON_KEY,
+  currentServiceDay, isStaleServiceDate, isActivePastReview, isLiveServiceActivity,
 } from "./utils/serviceDay.js";
 import {
-  FLOOR_MAPS_KEY, FLOOR_STATUS_KEY, sanitizeFloorMaps,
+  FLOOR_MAPS_KEY, sanitizeFloorMaps,
   getActiveDiningMap, getTerraceMap, mapSeatCountForBoardTable,
   terraceOccupancy, applyLayoutSwitchRow, resolveReservationTable,
   sanitizeFloorStatus, setFloorStatus, cycleFloorStatus, pruneFloorStatus,
@@ -76,7 +73,11 @@ import { scopedFrom } from "./lib/scopedDb.js";
 import { readStateKey, saveStateKey, dropPendingStateKey, pendingStateKeys } from "./lib/stateStore.js";
 import { createWriteQueue } from "./lib/writeQueue.js";
 import { recordClientDiagnostic } from "./lib/clientDiagnostics.js";
-import { finishServiceStore } from "./lib/serviceLifecycleStore.js";
+import {
+  startServiceStore, endServiceStore, updateServiceStore,
+  fetchServicesStore, readLiveServiceStore, fetchSameDayLabelsStore,
+} from "./lib/serviceLifecycle.js";
+import { currentServiceFrom, nextServiceLabel, serviceLabelBase } from "./lib/serviceEntity.js";
 import { isPowerSyncEnabled } from "./powersync/config.js";
 import { setSqlitePrimaryFlag } from "./powersync/primary.js";
 import { setSandbox, isSandbox } from "./lib/sandbox.js";
@@ -133,6 +134,13 @@ const toLocalDateISO = (date = new Date()) =>
   `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
+
+// localStorage cache keys for the service ENTITY identity (per workspace).
+const CHOSEN_ON_LS_KEY = "milka_service_chosen_on";
+// Floor SET strips are namespaced PER SERVICE: a stale device replaying its
+// old service's strips writes to that old key and can never touch the live
+// service's strips. (The shared legacy `floor_status_v1` key is retired.)
+const floorStatusKeyFor = (serviceId) => (serviceId ? `floor_status_v2:${serviceId}` : null);
 const APP_SUBTITLE = String(import.meta.env.VITE_APP_SUBTITLE || "SERVICE BOARD").trim() || "SERVICE BOARD";
 const DEFAULT_RESTAURANT_CONFIG = makeDefaultRestaurantConfig({ name: APP_NAME, subtitle: APP_SUBTITLE });
 
@@ -363,7 +371,7 @@ export default function App() {
     try {
       const storedMode = localStorage.getItem(workspaceKey("milka_mode")) || null;
       const storedDate = localStorage.getItem(workspaceKey("milka_service_date"));
-      const chosenOn   = localStorage.getItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
+      const chosenOn   = localStorage.getItem(workspaceKey(CHOSEN_ON_LS_KEY));
       // If the saved service date rolled over to yesterday, don't auto-resume
       // service/display — those modes require a date that matches today.
       // A deliberately-past date (demo / reviewing an earlier day) is exempt.
@@ -629,19 +637,36 @@ export default function App() {
     const t = setTimeout(() => setBootGateDone(true), 1500);
     return () => clearTimeout(t);
   }, [remoteBoardLoaded, bootGateDone]);
+  // ── Service ENTITY identity ─────────────────────────────────────────────
+  // The lifecycle is a row in the `services` table; serviceId names which one
+  // this device is on. serviceDate / chosenOn / session / startedAt below are
+  // cached MIRRORS of that entity for the render paths that key on them.
+  // localStorage caches the whole identity for an instant offline boot; a
+  // stale cached date drops the identity so "Start Service" prompts fresh.
+  const [serviceId, setServiceId] = useState(() => {
+    try {
+      const storedId = localStorage.getItem(workspaceKey("milka_service_id"));
+      const storedDate = localStorage.getItem(workspaceKey("milka_service_date"));
+      if (!storedId || !storedDate) return null;
+      const chosenOn = localStorage.getItem(workspaceKey(CHOSEN_ON_LS_KEY));
+      if (isStaleServiceDate(storedDate) && !isActivePastReview(storedDate, chosenOn)) return null;
+      return storedId;
+    } catch { return null; }
+  });
   const [serviceDate,  setServiceDate]  = useState(() => {
     try {
+      const storedId = localStorage.getItem(workspaceKey("milka_service_id"));
       const stored = localStorage.getItem(workspaceKey("milka_service_date"));
-      if (!stored) return null;
-      const chosenOn = localStorage.getItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
+      if (!stored || !storedId) return null;
+      const chosenOn = localStorage.getItem(workspaceKey(CHOSEN_ON_LS_KEY));
       if (isStaleServiceDate(stored) && !isActivePastReview(stored, chosenOn)) {
-        // Date rolled over since last session — drop the stale value so
-        // "Start Service" prompts for today's date instead of silently
-        // resuming yesterday's (now empty) service. An abandoned past-date
-        // review (chosen on an earlier day) is dropped here too.
+        // Date rolled over since last session — drop the stale identity so
+        // "Start Service" prompts for today's date. The stale service itself
+        // is safe in the store; the boot check files it (a status flip).
         try {
+          localStorage.removeItem(workspaceKey("milka_service_id"));
           localStorage.removeItem(workspaceKey("milka_service_date"));
-          localStorage.removeItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
+          localStorage.removeItem(workspaceKey(CHOSEN_ON_LS_KEY));
         } catch {}
         return null;
       }
@@ -651,7 +676,7 @@ export default function App() {
   // Service day at the moment the date was chosen — distinguishes a service
   // that rolled over (auto-end) from one deliberately started on a past day.
   const [serviceDateChosenOn, setServiceDateChosenOn] = useState(() => {
-    try { return localStorage.getItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY)) || null; } catch { return null; }
+    try { return localStorage.getItem(workspaceKey(CHOSEN_ON_LS_KEY)) || null; } catch { return null; }
   });
   const [showServiceDatePicker,  setShowServiceDatePicker]  = useState(false);
   const [pendingModeAfterDate,   setPendingModeAfterDate]   = useState(null);
@@ -677,6 +702,52 @@ export default function App() {
   const serviceStartedAtRef = useRef((() => {
     try { return localStorage.getItem(workspaceKey("milka_service_started_at")) || null; } catch { return null; }
   })());
+  const serviceIdRef = useRef(serviceId);
+  serviceIdRef.current = serviceId;
+
+  // Adopt a service ENTITY into all the mirrors (state, refs, localStorage) in
+  // one place. `svc` null releases the identity. This never touches the board
+  // or the store — board handling belongs to the callers.
+  const applyServiceEntity = (svc) => {
+    if (svc && svc.id) {
+      setServiceId(svc.id);
+      serviceIdRef.current = svc.id;
+      setServiceDate(svc.date || null);
+      serviceDateRef.current = svc.date || null;
+      setServiceDateChosenOn(svc.chosenOn || null);
+      serviceDateChosenOnRef.current = svc.chosenOn || null;
+      serviceStartedAtRef.current = svc.startedAt || null;
+      if (svc.session === "lunch" || svc.session === "dinner") {
+        setActiveServiceSession(svc.session);
+        activeServiceSessionRef.current = svc.session;
+      }
+      try {
+        localStorage.setItem(workspaceKey("milka_service_id"), svc.id);
+        if (svc.date) localStorage.setItem(workspaceKey("milka_service_date"), svc.date);
+        if (svc.chosenOn) localStorage.setItem(workspaceKey(CHOSEN_ON_LS_KEY), svc.chosenOn);
+        else localStorage.removeItem(workspaceKey(CHOSEN_ON_LS_KEY));
+        if (svc.startedAt) localStorage.setItem(workspaceKey("milka_service_started_at"), svc.startedAt);
+        else localStorage.removeItem(workspaceKey("milka_service_started_at"));
+        if (svc.session === "lunch" || svc.session === "dinner") {
+          localStorage.setItem(workspaceKey("milka_service_session"), svc.session);
+        }
+      } catch {}
+    } else {
+      setServiceId(null);
+      serviceIdRef.current = null;
+      setServiceDate(null);
+      serviceDateRef.current = null;
+      setServiceDateChosenOn(null);
+      serviceDateChosenOnRef.current = null;
+      serviceStartedAtRef.current = null;
+      try {
+        localStorage.removeItem(workspaceKey("milka_service_id"));
+        localStorage.removeItem(workspaceKey("milka_service_date"));
+        localStorage.removeItem(workspaceKey(CHOSEN_ON_LS_KEY));
+        localStorage.removeItem(workspaceKey("milka_service_started_at"));
+      } catch {}
+    }
+  };
   const saveTimerRef       = useRef(null);
   /** Sanitized-table JSON of the last state written to (or adopted from) the
    *  store, by index. Diffing against it keeps board writes to just the rows
@@ -767,10 +838,19 @@ export default function App() {
   // and archive seams below pick the store the same way.
 
   // Persist board rows: [{ table_id, data, updated_at }] (update-or-insert).
+  // Every row lands inside the CURRENT service's namespace — a write cannot
+  // address any other service's rows, by construction.
   const persistBoardRows = useCallback(async (rows) => {
     if (!supabase || !getWorkspaceId() || !rows?.length) return { ok: true };
     // Test service: keep the board entirely in memory — write nothing.
     if (sandboxRef.current) return { ok: true };
+    const svcId = serviceIdRef.current;
+    if (!svcId) {
+      // No live service — there is no namespace to write to. Surface it
+      // instead of silently dropping the rows (silent drops are how data
+      // vanishes without a trace).
+      return { ok: false, error: new Error("no live service — board edits need a started service") };
+    }
     // Record what this device is writing (all callers funnel through here —
     // autosave, CLEAR ALL blanks) so adoptRemoteTables can drop older echoes.
     for (const r of rows) {
@@ -787,7 +867,7 @@ export default function App() {
     try {
       if (sqlitePrimaryRef.current) {
         const { writeServiceTables } = await import("./powersync/writes.js");
-        await writeServiceTables(rows);
+        await writeServiceTables(svcId, rows);
       } else {
         const { saveServiceTableWithCas } = await import("./lib/serviceTableCas.js");
         const ws = getWorkspaceId();
@@ -823,6 +903,7 @@ export default function App() {
           const saved = await saveServiceTableWithCas({
             client: supabase,
             workspaceId: ws,
+            serviceId: svcId,
             tableId: row.table_id,
             data: row.data,
             ancestor,
@@ -880,12 +961,11 @@ export default function App() {
   const flushingBoardRef = useRef(false);
   const flushAgainRef = useRef(false);
   const boardFlushPromiseRef = useRef(null);
-  // TRUE while a service end is executing against the store. A board flush
-  // that lands AFTER the store-side clear resurrects the archived board in
-  // the store (last-write-wins upsert) — the straggler-autosave race the
-  // end-identity harness kept catching. persistServiceEnd raises this and
-  // waits out any in-flight flush; it drops on the local apply (success) or
-  // immediately (refused/failed end).
+  // TRUE while a service end is executing. There is no store-side clear left
+  // to race, but a flush landing mid-end would still write rows the operator
+  // believes are already filed — archiveAndClearAll raises this and waits out
+  // any in-flight flush; releaseServiceLocally drops it once the local reset
+  // is in place (or the end path drops it on failure).
   const endingServiceRef = useRef(false);
   const flushBoardWrites = useCallback(async () => {
     if (endingServiceRef.current) return { ok: false }; // the end clears pending itself
@@ -984,22 +1064,10 @@ export default function App() {
       };
     }
 
-    const existingIds = new Set(currentTables.map((table) => Number(table.id)));
     const nextTables = reconcileConfiguredTables(currentTables, nextConfig);
-    const addedRows = nextTables
-      .filter((table) => !existingIds.has(Number(table.id)))
-      .map((table) => ({
-        table_id: Number(table.id),
-        data: sanitizeTable(table),
-        updated_at: new Date().toISOString(),
-      }));
-
-    if (addedRows.length > 0) {
-      const boardResult = await persistBoardRows(addedRows);
-      if (!boardResult.ok) {
-        return { ok: false, error: boardResult.error?.message || "Could not create the new table rows." };
-      }
-    }
+    // Entity model: a blank table is the ABSENCE of a row, so newly configured
+    // tables need no store rows — they exist the moment the configuration
+    // says so, and a row appears only on their first real content write.
 
     const settingResult = await saveStateKey(RESTAURANT_CONFIG_KEY, nextConfig);
     if (!settingResult.ok) {
@@ -1007,28 +1075,30 @@ export default function App() {
     }
 
     prevTablesJsonRef.current = makeTableJsonMap(nextTables);
-    // Preserve confirmed ancestors for existing rows. Only rows created by this
-    // save are newly confirmed here; current React state is not store proof.
+    // Preserve confirmed ancestors for existing rows; retired ids drop out.
+    // (Newly added tables have no store row yet, so nothing to confirm.)
     const nextIds = new Set(nextTables.map((table) => Number(table.id)));
     for (const id of [...confirmedTablesJsonRef.current.keys()]) {
       if (!nextIds.has(id)) confirmedTablesJsonRef.current.delete(id);
-    }
-    for (const row of addedRows) {
-      confirmedTablesJsonRef.current.set(Number(row.table_id), JSON.stringify(row.data));
     }
     setRestaurantConfig(nextConfig);
     setTables(nextTables);
     return { ok: true, config: nextConfig };
   }, [canAdmin, flushBoardWrites, persistBoardRows]);
 
-  // Read the full board from the source of truth (SQLite when primary).
+  // Read the CURRENT service's board from the source of truth (SQLite when
+  // primary). No live service → no rows: between services the board is blank
+  // by construction, not by clearing anything.
   const fetchBoardRows = useCallback(async () => {
+    const svcId = serviceIdRef.current;
+    if (!svcId) return [];
     if (sqlitePrimaryRef.current) {
       const { readServiceTables } = await import("./powersync/reads.js");
-      return readServiceTables();
+      return readServiceTables(svcId);
     }
     const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
-      .select("table_id, data, updated_at");
+      .select("service_id, table_id, data, updated_at")
+      .eq("service_id", svcId);
     if (error) throw error;
     return data || [];
   }, []);
@@ -1163,7 +1233,15 @@ export default function App() {
   // baseline, so the pending autosave writes it and every device converges.
   const adoptRemoteTables = rows => {
     if (sandboxRef.current) return; // test service: ignore the real board
-    const arr = Array.isArray(rows) ? rows : [];
+    // Only the CURRENT service's rows may paint here. Rows from any other
+    // service (a stale realtime event, a reader that raced a service switch)
+    // are a different namespace — never folded into this board. Rows without
+    // a service_id stamp (legacy callers) are trusted as current.
+    const arr = (Array.isArray(rows) ? rows : []).filter((row) => {
+      if (!serviceIdRef.current) return false; // no live service → blank board
+      if (row.service_id == null) return true;
+      return String(row.service_id) === String(serviceIdRef.current);
+    });
     const rawById = new Map(arr.map(row => [Number(row.table_id), row]));
     const cur = tablesRef.current && tablesRef.current.length ? tablesRef.current : initTables;
     const configuredIds = configuredTableIds(restaurantConfigRef.current);
@@ -1995,189 +2073,103 @@ export default function App() {
     setArchiveOpen(false);
   };
 
-  // Load every non-deleted archive for a service day that shares the base label
-  // (or one of its " · n" variants) — the input set for the dedup decision.
-  const fetchSameDayArchives = async (archiveDate, archiveLabel) => {
-    let rows;
-    if (sqlitePrimaryRef.current) {
-      const { readActiveArchivesForDate } = await import("./powersync/reads.js");
-      rows = await readActiveArchivesForDate(archiveDate);
-    } else {
-      const { data } = await scopedFrom(TABLES.SERVICE_ARCHIVE)
-        .select("id, label, state, created_at").eq("date", archiveDate).is("deleted_at", null);
-      rows = data || [];
+  // The label for an ENDING service, deduplicated against the other entries
+  // already filed for that day ("… · 2"). Best-effort: an unreachable store
+  // falls back to the base label — a duplicate label is cosmetic, never loss.
+  const labelForEndingService = async (date, session) => {
+    try {
+      return nextServiceLabel({ date, session }, await fetchSameDayLabelsStore(date));
+    } catch {
+      return serviceLabelBase(date, session);
     }
-    return rows.filter(e => isSameServiceLabel(e.label, archiveLabel));
   };
 
-  // Archive + board clear + shared lifecycle clear are one store operation.
-  // SQLite-primary devices commit one local transaction; the fallback calls
-  // one Postgres function/transaction. This removes the old half-ended states
-  // (archive saved but board/date clear failed, or board cleared before date).
-  // `expected` carries the identity of the service being ended; the STORE
-  // itself refuses the whole operation (superseded: true, nothing written)
-  // when it no longer holds that service — the atomic backstop behind the
-  // client-side serviceEndSuperseded pre-check below.
-  const persistServiceEnd = useCallback(async ({ archive = null, expected = null }) => {
-    // Straggler-autosave guard: block NEW board flushes for the duration of
-    // the end and wait out any IN-FLIGHT one (including its retry backoff —
-    // bounded to seconds) before touching the store. Without this, a flush
-    // that derived rows from the pre-end board can land after the store-side
-    // clear and resurrect the archived service in the store. The flag stays
-    // up through the local apply on success (applyFinishedServiceLocally
-    // drops it once the blank baselines are in place) and drops here on a
-    // refused or failed end.
-    endingServiceRef.current = true;
-    while (flushingBoardRef.current) await new Promise((r) => setTimeout(r, 50));
-    try {
-      const { rows, superseded } = await finishServiceStore({
-        client: supabase,
-        workspaceId: getWorkspaceId(),
-        sqlitePrimary: sqlitePrimaryRef.current,
-        archive,
-        expected,
-        tableIds: [...new Set([
-          ...configuredTableIds(restaurantConfigRef.current),
-          ...(tablesRef.current || []).map((table) => Number(table.id)),
-        ])],
-      });
-      if (superseded) endingServiceRef.current = false;
-      return { ok: !superseded, superseded, rows };
-    } catch (error) {
-      endingServiceRef.current = false;
-      return { ok: false, error };
-    }
-  }, []);
-
-  const applyFinishedServiceLocally = (rows) => {
-    const ids = Array.isArray(rows) && rows.length
-      ? rows.map((row) => Number(row.table_id))
-      : configuredTableIds(restaurantConfigRef.current);
-    const blank = [...new Set(ids)].sort((a, b) => a - b).map(blankTable);
+  // Reset the LOCAL board to blank tables for the configured layout: fresh
+  // baselines, no pending writes. Purely local — never a store write. Used
+  // when switching to a different service namespace (start, adopt, release);
+  // the new namespace's rows (if any) stream in and adopt on top.
+  const resetBoardLocal = () => {
+    const blank = configuredTableIds(restaurantConfigRef.current).map(blankTable);
     intentionalBoardClearRef.current = true;
     pendingBoardWritesRef.current = new Set();
     prevTablesJsonRef.current = makeTableJsonMap(blank);
     confirmedTablesJsonRef.current = makeTableJsonMap(blank);
+    lastBoardWriteRef.current = new Map();
     tablesRef.current = blank;
-    for (const row of rows || []) {
-      const ts = Date.parse(row.updated_at || "");
-      if (Number.isFinite(ts)) lastBoardWriteRef.current.set(Number(row.table_id), ts);
-    }
     setTables(blank);
-    // SET strips are hands-calls for THIS service — they must not greet the
-    // next one. Local clear only: adopting devices never write; the ending
-    // device persists the empty blob itself (see archive/auto-end paths).
+    // SET strips belong to a service namespace; a namespace switch starts
+    // clean locally (the per-service floor key means nothing can leak over).
     setFloorStatusState({});
-    setServiceDate(null);
-    setServiceDateChosenOn(null);
-    serviceDateRef.current = null;
-    serviceDateChosenOnRef.current = null;
-    serviceStartedAtRef.current = null;
-    try {
-      localStorage.removeItem(workspaceKey("milka_service_date"));
-      localStorage.removeItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
-      localStorage.removeItem(workspaceKey("milka_service_started_at"));
-    } catch {}
+    floorStatusRef.current = {};
+  };
+
+  // Release the service identity on THIS device (it ended — here or
+  // elsewhere) and blank the local board. The service's rows live on in the
+  // store untouched; adopting devices never write anything.
+  const releaseServiceLocally = () => {
+    resetBoardLocal();
+    applyServiceEntity(null);
     // The blank baselines are in place — board flushes are safe again.
     endingServiceRef.current = false;
   };
 
-  // The store-side finish (RPC / finishServiceLocally) blanks the board and
-  // service_date UNCONDITIONALLY — it takes no service identity. So a device
-  // that slept through "D1 ended, D2 started" and then taps Archive & Clear
-  // for what it still shows as D1 would wipe D2's fresh board for everyone.
-  // Before ending, confirm the store still holds THE SERVICE WE ARE ENDING;
-  // if it moved on, adopt the store's reality instead of clearing it.
-  // Read-then-act (not atomic — a true fix needs an identity-checked RPC),
-  // but it shrinks the wipe window from hours to one round-trip. Store
-  // unreachable → proceed (offline local-first reads its own local truth).
-  const serviceEndSuperseded = async (expectedDate, expectedStartedAt) => {
-    try {
-      const live = await readStateKey("service_date");
-      const liveDate = live?.date || null;
-      const liveStartedAt = live?.startedAt || null;
-      if (!liveDate) return { superseded: true, live: live || {} }; // already ended
-      if (expectedDate && liveDate !== expectedDate) return { superseded: true, live };
-      if (expectedStartedAt && liveStartedAt && liveStartedAt !== expectedStartedAt) {
-        return { superseded: true, live };
-      }
-      return { superseded: false };
-    } catch { return { superseded: false }; }
-  };
-
-  // Guards a manual archive in flight so a double-tap (or a second device a few
-  // seconds later) can't file the same service twice — the cause of the two
-  // identical 23:53 entries in the 10.06 incident.
+  // Guards a manual end in flight so a double-tap can't race itself. (Ending
+  // is idempotent in the entity model — this only prevents duplicate UI work.)
   const archivingRef = useRef(false);
+  // END SERVICE — entity model: ONE idempotent status flip on THIS service's
+  // row. Nothing is copied and nothing is blanked; the ended service (with
+  // every table row) IS the archive entry. A stale device running this for an
+  // old service can only flip that old row — the wipe class is structurally
+  // impossible, so there is no superseded-check, no expected-identity plumbing
+  // and no store-side clear left to guard.
   const archiveAndClearAll = async ({ skipConfirm = false } = {}) => {
-    // Callers that chain another lifecycle step (notably Lunch → Dinner) need
-    // an HONEST verdict. The old function returned undefined on both success
-    // and refusal/failure, so the picker always started the next session even
-    // when the previous one was still live.
     if (archivingRef.current) return { ok: false, reason: "busy" };
-    if (!skipConfirm && typeof window !== "undefined" && !window.confirm("Archive today's service and clear all tables?")) {
+    const svcId = serviceIdRef.current;
+    if (!svcId) { setArchiveOpen(false); return { ok: true, reason: "no-service" }; }
+    if (!skipConfirm && typeof window !== "undefined" && !window.confirm(
+      "End this service? Every table is kept in the ARCHIVE — nothing is deleted.")) {
       return { ok: false, reason: "cancelled" };
     }
     archivingRef.current = true;
     try {
-      const superseded = await serviceEndSuperseded(serviceDate, serviceStartedAtRef.current);
-      if (superseded.superseded) {
-        adoptServiceLifecycleRef.current?.(superseded.live, new Date().toISOString());
-        setArchiveOpen(false);
-        window.alert("This service was already ended (or a new one started) on another device — nothing was cleared. The board has been updated.");
-        return { ok: false, reason: "superseded" };
-      }
+      // Straggler-autosave guard: wait out an in-flight board flush so its
+      // rows land (under this service's namespace) before the local release.
+      endingServiceRef.current = true;
+      while (flushingBoardRef.current) await new Promise((r) => setTimeout(r, 50));
+      // Stamp the archive label with the service's actual date, not whatever
+      // today happens to be — a service ended after midnight files right.
+      const date = serviceDateRef.current || toLocalDateISO();
+      const session = activeServiceSessionRef.current || "dinner";
+      const label = await labelForEndingService(date, session);
       const snap = boardStateRef.current; // stable reference, never stale
-      // Stamp the archive with the service's actual date, not whatever today
-      // happens to be — otherwise a service ended after midnight (or a stale
-      // day) lands under the wrong date.
-      const archiveDate = serviceDate || toLocalDateISO();
-      const dateStr = new Date(archiveDate + "T00:00:00").toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
-      const archiveLabel = `${dateStr} – ${activeServiceSession.toUpperCase()}`;
-      const activeTables = snap.tables.filter(t => t.active || t.arrivedAt || t.resName || t.resTime);
-      let archive = null;
-      if (supabase) {
-        const startedAt = serviceStartedAtRef.current;
-        const label = nextArchiveLabel(await fetchSameDayArchives(archiveDate, archiveLabel), archiveLabel);
-        archive = {
-          // Very old live services may predate the shared startedAt stamp.
-          // Fall back to the service day/session so two tablets still choose
-          // the same archive id instead of filing duplicate legacy entries.
-          id: await archiveIdForService(
-            getWorkspaceId(),
-            startedAt || `${archiveDate}|${activeServiceSession}`,
-          ),
-          date: archiveDate,
-          label,
-          state: { ...snap, tables: activeTables, menuCourses, serviceSession: activeServiceSession, startedAt },
-        };
-      }
-      const result = await persistServiceEnd({
-        archive,
-        // Identity of the service we believe we are ending — the store
-        // refuses atomically if it has moved on (stale-device backstop).
-        expected: { startedAt: serviceStartedAtRef.current || null, date: serviceDate || null },
+      const result = await endServiceStore(svcId, {
+        reason: "manual",
+        label,
+        // Context decoration for the archive detail (menu + beverage lists as
+        // the service used them). Optional: losing it never loses table data.
+        snapshot: {
+          menuCourses: menuCoursesRef.current || [],
+          cocktails: snap.cocktails, spirits: snap.spirits, beers: snap.beers,
+        },
       });
-      if (result.superseded) {
-        adoptServiceLifecycleRef.current?.((await readStateKey("service_date").catch(() => null)) || {}, new Date().toISOString());
-        setArchiveOpen(false);
-        window.alert("This service was already ended (or a new one started) on another device — nothing was cleared. The board has been updated.");
-        return { ok: false, reason: "superseded" };
-      }
       if (!result.ok) {
-        window.alert("Service was not ended; the live board is unchanged. Please retry: " + (result.error?.message || result.error));
+        endingServiceRef.current = false;
+        setSyncStatus("sync-error");
+        noteSyncError("end service", result.error);
+        recordClientDiagnostic("end service", result.error);
+        if (typeof window !== "undefined") {
+          window.alert("Service was not ended; the live board is unchanged. Please retry: " + (result.error?.message || result.error));
+        }
         return { ok: false, reason: "persist-failed", error: result.error };
       }
-      applyFinishedServiceLocally(result.rows);
-      // Persist the strip wipe so the store's floor_status doesn't carry this
-      // service's SET markers into the next one (adopters only clear locally).
-      updateFloorStatus({});
+      releaseServiceLocally();
       setSel(null);
       setArchiveOpen(false);
       // Return to mode selection after archiving
       changeMode(null);
       return { ok: true };
     } catch (error) {
+      endingServiceRef.current = false;
       setSyncStatus("sync-error");
       noteSyncError("end service", error);
       recordClientDiagnostic("end service", error);
@@ -2221,6 +2213,7 @@ export default function App() {
       // SANDBOX unseat must not leave exemptions behind on real table ids.
       unseatAllowances: new Map(intentionalBoardUnseatRef.current),
       reservations: reservationsRef.current,
+      serviceId: serviceIdRef.current,
       serviceDate: serviceDateRef.current,
       serviceDateChosenOn: serviceDateChosenOnRef.current,
       activeServiceSession: activeServiceSessionRef.current,
@@ -2281,6 +2274,8 @@ export default function App() {
       setReservations(snap.reservations || []);
       setFloorStatusState(snap.floorStatus || sanitizeFloorStatus({}));
       floorStatusRef.current = snap.floorStatus || sanitizeFloorStatus({});
+      serviceIdRef.current = snap.serviceId || null;
+      setServiceId(snap.serviceId || null);
       serviceDateRef.current = snap.serviceDate || null;
       serviceDateChosenOnRef.current = snap.serviceDateChosenOn || null;
       serviceStartedAtRef.current = snap.serviceStartedAt || null;
@@ -2309,9 +2304,10 @@ export default function App() {
     // Floor blobs included — they were restored from the snapshot, but another
     // device may have SET/un-SET strips or edited maps during the test.
     if (supabase && getWorkspaceId()) {
+      fetchServicesStore(20).then(rows => adoptServiceRowsRef.current?.(rows)).catch(() => {});
       fetchBoardRows().then(rows => { if (Array.isArray(rows)) adoptRemoteTables(rows); }).catch(() => {});
-      readStateKey("service_date").then(st => adoptServiceLifecycleRef.current?.(st, new Date().toISOString())).catch(() => {});
-      readStateKey(FLOOR_STATUS_KEY).then(st => adoptFloorStatusRef.current?.(st, new Date().toISOString())).catch(() => {});
+      const fsKey = floorStatusKeyFor(serviceIdRef.current);
+      if (fsKey) readStateKey(fsKey).then(st => adoptFloorStatusRef.current?.(st, new Date().toISOString())).catch(() => {});
       readStateKey(FLOOR_MAPS_KEY).then(st => adoptFloorMapsRef.current?.(st, new Date().toISOString())).catch(() => {});
       reloadReservationsRef.current?.();
     }
@@ -2325,194 +2321,88 @@ export default function App() {
     } catch { /* noop */ }
   };
 
-  // Guards the rollover auto-end so the boot check and the interval tick can't
-  // archive the same service twice. Reset when a fresh service starts.
+  // Guards the rollover auto-end so the boot check and the interval tick don't
+  // duplicate UI work. (The end itself is idempotent — flipping an already
+  // ended row changes nothing.)
   const autoEndingRef = useRef(false);
 
   // A service that has rolled past the service-day cutoff (see currentServiceDay)
-  // is over. ARCHIVE whatever is still on the board first — preserving the
-  // record of what each guest ate and drank — and only THEN clear it. This
-  // replaces the old behaviour that silently blanked the tables, destroying the
-  // night's drinks/seat input. If archiving fails we leave the service intact
-  // rather than risk losing it.
-  const autoEndStaleService = async (staleDate) => {
-    if (!supabase || !staleDate || autoEndingRef.current) return;
+  // is over: flip ITS row to 'ended'. Entity model — this is one safe write.
+  // Nothing is archived-then-cleared because nothing is destroyed: the rows
+  // stay under the ended service and appear in the Archive as-is. Getting the
+  // live-guard wrong is now an inconvenience (the entry sits in the Archive
+  // with every table intact), never data loss.
+  const autoEndStaleService = async (svc) => {
+    if (!supabase || !svc?.id || autoEndingRef.current) return;
+    if (sandboxRef.current) return;
     autoEndingRef.current = true;
-    let archive = null;
     try {
-      // Read the night's state from the source of truth: local React state may
-      // not have painted yet on a fresh load (or be blank on this device).
-      const rows = await fetchBoardRows();
-
-      // GUARD: never archive+clear a service that is LIVE right now. A board
-      // whose SEATED tables (active / arrived / kitchen activity) were touched
-      // within the current service day is an in-progress service running under a
-      // mislabeled or rolled-over date — not an abandoned one. Auto-ending it
-      // wiped a live dinner mid-service (the 04.07 incident). Re-date it forward
-      // to today and KEEP the board; the genuine overnight case (last activity on
-      // a past service day) still falls through to the archive+clear below.
-      const seatedRows = (rows || []).filter(r => {
-        const t = sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) });
-        return t.active || t.arrivedAt
-          || (t.kitchenLog && Object.keys(t.kitchenLog).length > 0)
-          || t.kitchenArchived;
-      });
-      const latestSeatedMs = seatedRows
-        .map(r => new Date(r.updated_at).getTime())
-        .filter(Number.isFinite)
-        .reduce((a, b) => Math.max(a, b), -Infinity);
-      if (seatedRows.length > 0 && isLiveServiceActivity(latestSeatedMs)) {
+      // LIVE guard — judged with the app's FULL content definition
+      // (tableHasServiceContent: drinks, seat data, notes, kitchen entries —
+      // not just seated markers; the narrow filter was how the 22.07 wipe
+      // slipped through). Recent activity on THE JUDGED SERVICE'S OWN rows
+      // (never this device's current namespace — a boot check judges a
+      // service it hasn't adopted) means a mislabeled live service: heal the
+      // date forward and keep going.
+      let latestMs = -Infinity;
+      let hasContent = false;
+      try {
+        let rows;
+        if (sqlitePrimaryRef.current) {
+          const { readServiceTables } = await import("./powersync/reads.js");
+          rows = await readServiceTables(svc.id);
+        } else {
+          const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
+            .select("service_id, table_id, data, updated_at")
+            .eq("service_id", svc.id);
+          if (error) throw error;
+          rows = data || [];
+        }
+        const contentRows = (rows || []).filter((r) =>
+          tableHasServiceContent(sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) })));
+        hasContent = contentRows.length > 0;
+        latestMs = contentRows
+          .map((r) => new Date(r.updated_at).getTime())
+          .filter(Number.isFinite)
+          .reduce((a, b) => Math.max(a, b), -Infinity);
+      } catch { /* unreadable board — the flip below is safe regardless */ }
+      if (hasContent && isLiveServiceActivity(latestMs)) {
         const healDay = currentServiceDay();
         console.warn(
-          `[auto-end] Live service detected under stale date ${staleDate} — re-dating to ${healDay} instead of clearing.`,
+          `[auto-end] Live service detected under stale date ${svc.date} — re-dating to ${healDay} instead of ending.`,
         );
-        setServiceDate(healDay);
-        setServiceDateChosenOn(healDay);
-        serviceDateRef.current = healDay;
-        serviceDateChosenOnRef.current = healDay;
-        // The re-dated state must keep a FULL identity: writing this device's
-        // empty stamp would strip startedAt from the shared state, and an
-        // identity-less live state deadlocks every other device's guarded end
-        // (nothing to adopt back). Mint one if we don't hold one — a device
-        // holding an older stamp is refused once, adopts, and retries fine.
-        const healStartedAt = serviceStartedAtRef.current || new Date().toISOString();
-        serviceStartedAtRef.current = healStartedAt;
-        try {
-          localStorage.setItem(workspaceKey("milka_service_date"), healDay);
-          localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), healDay);
-          localStorage.setItem(workspaceKey("milka_service_started_at"), healStartedAt);
-        } catch {}
-        await saveStateKey("service_date", {
-          date: healDay, chosenOn: healDay,
-          session: activeServiceSessionRef.current,
-          startedAt: healStartedAt,
-        });
-        autoEndingRef.current = false;
+        const healed = await updateServiceStore(svc.id, { date: healDay, chosen_on: healDay });
+        if (healed.ok && serviceIdRef.current === svc.id) {
+          applyServiceEntity({
+            ...svc, date: healDay, chosenOn: healDay,
+            session: svc.session || activeServiceSessionRef.current,
+            startedAt: svc.startedAt || serviceStartedAtRef.current,
+          });
+        }
         return;
       }
 
-      const activeTables = (rows || [])
-        .map(r => sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) }))
-        .filter(t => t.active || t.arrivedAt || t.resName || t.resTime)
-        .sort((a, b) => a.id - b.id);
-
-      if (activeTables.length > 0) {
-        // Read the session through the REF, not the render closure: the boot
-        // check and the 60s tick both hold the closure from when their effect
-        // last ran, so a session adopted/changed since then mislabeled the
-        // archive (an abandoned lunch filed as "… – DINNER").
-        const session = activeServiceSessionRef.current || "dinner";
-        const dateStr = new Date(staleDate + "T00:00:00").toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit", year: "numeric" });
-        const label = `${dateStr} – ${session.toUpperCase()}`;
-        const startedAt = serviceStartedAtRef.current;
-        const label2 = nextArchiveLabel(await fetchSameDayArchives(staleDate, label), label);
-        let courses = menuCoursesRef.current;
-        if (!courses || courses.length === 0) { try { courses = await fetchMenuCourses(); } catch { courses = []; } }
-        archive = {
-          id: await archiveIdForService(
-            getWorkspaceId(),
-            startedAt || `${staleDate}|${session}`,
-          ),
-          date: staleDate,
-          label: label2,
-          state: { tables: activeTables, cocktails, spirits, beers, menuCourses: courses || [], serviceSession: session, startedAt, autoEnded: true },
-        };
+      // File it: label the entry, flip the row. The session comes from the
+      // service entity itself, never this device's local default.
+      const session = svc.session || activeServiceSessionRef.current || "dinner";
+      const label = await labelForEndingService(svc.date, session);
+      const result = await endServiceStore(svc.id, { reason: "rollover", label });
+      if (!result.ok) {
+        console.error("Auto-end failed; leaving service visible:", result.error);
+        return;
       }
-    } catch (e) {
-      // Archiving failed — do NOT clear, so the data is never lost. We retry on
-      // the next load or interval tick.
-      console.error("Auto-end archive failed; leaving service intact:", e);
+      if (serviceIdRef.current === svc.id) {
+        releaseServiceLocally();
+        setSel(null);
+        changeMode(null);
+      }
+    } finally {
       autoEndingRef.current = false;
-      return;
     }
-
-    // A late auto-end (device asleep through the real end + a fresh start)
-    // must not blank the NEW service — the store-side clear is unconditional.
-    const superseded = await serviceEndSuperseded(staleDate, serviceStartedAtRef.current);
-    if (superseded.superseded) {
-      console.warn("[auto-end] Store already ended/replaced this service — adopting instead of clearing.");
-      adoptServiceLifecycleRef.current?.(superseded.live, new Date().toISOString());
-      autoEndingRef.current = false;
-      return;
-    }
-
-    const result = await persistServiceEnd({
-      archive,
-      expected: { startedAt: serviceStartedAtRef.current || null, date: staleDate || null },
-    });
-    if (result.superseded) {
-      console.warn("[auto-end] Store refused the finish (service moved on) — adopting instead.");
-      adoptServiceLifecycleRef.current?.((await readStateKey("service_date").catch(() => null)) || {}, new Date().toISOString());
-      autoEndingRef.current = false;
-      return;
-    }
-    if (!result.ok) {
-      console.error("Auto-end transaction failed; leaving service visible:", result.error);
-      autoEndingRef.current = false;
-      return;
-    }
-    applyFinishedServiceLocally(result.rows);
-    // The auto-ended service's SET markers must not survive into the next one.
-    updateFloorStatus({});
-    setSel(null);
-    changeMode(null);
   };
 
-  // A board can carry live tables with NO persisted service_date — e.g. the
-  // night ran after the date was left blank (the 19.06 incident: the service
-  // never auto-archived because the rollover auto-end is keyed entirely on
-  // serviceDate, so an orphaned board is invisible to it). Re-attach the
-  // service day the board's own activity belongs to, with chosenOn === that day
-  // so it counts as a service that ran on its own day — NOT a deliberate
-  // past-date review, which is exempt from auto-end. Once the date is back the
-  // existing rollover auto-end can file it: a still-current orphan is tracked
-  // and ends at the cutoff; a past orphan is already stale and the caller ends
-  // it on this same pass. Returns the day it attached, or null if there was
-  // nothing live to heal (or the read failed — board left untouched).
-  const healOrphanedService = async () => {
-    if (!supabase || serviceDate) return null;
-    let day = null;
-    try {
-      const rows = await fetchBoardRows();
-      const active = (rows || []).filter(r => {
-        const t = sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) });
-        return t.active || t.arrivedAt || t.resName || t.resTime;
-      });
-      if (active.length === 0) return null;
-      const latestMs = active
-        .map(r => new Date(r.updated_at).getTime())
-        .filter(Number.isFinite)
-        .reduce((a, b) => Math.max(a, b), -Infinity);
-      day = serviceDayForActivity(latestMs);
-      if (!day) return null;
-      // The re-attached service gets a FULL identity: session + a fresh
-      // startedAt, adopted locally too. This heal used to write a bare
-      // {date, chosenOn} blob — an identity-less state the guarded end
-      // (store-side since 11.07) compared its startedAt against forever,
-      // so END SERVICE was refused all night while the board kept showing
-      // the whole service (the 11.07 "can't end service" incident). A fresh
-      // stamp is deliberate: the original start's stamp is unknowable here,
-      // and any device still holding an older one is refused once, adopts
-      // this identity, and its retry succeeds.
-      const startedAt = new Date().toISOString();
-      const session = activeServiceSessionRef.current;
-      setServiceDate(day);
-      setServiceDateChosenOn(day);
-      serviceDateRef.current = day;
-      serviceDateChosenOnRef.current = day;
-      serviceStartedAtRef.current = startedAt;
-      try {
-        localStorage.setItem(workspaceKey("milka_service_date"), day);
-        localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), day);
-        localStorage.setItem(workspaceKey("milka_service_started_at"), startedAt);
-      } catch {}
-      await saveStateKey("service_date", { date: day, chosenOn: day, session, startedAt });
-    } catch (e) {
-      console.warn("Orphaned-service heal skipped; leaving board intact:", e);
-      return null;
-    }
-    return day;
-  };
+  // (healOrphanedService is GONE: board rows always belong to a service in
+  // the entity model, so an orphaned board — the 19.06 class — cannot exist.)
 
   // Board swaps exchange P-slot payloads. TERRACE drags change only the
   // guest's physical chair for that concrete map/table, keeping P1..P{pax}
@@ -2573,179 +2463,103 @@ export default function App() {
     }
   };
 
-  // ── Service date ──────────────────────────────────────────────────────────
-  const persistServiceDate = async (date, session = null) => {
-    const previousDate = serviceDate;
-    // A genuine day A→day B switch clears the whole board WITHOUT archiving —
-    // the only archiving paths are END SERVICE and the rollover auto-end. When
-    // live content is at stake, make the operator say so explicitly instead of
-    // silently destroying the night (the red past-date banner used to route
-    // users straight into this unarchived wipe).
-    if (shouldClearBoardOnDateChange(previousDate, date)) {
-      const liveCount = (tablesRef.current || []).filter(tableHasServiceContent).length;
-      if (liveCount > 0 && typeof window !== "undefined"
-          && !window.confirm(
-            `Changing the service date will CLEAR ${liveCount} table(s) WITHOUT archiving them.\n\n`
-            + "Use END SERVICE first if this service should be archived. Continue and clear?",
-          )) {
-        return { ok: false, reason: "cancelled" };
-      }
-    }
-    // A fresh service starting clears the auto-end guard so this new service can
-    // itself be auto-ended once it later rolls past the cutoff.
-    if (date) autoEndingRef.current = false;
-    const chosenOn = date ? currentServiceDay() : null;
-    // Fresh instance id per (re)start so two services on the same day+session are
-    // distinguishable in the archive.
-    const startedAt = date ? new Date().toISOString() : null;
+  // ── Service lifecycle: START ────────────────────────────────────────────────
+  // Starting a service INSERTS a new service entity — a fresh board namespace.
+  // Nothing here clears or archives anything: the previous service (if any) is
+  // superseded to 'ended' by the store trigger with every one of its rows
+  // intact, and the new service simply has no rows yet. The confirm dialogs
+  // about destroying data are gone because there is nothing left to destroy.
+  const startService = async (date, session = null) => {
+    if (!date) return { ok: false, reason: "no-date" };
     const nextSession = (session === "lunch" || session === "dinner")
       ? session : activeServiceSessionRef.current;
-    if (supabase) {
-      const result = await saveStateKey(
-        "service_date",
-        date ? { date, chosenOn, session: nextSession, startedAt } : {},
-      );
-      if (!result.ok) return result;
+    const result = await startServiceStore({
+      date,
+      session: nextSession,
+      chosenOn: currentServiceDay(),
+    });
+    if (!result.ok) return result;
+    // The new service can itself be auto-ended once it rolls past the cutoff.
+    autoEndingRef.current = false;
+    // Concurrent starts are arbitrated by the store trigger (newest wins,
+    // losers become 'ended' — non-destructively). Adopt the store's verdict
+    // instead of assuming ours won; if ours lost, the winner's rows sync in.
+    let winner = result.service;
+    if (result.persisted) {
+      try {
+        const live = await readLiveServiceStore();
+        if (live) winner = live;
+      } catch { /* offline: our optimistic entity stands until sync */ }
     }
-    // Adopt a picker-chosen session locally as part of the SAME lifecycle
-    // write. The picker used to fire persistServiceSession()'s unawaited
-    // read-merge-write in parallel with this function: whenever that read
-    // resolved after this write was enqueued, its stale base (old date /
-    // old startedAt) landed LAST in the per-key latest-wins queue and
-    // silently reverted the fresh identity in the store — devices then held
-    // a startedAt the store no longer carried, and every guarded END SERVICE
-    // was refused with "already ended on another device".
-    if (session === "lunch" || session === "dinner") {
-      setActiveServiceSession(session);
-      activeServiceSessionRef.current = session;
-      try { localStorage.setItem(workspaceKey("milka_service_session"), session); } catch {}
-    }
-    setServiceDate(date);
-    setServiceDateChosenOn(chosenOn);
-    serviceDateRef.current = date;
-    serviceDateChosenOnRef.current = chosenOn;
-    serviceStartedAtRef.current = startedAt;
-    try {
-      if (date) {
-        localStorage.setItem(workspaceKey("milka_service_date"), date);
-        localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), chosenOn);
-        if (startedAt) localStorage.setItem(workspaceKey("milka_service_started_at"), startedAt);
-      } else {
-        localStorage.removeItem(workspaceKey("milka_service_date"));
-        localStorage.removeItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
-        localStorage.removeItem(workspaceKey("milka_service_started_at"));
-      }
-    } catch {}
-    // Wipe the board ONLY when switching between two real, different service
-    // days. A device JOINING the current service (previousDate null — fresh
-    // login, a second device, a re-login) must NOT clear: that blanks the
-    // shared live board and the autosave then propagates the wipe to every
-    // device. This was the "opened the board on the laptop and it wiped the
-    // tablet" bug. A joining device keeps whatever it loaded from the store.
-    if (shouldClearBoardOnDateChange(previousDate, date)) {
-      intentionalBoardClearRef.current = true; // deliberate switch between two real service days
-      setTables(configuredTableIds(restaurantConfigRef.current).map(blankTable));
-    }
-    return { ok: true };
+    applyServiceEntity(winner);
+    // Fresh namespace: locally blank. (Its rows — if any — sync in on top.)
+    resetBoardLocal();
+    if (!sqlitePrimaryRef.current) fallbackBoardReloadRef.current?.();
+    return { ok: true, service: winner };
   };
 
   // The red past-date banner's action for a LIVE board: a service running
   // under a stale/rolled-over date is mislabeled, not over — re-date it
-  // FORWARD and keep every table (exactly what the auto-end live guard does
-  // at App's boot check). Routing this through the picker instead ran the
-  // day-switch path, which clears the whole board WITHOUT archiving — the
-  // banner built to fix mislabeled dates was inviting a destructive tap.
+  // FORWARD and keep every table. Entity model: one field patch on the row.
   const redateLiveServiceForward = async () => {
+    const svcId = serviceIdRef.current;
+    if (!svcId) return { ok: false, reason: "no-service" };
     const healDay = currentServiceDay();
-    // Keep a FULL identity: stripping startedAt would leave an identity-less
-    // shared state that deadlocks every device's guarded END (11.07 class).
-    const startedAt = serviceStartedAtRef.current || new Date().toISOString();
-    serviceStartedAtRef.current = startedAt;
-    setServiceDate(healDay);
-    setServiceDateChosenOn(healDay);
-    serviceDateRef.current = healDay;
-    serviceDateChosenOnRef.current = healDay;
-    try {
-      localStorage.setItem(workspaceKey("milka_service_date"), healDay);
-      localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), healDay);
-      localStorage.setItem(workspaceKey("milka_service_started_at"), startedAt);
-    } catch {}
-    if (!supabase) return { ok: true };
-    return saveStateKey("service_date", {
-      date: healDay, chosenOn: healDay,
-      session: activeServiceSessionRef.current,
-      startedAt,
-    });
+    const result = await updateServiceStore(svcId, { date: healDay, chosen_on: healDay });
+    if (result.ok) {
+      setServiceDate(healDay);
+      setServiceDateChosenOn(healDay);
+      serviceDateRef.current = healDay;
+      serviceDateChosenOnRef.current = healDay;
+      try {
+        localStorage.setItem(workspaceKey("milka_service_date"), healDay);
+        localStorage.setItem(workspaceKey(CHOSEN_ON_LS_KEY), healDay);
+      } catch {}
+    }
+    return result;
   };
 
-  // ── Shared service lifecycle ────────────────────────────────────────────────
-  // A service STARTED or ENDED on any device applies everywhere, live: the
-  // service_date settings row is the shared truth, and every device adopts its
-  // transitions from the watch / realtime feed. The adopting device NEVER
-  // writes anything (no archive, no clears, no date persist) — the store is
-  // already the new truth, which is what makes adoption wipe-proof (the 04.07
-  // wipe class came from devices WRITING what they believed, not adopting).
-  // Ordering is guarded by the row's updated_at; STALE dates never auto-adopt
-  // (the boot/auto-end healing paths own those).
-  const serviceLifecycleTsRef = useRef(0);
-  const adoptServiceLifecycle = (st, rowUpdatedAt) => {
-    // Test service: never adopt the real service's start/end/date — the
-    // sandbox owns its own lifecycle and must not be ended or re-dated by it.
+  // ── Shared service lifecycle: ADOPT ─────────────────────────────────────────
+  // The services table is the shared truth; every device adopts transitions
+  // from the watch / realtime feed. currentServiceFrom picks the same live row
+  // on every device (newest started_at). The adopting device NEVER writes
+  // anything — the store is already the new truth, which is what makes
+  // adoption wipe-proof. A stale echo can't regress the pick: an ended row
+  // simply stops being the newest live one.
+  const adoptServiceRows = (rows) => {
+    // Test service: never adopt the real lifecycle — the sandbox owns its own.
     if (sandboxRef.current) return;
-    const ts = Date.parse(rowUpdatedAt || "");
-    if (Number.isFinite(ts)) {
-      if (ts <= serviceLifecycleTsRef.current) return; // stale echo / replay
-      serviceLifecycleTsRef.current = ts;
-    }
-    const state = st || {};
-    // Session + start stamp travel on every lifecycle change (pre-existing
-    // behavior — keeps board filters and archive dedup in step).
-    if (state.session === "lunch" || state.session === "dinner") {
-      setActiveServiceSession(state.session);
-      activeServiceSessionRef.current = state.session;
-      try { localStorage.setItem(workspaceKey("milka_service_session"), state.session); } catch {}
-    }
-    if (state.startedAt) {
-      serviceStartedAtRef.current = state.startedAt;
-      try { localStorage.setItem(workspaceKey("milka_service_started_at"), state.startedAt); } catch {}
-    } else if (state.date) {
-      // A live service with NO identity (a legacy/degraded writer). Presenting
-      // a stamp kept from an EARLIER service is worse than none: the guarded
-      // end refuses it forever (nothing to adopt back), and the deterministic
-      // archive id would collide with that earlier night's entry — silently
-      // dropping the new archive ("on conflict do nothing").
-      serviceStartedAtRef.current = null;
-      try { localStorage.removeItem(workspaceKey("milka_service_started_at")); } catch {}
-    }
-    const remoteDate = state.date || null;
-    const localDate = serviceDateRef.current;
-    if (remoteDate && remoteDate !== localDate) {
-      // STARTED (or re-dated) on another device — adopt the live day.
-      if (isStaleServiceDate(remoteDate) && !isActivePastReview(remoteDate, state.chosenOn)) return;
-      // Any floor-strip blob this device retained for retry belongs to the
-      // PREVIOUS service — replaying it (retry backoff / the 'online' flush,
-      // possibly an hour later) would overwrite the new service's strips.
-      dropPendingStateKey?.(FLOOR_STATUS_KEY);
-      setServiceDate(remoteDate);
-      setServiceDateChosenOn(state.chosenOn || null);
-      serviceDateRef.current = remoteDate;
-      serviceDateChosenOnRef.current = state.chosenOn || null;
-      try {
-        localStorage.setItem(workspaceKey("milka_service_date"), remoteDate);
-        if (state.chosenOn) localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), state.chosenOn);
-      } catch {}
+    const next = currentServiceFrom(rows);
+    const curId = serviceIdRef.current;
+    if (next && next.id !== curId) {
+      // STARTED (or superseded) on another device — adopt the live service.
+      // A stale-dated live row never yanks a device off a current one, but a
+      // fresh device may adopt it to see the board (the boot check files it).
+      if (curId && isStaleServiceDate(next.date) && !isActivePastReview(next.date, next.chosenOn)) return;
+      // Any floor-strip retry this device retained belongs to the PREVIOUS
+      // service's key — replaying it can only touch that old key, but drop it
+      // anyway: the old service is over.
+      const oldKey = floorStatusKeyFor(curId);
+      if (oldKey) dropPendingStateKey?.(oldKey);
+      applyServiceEntity(next);
+      resetBoardLocal();
       setShowServiceDatePicker(false); // a start prompt waiting here is moot now
-    } else if (!remoteDate && localDate) {
-      // ENDED on another device — end here too. The ending device already
-      // archived and cleared the shared board; this device just releases the
-      // date and leaves the live views (the 08.07 phone kept showing a dead
-      // service all night because this adoption didn't exist).
-      // Drop any retained floor-strip retry first: a strip write that failed
-      // on a flaky link before the end would otherwise replay on the next
-      // 'online' signal and overwrite the ending device's {} wipe with the
-      // dead service's SET markers.
-      dropPendingStateKey?.(FLOOR_STATUS_KEY);
-      applyFinishedServiceLocally([]);
+      // Fallback path: pull the new namespace's rows now (the primary path's
+      // service-scoped watch re-reads on its own).
+      if (!sqlitePrimaryRef.current) fallbackBoardReloadRef.current?.();
+      return;
+    }
+    if (next && next.id === curId) {
+      // Same service, descriptive fields healed elsewhere (re-date, session).
+      applyServiceEntity(next);
+      return;
+    }
+    if (!next && curId) {
+      // ENDED on another device (no successor yet) — release here too. The
+      // rows live on in the store; this device just stops showing them.
+      const oldKey = floorStatusKeyFor(curId);
+      if (oldKey) dropPendingStateKey?.(oldKey);
+      releaseServiceLocally();
       setMode(prev => {
         if (prev !== "service" && prev !== "display") return prev;
         try { localStorage.removeItem(workspaceKey("milka_mode")); } catch { /* noop */ }
@@ -2755,13 +2569,11 @@ export default function App() {
   };
   // Ref indirection: the watch/channel handlers are bound once per
   // subscription, so they call through the ref to reach the latest closure.
-  const adoptServiceLifecycleRef = useRef(adoptServiceLifecycle);
-  adoptServiceLifecycleRef.current = adoptServiceLifecycle;
+  const adoptServiceRowsRef = useRef(adoptServiceRows);
+  adoptServiceRowsRef.current = adoptServiceRows;
 
-  // (Session changes ride persistServiceDate(date, session) as ONE lifecycle
-  // write. The old standalone persistServiceSession's read-merge-write raced
-  // the date write in the per-key queue and could silently revert the fresh
-  // identity — see persistServiceDate.)
+  // (Session changes ride startService / updateServiceStore as single writes
+  // on the service entity — there is no shared settings blob left to race.)
 
   // ── Reservations CRUD ─────────────────────────────────────────────────────
   // Push reservation edits to tables where service has ALREADY started. The
@@ -2966,32 +2778,11 @@ export default function App() {
       joiningServiceRef.current = true;
       setSyncStatus("connecting");
       try {
-        const state = await readStateKey("service_date");
-        const entry = resolveServiceEntry(state);
-        if (entry.action === "join") {
-          // setServiceDate directly (NOT persistServiceDate) so joining never
-          // clears the board or rewrites the date — just adopt the live one.
-          setServiceDate(entry.date);
-          setServiceDateChosenOn(entry.chosenOn);
-          // Adopt the live identity EXACTLY — including "none". Falling back
-          // to the stamp this device kept from an earlier service made it
-          // present an identity the store never held: the guarded end refused
-          // every attempt (nothing to adopt back), and the deterministic
-          // archive id collided with that earlier night's archive.
-          serviceStartedAtRef.current = entry.startedAt || null;
-          // Adopt the LIVE session so this device filters the board to the same
-          // session the service is actually running (not its own local default).
-          if (entry.session === "lunch" || entry.session === "dinner") {
-            setActiveServiceSession(entry.session);
-            activeServiceSessionRef.current = entry.session;
-          }
-          try {
-            localStorage.setItem(workspaceKey("milka_service_date"), entry.date);
-            if (entry.chosenOn) localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), entry.chosenOn);
-            if (entry.startedAt) localStorage.setItem(workspaceKey("milka_service_started_at"), entry.startedAt);
-            else localStorage.removeItem(workspaceKey("milka_service_started_at"));
-            if (entry.session === "lunch" || entry.session === "dinner") localStorage.setItem(workspaceKey("milka_service_session"), entry.session);
-          } catch {}
+        const live = await readLiveServiceStore();
+        if (live && (!isStaleServiceDate(live.date) || isActivePastReview(live.date, live.chosenOn))) {
+          // JOIN the live service: adopt its whole identity exactly. Never a
+          // write, never a clear — the board rows stream in on their own.
+          applyServiceEntity(live);
           enterMode("service");
           joiningServiceRef.current = false;
           return;
@@ -3092,7 +2883,8 @@ export default function App() {
   // drop by itself — it used to persist until someone manually un-tapped it,
   // and even across services. Transition-detected on whichever device observes
   // courseReady resolve (the firing kitchen sees its own write immediately);
-  // the cleared blob syncs through FLOOR_STATUS_KEY like every strip write.
+  // the cleared blob syncs through the per-service floor-status key like
+  // every strip write.
   const prevReadyKeysRef = useRef(null);
   // Clears queue until the floor-status blob has hydrated: judging against the
   // boot-empty {} would consume the transition without writing anything, and
@@ -3652,10 +3444,13 @@ export default function App() {
     // workspaceId is part of the gate (and deps): keyed on psResolved alone
     // this ran before the workspace was applied on a fresh login, read null
     // and never retried — maps and strips silently stayed at defaults.
+    // serviceId is a dep too: SET strips live under a per-service key, so a
+    // service switch re-reads the (new, usually empty) strip blob.
     if (!supabase || !workspaceId || !psResolved) return;
+    const fsKey = floorStatusKeyFor(serviceId);
     withRetry(() => Promise.all([
       readStateKey(FLOOR_MAPS_KEY),
-      readStateKey(FLOOR_STATUS_KEY),
+      fsKey ? readStateKey(fsKey) : Promise.resolve(null),
     ]))
       .then(([fm, fs]) => {
         const maps = fm ? sanitizeFloorMaps(fm) : floorMapsState;
@@ -3669,7 +3464,7 @@ export default function App() {
         floorStatusHydratedRef.current = true;
       })
       .catch(() => {});
-  }, [workspaceId, psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workspaceId, psResolved, serviceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Always-current mirrors of the two floor blobs + the time of this device's
   // last local write. Two reasons: (1) writers used to compute the next blob
@@ -3727,7 +3522,10 @@ export default function App() {
     floorStatusRef.current = s;
     floorStatusWriteTsRef.current = Date.now();
     setFloorStatusState(s);
-    if (supabase) saveStateKey(FLOOR_STATUS_KEY, s, { ancestor }).catch?.(() => {});
+    // Per-service key: a strip write can only ever land under the service it
+    // belongs to. No live service → local-only (nothing shared to update).
+    const fsKey = floorStatusKeyFor(serviceIdRef.current);
+    if (supabase && fsKey) saveStateKey(fsKey, s, { ancestor }).catch?.(() => {});
     return s;
   };
 
@@ -3847,20 +3645,28 @@ export default function App() {
     let isMounted = true;
 
     const loadRemoteTables = async () => {
-      const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
-        .select("table_id, data, updated_at")
-        .order("table_id", { ascending: true });
-
-      if (!isMounted) return;
-
-      if (error) {
-        // Do NOT mark the board as loaded: without the source of truth,
-        // reconcile/saves stay disabled. The poll and the visibilitychange
-        // refetch keep retrying and flip the gate on the first success.
-        setSyncStatus("sync-error");
-        noteSyncError("board load (fallback)", error);
-        return;
+      // Service-scoped: only the current namespace's rows exist for this
+      // board. No live service → an EMPTY board is the truth (still counts
+      // as loaded, or the reconcile/saves would stay locked between services).
+      const svcId = serviceIdRef.current;
+      let data = [];
+      if (svcId) {
+        const result = await scopedFrom(TABLES.SERVICE_TABLES)
+          .select("service_id, table_id, data, updated_at")
+          .eq("service_id", svcId)
+          .order("table_id", { ascending: true });
+        if (!isMounted) return;
+        if (result.error) {
+          // Do NOT mark the board as loaded: without the source of truth,
+          // reconcile/saves stay disabled. The poll and the visibilitychange
+          // refetch keep retrying and flip the gate on the first success.
+          setSyncStatus("sync-error");
+          noteSyncError("board load (fallback)", result.error);
+          return;
+        }
+        data = result.data || [];
       }
+      if (!isMounted) return;
 
       if (Array.isArray(data) && data.length > 0) adoptRemoteTables(data);
 
@@ -3886,7 +3692,10 @@ export default function App() {
       document.removeEventListener("visibilitychange", refetchOnWake);
       window.removeEventListener("online", refetchOnWake);
     };
-  }, [workspaceId, psResolved, sqlitePrimary]); // eslint-disable-line react-hooks/exhaustive-deps
+    // serviceId is a dep: adopting a service (boot, join, start) re-runs the
+    // one-shot load so the new namespace's rows paint without waiting for a
+    // poll tick or a realtime event.
+  }, [workspaceId, psResolved, sqlitePrimary, serviceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── PowerSync: connect + stream into the on-device SQLite DB ─────────────────
   // Loaded ENTIRELY via dynamic import() so the SDK + wa-sqlite WASM stay out
@@ -4061,17 +3870,19 @@ export default function App() {
             if (menuCoursesDirtyRef.current) return;
             setMenuCourses(courses);
           },
+          onServices: (rows) => {
+            // Shared service lifecycle: a service started/ended on another
+            // device applies here too (adopt-only — never writes back).
+            if (cancelled) return;
+            adoptServiceRowsRef.current?.(rows);
+          },
           onLiveSettings: (rows) => {
             if (cancelled) return;
             for (const row of rows) {
               if (row.id === "kitchen_ticket_order") {
                 const ids = row.state?.ids;
                 if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
-              } else if (row.id === "service_date") {
-                // Shared service lifecycle: a service started/ended on another
-                // device applies here too (adopt-only — never writes back).
-                adoptServiceLifecycleRef.current?.(row.state, row.updated_at);
-              } else if (row.id === FLOOR_STATUS_KEY) {
+              } else if (row.id === floorStatusKeyFor(serviceIdRef.current)) {
                 adoptFloorStatusRef.current?.(row.state, row.updated_at);
               } else if (row.id === FLOOR_MAPS_KEY) {
                 adoptFloorMapsRef.current?.(row.state, row.updated_at);
@@ -4081,6 +3892,7 @@ export default function App() {
             }
           },
         }, range, {
+          getServiceId: () => serviceIdRef.current,
           onError: reportWatchFailure,
           onReady: () => {
             if (cancelled) return;
@@ -4193,69 +4005,26 @@ export default function App() {
     const cachedResv = readLocalReservations();
     if (cachedResv && cachedResv.length) setReservations(cachedResv);
 
-    // Restore service date saved by a previous session — but if it has rolled
-    // past the service-day cutoff, the service is over: auto-end it (archiving
-    // the night's data before clearing) so "Start Service" prompts for a fresh
-    // date and pre-populates today's reservations on blank tables.
-    readStateKey("service_date")
-      .then(async (state) => {
+    // Boot lifecycle check. Read the live service from the store: adopt it if
+    // it is current; FILE it (one idempotent status flip, nothing destroyed)
+    // if it rolled past the service-day cutoff. Either verdict is safe — a
+    // wrong stale call parks the service intact in the Archive, it does not
+    // wipe anything (the 22.07 class is structurally gone).
+    fetchServicesStore(20)
+      .then(async (rows) => {
         if (!mounted) return;
-        const persisted = state?.date;
-        const persistedChosenOn = state?.chosenOn || null;
-        const persistedSession = state?.session;
-        const persistedStartedAt = state?.startedAt || null;
-        // Adopt the shared session BEFORE the stale checks: the auto-end
-        // paths below stamp the session onto the archive label and the
-        // re-date heal writes it back into the shared blob. Adopting it only
-        // in the live branch let a freshly-booted device (local default
-        // "dinner") archive an abandoned LUNCH as "… – DINNER", or flip every
-        // device's live lunch to dinner through the heal write.
-        if (persistedSession === "lunch" || persistedSession === "dinner") {
-          setActiveServiceSession(persistedSession);
-          activeServiceSessionRef.current = persistedSession;
-          try { localStorage.setItem(workspaceKey("milka_service_session"), persistedSession); } catch {}
-        }
-        if (!persisted) {
-          // No service_date on record. If the board still holds a live service
-          // (orphaned — see healOrphanedService), re-attach its day so it stops
-          // being invisible to the auto-end; if that day has already rolled
-          // over, end it now so the night is finally filed.
-          const healed = await healOrphanedService();
-          if (healed && isStaleServiceDate(healed)) await autoEndStaleService(healed);
+        const live = currentServiceFrom(rows);
+        if (!live) return; // nothing live; ended services are already filed
+        if (isStaleServiceDate(live.date) && !isActivePastReview(live.date, live.chosenOn)) {
+          await autoEndStaleService(live);
           return;
         }
-        if (isStaleServiceDate(persisted) && !isActivePastReview(persisted, persistedChosenOn)) {
-          await autoEndStaleService(persisted);
-          return;
-        }
-        setServiceDate(d => d || persisted); // local state wins if already set
-        setServiceDateChosenOn(c => c || persistedChosenOn);
-        // Adopt the persisted identity as-is. If the LIVE service carries no
-        // startedAt, a stamp left over from an earlier service must not stand
-        // in for it — the guarded end refuses a stamp the store never held,
-        // and the deterministic archive id would collide with that earlier
-        // night's entry. Keep the local stamp only while a locally-started
-        // service on a DIFFERENT day still owns it.
-        if (persistedStartedAt) {
-          serviceStartedAtRef.current = persistedStartedAt;
-        } else if (!serviceDateRef.current || serviceDateRef.current === persisted) {
-          serviceStartedAtRef.current = null;
-          try { localStorage.removeItem(workspaceKey("milka_service_started_at")); } catch {}
-        }
-        // Adopt the live service's shared session so this device's board reconcile
-        // shows the right session's reservations (not its own local default).
-        if (persistedSession === "lunch" || persistedSession === "dinner") {
-          setActiveServiceSession(persistedSession);
-          activeServiceSessionRef.current = persistedSession;
-        }
-        try {
-          localStorage.setItem(workspaceKey("milka_service_date"), persisted);
-          if (persistedChosenOn) localStorage.setItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY), persistedChosenOn);
-          if (persistedStartedAt) localStorage.setItem(workspaceKey("milka_service_started_at"), persistedStartedAt);
-          if (persistedSession === "lunch" || persistedSession === "dinner") localStorage.setItem(workspaceKey("milka_service_session"), persistedSession);
-        } catch {}
+        // Local state wins if this device already holds a service (it may
+        // have just started one); otherwise adopt the store's live service —
+        // identity, session and all — so a fresh boot lands on the board.
+        if (!serviceIdRef.current) applyServiceEntity(live);
       })
-      .catch(() => {}); // keep whatever local service date we already have
+      .catch(() => {}); // keep whatever local service identity we already have
 
     // Fallback planner load (-7…+30 days). When the local DB is primary the
     // reservations watch seeds + refreshes the planner instead. Kept callable
@@ -4293,22 +4062,33 @@ export default function App() {
   // store refresh lands). Sandbox leaves the real cache untouched.
   useEffect(() => { if (!sandboxRef.current) writeLocalReservations(reservations); }, [reservations]);
 
-  // While the app is left open (e.g. overnight), automatically end a service
-  // once it rolls past the service-day cutoff. The auto-end archives first, so
-  // this never loses the night's data — it just files it and clears the board.
+  // While the app is left open (e.g. overnight), automatically FILE a service
+  // once it rolls past the service-day cutoff — a status flip that keeps every
+  // table row; the night lands in the Archive intact.
   useEffect(() => {
-    if (!supabase || !serviceDate) return;
+    if (!supabase || !serviceId || !serviceDate) return;
     if (mode !== "service" && mode !== "display") return;
     // A date deliberately chosen in the past (demo / reviewing an earlier day)
     // is exempt only while it is STILL that service day — once the clock rolls
     // past chosenOn the review is abandoned and auto-end resumes, so an old
     // selection can't keep filing live service under a stale date.
     if (isActivePastReview(serviceDate, serviceDateChosenOn)) return;
-    const tick = () => { if (isStaleServiceDate(serviceDate)) autoEndStaleService(serviceDate); };
+    const tick = () => {
+      if (!serviceIdRef.current) return;
+      if (!isStaleServiceDate(serviceDateRef.current)) return;
+      autoEndStaleService({
+        id: serviceIdRef.current,
+        date: serviceDateRef.current,
+        chosenOn: serviceDateChosenOnRef.current,
+        session: activeServiceSessionRef.current,
+        startedAt: serviceStartedAtRef.current,
+        status: "live",
+      });
+    };
     tick();
     const id = setInterval(tick, 60 * 1000);
     return () => clearInterval(id);
-  }, [supabase, serviceDate, serviceDateChosenOn, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [supabase, serviceId, serviceDate, serviceDateChosenOn, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Menu courses: cached device copy paints instantly; the store refreshes ──
   useEffect(() => {
@@ -4368,6 +4148,9 @@ export default function App() {
     // back to the full reload.
     onChange: (payload) => {
       if (payload.new && payload.new.table_id != null) {
+        // Another service's row (an old namespace still receiving a stale
+        // device's writes) is not this board's news — adoptRemoteTables
+        // filters by service_id, so passing it through is safe and simple.
         adoptRemoteTables([payload.new]);
         setRemoteBoardLoaded(true);
         setBoardSyncTick(t => t + 1);
@@ -4405,9 +4188,29 @@ export default function App() {
     enabled: fallbackRealtime,
   });
 
-  // Settings (kitchen ticket order, shared service lifecycle) — mirrors the
-  // onLiveSettings watch handler. The settings table carries many ids
-  // (inventory, configs…); only react to the ones owned here.
+  // Shared service lifecycle (fallback path): the services table is the
+  // truth. Any change → re-read the recent set and adopt (currentServiceFrom
+  // needs the full live picture, not one event's row).
+  useRealtimeTable({
+    supabase,
+    channelName: `milka-services-${workspaceId}`,
+    filter: wsFilter,
+    table: TABLES.SERVICES,
+    onChange: () => {
+      fetchServicesStore(20).then(rows => adoptServiceRowsRef.current?.(rows)).catch(() => {});
+    },
+    // Reconnect catch-up: a service started/ended while this socket was dead
+    // must apply on rejoin (the old display waking into an already-ended
+    // service, most of all).
+    onResubscribe: () => {
+      fetchServicesStore(20).then(rows => adoptServiceRowsRef.current?.(rows)).catch(() => {});
+    },
+    enabled: fallbackRealtime,
+  });
+
+  // Settings (kitchen ticket order, floor blobs) — mirrors the onLiveSettings
+  // watch handler. The settings table carries many ids (inventory, configs…);
+  // only react to the ones owned here. Floor SET strips are per-service keys.
   useRealtimeTable({
     supabase,
     channelName: `milka-settings-live-${workspaceId}`,
@@ -4418,11 +4221,7 @@ export default function App() {
       if (id === "kitchen_ticket_order") {
         const ids = payload.new?.state?.ids;
         if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
-      } else if (id === "service_date") {
-        // Shared service lifecycle: a service started/ended on another device
-        // applies here too (adopt-only — never writes back).
-        adoptServiceLifecycleRef.current?.(payload.new?.state, payload.new?.updated_at);
-      } else if (id === FLOOR_STATUS_KEY) {
+      } else if (id && id === floorStatusKeyFor(serviceIdRef.current)) {
         adoptFloorStatusRef.current?.(payload.new?.state, payload.new?.updated_at);
       } else if (id === FLOOR_MAPS_KEY) {
         adoptFloorMapsRef.current?.(payload.new?.state, payload.new?.updated_at);
@@ -4430,20 +4229,18 @@ export default function App() {
         adoptRestaurantConfiguration(payload.new?.state);
       }
     },
-    // Reconnect catch-up: re-read the owned live keys — a service started,
-    // ended, or re-dated while this socket was dead must apply on rejoin
-    // (the old display waking into an already-ended service, most of all).
+    // Reconnect catch-up: re-read the owned live keys.
     onResubscribe: () => {
       readStateKey("kitchen_ticket_order").then(state => {
         const ids = state?.ids;
         if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
       }).catch(() => {});
-      readStateKey("service_date").then(state => {
-        if (state) adoptServiceLifecycleRef.current?.(state, new Date().toISOString());
-      }).catch(() => {});
-      readStateKey(FLOOR_STATUS_KEY).then(state => {
-        adoptFloorStatusRef.current?.(state, new Date().toISOString());
-      }).catch(() => {});
+      const fsKey = floorStatusKeyFor(serviceIdRef.current);
+      if (fsKey) {
+        readStateKey(fsKey).then(state => {
+          adoptFloorStatusRef.current?.(state, new Date().toISOString());
+        }).catch(() => {});
+      }
       readStateKey(FLOOR_MAPS_KEY).then(state => {
         adoptFloorMapsRef.current?.(state, new Date().toISOString());
       }).catch(() => {});
@@ -4493,13 +4290,15 @@ export default function App() {
     if (!supabase || !workspaceId || historyGapsByMenu) return;
     if (mode !== "service" && mode !== "display" && mode !== "kitchen") return;
     let cancelled = false;
-    scopedFrom(TABLES.SERVICE_ARCHIVE)
-      .select("state").is("deleted_at", null)
-      .order("created_at", { ascending: false }).limit(10)
-      .then(({ data, error }) => {
-        if (cancelled || error) return;
-        setHistoryGapsByMenu(historyGapsByMenuType(data || []));
-      });
+    // The archive seam merges ended services with legacy snapshots, so the
+    // cadence history keeps learning from every filed night.
+    import("./lib/archiveStore.js")
+      .then(({ fetchArchive }) => fetchArchive())
+      .then(({ active }) => {
+        if (cancelled) return;
+        setHistoryGapsByMenu(historyGapsByMenuType((active || []).slice(0, 10)));
+      })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, [mode, workspaceId, historyGapsByMenu]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -4655,42 +4454,72 @@ export default function App() {
       defaultSession={activeServiceSession}
       reservations={reservations}
       onConfirm={async (date, session = "dinner") => {
-        // A same-day session flip over a LIVE board is a real lifecycle
-        // moment, not a relabel: silently flipping filed the still-seated
-        // lunch tables under "… – DINNER" and lunch itself was never
-        // archived. Offer the honest handover: end (archive & clear) the
-        // running session first, then start the new one fresh.
+        const finishPick = () => {
+          setShowServiceDatePicker(false);
+          const target = pendingModeAfterDate;
+          setPendingModeAfterDate(null);
+          if (target) {
+            setMode(target);
+            try { localStorage.setItem(workspaceKey("milka_mode"), target); } catch {}
+            // The reconciliation effect (watches `mode` + `serviceDate` +
+            // `activeServiceSession`) fills the board from reservations.
+          }
+        };
+        const curId = serviceIdRef.current;
         const prevSession = activeServiceSessionRef.current;
-        const sessionFlip = date && date === serviceDateRef.current
-          && (session === "lunch" || session === "dinner") && session !== prevSession;
-        if (sessionFlip) {
+        const sameDate = Boolean(curId && date && date === serviceDateRef.current);
+        const nextSession = (session === "lunch" || session === "dinner") ? session : prevSession;
+        if (sameDate && nextSession === prevSession) {
+          // Re-picking the running service is a JOIN, not a restart — never
+          // mint a new entity for the same day+session (a restart would flip
+          // the board to a fresh empty namespace mid-service).
+          finishPick();
+          return;
+        }
+        if (sameDate && nextSession !== prevSession) {
+          // A same-day session flip over a LIVE board is a real lifecycle
+          // moment, not a relabel. Offer the honest handover: END the running
+          // session (kept whole in the Archive) and start the new one fresh —
+          // or relabel the running service in place. Both are safe; neither
+          // destroys a row.
           const liveCount = (tablesRef.current || []).filter(tableHasServiceContent).length;
-          if (liveCount > 0 && typeof window !== "undefined"
-              && window.confirm(
-                `Switching to ${session.toUpperCase()} while ${liveCount} table(s) are still live from ${prevSession.toUpperCase()}.\n\n`
-                + `OK — end ${prevSession.toUpperCase()} now (archive & clear), then start ${session.toUpperCase()} fresh.\n`
-                + `Cancel — keep the board and relabel the running service as ${session.toUpperCase()}.`,
-              )) {
-            const ended = await archiveAndClearAll({ skipConfirm: true });
-            // Never mint the next service identity unless the previous
-            // service actually finished. A refused stale-device END, a store
-            // error, or a busy archive must leave the newer/live service as-is.
-            if (!ended?.ok) return;
+          if (liveCount > 0 && typeof window !== "undefined") {
+            if (window.confirm(
+              `Switching to ${nextSession.toUpperCase()} while ${liveCount} table(s) are still live from ${prevSession.toUpperCase()}.\n\n`
+              + `OK — end ${prevSession.toUpperCase()} now (kept in the Archive), then start ${nextSession.toUpperCase()} fresh.\n`
+              + `Cancel — keep the board and relabel the running service as ${nextSession.toUpperCase()}.`,
+            )) {
+              const ended = await archiveAndClearAll({ skipConfirm: true });
+              // Never mint the next service unless the previous one actually
+              // finished — a store error must leave the live service as-is.
+              if (!ended?.ok) return;
+            } else {
+              const relabeled = await updateServiceStore(curId, { session: nextSession });
+              if (!relabeled?.ok) return; // store failure — keep the picker open
+              setActiveServiceSession(nextSession);
+              activeServiceSessionRef.current = nextSession;
+              try { localStorage.setItem(workspaceKey("milka_service_session"), nextSession); } catch {}
+              finishPick();
+              return;
+            }
+          }
+        } else if (curId && typeof window !== "undefined") {
+          // A different day picked while a service is live: starting the new
+          // one supersedes the current one into the Archive — say so. (No
+          // data is destroyed either way; this is a courtesy, not a guard.)
+          const liveCount = (tablesRef.current || []).filter(tableHasServiceContent).length;
+          if (liveCount > 0 && !window.confirm(
+            `Start a new ${nextSession.toUpperCase()} service for ${date}?\n\n`
+            + `The current service (${liveCount} live table(s)) will be ENDED and kept in the Archive.`,
+          )) {
+            return;
           }
         }
-        // ONE lifecycle write carries date + session + fresh identity —
-        // never two racing writes to the same settings key.
-        const saved = await persistServiceDate(date, session);
-        if (!saved?.ok) return; // cancelled/store failure — keep the picker open
-        setShowServiceDatePicker(false);
-        const target = pendingModeAfterDate;
-        setPendingModeAfterDate(null);
-        if (target) {
-          setMode(target);
-          try { localStorage.setItem(workspaceKey("milka_mode"), target); } catch {}
-          // The reconciliation effect (watches `mode` + `serviceDate` + `activeServiceSession`)
-          // fills the board from reservations for the chosen date and session.
-        }
+        // START: one INSERT creates the new service; the store trigger files
+        // any previous live service with all its rows intact.
+        const saved = await startService(date, session);
+        if (!saved?.ok) return; // store failure — keep the picker open
+        finishPick();
       }}
       onCancel={() => { setShowServiceDatePicker(false); setPendingModeAfterDate(null); }}
     />
@@ -4749,7 +4578,7 @@ export default function App() {
       onExit={() => changeMode(null)}
       serviceDate={serviceDate}
       activeServiceSession={activeServiceSession}
-      onSetServiceDate={persistServiceDate}
+      onSetServiceDate={startService}
       onOpenArchive={() => setArchiveOpen(true)}
       courseQuickNotes={courseQuickNotes}
       profiles={profilesState.profiles}

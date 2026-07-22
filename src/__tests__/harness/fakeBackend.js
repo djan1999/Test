@@ -30,6 +30,29 @@ const tableOf = (store, name) => {
   return store.tables.get(name);
 };
 
+// Mirrors private.services_single_live: a row going live ends every OTHER
+// live service in the workspace — unless a NEWER live one exists, in which
+// case the incoming row itself is superseded (newest started_at wins).
+function applyServicesSingleLive(store, row) {
+  if (!row || row.status !== "live") return;
+  const rows = tableOf(store, "services");
+  const newerLive = rows.some((r) => r !== row && r.workspace_id === row.workspace_id
+    && r.status === "live" && String(r.started_at || "") > String(row.started_at || ""));
+  if (newerLive) {
+    row.status = "ended";
+    row.ended_at = new Date().toISOString();
+    row.end_reason = row.end_reason || "superseded";
+    return;
+  }
+  for (const r of rows) {
+    if (r === row || r.workspace_id !== row.workspace_id || r.status !== "live") continue;
+    if (String(r.id) === String(row.id)) continue;
+    r.status = "ended";
+    r.ended_at = new Date().toISOString();
+    r.end_reason = r.end_reason || "superseded";
+  }
+}
+
 export const backend = {
   remote: newStore(),
   local: newStore(),
@@ -82,6 +105,38 @@ export function seed(table, rows) {
   }
 }
 
+// Seed a SERVICE entity in both stores and return its id — the harness
+// shorthand for "a service is running / ran". Board rows for it are seeded
+// separately via seed("service_tables", [{ service_id, table_id, … }]).
+export function seedService({
+  id = "svc-harness",
+  date,
+  session = "dinner",
+  chosenOn = null,
+  startedAt = new Date().toISOString(),
+  status = "live",
+  endedAt = null,
+  endReason = null,
+  label = null,
+  deletedAt = null,
+} = {}) {
+  seed("services", [{
+    id,
+    date,
+    session,
+    chosen_on: chosenOn || date,
+    started_at: startedAt,
+    status,
+    ended_at: endedAt,
+    end_reason: endReason,
+    label,
+    snapshot: null,
+    deleted_at: deletedAt,
+    updated_at: startedAt,
+  }]);
+  return id;
+}
+
 export const remoteRows = (table) => tableOf(backend.remote, table);
 export const localRows = (table) => tableOf(backend.local, table);
 
@@ -122,6 +177,7 @@ function makeBuilder(store, table) {
       return { data: null, error: new Error("fake network: remote writes are failing") };
     }
     let data = null;
+    let touched = [];
     if (state.op === "select" || state.op === null) {
       let out = rows.filter(matches);
       for (const { col, asc } of [...state.orders].reverse()) {
@@ -134,6 +190,7 @@ function makeBuilder(store, table) {
         id: crypto.randomUUID(), created_at: nowISO(), ...clone(r),
       }));
       rows.push(...list);
+      touched = list;
       data = clone(list);
     } else if (state.op === "upsert") {
       const keys = (state.opts?.onConflict || "id").split(",").map((s) => s.trim());
@@ -141,20 +198,30 @@ function makeBuilder(store, table) {
       const written = [];
       for (const r of list) {
         const hit = rows.find((row) => keys.every((k) => asKey(row[k]) === asKey(r[k])));
-        if (hit) Object.assign(hit, clone(r));
-        else rows.push({ id: crypto.randomUUID(), created_at: nowISO(), ...clone(r) });
+        if (hit) { Object.assign(hit, clone(r)); touched.push(hit); }
+        else {
+          const fresh = { id: crypto.randomUUID(), created_at: nowISO(), ...clone(r) };
+          rows.push(fresh);
+          touched.push(fresh);
+        }
         written.push(clone(r));
       }
       data = written;
     } else if (state.op === "update") {
       const hit = rows.filter(matches);
       hit.forEach((row) => Object.assign(row, clone(state.payload)));
+      touched = hit;
       data = clone(hit);
     } else if (state.op === "delete") {
       const keep = rows.filter((r) => !matches(r));
       const removed = rows.length - keep.length;
       rows.length = 0; rows.push(...keep);
       data = removed;
+    }
+    // Postgres trigger emulation: a services row going live ends every other
+    // live service in its workspace (newest started_at wins).
+    if (table === "services") {
+      for (const row of touched) applyServicesSingleLive(store, row);
     }
     if (state.single || state.maybe) {
       const first = Array.isArray(data) ? data[0] : data;
@@ -200,14 +267,23 @@ export const fakeSupabase = {
   rpc: async (name, args) => {
     if (backend.failRemoteWrites) return { data: null, error: new Error("fake network: remote writes are failing") };
     if (name === "save_service_table_if_current") {
+      // Entity model: board rows are keyed by (workspace, service, table).
+      // A call without a service id mirrors production's legacy stub: loud
+      // failure, nothing written.
+      if (!args.p_service_id) {
+        return { data: null, error: new Error("save_service_table_if_current now requires p_service_id") };
+      }
       const rows = tableOf(backend.remote, "service_tables");
-      const hit = rows.find((r) => r.workspace_id === args.p_workspace_id && Number(r.table_id) === Number(args.p_table_id));
+      const hit = rows.find((r) => r.workspace_id === args.p_workspace_id
+        && asKey(r.service_id) === asKey(args.p_service_id)
+        && Number(r.table_id) === Number(args.p_table_id));
       const expected = args.p_expected_updated_at ?? null;
       if ((!hit && expected != null) || (hit && expected == null) || (hit && hit.updated_at !== expected)) {
         return { data: false, error: null };
       }
-      upsertInto(backend.remote, "service_tables", ["workspace_id", "table_id"], {
+      upsertInto(backend.remote, "service_tables", ["workspace_id", "service_id", "table_id"], {
         workspace_id: args.p_workspace_id,
+        service_id: String(args.p_service_id),
         table_id: Number(args.p_table_id),
         data: clone(args.p_data || {}),
         updated_at: args.p_updated_at || nowISO(),
@@ -251,31 +327,39 @@ export const fakeSupabase = {
       return { data: true, error: null };
     }
     if (name === "archive_and_finish_service") {
-      // Mirror the identity guard: when the caller names the service it is
-      // ending and the store no longer holds it, the call is a full NO-OP.
-      const expectedStarted = args.p_expected_started_at ?? null;
-      const expectedDate = args.p_expected_date ?? null;
-      if (expectedStarted != null || expectedDate != null) {
-        const row = tableOf(backend.remote, "service_settings")
-          .find((r) => r.workspace_id === args.p_workspace_id && r.id === "service_date");
-        const state = row?.state || null;
-        // A state with NO startedAt has no identity to mismatch — the date
-        // decides alone (mirrors the production function).
-        const startedOk = expectedStarted == null || state?.startedAt == null
-          || state.startedAt === expectedStarted;
-        const dateOk = expectedDate == null || state?.date === expectedDate;
-        if (!state?.date || !startedOk || !dateOk) {
-          return { data: { superseded: true }, error: null };
+      // NEUTERED straggler shield — mirrors production exactly: the archive
+      // snapshot is filed, the legacy pointer clears only when guarded and
+      // matching, and service_tables are NEVER touched.
+      if (args.p_archive_id && args.p_archive_date && args.p_archive_label) {
+        const rows = tableOf(backend.remote, "service_archive");
+        if (!rows.some((r) => asKey(r.id) === asKey(args.p_archive_id))) {
+          rows.push({
+            workspace_id: args.p_workspace_id,
+            id: args.p_archive_id,
+            date: args.p_archive_date,
+            label: args.p_archive_label,
+            state: clone(args.p_archive_state || {}),
+            created_at: nowISO(),
+            deleted_at: null,
+          });
         }
       }
-      applyFinishedServiceToStore(backend.remote, args.p_workspace_id, {
-        archive: args.p_archive_id ? {
-          id: args.p_archive_id,
-          date: args.p_archive_date,
-          label: args.p_archive_label,
-          state: args.p_archive_state || {},
-        } : null,
-      });
+      const expectedStarted = args.p_expected_started_at ?? null;
+      const expectedDate = args.p_expected_date ?? null;
+      if (expectedStarted == null && expectedDate == null) {
+        return { data: { superseded: true }, error: null }; // unguarded: refused
+      }
+      const row = tableOf(backend.remote, "service_settings")
+        .find((r) => r.workspace_id === args.p_workspace_id && r.id === "service_date");
+      const state = row?.state || null;
+      const startedOk = expectedStarted == null || state?.startedAt == null
+        || state.startedAt === expectedStarted;
+      const dateOk = expectedDate == null || state?.date === expectedDate;
+      if (!state?.date || !startedOk || !dateOk) {
+        return { data: { superseded: true }, error: null };
+      }
+      row.state = {};
+      row.updated_at = nowISO();
       return { data: { superseded: false }, error: null };
     }
     return { data: null, error: null };
@@ -298,11 +382,24 @@ export const fakeReads = {
   readSetting: async (id) => clone(wsRows("service_settings").find((r) => asKey(r.id) === asKey(id))?.state ?? null),
   readLiveSettings: async () =>
     clone(wsRows("service_settings")
-      .filter((r) => ["kitchen_ticket_order", "service_date", "floor_status_v1", "floor_maps_v1"].includes(r.id))
+      .filter((r) => ["kitchen_ticket_order", "floor_maps_v1", "restaurant_config_v1"].includes(r.id)
+        || String(r.id).startsWith("floor_status_v2:"))
       .map((r) => ({ id: r.id, state: r.state, updated_at: r.updated_at }))),
-  readServiceTables: async () =>
-    clone(wsRows("service_tables").map((r) => ({ table_id: Number(r.table_id), data: r.data, updated_at: r.updated_at }))
-      .sort((a, b) => a.table_id - b.table_id)),
+  readServices: async (limit = 120) =>
+    clone([...wsRows("services")]
+      .sort((a, b) => (String(a.started_at || "") < String(b.started_at || "") ? 1 : -1))
+      .slice(0, limit)),
+  readServiceTables: async (serviceId) => {
+    if (!serviceId) return [];
+    return clone(wsRows("service_tables")
+      .filter((r) => asKey(r.service_id) === asKey(serviceId))
+      .map((r) => ({ service_id: r.service_id, table_id: Number(r.table_id), data: r.data, updated_at: r.updated_at }))
+      .sort((a, b) => a.table_id - b.table_id));
+  },
+  readServiceTablesForServices: async (serviceIds) => {
+    const ids = (serviceIds || []).map(asKey);
+    return clone(wsRows("service_tables").filter((r) => ids.includes(asKey(r.service_id))));
+  },
   readReservations: async (from, to) =>
     clone(wsRows("reservations").filter((r) => r.date >= from && r.date <= to)
       .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.created_at < b.created_at ? -1 : 1)))),
@@ -312,15 +409,24 @@ export const fakeReads = {
   }))),
   readBeverages: async () => clone([...wsRows("beverages")].sort((a, b) => (a.position || 0) - (b.position || 0))),
   readMenuCourses: async () => clone([...wsRows("menu_courses")].sort((a, b) => (a.position || 0) - (b.position || 0))),
-  readActiveArchivesForDate: async (date) =>
-    clone(wsRows("service_archive").filter((r) => r.date === date && r.deleted_at == null)
-      .map((r) => ({ id: r.id, label: r.label, state: r.state, created_at: r.created_at }))),
-  readServiceArchive: async () => ({
-    active: clone(wsRows("service_archive").filter((r) => r.deleted_at == null)
-      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).slice(0, 60)),
-    deleted: clone(wsRows("service_archive").filter((r) => r.deleted_at != null)
-      .sort((a, b) => (a.deleted_at < b.deleted_at ? 1 : -1)).slice(0, 30)),
-  }),
+  readActiveArchivesForDate: async (date) => clone([
+    ...wsRows("service_archive").filter((r) => r.date === date && r.deleted_at == null)
+      .map((r) => ({ id: r.id, label: r.label, created_at: r.created_at })),
+    ...wsRows("services").filter((r) => r.date === date && r.status === "ended" && r.deleted_at == null && r.label)
+      .map((r) => ({ id: r.id, label: r.label, created_at: r.ended_at })),
+  ]),
+  readServiceArchive: async () => {
+    const { archiveEntryFromService, mergeArchiveEntries } = await import("../../lib/serviceEntity.js");
+    const ended = wsRows("services").filter((r) => r.status === "ended");
+    return mergeArchiveEntries({
+      serviceEntries: ended.map((svc) => archiveEntryFromService(
+        clone(svc),
+        clone(wsRows("service_tables").filter((r) => asKey(r.service_id) === asKey(svc.id))),
+      )),
+      legacyActive: clone(wsRows("service_archive").filter((r) => r.deleted_at == null)),
+      legacyDeleted: clone(wsRows("service_archive").filter((r) => r.deleted_at != null)),
+    });
+  },
 };
 
 // ── fake powersync: writes into backend.local + connector mirror ─────────────
@@ -331,38 +437,6 @@ const upsertInto = (store, table, keys, row) => {
   const hit = rows.find((r) => keys.every((k) => asKey(r[k]) === asKey(row[k])));
   if (hit) Object.assign(hit, clone(row));
   else rows.push(clone(row));
-};
-const applyFinishedServiceToStore = (store, ws, { archive = null, blankRows = null } = {}) => {
-  if (archive) {
-    upsertInto(store, "service_archive", ["id"], {
-      workspace_id: ws,
-      id: archive.id,
-      date: archive.date,
-      label: archive.label,
-      state: clone(archive.state || {}),
-      created_at: nowISO(),
-      deleted_at: null,
-    });
-  }
-  const rows = blankRows || Array.from({ length: 10 }, (_, i) => ({
-    table_id: i + 1,
-    data: {},
-    updated_at: nowISO(),
-  }));
-  for (const row of rows) {
-    upsertInto(store, "service_tables", ["workspace_id", "table_id"], {
-      workspace_id: ws,
-      table_id: Number(row.table_id),
-      data: clone(row.data || {}),
-      updated_at: row.updated_at || nowISO(),
-    });
-  }
-  upsertInto(store, "service_settings", ["workspace_id", "id"], {
-    workspace_id: ws,
-    id: "service_date",
-    state: {},
-    updated_at: nowISO(),
-  });
 };
 const mirror = (apply) => {
   if (backend.connectorDown) backend.uploadQueue.push(apply);
@@ -377,8 +451,11 @@ export async function drainUploads() {
 export async function fireWatches() {
   const w = backend.watch;
   if (!w) return;
-  const { handlers, range } = w;
-  if (handlers.onServiceTables) handlers.onServiceTables(await fakeReads.readServiceTables());
+  const { handlers, range, lifecycle } = w;
+  if (handlers.onServices) handlers.onServices(await fakeReads.readServices());
+  if (handlers.onServiceTables) {
+    handlers.onServiceTables(await fakeReads.readServiceTables(lifecycle?.getServiceId?.()));
+  }
   if (handlers.onReservations) handlers.onReservations(await fakeReads.readReservations(range.from, range.to));
   if (handlers.onWines) handlers.onWines(await fakeReads.readWines());
   if (handlers.onBeverages) handlers.onBeverages(await fakeReads.readBeverages());
@@ -400,13 +477,74 @@ const requireWorkspace = () => {
 };
 
 export const fakeWrites = {
-  writeServiceTables: async (rows) => {
+  writeServiceTables: async (serviceId, rows) => {
     const ws = requireWorkspace();
+    if (!serviceId) throw new Error("fake writes: board write without a service id");
     for (const r of rows) {
-      const row = { workspace_id: ws, table_id: Number(r.table_id), data: r.data, updated_at: r.updated_at || nowISO() };
-      upsertInto(backend.local, "service_tables", ["workspace_id", "table_id"], row);
-      mirror((store) => upsertInto(store, "service_tables", ["workspace_id", "table_id"], row));
+      const row = {
+        workspace_id: ws, service_id: String(serviceId),
+        table_id: Number(r.table_id), data: r.data, updated_at: r.updated_at || nowISO(),
+      };
+      upsertInto(backend.local, "service_tables", ["workspace_id", "service_id", "table_id"], row);
+      mirror((store) => upsertInto(store, "service_tables", ["workspace_id", "service_id", "table_id"], row));
     }
+    await fireWatches();
+  },
+  insertServiceLocally: async (entity) => {
+    const ws = requireWorkspace();
+    const row = {
+      workspace_id: ws, id: String(entity.id),
+      date: entity.date, session: entity.session,
+      chosen_on: entity.chosenOn ?? entity.chosen_on ?? null,
+      started_at: entity.startedAt ?? entity.started_at ?? nowISO(),
+      status: entity.status || "live",
+      ended_at: null, end_reason: null, label: entity.label ?? null,
+      snapshot: clone(entity.snapshot ?? null), deleted_at: null, updated_at: nowISO(),
+    };
+    upsertInto(backend.local, "services", ["id"], row);
+    applyServicesSingleLive(backend.local, tableOf(backend.local, "services").find((r) => asKey(r.id) === asKey(row.id)));
+    mirror((store) => {
+      upsertInto(store, "services", ["id"], row);
+      applyServicesSingleLive(store, tableOf(store, "services").find((r) => asKey(r.id) === asKey(row.id)));
+    });
+    await fireWatches();
+  },
+  updateServiceLocally: async (serviceId, patch) => {
+    requireWorkspace();
+    const apply = (store) => {
+      const hit = tableOf(store, "services").find((r) => asKey(r.id) === asKey(serviceId));
+      if (!hit) return;
+      Object.assign(hit, clone(patch));
+      applyServicesSingleLive(store, hit);
+    };
+    apply(backend.local);
+    mirror(apply);
+    await fireWatches();
+  },
+  setServiceDeleted: async (serviceId, deletedAt) => {
+    requireWorkspace();
+    const apply = (store) => {
+      const hit = tableOf(store, "services").find((r) => asKey(r.id) === asKey(serviceId));
+      if (hit) { hit.deleted_at = deletedAt; hit.updated_at = nowISO(); }
+    };
+    apply(backend.local);
+    mirror(apply);
+    await fireWatches();
+  },
+  purgeDeletedServices: async () => {
+    const ws = requireWorkspace();
+    const apply = (store) => {
+      const services = tableOf(store, "services");
+      const doomed = services.filter((r) => r.workspace_id === ws && r.status === "ended" && r.deleted_at != null);
+      const doomedIds = new Set(doomed.map((r) => asKey(r.id)));
+      const keepSvc = services.filter((r) => !doomedIds.has(asKey(r.id)));
+      services.length = 0; services.push(...keepSvc);
+      const rows = tableOf(store, "service_tables");
+      const keepRows = rows.filter((r) => !doomedIds.has(asKey(r.service_id)));
+      rows.length = 0; rows.push(...keepRows);
+    };
+    apply(backend.local);
+    mirror(apply);
     await fireWatches();
   },
   writeSetting: async (id, state) => {
@@ -461,23 +599,6 @@ export const fakeWrites = {
     mirror((store) => upsertInto(store, "service_archive", ["id"], row));
     await fireWatches();
     return row.id;
-  },
-  finishServiceLocally: async ({ archive = null, blankRows = [], expected = null }) => {
-    const ws = requireWorkspace();
-    // Mirror the local identity guard (see powersync/writes.js).
-    if (expected && (expected.startedAt || expected.date)) {
-      const row = tableOf(backend.local, "service_settings")
-        .find((r) => r.workspace_id === ws && r.id === "service_date");
-      const state = row?.state || null;
-      const startedOk = !expected.startedAt || state?.startedAt == null
-        || state.startedAt === expected.startedAt;
-      const dateOk = !expected.date || state?.date === expected.date;
-      if (!state?.date || !startedOk || !dateOk) return { superseded: true };
-    }
-    applyFinishedServiceToStore(backend.local, ws, { archive, blankRows });
-    mirror((store) => applyFinishedServiceToStore(store, ws, { archive, blankRows }));
-    await fireWatches();
-    return { superseded: false };
   },
   setArchiveDeleted: async (id, deletedAt) => {
     const set = (store) => {
@@ -590,18 +711,31 @@ export const fakeArchiveStore = {
   getWorkspaceId,
   fetchArchive: async () => {
     if (isSqlitePrimary()) return fakeReads.readServiceArchive();
-    const rows = tableOf(backend.remote, "service_archive").filter((r) => r.workspace_id === getWorkspaceId());
-    return {
-      active: clone(rows.filter((r) => r.deleted_at == null).sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).slice(0, 60)),
-      deleted: clone(rows.filter((r) => r.deleted_at != null).sort((a, b) => (a.deleted_at < b.deleted_at ? 1 : -1)).slice(0, 30)),
-    };
+    const { archiveEntryFromService, mergeArchiveEntries } = await import("../../lib/serviceEntity.js");
+    const ws = getWorkspaceId();
+    const legacy = tableOf(backend.remote, "service_archive").filter((r) => r.workspace_id === ws);
+    const ended = tableOf(backend.remote, "services").filter((r) => r.workspace_id === ws && r.status === "ended");
+    return mergeArchiveEntries({
+      serviceEntries: ended.map((svc) => archiveEntryFromService(
+        clone(svc),
+        clone(tableOf(backend.remote, "service_tables")
+          .filter((r) => r.workspace_id === ws && asKey(r.service_id) === asKey(svc.id))),
+      )),
+      legacyActive: clone(legacy.filter((r) => r.deleted_at == null)),
+      legacyDeleted: clone(legacy.filter((r) => r.deleted_at != null)),
+    });
   },
   archiveSetDeleted: async (id, deletedAt) => {
     try {
-      if (isSqlitePrimary()) await fakeWrites.setArchiveDeleted(id, deletedAt);
-      else {
+      const isService = tableOf(isSqlitePrimary() ? backend.local : backend.remote, "services")
+        .some((r) => asKey(r.id) === asKey(id));
+      if (isSqlitePrimary()) {
+        if (isService) await fakeWrites.setServiceDeleted(id, deletedAt);
+        else await fakeWrites.setArchiveDeleted(id, deletedAt);
+      } else {
         if (backend.failRemoteWrites) throw new Error("fake network: remote writes are failing");
-        const hit = tableOf(backend.remote, "service_archive").find((r) => asKey(r.id) === asKey(id));
+        const table = isService ? "services" : "service_archive";
+        const hit = tableOf(backend.remote, table).find((r) => asKey(r.id) === asKey(id));
         if (hit) hit.deleted_at = deletedAt;
       }
       return { ok: true };
@@ -609,24 +743,46 @@ export const fakeArchiveStore = {
   },
   archiveSetAllDeleted: async (deletedAt) => {
     try {
-      if (isSqlitePrimary()) await fakeWrites.setAllArchivesDeleted(deletedAt);
-      else {
-        if (backend.failRemoteWrites) throw new Error("fake network: remote writes are failing");
-        tableOf(backend.remote, "service_archive").forEach((r) => {
-          if (r.workspace_id === getWorkspaceId() && r.deleted_at == null) r.deleted_at = deletedAt;
+      if (isSqlitePrimary()) {
+        await fakeWrites.setAllArchivesDeleted(deletedAt);
+        tableOf(backend.local, "services").forEach((r) => {
+          if (r.workspace_id === getWorkspaceId() && r.status === "ended" && r.deleted_at == null) r.deleted_at = deletedAt;
         });
+        mirror((store) => tableOf(store, "services").forEach((r) => {
+          if (r.workspace_id === getWorkspaceId() && r.status === "ended" && r.deleted_at == null) r.deleted_at = deletedAt;
+        }));
+      } else {
+        if (backend.failRemoteWrites) throw new Error("fake network: remote writes are failing");
+        for (const table of ["service_archive", "services"]) {
+          tableOf(backend.remote, table).forEach((r) => {
+            if (r.workspace_id !== getWorkspaceId() || r.deleted_at != null) return;
+            if (table === "services" && r.status !== "ended") return;
+            r.deleted_at = deletedAt;
+          });
+        }
       }
       return { ok: true };
     } catch (error) { return { ok: false, error }; }
   },
   archivePurgeTrash: async () => {
     try {
-      if (isSqlitePrimary()) await fakeWrites.purgeDeletedArchives();
-      else {
+      if (isSqlitePrimary()) {
+        await fakeWrites.purgeDeletedArchives();
+        await fakeWrites.purgeDeletedServices();
+      } else {
         if (backend.failRemoteWrites) throw new Error("fake network: remote writes are failing");
-        const rows = tableOf(backend.remote, "service_archive");
-        const keep = rows.filter((r) => r.deleted_at == null);
-        rows.length = 0; rows.push(...keep);
+        const legacy = tableOf(backend.remote, "service_archive");
+        const keepLegacy = legacy.filter((r) => r.deleted_at == null);
+        legacy.length = 0; legacy.push(...keepLegacy);
+        const services = tableOf(backend.remote, "services");
+        const doomedIds = new Set(services
+          .filter((r) => r.status === "ended" && r.deleted_at != null)
+          .map((r) => asKey(r.id)));
+        const keepSvc = services.filter((r) => !doomedIds.has(asKey(r.id)));
+        services.length = 0; services.push(...keepSvc);
+        const rows = tableOf(backend.remote, "service_tables");
+        const keepRows = rows.filter((r) => !doomedIds.has(asKey(r.service_id)));
+        rows.length = 0; rows.push(...keepRows);
       }
       return { ok: true };
     } catch (error) { return { ok: false, error }; }
@@ -658,8 +814,8 @@ export const fakeSystem = {
 };
 
 export const fakeWatch = {
-  startWatches: (handlers, range) => {
-    backend.watch = { handlers, range };
+  startWatches: (handlers, range, lifecycle = {}) => {
+    backend.watch = { handlers, range, lifecycle };
     fireWatches(); // first fire seeds the UI, like the real triggerImmediate
     return () => { if (backend.watch?.handlers === handlers) backend.watch = null; };
   },

@@ -26,10 +26,16 @@
 # one workspace.
 
 streams:
+  services:
+    priority: 1
+    query: >-
+      SELECT * FROM services
+      WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
+    auto_subscribe: true
   service_tables:
     priority: 1
     query: >-
-      SELECT workspace_id || '|' || CAST(table_id AS TEXT) AS id, * FROM service_tables
+      SELECT workspace_id || '|' || CAST(service_id AS TEXT) || '|' || CAST(table_id AS TEXT) AS id, * FROM service_tables
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
     auto_subscribe: true
   reservations:

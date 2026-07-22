@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 export const TABLES = {
+  SERVICES: "services",
   SERVICE_TABLES: "service_tables",
   SERVICE_SETTINGS: "service_settings",
   SERVICE_ARCHIVE: "service_archive",

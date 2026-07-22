@@ -11,16 +11,21 @@ const asObject = (value) => {
 // Shared server write for the busy service-board document. Both PowerSync
 // uploads and the direct-Supabase outage fallback use the same merge and
 // compare-and-swap contract; otherwise the fallback can erase a tablet edit.
+// SERVICE-SCOPED since the entity rework: the row is addressed by
+// (workspace, service, table), so a write can only ever land inside the
+// service namespace it names — a stale device writing its old service's rows
+// touches that old service and nothing else.
 export async function saveServiceTableWithCas({
   client,
   workspaceId,
+  serviceId,
   tableId,
   data,
   ancestor = null,
   maxAttempts = 4,
 }) {
   const id = Number(tableId);
-  if (!client || !workspaceId || !Number.isFinite(id)) {
+  if (!client || !workspaceId || !serviceId || !Number.isFinite(id)) {
     throw new Error("Invalid service-table CAS request");
   }
   const mine = asObject(data);
@@ -31,6 +36,7 @@ export async function saveServiceTableWithCas({
       .from("service_tables")
       .select("data,updated_at")
       .eq("workspace_id", workspaceId)
+      .eq("service_id", serviceId)
       .eq("table_id", id)
       .maybeSingle();
     if (readError) throw readError;
@@ -53,6 +59,7 @@ export async function saveServiceTableWithCas({
       "save_service_table_if_current",
       {
         p_workspace_id: workspaceId,
+        p_service_id: serviceId,
         p_table_id: id,
         p_expected_updated_at: current?.updated_at ?? null,
         p_data: merged,
