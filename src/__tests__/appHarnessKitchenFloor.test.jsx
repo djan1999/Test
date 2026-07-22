@@ -17,7 +17,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import {
-  backend, resetBackend, seed, remoteRows, WORKSPACE_ID, emitRealtime,
+  backend, resetBackend, seed, seedService, remoteRows, WORKSPACE_ID, emitRealtime,
 } from "./harness/fakeBackend.js";
 import { currentServiceDay } from "../utils/serviceDay.js";
 import { blankTable } from "../utils/tableHelpers.js";
@@ -26,6 +26,7 @@ vi.mock("../lib/supabaseClient.js", async () => {
   const h = await import("./harness/fakeBackend.js");
   return {
     TABLES: {
+      SERVICES: "services",
       SERVICE_TABLES: "service_tables", SERVICE_SETTINGS: "service_settings",
       SERVICE_ARCHIVE: "service_archive", MENU_COURSES: "menu_courses",
       WINES: "wines", BEVERAGES: "beverages", RESERVATIONS: "reservations",
@@ -58,6 +59,7 @@ window.scrollTo = () => {};
 Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || (() => {});
 
 const TODAY = () => currentServiceDay();
+const SVC = "svc-live";
 
 // Two-course dinner in supabase row shape (App maps via supabaseRowToCourse).
 const courseRow = (position, key, name) => ({
@@ -71,12 +73,8 @@ const seedLiveService = ({ annaExtra = {} } = {}) => {
     ...blankTable(1), active: true, arrivedAt: "19:43",
     resName: "Anna Harness", resTime: "19:30", guests: 2, ...annaExtra,
   };
-  seed("service_settings", [{
-    id: "service_date",
-    state: { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: now },
-    updated_at: now,
-  }]);
-  seed("service_tables", [{ table_id: 1, data: anna, updated_at: now }]);
+  seedService({ id: SVC, date: TODAY(), session: "dinner", startedAt: now });
+  seed("service_tables", [{ service_id: SVC, table_id: 1, data: anna, updated_at: now }]);
   seed("reservations", [
     { id: "res-anna", date: TODAY(), table_id: 1, created_at: now,
       data: { resName: "Anna Harness", resTime: "19:30", guests: 2, tableGroup: [], service_session: "dinner" } },
@@ -263,7 +261,7 @@ describe("app harness — kitchen board through the real App", () => {
     });
     const now = new Date().toISOString();
     seed("service_settings", [{
-      id: "floor_status_v1",
+      id: `floor_status_v2:${SVC}`,
       state: { dining_a: { T1: "SET" } },
       updated_at: now,
     }]);
@@ -275,21 +273,18 @@ describe("app harness — kitchen board through the real App", () => {
       expect(rowFor(remoteRows("service_tables"), 1)?.data?.courseReady).toBeNull();
     }, { timeout: 5000 });
     await waitFor(() => {
-      const row = remoteRows("service_settings").find((r) => r.id === "floor_status_v1");
+      const row = remoteRows("service_settings").find((r) => r.id === `floor_status_v2:${SVC}`);
       expect(row?.state || {}).toEqual({});
     }, { timeout: 5000 });
   }, 25000);
 
   it("firing a course flagged 'clears terrace' auto-moves the party in and frees their terrace table", async () => {
     const now = new Date().toISOString();
-    seed("service_settings", [{
-      id: "service_date",
-      state: { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: now },
-      updated_at: now,
-    }]);
+    seedService({ id: SVC, date: TODAY(), session: "dinner", startedAt: now });
     // Bruno's party is out on terrace T23; his dining table (2) is templated
     // but NOT seated — the kitchen ticket exists via the terrace decoration.
     seed("service_tables", [{
+      service_id: SVC,
       table_id: 2,
       data: { ...blankTable(2), resName: "Bruno Harness", resTime: "20:15", guests: 3 },
       updated_at: now,
@@ -318,14 +313,11 @@ describe("app harness — kitchen board through the real App", () => {
 
   it("a flagged fire never yanks a SECOND-LEG terrace party back in — they are physically outside (15.07)", async () => {
     const now = new Date().toISOString();
-    seed("service_settings", [{
-      id: "service_date",
-      state: { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: now },
-      updated_at: now,
-    }]);
+    seedService({ id: SVC, date: TODAY(), session: "dinner", startedAt: now });
     // Bruno already dined INSIDE (table 2 is seated, moved_at from the first
     // move-in) and went BACK OUT to T23 for dessert — the second terrace leg.
     seed("service_tables", [{
+      service_id: SVC,
       table_id: 2,
       data: { ...blankTable(2), active: true, arrivedAt: "19:07", resName: "Bruno Harness", resTime: "20:15", guests: 3 },
       updated_at: now,

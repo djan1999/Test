@@ -40,10 +40,12 @@ vi.mock("../powersync/system.js", () => {
     if (String(params[0]) in h.rowState) row.state = h.rowState[String(params[0])];
     return row;
   };
-  const ctx = { execute, getOptional };
+  const getAll = async (sql, params) => { record(sql, params); return []; };
+  const ctx = { execute, getOptional, getAll };
   return { getPowerSync: () => ({
     execute,
     getOptional,
+    getAll,
     writeTransaction: async (fn) => { h.transactions += 1; return fn(ctx); },
   }) };
 });
@@ -56,7 +58,7 @@ vi.mock("../lib/supabaseClient.js", () => ({
 import {
   writeServiceTables, writeSetting, writeReservation, deleteReservationRow,
   writeMenuCourses, writeWines, deleteWines, replaceManualBeverages,
-  finishServiceLocally,
+  insertServiceLocally, updateServiceLocally, setServiceDeleted,
 } from "../powersync/writes.js";
 
 const callsLike = (verb) => h.calls.filter((c) => c.sql.toUpperCase().startsWith(verb));
@@ -69,42 +71,47 @@ beforeEach(() => {
   h.transactions = 0;
 });
 
-describe("powersync/writes — board rows", () => {
+describe("powersync/writes — board rows (service-scoped)", () => {
   it("updates an existing row in place (no insert) with jsonb as text", async () => {
-    h.rows.add("service_tables|ws-1|3|ws-1");
-    await writeServiceTables([{ table_id: 3, data: { resName: "Kovač" }, updated_at: "t1" }]);
+    h.rows.add("service_tables|ws-1|svc-1|3|ws-1");
+    await writeServiceTables("svc-1", [{ table_id: 3, data: { resName: "Kovač" }, updated_at: "t1" }]);
     const updates = callsLike("UPDATE");
     expect(updates).toHaveLength(1);
     expect(updates[0].sql).toContain("UPDATE service_tables SET");
-    expect(updates[0].params).toEqual([3, '{"resName":"Kovač"}', "t1", "ws-1|3", "ws-1"]);
+    expect(updates[0].params).toEqual(["svc-1", 3, '{"resName":"Kovač"}', "t1", "ws-1|svc-1|3", "ws-1"]);
     expect(callsLike("INSERT")).toHaveLength(0);
   });
 
   it("REGRESSION: saving a synced row repeatedly never duplicate-INSERTs even though view UPDATEs report rowsAffected 0", async () => {
-    h.rows.add("service_tables|ws-1|3|ws-1");
+    h.rows.add("service_tables|ws-1|svc-1|3|ws-1");
     // The pre-fix code fell through to INSERT here and died on the ps_data__*
     // primary key — the crash that blocked all saves on sqlite-primary.
-    await writeServiceTables([{ table_id: 3, data: { resName: "a" }, updated_at: "t1" }]);
-    await writeServiceTables([{ table_id: 3, data: { resName: "b" }, updated_at: "t2" }]);
+    await writeServiceTables("svc-1", [{ table_id: 3, data: { resName: "a" }, updated_at: "t1" }]);
+    await writeServiceTables("svc-1", [{ table_id: 3, data: { resName: "b" }, updated_at: "t2" }]);
     expect(callsLike("INSERT")).toHaveLength(0);
     expect(callsLike("UPDATE")).toHaveLength(2);
   });
 
-  it("falls through to INSERT with the aliased id when the row is missing", async () => {
-    await writeServiceTables([{ table_id: 7, data: {}, updated_at: "t1" }]);
+  it("falls through to INSERT with the aliased (workspace|service|table) id when the row is missing", async () => {
+    await writeServiceTables("svc-1", [{ table_id: 7, data: {}, updated_at: "t1" }]);
     const inserts = callsLike("INSERT");
     expect(inserts).toHaveLength(1);
-    expect(inserts[0].sql).toContain("INSERT INTO service_tables (id, workspace_id, table_id, data, updated_at)");
-    expect(inserts[0].params).toEqual(["ws-1|7", "ws-1", 7, "{}", "t1"]);
+    expect(inserts[0].sql).toContain("INSERT INTO service_tables (id, workspace_id, service_id, table_id, data, updated_at)");
+    expect(inserts[0].params).toEqual(["ws-1|svc-1|7", "ws-1", "svc-1", 7, "{}", "t1"]);
     // …and a second save of the now-existing row goes through UPDATE.
-    await writeServiceTables([{ table_id: 7, data: { x: 1 }, updated_at: "t2" }]);
+    await writeServiceTables("svc-1", [{ table_id: 7, data: { x: 1 }, updated_at: "t2" }]);
     expect(callsLike("INSERT")).toHaveLength(1);
     expect(callsLike("UPDATE")).toHaveLength(1);
   });
 
+  it("refuses to write without a service id — a board write must name its namespace", async () => {
+    await expect(writeServiceTables(null, [{ table_id: 1, data: {} }])).rejects.toThrow(/service/);
+    expect(h.calls).toHaveLength(0);
+  });
+
   it("refuses to write without an active workspace", async () => {
     h.workspaceId = null;
-    await expect(writeServiceTables([{ table_id: 1, data: {} }])).rejects.toThrow(/workspace/);
+    await expect(writeServiceTables("svc-1", [{ table_id: 1, data: {} }])).rejects.toThrow(/workspace/);
     expect(h.calls).toHaveLength(0);
   });
 });
@@ -234,69 +241,38 @@ describe("powersync/writes — wines & beverages", () => {
   });
 });
 
-describe("powersync/writes — finish service", () => {
-  it("archives, clears ten tables, and clears service_date in one local transaction", async () => {
-    await finishServiceLocally({
-      archive: { id: "archive-1", date: "2026-07-10", label: "10. 07. 2026 – DINNER", state: { tables: [] } },
-      blankRows: Array.from({ length: 10 }, (_, i) => ({ table_id: i + 1, data: {}, updated_at: "end" })),
+describe("powersync/writes — service entity lifecycle", () => {
+  it("insertServiceLocally writes ONE services row and touches no board rows", async () => {
+    await insertServiceLocally({
+      id: "svc-9", date: "2026-07-23", session: "dinner", chosenOn: "2026-07-23",
+      startedAt: "2026-07-23T16:00:00Z", status: "live", updatedAt: "u1",
     });
-
-    expect(h.transactions).toBe(1);
-    expect(h.calls.some(c => c.sql.startsWith("INSERT INTO service_archive"))).toBe(true);
-    expect(h.calls.filter(c => c.sql.startsWith("INSERT INTO service_tables"))).toHaveLength(10);
-    const setting = h.calls.find(c => c.sql.startsWith("INSERT INTO service_settings"));
-    expect(setting.params[0]).toBe("ws-1|service_date");
-    expect(setting.params[2]).toBe("{}");
+    const inserts = callsLike("INSERT");
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0].sql).toContain("INSERT INTO services");
+    expect(inserts[0].params[0]).toBe("svc-9");
+    // The wipe-impossibility pin: starting a service writes NOTHING to
+    // service_tables — a fresh namespace needs no clearing.
+    expect(h.calls.some((c) => /service_tables/.test(c.sql))).toBe(false);
   });
 
-  it("is idempotent for the same deterministic archive id", async () => {
-    const payload = {
-      archive: { id: "archive-1", date: "2026-07-10", label: "Dinner", state: {} },
-      blankRows: [{ table_id: 1, data: {}, updated_at: "end" }],
-    };
-    await finishServiceLocally(payload);
-    h.calls = [];
-    await finishServiceLocally(payload);
-    expect(h.calls.some(c => c.sql.startsWith("INSERT INTO service_archive"))).toBe(false);
-    expect(h.calls.some(c => c.sql.startsWith("UPDATE service_tables"))).toBe(true);
-    expect(h.calls.some(c => c.sql.startsWith("UPDATE service_settings"))).toBe(true);
-  });
-});
-
-describe("powersync/writes — finish service identity guard", () => {
-  const seedServiceDate = (state) => {
-    h.rows.add("service_settings|ws-1|service_date|ws-1");
-    h.rowState["ws-1|service_date"] = JSON.stringify(state);
-  };
-  const blankRows = [{ table_id: 1, data: {}, updated_at: "end" }];
-
-  it("refuses the whole end when the local state holds a DIFFERENT startedAt", async () => {
-    seedServiceDate({ date: "2026-07-11", startedAt: "S2" });
-    const result = await finishServiceLocally({
-      blankRows, expected: { startedAt: "S1", date: "2026-07-11" },
+  it("updateServiceLocally (END / heal) patches by id and touches no board rows", async () => {
+    await updateServiceLocally("svc-9", {
+      status: "ended", ended_at: "e1", end_reason: "manual", updated_at: "u2",
     });
-    expect(result.superseded).toBe(true);
-    expect(h.calls.some(c => /INTO service_tables|UPDATE service_tables/.test(c.sql))).toBe(false);
+    const updates = callsLike("UPDATE");
+    expect(updates).toHaveLength(1);
+    expect(updates[0].sql).toBe("UPDATE services SET status = ?, ended_at = ?, end_reason = ?, updated_at = ? WHERE id = ? AND workspace_id = ?");
+    expect(updates[0].params).toEqual(["ended", "e1", "manual", "u2", "svc-9", "ws-1"]);
+    // The wipe-impossibility pin: ending a service blanks NOTHING.
+    expect(h.calls.some((c) => /service_tables/.test(c.sql))).toBe(false);
   });
 
-  it("a state with NO startedAt has no identity to mismatch — the date alone decides (11.07 incident)", async () => {
-    // The production trap: {date, chosenOn} in the store, a stale stamp on
-    // the device. Comparing undefined === 'S-stale' refused every end.
-    seedServiceDate({ date: "2026-07-11", chosenOn: "2026-07-11" });
-    const result = await finishServiceLocally({
-      blankRows, expected: { startedAt: "S-stale", date: "2026-07-11" },
-    });
-    expect(result.superseded).toBe(false);
-    expect(h.calls.some(c => /^(INSERT INTO|UPDATE) service_tables/.test(c.sql))).toBe(true);
-    expect(h.calls.some(c => c.sql.startsWith("UPDATE service_settings"))).toBe(true);
-  });
-
-  it("an identity-less state still refuses a DATE mismatch", async () => {
-    seedServiceDate({ date: "2026-07-12", chosenOn: "2026-07-12" });
-    const result = await finishServiceLocally({
-      blankRows, expected: { startedAt: "S-stale", date: "2026-07-11" },
-    });
-    expect(result.superseded).toBe(true);
-    expect(h.calls.some(c => /INTO service_tables|UPDATE service_tables/.test(c.sql))).toBe(false);
+  it("setServiceDeleted soft-deletes the entry — its board rows survive", async () => {
+    await setServiceDeleted("svc-9", "d1");
+    const updates = callsLike("UPDATE");
+    expect(updates).toHaveLength(1);
+    expect(updates[0].sql).toContain("UPDATE services SET deleted_at = ?");
+    expect(h.calls.some((c) => /service_tables/.test(c.sql))).toBe(false);
   });
 });

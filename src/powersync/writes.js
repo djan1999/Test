@@ -16,7 +16,7 @@
 
 import { getPowerSync } from "./system.js";
 import { getWorkspaceId } from "../lib/supabaseClient.js";
-import { localRowId } from "./rowId.js";
+import { localRowId, localTableRowId } from "./rowId.js";
 import { randomUuid } from "../utils/uuid.js";
 
 // JS value → SQLite storage value (JSON text for objects, 0/1 for booleans).
@@ -64,16 +64,90 @@ async function upsertLocalRow(tx, table, ws, id, cols) {
   }
 }
 
-// Board rows: [{ table_id, data, updated_at }]
-export async function writeServiceTables(rows) {
+// Board rows for ONE service: [{ table_id, data, updated_at }]. Every row is
+// keyed by (workspace, service, table) — a write can only ever land inside
+// the service namespace it names.
+export async function writeServiceTables(serviceId, rows) {
   const ws = requireWorkspace();
+  if (!serviceId) throw new Error("[PowerSync writes] board write without a service id");
   await getPowerSync().writeTransaction(async (tx) => {
     for (const row of rows) {
-      await upsertLocalRow(tx, "service_tables", ws, localRowId(ws, row.table_id), {
+      await upsertLocalRow(tx, "service_tables", ws, localTableRowId(ws, serviceId, row.table_id), {
+        service_id: String(serviceId),
         table_id: Number(row.table_id),
         data: sqlite(row.data ?? {}),
         updated_at: row.updated_at || new Date().toISOString(),
       });
+    }
+  });
+}
+
+// ── service entity lifecycle ────────────────────────────────────────────────
+// Plain uuid-keyed rows: START inserts, END/heal patch by id. No operation
+// here (or anywhere) blanks board rows.
+
+const serviceCols = (entity) => ({
+  date: entity.date,
+  session: entity.session,
+  chosen_on: entity.chosenOn ?? entity.chosen_on ?? null,
+  started_at: entity.startedAt ?? entity.started_at ?? null,
+  status: entity.status || "live",
+  ended_at: entity.endedAt ?? entity.ended_at ?? null,
+  end_reason: entity.endReason ?? entity.end_reason ?? null,
+  label: entity.label ?? null,
+  snapshot: sqlite(entity.snapshot ?? null),
+  deleted_at: entity.deletedAt ?? entity.deleted_at ?? null,
+  updated_at: entity.updatedAt ?? entity.updated_at ?? new Date().toISOString(),
+});
+
+export async function insertServiceLocally(entity) {
+  const ws = requireWorkspace();
+  await getPowerSync().writeTransaction(async (tx) => {
+    await upsertLocalRow(tx, "services", ws, String(entity.id), serviceCols(entity));
+  });
+}
+
+// Field patch by id (end, re-date heal, archive soft-delete). Snake-case keys
+// straight to columns; jsonb values stringified for SQLite.
+export async function updateServiceLocally(serviceId, patch) {
+  const ws = requireWorkspace();
+  const names = Object.keys(patch);
+  if (names.length === 0) return;
+  const values = names.map((n) => (n === "snapshot" ? sqlite(patch[n]) : patch[n]));
+  await getPowerSync().execute(
+    `UPDATE services SET ${names.map((n) => `${n} = ?`).join(", ")} WHERE id = ? AND workspace_id = ?`,
+    [...values, String(serviceId), ws],
+  );
+}
+
+// Archive-view soft delete / restore for an ENDED service entry.
+export async function setServiceDeleted(serviceId, deletedAt) {
+  await updateServiceLocally(serviceId, {
+    deleted_at: deletedAt,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+// Archive-trash purge for service-backed entries: hard-delete an ENDED,
+// already soft-deleted service and its board rows (the server FK cascades;
+// the local view schema does not, so the rows are deleted explicitly).
+// A LIVE service is refused here and by the server's RLS delete policy.
+export async function purgeDeletedServices() {
+  const ws = requireWorkspace();
+  await getPowerSync().writeTransaction(async (tx) => {
+    const doomed = await tx.getAll(
+      "SELECT id FROM services WHERE workspace_id = ? AND status = 'ended' AND deleted_at IS NOT NULL",
+      [ws],
+    );
+    for (const row of doomed) {
+      await tx.execute(
+        "DELETE FROM service_tables WHERE workspace_id = ? AND service_id = ?",
+        [ws, String(row.id)],
+      );
+      await tx.execute(
+        "DELETE FROM services WHERE workspace_id = ? AND id = ? AND status = 'ended' AND deleted_at IS NOT NULL",
+        [ws, String(row.id)],
+      );
     }
   });
 }
@@ -226,52 +300,10 @@ export async function writeArchiveEntry(entry) {
   return id;
 }
 
-// Archive (optional), clear all board rows, and clear the shared service date
-// in ONE local SQLite transaction. PowerSync uploads the resulting CRUD batch
-// durably; a transient server failure keeps the entire batch queued for retry.
-//
-// `expected` ({ startedAt, date }) names WHICH service this ends. If the
-// local DB's service_date no longer holds that service (a newer one already
-// synced in), the whole transaction is skipped and { superseded: true }
-// returns — a stale device's late finish must not blank the fresh service.
-// (An offline device that never synced the new service can't be caught here;
-// the server-side guard in archive_and_finish_service is the backstop for
-// the fallback path, and the CAS upload path bounds the local one.)
-export async function finishServiceLocally({ archive = null, blankRows, expected = null }) {
-  const ws = requireWorkspace();
-  let superseded = false;
-  await getPowerSync().writeTransaction(async (tx) => {
-    if (expected && (expected.startedAt || expected.date)) {
-      const row = await tx.getOptional(
-        "SELECT state FROM service_settings WHERE id = ? AND workspace_id = ?",
-        [localRowId(ws, "service_date"), ws],
-      );
-      let state = null;
-      try { state = row?.state ? JSON.parse(row.state) : null; } catch { state = null; }
-      // A state with NO startedAt has no identity to mismatch — the date
-      // decides alone (mirrors archive_and_finish_service and the client
-      // pre-check; an identity-less live state used to refuse every guarded
-      // end forever, with nothing for adoption to heal from).
-      const startedOk = !expected.startedAt || state?.startedAt == null
-        || state.startedAt === expected.startedAt;
-      const dateOk = !expected.date || state?.date === expected.date;
-      if (!state?.date || !startedOk || !dateOk) { superseded = true; return; }
-    }
-    if (archive) await writeArchiveInTransaction(tx, ws, archive);
-    for (const row of blankRows || []) {
-      await upsertLocalRow(tx, "service_tables", ws, localRowId(ws, row.table_id), {
-        table_id: Number(row.table_id),
-        data: sqlite(row.data ?? {}),
-        updated_at: row.updated_at || new Date().toISOString(),
-      });
-    }
-    await upsertLocalRow(tx, "service_settings", ws, localRowId(ws, "service_date"), {
-      state: sqlite({}),
-      updated_at: new Date().toISOString(),
-    });
-  });
-  return { superseded };
-}
+// (finishServiceLocally is GONE. Ending a service is updateServiceLocally
+// flipping ONE services row to status='ended' — see lib/serviceLifecycle.js.
+// Nothing writes blank board rows or clears a shared pointer anymore; that
+// operation class was the root of every board-wipe incident.)
 
 // Soft-delete / restore an archive entry (deleted_at timestamp or null).
 export async function setArchiveDeleted(id, deletedAt) {

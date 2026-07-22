@@ -38,12 +38,11 @@ const ALLOWLIST = {
     // Direct-Supabase fallback branches of the store seams and one-shot
     // loaders. They run only when sqlitePrimary is false (PowerSync unavailable
     // or disabled), so the watches never fight them.
-    "TABLES.SERVICE_TABLES.select": 2,   // fetchBoardRows fallback + board poll
+    "TABLES.SERVICE_TABLES.select": 3,   // fetchBoardRows fallback + board poll + auto-end's judged-service read
     "TABLES.RESERVATIONS.upsert": 1,     // atomic multi-reservation swap fallback
     "TABLES.RESERVATIONS.insert": 1,     // saveRes create (id comes from DB)
     "TABLES.RESERVATIONS.delete": 1,     // deleteReservation fallback
     "TABLES.RESERVATIONS.select": 1,     // fallback one-shot load
-    "TABLES.SERVICE_ARCHIVE.select": 2,  // fallback archive list + dedup check
     "TABLES.MENU_COURSES.select": 1,     // fetchMenuCourses (admin surface)
     "TABLES.MENU_COURSES.upsert": 2,     // saveMenuCourses + legacy-shape retry
     "TABLES.MENU_COURSES.delete": 1,     // saveMenuCourses prune
@@ -54,14 +53,26 @@ const ALLOWLIST = {
     "TABLES.BEVERAGES.insert": 1,        // beverage sync write
     "TABLES.BEVERAGES.delete": 1,        // beverage sync prune
   },
-  "components/reservations/GuestMemory.jsx": {
-    "TABLES.SERVICE_ARCHIVE.select": 1,  // fallback read when SQLite not primary
-  },
   "lib/archiveStore.js": {
     // IS the archive seam — its fallback branch talks to Supabase directly.
+    // Since the service-entity rework the archive view merges TWO sources:
+    // ended services (+ their board rows) and legacy service_archive rows.
     "TABLES.SERVICE_ARCHIVE.select": 2,
     "TABLES.SERVICE_ARCHIVE.update": 2,
     "TABLES.SERVICE_ARCHIVE.delete": 1,
+    "TABLES.SERVICES.select": 2,         // merged archive read + id-kind probe
+    "TABLES.SERVICE_TABLES.select": 1,   // ended services' board rows
+    "TABLES.SERVICES.update": 2,         // soft-delete / restore (one + all)
+    "TABLES.SERVICES.delete": 1,         // trash purge (RLS: ended+trashed only)
+  },
+  "lib/serviceLifecycle.js": {
+    // IS the service lifecycle seam — its fallback branch talks to Supabase
+    // directly. Every write is single-row by id; nothing here can touch
+    // service_tables (see serviceLifecycle.test.js pins).
+    "TABLES.SERVICES.select": 2,         // services list + same-day label dedup
+    "TABLES.SERVICE_ARCHIVE.select": 1,  // same-day legacy labels for dedup
+    "TABLES.SERVICES.insert": 1,         // START — one new entity row
+    "TABLES.SERVICES.update": 2,         // END (status flip) + field heal
   },
   "lib/auditStore.js": {
     // Audit history stays on the server and is not synchronized into each

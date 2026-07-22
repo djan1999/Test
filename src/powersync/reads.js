@@ -106,16 +106,21 @@ export async function readSettingsPrefix(prefix) {
   }));
 }
 
-// The settings rows the app live-updates across devices. floor_status_v1 /
-// floor_maps_v1 joined 11.07: they were boot-read only, so a SET marker
-// tapped on one tablet never reached another device without a full reload.
+// The settings rows the app live-updates across devices. floor_status /
+// floor_maps joined 11.07: they were boot-read only, so a SET marker tapped
+// on one tablet never reached another device without a full reload.
+// Floor SET strips are namespaced PER SERVICE (`floor_status_v2:<serviceId>`)
+// since the entity rework: a stale device replaying its old service's strips
+// writes to that OLD key and can never overwrite the live service's strips.
+// (The legacy shared `service_date` and `floor_status_v1` keys are retired
+// and deliberately not read.)
 export async function readLiveSettings() {
   const ws = getWorkspaceId();
-  const ids = ["kitchen_ticket_order", "service_date", "floor_status_v1", "floor_maps_v1", "restaurant_config_v1"]
+  const ids = ["kitchen_ticket_order", "floor_maps_v1", "restaurant_config_v1"]
     .map((id) => localRowId(ws, id));
   const rows = await getPowerSync().getAll(
-    "SELECT id, state, updated_at FROM service_settings WHERE workspace_id = ? AND id IN (?, ?, ?, ?, ?)",
-    [ws, ...ids],
+    "SELECT id, state, updated_at FROM service_settings WHERE workspace_id = ? AND (id IN (?, ?, ?) OR id LIKE ?)",
+    [ws, ...ids, `${localRowId(ws, "floor_status_v2:")}%`],
   );
   return rows.map((row) => ({
     ...reviveRow(row),
@@ -133,12 +138,34 @@ export async function readReservations(fromISO, toISO) {
   return rows.map(reviveRow);
 }
 
-// Service board rows, shaped like the Supabase select the board consumes:
-// { table_id, data, updated_at }.
-export async function readServiceTables() {
+// Service board rows for ONE service, shaped like the Supabase select the
+// board consumes: { service_id, table_id, data, updated_at }. No service →
+// no rows (a device between services has no board namespace to read).
+export async function readServiceTables(serviceId) {
+  if (!serviceId) return [];
   const rows = await getPowerSync().getAll(
-    "SELECT table_id, data, updated_at FROM service_tables WHERE workspace_id = ? ORDER BY table_id",
-    [getWorkspaceId()],
+    "SELECT service_id, table_id, data, updated_at FROM service_tables WHERE workspace_id = ? AND service_id = ? ORDER BY table_id",
+    [getWorkspaceId(), String(serviceId)],
+  );
+  return rows.map(reviveRow);
+}
+
+// All services rows for the workspace (newest started_at first, bounded).
+export async function readServices(limit = 120) {
+  const rows = await getPowerSync().getAll(
+    "SELECT * FROM services WHERE workspace_id = ? ORDER BY started_at DESC LIMIT ?",
+    [getWorkspaceId(), limit],
+  );
+  return rows.map(reviveRow);
+}
+
+// Board rows for a SET of services in one query — the archive detail reads.
+export async function readServiceTablesForServices(serviceIds) {
+  const ids = (serviceIds || []).map(String).filter(Boolean);
+  if (ids.length === 0) return [];
+  const rows = await getPowerSync().getAll(
+    `SELECT service_id, table_id, data, updated_at FROM service_tables WHERE workspace_id = ? AND service_id IN (${ids.map(() => "?").join(",")}) ORDER BY service_id, table_id`,
+    [getWorkspaceId(), ...ids],
   );
   return rows.map(reviveRow);
 }
@@ -197,27 +224,35 @@ export async function readMenuCourses() {
   });
 }
 
-// Active (non-deleted) archive entries for one service day — the input set
-// for the manual-archive label dedup.
+// Labels already taken on one service day — the input set for the end-label
+// dedup ("… · 2"). Ended services AND legacy archive rows both count.
 export async function readActiveArchivesForDate(date) {
-  const rows = await getPowerSync().getAll(
-    "SELECT id, label, state, created_at FROM service_archive WHERE workspace_id = ? AND date = ? AND deleted_at IS NULL",
-    [getWorkspaceId(), date],
-  );
-  return rows.map(reviveRow);
-}
-
-// Service archive split into { active, deleted }, mirroring the two Supabase
-// queries the Archive modal runs (active newest-first ≤60, trash newest-first
-// ≤30). state jsonb is revived to an object.
-export async function readServiceArchive() {
-  // LIMIT in SQL, not post-parse: each archive row's `state` is a full board
-  // snapshot (easily 100KB+), and the archive grows forever — selecting the
-  // whole table and JSON-parsing every row just to slice the top 60 made the
-  // Archive open slower every week of operation on the weakest device.
   const ws = getWorkspaceId();
   const db = getPowerSync();
-  const [activeRows, deletedRows] = await Promise.all([
+  const [legacy, services] = await Promise.all([
+    db.getAll(
+      "SELECT id, label, created_at FROM service_archive WHERE workspace_id = ? AND date = ? AND deleted_at IS NULL",
+      [ws, date],
+    ),
+    db.getAll(
+      "SELECT id, label, ended_at AS created_at FROM services WHERE workspace_id = ? AND date = ? AND status = 'ended' AND deleted_at IS NULL AND label IS NOT NULL",
+      [ws, date],
+    ),
+  ]);
+  return [...legacy, ...services].map(reviveRow);
+}
+
+// Archive view: ended services (adapted to the legacy entry shape) merged
+// with legacy service_archive rows, split into { active, deleted } — active
+// newest-first ≤60, trash newest-first ≤30 (the caps the modal always had).
+export async function readServiceArchive() {
+  const { archiveEntryFromService, mergeArchiveEntries } = await import("../lib/serviceEntity.js");
+  const ws = getWorkspaceId();
+  const db = getPowerSync();
+  const [legacyActive, legacyDeleted, endedServices] = await Promise.all([
+    // LIMIT in SQL, not post-parse: each legacy row's `state` is a full board
+    // snapshot (easily 100KB+); parsing everything just to slice the top 60
+    // made the Archive open slower every week on the weakest device.
     db.getAll(
       "SELECT id, date, label, state, created_at, deleted_at, workspace_id FROM service_archive WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 60",
       [ws],
@@ -226,9 +261,22 @@ export async function readServiceArchive() {
       "SELECT id, date, label, state, created_at, deleted_at, workspace_id FROM service_archive WHERE workspace_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT 30",
       [ws],
     ),
+    db.getAll(
+      "SELECT * FROM services WHERE workspace_id = ? AND status = 'ended' ORDER BY ended_at DESC LIMIT 90",
+      [ws],
+    ),
   ]);
-  return {
-    active: activeRows.map(reviveRow),
-    deleted: deletedRows.map(reviveRow),
-  };
+  const services = endedServices.map(reviveRow);
+  const tableRows = await readServiceTablesForServices(services.map((row) => row.id));
+  const rowsByService = new Map();
+  for (const row of tableRows) {
+    const key = String(row.service_id);
+    if (!rowsByService.has(key)) rowsByService.set(key, []);
+    rowsByService.get(key).push(row);
+  }
+  return mergeArchiveEntries({
+    serviceEntries: services.map((row) => archiveEntryFromService(row, rowsByService.get(String(row.id)) || [])),
+    legacyActive: legacyActive.map(reviveRow),
+    legacyDeleted: legacyDeleted.map(reviveRow),
+  });
 }

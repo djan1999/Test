@@ -10,9 +10,32 @@ import { column, Schema, Table } from "@powersync/web";
 // trackPrevious on shared documents/composite-key tables: uploads need the
 // ancestor for three-way folds; DELETE ops also need previous workspace/key
 // values when queued under a different workspace than the active one.
+// THE service lifecycle entity (see schema.sql `services`). Plain uuid id —
+// no aliasing. Board rows below reference it via service_id; a stale device
+// can only ever address the services it has actually synced.
+const services = new Table(
+  {
+    // id column (text) is automatically included
+    date: column.text,
+    session: column.text,
+    chosen_on: column.text,
+    started_at: column.text,
+    status: column.text,
+    ended_at: column.text,
+    end_reason: column.text,
+    label: column.text,
+    snapshot: column.text,
+    deleted_at: column.text,
+    updated_at: column.text,
+    workspace_id: column.text,
+  },
+  { indexes: {} },
+);
+
 const service_tables = new Table(
   {
     // id column (text) is automatically included
+    service_id: column.text,
     table_id: column.integer,
     data: column.text,
     updated_at: column.text,
@@ -153,6 +176,7 @@ const service_archive = new Table(
 );
 
 export const AppSchema = new Schema({
+  services,
   service_tables,
   service_settings,
   reservations,

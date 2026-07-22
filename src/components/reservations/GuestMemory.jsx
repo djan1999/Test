@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase, TABLES } from "../../lib/supabaseClient.js";
-import { scopedFrom } from "../../lib/scopedDb.js";
-import { isSqlitePrimary } from "../../powersync/primary.js";
+import { supabase } from "../../lib/supabaseClient.js";
+import { fetchArchive } from "../../lib/archiveStore.js";
 import { findGuestHistory } from "../../utils/archiveInsights.js";
 import { tokens } from "../../styles/tokens.js";
 
@@ -14,20 +13,10 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 const ARCHIVE_LIMIT = 20;
 
 async function fetchRecentArchives() {
-  // Local SQLite when primary (instant, works offline); direct Supabase
-  // otherwise. Both shaped as { date, label, state } rows, newest first.
-  if (isSqlitePrimary()) {
-    const { readServiceArchive } = await import("../../powersync/reads.js");
-    const { active } = await readServiceArchive();
-    return active.slice(0, ARCHIVE_LIMIT).map(({ date, label, state }) => ({ date, label, state }));
-  }
-  const { data, error } = await scopedFrom(TABLES.SERVICE_ARCHIVE)
-    .select("date, label, state")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(ARCHIVE_LIMIT);
-  if (error) throw error;
-  return data || [];
+  // The archive seam merges ENDED SERVICES (entity model) with legacy
+  // service_archive snapshots on both storage paths, newest first.
+  const { active } = await fetchArchive();
+  return active.slice(0, ARCHIVE_LIMIT).map(({ date, label, state }) => ({ date, label, state }));
 }
 
 function loadRecentArchives() {

@@ -1,5 +1,14 @@
 # Milka Service Board
 
+## Service lifecycle (entity model)
+Every service is a row in the `services` table. STARTing inserts a new row (a
+fresh board namespace — clears nothing); ENDing flips that one row to
+`ended` (destroys nothing — the ended service and its `service_tables` rows
+ARE the archive entry). A stale/offline device can only ever end the old
+service it knows about, so the historical "board wiped mid-service" incident
+class is structurally impossible. See `docs/SERVICE_ENTITY_RELEASE.md` for
+the model, the migration, and the release-night runbook.
+
 ## Multi-restaurant (workspaces) + login
 The app now requires a Supabase **email + password login**, and all data is
 isolated per **restaurant (workspace)**:

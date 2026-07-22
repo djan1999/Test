@@ -41,9 +41,11 @@ export function getPowerSync() {
   if (!_db) {
     _db = new PowerSyncDatabase({
       schema: AppSchema,
-      // v2 uses workspace-qualified ids. A new file prevents legacy aliases
-      // from contaminating the corrected schema after an in-place upgrade.
-      database: { dbFilename: "milka-powersync-v2.db" },
+      // v3: the service entity lifecycle re-keys board rows by
+      // (workspace, service, table) and adds the services table. A new file
+      // prevents legacy aliases — and any queued pre-entity end-of-service
+      // transaction — from replaying into the corrected schema.
+      database: { dbFilename: "milka-powersync-v3.db" },
     });
   }
   return _db;

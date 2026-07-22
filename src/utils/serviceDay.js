@@ -26,7 +26,6 @@ export const isStaleServiceDate = (date, today = currentServiceDay()) =>
 // i.e. it was current/future when chosen. A date deliberately chosen in the
 // past (demo, reviewing or re-running an earlier day) must never be auto-ended
 // out from under the user; it stays until ended manually.
-export const SERVICE_DATE_CHOSEN_ON_KEY = "milka_service_date_chosen_on";
 export const isDeliberatelyPastDate = (date, chosenOn) =>
   Boolean(date && chosenOn) && String(date) < String(chosenOn);
 
@@ -40,14 +39,9 @@ export const isDeliberatelyPastDate = (date, chosenOn) =>
 export const isActivePastReview = (date, chosenOn, today = currentServiceDay()) =>
   isDeliberatelyPastDate(date, chosenOn) && String(chosenOn) >= String(today);
 
-// Whether picking a service date should WIPE the local board. Only true when
-// switching between two genuinely different known days — NOT when a device is
-// joining the current service (prevDate null: a fresh login, a second device,
-// a re-login). The old check (`next && next !== prev`) cleared on join because
-// prev was null, blanking the shared live board and propagating it to every
-// device — the "opened on the laptop and it wiped the tablet" bug.
-export const shouldClearBoardOnDateChange = (prevDate, nextDate) =>
-  Boolean(nextDate && prevDate && String(nextDate) !== String(prevDate));
+// (shouldClearBoardOnDateChange is GONE: in the service-entity model a date
+// switch starts a NEW service namespace — nothing is ever wiped, so there is
+// no wipe decision left to make.)
 
 // ── Orphaned-service recovery ─────────────────────────────────────────────
 // A board can end up with live tables but NO persisted service_date. The whole
@@ -86,19 +80,5 @@ export const isLiveServiceActivity = (latestActivityMs, now = new Date()) => {
   return Boolean(day) && !isStaleServiceDate(day, currentServiceDay(now));
 };
 
-// Decide what a device should do when entering Service, given the server's
-// persisted service_date state ({ date, chosenOn }). If a live (non-stale, or
-// still-active past-review) service exists → JOIN it silently, no prompt, no
-// wipe. Otherwise → START: prompt for a new service date. This is what makes a
-// second device / re-login "just see the live service" instead of being asked
-// to start one (and clearing the board in the process).
-export function resolveServiceEntry(state, today = currentServiceDay()) {
-  const date = state?.date || null;
-  const chosenOn = state?.chosenOn || null;
-  const session = (state?.session === "lunch" || state?.session === "dinner") ? state.session : null;
-  const startedAt = state?.startedAt || null;
-  if (date && (!isStaleServiceDate(date, today) || isActivePastReview(date, chosenOn, today))) {
-    return { action: "join", date, chosenOn, session, startedAt };
-  }
-  return { action: "start", date: null, chosenOn: null, session: null, startedAt: null };
-}
+// (resolveServiceEntry is GONE: joining is reading the live row from the
+// `services` table — see lib/serviceLifecycle.js readLiveServiceStore.)

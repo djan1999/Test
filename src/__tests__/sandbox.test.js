@@ -20,7 +20,7 @@ vi.mock("../powersync/primary.js", () => ({ isSqlitePrimary: () => false }));
 import { setSandbox } from "../lib/sandbox.js";
 import { saveStateKey, pendingStateKeys } from "../lib/stateStore.js";
 import { archiveSetDeleted, archiveSetAllDeleted, archivePurgeTrash } from "../lib/archiveStore.js";
-import { finishServiceStore } from "../lib/serviceLifecycleStore.js";
+import { startServiceStore, endServiceStore, updateServiceStore } from "../lib/serviceLifecycle.js";
 
 beforeEach(() => { h.scopedSpy.mockClear(); });
 afterEach(() => { setSandbox(false); });
@@ -43,17 +43,14 @@ describe("sandbox kill-switch", () => {
     expect(h.scopedSpy).not.toHaveBeenCalled();
   });
 
-  it("finishServiceStore files no archive and clears no rows while sandbox is on", async () => {
+  it("service lifecycle ops persist nothing while sandbox is on", async () => {
     setSandbox(true);
-    const client = { rpc: vi.fn() };
-    const res = await finishServiceStore({
-      client, workspaceId: "ws-1", sqlitePrimary: false,
-      archive: { id: "a1", date: "2026-07-12", label: "L", state: {} },
-      expected: { startedAt: "S", date: "2026-07-12" },
-    });
-    expect(client.rpc).not.toHaveBeenCalled();
-    expect(res.superseded).toBe(false);
-    expect(res.rows).toHaveLength(10); // blank board handed back for the local UI
+    const started = await startServiceStore({ date: "2026-07-12", session: "dinner" });
+    expect(started.ok).toBe(true);
+    expect(started.persisted).toBe(false); // entity handed back for the local UI only
+    expect(await endServiceStore("svc-1", { reason: "manual" })).toEqual({ ok: true, persisted: false });
+    expect(await updateServiceStore("svc-1", { date: "2026-07-12" })).toEqual({ ok: true, persisted: false });
+    expect(h.scopedSpy).not.toHaveBeenCalled();
   });
 
   it("with sandbox OFF the seams reach the store again (saveStateKey queues)", async () => {
