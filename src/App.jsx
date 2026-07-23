@@ -4802,7 +4802,8 @@ export default function App() {
         // and conflict-check tonight's dinner and every future-dated
         // reservation, or they surface as NEEDS TABLE only when their service
         // starts — exactly the mid-service scramble the confirm flow exists
-        // to prevent. planLayoutSwitch keys conflicts per session already.
+        // to prevent. planLayoutSwitch keys conflicts per date+session, so
+        // the multi-date set never cross-flags different nights.
         floorReservations={layoutPlanningReservations}
         boardTables={displayTables}
         onUpdateFloorMaps={updateFloorMaps}

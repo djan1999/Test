@@ -213,8 +213,9 @@ export function mapSeatCountForBoardTable(map, tableId) {
 
 // ── layout switch planning ──────────────────────────────────────────────────
 // Re-resolve every reservation of the service against the next map and return
-// the confirm diff: moves, conflicts (overlapping claims within one session),
-// NEEDS TABLE rows. Nothing is applied here — the caller shows the diff first.
+// the confirm diff: moves, conflicts (overlapping claims within one service —
+// same date + session), NEEDS TABLE rows. Nothing is applied here — the
+// caller shows the diff first.
 const sameIds = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 export function planLayoutSwitch(nextMap, reservations, tables = null) {
@@ -225,6 +226,7 @@ export function planLayoutSwitch(nextMap, reservations, tables = null) {
     return {
       id: r.id,
       name: r.data?.resName || "",
+      date: r.date || null,
       session: resolveReservationSession(r.data),
       from,
       to,
@@ -239,13 +241,15 @@ export function planLayoutSwitch(nextMap, reservations, tables = null) {
       status: !to ? "needs_table" : sameIds(from, to) ? "unchanged" : "move",
     };
   });
-  // Two parties in the same session claiming an overlapping slot set is a
-  // conflict the switch cannot silently apply.
-  const claimed = new Map(); // `${session}:${slot}` → row
+  // Two parties in the same service (same date AND session) claiming an
+  // overlapping slot set is a conflict the switch cannot silently apply.
+  // The planning set spans future dates too, so the date must be in the key —
+  // without it tonight's T9 collides with next week's T9.
+  const claimed = new Map(); // `${date}:${session}:${slot}` → row
   for (const row of rows) {
     if (!row.to) continue;
     for (const slot of row.to) {
-      const key = `${row.session}:${slot}`;
+      const key = `${row.date}:${row.session}:${slot}`;
       const other = claimed.get(key);
       if (other) { row.status = "conflict"; other.status = "conflict"; }
       else claimed.set(key, row);
