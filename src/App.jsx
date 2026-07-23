@@ -367,22 +367,13 @@ export default function App() {
   const [cocktails, setCocktails] = useState(localBev?.cocktails ?? initCocktails);
   const [spirits,   setSpirits]   = useState(localBev?.spirits   ?? initSpirits);
   const [beers,     setBeers]     = useState(localBev?.beers      ?? initBeers);
-  const [mode, setMode] = useState(() => {
-    try {
-      const storedMode = localStorage.getItem(workspaceKey("milka_mode")) || null;
-      const storedDate = localStorage.getItem(workspaceKey("milka_service_date"));
-      const chosenOn   = localStorage.getItem(workspaceKey(CHOSEN_ON_LS_KEY));
-      // If the saved service date rolled over to yesterday, don't auto-resume
-      // service/display — those modes require a date that matches today.
-      // A deliberately-past date (demo / reviewing an earlier day) is exempt.
-      if ((storedMode === "service" || storedMode === "display")
-          && isStaleServiceDate(storedDate)
-          && !isActivePastReview(storedDate, chosenOn)) {
-        return null;
-      }
-      return storedMode;
-    } catch { return null; }
-  });
+  // Every app open (and every sign-in) starts at the MODE SELECTION screen —
+  // the operating mode is a per-session choice, never restored from a previous
+  // session. Auto-resuming the stored mode dropped freshly opened devices
+  // straight into Service/Kitchen with whatever stale context the last session
+  // left behind (per Djan, 23.07: opening the app must always land on the
+  // first screen).
+  const [mode, setMode] = useState(null);
   // ── Auth + workspace (multi-tenant) ─────────────────────────────────────────
   // When Supabase is configured the app requires a login, then a workspace
   // (restaurant) selection. Each workspace is a fully isolated data set.
@@ -627,16 +618,21 @@ export default function App() {
   // the wipe to the server.
   const [remoteBoardLoaded, setRemoteBoardLoaded] = useState(!supabase);
   const [boardSyncTick, setBoardSyncTick] = useState(0);
-  // Boot splash: show "CONNECTING…" until the board truth lands, but never
-  // longer than a beat — an offline device must still reach the UI (its board
-  // fills in when the local DB read completes).
+  // Boot splash: hold "CONNECTING…" until the device is genuinely set up —
+  // the board truth AND the reservations have loaded (local SQLite when
+  // primary, Supabase on the fallback) — so nobody can act on a half-synced
+  // view (per Djan, 23.07). A previously-synced device that is OFFLINE still
+  // gets through fast: its local DB serves both reads immediately. The long
+  // escape hatch only exists for the degraded case (fallback path with no
+  // network) so a device with cached lists is not bricked — it opens with a
+  // sync-error chip instead of an eternal splash.
   const [bootGateDone, setBootGateDone] = useState(!supabase);
   useEffect(() => {
     if (bootGateDone) return undefined;
-    if (remoteBoardLoaded) { setBootGateDone(true); return undefined; }
-    const t = setTimeout(() => setBootGateDone(true), 1500);
+    if (remoteBoardLoaded && reservationsLoaded) { setBootGateDone(true); return undefined; }
+    const t = setTimeout(() => setBootGateDone(true), 12000);
     return () => clearTimeout(t);
-  }, [remoteBoardLoaded, bootGateDone]);
+  }, [remoteBoardLoaded, reservationsLoaded, bootGateDone]);
   // ── Service ENTITY identity ─────────────────────────────────────────────
   // The lifecycle is a row in the `services` table; serviceId names which one
   // this device is on. serviceDate / chosenOn / session / startedAt below are
@@ -2251,10 +2247,9 @@ export default function App() {
     setServiceDate(today);
     setServiceDateChosenOn(today);
 
-    // Enter service WITHOUT persisting the mode/date (a reload must resume the
+    // Enter service WITHOUT persisting the date (a reload must resume the
     // real state, never a stranded non-sandbox "service" on today's date).
     setMode("service");
-    try { localStorage.removeItem(workspaceKey("milka_mode")); } catch { /* noop */ }
   };
 
   const endTestService = () => {
@@ -2315,10 +2310,6 @@ export default function App() {
     // Back to where the test was launched from (Admin).
     const backMode = snap?.mode ?? null;
     setMode(backMode);
-    try {
-      if (backMode) localStorage.setItem(workspaceKey("milka_mode"), backMode);
-      else localStorage.removeItem(workspaceKey("milka_mode"));
-    } catch { /* noop */ }
   };
 
   // Guards the rollover auto-end so the boot check and the interval tick don't
@@ -2560,11 +2551,7 @@ export default function App() {
       const oldKey = floorStatusKeyFor(curId);
       if (oldKey) dropPendingStateKey?.(oldKey);
       releaseServiceLocally();
-      setMode(prev => {
-        if (prev !== "service" && prev !== "display") return prev;
-        try { localStorage.removeItem(workspaceKey("milka_mode")); } catch { /* noop */ }
-        return null;
-      });
+      setMode(prev => (prev === "service" || prev === "display") ? null : prev);
     }
   };
   // Ref indirection: the watch/channel handlers are bound once per
@@ -2755,12 +2742,10 @@ export default function App() {
     }
   };
 
+  // Mode is per-session only (never persisted): the next open starts at the
+  // mode-selection screen.
   const enterMode = (nextMode) => {
     setMode(nextMode);
-    try {
-      if (nextMode) localStorage.setItem(workspaceKey("milka_mode"), nextMode);
-      else          localStorage.removeItem(workspaceKey("milka_mode"));
-    } catch {}
   };
 
   // Guards against double-taps while the join check is in flight.
@@ -4460,7 +4445,6 @@ export default function App() {
           setPendingModeAfterDate(null);
           if (target) {
             setMode(target);
-            try { localStorage.setItem(workspaceKey("milka_mode"), target); } catch {}
             // The reconciliation effect (watches `mode` + `serviceDate` +
             // `activeServiceSession`) fills the board from reservations.
           }
