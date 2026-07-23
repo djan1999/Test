@@ -55,7 +55,12 @@ vi.mock("../lib/supabaseClient.js", () => ({
   getWorkspaceId: () => h.workspaceId,
 }));
 
+// The connector surfaces dropped CAS refusals through recordClientDiagnostic;
+// the 23.07 wedge regressions assert on it.
+vi.mock("../lib/clientDiagnostics.js", () => ({ recordClientDiagnostic: vi.fn() }));
+
 import { SupabaseConnector } from "../powersync/SupabaseConnector.js";
+import { recordClientDiagnostic } from "../lib/clientDiagnostics.js";
 
 const makeTx = (crud) => ({ crud, complete: vi.fn(async () => {}) });
 const makeDb = (tx) => ({ getNextCrudTransaction: async () => tx });
@@ -210,14 +215,48 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     // Deliberately source-first: the connector must reorder this safely.
     const tx = makeTx([sourceBlank, destinationClaim]);
 
-    await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toMatchObject({
-      code: "MILKA_TABLE_CONFLICT",
-      conflict: "destination-occupied",
-    });
+    // REGRESSION (23.07): this refusal used to rethrow as transient, so the
+    // engine retried the same deterministic fold forever — wedging the queue
+    // and (since checkpoints never apply over pending uploads) freezing the
+    // device in both directions. The refusal now DROPS the whole gesture:
+    // the source blank never uploads, the party stays on its server table.
+    vi.mocked(recordClientDiagnostic).mockClear();
+    await new SupabaseConnector().uploadData(makeDb(tx));
 
     // Only the destination's CAS read ran — no overwrite, no source clear RPC.
     expect(h.calls.filter((c) => c.op === "rpc")).toHaveLength(0);
-    expect(tx.complete).not.toHaveBeenCalled();
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+    expect(recordClientDiagnostic).toHaveBeenCalledTimes(1);
+  });
+
+  it("REGRESSION (23.07): a concurrent-clear refusal completes the transaction instead of freezing the device", async () => {
+    // The Demo-drill wedge: a queued CLEAR of table 9 whose ancestor is stale
+    // (the table changed on another device / the service moved on). The fold
+    // refuses as concurrent-clear — a verdict that re-runs identically on
+    // every retry. The queue must move past it: complete the transaction,
+    // record a diagnostic, upload nothing for the refused table.
+    const alpha = { id: 9, active: true, resName: "ALPHA", resTime: "19:00", seats: [] };
+    const beta = { id: 9, active: true, resName: "BETA", resTime: "19:15", seats: [] };
+    const blank = { id: 9, active: false, resName: "", resTime: "", seats: [] };
+    h.remoteServiceTables = { 9: { data: beta, updated_at: "2026-07-23T21:33:00.000Z" } };
+    const clearOp = {
+      ...patch("service_tables", "ws-a|svc-1|9", {
+        service_id: "svc-1", table_id: 9, data: JSON.stringify(blank), workspace_id: "ws-a",
+      }),
+      previousValues: { workspace_id: "ws-a", data: JSON.stringify(alpha) },
+    };
+    const tx = makeTx([clearOp]);
+
+    vi.mocked(recordClientDiagnostic).mockClear();
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls.filter((c) => c.op === "rpc")).toHaveLength(0);
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+    expect(recordClientDiagnostic).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordClientDiagnostic).mock.calls[0][1]).toMatchObject({
+      code: "MILKA_TABLE_CONFLICT",
+      conflict: "concurrent-clear",
+    });
   });
 
   it("REGRESSION (09.07): reservations PATCH without date keeps the stored date through CAS", async () => {

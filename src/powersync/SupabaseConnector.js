@@ -196,8 +196,10 @@ async function applyServiceTableWrite(op, ws, row) {
 
 // A MOVE is stored locally as "destination receives the party" + "source is
 // blanked". Upload the claim first. If the destination became occupied on the
-// server, its CAS refuses and the transaction stays queued WITHOUT erasing the
-// source. Stable ordering keeps unrelated operations in their original order.
+// server, its CAS refuses and the WHOLE gesture is dropped (see uploadData) —
+// the source blank never uploads, so the party stays on its server table and
+// the next checkpoint restores it locally: a refused move simply didn't
+// happen. Stable ordering keeps unrelated operations in their original order.
 function serviceTableClaimsFirst(crud) {
   const boardWrites = (crud || []).filter((op) => op.table === "service_tables" && op.op !== OP_DELETE);
   const ids = boardWrites.map((op) => String(op.id));
@@ -381,6 +383,22 @@ export class SupabaseConnector {
       try {
         const result = await applyOp(op);
         if (result?.error) {
+          if (result.error.code === "MILKA_TABLE_CONFLICT") {
+            // The CAS refused this board write: the table changed or became
+            // occupied under our stale ancestor. That is a VERDICT, not an
+            // outage — the fold re-runs against the same ancestor on every
+            // retry, so the op can never succeed later. Treating it as
+            // transient wedged the queue forever, and since checkpoints are
+            // never applied over pending uploads, one refused write froze the
+            // whole device in BOTH directions (23.07 Demo drill). Accept the
+            // verdict instead: surface it, drop the REST of this gesture
+            // (claims-first ordering puts a move's refused destination before
+            // its source blank, so nothing is ever erased by the drop), and
+            // let the next checkpoint restore server truth locally.
+            console.error("[PowerSync] CAS refused board write — dropping the rest of its transaction:", op, result.error.message);
+            recordClientDiagnostic("board write refused (newer table kept)", result.error);
+            break;
+          }
           if (isPermanentError(result.error) && !NEVER_DROP_TABLES.has(op.table)) {
             // Will fail on every retry — log the full op and move on rather
             // than wedging the whole queue behind it.
