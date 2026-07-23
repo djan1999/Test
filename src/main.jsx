@@ -46,7 +46,25 @@ const updateSW = registerSW({
     if (registration) {
       // Poll every 60 s so a fresh deploy starts downloading in the
       // background right away (it still only ACTIVATES per the rule above).
-      setInterval(() => registration.update(), 60_000);
+      // The check re-fetches /sw.js over the network, so a wifi blip rejects
+      // it — expected and self-healing (the next tick retries). Those one-off
+      // rejections used to land unhandled in the diagnostics log as scary
+      // ServiceWorker errors. Swallow them, and record ONE entry only after
+      // 10 straight failures: 10+ minutes unable to even check is the real
+      // stale-device signal (how the kitchen display stayed pinned on an old
+      // build) and deserves the alarm.
+      let failedChecks = 0;
+      setInterval(() => {
+        registration.update().then(
+          () => { failedChecks = 0; },
+          (error) => {
+            failedChecks += 1;
+            if (failedChecks === 10) {
+              recordClientDiagnostic("service-worker-update-check failing 10+ min", error);
+            }
+          },
+        );
+      }, 60_000);
     }
   },
   onRegisterError(error) {
