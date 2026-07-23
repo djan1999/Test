@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML, generateKitchenTicketsHTML } from "../../utils/weeklyPrintGenerator.js";
+import { readWeeklySheetEdits, writeWeeklySheetEdits } from "../../utils/storage.js";
 import { deriveCourseKeysFromTemplate } from "../../utils/menuLayoutProfiles.js";
 import { blankTable, makeSeats } from "../../utils/tableHelpers.js";
 import { getCourseMod } from "../../utils/menuUtils.js";
@@ -260,8 +261,6 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
   const [editingId,   setEditingId]   = useState(null);   // reservation id being edited, or "new"
   const [ticketId,    setTicketId]    = useState(null);    // reservation id showing kitchen preview
   const [weeklyPreview, setWeeklyPreview] = useState(null); // "reservations" | "allergies" | null
-  const [weeklyEdits,   setWeeklyEdits]   = useState({});
-  const [allergyEdits,  setAllergyEdits]  = useState({});
   const [draftFromReservation, setDraftFromReservation] = useState(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -298,6 +297,31 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
   }, [weekOffset]);
 
   const toDateStr = d => toLocalDateISO(d);
+
+  // Edits to the printable overview / allergy sheets persist per workspace +
+  // week, so they survive leaving this screen, reloads around printing, and
+  // reservations added after editing (edits overlay the regenerated cells).
+  const weekStartStr = toDateStr(weekDays[0]);
+  const [weeklyEdits,  setWeeklyEditsState]  = useState(() => readWeeklySheetEdits("overview", weekStartStr));
+  const [allergyEdits, setAllergyEditsState] = useState(() => readWeeklySheetEdits("allergies", weekStartStr));
+  const editsWeekRef = useRef(weekStartStr);
+  useEffect(() => {
+    if (editsWeekRef.current === weekStartStr) return;
+    editsWeekRef.current = weekStartStr;
+    setWeeklyEditsState(readWeeklySheetEdits("overview", weekStartStr));
+    setAllergyEditsState(readWeeklySheetEdits("allergies", weekStartStr));
+  }, [weekStartStr]);
+  const setWeeklyEdits = (updater) => {
+    const next = typeof updater === "function" ? updater(weeklyEdits) : updater;
+    setWeeklyEditsState(next);
+    writeWeeklySheetEdits("overview", weekStartStr, next);
+  };
+  const setAllergyEdits = (updater) => {
+    const next = typeof updater === "function" ? updater(allergyEdits) : updater;
+    setAllergyEditsState(next);
+    writeWeeklySheetEdits("allergies", weekStartStr, next);
+  };
+
   const fmtRange  = () => {
     const o = { day: "numeric", month: "short" };
     return `${weekDays[0].toLocaleDateString("en-GB", o)} – ${weekDays[6].toLocaleDateString("en-GB", o)}`.toUpperCase();
