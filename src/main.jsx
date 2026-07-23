@@ -2,7 +2,7 @@
 // tablet/display browsers before any library module evaluates (10.07 board
 // saves crashed on the kitchen display without it).
 import './lib/abortSignalPolyfill.js';
-import React from 'react';
+import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import { ErrorBoundary } from './components/ui/ErrorBoundary.jsx';
@@ -61,10 +61,45 @@ if (!rootEl) {
   throw new Error('Root element #root was not found. Check index.html.');
 }
 
+// Managed restaurant creation is intentionally isolated from the live board:
+// the ordinary `/` path still renders the exact same App component, while the
+// separate route is unavailable unless its build-time flag is explicitly on.
+const routePath = window.location.pathname.replace(/\/+$/, '') || '/';
+const onboardingRequested = routePath === '/platform-onboarding';
+const onboardingEnabled = import.meta.env.VITE_ENABLE_MANAGED_ONBOARDING === 'true';
+const ManagedOnboardingApp = React.lazy(() => import('./components/onboarding/ManagedOnboardingApp.jsx'));
+
+function DisabledOnboarding() {
+  return (
+    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'monospace' }}>
+      <section style={{ maxWidth: 560, padding: 40, border: '1px solid currentColor', background: 'white', textAlign: 'center' }}>
+        <p style={{ fontSize: 10, letterSpacing: '0.16em', opacity: 0.6 }}>MANAGED ONBOARDING</p>
+        <h1 style={{ fontSize: 30, fontWeight: 500 }}>Not enabled in this build</h1>
+        <p style={{ opacity: 0.75, lineHeight: 1.6 }}>The restaurant service app is unchanged. Enable onboarding only in a reviewed preview environment.</p>
+        <a href="/" style={{ color: 'currentColor' }}>Open main app →</a>
+      </section>
+    </main>
+  );
+}
+
+function LoadingOnboarding() {
+  return (
+    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', fontFamily: 'monospace' }}>
+      <p style={{ fontSize: 11, letterSpacing: '0.14em' }}>LOADING MANAGED ONBOARDING…</p>
+    </main>
+  );
+}
+
+const rootContent = onboardingRequested
+  ? (onboardingEnabled
+      ? <Suspense fallback={<LoadingOnboarding />}><ManagedOnboardingApp /></Suspense>
+      : <DisabledOnboarding />)
+  : <App />;
+
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      {rootContent}
     </ErrorBoundary>
   </React.StrictMode>
 );
