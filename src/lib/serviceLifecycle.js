@@ -7,6 +7,9 @@
 //                   nothing is cleared; the new service simply has no rows).
 //   endService    → UPDATE that one row to status='ended'. Idempotent; the
 //                   ended service IS the archive entry.
+//   resumeService → UPDATE that one row back to status='live'. The single-live
+//                   trigger arbitrates, so a resume can never displace a newer
+//                   live service — it just re-ends as 'superseded'.
 //   updateService → field patch (re-date heal, session relabel).
 // There is no operation that blanks service_tables. A stale device replaying
 // any of these can only affect the old service row it already knows about.
@@ -128,6 +131,44 @@ export async function endServiceStore(serviceId, { reason = "manual", label = nu
       if (error) throw error;
     }
     return { ok: true, persisted: true };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+
+// Resume an ENDED service: flip its one row back to 'live'. Nothing was
+// deleted when it ended — its board rows are all still keyed to its id — so
+// this alone brings the whole board back on every device. The single-live
+// trigger still arbitrates: if a NEWER live service exists, the resumed row
+// is immediately re-ended ('superseded'), so a resume can never hijack a
+// service that is actually running. The result reports the store's honest
+// verdict: `resumed: false` means the store refused (a newer live row won).
+export async function resumeServiceStore(serviceId) {
+  if (!serviceId) return { ok: false, error: new Error("no service to resume") };
+  if (!supabase || !getWorkspaceId() || isSandbox()) {
+    return { ok: false, error: new Error("resume needs a connected workspace") };
+  }
+  const patch = {
+    status: "live",
+    ended_at: null,
+    end_reason: null,
+    // The label was minted for the ENDED entry; re-ending mints a fresh one.
+    label: null,
+    deleted_at: null,
+    updated_at: nowISO(),
+  };
+  try {
+    if (isSqlitePrimary()) {
+      const { updateServiceLocally } = await import("../powersync/writes.js");
+      await updateServiceLocally(serviceId, patch);
+    } else {
+      const { error } = await scopedFrom(TABLES.SERVICES)
+        .update(patch)
+        .eq("id", serviceId);
+      if (error) throw error;
+    }
+    const live = await readLiveServiceStore();
+    return { ok: true, persisted: true, resumed: Boolean(live && live.id === serviceId), live };
   } catch (error) {
     return { ok: false, error };
   }

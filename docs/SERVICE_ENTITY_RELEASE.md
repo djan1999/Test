@@ -86,6 +86,11 @@ touch a later service either.
 - Forgetting to end is also fine: the rollover auto-end files the service at
   06:00, intact. If it ever mislabels a live service, the data is in the
   Archive, not gone.
+- **Ended by accident? RESUME it.** Open the Archive — today's entries show a
+  green RESUME button. One tap flips the service back to live on every device
+  with all its tables exactly as they were (nothing was deleted when it
+  ended). A resume can never displace a service that is actually running: if
+  a newer live service exists, the store refuses and tells you so.
 - The Archive's trash purge is the ONLY destructive operation left, and it
   requires the entry to be ended *and* already in the trash (enforced by the
   database, not just the UI).
