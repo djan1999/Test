@@ -75,5 +75,8 @@ streams:
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
     auto_subscribe: true
 
+# Edition 3 = the current Sync Streams compiler (edition 2 was the alpha —
+# the dashboard warns on it). Same stream structure; a superset SQL feature
+# set. Bumped 22.07.2026 with the service-entity release deploy.
 config:
-  edition: 2
+  edition: 3
