@@ -74,7 +74,7 @@ import { readStateKey, saveStateKey, dropPendingStateKey, pendingStateKeys } fro
 import { createWriteQueue } from "./lib/writeQueue.js";
 import { recordClientDiagnostic } from "./lib/clientDiagnostics.js";
 import {
-  startServiceStore, endServiceStore, updateServiceStore,
+  startServiceStore, endServiceStore, resumeServiceStore, updateServiceStore,
   fetchServicesStore, readLiveServiceStore, fetchSameDayLabelsStore,
 } from "./lib/serviceLifecycle.js";
 import { currentServiceFrom, nextServiceLabel, serviceLabelBase } from "./lib/serviceEntity.js";
@@ -2559,6 +2559,29 @@ export default function App() {
   const adoptServiceRowsRef = useRef(adoptServiceRows);
   adoptServiceRowsRef.current = adoptServiceRows;
 
+  // ── Service lifecycle: RESUME ───────────────────────────────────────────────
+  // Bring an accidentally-ended service back. Ending destroyed nothing — the
+  // board rows are all still keyed to the service's id — so resume is one
+  // status flip and then ordinary adoption. The store's single-live trigger
+  // arbitrates: if a newer service is already live, the resume loses
+  // (re-ended as 'superseded') and this device stays where it is.
+  const resumeServiceFromArchive = async (entry) => {
+    if (sandboxRef.current) {
+      return { ok: false, error: new Error("the test service has no real archive to resume") };
+    }
+    if (!entry?.id) return { ok: false, error: new Error("nothing to resume") };
+    const result = await resumeServiceStore(entry.id);
+    if (!result.ok) return result;
+    // Adopt the store's verdict — the same path every other device takes when
+    // the resumed row syncs to it. If the resume won, this applies the service
+    // and pulls its rows; if it lost, nothing here changes.
+    try {
+      const rows = await fetchServicesStore(20);
+      adoptServiceRowsRef.current?.(rows);
+    } catch { /* the watch/realtime feed will deliver the adoption instead */ }
+    return result;
+  };
+
   // (Session changes ride startService / updateServiceStore as single writes
   // on the service entity — there is no shared settings blob left to race.)
 
@@ -4579,6 +4602,8 @@ export default function App() {
         canClearAll={canAdmin}
         onClose={() => setArchiveOpen(false)}
         onRestoreTicket={id => upd(id, "kitchenArchived", false)}
+        onResumeService={resumeServiceFromArchive}
+        resumableDate={currentServiceDay()}
         menuCourses={menuCourses}
       />
     )}
@@ -4677,6 +4702,8 @@ export default function App() {
             canClearAll={canAdmin}
             onClose={() => setArchiveOpen(false)}
             onRestoreTicket={id => upd(id, "kitchenArchived", false)}
+            onResumeService={resumeServiceFromArchive}
+            resumableDate={currentServiceDay()}
             menuCourses={menuCourses}
           />
         </Suspense>
@@ -5092,6 +5119,8 @@ export default function App() {
             canClearAll={canAdmin}
             onClose={() => setArchiveOpen(false)}
             onRestoreTicket={id => upd(id, "kitchenArchived", false)}
+            onResumeService={resumeServiceFromArchive}
+            resumableDate={currentServiceDay()}
             menuCourses={menuCourses}
           />
         </Suspense>

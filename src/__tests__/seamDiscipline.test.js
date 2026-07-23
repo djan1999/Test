@@ -72,7 +72,7 @@ const ALLOWLIST = {
     "TABLES.SERVICES.select": 2,         // services list + same-day label dedup
     "TABLES.SERVICE_ARCHIVE.select": 1,  // same-day legacy labels for dedup
     "TABLES.SERVICES.insert": 1,         // START — one new entity row
-    "TABLES.SERVICES.update": 2,         // END (status flip) + field heal
+    "TABLES.SERVICES.update": 3,         // END + RESUME (status flips) + field heal
   },
   "lib/auditStore.js": {
     // Audit history stays on the server and is not synchronized into each

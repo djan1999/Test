@@ -63,7 +63,7 @@ vi.mock("../lib/scopedDb.js", () => ({
 }));
 
 import {
-  startServiceStore, endServiceStore, updateServiceStore, readLiveServiceStore,
+  startServiceStore, endServiceStore, resumeServiceStore, updateServiceStore, readLiveServiceStore,
 } from "../lib/serviceLifecycle.js";
 import { currentServiceFrom, sanitizeService, archiveEntryFromService } from "../lib/serviceEntity.js";
 
@@ -116,6 +116,48 @@ describe("endServiceStore — the wipe-impossibility core", () => {
   it("refuses to end nothing", async () => {
     const res = await endServiceStore(null);
     expect(res.ok).toBe(false);
+  });
+});
+
+describe("resumeServiceStore — un-ending is one status flip", () => {
+  it("flips the addressed ended row back to live and clears its end fields", async () => {
+    h.rows.push({
+      id: "s1", workspace_id: "ws-1", date: "2026-07-23", session: "dinner",
+      started_at: "2026-07-23T16:00:00Z", status: "ended",
+      ended_at: "2026-07-23T18:50:00Z", end_reason: "manual", label: "23. 07. 2026 – DINNER",
+    });
+    const res = await resumeServiceStore("s1");
+    expect(res.ok).toBe(true);
+    expect(res.resumed).toBe(true);
+    expect(res.live?.id).toBe("s1");
+    const row = h.rows[0];
+    expect(row.status).toBe("live");
+    expect(row.ended_at).toBe(null);
+    expect(row.end_reason).toBe(null);
+    expect(row.label).toBe(null); // re-ending mints a fresh label
+    expect(h.tableWrites).toHaveLength(0); // the board rows were never gone
+  });
+
+  it("reports resumed:false when a newer live service wins the arbitration", async () => {
+    h.rows.push(
+      { id: "old", workspace_id: "ws-1", date: "2026-07-23", session: "lunch", started_at: "2026-07-23T10:00:00Z", status: "ended", ended_at: "E" },
+      { id: "new", workspace_id: "ws-1", date: "2026-07-23", session: "dinner", started_at: "2026-07-23T16:00:00Z", status: "live" },
+    );
+    // The store trigger would re-end "old" as 'superseded'; even before that
+    // echo lands, the honest verdict read picks the newest live row — so the
+    // caller learns the resume did NOT displace the running service.
+    const res = await resumeServiceStore("old");
+    expect(res.ok).toBe(true);
+    expect(res.resumed).toBe(false);
+    expect(res.live?.id).toBe("new");
+    expect(h.rows.find((r) => r.id === "new").status).toBe("live"); // untouched
+    expect(h.tableWrites).toHaveLength(0);
+  });
+
+  it("refuses to resume nothing", async () => {
+    const res = await resumeServiceStore(null);
+    expect(res.ok).toBe(false);
+    expect(h.rows).toHaveLength(0);
   });
 });
 
