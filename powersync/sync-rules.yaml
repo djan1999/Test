@@ -35,7 +35,7 @@ streams:
   service_tables:
     priority: 1
     query: >-
-      SELECT workspace_id || '|' || CAST(service_id AS TEXT) || '|' || CAST(table_id AS TEXT) AS id, * FROM service_tables
+      SELECT *, workspace_id || '|' || CAST(service_id AS TEXT) || '|' || CAST(table_id AS TEXT) AS id FROM service_tables
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
     auto_subscribe: true
   reservations:
@@ -53,7 +53,7 @@ streams:
   menu_courses:
     priority: 2
     query: >-
-      SELECT workspace_id || '|' || CAST(position AS TEXT) AS id, * FROM menu_courses
+      SELECT *, workspace_id || '|' || CAST(position AS TEXT) AS id FROM menu_courses
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
     auto_subscribe: true
   beverages:
@@ -65,7 +65,7 @@ streams:
   wines:
     priority: 3
     query: >-
-      SELECT workspace_id || '|' || "key" AS id, * FROM wines
+      SELECT *, workspace_id || '|' || "key" AS id FROM wines
       WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
     auto_subscribe: true
   service_archive:
