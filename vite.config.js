@@ -60,7 +60,7 @@ export default defineConfig({
         // The async wa-sqlite cores are ~2.3–2.6 MB, over workbox's 2 MiB
         // default — without this they'd be silently dropped from the precache.
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-        navigateFallback: '/',
+        navigateFallback: 'index.html',
 
         runtimeCaching: [
           // Fonts — rarely change, cache aggressively.

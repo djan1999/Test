@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   remoteServiceSetting: null,
   remoteReservation: null,
   rpcResponses: {},
+  diagnostics: [],
 }));
 
 vi.mock("../lib/supabaseClient.js", () => ({
@@ -55,6 +56,10 @@ vi.mock("../lib/supabaseClient.js", () => ({
   getWorkspaceId: () => h.workspaceId,
 }));
 
+vi.mock("../lib/clientDiagnostics.js", () => ({
+  recordClientDiagnostic: (source, error) => h.diagnostics.push({ source, error }),
+}));
+
 import { SupabaseConnector } from "../powersync/SupabaseConnector.js";
 
 const makeTx = (crud) => ({ crud, complete: vi.fn(async () => {}) });
@@ -75,6 +80,7 @@ beforeEach(() => {
   h.remoteReservation = null;
   h.rpcResponses = {};
   h.rpcData = null;
+  h.diagnostics = [];
   vi.restoreAllMocks();
 });
 
@@ -187,6 +193,7 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
   });
 
   it("uploads a MOVE destination first and keeps the source when that destination became occupied", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     const blank = { id: 7, active: false, resName: "", resTime: "", seats: [] };
     const alphaAtSource = { id: 3, active: true, resName: "ALPHA", resTime: "19:00", seats: [] };
     const alphaAtDestination = { ...alphaAtSource, id: 7 };
@@ -210,14 +217,88 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     // Deliberately source-first: the connector must reorder this safely.
     const tx = makeTx([sourceBlank, destinationClaim]);
 
-    await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toMatchObject({
-      code: "MILKA_TABLE_CONFLICT",
-      conflict: "destination-occupied",
-    });
+    await expect(new SupabaseConnector().uploadData(makeDb(tx))).resolves.toBeUndefined();
 
     // Only the destination's CAS read ran — no overwrite, no source clear RPC.
     expect(h.calls.filter((c) => c.op === "rpc")).toHaveLength(0);
-    expect(tx.complete).not.toHaveBeenCalled();
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+    expect(h.diagnostics).toEqual([
+      expect.objectContaining({
+        source: "PowerSync service-table conflict (discarded)",
+        error: expect.objectContaining({
+          code: "MILKA_TABLE_CONFLICT",
+          conflict: "destination-occupied",
+        }),
+      }),
+    ]);
+  });
+
+  it("REGRESSION (23.07): concurrent clear is completed so the next queued transaction uploads", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ancestor = {
+      id: 9,
+      active: true,
+      resName: "ALPHA",
+      resTime: "19:00",
+      seats: [{ id: 1, water: "Still" }],
+    };
+    const serverCopy = {
+      ...ancestor,
+      seats: [{ id: 1, water: "Sparkling" }],
+    };
+    const blank = {
+      id: 9,
+      active: false,
+      resName: "",
+      resTime: "",
+      seats: [],
+    };
+    h.remoteServiceTables = {
+      9: { data: serverCopy, updated_at: "2026-07-23T23:34:00.000Z" },
+    };
+
+    const refusedClear = makeTx([{
+      ...patch("service_tables", "ws-a|svc-1|9", {
+        service_id: "svc-1",
+        table_id: 9,
+        data: JSON.stringify(blank),
+        workspace_id: "ws-a",
+      }),
+      previousValues: {
+        workspace_id: "ws-a",
+        data: JSON.stringify(ancestor),
+      },
+    }]);
+    const nextTransaction = makeTx([put("services", "svc-next", {
+      date: "2026-07-24",
+      session: "dinner",
+      chosen_on: "2026-07-24",
+      started_at: "2026-07-24T16:00:00Z",
+      status: "live",
+      snapshot: null,
+      updated_at: "2026-07-24T16:00:00Z",
+      workspace_id: "ws-a",
+    })]);
+    const database = {
+      getNextCrudTransaction: vi.fn()
+        .mockResolvedValueOnce(refusedClear)
+        .mockResolvedValueOnce(nextTransaction),
+    };
+    const connector = new SupabaseConnector();
+
+    await expect(connector.uploadData(database)).resolves.toBeUndefined();
+    await expect(connector.uploadData(database)).resolves.toBeUndefined();
+
+    expect(refusedClear.complete).toHaveBeenCalledTimes(1);
+    expect(nextTransaction.complete).toHaveBeenCalledTimes(1);
+    expect(h.calls.some((call) => call.table === "services" && call.op === "upsert")).toBe(true);
+    expect(h.diagnostics[0]).toMatchObject({
+      source: "PowerSync service-table conflict (discarded)",
+      error: {
+        code: "MILKA_TABLE_CONFLICT",
+        conflict: "concurrent-clear",
+      },
+    });
   });
 
   it("REGRESSION (09.07): reservations PATCH without date keeps the stored date through CAS", async () => {

@@ -390,6 +390,19 @@ export class SupabaseConnector {
           throw result.error; // transient → engine retries with backoff
         }
       } catch (e) {
+        if (e?.code === "MILKA_TABLE_CONFLICT") {
+          // This is a deterministic refusal, not a transient upload failure.
+          // Retrying replays the same local/ancestor/server fold forever and
+          // wedges every later upload plus incoming download checkpoints.
+          //
+          // Board moves are ordered destination-claim first above. Completing
+          // the transaction here therefore drops the refused move before its
+          // source-clear can run; the next checkpoint restores server truth.
+          console.warn("[PowerSync] service-table conflict — discarding transaction:", e);
+          recordClientDiagnostic("PowerSync service-table conflict (discarded)", e);
+          await transaction.complete();
+          return;
+        }
         if (e instanceof PermanentOpError) {
           console.error("[PowerSync] unuploadable op — skipping:", op, e.message);
           continue;
