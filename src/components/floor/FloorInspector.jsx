@@ -86,8 +86,9 @@ export default function FloorInspector({
   const apply = (next) => { if (next !== floorMaps) onUpdate(next); };
   const dropSheetSel = (next) => { apply(next); onSheetSelect && onSheetSelect(null); };
 
-  // Claim conflicts under THIS map for tonight — the same resolver the
-  // active-layout switch confirms with. Only trouble rows surface.
+  // Claim conflicts under THIS map for the upcoming services — the same
+  // resolver the active-layout switch confirms with (the reservation set
+  // spans today forward). Only trouble rows surface.
   const trouble = map.kind === "dining"
     ? planLayoutSwitch(map, reservations).filter((r) => r.status === "conflict" || r.status === "needs_table")
     : [];
@@ -351,13 +352,14 @@ export default function FloorInspector({
       {/* claim conflicts under this map, straight from the switch resolver */}
       {trouble.length > 0 && (
         <div style={{ borderTop: `1px solid ${tokens.ink[5]}`, paddingTop: 8, marginTop: 2 }}>
-          <div style={{ ...label9, marginBottom: 4 }}>RESOLVE — tonight's reservations against this map</div>
+          <div style={{ ...label9, marginBottom: 4 }}>RESOLVE — upcoming reservations against this map</div>
           {trouble.map((r) => (
             <div key={r.id} style={{ display: "flex", gap: 10, alignItems: "baseline", padding: "3px 0" }}>
               <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.1em", fontWeight: 700, minWidth: 84, textTransform: "uppercase",
                 color: r.status === "conflict" ? tokens.red.text : tokens.signal.warn }}>
                 {r.status === "needs_table" ? "NEEDS TABLE" : "CONFLICT"}
               </span>
+              {r.date && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3] }}>{r.date}</span>}
               <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[1], fontWeight: 600 }}>{r.name || "—"}</span>
               <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3] }}>
                 T{r.from.join("-")}{r.to ? ` → ${r.label} (T${r.to.join("-")})` : " → unresolved in this map"}
