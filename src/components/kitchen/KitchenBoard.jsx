@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
-import { optionalPairingsFromCourses, courseRestrictionModCounts } from "../../utils/menuUtils.js";
+import { optionalPairingsFromCourses, courseRestrictionModCounts, overrideModCounts } from "../../utils/menuUtils.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
@@ -137,11 +137,21 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       if (!next.name) delete next.name;
       if (!next.note) delete next.note;
       if (next.presets && Object.keys(next.presets).length === 0) delete next.presets;
+      if (next.modOverrides && Object.keys(next.modOverrides).length === 0) delete next.modOverrides;
       const out = { ...prev };
-      if (!next.name && !next.note && !next.presets) delete out[key];
+      if (!next.name && !next.note && !next.presets && !next.modOverrides) delete out[key];
       else out[key] = next;
       return out;
     });
+  };
+  // Per-ticket rewrite of an auto-applied restriction text, keyed by the
+  // ORIGINAL derived label. Clearing the input deletes the override so the
+  // admin-configured default comes back.
+  const setDraftModOverride = (key, mod, text) => {
+    const current = { ...(draftNotes[key]?.modOverrides || {}) };
+    if (String(text || "").trim()) current[mod] = text;
+    else delete current[mod];
+    updateDraftEntry(key, { modOverrides: current });
   };
   const bumpDraftPreset = (key, text) => {
     const current = draftNotes[key]?.presets || {};
@@ -702,7 +712,11 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               // Count per GUEST, not per seat: an unassigned restriction is one
               // prospective guest and reads "1×" from entry, not "N×" broadcast
               // across every chair until it's pinned to a seat.
-              const restrCounts = courseRestrictionModCounts(course, seats, restrictions);
+              // Per-ticket text overrides (edited in the ticket editor, saved
+              // on the reservation) rewrite the derived label for THIS table
+              // only — admin course config stays the source for everyone else.
+              const restrCounts = overrideModCounts(
+                courseRestrictionModCounts(course, seats, restrictions), kcNotePreview);
               if (restrCounts) Object.assign(counts, restrCounts);
             }
             // Per-course quick-note presets are applied in reservations mode
@@ -749,8 +763,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const displayName = kcNote.name || baseName;
           const draftEntry = draftNotes[key] || {};
           const draftPresets = draftEntry.presets || {};
+          const draftOverrides = draftEntry.modOverrides || {};
+          // Base (pre-override) restriction texts this course derives from the
+          // guest's dietaries — the rows the editor exposes for rewriting.
+          const restrModBase = (editable && showEdit)
+            ? courseRestrictionModCounts(course, seats, restrictions)
+            : null;
           const chips = (editable && showEdit) ? (quickNotes[key] || []) : [];
-          const draftHasAny = draftEntry.name || draftEntry.note || Object.keys(draftPresets).length > 0;
+          const draftHasAny = draftEntry.name || draftEntry.note || Object.keys(draftPresets).length > 0 || Object.keys(draftOverrides).length > 0;
 
           return (
             <div key={key} style={{
@@ -830,6 +850,36 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                     placeholder="Note (e.g. No Ricotta)…"
                     style={{ fontFamily: FONT, fontSize: "10px", padding: "8px 7px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
                   />
+                  {restrModBase && Object.keys(restrModBase).length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ fontFamily: FONT, fontSize: "7px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.red.text }}>
+                        RESTRICTION TEXT · THIS TICKET ONLY
+                      </div>
+                      {Object.entries(restrModBase).map(([mod, count]) => {
+                        const overridden = typeof draftOverrides[mod] === "string" && draftOverrides[mod].trim();
+                        return (
+                          <div key={mod} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, color: tokens.red.text, flexShrink: 0 }}>{count}×</span>
+                            <input
+                              value={draftOverrides[mod] ?? ""}
+                              onChange={e => setDraftModOverride(key, mod, e.target.value)}
+                              placeholder={mod}
+                              aria-label={`Restriction text for ${mod}`}
+                              style={{ fontFamily: FONT, fontSize: "10px", padding: "8px 7px", border: `1px solid ${overridden ? tokens.red.border : tokens.ink[4]}`, borderRadius: 0, flex: 1, minWidth: 0, boxSizing: "border-box", background: overridden ? tokens.red.bg : tokens.neutral[0] }}
+                            />
+                            {overridden && (
+                              <button
+                                onPointerDown={e => e.stopPropagation()}
+                                onClick={e => { e.stopPropagation(); setDraftModOverride(key, mod, ""); }}
+                                aria-label={`Reset restriction text for ${mod}`}
+                                title="Reset to default"
+                                style={{ fontFamily: FONT, fontSize: "10px", padding: 0, width: 30, height: 30, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation", flexShrink: 0 }}>↺</button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   {chips.length > 0 && (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                       {chips.map(chip => {

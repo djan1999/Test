@@ -3,7 +3,7 @@ import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML, generateKitc
 import { readWeeklySheetEdits, writeWeeklySheetEdits } from "../../utils/storage.js";
 import { deriveCourseKeysFromTemplate } from "../../utils/menuLayoutProfiles.js";
 import { blankTable, makeSeats } from "../../utils/tableHelpers.js";
-import { getCourseMod } from "../../utils/menuUtils.js";
+import { getCourseMod, applyModOverride } from "../../utils/menuUtils.js";
 import { RESTRICTIONS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as fieldLabelMixin, circleButton } from "../../styles/mixins.js";
@@ -175,7 +175,9 @@ function allergyBaseCell(course, resv) {
       }
     });
     [...seatGroups.values(), ...unassigned].forEach(notes => {
-      const mod = getCourseMod(course, notes);
+      // Apply the per-ticket text override so the sheet pre-fills with what
+      // the kitchen ticket actually shows for this reservation.
+      const mod = applyModOverride(getCourseMod(course, notes), kcNote);
       if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
     });
     if (Object.keys(modCounts).length > 0)
