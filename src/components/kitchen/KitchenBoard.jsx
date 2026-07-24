@@ -3,6 +3,7 @@ import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy,
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
 import { optionalPairingsFromCourses, courseRestrictionModCounts, overrideModCounts } from "../../utils/menuUtils.js";
+import { groupRestrictionsByGuest } from "../../utils/restrictionGroups.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
@@ -64,9 +65,21 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     footerPad: "7px 12px", archiveBtnPad: "9px 10px",
   };
   const seats = table.seats || [];
-  const restrictions = table.restrictions || [];
+  // Array.isArray, not `|| []` — a truthy non-array here threw on .map and
+  // took the ticket (and with it the board) down.
+  const restrictions = Array.isArray(table.restrictions) ? table.restrictions : [];
   const log = table.kitchenLog || {};
+  // Which PERSON (guest group key) is currently being pinned to a chair.
   const [assigningRestrIdx, setAssigningRestrIdx] = useState(null);
+  // Restrictions still floating — never pinned, or pinned to a position that
+  // matches no live seat. Grouped per person so one guest's whole set moves
+  // to a chair in a single tap and reads as one cover on the pass.
+  const unassignedGroups = (() => {
+    const seatIds = new Set(seats.map(s => s.id));
+    return groupRestrictionsByGuest(
+      restrictions.filter(r => r?.note && (r.pos == null || !seatIds.has(r.pos)))
+    );
+  })();
   // STABLE fallback, never an inline {}: kitchenCourseNotes is a dependency
   // of the draft-sync effect below, and a table without the field (walk-ins,
   // directly-seeded tables — reservation templating is what usually adds it)
@@ -127,8 +140,20 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     setPickingRestr(null);
     setCustomNote("");
   };
-  const removeKitchenRestr = (origIdx) => {
-    upd(table.id, "restrictions", (prev) => (prev || []).filter((_, i) => i !== origIdx));
+  // Remove by IDENTITY, not by render index: the captured array can be a beat
+  // behind another device's write, and an index that shifted underneath us
+  // deletes somebody else's allergy.
+  const removeKitchenRestr = (entry) => {
+    if (!entry) return;
+    upd(table.id, "restrictions", (prev) => {
+      const list = prev || [];
+      const idx = list.findIndex(r =>
+        r?.note === entry.note
+        && (r?.pos ?? null) === (entry.pos ?? null)
+        && (r?.guest || "") === (entry.guest || "")
+        && !!r?.kitchenAdded === !!entry.kitchenAdded);
+      return idx === -1 ? list : list.filter((_, i) => i !== idx);
+    });
   };
   const updateDraftEntry = (key, patch) => {
     setDraftNotes((prev) => {
@@ -197,11 +222,25 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     });
   };
 
+  // Assign a whole PERSON to a chair, not one restriction at a time: the
+  // guest who is "no pork + no alcohol + no fish" is one guest, and pinning
+  // them chip by chip left half their restrictions floating as separate
+  // prospective covers. Matching is by note+guest rather than by index — the
+  // render-captured array can be a beat behind another device's write.
   const assignRestrToSeat = (seatId) => {
     if (assigningRestrIdx === null) return;
-    upd(table.id, "restrictions", (prev) => (prev || []).map((r, i) =>
-      i === assigningRestrIdx ? { ...r, pos: seatId } : r
-    ));
+    const group = unassignedGroups.find(g => g.key === assigningRestrIdx);
+    if (!group) { setAssigningRestrIdx(null); return; }
+    const wanted = group.entries.map(r => `${r.note}|${r.guest || ""}|${r.pos ?? ""}`);
+    upd(table.id, "restrictions", (prev) => {
+      const remaining = [...wanted];
+      return (prev || []).map((r) => {
+        const idx = remaining.indexOf(`${r?.note}|${r?.guest || ""}|${r?.pos ?? ""}`);
+        if (idx === -1) return r;
+        remaining.splice(idx, 1);
+        return { ...r, pos: seatId };
+      });
+    });
     setAssigningRestrIdx(null);
   };
 
@@ -278,14 +317,19 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   // drives course visibility/order via deriveCourseKeysFromTemplate; otherwise
   // we fall back to the legacy show_on_short / position rules so older
   // sessions stay stable.
-  const visibleCoursesForTable = getVisibleCoursesForTable(
-    table,
-    menuCourses || [],
-    kitchenTemplate
-      ? { kitchenTemplate }
-      : { kitchenTemplate: resolveGuestTemplate(table, profiles, assignments) }
-  );
-  const kitchenItemByCourseKey = visibleCoursesForTable.reduce((acc, vc) => {
+  const courseOptions = kitchenTemplate
+    ? { kitchenTemplate }
+    : { kitchenTemplate: resolveGuestTemplate(table, profiles, assignments) };
+  const visibleCoursesForTable = getVisibleCoursesForTable(table, menuCourses || [], courseOptions);
+  // Edit mode shows EVERY course, including optional dishes nobody has
+  // ordered yet (cheese, an extra course, the cake). A restriction or a note
+  // has to be settable on them in advance — the dish is added at the table or
+  // during the menu, and it must arrive carrying the guest's restrictions
+  // rather than as a blank plate the pass has to remember to modify.
+  const editableCourseEntries = (editable && showEdit)
+    ? getVisibleCoursesForTable(table, menuCourses || [], { ...courseOptions, includeUnordered: true })
+    : visibleCoursesForTable;
+  const kitchenItemByCourseKey = editableCourseEntries.reduce((acc, vc) => {
     if (vc.kitchenItem) acc[vc.key] = vc.kitchenItem;
     return acc;
   }, {});
@@ -517,7 +561,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               </span>
               <button
                 onPointerDown={e => e.stopPropagation()}
-                onClick={e => { e.stopPropagation(); removeKitchenRestr(i); }}
+                onClick={e => { e.stopPropagation(); removeKitchenRestr(r); }}
                 aria-label={`Remove restriction ${restrLabel(r.note)}`}
                 style={{ fontFamily: FONT, fontSize: "10px", padding: 0, width: 32, height: 32, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation", flexShrink: 0 }}>✕</button>
             </div>
@@ -621,26 +665,26 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             chips above nor this strip and the allergy silently vanished
             from every kitchen surface. */}
         {(() => {
-          const seatIds = new Set(seats.map(s => s.id));
-          const unassigned = restrictions.map((r, i) => ({ ...r, _i: i }))
-            .filter(r => r.note && (!r.pos || !seatIds.has(r.pos)));
+          const unassigned = unassignedGroups;
           if (unassigned.length === 0) return null;
           return (
             <div style={{ marginTop: compact ? 3 : 7, paddingTop: compact ? 3 : 7, borderTop: `1px solid ${RULE_SOFT}` }}>
               <div style={{ display: "flex", gap: compact ? 4 : 6, flexWrap: "wrap", alignItems: "center" }}>
                 <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", color: tokens.red.text, textTransform: "uppercase", flexShrink: 0 }}>⚠ UNASSIGNED</span>
-                {unassigned.map(r => (
+                {unassigned.map(g => (
+                  // One chip per PERSON — every restriction that guest carries,
+                  // pinned to a chair together.
                   <span
-                    key={r._i}
-                    onClick={() => setAssigningRestrIdx(assigningRestrIdx === r._i ? null : r._i)}
+                    key={g.key}
+                    onClick={() => setAssigningRestrIdx(assigningRestrIdx === g.key ? null : g.key)}
                     style={{
                       fontFamily: FONT, fontSize: "8px", padding: dz.assignBtnPad, borderRadius: 0,
                       border: `1px solid ${tokens.red.border}`,
-                      background: assigningRestrIdx === r._i ? tokens.red.text : tokens.red.bg,
-                      color: assigningRestrIdx === r._i ? tokens.neutral[0] : tokens.red.text,
+                      background: assigningRestrIdx === g.key ? tokens.red.text : tokens.red.bg,
+                      color: assigningRestrIdx === g.key ? tokens.neutral[0] : tokens.red.text,
                       fontWeight: 500, cursor: "pointer", userSelect: "none", touchAction: "manipulation",
                     }}
-                  >{restrLabel(r.note)} {assigningRestrIdx === r._i ? "→ pick seat" : "→"}</span>
+                  >{g.notes.map(restrLabel).join(" · ")} {assigningRestrIdx === g.key ? "→ pick seat" : "→"}</span>
                 ))}
               </div>
               {assigningRestrIdx !== null && (
@@ -689,10 +733,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
       {/* ── Courses ── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        {courses.map((course, idx) => {
+        {editableCourseEntries.map((entry, idx) => {
+          const course = entry.rawCourse;
           const key = course.course_key || `course_${idx}`;
-          const fired = !!log[key];
-          const firedAt = log[key]?.firedAt;
+          // Optional dish nobody has ordered yet — visible in edit mode only,
+          // to carry restrictions/notes forward to the moment it IS added.
+          const pending = !!entry.pending;
+          const fired = !pending && !!log[key];
+          const firedAt = pending ? null : log[key]?.firedAt;
 
           // Kitchen layout item (when this table's assigned kitchen layout
           // contains this course). It can override the display name and turn
@@ -774,25 +822,26 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
           return (
             <div key={key} style={{
-              background: fired ? tokens.green.bg : tokens.neutral[0],
+              background: fired ? tokens.green.bg : pending ? tokens.neutral[50] : tokens.neutral[0],
               borderLeft: fired ? `4px solid ${tokens.green.border}` : kcNote.name || kcNote.note ? `4px solid ${tokens.red.text}` : "4px solid transparent",
             }}>
               <div
-                onClick={() => { if (editable && showEdit) return; fired ? unfire(key) : fire(key); }}
+                onClick={() => { if (pending || (editable && showEdit)) return; fired ? unfire(key) : fire(key); }}
                 style={{ display: "flex", alignItems: "center", padding: dz.coursePad, gap: dz.courseGap, cursor: editable && showEdit ? "default" : "pointer" }}>
-                <span style={{ fontFamily: FONT, fontSize: dz.courseGlyph, color: fired ? tokens.green.border : tokens.ink[4], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
+                <span style={{ fontFamily: FONT, fontSize: dz.courseGlyph, color: fired ? tokens.green.border : tokens.ink[4], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : pending ? "＋" : "○"}</span>
                 {(() => {
                   const hasSub = (pairingAlert || mods || (kcNote.note && showCourseNotes)) && !fired;
                   const nameEl = (
                     <div style={{
                       fontFamily: FONT, fontSize: dz.courseFont, fontWeight: 700, lineHeight: dz.courseLH,
-                      color: fired ? tokens.ink[4] : kcNote.name ? tokens.red.text : tokens.ink[0],
+                      color: fired ? tokens.ink[4] : kcNote.name ? tokens.red.text : pending ? tokens.ink[2] : tokens.ink[0],
                       textDecoration: fired ? "line-through" : "none",
                       letterSpacing: "0.02em",
                       ...(inlineMods ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 0, maxWidth: hasSub ? "60%" : "100%" } : {}),
                     }}>
                       {displayName}
                       {kcNote.name && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[3], marginLeft: 5 }}>({baseName})</span>}
+                      {pending && <span style={{ fontFamily: FONT, fontSize: "7px", fontWeight: 600, letterSpacing: "0.10em", color: tokens.ink[3], border: `1px solid ${tokens.ink[4]}`, padding: "0 3px", marginLeft: 6 }}>NOT ADDED</span>}
                       {extraLabel && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[4], marginLeft: 6 }}>{extraLabel}</span>}
                     </div>
                   );

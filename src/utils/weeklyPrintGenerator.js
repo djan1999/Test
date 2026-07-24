@@ -3,6 +3,7 @@
  * Produces two HTML documents: reservations sheet and allergy/restriction sheet.
  */
 import { getCourseMod, applyModOverride } from "./menuUtils.js";
+import { groupRestrictionsByGuest } from "./restrictionGroups.js";
 import { deriveCourseKeysFromTemplate } from "./menuLayoutProfiles.js";
 
 const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -366,21 +367,12 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
       // Priority 2: Restriction-based modifications
       if (restrictions.length > 0) {
         const modCounts = {};
-        const seatGroups = new Map();
-        const unassigned = [];
-        restrictions.forEach(rs => {
-          if (rs.pos) {
-            const arr = seatGroups.get(rs.pos) || [];
-            arr.push(rs.note);
-            seatGroups.set(rs.pos, arr);
-          } else {
-            unassigned.push([rs.note]);
-          }
-        });
-        [...seatGroups.values(), ...unassigned].forEach(notes => {
-          // Same per-ticket override the kitchen ticket applies — the sheet
-          // must pre-fill with what the kitchen will actually cook.
-          const mod = applyModOverride(getCourseMod(course, notes), kcNote);
+        // One entry per PERSON — grouped by chair when seated, by guest id
+        // before that — so a guest with two restrictions prints one combined
+        // line, exactly as the kitchen ticket shows it. The per-ticket text
+        // override still wins over the derived label.
+        groupRestrictionsByGuest(restrictions).forEach(group => {
+          const mod = applyModOverride(getCourseMod(course, group.notes), kcNote);
           if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
         });
 
@@ -555,23 +547,11 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
         let modLines = kcNote.note ? [esc(kcNote.note)] : [];
         const modCounts = {};
         if (!isCelebration && restrictions.length > 0) {
-          const seatGroups = new Map();
-          const unassignedGroups = [];
-          restrictions.forEach(r => {
-            if (!r.note) return;
-            if (r.pos) {
-              const arr = seatGroups.get(r.pos) || [];
-              arr.push(r.note);
-              seatGroups.set(r.pos, arr);
-            } else {
-              unassignedGroups.push([r.note]);
-            }
-          });
-
-          [...seatGroups.values(), ...unassignedGroups].forEach(restrKeys => {
-            // Per-ticket text override (edited in the ticket editor, stored on
-            // the reservation) — admin course config stays untouched.
-            const mod = applyModOverride(getCourseMod(course, restrKeys), kcNote);
+          // Per person, not per restriction — same grouping the ticket uses.
+          // The per-ticket text override (edited in the ticket editor, stored
+          // on the reservation) still wins; admin course config is untouched.
+          groupRestrictionsByGuest(restrictions).forEach(group => {
+            const mod = applyModOverride(getCourseMod(course, group.notes), kcNote);
             if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
           });
         }

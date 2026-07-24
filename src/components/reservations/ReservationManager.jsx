@@ -4,6 +4,7 @@ import { readWeeklySheetEdits, writeWeeklySheetEdits } from "../../utils/storage
 import { deriveCourseKeysFromTemplate } from "../../utils/menuLayoutProfiles.js";
 import { blankTable, makeSeats } from "../../utils/tableHelpers.js";
 import { getCourseMod, applyModOverride } from "../../utils/menuUtils.js";
+import { groupRestrictionsByGuest } from "../../utils/restrictionGroups.js";
 import { RESTRICTIONS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as fieldLabelMixin, circleButton } from "../../styles/mixins.js";
@@ -160,24 +161,13 @@ function allergyBaseCell(course, resv) {
   if (kcNote?.name || kcNote?.note) return [kcNote.name, kcNote.note].filter(Boolean).join("\n");
   if (restrictions.length > 0) {
     const modCounts = {};
-    // Each restriction entry represents one guest. Restrictions explicitly
-    // assigned to the same seat (pos > 0) are grouped so the resolver can
-    // produce a combined substitute. Unassigned (pos null) are each one guest.
-    const seatGroups = new Map();
-    const unassigned = [];
-    restrictions.forEach(rs => {
-      if (rs.pos) {
-        const arr = seatGroups.get(rs.pos) || [];
-        arr.push(rs.note);
-        seatGroups.set(rs.pos, arr);
-      } else {
-        unassigned.push([rs.note]);
-      }
-    });
-    [...seatGroups.values(), ...unassigned].forEach(notes => {
-      // Apply the per-ticket text override so the sheet pre-fills with what
-      // the kitchen ticket actually shows for this reservation.
-      const mod = applyModOverride(getCourseMod(course, notes), kcNote);
+    // One group per GUEST: restrictions on the same chair (pos), or sharing a
+    // guest id before seats are assigned, resolve into one combined
+    // substitute — the same line the kitchen ticket prints. The per-ticket
+    // text override then wins, so the sheet pre-fills with what the kitchen
+    // actually shows for this reservation.
+    groupRestrictionsByGuest(restrictions).forEach(group => {
+      const mod = applyModOverride(getCourseMod(course, group.notes), kcNote);
       if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
     });
     if (Object.keys(modCounts).length > 0)
@@ -528,7 +518,10 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                         return rs.length ? <span style={{ color: tokens.ink[2] }}>Room{rs.length > 1 ? "s" : ""} #{rs.join(", ")}</span> : null;
                       })()}
                     </div>
-                    {d.restrictions?.length > 0 && (
+                    {/* Array.isArray, not `?.length > 0`: a non-array value
+                        with a length (a function's arity, a string) passed the
+                        old guard and crashed the whole reservation list. */}
+                    {Array.isArray(d.restrictions) && d.restrictions.length > 0 && (
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
                         {d.restrictions.map((rs, i) => {
                           const def = RESTRICTIONS.find(x => x.key === rs.note);

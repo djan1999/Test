@@ -34,6 +34,7 @@ function uniqueKey(base, taken) {
 export default function RestrictionsPanel({ restrictions = [], onSave }) {
   const [draft, setDraft] = useState(() => restrictions.map(r => ({ ...r })));
   const [status, setStatus] = useState("idle");
+  const [errorMsg, setErrorMsg] = useState("");
   const [newLabel, setNewLabel] = useState("");
   const [newEmoji, setNewEmoji] = useState("");
   const [newGroup, setNewGroup] = useState("dietary");
@@ -64,10 +65,25 @@ export default function RestrictionsPanel({ restrictions = [], onSave }) {
     setStatus("idle");
   };
 
+  // A failed save used to show a bare red "ERROR" and nothing else — the
+  // reason (an RLS refusal, an offline write, a conflict) only reached the
+  // console, so nobody editing restrictions could say what went wrong. Report
+  // the message, and never let a rejection strand the button on "SAVING…".
   const save = async () => {
     setStatus("saving");
-    const result = await onSave(draft);
-    if (result?.ok === false) { setStatus("error"); return; }
+    setErrorMsg("");
+    try {
+      const result = await onSave(draft);
+      if (result?.ok === false) {
+        setErrorMsg(result?.error?.message || String(result?.error || "Save failed — retrying in the background."));
+        setStatus("error");
+        return;
+      }
+    } catch (e) {
+      setErrorMsg(e?.message || String(e));
+      setStatus("error");
+      return;
+    }
     setStatus("saved");
     setTimeout(() => setStatus("idle"), 2000);
   };
@@ -151,6 +167,12 @@ export default function RestrictionsPanel({ restrictions = [], onSave }) {
           </button>
         </div>
       </div>
+
+      {status === "error" && errorMsg && (
+        <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text, background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, padding: "8px 10px", marginTop: 14, lineHeight: 1.45 }}>
+          {errorMsg}
+        </div>
+      )}
 
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
         <button onClick={save} disabled={!dirty || status === "saving"} style={{ ...saveBtn(status), opacity: dirty ? 1 : 0.5 }}>
