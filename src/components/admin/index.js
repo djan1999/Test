@@ -10,3 +10,4 @@ export { default as InventoryPanel } from "./InventoryPanel.jsx";
 export { default as SystemPanel } from "./SystemPanel.jsx";
 export { default as ArchivePanel } from "./ArchivePanel.jsx";
 export { default as QuickAccessPanel } from "./QuickAccessPanel.jsx";
+export { default as ReservationsAdminPanel } from "./reservations/ReservationsAdminPanel.jsx";

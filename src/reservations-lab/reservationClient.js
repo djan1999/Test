@@ -25,6 +25,19 @@ async function parseResponse(response) {
   return payload;
 }
 
+function staffHeaders(credentials = getLabAccessCode()) {
+  if (credentials && typeof credentials === "object") {
+    const accessToken = String(credentials.accessToken || "").trim();
+    const workspaceId = String(credentials.workspaceId || "").trim();
+    return {
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...(workspaceId ? { "x-milka-workspace-id": workspaceId } : {}),
+    };
+  }
+  const accessCode = String(credentials || "").trim();
+  return accessCode ? { "x-milka-lab-access": accessCode } : {};
+}
+
 export function getLabAccessCode() {
   try {
     return sessionStorage.getItem(ACCESS_KEY) || "";
@@ -42,27 +55,27 @@ export function setLabAccessCode(value) {
   }
 }
 
-export async function loadStaffState(accessCode = getLabAccessCode()) {
+export async function loadStaffState(credentials = getLabAccessCode()) {
   if (EDGE_API) {
     const response = await fetch(EDGE_API, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-milka-lab-access": accessCode },
+      headers: { "Content-Type": "application/json", ...staffHeaders(credentials) },
       body: JSON.stringify({ action: "staffState" }),
     });
     return parseResponse(response);
   }
   const response = await fetch("/api/resv/staff", {
-    headers: { "x-milka-lab-access": accessCode },
+    headers: staffHeaders(credentials),
     cache: "no-store",
   });
   return parseResponse(response);
 }
 
-export async function staffAction(action, body = {}, accessCode = getLabAccessCode()) {
+export async function staffAction(action, body = {}, credentials = getLabAccessCode()) {
   if (EDGE_API) {
     const response = await fetch(EDGE_API, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-milka-lab-access": accessCode },
+      headers: { "Content-Type": "application/json", ...staffHeaders(credentials) },
       body: JSON.stringify({ action, ...body }),
     });
     return parseResponse(response);
@@ -71,7 +84,7 @@ export async function staffAction(action, body = {}, accessCode = getLabAccessCo
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-milka-lab-access": accessCode,
+      ...staffHeaders(credentials),
     },
     body: JSON.stringify({ action, ...body }),
   });

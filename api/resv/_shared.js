@@ -40,16 +40,54 @@ export function methodNotAllowed(response) {
   return sendJson(response, 405, { ok: false, error: "method_not_allowed" });
 }
 
-export function assertLabAccess(request) {
-  const expected = requiredEnv("RESERVATIONS_LAB_ACCESS_CODE");
-  const received = String(request.headers["x-milka-lab-access"] || "");
-  const a = Buffer.from(expected);
-  const b = Buffer.from(received);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-    const error = new Error("LAB access code is invalid.");
+function safeEqual(aValue, bValue) {
+  const a = Buffer.from(String(aValue || ""));
+  const b = Buffer.from(String(bValue || ""));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+export async function assertStaffAccess(request, client, { adminOnly = false } = {}) {
+  const expectedCode = String(process.env.RESERVATIONS_LAB_ACCESS_CODE || "").trim();
+  const receivedCode = String(request.headers["x-milka-lab-access"] || "");
+  if (expectedCode && safeEqual(expectedCode, receivedCode)) {
+    return { kind: "lab_code", role: "admin", userId: null };
+  }
+
+  const authorization = String(request.headers.authorization || "");
+  const accessToken = authorization.startsWith("Bearer ")
+    ? authorization.slice(7).trim()
+    : "";
+  const workspaceId = String(request.headers["x-milka-workspace-id"] || "").trim();
+  if (!accessToken || !workspaceId) {
+    const error = new Error("Sign in to Milka or enter the LAB access code.");
     error.statusCode = 401;
     throw error;
   }
+
+  const { data: authData, error: authError } = await client.auth.getUser(accessToken);
+  const userId = authData?.user?.id;
+  if (authError || !userId) {
+    const error = new Error("Your Milka login expired. Sign in again.");
+    error.statusCode = 401;
+    throw error;
+  }
+  const { data: membership, error: membershipError } = await client
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (membershipError) throw membershipError;
+  const role = String(membership?.role || "").toLowerCase();
+  const permitted = adminOnly ? role === "admin" : ["admin", "service"].includes(role);
+  if (!permitted) {
+    const error = new Error(adminOnly
+      ? "Only a Milka Admin can change reservation settings."
+      : "Your Milka role cannot manage reservations.");
+    error.statusCode = 403;
+    throw error;
+  }
+  return { kind: "milka_session", role, userId };
 }
 
 export async function getWorkspace(client) {

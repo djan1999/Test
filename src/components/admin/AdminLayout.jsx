@@ -15,13 +15,18 @@ import FloorPanel from "./FloorPanel.jsx";
 import RestaurantConfigPanel from "./RestaurantConfigPanel.jsx";
 import MembersPanel from "./MembersPanel.jsx";
 import AuditLogPanel from "./AuditLogPanel.jsx";
+import ReservationsAdminModule from "./reservations/ReservationsAdminModule.jsx";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
 
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
 const MANAGED_ONBOARDING_ENABLED = import.meta.env.VITE_ENABLE_MANAGED_ONBOARDING === "true";
+const RESERVATIONS_V2_ENABLED = import.meta.env.VITE_RESERVATIONS_V2_ENABLED === "true";
 
 const SECTIONS = [
   { id: "restaurant",  label: "Restaurant Setup",       icon: "R" },
+  ...(RESERVATIONS_V2_ENABLED
+    ? [{ id: "reservations", label: "Reservations", icon: "B" }]
+    : []),
   { id: "staff",       label: "Staff & Roles",          icon: "S" },
   { id: "audit",       label: "Audit Trail",             icon: "A" },
   { id: "menu",        label: "Menu Layout",           icon: "▨" },
@@ -118,9 +123,14 @@ export default function AdminLayout({
   currentUserId = null,
   managedOnboardingEnabled = MANAGED_ONBOARDING_ENABLED,
   // Navigation
+  initialSection = null,
   onExit,
 }) {
-  const [activeSection, setActiveSection] = useState("restaurant");
+  const [activeSection, setActiveSection] = useState(() => (
+    SECTIONS.some((section) => section.id === initialSection)
+      ? initialSection
+      : "restaurant"
+  ));
   const [dishesCoursesOpen, setDishesCoursesOpen] = useState(true);
   const [dishesRestrictionsOpen, setDishesRestrictionsOpen] = useState(false);
   const [dishesQuickNotesOpen, setDishesQuickNotesOpen] = useState(false);
@@ -348,6 +358,13 @@ export default function AdminLayout({
               accessToken={accessToken}
               workspaceId={workspaceId}
               currentUserId={currentUserId}
+            />
+          )}
+
+          {activeSection === "reservations" && RESERVATIONS_V2_ENABLED && (
+            <ReservationsAdminModule
+              accessToken={accessToken}
+              workspaceId={workspaceId}
             />
           )}
 

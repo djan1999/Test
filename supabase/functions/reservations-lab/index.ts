@@ -3,7 +3,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type, x-milka-lab-access",
+  "Access-Control-Allow-Headers": "authorization, content-type, x-milka-lab-access, x-milka-workspace-id",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Content-Type": "application/json; charset=utf-8",
 };
@@ -258,11 +258,55 @@ Deno.serve(async (request: Request) => {
       "saveCalendarRule", "saveCalendarRules", "deleteCalendarRule", "saveLegacyReservation",
       "saveLegacyReservations", "assignTables", "swapTables", "deleteBooking",
     ]);
+    const adminActions = new Set([
+      "saveConfig", "saveAdminSettings", "saveSchedule", "saveServices",
+      "saveCalendarRule", "saveCalendarRules", "deleteCalendarRule",
+    ]);
+    let staffActor = "LAB STAFF";
     if (staffActions.has(action)) {
       const code = String(request.headers.get("x-milka-lab-access") || body.accessCode || "");
-      const { data: auth, error: authError } = await client.from("reservation_lab_auth").select("access_code_hash").eq("workspace_id", workspace.id).single();
-      if (authError) throw authError;
-      if (!code || await sha256(code) !== auth.access_code_hash) return json(401, { ok: false, error: "invalid_lab_access", message: "LAB access code is invalid." });
+      let authorizedByCode = false;
+      if (code) {
+        const { data: auth, error: authError } = await client.from("reservation_lab_auth")
+          .select("access_code_hash")
+          .eq("workspace_id", workspace.id)
+          .single();
+        if (authError) throw authError;
+        authorizedByCode = await sha256(code) === auth.access_code_hash;
+      }
+      if (!authorizedByCode) {
+        const authorization = String(request.headers.get("authorization") || "");
+        const token = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+        const membershipWorkspace = String(request.headers.get("x-milka-workspace-id") || "");
+        if (!token || !membershipWorkspace) {
+          return json(401, { ok: false, error: "staff_access_required", message: "Sign in to Milka or enter the LAB access code." });
+        }
+        const { data: authData, error: userError } = await client.auth.getUser(token);
+        const userId = authData?.user?.id;
+        if (userError || !userId) {
+          return json(401, { ok: false, error: "expired_login", message: "Your Milka login expired. Sign in again." });
+        }
+        const { data: membership, error: membershipError } = await client.from("workspace_members")
+          .select("role")
+          .eq("workspace_id", membershipWorkspace)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (membershipError) throw membershipError;
+        const role = String(membership?.role || "").toLowerCase();
+        const permitted = adminActions.has(action)
+          ? role === "admin"
+          : ["admin", "service"].includes(role);
+        if (!permitted) {
+          return json(403, {
+            ok: false,
+            error: "role_forbidden",
+            message: adminActions.has(action)
+              ? "Only a Milka Admin can change reservation settings."
+              : "Your Milka role cannot manage reservations.",
+          });
+        }
+        staffActor = `MILKA:${userId}`;
+      }
     }
 
     const loadContext = async (date?: string) => {
@@ -360,7 +404,7 @@ Deno.serve(async (request: Request) => {
         accessibility: Array.isArray(input.accessibility) ? input.accessibility : [],
         consentNews: Boolean(input.consentNews),
         idempotencyKey,
-        createdBy: publicOnly ? "WEB" : "LAB STAFF",
+        createdBy: publicOnly ? "WEB" : staffActor,
         operationalData: {
           ...(input.operationalData || {}),
           tableGroup: input.operationalData?.tableGroup || (
@@ -371,7 +415,7 @@ Deno.serve(async (request: Request) => {
       const { data: savedRows, error } = await client.rpc("save_reservation_booking_rows", {
         p_workspace: workspace.id,
         p_bookings: [rpcBooking],
-        p_actor: publicOnly ? "WEB" : "LAB STAFF",
+        p_actor: publicOnly ? "WEB" : staffActor,
       });
       if (error) throw error;
       const data = savedRows?.[0];
@@ -500,7 +544,7 @@ Deno.serve(async (request: Request) => {
       const { data: savedRows, error } = await client.rpc("save_reservation_booking_rows", {
         p_workspace: workspace.id,
         p_bookings: [merged],
-        p_actor: "LAB STAFF",
+        p_actor: staffActor,
       });
       if (error) throw error;
       return json(200, { ok: true, booking: mapBooking(savedRows[0]) });
@@ -513,7 +557,7 @@ Deno.serve(async (request: Request) => {
       const { data, error } = await client.rpc("save_reservation_booking_rows", {
         p_workspace: workspace.id,
         p_bookings: bookings,
-        p_actor: "LAB STAFF",
+        p_actor: staffActor,
       });
       if (error) throw error;
       return json(200, {
@@ -536,7 +580,7 @@ Deno.serve(async (request: Request) => {
       const { data, error } = await client.rpc("save_reservation_booking_rows", {
         p_workspace: workspace.id,
         p_bookings: [booking],
-        p_actor: "LAB STAFF",
+        p_actor: staffActor,
       });
       if (error) throw error;
       return json(200, { ok: true, booking: mapBooking(data[0]) });
@@ -546,7 +590,7 @@ Deno.serve(async (request: Request) => {
         p_workspace: workspace.id,
         p_a: body.aId,
         p_b: body.bId,
-        p_actor: "LAB STAFF",
+        p_actor: staffActor,
       });
       if (error) throw error;
       return json(200, { ok: true, bookings: (data || []).map(mapBooking) });
@@ -555,7 +599,7 @@ Deno.serve(async (request: Request) => {
       const { error } = await client.rpc("delete_reservation_booking", {
         p_workspace: workspace.id,
         p_booking: body.bookingId,
-        p_actor: "LAB STAFF",
+        p_actor: staffActor,
       });
       if (error) throw error;
       return json(200, { ok: true });
@@ -567,7 +611,7 @@ Deno.serve(async (request: Request) => {
       if (["cancelled", "no_show"].includes(body.toStatus) && !String(body.reason || "").trim()) throw new Error("A reason is required.");
       const { data, error } = await client.from("reservation_bookings").update({ status: body.toStatus, updated_at: new Date().toISOString() }).eq("id", current.id).eq("status", current.status).select("*").single();
       if (error) throw error;
-      await event(current.id, { actor: "LAB STAFF", event_type: "status_changed", from_status: current.status, to_status: body.toStatus, reason: body.reason || null });
+      await event(current.id, { actor: staffActor, event_type: "status_changed", from_status: current.status, to_status: body.toStatus, reason: body.reason || null });
       const booking = mapBooking(data);
       if (body.toStatus === "completed") await upsertGuest(booking);
       return json(200, { ok: true, booking });
@@ -602,7 +646,7 @@ Deno.serve(async (request: Request) => {
         p_workspace: workspace.id,
         p_config: body.config,
         p_changes: changes,
-        p_actor: "LAB STAFF",
+        p_actor: staffActor,
       });
       if (error) throw error;
       const saved = data?.[0];
@@ -621,7 +665,7 @@ Deno.serve(async (request: Request) => {
         p_services: services,
         p_rules: rules,
         p_changes: Array.isArray(body.changes) ? body.changes : [],
-        p_actor: "LAB STAFF",
+        p_actor: staffActor,
       });
       if (error) throw error;
       const saved = data?.[0];
@@ -644,7 +688,7 @@ Deno.serve(async (request: Request) => {
             oldValue: context.services,
             newValue: rows,
           }],
-        p_actor: "LAB STAFF",
+        p_actor: staffActor,
       });
       if (error) throw error;
       return json(200, { ok: true });
@@ -666,7 +710,7 @@ Deno.serve(async (request: Request) => {
             oldValue: context.exceptions,
             newValue: rules,
           }],
-        p_actor: "LAB STAFF",
+        p_actor: staffActor,
       });
       if (error) throw error;
       return json(200, { ok: true });

@@ -1,5 +1,5 @@
 import {
-  assertLabAccess,
+  assertStaffAccess,
   createBooking,
   getAdminClient,
   getWorkspace,
@@ -48,16 +48,23 @@ async function loadState(client, workspaceId) {
 
 export default async function handler(request, response) {
   try {
-    assertLabAccess(request);
     const client = getAdminClient();
     const workspace = await getWorkspace(client);
     if (request.method === "GET") {
+      await assertStaffAccess(request, client);
       return sendJson(response, 200, { ok: true, workspace, state: await loadState(client, workspace.id) });
     }
     if (request.method !== "POST") return methodNotAllowed(response);
 
     const action = String(request.body?.action || "");
-    const actor = "LAB STAFF";
+    const adminActions = new Set([
+      "saveConfig", "saveAdminSettings", "saveSchedule", "saveServices",
+      "saveCalendarRule", "saveCalendarRules", "deleteCalendarRule",
+    ]);
+    const access = await assertStaffAccess(request, client, {
+      adminOnly: adminActions.has(action),
+    });
+    const actor = access.userId ? `MILKA:${access.userId}` : "LAB STAFF";
     if (action === "staffState") {
       return sendJson(response, 200, { ok: true, workspace, state: await loadState(client, workspace.id) });
     }
