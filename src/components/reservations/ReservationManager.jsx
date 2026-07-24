@@ -516,7 +516,10 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                         return rs.length ? <span style={{ color: tokens.ink[2] }}>Room{rs.length > 1 ? "s" : ""} #{rs.join(", ")}</span> : null;
                       })()}
                     </div>
-                    {d.restrictions?.length > 0 && (
+                    {/* Array.isArray, not `?.length > 0`: a non-array value
+                        with a length (a function's arity, a string) passed the
+                        old guard and crashed the whole reservation list. */}
+                    {Array.isArray(d.restrictions) && d.restrictions.length > 0 && (
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
                         {d.restrictions.map((rs, i) => {
                           const def = RESTRICTIONS.find(x => x.key === rs.note);

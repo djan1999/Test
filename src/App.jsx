@@ -37,6 +37,7 @@ import {
   tableIsGroupMember,
   applyLayoutSwitchToTables, renameFloorPositionsKey, floorPositionKey,
   swapSeatData, moveSeatOnFloor, materializeFloorPositions,
+  resolveFieldUpdate,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory } from "./utils/beverages.js";
 import { foldTable } from "./utils/foldTable.js";
@@ -2745,23 +2746,34 @@ export default function App() {
 
   // Update a field in a reservation's data AND sync to service_tables so
   // Display mode picks it up via the existing realtime subscription.
+  // `value` may be an UPDATER FUNCTION. The kitchen ticket writes allergy,
+  // seat and fire data functionally (upd(id, "restrictions", prev => …)) so a
+  // concurrent edit from another device can never be clobbered — the live
+  // board's `upd` understands that, and this one did not: it stored the
+  // function itself as the field. A function has a `.length` (its arity), so
+  // the reservation list's `restrictions?.length > 0` guard passed and the
+  // render crashed on `d.restrictions.map is not a function`, taking the whole
+  // app to the error boundary. Worse, JSON.stringify DROPS function values, so
+  // the row that reached Supabase had the guest's restrictions missing
+  // entirely. Resolve the updater once, here, against the row's current value.
   const updTableFromReservation = (resvId, tableId, field, value) => {
+    const target = reservationsRef.current.find(r => r.id === resvId);
+    const resolved = resolveFieldUpdate(value, target?.data?.[field]);
     setReservations(prev => prev.map(r => {
       if (r.id !== resvId) return r;
-      return { ...r, data: { ...(r.data || {}), [field]: value } };
+      return { ...r, data: { ...(r.data || {}), [field]: resolved } };
     }));
     // Persist outside the state updater: updaters must stay pure (StrictMode
     // runs them twice, which double-fired this write before).
-    const target = reservationsRef.current.find(r => r.id === resvId);
     if (target && supabase && getWorkspaceId()) {
-      const newData = { ...(target.data || {}), [field]: value };
+      const newData = { ...(target.data || {}), [field]: resolved };
       persistReservationRow({ id: resvId, date: target.date, table_id: target.table_id, data: newData });
     }
     // Only push to service_tables when that table already carries reservation data
     // (avoids polluting blank table rows before service starts).
     const serviceTable = tablesRef.current?.find(t => t.id === tableId);
     if (serviceTable?.resName || serviceTable?.active) {
-      upd(tableId, field, value);
+      upd(tableId, field, resolved);
     }
   };
 
@@ -2954,10 +2966,19 @@ export default function App() {
         .filter(k => flagged.has(k) && t.kitchenLog[k]?.firedAt)
         .sort().join(",");
     });
+    // A device that CANNOT act must not consume the fire. The snapshot used to
+    // be written before this gate, so a tablet parked in the reservation
+    // manager (or a kitchen panel showing the terrace/dining view) silently
+    // ate the transition — and because the move is edge-detected, there was no
+    // second chance: nobody ever moved the party in and the terrace table
+    // stayed occupied. Gate FIRST, snapshot after, so the fire is still
+    // pending when this device returns to a mode that can act on it.
+    // kitchen_floor belongs here on its own merit: the terrace view is exactly
+    // where a freed table matters.
+    if (mode !== "service" && mode !== "display" && mode !== "kitchen_floor") return;
     const prev = prevFlaggedFiredRef.current;
     prevFlaggedFiredRef.current = cur;
     if (!prev) return; // first observation — no fires to judge yet
-    if (mode !== "service" && mode !== "display") return;
     const newlyFired = tables.filter(t => cur[t.id] && cur[t.id] !== (prev[t.id] ?? ""));
     if (!newlyFired.length) return;
     serviceReservations.forEach(r => {

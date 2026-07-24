@@ -138,6 +138,19 @@ export const blankTable = id => ({
 
 export const initTables = Array.from({ length: 10 }, (_, i) => blankTable(i + 1));
 
+/**
+ * Resolve a field write that may be a FUNCTIONAL updater.
+ *
+ * Kitchen surfaces write allergy/seat/fire data as `prev => next` so a
+ * concurrent write from another device can't be clobbered by a value captured
+ * at render time. Every `upd`-shaped handler must resolve that before storing:
+ * a handler that stored the function itself put a function where an array
+ * belonged — and because a function has a `.length` (its arity), length guards
+ * passed and the render died on `.map is not a function`.
+ */
+export const resolveFieldUpdate = (value, previous) =>
+  typeof value === "function" ? value(previous) : value;
+
 // Descriptive (label-level) table fields derived from a reservation's data
 // blob. These are safe to apply even to a table where service has already
 // started — they never touch seats, orders, kitchen log, or grouping. Used by
@@ -154,7 +167,10 @@ export const reservationDescriptiveFields = (d = {}) => ({
   rooms:              Array.isArray(d.rooms) && d.rooms.length ? d.rooms.filter(Boolean) : (d.room ? [d.room] : []),
   birthday:           !!d.birthday,
   cakeNote:           d.birthday ? (d.cakeNote || "") : "",
-  restrictions:       d.restrictions || [],
+  // Array.isArray, not `|| []`: any truthy non-array (a stray object, a
+  // function left by a bad write) sailed through and every downstream
+  // .map/.filter on the board threw.
+  restrictions:       Array.isArray(d.restrictions) ? d.restrictions : [],
   notes:              d.notes || "",
   kitchenCourseNotes: d.kitchenCourseNotes || {},
 });

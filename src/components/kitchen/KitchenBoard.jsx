@@ -65,7 +65,9 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     footerPad: "7px 12px", archiveBtnPad: "9px 10px",
   };
   const seats = table.seats || [];
-  const restrictions = table.restrictions || [];
+  // Array.isArray, not `|| []` — a truthy non-array here threw on .map and
+  // took the ticket (and with it the board) down.
+  const restrictions = Array.isArray(table.restrictions) ? table.restrictions : [];
   const log = table.kitchenLog || {};
   // Which PERSON (guest group key) is currently being pinned to a chair.
   const [assigningRestrIdx, setAssigningRestrIdx] = useState(null);
