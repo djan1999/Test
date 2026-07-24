@@ -2983,12 +2983,12 @@ export default function App() {
     if (!newlyFired.length) return;
     serviceReservations.forEach(r => {
       if (visitStateOf(r.data) !== "terrace") return;
-      // A party back OUTSIDE for the last course (second terrace leg — the
-      // moved_at stamp from their first move-in marks it) must never be
-      // auto-moved: the fire would free the terrace table they are
-      // physically sitting at and hand it to the ASSIGN PARTY picker. The
-      // second leg ends only by explicit gestures (MOVE / CLEAR TABLE).
-      if (r.data?.moved_at) return;
+      // EVERY terrace leg ends here, including a party that already came in
+      // once (moved_at set) and went back out. Per Djan: firing the flagged
+      // course means those guests are at their dining table, so the terrace
+      // table they sat at must free for the next seating — a second leg used
+      // to be skipped, and the tile stayed occupied for the rest of service
+      // unless someone cleared it by hand.
       const ids = reservationTableIds(r.data, r.table_id).map(Number);
       if (newlyFired.some(t => ids.includes(Number(t.id)))) moveTerracePartyIn(r);
     });
