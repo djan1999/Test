@@ -4,7 +4,6 @@
 import './lib/abortSignalPolyfill.js';
 import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App.jsx';
 import { ErrorBoundary } from './components/ui/ErrorBoundary.jsx';
 import './styles.css';
 import { registerSW } from 'virtual:pwa-register';
@@ -75,6 +74,10 @@ const reservationsRequested = routePath === '/reservations'
   || routePath.startsWith('/book/manage/');
 const reservationsEnabled = import.meta.env.VITE_RESERVATIONS_V2_ENABLED === 'true';
 const ReservationsLabApp = React.lazy(() => import('./reservations-lab/ReservationsLabApp.jsx'));
+// Keep the operational Service app out of reservation-only bundles. Importing
+// App eagerly also evaluates its Supabase client before route selection, which
+// would couple the isolated LAB routes to the current restaurant environment.
+const ServiceApp = React.lazy(() => import('./App.jsx'));
 
 function DisabledOnboarding() {
   return (
@@ -105,7 +108,7 @@ const rootContent = reservationsRequested
   ? (onboardingEnabled
       ? <Suspense fallback={<LoadingOnboarding />}><ManagedOnboardingApp /></Suspense>
       : <DisabledOnboarding />)
-  : <App />;
+  : <Suspense fallback={<LoadingOnboarding />}><ServiceApp /></Suspense>;
 
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
