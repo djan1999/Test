@@ -134,6 +134,7 @@ const toLocalDateISO = (date = new Date()) =>
 
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
 const APP_SUBTITLE = String(import.meta.env.VITE_APP_SUBTITLE || "SERVICE BOARD").trim() || "SERVICE BOARD";
+const RESERVATIONS_V2_ENABLED = import.meta.env.VITE_RESERVATIONS_V2_ENABLED === "true";
 const DEFAULT_RESTAURANT_CONFIG = makeDefaultRestaurantConfig({ name: APP_NAME, subtitle: APP_SUBTITLE });
 
 // Board sync history follows a table's stable id, never its screen position.
@@ -361,6 +362,9 @@ export default function App() {
   const [beers,     setBeers]     = useState(localBev?.beers      ?? initBeers);
   const [mode, setMode] = useState(() => {
     try {
+      const requestedAdmin = RESERVATIONS_V2_ENABLED
+        && new URLSearchParams(window.location.search).get("admin") === "reservations";
+      if (requestedAdmin) return "admin";
       const storedMode = localStorage.getItem(workspaceKey("milka_mode")) || null;
       const storedDate = localStorage.getItem(workspaceKey("milka_service_date"));
       const chosenOn   = localStorage.getItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
@@ -4901,6 +4905,10 @@ export default function App() {
       {sandboxBannerEl}
       <Suspense fallback={lazyViewFallback}><AdminLayout
         appName={effectiveAppName}
+        initialSection={RESERVATIONS_V2_ENABLED
+          && new URLSearchParams(window.location.search).get("admin") === "reservations"
+          ? "reservations"
+          : null}
         restaurantConfig={restaurantConfig}
         onSaveRestaurantConfig={saveRestaurantConfiguration}
         accessToken={session?.access_token || null}

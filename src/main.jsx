@@ -10,6 +10,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { setUpdateReady } from './lib/swUpdate.js';
 import { installGlobalDiagnostics, recordClientDiagnostic } from './lib/clientDiagnostics.js';
 import StagingBoundary from './components/environment/StagingBoundary.jsx';
+import { reservationAdminRedirectTarget } from './reservations-lab/adminRedirect.js';
 
 installGlobalDiagnostics();
 
@@ -73,6 +74,9 @@ const reservationsRequested = routePath === '/reservations'
   || routePath === '/book'
   || routePath.startsWith('/book/manage/');
 const reservationsEnabled = import.meta.env.VITE_RESERVATIONS_V2_ENABLED === 'true';
+const reservationAdminRedirect = reservationsEnabled
+  ? reservationAdminRedirectTarget(routePath)
+  : null;
 const ReservationsLabApp = React.lazy(() => import('./reservations-lab/ReservationsLabApp.jsx'));
 // Keep the operational Service app out of reservation-only bundles. Importing
 // App eagerly also evaluates its Supabase client before route selection, which
@@ -100,7 +104,13 @@ function LoadingOnboarding() {
   );
 }
 
-const rootContent = reservationsRequested
+if (reservationAdminRedirect) {
+  window.location.replace(reservationAdminRedirect);
+}
+
+const rootContent = reservationAdminRedirect
+  ? <LoadingOnboarding />
+  : reservationsRequested
   ? (reservationsEnabled
       ? <Suspense fallback={<LoadingOnboarding />}><ReservationsLabApp routePath={routePath} /></Suspense>
       : <DisabledOnboarding />)
