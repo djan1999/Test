@@ -7,7 +7,11 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./src/__tests__/setup.js"],
-    include: ["src/__tests__/**/*.test.{js,jsx}", "api/__tests__/**/*.test.js"],
+    include: [
+      "src/__tests__/**/*.test.{js,jsx}",
+      "src/domain/reservations/__tests__/**/*.test.js",
+      "api/__tests__/**/*.test.js",
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
