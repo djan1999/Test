@@ -184,6 +184,10 @@ export default function ReservationWorkspace({
   onPrintBreakdown,
   onPrintAllergySheet,
   onPrintWeekly,
+  onExit,
+  loading = false,
+  error = "",
+  onRetry,
   canEdit = true,
 }) {
   const config = useMemo(() => normalizeReservationConfig(reservationConfig), [reservationConfig]);
@@ -299,13 +303,33 @@ export default function ReservationWorkspace({
             </button>
           )) : null}
         </div>
-        <button type="button" style={{ ...quiet, width: compact ? "100%" : "auto" }} onClick={guard(() => setWalkIn({ pax: 2 }))}>
-          Walk-in
-        </button>
-        <button type="button" style={{ ...strong, width: compact ? "100%" : "auto" }} onClick={guard(() => setEditing({ booking: null }))}>
-          + New booking
-        </button>
+        <div style={{ display: "flex", gap: 5, width: compact ? "100%" : "auto" }}>
+          {onExit ? (
+            <button type="button" style={{ ...quiet, flex: compact ? 1 : "initial" }} onClick={onExit}>
+              Exit
+            </button>
+          ) : null}
+          <button type="button" style={{ ...quiet, flex: compact ? 1 : "initial" }} onClick={guard(() => setWalkIn({ pax: 2 }))}>
+            Walk-in
+          </button>
+          <button type="button" style={{ ...strong, flex: compact ? 1 : "initial" }} onClick={guard(() => setEditing({ booking: null }))}>
+            + New booking
+          </button>
+        </div>
       </div>
+
+      {loading ? (
+        <div style={{ ...box, padding: "9px 12px", marginBottom: 12, fontSize: 10, color: tokens.ink[3] }}>
+          Refreshing reservations…
+        </div>
+      ) : null}
+
+      {error ? (
+        <div style={{ ...box, padding: "9px 12px", marginBottom: 12, fontSize: 10, color: tokens.red.text, borderColor: tokens.red.border, background: tokens.red.bg }}>
+          {error}
+          {onRetry ? <button type="button" style={{ ...quiet, marginLeft: 10 }} onClick={onRetry}>Try again</button> : null}
+        </div>
+      ) : null}
 
       {dayServices.length === 0 ? (
         <div style={{ ...box, background: tokens.tint.parchment, padding: "11px 13px", marginBottom: 12, fontSize: 11, color: tokens.ink[2], lineHeight: 1.6 }}>
@@ -396,42 +420,15 @@ export default function ReservationWorkspace({
           onResolveConflict={onResolveConflict}
           onSwapReservations={(aId, bId) => onSwapBookings?.({ aId, bId })}
           onSave={async (draft) => {
-            // Operational fields keep travelling in operationalData; anything the
-            // form returns at the top level is folded back into it, so no legacy
-            // field is silently dropped.
-            const {
-              menuType, lang, guestType, room, rooms, birthday, cakeNote,
-              restrictions, notes, tableGroup, courseOverrides, kitchenCourseNotes,
-              ...rest
-            } = draft;
-            const operationalData = {
-              ...opsOf(editing.booking),
-              ...(menuType !== undefined ? { menuType } : {}),
-              ...(lang !== undefined ? { lang } : {}),
-              ...(guestType !== undefined ? { guestType } : {}),
-              ...(room !== undefined ? { room } : {}),
-              ...(rooms !== undefined ? { rooms } : {}),
-              ...(birthday !== undefined ? { birthday } : {}),
-              ...(cakeNote !== undefined ? { cakeNote } : {}),
-              ...(restrictions !== undefined ? { restrictions } : {}),
-              ...(notes !== undefined ? { notes } : {}),
-              ...(tableGroup !== undefined ? { tableGroup } : {}),
-              ...(courseOverrides !== undefined ? { courseOverrides } : {}),
-              ...(kitchenCourseNotes !== undefined ? { kitchenCourseNotes } : {}),
-            };
-            await onSaveBooking?.({
+            await onSaveBooking?.(legacyReservationToBooking(draft, {
               ...(editing.booking || {}),
-              ...rest,
-              notes: notes !== undefined ? notes : editing.booking?.notes,
-              operationalData,
-            });
+              status: editing.booking?.status || "confirmed",
+              source: editing.booking?.source || "staff",
+            }));
             setEditing(null);
             say("Booking saved.");
           }}
           onCancel={() => setEditing(null)}
-          onDelete={editing.booking && onDeleteBooking
-            ? async () => { await onDeleteBooking(editing.booking.id); setEditing(null); say("Booking removed."); }
-            : undefined}
         />
       ) : null}
 
@@ -443,6 +440,12 @@ export default function ReservationWorkspace({
           onEdit={() => { setEditing({ booking: detail }); setDetail(null); }}
           onAssign={() => { setAssigning(detail); setDetail(null); }}
           onStatus={guard((to, reason) => { onStatusChange?.({ id: detail.id, to, reason }); setDetail(null); })}
+          onDelete={onDeleteBooking ? guard(async () => {
+            if (!window.confirm(`Permanently delete ${detail.name || "this booking"}?`)) return;
+            await onDeleteBooking(detail.id);
+            setDetail(null);
+            say("Booking removed.");
+          }) : null}
           onClose={() => setDetail(null)}
         />
       ) : null}
@@ -464,7 +467,7 @@ export default function ReservationWorkspace({
               time, pax: walkIn.pax,
               status: "arrived",
               name: name || "Walk-in",
-              source: "walkin",
+              source: "walk_in",
               operationalData: { tableGroup: tables },
             });
             setWalkIn(null);
@@ -584,7 +587,7 @@ function BookingRow({ booking, narrow, onEdit, onAssign, onStatus, onGuest, onDe
             {ops.menuType || booking.experience ? ` · ${ops.menuType || booking.experience}` : ""}
             {booking.language || ops.lang ? ` · ${booking.language || ops.lang}` : ""}
             {(ops.rooms || (ops.room ? [ops.room] : [])).length ? ` · room ${(ops.rooms || [ops.room]).join(", ")}` : ""}
-            {booking.source === "public" ? " · booked online" : ""}
+            {booking.source === "web" ? " · booked online" : ""}
             {booking.ref ? ` · ${booking.ref}` : ""}
           </div>
         </div>
@@ -899,7 +902,7 @@ function GuestsTab({ bookings, query, onQuery, selected, onSelect, onOpen, narro
             </div>
             <Suspense fallback={null}>
               {/* Archive-based history from completed services, as the old manager showed it. */}
-              <GuestMemory guestName={active.name} />
+              <GuestMemory name={active.name} />
             </Suspense>
           </>
         ) : (
@@ -1189,7 +1192,7 @@ function TimelineTab({ bookings, seatings, service, config, compact, narrow, onD
 // Everything known about one booking, including its status history, so a host
 // can answer "who changed this, and when" without leaving the workspace.
 
-function DetailModal({ booking, config, compact, onEdit, onAssign, onStatus, onClose }) {
+function DetailModal({ booking, config, compact, onEdit, onAssign, onStatus, onDelete, onClose }) {
   const ops = opsOf(booking);
   const restrictions = restrictionsOf(booking);
   const seated = tablesOf(booking);
@@ -1202,7 +1205,7 @@ function DetailModal({ booking, config, compact, onEdit, onAssign, onStatus, onC
     ["Experience", ops.menuType || booking.experience || "—"],
     ["Language", booking.language || ops.lang || "—"],
     ["Contact", [booking.phone, booking.email].filter(Boolean).join(" · ") || "—"],
-    ["Guest type", ops.guestType || (booking.source === "public" ? "Booked online" : booking.source === "walkin" ? "Walk-in" : "—")],
+    ["Guest type", ops.guestType || (booking.source === "web" ? "Booked online" : booking.source === "walk_in" ? "Walk-in" : "—")],
     ["Hotel room", (ops.rooms || (ops.room ? [ops.room] : [])).join(", ") || "—"],
     ["Occasion", booking.occasion || (ops.birthday ? "Birthday" : "") || "—"],
     ["Cake", ops.cakeNote || "—"],
@@ -1213,7 +1216,7 @@ function DetailModal({ booking, config, compact, onEdit, onAssign, onStatus, onC
       <div style={{ fontFamily: FONT, padding: compact ? 14 : 18, minWidth: compact ? 260 : 360, maxWidth: 560 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
           <div style={{ fontSize: 15, fontWeight: 600 }}>{booking.name || "Booking"}</div>
-          <span style={{ ...label9, fontSize: 8 }}>{booking.source === "public" ? "booked online" : booking.source || "staff"}</span>
+          <span style={{ ...label9, fontSize: 8 }}>{booking.source === "web" ? "booked online" : booking.source || "staff"}</span>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "1fr 1fr", gap: "0 16px", marginTop: 12 }}>
@@ -1260,6 +1263,11 @@ function DetailModal({ booking, config, compact, onEdit, onAssign, onStatus, onC
               const reason = window.prompt("Why is this booking cancelled?");
               if (reason && reason.trim()) onStatus("cancelled", reason.trim());
             }}>Cancel</button>
+          ) : null}
+          {onDelete ? (
+            <button type="button" style={{ ...quiet, color: tokens.red.text, borderColor: tokens.red.border }} onClick={onDelete}>
+              Delete
+            </button>
           ) : null}
         </div>
       </div>

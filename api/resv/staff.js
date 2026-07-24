@@ -182,6 +182,22 @@ export default async function handler(request, response) {
       );
       return sendJson(response, 200, { ok: true, booking });
     }
+    if (action === "convertWaitlist") {
+      const booking = {
+        ...(request.body.booking || {}),
+        source: "waitlist",
+        actor,
+      };
+      validateBookingPayload(booking);
+      const { data, error } = await client.rpc("convert_reservation_waitlist", {
+        p_workspace: workspace.id,
+        p_waitlist: request.body.waitlistId,
+        p_booking: booking,
+        p_actor: actor,
+      });
+      if (error) throw error;
+      return sendJson(response, 200, { ok: true, booking: mapBooking(data) });
+    }
     if (action === "addWaitlist") {
       const entry = request.body.entry || {};
       const { data, error } = await client.from("reservation_waitlist").insert({

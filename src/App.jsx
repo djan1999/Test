@@ -100,6 +100,8 @@ import { DEFAULT_SYNC_CONFIG, normalizeSyncConfig } from "./config/syncConfig.js
 import { tokens } from "./styles/tokens.js";
 import ServiceDatePicker from "./components/reservations/ServiceDatePicker.jsx";
 import ResvForm from "./components/reservations/ResvForm.jsx";
+import { useReservationWorkspace } from "./components/reservations/useReservationWorkspace.js";
+import { staffAction as reservationStaffAction } from "./reservations-lab/reservationClient.js";
 import CenteredModal from "./components/ui/CenteredModal.jsx";
 import Header from "./components/ui/Header.jsx";
 import GlobalStyle from "./components/ui/GlobalStyle.jsx";
@@ -120,7 +122,7 @@ import FloorMap from "./components/floor/FloorMap.jsx";
 // generated chunk, so these still open offline once the app is installed.
 const AdminLayout = lazy(() => import("./components/admin/AdminLayout.jsx"));
 const KitchenBoard = lazy(() => import("./components/kitchen/KitchenBoard.jsx"));
-const ReservationManager = lazy(() => import("./components/reservations/ReservationManager.jsx"));
+const ReservationManager = lazy(() => import("./components/reservations/ReservationWorkspace.jsx"));
 const MenuPage = lazy(() => import("./components/menu/MenuPage.jsx"));
 const SummaryModal = lazy(() => import("./components/modals/SummaryModal.jsx"));
 const ArchiveModal = lazy(() => import("./components/modals/ArchiveModal.jsx"));
@@ -409,6 +411,14 @@ export default function App() {
   );
   const canAdmin = canAdminister(currentRole);
   const effectiveAppName = restaurantConfig.name || currentWorkspace?.name || APP_NAME;
+  const reservationCredentialsRef = useRef({
+    accessToken: session?.access_token || null,
+    workspaceId,
+  });
+  reservationCredentialsRef.current = {
+    accessToken: session?.access_token || null,
+    workspaceId,
+  };
 
   // Restaurant identity and table definitions are workspace data, not build
   // constants. A missing setting deliberately falls back to Milka's current
@@ -1084,6 +1094,19 @@ export default function App() {
     if (sandboxRef.current) return { ok: true }; // test service: memory only
 
     try {
+      if (RESERVATIONS_V2_ENABLED) {
+        const previous = reservationsRef.current.find((reservation) => reservation.id === id);
+        const result = await reservationStaffAction("saveLegacyReservation", {
+          row: {
+            id,
+            date: date || previous?.date,
+            table_id: table_id ?? previous?.table_id ?? null,
+            data: data || previous?.data || {},
+            created_at: created_at || previous?.created_at,
+          },
+        }, reservationCredentialsRef.current);
+        return { ok: true, data: result.booking || null };
+      }
       if (sqlitePrimaryRef.current) {
         const { writeReservation } = await import("./powersync/writes.js");
         await writeReservation({ id, date, table_id, data, created_at });
@@ -1127,6 +1150,12 @@ export default function App() {
     if (sandboxRef.current) return { ok: true }; // test service: memory only
 
     try {
+      if (RESERVATIONS_V2_ENABLED) {
+        const result = await reservationStaffAction("saveLegacyReservations", {
+          rows,
+        }, reservationCredentialsRef.current);
+        return { ok: true, data: result.bookings || [] };
+      }
       if (sqlitePrimaryRef.current) {
         const { writeReservations } = await import("./powersync/writes.js");
         await writeReservations(rows);
@@ -2864,6 +2893,13 @@ export default function App() {
     // New reservation: mint the uuid client-side so the local write, the
     // uploaded row, and the optimistic React state all share one identity.
     const local = { ...dbRow, id: randomUuid(), created_at: new Date().toISOString() };
+    if (RESERVATIONS_V2_ENABLED && supabase && !sandboxRef.current) {
+      const result = await persistReservationRow(local);
+      if (!result.ok) return result;
+      setReservations(prev => [...prev, local]);
+      syncStartedTablesFromReservation(date, rData, Number(table_id));
+      return { ok: true, data: local };
+    }
     if (supabase && !sandboxRef.current) {
       let inserted = local;
       if (sqlitePrimaryRef.current) {
@@ -2897,6 +2933,11 @@ export default function App() {
       return { ok: true };
     }
     try {
+      if (RESERVATIONS_V2_ENABLED) {
+        await reservationStaffAction("deleteBooking", { bookingId: id }, reservationCredentialsRef.current);
+        setReservations(prev => prev.filter(r => r.id !== id));
+        return { ok: true };
+      }
       if (sqlitePrimaryRef.current) {
         const { deleteReservationRow } = await import("./powersync/writes.js");
         await deleteReservationRow(id);
@@ -4562,6 +4603,15 @@ export default function App() {
     </div>
   ) : null;
 
+  const reservationWorkspace = useReservationWorkspace({
+    enabled: mode === "reservation",
+    accessToken: session?.access_token || null,
+    workspaceId,
+    menuCourses: activeMenuCourses,
+    profiles: profilesState.profiles,
+    assignments: profilesState.assignments,
+  });
+
   // Preview — visit /#preview to inspect TableCard design without auth
   if (window.location.hash === "#preview") return (
     <div style={{ backgroundColor: tokens.ink.bg, minHeight: "100vh", padding: "48px 40px", fontFamily: tokens.font }}>
@@ -4743,24 +4793,31 @@ export default function App() {
 
   // Reservation Manager mode
   if (renderMode === "reservation") return (<>{serviceDatePickerEl}{sandboxBannerEl}<Suspense fallback={lazyViewFallback}><ReservationManager
-      reservations={reservations}
-      menuCourses={activeMenuCourses}
+      bookings={reservationWorkspace.bookings}
+      reservationConfig={reservationWorkspace.reservationConfig}
+      weeklyServices={reservationWorkspace.weeklyServices}
+      calendarRules={reservationWorkspace.calendarRules}
+      waitlist={reservationWorkspace.waitlist}
       tables={displayTables}
-      onUpsert={upsertReservation}
-      onDelete={deleteReservation}
-      onUpdReservation={updTableFromReservation}
-      onSwapReservations={swapReservations}
+      onSaveBooking={reservationWorkspace.onSaveBooking}
+      onDeleteBooking={reservationWorkspace.onDeleteBooking}
+      onStatusChange={reservationWorkspace.onStatusChange}
+      onAssignTables={reservationWorkspace.onAssignTables}
+      onSwapBookings={reservationWorkspace.onSwapBookings}
+      onResolveConflict={reservationWorkspace.onResolveConflict}
+      onConvertWaitlist={reservationWorkspace.onConvertWaitlist}
+      onRemoveWaitlist={reservationWorkspace.onRemoveWaitlist}
+      onPrintKitchenTicket={reservationWorkspace.onPrintKitchenTicket}
+      onPrintBreakdown={reservationWorkspace.onPrintBreakdown}
+      onPrintAllergySheet={reservationWorkspace.onPrintAllergySheet}
+      onPrintWeekly={reservationWorkspace.onPrintWeekly}
       onExit={() => changeMode(null)}
       serviceDate={serviceDate}
-      activeServiceSession={activeServiceSession}
-      onSetServiceDate={persistServiceDate}
-      onOpenArchive={() => setArchiveOpen(true)}
-      courseQuickNotes={courseQuickNotes}
-      profiles={profilesState.profiles}
-      assignments={profilesState.assignments}
-      resolveTableFlag={(r) => ({
-        needsTable: !resolveReservationTable(getActiveDiningMap(floorMapsState), r.table_id).table,
-      })}
+      activeService={activeServiceSession}
+      canEdit={currentRole === WORKSPACE_ROLES.ADMIN || currentRole === WORKSPACE_ROLES.SERVICE}
+      loading={reservationWorkspace.loading}
+      error={reservationWorkspace.error}
+      onRetry={reservationWorkspace.retry}
     />
     {archiveOpen && (
       <ArchiveModal
