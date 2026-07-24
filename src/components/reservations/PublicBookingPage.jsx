@@ -67,6 +67,7 @@ const readable = (iso) => {
  * @param {Function} joinWaitlist     (entry) => Promise
  * @param {boolean}  testMode         validates for real, creates nothing
  * @param {string}   startDate        optional ISO date to open on
+ * @param {object}   initialBooking   server-validated booking when changing a manage link
  */
 export default function PublicBookingPage({
   publicConfig,
@@ -75,6 +76,7 @@ export default function PublicBookingPage({
   joinWaitlist,
   testMode = false,
   startDate,
+  initialBooking,
 }) {
   const config = publicConfig || {};
   const restaurantName = config.restaurantName || "Restaurant";
@@ -88,14 +90,24 @@ export default function PublicBookingPage({
 
   const today = isoOf(new Date());
   const [step, setStep] = useState("when");
-  const [date, setDate] = useState(startDate || today);
-  const [pax, setPax] = useState(2);
+  const [date, setDate] = useState(startDate || initialBooking?.date || today);
+  const [pax, setPax] = useState(Number(initialBooking?.pax || 2));
   const [availability, setAvailability] = useState(null);
   const [loading, setLoading] = useState(false);
   const [choice, setChoice] = useState(null);          // { time, service }
-  const [experience, setExperience] = useState(experiences[0]?.key || "");
-  const [guest, setGuest] = useState({ name: "", phone: "", email: "", language: (config.languages || ["en"])[0] });
-  const [needs, setNeeds] = useState({ allergies: "", accessibility: "", occasion: "", notes: "" });
+  const [experience, setExperience] = useState(initialBooking?.experience || experiences[0]?.key || "");
+  const [guest, setGuest] = useState({
+    name: initialBooking?.name || "",
+    phone: initialBooking?.phone || "",
+    email: initialBooking?.email || "",
+    language: initialBooking?.language || (config.languages || ["en"])[0],
+  });
+  const [needs, setNeeds] = useState({
+    allergies: Array.isArray(initialBooking?.allergies) ? initialBooking.allergies.join(", ") : initialBooking?.allergies || "",
+    accessibility: Array.isArray(initialBooking?.accessibility) ? initialBooking.accessibility.join(", ") : initialBooking?.accessibility || "",
+    occasion: initialBooking?.occasion || "",
+    notes: initialBooking?.notes || "",
+  });
   const [consent, setConsent] = useState(false);
   const [news, setNews] = useState(false);
   const [error, setError] = useState("");

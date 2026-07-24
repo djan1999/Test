@@ -1,7 +1,10 @@
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { evaluateAvailability } from "../../src/domain/reservations/availability.js";
-import { normalizeReservationConfig } from "../../src/domain/reservations/config.js";
+import {
+  normalizeReservationConfig,
+  publicConfigOf,
+} from "../../src/domain/reservations/config.js";
 import { assertReservationTransition } from "../../src/domain/reservations/lifecycle.js";
 
 const PRODUCTION_PROJECT_REF = "cvljktjmksfibuyphdln";
@@ -223,16 +226,40 @@ export async function loadReservationContext(client, workspaceId, { from, to } =
   };
 }
 
-export async function getAvailability(client, workspaceId, { date, pax, publicOnly }) {
+function restaurantClock(timeZone) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date()).reduce((values, part) => ({ ...values, [part.type]: part.value }), {});
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    minutes: Number(parts.hour) * 60 + Number(parts.minute),
+  };
+}
+
+export async function getAvailability(client, workspaceId, {
+  date,
+  pax,
+  publicOnly,
+  excludeBookingId = null,
+}) {
   const context = await loadReservationContext(client, workspaceId, { from: date, to: date });
+  const now = restaurantClock(context.config.timezone || "Europe/Ljubljana");
   const services = evaluateAvailability({
     date,
     pax: Number(pax),
     services: context.services,
     exceptions: context.exceptions,
-    bookings: context.bookings,
+    bookings: context.bookings.filter((booking) => booking.id !== excludeBookingId),
     config: context.config,
     publicOnly,
+    isToday: publicOnly && date === now.date,
+    nowMinutes: publicOnly ? now.minutes : null,
   });
   return { ...context, services };
 }
@@ -258,25 +285,33 @@ export async function createBooking(client, workspaceId, input, { publicOnly = f
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle();
   if (replayError) throw replayError;
-  if (replay) return { booking: mapBooking(replay), replay: true, manageToken: null };
+  if (replay) {
+    let manageToken = null;
+    if (publicOnly) {
+      manageToken = createManageToken();
+      const expiry = new Date(`${replay.date}T23:59:59+02:00`);
+      expiry.setDate(expiry.getDate() + 1);
+      const { error: tokenError } = await client.from("reservation_manage_tokens").insert({
+        token_hash: manageToken.hash,
+        workspace_id: workspaceId,
+        booking_id: replay.id,
+        expires_at: expiry.toISOString(),
+      });
+      if (tokenError) throw tokenError;
+    }
+    return {
+      booking: mapBooking(replay),
+      replay: true,
+      manageToken: manageToken?.raw || null,
+    };
+  }
 
-  const availability = await getAvailability(client, workspaceId, {
-    date: input.date,
-    pax: Number(input.pax),
-    publicOnly,
-  });
-  const service = availability.services.find((item) => item.service === input.service);
-  const slot = service?.slots.find((item) => item.time === input.time && item.ok);
-  if (!slot && !input.overrideReason) {
-    const error = new Error("That time is no longer available.");
-    error.code = "slot_taken";
-    throw error;
-  }
-  if (publicOnly && Number(input.pax) > Number(availability.config.online.maxPax)) {
-    const error = new Error("This party is too large for online booking.");
-    error.code = "party_too_large";
-    throw error;
-  }
+  const { availability, slot } = await validateBookingChoice(
+    client,
+    workspaceId,
+    input,
+    { publicOnly, allowOverride: Boolean(input.overrideReason) },
+  );
 
   const status = input.status || (
     publicOnly && Number(input.pax) > Number(availability.config.online.autoConfirmMaxPax)
@@ -336,8 +371,26 @@ export async function createBooking(client, workspaceId, input, { publicOnly = f
         .eq("workspace_id", workspaceId)
         .eq("idempotency_key", idempotencyKey)
         .single();
-      return { booking: mapBooking(duplicate), replay: true, manageToken: null };
+      let duplicateToken = null;
+      if (publicOnly) {
+        duplicateToken = createManageToken();
+        const expiry = new Date(`${duplicate.date}T23:59:59+02:00`);
+        expiry.setDate(expiry.getDate() + 1);
+        const { error: tokenError } = await client.from("reservation_manage_tokens").insert({
+          token_hash: duplicateToken.hash,
+          workspace_id: workspaceId,
+          booking_id: duplicate.id,
+          expires_at: expiry.toISOString(),
+        });
+        if (tokenError) throw tokenError;
+      }
+      return {
+        booking: mapBooking(duplicate),
+        replay: true,
+        manageToken: duplicateToken?.raw || null,
+      };
     }
+    if (String(error.message || "").includes("slot_taken")) error.code = "slot_taken";
     throw error;
   }
   const data = savedRows?.[0];
@@ -358,6 +411,46 @@ export async function createBooking(client, workspaceId, input, { publicOnly = f
   }
   await upsertGuest(client, workspaceId, mapBooking(data));
   return { booking: mapBooking(data), replay: false, manageToken: manageToken?.raw || null };
+}
+
+export async function validateBookingChoice(client, workspaceId, input, {
+  publicOnly = true,
+  excludeBookingId = null,
+  allowOverride = false,
+} = {}) {
+  validateBookingPayload(input);
+  const availability = await getAvailability(client, workspaceId, {
+    date: input.date,
+    pax: Number(input.pax),
+    publicOnly,
+    excludeBookingId,
+  });
+  if (publicOnly && Number(input.pax) > Number(availability.config.online.maxPax)) {
+    const error = new Error("This party is too large for online booking.");
+    error.code = "party_too_large";
+    throw error;
+  }
+  const service = availability.services.find((item) => item.service === input.service);
+  const candidate = service?.slots.find((item) => item.time === input.time);
+  const slot = candidate?.ok ? candidate : null;
+  if (!slot && !allowOverride) {
+    const error = new Error(candidate?.reason === "no_table"
+      ? "No table of the right size is free then."
+      : "That time is no longer available.");
+    error.code = candidate?.reason === "no_table" ? "no_table" : (
+      candidate?.reason === "party_too_large" ? "party_too_large" : "slot_taken"
+    );
+    throw error;
+  }
+  return {
+    availability,
+    slot,
+    status: input.status || (
+      publicOnly && Number(input.pax) > Number(availability.config.online.autoConfirmMaxPax)
+        ? "pending"
+        : "confirmed"
+    ),
+  };
 }
 
 export async function upsertGuest(client, workspaceId, booking) {
@@ -435,17 +528,5 @@ export async function resolveManageToken(client, rawToken) {
 }
 
 export function publicConfig(config) {
-  const normalized = normalizeReservationConfig(config);
-  return {
-    restaurantName: normalized.restaurantName,
-    tagline: normalized.tagline,
-    timezone: normalized.timezone,
-    online: {
-      enabled: normalized.online.enabled,
-      maxPax: normalized.online.maxPax,
-      windowDays: normalized.online.windowDays,
-    },
-    publicPage: normalized.publicPage,
-    waitlistEnabled: normalized.waitlist.enabled,
-  };
+  return publicConfigOf(config);
 }

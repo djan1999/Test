@@ -114,6 +114,16 @@ export async function submitPublicBooking(booking, idempotencyKey) {
   return parseResponse(response);
 }
 
+export async function validatePublicBooking(booking, idempotencyKey) {
+  if (EDGE_API) return edgeRequest("validate", { booking, idempotencyKey });
+  const response = await fetch("/api/resv/public", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "validate", booking, idempotencyKey }),
+  });
+  return parseResponse(response);
+}
+
 export async function submitPublicWaitlist(entry) {
   if (EDGE_API) return edgeRequest("waitlist", { entry });
   const response = await fetch("/api/resv/public", {
@@ -137,6 +147,16 @@ export async function cancelManagedBooking(token, reason) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "cancel", token, reason }),
+  });
+  return parseResponse(response);
+}
+
+export async function changeManagedBooking(token, booking, idempotencyKey) {
+  if (EDGE_API) return edgeRequest("change", { token, booking, idempotencyKey });
+  const response = await fetch("/api/resv/public", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "change", token, booking, idempotencyKey }),
   });
   return parseResponse(response);
 }

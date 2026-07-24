@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_RESERVATION_CONFIG, DEFAULT_WEEKLY_SERVICES } from "../domain/reservations/config.js";
+import {
+  DEFAULT_RESERVATION_CONFIG,
+  DEFAULT_WEEKLY_SERVICES,
+  normalizeReservationConfig,
+} from "../domain/reservations/config.js";
 import { evaluateAvailability, resolveServicesForDate } from "../domain/reservations/availability.js";
 import { assertReservationTransition, canTransitionReservation } from "../domain/reservations/lifecycle.js";
 
@@ -48,5 +52,29 @@ describe("weekly service schedules", () => {
       }],
     });
     expect(result.find((service) => service.service === "dinner").slots.find((slot) => slot.time === "18:00").ok).toBe(false);
+  });
+});
+
+describe("reservation admin configuration", () => {
+  it("preserves every section edited by the Reservations panel", () => {
+    const input = {
+      online: { maxPax: 9, minPax: 2, leadMinutes: 45, windowDays: 120, autoConfirmMaxPax: 5, whenFull: "waitlist" },
+      pacing: { coversPerSlot: 10, coversPerService: 38 },
+      durations: { small: 90, medium: 135, large: 180, buffer: 20 },
+      tables: [{ id: "T99", seats: 10 }],
+      combos: [["T01", "T02"]],
+      experiences: [{ key: "private", title: "Private", active: true }],
+      messages: { custom: { en: "Hello" } },
+      team: [{ id: "host", role: "host" }],
+      publicPage: { phone: "+386 1" },
+      waitlist: { enabled: false },
+      privacy: { retentionMonths: 12 },
+      walkIns: { enabled: false },
+    };
+    const normalized = normalizeReservationConfig(input);
+    Object.keys(input).forEach((key) => expect(normalized).toHaveProperty(key));
+    expect(normalized.online).toMatchObject(input.online);
+    expect(normalized.messages.custom).toEqual({ en: "Hello" });
+    expect(normalized.tables).toEqual(input.tables);
   });
 });

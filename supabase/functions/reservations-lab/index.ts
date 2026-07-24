@@ -219,11 +219,13 @@ function availability(date: string, pax: number, context: any, publicOnly = fals
         const passesLeadTime = !publicOnly
           || date !== now?.date
           || minutesOf(time) >= Number(now?.minutes || 0) + Number(context.config.online?.leadMinutes || 0);
-        const ok = passesLeadTime
-          && serviceCovers + pax <= serviceCap
-          && slotCovers + pax <= Number(context.config.pacing?.coversPerSlot || 12)
-          && Boolean(tableLabel);
-        return { time, ok, tableLabel: ok ? tableLabel : null };
+        let reason = null;
+        if (pax > Number(context.config.online?.maxPax || 6)) reason = "party_too_large";
+        else if (!passesLeadTime) reason = "too_late";
+        else if (serviceCovers + pax > serviceCap) reason = "service_full";
+        else if (slotCovers + pax > Number(context.config.pacing?.coversPerSlot || 12)) reason = "sitting_full";
+        else if (!tableLabel) reason = "no_table";
+        return { time, ok: reason === null, reason, tableLabel: reason === null ? tableLabel : null };
       }),
     };
   });
@@ -256,7 +258,7 @@ Deno.serve(async (request: Request) => {
       "staffState", "createBooking", "updateBooking", "transition", "addWaitlist",
       "updateWaitlist", "saveConfig", "saveAdminSettings", "saveSchedule", "saveServices",
       "saveCalendarRule", "saveCalendarRules", "deleteCalendarRule", "saveLegacyReservation",
-      "saveLegacyReservations", "assignTables", "swapTables", "deleteBooking",
+      "saveLegacyReservations", "assignTables", "swapTables", "deleteBooking", "convertWaitlist",
     ]);
     const adminActions = new Set([
       "saveConfig", "saveAdminSettings", "saveSchedule", "saveServices",
@@ -359,27 +361,60 @@ Deno.serve(async (request: Request) => {
       if (result.error) throw result.error;
     };
 
-    const createBooking = async (input: any, publicOnly: boolean) => {
+    const choiceFor = async (input: any, publicOnly: boolean, excludeBookingId?: string) => {
       validateBooking(input);
-      const idempotencyKey = String(input.idempotencyKey || crypto.randomUUID());
-      const { data: replay, error: replayError } = await client.from("reservation_bookings").select("*").eq("workspace_id", workspace.id).eq("idempotency_key", idempotencyKey).maybeSingle();
-      if (replayError) throw replayError;
-      if (replay) return { booking: mapBooking(replay), replay: true, token: null };
       const context = await loadContext(input.date);
-      const options = availability(input.date, Number(input.pax), context, publicOnly);
-      const service = options.find((item) => item.service === input.service);
-      const slot = service?.slots.find((item) => item.time === input.time && item.ok);
-      if (!slot && !input.overrideReason) {
-        const error: any = new Error("That time is no longer available.");
-        error.code = "slot_taken";
-        throw error;
-      }
+      const scopedContext = excludeBookingId
+        ? { ...context, bookings: context.bookings.filter((booking: any) => booking.id !== excludeBookingId) }
+        : context;
+      const options = availability(input.date, Number(input.pax), scopedContext, publicOnly);
       if (publicOnly && Number(input.pax) > Number(context.config.online?.maxPax || 6)) {
         const error: any = new Error("This party is too large for online booking.");
         error.code = "party_too_large";
         throw error;
       }
-      const status = input.status || (publicOnly && Number(input.pax) > Number(context.config.online?.autoConfirmMaxPax || 4) ? "pending" : "confirmed");
+      const service = options.find((item) => item.service === input.service);
+      const candidate = service?.slots.find((item) => item.time === input.time);
+      const slot = candidate?.ok ? candidate : null;
+      if (!slot && !input.overrideReason) {
+        const error: any = new Error(candidate?.reason === "no_table"
+          ? "No table of the right size is free then."
+          : "That time is no longer available.");
+        error.code = candidate?.reason === "no_table" ? "no_table" : (
+          candidate?.reason === "party_too_large" ? "party_too_large" : "slot_taken"
+        );
+        throw error;
+      }
+      const status = input.status || (
+        publicOnly && Number(input.pax) > Number(context.config.online?.autoConfirmMaxPax || 4)
+          ? "pending"
+          : "confirmed"
+      );
+      return { context, slot, status };
+    };
+
+    const createBooking = async (input: any, publicOnly: boolean) => {
+      validateBooking(input);
+      const idempotencyKey = String(input.idempotencyKey || crypto.randomUUID());
+      const { data: replay, error: replayError } = await client.from("reservation_bookings").select("*").eq("workspace_id", workspace.id).eq("idempotency_key", idempotencyKey).maybeSingle();
+      if (replayError) throw replayError;
+      if (replay) {
+        let token = null;
+        if (publicOnly) {
+          token = randomToken();
+          const expires = new Date(`${replay.date}T23:59:59+02:00`);
+          expires.setDate(expires.getDate() + 1);
+          const { error: tokenError } = await client.from("reservation_manage_tokens").insert({
+            token_hash: await sha256(token),
+            workspace_id: workspace.id,
+            booking_id: replay.id,
+            expires_at: expires.toISOString(),
+          });
+          if (tokenError) throw tokenError;
+        }
+        return { booking: mapBooking(replay), replay: true, token };
+      }
+      const { slot, status } = await choiceFor(input, publicOnly);
       const ref = randomRef();
       const rpcBooking = {
         id: input.id,
@@ -417,7 +452,10 @@ Deno.serve(async (request: Request) => {
         p_bookings: [rpcBooking],
         p_actor: publicOnly ? "WEB" : staffActor,
       });
-      if (error) throw error;
+      if (error) {
+        if (String(error.message || "").includes("slot_taken")) error.code = "slot_taken";
+        throw error;
+      }
       const data = savedRows?.[0];
       if (!data) throw new Error("Reservation write returned no booking.");
       const booking = mapBooking(data);
@@ -455,9 +493,17 @@ Deno.serve(async (request: Request) => {
         restaurantName: config.restaurantName,
         tagline: config.tagline,
         timezone: config.timezone,
-        online: { enabled: config.online?.enabled, maxPax: config.online?.maxPax, windowDays: config.online?.windowDays },
-        publicPage: config.publicPage,
-        waitlistEnabled: config.waitlist?.enabled,
+        ...(config.publicPage || {}),
+        maxPax: config.online?.maxPax,
+        minPax: config.online?.minPax,
+        leadMinutes: config.online?.leadMinutes,
+        windowDays: config.online?.windowDays,
+        autoConfirmMaxPax: config.online?.autoConfirmMaxPax,
+        whenFull: config.online?.whenFull,
+        waitlistEnabled: config.waitlist?.enabled !== false,
+        experiences: (config.experiences || [])
+          .filter((experience: any) => experience.active !== false)
+          .map(({ key, title, description, services }: any) => ({ key, title, description, services })),
       } });
     }
     if (action === "availability") {
@@ -465,6 +511,10 @@ Deno.serve(async (request: Request) => {
       const services = availability(body.date, Number(body.pax || 2), context, true)
         .map((service) => ({ service: service.service, slots: service.slots.map(({ time, ok }) => ({ time, ok })) }));
       return json(200, { ok: true, services, anyOk: services.some((service) => service.slots.some((slot) => slot.ok)) });
+    }
+    if (action === "validate") {
+      const { status } = await choiceFor({ ...body.booking, idempotencyKey: body.idempotencyKey, source: "web" }, true);
+      return json(200, { ok: true, ref: "TEST-VALID", manageUrl: null, status });
     }
     if (action === "submit") {
       const result = await createBooking({ ...body.booking, idempotencyKey: body.idempotencyKey, source: "web" }, true);
@@ -488,7 +538,13 @@ Deno.serve(async (request: Request) => {
       const managed = await resolveToken(body.token);
       if (!managed) return json(404, { ok: false, error: "expired_link" });
       const booking = managed.booking;
-      return json(200, { ok: true, booking: { ref: booking.ref, date: booking.date, service: booking.service, time: booking.time, pax: booking.pax, name: booking.name, status: booking.status } });
+      return json(200, { ok: true, booking: {
+        ref: booking.ref, date: booking.date, service: booking.service,
+        time: booking.time, pax: booking.pax, name: booking.name, status: booking.status,
+        phone: booking.phone, email: booking.email, language: booking.language,
+        experience: booking.experience, occasion: booking.occasion, notes: booking.notes,
+        allergies: booking.allergies, accessibility: booking.accessibility,
+      } });
     }
     if (action === "cancel") {
       const managed = await resolveToken(body.token);
@@ -499,6 +555,53 @@ Deno.serve(async (request: Request) => {
       await event(managed.booking.id, { actor: "WEB", event_type: "status_changed", from_status: managed.booking.status, to_status: "cancelled", reason: body.reason || "Cancelled by guest" });
       await client.from("reservation_manage_tokens").update({ revoked_at: new Date().toISOString() }).eq("token_hash", managed.hash);
       return json(200, { ok: true, status: "cancelled" });
+    }
+    if (action === "change") {
+      const managed = await resolveToken(body.token);
+      if (!managed) return json(404, { ok: false, error: "expired_link" });
+      const input = body.booking || {};
+      const idempotencyKey = String(body.idempotencyKey || "");
+      if (idempotencyKey && managed.booking.operationalData?.lastManageChangeKey === idempotencyKey) {
+        return json(200, {
+          ok: true, ref: managed.booking.ref, status: managed.booking.status,
+          manageUrl: `/book/manage/${body.token}`, replay: true,
+        });
+      }
+      const { slot } = await choiceFor(input, true, managed.booking.id);
+      const next = {
+        ...managed.booking,
+        ...input,
+        id: managed.booking.id,
+        ref: managed.booking.ref,
+        status: managed.booking.status,
+        source: "web",
+        tableLabel: slot?.tableLabel || managed.booking.tableLabel,
+        operationalData: {
+          ...(managed.booking.operationalData || {}),
+          ...(input.operationalData || {}),
+          tableGroup: slot?.tableLabel ? [slot.tableLabel] : [],
+          lastManageChangeKey: idempotencyKey || null,
+        },
+      };
+      const { data, error } = await client.rpc("save_reservation_booking_rows", {
+        p_workspace: workspace.id,
+        p_bookings: [next],
+        p_actor: "WEB",
+      });
+      if (error) throw error;
+      if (!data?.[0]) throw new Error("Reservation change returned no booking.");
+      const saved = mapBooking(data[0]);
+      await event(saved.id, {
+        actor: "WEB",
+        event_type: "booking_changed",
+        from_status: managed.booking.status,
+        to_status: saved.status,
+        reason: "Date or time changed by guest",
+      });
+      return json(200, {
+        ok: true, ref: saved.ref, status: saved.status,
+        manageUrl: `/book/manage/${body.token}`,
+      });
     }
     if (action === "staffState") {
       const context = await loadContext();
@@ -615,6 +718,18 @@ Deno.serve(async (request: Request) => {
       const booking = mapBooking(data);
       if (body.toStatus === "completed") await upsertGuest(booking);
       return json(200, { ok: true, booking });
+    }
+    if (action === "convertWaitlist") {
+      const booking = { ...(body.booking || {}), source: "waitlist" };
+      validateBooking(booking);
+      const { data, error } = await client.rpc("convert_reservation_waitlist", {
+        p_workspace: workspace.id,
+        p_waitlist: body.waitlistId,
+        p_booking: booking,
+        p_actor: staffActor,
+      });
+      if (error) throw error;
+      return json(200, { ok: true, booking: mapBooking(data) });
     }
     if (action === "addWaitlist") {
       const entry = body.entry || {};

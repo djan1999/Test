@@ -222,6 +222,7 @@ export function publicConfigOf(config) {
     minPax: normalized.online.minPax,
     leadMinutes: normalized.online.leadMinutes,
     windowDays: normalized.online.windowDays,
+    autoConfirmMaxPax: normalized.online.autoConfirmMaxPax,
     whenFull: normalized.online.whenFull,
     waitlistEnabled: normalized.waitlist.enabled !== false,
     experiences: normalized.experiences
