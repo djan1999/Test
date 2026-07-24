@@ -364,6 +364,166 @@ begin
 end
 $$;
 
+create or replace function public.save_reservation_config(
+  p_workspace uuid,
+  p_config jsonb,
+  p_changes jsonb default '[]'::jsonb,
+  p_actor text default 'LAB STAFF'
+) returns table(version integer, config jsonb)
+language plpgsql
+as $$
+declare
+  current_config jsonb;
+  current_version integer;
+  next_version integer;
+  change_item jsonb;
+begin
+  if jsonb_typeof(coalesce(p_config, '{}'::jsonb)) <> 'object' then
+    raise exception 'config_required';
+  end if;
+
+  select reservation_config.config, reservation_config.version
+  into current_config, current_version
+  from public.reservation_config
+  where workspace_id = p_workspace
+  for update;
+  if not found then raise exception 'reservation_config_not_found'; end if;
+
+  next_version := current_version + 1;
+  update public.reservation_config
+  set config = p_config,
+      version = next_version,
+      updated_at = now()
+  where workspace_id = p_workspace;
+
+  if jsonb_typeof(coalesce(p_changes, '[]'::jsonb)) = 'array'
+      and jsonb_array_length(coalesce(p_changes, '[]'::jsonb)) > 0 then
+    for change_item in
+      select value from jsonb_array_elements(p_changes) as changes_(value)
+    loop
+      insert into public.reservation_admin_audit (
+        workspace_id, actor, section, field, old_value, new_value
+      ) values (
+        p_workspace,
+        p_actor,
+        coalesce(nullif(change_item ->> 'section', ''), 'Reservations'),
+        coalesce(
+          nullif(change_item ->> 'field', ''),
+          nullif(change_item ->> 'label', ''),
+          'configuration'
+        ),
+        case
+          when change_item ? 'oldValue' then change_item -> 'oldValue'
+          when change_item ? 'old' then change_item -> 'old'
+          when change_item ? 'from' then change_item -> 'from'
+          else null
+        end,
+        case
+          when change_item ? 'newValue' then change_item -> 'newValue'
+          when change_item ? 'next' then change_item -> 'next'
+          when change_item ? 'to' then change_item -> 'to'
+          else null
+        end
+      );
+    end loop;
+  else
+    insert into public.reservation_admin_audit (
+      workspace_id, actor, section, field, old_value, new_value
+    ) values (
+      p_workspace, p_actor, 'Reservations', 'configuration',
+      current_config, p_config
+    );
+  end if;
+
+  return query select next_version, p_config;
+end
+$$;
+
+create or replace function public.save_reservation_admin_settings(
+  p_workspace uuid,
+  p_config jsonb,
+  p_services jsonb,
+  p_rules jsonb,
+  p_changes jsonb default '[]'::jsonb,
+  p_actor text default 'LAB STAFF'
+) returns table(version integer, config jsonb)
+language plpgsql
+as $$
+declare
+  service_item jsonb;
+  rule_item jsonb;
+  saved_version integer;
+  saved_config jsonb;
+begin
+  if jsonb_typeof(coalesce(p_services, '[]'::jsonb)) <> 'array' then
+    raise exception 'services_required';
+  end if;
+  if jsonb_typeof(coalesce(p_rules, '[]'::jsonb)) <> 'array' then
+    raise exception 'calendar_rules_required';
+  end if;
+
+  select result.version, result.config
+  into saved_version, saved_config
+  from public.save_reservation_config(
+    p_workspace, p_config, p_changes, p_actor
+  ) as result;
+
+  delete from public.reservation_services
+  where workspace_id = p_workspace;
+  for service_item in
+    select value from jsonb_array_elements(p_services) as services_(value)
+  loop
+    insert into public.reservation_services (
+      id, workspace_id, service, weekday, enabled,
+      first_seating, last_seating, interval_min, online_enabled,
+      walkins_enabled, min_pax, max_pax, updated_at
+    ) values (
+      coalesce(nullif(service_item ->> 'id', '')::uuid, gen_random_uuid()),
+      p_workspace,
+      service_item ->> 'service',
+      (service_item ->> 'weekday')::smallint,
+      coalesce((service_item ->> 'enabled')::boolean, true),
+      (service_item ->> 'first')::time,
+      (service_item ->> 'last')::time,
+      coalesce((service_item ->> 'interval')::integer, 30),
+      coalesce((service_item ->> 'onlineEnabled')::boolean, true),
+      coalesce((service_item ->> 'walkInsEnabled')::boolean, true),
+      nullif(service_item ->> 'minPax', '')::integer,
+      nullif(service_item ->> 'maxPax', '')::integer,
+      now()
+    );
+  end loop;
+
+  delete from public.reservation_calendar_rules
+  where workspace_id = p_workspace;
+  for rule_item in
+    select value from jsonb_array_elements(p_rules) as rules_(value)
+  loop
+    insert into public.reservation_calendar_rules (
+      id, workspace_id, date, kind, service, mode,
+      first_seating, last_seating, interval_min, online_off,
+      capacity, label, updated_at
+    ) values (
+      coalesce(nullif(rule_item ->> 'id', '')::uuid, gen_random_uuid()),
+      p_workspace,
+      (rule_item ->> 'date')::date,
+      rule_item ->> 'kind',
+      nullif(rule_item ->> 'service', ''),
+      nullif(rule_item ->> 'mode', ''),
+      nullif(rule_item ->> 'first', '')::time,
+      nullif(rule_item ->> 'last', '')::time,
+      nullif(rule_item ->> 'interval', '')::integer,
+      coalesce((rule_item ->> 'onlineOff')::boolean, false),
+      nullif(rule_item ->> 'capacity', '')::integer,
+      nullif(rule_item ->> 'label', ''),
+      now()
+    );
+  end loop;
+
+  return query select saved_version, saved_config;
+end
+$$;
+
 create or replace function public.project_reservation_booking()
 returns trigger
 language plpgsql
@@ -453,6 +613,8 @@ revoke all on function public.reservation_booking_busy_tables(uuid, date, text, 
 revoke all on function public.save_reservation_booking_rows(uuid, jsonb, text) from public, anon, authenticated;
 revoke all on function public.delete_reservation_booking(uuid, uuid, text) from public, anon, authenticated;
 revoke all on function public.swap_reservation_booking_tables(uuid, uuid, uuid, text) from public, anon, authenticated;
+revoke all on function public.save_reservation_config(uuid, jsonb, jsonb, text) from public, anon, authenticated;
+revoke all on function public.save_reservation_admin_settings(uuid, jsonb, jsonb, jsonb, jsonb, text) from public, anon, authenticated;
 
 grant execute on function public.reservation_table_label(text) to service_role;
 grant execute on function public.reservation_booking_tables_of(text, jsonb) to service_role;
@@ -462,6 +624,8 @@ grant execute on function public.reservation_booking_busy_tables(uuid, date, tex
 grant execute on function public.save_reservation_booking_rows(uuid, jsonb, text) to service_role;
 grant execute on function public.delete_reservation_booking(uuid, uuid, text) to service_role;
 grant execute on function public.swap_reservation_booking_tables(uuid, uuid, uuid, text) to service_role;
+grant execute on function public.save_reservation_config(uuid, jsonb, jsonb, text) to service_role;
+grant execute on function public.save_reservation_admin_settings(uuid, jsonb, jsonb, jsonb, jsonb, text) to service_role;
 
 alter function public.reservation_table_label(text) set search_path = '';
 alter function public.reservation_booking_tables_of(text, jsonb) set search_path = '';
@@ -471,6 +635,8 @@ alter function public.reservation_booking_busy_tables(uuid, date, text, integer,
 alter function public.save_reservation_booking_rows(uuid, jsonb, text) set search_path = '';
 alter function public.delete_reservation_booking(uuid, uuid, text) set search_path = '';
 alter function public.swap_reservation_booking_tables(uuid, uuid, uuid, text) set search_path = '';
+alter function public.save_reservation_config(uuid, jsonb, jsonb, text) set search_path = '';
+alter function public.save_reservation_admin_settings(uuid, jsonb, jsonb, jsonb, jsonb, text) set search_path = '';
 alter function public.project_reservation_booking() set search_path = '';
 
 commit;

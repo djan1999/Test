@@ -70,6 +70,9 @@ function mapService(row: Record<string, unknown>) {
     last: String(row.last_seating || "").slice(0, 5),
     interval: Number(row.interval_min),
     onlineEnabled: row.online_enabled,
+    walkInsEnabled: row.walkins_enabled !== false,
+    minPax: row.min_pax == null ? null : Number(row.min_pax),
+    maxPax: row.max_pax == null ? null : Number(row.max_pax),
   };
 }
 
@@ -110,8 +113,44 @@ function mapBooking(row: Record<string, unknown>) {
     allergies: row.allergies || [],
     accessibility: row.accessibility || [],
     consentNews: row.consent_news,
+    operationalData: row.operational_data || {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function tableLabel(value: unknown) {
+  const match = String(value || "").match(/(\d+)/);
+  return match ? `T${String(Number(match[1])).padStart(2, "0")}` : null;
+}
+
+function legacyToBooking(row: any) {
+  const data = row?.data || {};
+  const group = Array.isArray(data.tableGroup) && data.tableGroup.length
+    ? data.tableGroup
+    : (row?.table_id != null ? [row.table_id] : []);
+  const labels = group.map(tableLabel).filter(Boolean);
+  return {
+    id: row?.id,
+    date: row?.date,
+    service: data.service_session || "dinner",
+    time: data.resTime || "",
+    pax: Number(data.guests || 1),
+    status: data.booking_status || "confirmed",
+    name: data.resName || "Reservation",
+    phone: data.phone || "",
+    email: data.email || "",
+    language: data.lang || "en",
+    source: ["staff", "web", "phone", "walk_in", "waitlist"].includes(data.source) ? data.source : "staff",
+    ref: data.ref || "",
+    tableLabel: labels[0] || tableLabel(row?.table_id),
+    experience: data.experience || "",
+    occasion: data.occasion || "",
+    notes: data.notes || "",
+    allergies: Array.isArray(data.restrictions) ? data.restrictions : [],
+    accessibility: Array.isArray(data.accessibility) ? data.accessibility : [],
+    consentNews: Boolean(data.consentNews),
+    operationalData: { ...data, tableGroup: labels },
   };
 }
 
@@ -215,7 +254,9 @@ Deno.serve(async (request: Request) => {
 
     const staffActions = new Set([
       "staffState", "createBooking", "updateBooking", "transition", "addWaitlist",
-      "updateWaitlist", "saveConfig", "saveSchedule", "saveCalendarRule", "deleteCalendarRule",
+      "updateWaitlist", "saveConfig", "saveAdminSettings", "saveSchedule", "saveServices",
+      "saveCalendarRule", "saveCalendarRules", "deleteCalendarRule", "saveLegacyReservation",
+      "saveLegacyReservations", "assignTables", "swapTables", "deleteBooking",
     ]);
     if (staffActions.has(action)) {
       const code = String(request.headers.get("x-milka-lab-access") || body.accessCode || "");
@@ -296,32 +337,46 @@ Deno.serve(async (request: Request) => {
       }
       const status = input.status || (publicOnly && Number(input.pax) > Number(context.config.online?.autoConfirmMaxPax || 4) ? "pending" : "confirmed");
       const ref = randomRef();
-      const { data, error } = await client.from("reservation_bookings").insert({
-        workspace_id: workspace.id,
+      const rpcBooking = {
+        id: input.id,
         date: input.date,
         service: input.service,
-        booking_time: input.time,
+        time: input.time,
         pax: Number(input.pax),
         status,
-        guest_name: String(input.name).trim(),
+        name: String(input.name).trim(),
         phone: String(input.phone || "").trim() || null,
         email: String(input.email || "").trim().toLowerCase() || null,
         language: input.language || "en",
         source: input.source || (publicOnly ? "web" : "staff"),
         ref,
-        table_label: slot?.tableLabel || input.tableLabel || null,
+        tableLabel: publicOnly
+          ? (slot?.tableLabel || input.tableLabel || null)
+          : (input.tableLabel || slot?.tableLabel || null),
         experience: input.experience || null,
         occasion: input.occasion || null,
         notes: input.notes || null,
         allergies: Array.isArray(input.allergies) ? input.allergies : [],
         accessibility: Array.isArray(input.accessibility) ? input.accessibility : [],
-        consent_news: Boolean(input.consentNews),
-        idempotency_key: idempotencyKey,
-        created_by: publicOnly ? "WEB" : "LAB STAFF",
-      }).select("*").single();
+        consentNews: Boolean(input.consentNews),
+        idempotencyKey,
+        createdBy: publicOnly ? "WEB" : "LAB STAFF",
+        operationalData: {
+          ...(input.operationalData || {}),
+          tableGroup: input.operationalData?.tableGroup || (
+            input.tableLabel ? [input.tableLabel] : (slot?.tableLabel ? [slot.tableLabel] : [])
+          ),
+        },
+      };
+      const { data: savedRows, error } = await client.rpc("save_reservation_booking_rows", {
+        p_workspace: workspace.id,
+        p_bookings: [rpcBooking],
+        p_actor: publicOnly ? "WEB" : "LAB STAFF",
+      });
       if (error) throw error;
+      const data = savedRows?.[0];
+      if (!data) throw new Error("Reservation write returned no booking.");
       const booking = mapBooking(data);
-      await event(data.id, { actor: publicOnly ? "WEB" : "LAB STAFF", event_type: "created", to_status: status });
       await upsertGuest(booking);
       let token = null;
       if (publicOnly) {
@@ -429,17 +484,81 @@ Deno.serve(async (request: Request) => {
     if (action === "updateBooking") {
       const booking = body.booking || {};
       validateBooking(booking);
-      const { data, error } = await client.from("reservation_bookings").update({
-        date: booking.date, service: booking.service, booking_time: booking.time,
-        pax: Number(booking.pax), guest_name: booking.name, phone: booking.phone || null,
-        email: booking.email || null, language: booking.language || "en",
-        experience: booking.experience || null, occasion: booking.occasion || null,
-        notes: booking.notes || null, allergies: booking.allergies || [],
-        accessibility: booking.accessibility || [], updated_at: new Date().toISOString(),
-      }).eq("workspace_id", workspace.id).eq("id", booking.id).select("*").single();
+      const { data: current, error: currentError } = await client.from("reservation_bookings")
+        .select("*").eq("workspace_id", workspace.id).eq("id", booking.id).single();
+      if (currentError) throw currentError;
+      const merged = {
+        ...mapBooking(current),
+        ...booking,
+        id: current.id,
+        status: booking.status || current.status,
+        operationalData: {
+          ...(current.operational_data || {}),
+          ...(booking.operationalData || {}),
+        },
+      };
+      const { data: savedRows, error } = await client.rpc("save_reservation_booking_rows", {
+        p_workspace: workspace.id,
+        p_bookings: [merged],
+        p_actor: "LAB STAFF",
+      });
       if (error) throw error;
-      await event(booking.id, { actor: "LAB STAFF", event_type: "modified" });
-      return json(200, { ok: true, booking: mapBooking(data) });
+      return json(200, { ok: true, booking: mapBooking(savedRows[0]) });
+    }
+    if (action === "saveLegacyReservation" || action === "saveLegacyReservations") {
+      const rows = action === "saveLegacyReservation" ? [body.row] : body.rows;
+      if (!Array.isArray(rows) || rows.some((row) => !row)) throw new Error("Reservation rows are required.");
+      const bookings = rows.map(legacyToBooking);
+      bookings.forEach(validateBooking);
+      const { data, error } = await client.rpc("save_reservation_booking_rows", {
+        p_workspace: workspace.id,
+        p_bookings: bookings,
+        p_actor: "LAB STAFF",
+      });
+      if (error) throw error;
+      return json(200, {
+        ok: true,
+        bookings: (data || []).map(mapBooking),
+        booking: data?.[0] ? mapBooking(data[0]) : null,
+      });
+    }
+    if (action === "assignTables") {
+      const { data: current, error: currentError } = await client.from("reservation_bookings")
+        .select("*").eq("workspace_id", workspace.id).eq("id", body.bookingId).single();
+      if (currentError) throw currentError;
+      const tables = Array.isArray(body.tables) ? body.tables : [];
+      if (!tables.length) throw new Error("Choose at least one table.");
+      const booking = {
+        ...mapBooking(current),
+        tableLabel: tables[0],
+        operationalData: { ...(current.operational_data || {}), tableGroup: tables },
+      };
+      const { data, error } = await client.rpc("save_reservation_booking_rows", {
+        p_workspace: workspace.id,
+        p_bookings: [booking],
+        p_actor: "LAB STAFF",
+      });
+      if (error) throw error;
+      return json(200, { ok: true, booking: mapBooking(data[0]) });
+    }
+    if (action === "swapTables") {
+      const { data, error } = await client.rpc("swap_reservation_booking_tables", {
+        p_workspace: workspace.id,
+        p_a: body.aId,
+        p_b: body.bId,
+        p_actor: "LAB STAFF",
+      });
+      if (error) throw error;
+      return json(200, { ok: true, bookings: (data || []).map(mapBooking) });
+    }
+    if (action === "deleteBooking") {
+      const { error } = await client.rpc("delete_reservation_booking", {
+        p_workspace: workspace.id,
+        p_booking: body.bookingId,
+        p_actor: "LAB STAFF",
+      });
+      if (error) throw error;
+      return json(200, { ok: true });
     }
     if (action === "transition") {
       const { data: current, error: currentError } = await client.from("reservation_bookings").select("*").eq("workspace_id", workspace.id).eq("id", body.bookingId).single();
@@ -476,24 +595,80 @@ Deno.serve(async (request: Request) => {
     if (action === "saveConfig") {
       const { data: before, error: beforeError } = await client.from("reservation_config").select("config,version").eq("workspace_id", workspace.id).single();
       if (beforeError) throw beforeError;
-      const { error } = await client.from("reservation_config").update({ config: body.config, version: Number(before.version || 1) + 1, updated_at: new Date().toISOString() }).eq("workspace_id", workspace.id);
+      const changes = Array.isArray(body.changes) && body.changes.length
+        ? body.changes
+        : [{ section: "Reservations", field: "configuration", oldValue: before.config, newValue: body.config }];
+      const { data, error } = await client.rpc("save_reservation_config", {
+        p_workspace: workspace.id,
+        p_config: body.config,
+        p_changes: changes,
+        p_actor: "LAB STAFF",
+      });
       if (error) throw error;
-      await client.from("reservation_admin_audit").insert({ workspace_id: workspace.id, actor: "LAB STAFF", section: "Reservations", field: "configuration", old_value: before.config, new_value: body.config });
-      return json(200, { ok: true, version: Number(before.version || 1) + 1 });
+      const saved = data?.[0];
+      if (!saved) throw new Error("Reservation configuration write returned no result.");
+      return json(200, { ok: true, version: Number(saved.version), config: saved.config });
     }
-    if (action === "saveSchedule") {
-      const { error: deleteError } = await client.from("reservation_services").delete().eq("workspace_id", workspace.id);
-      if (deleteError) throw deleteError;
-      const rows = (Array.isArray(body.services) ? body.services : []).filter((row) => row.enabled).map((row) => ({
-        workspace_id: workspace.id, service: row.service, weekday: Number(row.weekday), enabled: true,
-        first_seating: row.first, last_seating: row.last, interval_min: Number(row.interval || 30),
-        online_enabled: row.onlineEnabled !== false,
-      }));
-      if (rows.length) {
-        const { error } = await client.from("reservation_services").insert(rows);
-        if (error) throw error;
+    if (action === "saveAdminSettings") {
+      const services = Array.isArray(body.services) ? body.services : body.weeklyServices;
+      const rules = Array.isArray(body.rules) ? body.rules : body.exceptions;
+      if (!body.config || !Array.isArray(services) || !Array.isArray(rules)) {
+        throw new Error("Configuration, services and calendar rules are required.");
       }
-      await client.from("reservation_admin_audit").insert({ workspace_id: workspace.id, actor: "LAB STAFF", section: "Services & Hours", field: "weekly schedule", new_value: body.services });
+      const { data, error } = await client.rpc("save_reservation_admin_settings", {
+        p_workspace: workspace.id,
+        p_config: body.config,
+        p_services: services,
+        p_rules: rules,
+        p_changes: Array.isArray(body.changes) ? body.changes : [],
+        p_actor: "LAB STAFF",
+      });
+      if (error) throw error;
+      const saved = data?.[0];
+      if (!saved) throw new Error("Reservation settings write returned no result.");
+      return json(200, { ok: true, version: Number(saved.version), config: saved.config });
+    }
+    if (action === "saveSchedule" || action === "saveServices") {
+      const context = await loadContext();
+      const rows = Array.isArray(body.services) ? body.services : [];
+      const { error } = await client.rpc("save_reservation_admin_settings", {
+        p_workspace: workspace.id,
+        p_config: context.config,
+        p_services: rows,
+        p_rules: context.exceptions,
+        p_changes: Array.isArray(body.changes) && body.changes.length
+          ? body.changes
+          : [{
+            section: "Services & Hours",
+            field: "weekly schedule",
+            oldValue: context.services,
+            newValue: rows,
+          }],
+        p_actor: "LAB STAFF",
+      });
+      if (error) throw error;
+      return json(200, { ok: true });
+    }
+    if (action === "saveCalendarRules") {
+      const rules = Array.isArray(body.rules) ? body.rules : body.exceptions;
+      if (!Array.isArray(rules)) throw new Error("Calendar rules are required.");
+      const context = await loadContext();
+      const { error } = await client.rpc("save_reservation_admin_settings", {
+        p_workspace: workspace.id,
+        p_config: context.config,
+        p_services: context.services,
+        p_rules: rules,
+        p_changes: Array.isArray(body.changes) && body.changes.length
+          ? body.changes
+          : [{
+            section: "Calendar & Closures",
+            field: "calendar rules",
+            oldValue: context.exceptions,
+            newValue: rules,
+          }],
+        p_actor: "LAB STAFF",
+      });
+      if (error) throw error;
       return json(200, { ok: true });
     }
     if (action === "saveCalendarRule") {

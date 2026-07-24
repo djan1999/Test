@@ -10,6 +10,8 @@ drop function if exists public.project_reservation_booking();
 drop function if exists public.swap_reservation_booking_tables(uuid, uuid, uuid, text);
 drop function if exists public.delete_reservation_booking(uuid, uuid, text);
 drop function if exists public.save_reservation_booking_rows(uuid, jsonb, text);
+drop function if exists public.save_reservation_admin_settings(uuid, jsonb, jsonb, jsonb, jsonb, text);
+drop function if exists public.save_reservation_config(uuid, jsonb, jsonb, text);
 drop function if exists public.reservation_booking_busy_tables(uuid, date, text, integer, uuid[]);
 drop function if exists public.reservation_booking_hold_minutes(uuid, integer);
 drop function if exists public.reservation_booking_minutes(text);

@@ -18,7 +18,13 @@ export function getAdminClient() {
   if (url.includes(PRODUCTION_PROJECT_REF)) {
     throw new Error("Reservations LAB refused to use the production Supabase project.");
   }
-  return createClient(url, requiredEnv("SUPABASE_SERVICE_KEY"), {
+  const serviceKey = String(
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+      || process.env.SUPABASE_SERVICE_KEY
+      || "",
+  ).trim();
+  if (!serviceKey) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured for the reservations LAB.");
+  return createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
@@ -66,6 +72,9 @@ export function mapService(row) {
     last: String(row.last_seating || "").slice(0, 5),
     interval: Number(row.interval_min),
     onlineEnabled: row.online_enabled,
+    walkInsEnabled: row.walkins_enabled !== false,
+    minPax: row.min_pax == null ? null : Number(row.min_pax),
+    maxPax: row.max_pax == null ? null : Number(row.max_pax),
   };
 }
 
@@ -106,6 +115,7 @@ export function mapBooking(row) {
     allergies: row.allergies || [],
     accessibility: row.accessibility || [],
     consentNews: row.consent_news,
+    operationalData: row.operational_data || {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -132,6 +142,9 @@ function bookingInsert(workspaceId, payload, extra = {}) {
     allergies: Array.isArray(payload.allergies) ? payload.allergies : [],
     accessibility: Array.isArray(payload.accessibility) ? payload.accessibility : [],
     consent_news: Boolean(payload.consentNews),
+    operational_data: payload.operationalData && typeof payload.operationalData === "object"
+      ? payload.operationalData
+      : {},
     idempotency_key: payload.idempotencyKey || null,
     created_by: payload.actor || "SYSTEM",
     ...extra,
@@ -238,9 +251,45 @@ export async function createBooking(client, workspaceId, input, { publicOnly = f
     status,
     ref,
     idempotencyKey,
-    tableLabel: slot?.tableLabel || input.tableLabel,
+    tableLabel: publicOnly
+      ? (slot?.tableLabel || input.tableLabel)
+      : (input.tableLabel || slot?.tableLabel),
+    operationalData: {
+      ...(input.operationalData || {}),
+      tableGroup: input.operationalData?.tableGroup || slot?.tables || (
+        input.tableLabel ? [input.tableLabel] : []
+      ),
+    },
   });
-  const { data, error } = await client.from("reservation_bookings").insert(record).select("*").single();
+  const rpcBooking = {
+    id: input.id,
+    date: record.date,
+    service: record.service,
+    time: input.time,
+    pax: record.pax,
+    status: record.status,
+    name: record.guest_name,
+    phone: record.phone || "",
+    email: record.email || "",
+    language: record.language,
+    source: record.source,
+    ref: record.ref,
+    tableLabel: record.table_label,
+    experience: record.experience || "",
+    occasion: record.occasion || "",
+    notes: record.notes || "",
+    allergies: record.allergies,
+    accessibility: record.accessibility,
+    consentNews: record.consent_news,
+    idempotencyKey: record.idempotency_key,
+    createdBy: record.created_by,
+    operationalData: record.operational_data,
+  };
+  const { data: savedRows, error } = await client.rpc("save_reservation_booking_rows", {
+    p_workspace: workspaceId,
+    p_bookings: [rpcBooking],
+    p_actor: input.actor || (publicOnly ? "WEB" : "LAB STAFF"),
+  });
   if (error) {
     if (error.code === "23505") {
       const { data: duplicate } = await client
@@ -253,14 +302,8 @@ export async function createBooking(client, workspaceId, input, { publicOnly = f
     }
     throw error;
   }
-  await client.from("reservation_status_events").insert({
-    workspace_id: workspaceId,
-    booking_id: data.id,
-    actor: input.actor || (publicOnly ? "WEB" : "LAB STAFF"),
-    event_type: "created",
-    to_status: status,
-    note: input.overrideReason || null,
-  });
+  const data = savedRows?.[0];
+  if (!data) throw new Error("Reservation write returned no booking.");
 
   let manageToken = null;
   if (publicOnly) {
