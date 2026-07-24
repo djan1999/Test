@@ -2,7 +2,7 @@
  * Weekly print generators for the Reservation Manager.
  * Produces two HTML documents: reservations sheet and allergy/restriction sheet.
  */
-import { getCourseMod } from "./menuUtils.js";
+import { getCourseMod, applyModOverride } from "./menuUtils.js";
 import { deriveCourseKeysFromTemplate } from "./menuLayoutProfiles.js";
 
 const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -378,7 +378,9 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
           }
         });
         [...seatGroups.values(), ...unassigned].forEach(notes => {
-          const mod = getCourseMod(course, notes);
+          // Same per-ticket override the kitchen ticket applies — the sheet
+          // must pre-fill with what the kitchen will actually cook.
+          const mod = applyModOverride(getCourseMod(course, notes), kcNote);
           if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
         });
 
@@ -567,7 +569,9 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
           });
 
           [...seatGroups.values(), ...unassignedGroups].forEach(restrKeys => {
-            const mod = getCourseMod(course, restrKeys);
+            // Per-ticket text override (edited in the ticket editor, stored on
+            // the reservation) — admin course config stays untouched.
+            const mod = applyModOverride(getCourseMod(course, restrKeys), kcNote);
             if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
           });
         }
