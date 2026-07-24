@@ -170,12 +170,20 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     });
   };
   // Per-ticket rewrite of an auto-applied restriction text, keyed by the
-  // ORIGINAL derived label. Clearing the input deletes the override so the
-  // admin-configured default comes back.
+  // ORIGINAL derived label. The bar renders pre-filled with the applied text,
+  // so an EMPTIED bar has to stay empty — deleting the key on blank made the
+  // default text spring straight back into the field mid-edit and you could
+  // never retype it. Blank is stored, and a blank override never reaches the
+  // ticket (applyModOverride ignores it), so the default still shows there.
+  // ↺ removes the key outright and restores the pre-filled default.
   const setDraftModOverride = (key, mod, text) => {
     const current = { ...(draftNotes[key]?.modOverrides || {}) };
-    if (String(text || "").trim()) current[mod] = text;
-    else delete current[mod];
+    current[mod] = text;
+    updateDraftEntry(key, { modOverrides: current });
+  };
+  const clearDraftModOverride = (key, mod) => {
+    const current = { ...(draftNotes[key]?.modOverrides || {}) };
+    delete current[mod];
     updateDraftEntry(key, { modOverrides: current });
   };
   const bumpDraftPreset = (key, text) => {
@@ -194,8 +202,24 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       return out;
     });
   };
+  // A bar emptied during the edit keeps its blank override in the DRAFT (so
+  // the field stays empty under the cursor instead of the default text
+  // springing back), but a blank is not a rewrite — it means "use the
+  // default". Strip them on the way out so nothing but real edits is stored,
+  // and an entry left with nothing disappears entirely.
   const saveDraftNotes = () => {
-    upd(table.id, "kitchenCourseNotes", draftNotes);
+    const clean = {};
+    for (const [key, entry] of Object.entries(draftNotes)) {
+      const next = { ...entry };
+      if (next.modOverrides) {
+        const kept = Object.fromEntries(
+          Object.entries(next.modOverrides).filter(([, text]) => String(text || "").trim()));
+        if (Object.keys(kept).length) next.modOverrides = kept;
+        else delete next.modOverrides;
+      }
+      if (next.name || next.note || next.presets || next.modOverrides) clean[key] = next;
+    }
+    upd(table.id, "kitchenCourseNotes", clean);
     setShowEdit(false);
   };
   const cancelDraftNotes = () => {
@@ -817,8 +841,17 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const restrModBase = (editable && showEdit)
             ? courseRestrictionModCounts(course, seats, restrictions)
             : null;
+          const restrModEntries = Object.entries(restrModBase || {});
+          // A course with no restriction of its own still needs somewhere to
+          // put a free note; so does one that already carries a note from
+          // before the fields merged (or it would be stranded, unreadable and
+          // uneditable, on the reservation).
+          const showPlainNote = (editable && showEdit)
+            && (restrModEntries.length === 0 || !!draftEntry.note);
           const chips = (editable && showEdit) ? (quickNotes[key] || []) : [];
-          const draftHasAny = draftEntry.name || draftEntry.note || Object.keys(draftPresets).length > 0 || Object.keys(draftOverrides).length > 0;
+          const draftHasAny = draftEntry.name || draftEntry.note
+            || Object.keys(draftPresets).length > 0
+            || Object.values(draftOverrides).some(v => String(v || "").trim());
 
           return (
             <div key={key} style={{
@@ -887,47 +920,44 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               </div>
               {editable && showEdit && (
                 <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} style={{ padding: "0 10px 8px 28px", display: "flex", flexDirection: "column", gap: 5, background: draftHasAny ? tokens.red.bg : "transparent" }}>
-                  <input
-                    value={draftEntry.name || ""}
-                    onChange={e => updateDraftEntry(key, { name: e.target.value })}
-                    placeholder={`Rename "${baseName}"…`}
-                    style={{ fontFamily: FONT, fontSize: "10px", padding: "8px 7px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
-                  />
-                  <input
-                    value={draftEntry.note || ""}
-                    onChange={e => updateDraftEntry(key, { note: e.target.value })}
-                    placeholder="Note (e.g. No Ricotta)…"
-                    style={{ fontFamily: FONT, fontSize: "10px", padding: "8px 7px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
-                  />
-                  {restrModBase && Object.keys(restrModBase).length > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <div style={{ fontFamily: FONT, fontSize: "7px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.red.text }}>
-                        RESTRICTION TEXT · THIS TICKET ONLY
+                  {/* ONE bar per line the ticket shows. The applied
+                      restriction text is WRITTEN IN, not dangled as a
+                      placeholder, so staff extend what the kitchen already
+                      reads instead of retyping it from memory. ↺ restores the
+                      admin-configured default. A course carrying no
+                      restriction gets a plain note bar in its place — the
+                      separate note field and the dish-rename field are gone. */}
+                  {restrModEntries.map(([mod, count]) => {
+                    const draft = draftOverrides[mod];
+                    const touched = typeof draft === "string";
+                    return (
+                      <div key={mod} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, color: tokens.red.text, flexShrink: 0 }}>{count}×</span>
+                        <input
+                          value={touched ? draft : mod}
+                          onChange={e => setDraftModOverride(key, mod, e.target.value)}
+                          placeholder={mod}
+                          aria-label={`Restriction text for ${mod}`}
+                          style={{ fontFamily: FONT, fontSize: "10px", padding: "8px 7px", border: `1px solid ${touched && draft.trim() ? tokens.red.border : tokens.ink[4]}`, borderRadius: 0, flex: 1, minWidth: 0, boxSizing: "border-box", background: touched && draft.trim() ? tokens.red.bg : tokens.neutral[0] }}
+                        />
+                        {touched && (
+                          <button
+                            onPointerDown={e => e.stopPropagation()}
+                            onClick={e => { e.stopPropagation(); clearDraftModOverride(key, mod); }}
+                            aria-label={`Reset restriction text for ${mod}`}
+                            title="Reset to default"
+                            style={{ fontFamily: FONT, fontSize: "10px", padding: 0, width: 30, height: 30, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation", flexShrink: 0 }}>↺</button>
+                        )}
                       </div>
-                      {Object.entries(restrModBase).map(([mod, count]) => {
-                        const overridden = typeof draftOverrides[mod] === "string" && draftOverrides[mod].trim();
-                        return (
-                          <div key={mod} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                            <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, color: tokens.red.text, flexShrink: 0 }}>{count}×</span>
-                            <input
-                              value={draftOverrides[mod] ?? ""}
-                              onChange={e => setDraftModOverride(key, mod, e.target.value)}
-                              placeholder={mod}
-                              aria-label={`Restriction text for ${mod}`}
-                              style={{ fontFamily: FONT, fontSize: "10px", padding: "8px 7px", border: `1px solid ${overridden ? tokens.red.border : tokens.ink[4]}`, borderRadius: 0, flex: 1, minWidth: 0, boxSizing: "border-box", background: overridden ? tokens.red.bg : tokens.neutral[0] }}
-                            />
-                            {overridden && (
-                              <button
-                                onPointerDown={e => e.stopPropagation()}
-                                onClick={e => { e.stopPropagation(); setDraftModOverride(key, mod, ""); }}
-                                aria-label={`Reset restriction text for ${mod}`}
-                                title="Reset to default"
-                                style={{ fontFamily: FONT, fontSize: "10px", padding: 0, width: 30, height: 30, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation", flexShrink: 0 }}>↺</button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                    );
+                  })}
+                  {showPlainNote && (
+                    <input
+                      value={draftEntry.note || ""}
+                      onChange={e => updateDraftEntry(key, { note: e.target.value })}
+                      placeholder="Note (e.g. No Ricotta)…"
+                      style={{ fontFamily: FONT, fontSize: "10px", padding: "8px 7px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
+                    />
                   )}
                   {chips.length > 0 && (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>

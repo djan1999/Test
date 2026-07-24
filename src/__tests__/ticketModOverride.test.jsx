@@ -67,8 +67,10 @@ describe("KitchenTicket — per-ticket restriction text override", () => {
     );
     fireEvent.click(screen.getByText("✏ EDIT"));
     const input = screen.getByLabelText("Restriction text for CHARRED CUCUMBER");
-    // The default text sits in the placeholder so staff see what they're replacing.
+    // The applied text is written INTO the bar (and mirrored in the
+    // placeholder) so staff extend what the kitchen already reads.
     expect(input.placeholder).toBe("CHARRED CUCUMBER");
+    expect(input.value).toBe("CHARRED CUCUMBER");
     fireEvent.change(input, { target: { value: "CHARRED CUCUMBER, NO CREAM" } });
     fireEvent.click(screen.getByText("SAVE"));
 
@@ -135,5 +137,64 @@ describe("generateKitchenTicketsHTML — per-ticket restriction text override", 
     const html = generateKitchenTicketsHTML([resv()], [danube]);
     expect(html).toContain("charred cucumber");
     expect(html).not.toContain("kohlrabi");
+  });
+});
+
+// ── One bar per line: note and restriction text merged ───────────────────────
+// The editor used to stack three fields per course — rename the dish, a free
+// note, and (after #129) a separate restriction-text row. Per Djan the rename
+// isn't needed and the note duplicated the restriction bar, so a course now
+// gets ONE bar per line the ticket shows, pre-filled with the applied text.
+
+const plain = { ...danube, course_key: "brioche", menu: { name: "BRIOCHE", sub: "" }, restrictions: {} };
+
+describe("KitchenTicket editor — merged note/restriction bar", () => {
+  it("has no dish-rename field any more", () => {
+    render(<KitchenTicket table={makeTable()} menuCourses={[danube]} upd={vi.fn()} editable />);
+    fireEvent.click(screen.getByText("✏ EDIT"));
+    expect(screen.queryByPlaceholderText(/^Rename /)).toBeNull();
+  });
+
+  it("shows no separate note bar on a course that carries a restriction", () => {
+    render(<KitchenTicket table={makeTable()} menuCourses={[danube]} upd={vi.fn()} editable />);
+    fireEvent.click(screen.getByText("✏ EDIT"));
+    // Only the restriction bar — the note field is the same bar now.
+    expect(screen.queryByPlaceholderText(/^Note \(/)).toBeNull();
+    expect(screen.getByLabelText("Restriction text for CHARRED CUCUMBER")).toBeTruthy();
+  });
+
+  it("falls back to a plain note bar on a course with no restriction", () => {
+    const table = { ...makeTable(), restrictions: [] };
+    render(<KitchenTicket table={table} menuCourses={[plain]} upd={vi.fn()} editable />);
+    fireEvent.click(screen.getByText("✏ EDIT"));
+    expect(screen.getByPlaceholderText(/^Note \(/)).toBeTruthy();
+  });
+
+  it("an emptied bar STAYS empty instead of the default springing back", () => {
+    render(<KitchenTicket table={makeTable()} menuCourses={[danube]} upd={vi.fn()} editable />);
+    fireEvent.click(screen.getByText("✏ EDIT"));
+    const input = screen.getByLabelText("Restriction text for CHARRED CUCUMBER");
+    fireEvent.change(input, { target: { value: "" } });
+    // Deleting the key on blank re-rendered the default into the field and
+    // made it impossible to retype.
+    expect(screen.getByLabelText("Restriction text for CHARRED CUCUMBER").value).toBe("");
+  });
+
+  it("a blank bar is not a rewrite — nothing is stored and the default stands", () => {
+    const upd = vi.fn();
+    render(<KitchenTicket table={makeTable()} menuCourses={[danube]} upd={upd} editable />);
+    fireEvent.click(screen.getByText("✏ EDIT"));
+    fireEvent.change(screen.getByLabelText("Restriction text for CHARRED CUCUMBER"), { target: { value: "   " } });
+    fireEvent.click(screen.getByText("SAVE"));
+    expect(upd).toHaveBeenCalledWith(1, "kitchenCourseNotes", {});
+  });
+
+  it("an existing note stays editable even once the course has a restriction", () => {
+    // Otherwise a note written before the fields merged would be stranded on
+    // the reservation: visible on the ticket, reachable nowhere.
+    const table = makeTable({ kitchenCourseNotes: { danube: { note: "no chives" } } });
+    render(<KitchenTicket table={table} menuCourses={[danube]} upd={vi.fn()} editable />);
+    fireEvent.click(screen.getByText("✏ EDIT"));
+    expect(screen.getByPlaceholderText(/^Note \(/).value).toBe("no chives");
   });
 });

@@ -118,13 +118,15 @@ describe("ResvForm — per-guest restrictions", () => {
     return onSave.mock.calls[0][0];
   };
 
-  it("restrictions tapped in a row land on the SAME guest", async () => {
+  it("naming a guest first lands the restrictions on that ONE person", async () => {
     const onSave = openForm();
+    fireEvent.click(screen.getByText("+ Guest"));   // deliberate: "these are one person"
     fireEvent.click(screen.getByText(/No Pork/));
     fireEvent.click(screen.getByText(/No Alcohol/));
     const saved = await save(onSave);
     const restr = saved.data.restrictions;
     expect(restr.map(r => r.note).sort()).toEqual(["no_alcohol", "no_pork"]);
+    expect(restr[0].guest).toBeTruthy();
     expect(restr[0].guest).toBe(restr[1].guest);
   });
 
@@ -149,7 +151,7 @@ describe("ResvForm — per-guest restrictions", () => {
     expect(saved.data.restrictions).toEqual([]);
   });
 
-  it("existing entries keep counting as one guest each", async () => {
+  it("existing entries load untouched — no invented attribution", async () => {
     const onSave = vi.fn(async () => {});
     render(
       <ResvForm
@@ -163,7 +165,20 @@ describe("ResvForm — per-guest restrictions", () => {
     );
     const saved = await save(onSave);
     const restr = saved.data.restrictions;
-    expect(restr).toHaveLength(2);
-    expect(restr[0].guest).not.toBe(restr[1].guest);
+    // Two loose entries stay two unattributed covers. Stamping guest ids on
+    // load would claim knowledge the booking never had.
+    expect(restr).toEqual([{ pos: null, note: "veg" }, { pos: null, note: "veg" }]);
+  });
+
+  it("restrictions default to unattributed — one cover each until a guest is named", async () => {
+    const onSave = openForm();
+    fireEvent.click(screen.getByText(/No Pork/));
+    fireEvent.click(screen.getByText(/No Alcohol/));
+    const saved = await save(onSave);
+    // No guest was named, so neither entry claims to be the same person.
+    expect(saved.data.restrictions).toEqual([
+      { pos: null, note: "no_pork" },
+      { pos: null, note: "no_alcohol" },
+    ]);
   });
 });

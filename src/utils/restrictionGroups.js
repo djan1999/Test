@@ -62,26 +62,13 @@ export function nextGuestId(restrictions = []) {
   return `g${max + 1}`;
 }
 
-/**
- * Stamp a guest id onto every unassigned entry that lacks one.
- *
- * Reservations written before grouping existed treated each entry as its own
- * person, so each gets its OWN id — counts stay exactly as they are today and
- * staff can merge them by hand. Seat-pinned entries are left alone: `pos`
- * already identifies the person.
- */
-export function withGuestIds(restrictions = []) {
-  const used = new Set((restrictions || []).map((r) => r?.guest).filter(Boolean));
-  let n = 0;
-  const mint = () => {
-    let id;
-    do { id = `g${++n}`; } while (used.has(id));
-    used.add(id);
-    return id;
-  };
-  return (restrictions || []).map((r) =>
-    (r && r.note && !r.guest && r.pos == null) ? { ...r, guest: mint() } : r);
-}
+// There is deliberately NO helper that stamps guest ids onto existing
+// entries. An entry without one means "we don't know whose this is yet" —
+// which is the normal state when a booking is taken — and inventing ids on
+// load would turn that honest unknown into a claim that every restriction
+// belongs to a different named person (or, worse, all to the same one).
+// Attribution is only ever an explicit act: naming a guest in the form, or
+// pinning the restriction to a seat during service.
 
 /** All restriction keys carried by one person's group. */
 export const groupNotes = (group) => (group?.notes || []).filter(Boolean);
