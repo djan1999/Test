@@ -4,7 +4,7 @@ import { useModalEscape } from "../../hooks/useModalEscape.js";
 import { RESTRICTIONS, RESTRICTION_GROUPS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, circleButton as mixinCircleButton } from "../../styles/mixins.js";
-import { groupRestrictionsByGuest, nextGuestId, withGuestIds } from "../../utils/restrictionGroups.js";
+import { groupRestrictionsByGuest, nextGuestId } from "../../utils/restrictionGroups.js";
 
 const FONT = tokens.font;
 const baseInp = { ...baseInput };
@@ -41,15 +41,13 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
       : (table.room ? [table.room] : [])
   );
   const [birthday, setBirthday]   = useState(table.birthday || false);
-  // Restrictions belong to PEOPLE — see restrictionGroups.js. Entries already
-  // pinned to a chair keep their seat as the grouping key; the rest get a
-  // guest id so one cover's restrictions travel (and print) together.
-  const [restrictions, setRestrictions] = useState(() => withGuestIds(table.restrictions || []));
-  const [activeGuest, setActiveGuest] = useState(() => {
-    const groups = groupRestrictionsByGuest(withGuestIds(table.restrictions || []));
-    const last = groups[groups.length - 1];
-    return last?.guest || "g1";
-  });
+  // Restrictions belong to PEOPLE — see restrictionGroups.js. Entries pinned
+  // to a chair use the seat as the grouping key. The rest start UNATTRIBUTED
+  // (activeGuest null): mid-service you often know the table has an allergy
+  // long before you know whose it is, so each stands alone as its own cover
+  // until someone names a guest or pins it to a seat.
+  const [restrictions, setRestrictions] = useState(() => table.restrictions || []);
+  const [activeGuest, setActiveGuest] = useState(null);
   const [notes, setNotes]         = useState(table.notes || "");
   const [lang, setLang]           = useState(table.lang || "en");
 
@@ -57,14 +55,17 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
 
   const guestGroups = groupRestrictionsByGuest(restrictions);
   const guestIds = guestGroups.map(g => g.guest).filter(Boolean);
-  const shownGuestIds = guestIds.includes(activeGuest) ? guestIds : [...guestIds, activeGuest];
+  const shownGuestIds = (activeGuest && !guestIds.includes(activeGuest))
+    ? [...guestIds, activeGuest] : guestIds;
   const guestNumber = (id) => shownGuestIds.indexOf(id) + 1;
-  const notesForGuest = (id) => guestGroups.find(g => g.guest === id)?.notes || [];
+  const notesForGuest = (id) => (id
+    ? (guestGroups.find(g => g.guest === id)?.notes || [])
+    : guestGroups.filter(g => !g.guest && g.pos == null).flatMap(g => g.notes));
   const toggleRestriction = (key) => {
     setRestrictions(rs => {
       const idx = rs.findIndex(r => r.note === key && (r.guest || null) === activeGuest && r.pos == null);
       if (idx >= 0) return rs.filter((_, i) => i !== idx);
-      return [...rs, { pos: null, note: key, guest: activeGuest }];
+      return [...rs, { pos: null, note: key, ...(activeGuest ? { guest: activeGuest } : {}) }];
     });
   };
   const addGuest = () => setActiveGuest(nextGuestId([...restrictions, { guest: activeGuest }]));
@@ -280,11 +281,26 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
           <div>
             <div style={{ ...fieldLabel, marginBottom: 12 }}>⚠️ Restrictions</div>
 
-            {/* Guest selector — everything tapped below belongs to this person,
-                so the ticket reads "1× NO PORK, ALCOHOL" for one cover instead
-                of a separate 1× line per restriction. */}
+            {/* Guest selector. "?" is the default — restrictions you can't yet
+                attribute each stand alone as their own cover. Naming a guest
+                says "these are one person", and the ticket then reads
+                "1× NO PORK, ALCOHOL" on a single line. */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 14 }}>
               <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", flexShrink: 0 }}>Guest</span>
+              {(() => {
+                const active = activeGuest === null;
+                const count = notesForGuest(null).length;
+                return (
+                  <button onClick={() => setActiveGuest(null)} title="Don't know who yet — each restriction counts as its own guest" style={{
+                    fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "8px 11px",
+                    borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
+                    border: `1px ${active ? "solid" : "dashed"} ${active ? tokens.charcoal.default : tokens.neutral[200]}`,
+                    background: active ? tokens.charcoal.default : tokens.neutral[50],
+                    color: active ? tokens.neutral[0] : tokens.text.muted,
+                    fontWeight: active ? 600 : 400,
+                  }}>?{count > 0 ? ` · ${count}` : ""}</button>
+                );
+              })()}
               {shownGuestIds.map(id => {
                 const active = id === activeGuest;
                 const count = notesForGuest(id).length;
@@ -354,11 +370,11 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 7 }}>
                 {guestGroups.map(g => (
                   <div key={g.key} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                    <button onClick={() => g.guest && setActiveGuest(g.guest)} style={{
+                    <button onClick={() => setActiveGuest(g.guest || null)} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 1, textTransform: "uppercase",
                       color: tokens.text.disabled, background: "none", border: "none", padding: 0,
                       cursor: "pointer", flexShrink: 0, minWidth: 52, textAlign: "left",
-                    }}>{g.pos != null ? `P${g.pos}` : `Guest ${guestNumber(g.guest)}`}</button>
+                    }}>{g.pos != null ? `P${g.pos}` : g.guest ? `Guest ${guestNumber(g.guest)}` : "?"}</button>
                     {g.entries.map((r, i) => {
                       const def = RESTRICTIONS.find(x => x.key === r.note);
                       const label = def ? `${def.emoji} ${def.label}` : r.note;

@@ -11,7 +11,6 @@ import {
   groupRestrictionsByGuest,
   guestKeyOf,
   nextGuestId,
-  withGuestIds,
 } from "../utils/restrictionGroups.js";
 import { getVisibleCoursesForTable } from "../utils/courseProgress.js";
 
@@ -194,15 +193,12 @@ describe("restriction guest grouping", () => {
     expect(groupRestrictionsByGuest([{ pos: null, note: "" }, null])).toEqual([]);
   });
 
-  it("gives every ungrouped legacy entry its own guest id — counts unchanged", () => {
-    const migrated = withGuestIds([{ pos: null, note: "veg" }, { pos: null, note: "veg" }]);
-    expect(migrated[0].guest).not.toBe(migrated[1].guest);
-    expect(groupRestrictionsByGuest(migrated)).toHaveLength(2);
-  });
-
-  it("leaves seat-pinned entries alone — the chair already identifies the guest", () => {
-    const migrated = withGuestIds([{ pos: 2, note: "veg" }]);
-    expect(migrated[0].guest).toBeUndefined();
+  it("keeps unattributed entries apart — one unknown guest each", () => {
+    // No guest id means "we don't know whose this is". Two loose entries are
+    // two prospective covers until someone says otherwise.
+    const groups = groupRestrictionsByGuest([{ pos: null, note: "veg" }, { pos: null, note: "veg" }]);
+    expect(groups).toHaveLength(2);
+    expect(groups.every(g => g.guest === null)).toBe(true);
   });
 
   it("mints ids that do not collide with existing ones", () => {

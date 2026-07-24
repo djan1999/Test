@@ -311,7 +311,15 @@ describe("app harness — kitchen board through the real App", () => {
     // fire alone (Amuse) would not have moved anyone: the flag did it.
   }, 25000);
 
-  it("a flagged fire never yanks a SECOND-LEG terrace party back in — they are physically outside (15.07)", async () => {
+  // REVERSED 24.07 per Djan: "when crayfish is fired, it needs to clear the
+  // table which they sat on in the terrace." The fire is the signal that the
+  // guests are at their dining table, so it ends EVERY terrace leg, not just
+  // the first. The old rule (below, now inverted) skipped a party that had
+  // already come in once — their tile stayed occupied for the rest of service
+  // unless someone cleared it by hand. Cost of the reversal, accepted: a
+  // party genuinely still sitting outside when the course fires has their
+  // terrace table freed and offered to the ASSIGN PARTY picker.
+  it("a flagged fire ends a SECOND-LEG terrace stay too — the terrace table frees", async () => {
     const now = new Date().toISOString();
     seedService({ id: SVC, date: TODAY(), session: "dinner", startedAt: now });
     // Bruno already dined INSIDE (table 2 is seated, moved_at from the first
@@ -341,10 +349,14 @@ describe("app harness — kitchen board through the real App", () => {
     await waitFor(() => {
       expect(rowFor(remoteRows("service_tables"), 2)?.data?.kitchenLog?.crayfish?.firedAt).toBeTruthy();
     }, { timeout: 5000 });
-    // …but Bruno STAYS outside: auto-freeing the terrace table he is sitting
-    // at would hand it to the ASSIGN PARTY picker (double-book hazard).
-    expect(resRow("res-bruno")?.data?.visit_state).toBe("terrace");
-    expect(resRow("res-bruno")?.data?.terrace_table).toBe("T23");
+    // …and T23 is released. Terrace occupancy derives from visit_state, so
+    // leaving 'terrace' IS the table clearing; it goes straight to 'dining'
+    // (not 'arriving') because their dining table is already seated, and the
+    // arrival time is not re-stamped.
+    await waitFor(() => {
+      expect(resRow("res-bruno")?.data?.visit_state).toBe("dining");
+    }, { timeout: 5000 });
+    expect(rowFor(remoteRows("service_tables"), 2)?.data?.arrivedAt).toBe("19:07");
   }, 25000);
 
   it("a stale SET banner (course key no longer on the menu) self-heals on the kitchen board", async () => {
