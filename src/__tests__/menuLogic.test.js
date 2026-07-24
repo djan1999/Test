@@ -436,3 +436,51 @@ describe("restriction key-space tolerance", () => {
     expect(keys.indexOf("vegan")).toBeLessThan(keys.indexOf("veg"));
   });
 });
+
+// ── Per-ticket restriction-text overrides ─────────────────────────────────────
+// Staff can rewrite the auto-applied substitution text for ONE reservation
+// from the ticket editor. Overrides key by the ORIGINAL derived label in
+// kitchenCourseNotes[courseKey].modOverrides — the admin course config is
+// never mutated.
+
+import { applyModOverride, overrideModCounts } from "../utils/menuUtils.js";
+
+describe("applyModOverride / overrideModCounts", () => {
+  it("returns the derived label untouched when there is no override", () => {
+    expect(applyModOverride("CHARRED CUCUMBER", undefined)).toBe("CHARRED CUCUMBER");
+    expect(applyModOverride("CHARRED CUCUMBER", {})).toBe("CHARRED CUCUMBER");
+    expect(applyModOverride("CHARRED CUCUMBER", { modOverrides: {} })).toBe("CHARRED CUCUMBER");
+  });
+
+  it("rewrites the label when an override matches the derived text", () => {
+    const kcNote = { modOverrides: { "CHARRED CUCUMBER": "Charred cucumber, no cream" } };
+    expect(applyModOverride("CHARRED CUCUMBER", kcNote)).toBe("Charred cucumber, no cream");
+  });
+
+  it("an override for a STALE label no longer matches once admin changes the variant", () => {
+    // Admin renamed the veg variant → the derived label changes → the old
+    // override must stop applying so the new default resurfaces.
+    const kcNote = { modOverrides: { "CHARRED CUCUMBER": "extra sauce" } };
+    expect(applyModOverride("GRILLED LEEK", kcNote)).toBe("GRILLED LEEK");
+  });
+
+  it("blank/whitespace override values fall back to the derived label", () => {
+    expect(applyModOverride("CELERIAC", { modOverrides: { CELERIAC: "   " } })).toBe("CELERIAC");
+  });
+
+  it("null mod passes through (no crash on courses without a mod)", () => {
+    expect(applyModOverride(null, { modOverrides: { X: "Y" } })).toBeNull();
+  });
+
+  it("overrideModCounts remaps counts and merges collisions", () => {
+    const counts = { CELERIAC: 1, "GF BREAD": 2 };
+    const kcNote = { modOverrides: { CELERIAC: "SPECIAL PLATE", "GF BREAD": "SPECIAL PLATE" } };
+    expect(overrideModCounts(counts, kcNote)).toEqual({ "SPECIAL PLATE": 3 });
+  });
+
+  it("overrideModCounts is identity for null counts and missing overrides", () => {
+    expect(overrideModCounts(null, { modOverrides: { A: "B" } })).toBeNull();
+    const counts = { CELERIAC: 1 };
+    expect(overrideModCounts(counts, {})).toBe(counts);
+  });
+});

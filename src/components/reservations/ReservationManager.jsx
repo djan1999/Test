@@ -3,7 +3,7 @@ import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML, generateKitc
 import { readWeeklySheetEdits, writeWeeklySheetEdits } from "../../utils/storage.js";
 import { deriveCourseKeysFromTemplate } from "../../utils/menuLayoutProfiles.js";
 import { blankTable, makeSeats } from "../../utils/tableHelpers.js";
-import { getCourseMod } from "../../utils/menuUtils.js";
+import { getCourseMod, applyModOverride } from "../../utils/menuUtils.js";
 import { groupRestrictionsByGuest } from "../../utils/restrictionGroups.js";
 import { RESTRICTIONS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
@@ -163,9 +163,11 @@ function allergyBaseCell(course, resv) {
     const modCounts = {};
     // One group per GUEST: restrictions on the same chair (pos), or sharing a
     // guest id before seats are assigned, resolve into one combined
-    // substitute — the same line the kitchen ticket prints.
+    // substitute — the same line the kitchen ticket prints. The per-ticket
+    // text override then wins, so the sheet pre-fills with what the kitchen
+    // actually shows for this reservation.
     groupRestrictionsByGuest(restrictions).forEach(group => {
-      const mod = getCourseMod(course, group.notes);
+      const mod = applyModOverride(getCourseMod(course, group.notes), kcNote);
       if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
     });
     if (Object.keys(modCounts).length > 0)

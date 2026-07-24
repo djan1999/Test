@@ -2,7 +2,7 @@
  * Weekly print generators for the Reservation Manager.
  * Produces two HTML documents: reservations sheet and allergy/restriction sheet.
  */
-import { getCourseMod } from "./menuUtils.js";
+import { getCourseMod, applyModOverride } from "./menuUtils.js";
 import { groupRestrictionsByGuest } from "./restrictionGroups.js";
 import { deriveCourseKeysFromTemplate } from "./menuLayoutProfiles.js";
 
@@ -369,9 +369,10 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
         const modCounts = {};
         // One entry per PERSON — grouped by chair when seated, by guest id
         // before that — so a guest with two restrictions prints one combined
-        // line, exactly as the kitchen ticket shows it.
+        // line, exactly as the kitchen ticket shows it. The per-ticket text
+        // override still wins over the derived label.
         groupRestrictionsByGuest(restrictions).forEach(group => {
-          const mod = getCourseMod(course, group.notes);
+          const mod = applyModOverride(getCourseMod(course, group.notes), kcNote);
           if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
         });
 
@@ -547,8 +548,10 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
         const modCounts = {};
         if (!isCelebration && restrictions.length > 0) {
           // Per person, not per restriction — same grouping the ticket uses.
+          // The per-ticket text override (edited in the ticket editor, stored
+          // on the reservation) still wins; admin course config is untouched.
           groupRestrictionsByGuest(restrictions).forEach(group => {
-            const mod = getCourseMod(course, group.notes);
+            const mod = applyModOverride(getCourseMod(course, group.notes), kcNote);
             if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
           });
         }

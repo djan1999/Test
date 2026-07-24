@@ -388,6 +388,38 @@ export function getCourseMod(course, restrKeys) {
   return combineCourseMods(courseModList(course, restrKeys));
 }
 
+/**
+ * Per-ticket override of a restriction-derived mod label. Staff can rewrite
+ * the auto-applied substitution text ("CHARRED CUCUMBER" → "CHARRED CUCUMBER,
+ * NO CREAM") for ONE reservation/table from the ticket editor. Overrides live
+ * in kitchenCourseNotes[courseKey].modOverrides, keyed by the ORIGINAL derived
+ * label — the admin course config is never touched, and if admin later changes
+ * the variant text the stale override simply stops matching and the new
+ * default resurfaces instead of being silently shadowed.
+ */
+export function applyModOverride(mod, kcNote) {
+  if (!mod) return mod;
+  const overrides = kcNote?.modOverrides;
+  const hit = overrides && typeof overrides === "object" ? overrides[mod] : null;
+  return typeof hit === "string" && hit.trim() ? hit.trim() : mod;
+}
+
+/**
+ * Map a { [mod]: count } object through applyModOverride, merging counts when
+ * two different derived mods are overridden to the same text.
+ */
+export function overrideModCounts(counts, kcNote) {
+  if (!counts) return counts;
+  const overrides = kcNote?.modOverrides;
+  if (!overrides || typeof overrides !== "object") return counts;
+  const out = {};
+  for (const [mod, count] of Object.entries(counts)) {
+    const label = applyModOverride(mod, kcNote);
+    out[label] = (out[label] || 0) + count;
+  }
+  return out;
+}
+
 export const RESTRICTION_KEYS = DIETARY_KEYS;
 
 // Restriction entries with no `pos` (null/undefined) are treated as table-wide:

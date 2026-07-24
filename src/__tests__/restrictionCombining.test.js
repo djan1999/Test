@@ -5,6 +5,7 @@ import {
   combineCourseMods,
   getCourseMod,
   courseRestrictionModCounts,
+  overrideModCounts,
 } from "../utils/menuUtils.js";
 import {
   groupRestrictionsByGuest,
@@ -134,6 +135,38 @@ describe("courseRestrictionModCounts groups per PERSON", () => {
     const restrictions = [{ pos: null, note: "shellfish" }, { pos: null, note: "no_pork" }];
     expect(courseRestrictionModCounts(squash, seats, restrictions))
       .toEqual({ "NO CRAYFISH": 1, "NO CRACKLINGS": 1 });
+  });
+});
+
+// Per-ticket mod overrides (#129) are keyed by the DERIVED label, and
+// combining changes what that label is. These pin how the two compose.
+describe("combined mods and per-ticket text overrides", () => {
+  const seats = [{ id: 1 }, { id: 2 }];
+  const restrictions = [
+    { pos: 1, note: "shellfish" },
+    { pos: 1, note: "no_pork" },
+  ];
+
+  it("an override on the COMBINED label rewrites the line", () => {
+    const counts = courseRestrictionModCounts(squash, seats, restrictions);
+    expect(counts).toEqual({ "NO CRAYFISH, CRACKLINGS": 1 });
+    const kcNote = { modOverrides: { "NO CRAYFISH, CRACKLINGS": "PLAIN SQUASH ONLY" } };
+    expect(overrideModCounts(counts, kcNote)).toEqual({ "PLAIN SQUASH ONLY": 1 });
+  });
+
+  it("an override keyed to one restriction's old label falls back to the default", () => {
+    // #129's documented behaviour when the derived text moves on: the stale
+    // override stops matching and the current default resurfaces, rather than
+    // silently shadowing it.
+    const counts = courseRestrictionModCounts(squash, seats, restrictions);
+    const stale = { modOverrides: { "NO CRAYFISH": "SOMETHING OLD" } };
+    expect(overrideModCounts(counts, stale)).toEqual({ "NO CRAYFISH, CRACKLINGS": 1 });
+  });
+
+  it("a single-restriction guest's override is untouched by combining", () => {
+    const counts = courseRestrictionModCounts(squash, seats, [{ pos: 1, note: "shellfish" }]);
+    const kcNote = { modOverrides: { "NO CRAYFISH": "NO CRAYFISH, EXTRA LEMON" } };
+    expect(overrideModCounts(counts, kcNote)).toEqual({ "NO CRAYFISH, EXTRA LEMON": 1 });
   });
 });
 
