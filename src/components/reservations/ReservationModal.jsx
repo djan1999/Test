@@ -4,6 +4,7 @@ import { useModalEscape } from "../../hooks/useModalEscape.js";
 import { RESTRICTIONS, RESTRICTION_GROUPS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, circleButton as mixinCircleButton } from "../../styles/mixins.js";
+import { groupRestrictionsByGuest, nextGuestId, withGuestIds } from "../../utils/restrictionGroups.js";
 
 const FONT = tokens.font;
 const baseInp = { ...baseInput };
@@ -40,11 +41,33 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
       : (table.room ? [table.room] : [])
   );
   const [birthday, setBirthday]   = useState(table.birthday || false);
-  const [restrictions, setRestrictions] = useState(table.restrictions || []);
+  // Restrictions belong to PEOPLE — see restrictionGroups.js. Entries already
+  // pinned to a chair keep their seat as the grouping key; the rest get a
+  // guest id so one cover's restrictions travel (and print) together.
+  const [restrictions, setRestrictions] = useState(() => withGuestIds(table.restrictions || []));
+  const [activeGuest, setActiveGuest] = useState(() => {
+    const groups = groupRestrictionsByGuest(withGuestIds(table.restrictions || []));
+    const last = groups[groups.length - 1];
+    return last?.guest || "g1";
+  });
   const [notes, setNotes]         = useState(table.notes || "");
   const [lang, setLang]           = useState(table.lang || "en");
 
   useModalEscape(onClose);
+
+  const guestGroups = groupRestrictionsByGuest(restrictions);
+  const guestIds = guestGroups.map(g => g.guest).filter(Boolean);
+  const shownGuestIds = guestIds.includes(activeGuest) ? guestIds : [...guestIds, activeGuest];
+  const guestNumber = (id) => shownGuestIds.indexOf(id) + 1;
+  const notesForGuest = (id) => guestGroups.find(g => g.guest === id)?.notes || [];
+  const toggleRestriction = (key) => {
+    setRestrictions(rs => {
+      const idx = rs.findIndex(r => r.note === key && (r.guest || null) === activeGuest && r.pos == null);
+      if (idx >= 0) return rs.filter((_, i) => i !== idx);
+      return [...rs, { pos: null, note: key, guest: activeGuest }];
+    });
+  };
+  const addGuest = () => setActiveGuest(nextGuestId([...restrictions, { guest: activeGuest }]));
 
   return (
     <div style={{
@@ -257,26 +280,55 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
           <div>
             <div style={{ ...fieldLabel, marginBottom: 12 }}>⚠️ Restrictions</div>
 
-            {/* Chip picker — each click adds one entry (multiple seats can share same restriction) */}
+            {/* Guest selector — everything tapped below belongs to this person,
+                so the ticket reads "1× NO PORK, ALCOHOL" for one cover instead
+                of a separate 1× line per restriction. */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 14 }}>
+              <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", flexShrink: 0 }}>Guest</span>
+              {shownGuestIds.map(id => {
+                const active = id === activeGuest;
+                const count = notesForGuest(id).length;
+                return (
+                  <button key={id} onClick={() => setActiveGuest(id)} style={{
+                    fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "8px 11px",
+                    borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
+                    border: `1px solid ${active ? tokens.charcoal.default : tokens.neutral[200]}`,
+                    background: active ? tokens.charcoal.default : tokens.neutral[50],
+                    color: active ? tokens.neutral[0] : tokens.text.muted,
+                    fontWeight: active ? 600 : 400,
+                  }}>{guestNumber(id)}{count > 0 ? ` · ${count}` : ""}</button>
+                );
+              })}
+              <button onClick={addGuest} style={{
+                fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "8px 11px",
+                borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
+                border: `1px dashed ${tokens.neutral[200]}`, background: tokens.neutral[0], color: tokens.text.muted,
+              }}>+ Guest</button>
+            </div>
+
+            {/* Chip picker — taps toggle the restriction for the active guest */}
             {Object.entries(RESTRICTION_GROUPS).map(([group, groupLabel]) => {
               const groupItems = RESTRICTIONS.filter(r => r.group === group);
+              const mine = new Set(notesForGuest(activeGuest));
               return (
                 <div key={group} style={{ marginBottom: 14 }}>
                   <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 7 }}>{groupLabel}</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {groupItems.map(opt => {
-                      const count = restrictions.filter(r => r.note === opt.key).length;
-                      const active = count > 0;
+                      // Badge counts PEOPLE carrying it; the fill shows whether
+                      // the guest being edited does.
+                      const count = guestGroups.filter(g => g.notes.includes(opt.key)).length;
+                      const on = mine.has(opt.key);
                       return (
                         <button key={opt.key}
-                          onClick={() => setRestrictions(rs => [...rs, { pos: null, note: opt.key }])}
+                          onClick={() => toggleRestriction(opt.key)}
                           style={{
                             fontFamily: FONT, fontSize: 10, letterSpacing: 0.5,
                             padding: "10px 11px", borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
-                            border: `1px solid ${active ? tokens.red.border : tokens.neutral[200]}`,
-                            background: active ? tokens.red.bg : tokens.neutral[50],
-                            color: active ? tokens.red.text : tokens.text.muted,
-                            fontWeight: active ? 600 : 400,
+                            border: `1px solid ${on || count > 0 ? tokens.red.border : tokens.neutral[200]}`,
+                            background: on ? tokens.red.bg : tokens.neutral[50],
+                            color: on || count > 0 ? tokens.red.text : tokens.text.muted,
+                            fontWeight: on ? 600 : 400,
                             transition: "all 0.1s",
                             position: "relative",
                           }}>
@@ -297,29 +349,38 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
               );
             })}
 
-            {/* Active restrictions — just chips, seat assigned later in service */}
-            {restrictions.length > 0 && (
-              <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {restrictions.map((r, i) => {
-                  const def = RESTRICTIONS.find(x => x.key === r.note);
-                  const label = def ? `${def.emoji} ${def.label}` : r.note;
-                  return (
-                    <div key={i} style={{
-                      display: "flex", alignItems: "center", gap: 6,
-                      padding: "5px 10px", background: tokens.red.bg,
-                      border: `1px solid ${tokens.red.border}`, borderRadius: 0,
-                    }}>
-                      <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.red.text, fontWeight: 500 }}>{label}</span>
-                      <button onClick={() => setRestrictions(rs => rs.filter((_, idx) => idx !== i))}
-                        style={{ background: "none", border: "none", color: tokens.red.border, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0, width: 32, height: 32, display: "inline-flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation", flexShrink: 0 }}>×</button>
-                    </div>
-                  );
-                })}
+            {/* One row per guest — what the kitchen reads as one cover */}
+            {guestGroups.length > 0 && (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 7 }}>
+                {guestGroups.map(g => (
+                  <div key={g.key} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <button onClick={() => g.guest && setActiveGuest(g.guest)} style={{
+                      fontFamily: FONT, fontSize: 9, letterSpacing: 1, textTransform: "uppercase",
+                      color: tokens.text.disabled, background: "none", border: "none", padding: 0,
+                      cursor: "pointer", flexShrink: 0, minWidth: 52, textAlign: "left",
+                    }}>{g.pos != null ? `P${g.pos}` : `Guest ${guestNumber(g.guest)}`}</button>
+                    {g.entries.map((r, i) => {
+                      const def = RESTRICTIONS.find(x => x.key === r.note);
+                      const label = def ? `${def.emoji} ${def.label}` : r.note;
+                      return (
+                        <div key={`${r.note}-${i}`} style={{
+                          display: "flex", alignItems: "center", gap: 6,
+                          padding: "5px 10px", background: tokens.red.bg,
+                          border: `1px solid ${tokens.red.border}`, borderRadius: 0,
+                        }}>
+                          <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.red.text, fontWeight: 500 }}>{label}</span>
+                          <button onClick={() => setRestrictions(rs => rs.filter(x => x !== r))} aria-label={`Remove ${label}`}
+                            style={{ background: "none", border: "none", color: tokens.red.border, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0, width: 32, height: 32, display: "inline-flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation", flexShrink: 0 }}>×</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             )}
             {restrictions.length > 0 && (
               <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.text.disabled, marginTop: 8, letterSpacing: 0.5 }}>
-                Assign to seats when guests are seated
+                Assign to seats when guests are seated — a guest's restrictions move together
               </div>
             )}
           </div>

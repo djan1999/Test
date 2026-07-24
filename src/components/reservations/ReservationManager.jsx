@@ -4,6 +4,7 @@ import { readWeeklySheetEdits, writeWeeklySheetEdits } from "../../utils/storage
 import { deriveCourseKeysFromTemplate } from "../../utils/menuLayoutProfiles.js";
 import { blankTable, makeSeats } from "../../utils/tableHelpers.js";
 import { getCourseMod } from "../../utils/menuUtils.js";
+import { groupRestrictionsByGuest } from "../../utils/restrictionGroups.js";
 import { RESTRICTIONS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as fieldLabelMixin, circleButton } from "../../styles/mixins.js";
@@ -160,22 +161,11 @@ function allergyBaseCell(course, resv) {
   if (kcNote?.name || kcNote?.note) return [kcNote.name, kcNote.note].filter(Boolean).join("\n");
   if (restrictions.length > 0) {
     const modCounts = {};
-    // Each restriction entry represents one guest. Restrictions explicitly
-    // assigned to the same seat (pos > 0) are grouped so the resolver can
-    // produce a combined substitute. Unassigned (pos null) are each one guest.
-    const seatGroups = new Map();
-    const unassigned = [];
-    restrictions.forEach(rs => {
-      if (rs.pos) {
-        const arr = seatGroups.get(rs.pos) || [];
-        arr.push(rs.note);
-        seatGroups.set(rs.pos, arr);
-      } else {
-        unassigned.push([rs.note]);
-      }
-    });
-    [...seatGroups.values(), ...unassigned].forEach(notes => {
-      const mod = getCourseMod(course, notes);
+    // One group per GUEST: restrictions on the same chair (pos), or sharing a
+    // guest id before seats are assigned, resolve into one combined
+    // substitute — the same line the kitchen ticket prints.
+    groupRestrictionsByGuest(restrictions).forEach(group => {
+      const mod = getCourseMod(course, group.notes);
       if (mod) modCounts[mod] = (modCounts[mod] || 0) + 1;
     });
     if (Object.keys(modCounts).length > 0)
