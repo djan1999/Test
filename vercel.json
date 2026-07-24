@@ -4,6 +4,22 @@
     {
       "source": "/platform-onboarding",
       "destination": "/index.html"
+    },
+    {
+      "source": "/reservations",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/reservations/admin",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/book",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/book/manage/:token",
+      "destination": "/index.html"
     }
   ]
 }

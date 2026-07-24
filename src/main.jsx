@@ -69,6 +69,12 @@ const routePath = window.location.pathname.replace(/\/+$/, '') || '/';
 const onboardingRequested = routePath === '/platform-onboarding';
 const onboardingEnabled = import.meta.env.VITE_ENABLE_MANAGED_ONBOARDING === 'true';
 const ManagedOnboardingApp = React.lazy(() => import('./components/onboarding/ManagedOnboardingApp.jsx'));
+const reservationsRequested = routePath === '/reservations'
+  || routePath === '/reservations/admin'
+  || routePath === '/book'
+  || routePath.startsWith('/book/manage/');
+const reservationsEnabled = import.meta.env.VITE_RESERVATIONS_V2_ENABLED === 'true';
+const ReservationsLabApp = React.lazy(() => import('./reservations-lab/ReservationsLabApp.jsx'));
 
 function DisabledOnboarding() {
   return (
@@ -91,7 +97,11 @@ function LoadingOnboarding() {
   );
 }
 
-const rootContent = onboardingRequested
+const rootContent = reservationsRequested
+  ? (reservationsEnabled
+      ? <Suspense fallback={<LoadingOnboarding />}><ReservationsLabApp routePath={routePath} /></Suspense>
+      : <DisabledOnboarding />)
+  : onboardingRequested
   ? (onboardingEnabled
       ? <Suspense fallback={<LoadingOnboarding />}><ManagedOnboardingApp /></Suspense>
       : <DisabledOnboarding />)
