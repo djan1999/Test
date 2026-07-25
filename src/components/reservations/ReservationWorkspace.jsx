@@ -540,13 +540,27 @@ function DayBook({ shown, counts, seatings, filter, onFilter, config, bookings, 
 
   return (
     <>
+      {/* Five tiles across three phone columns used to leave the sixth cell
+          empty inside the box's own border, and every tile drew its right and
+          bottom rule even against that border — a hollow cell ringed by
+          doubled lines. The last tile now closes the row, and a tile only
+          rules where another tile actually follows it. */}
       <div style={{ ...box, display: "grid", gridTemplateColumns: compact ? "repeat(3, 1fr)" : "repeat(auto-fit, minmax(104px, 1fr))", marginBottom: 12 }}>
-        {stats.map(([key, value]) => (
-          <div key={key} style={{ padding: "9px 12px", borderRight: `1px solid ${tokens.ink[5]}`, borderBottom: compact ? `1px solid ${tokens.ink[5]}` : "none" }}>
-            <div style={{ ...label9, fontSize: 8 }}>{key}</div>
-            <div style={{ fontSize: compact ? 16 : 18, fontWeight: 500, marginTop: 3 }}>{value}</div>
-          </div>
-        ))}
+        {stats.map(([key, value], index) => {
+          const last = index === stats.length - 1;
+          const endsRow = compact ? (last || index % 3 === 2) : last;
+          return (
+            <div key={key} style={{
+              padding: "9px 12px",
+              gridColumn: compact && last ? `span ${stats.length % 3 === 0 ? 1 : 3 - ((stats.length - 1) % 3)}` : undefined,
+              borderRight: endsRow ? "none" : `1px solid ${tokens.ink[5]}`,
+              borderBottom: compact && index < stats.length - 1 - ((stats.length - 1) % 3) ? `1px solid ${tokens.ink[5]}` : "none",
+            }}>
+              <div style={{ ...label9, fontSize: 8 }}>{key}</div>
+              <div style={{ fontSize: compact ? 16 : 18, fontWeight: 500, marginTop: 3 }}>{value}</div>
+            </div>
+          );
+        })}
       </div>
 
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 12 }}>
@@ -630,9 +644,18 @@ function BookingRow({ booking, narrow, onEdit, onAssign, onStatus, onGuest, onDe
         <button type="button" style={{ ...quiet, fontWeight: 700 }} onClick={() => onAssign(booking)}>
           {seated.length ? seated.join("+") : "Assign table"}
         </button>
-        {narrow ? null : (
-          <button type="button" style={{ ...quiet, marginLeft: 4 }} onClick={() => onDetail(booking)} title="Full record and history">Record</button>
-        )}
+        {/* Record stays on every width. Cancelling with a reason, marking a
+            no-show and reading the status history all live behind it, and the
+            name beside it opens the guest, not the booking — so hiding it on a
+            phone left a host with no way to reach any of them. */}
+        <button
+          type="button"
+          style={narrow ? quiet : { ...quiet, marginLeft: 4 }}
+          onClick={() => onDetail(booking)}
+          title="Full record and history"
+        >
+          Record
+        </button>
         {narrow ? (
           <>
             {booking.status === "pending" ? <button type="button" style={strong} onClick={() => onStatus(booking, "confirmed")}>Confirm</button> : null}
