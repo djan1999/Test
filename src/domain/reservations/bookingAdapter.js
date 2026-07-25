@@ -15,6 +15,25 @@ function normalizeSource(value) {
   return ALLOWED_SOURCES.has(source) ? source : "staff";
 }
 
+// Web bookings carry allergies as bare strings (the public form splits one
+// free-text field), while every legacy consumer — ResvForm, the kitchen ticket,
+// the weekly sheets — reads a restriction as { pos, note }. Shape the strings
+// here; an entry that is already an object is passed through by reference, so
+// a course position (and anything else the object carries) survives the edit
+// round trip untouched.
+function normalizeRestrictions(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((item) => (item && typeof item === "object") || String(item ?? "").trim())
+    .map((item) => (item && typeof item === "object" ? item : { pos: null, note: String(item).trim() }));
+}
+
+// The reservation model speaks the config's language codes ("sl"), the whole
+// legacy stack keys off "si". This adapter is the only crossing point, so the
+// translation lives here rather than in either vocabulary.
+const toLegacyLang = (value) => (String(value || "").toLowerCase() === "sl" ? "si" : (value || "en"));
+const toBookingLang = (value) => (String(value || "").toLowerCase() === "si" ? "sl" : (value || "en"));
+
 function tableIdsFromBooking(booking) {
   const operational = booking?.operationalData || {};
   const group = Array.isArray(operational.tableGroup) ? operational.tableGroup : [];
@@ -29,9 +48,9 @@ export function bookingToLegacyReservation(booking) {
     ? booking.operationalData
     : {};
   const tableGroup = tableIdsFromBooking(booking);
-  const restrictions = Array.isArray(operational.restrictions)
-    ? operational.restrictions
-    : (Array.isArray(booking?.allergies) ? booking.allergies : []);
+  const restrictions = normalizeRestrictions(
+    Array.isArray(operational.restrictions) ? operational.restrictions : booking?.allergies,
+  );
   return {
     id: booking.id,
     date: booking.date,
@@ -45,7 +64,7 @@ export function bookingToLegacyReservation(booking) {
       resName: booking.name || "",
       resTime: booking.time || "",
       guests: Number(booking.pax || 0),
-      lang: booking.language || "en",
+      lang: toLegacyLang(booking.language),
       phone: booking.phone || "",
       email: booking.email || "",
       source: normalizeSource(booking.source),
@@ -80,7 +99,7 @@ export function legacyReservationToBooking(row, existing = {}) {
     name: data.resName || existing.name || "Reservation",
     phone: data.phone ?? existing.phone ?? "",
     email: data.email ?? existing.email ?? "",
-    language: data.lang || existing.language || "en",
+    language: toBookingLang(data.lang || existing.language),
     source,
     ref: data.ref || existing.ref || "",
     tableLabel: tableLabels[0] || tableIdToLabel(row?.table_id) || existing.tableLabel || null,

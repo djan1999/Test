@@ -145,7 +145,7 @@ export function normalizeReservationConfig(value) {
     walkIns: mergeSection(base.walkIns, input.walkIns),
     // A saved empty list is a real choice (no joinable tables, no experiences
     // offered) for arrays the restaurant curates; only a MISSING key falls back.
-    tables: Array.isArray(input.tables) && input.tables.length ? input.tables : base.tables,
+    tables: Array.isArray(input.tables) ? input.tables : base.tables,
     combos: Array.isArray(input.combos) ? input.combos : base.combos,
     experiences: Array.isArray(input.experiences) ? input.experiences : base.experiences,
     team: Array.isArray(input.team) ? input.team : base.team,
