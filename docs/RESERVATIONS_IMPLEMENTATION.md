@@ -37,7 +37,90 @@ The LAB deliberately uses `reservation_bookings`, not the existing operational
 Service board even if a future developer accidentally points a Service reader
 at the same staging workspace.
 
-The future `serviceBridge` remains unimplemented and OFF.
+### The three connections to Service
+
+The bridge to Service is no longer a single future switch. It is three separate
+connections with three different safety profiles, each behind its own flag and
+each off by default. Turning one on never requires or affects another; all three
+additionally require `VITE_RESERVATIONS_V2_ENABLED`.
+
+**Loop 1 — reservations → Service** (`VITE_RESERVATIONS_LOOP1_ENABLED`).
+`src/domain/reservations/serviceProjection.js` projects bookings into the legacy
+row shape the board reads. Forward only. A booking with no row is added; a
+booking whose row exists has only its *reservation-owned* fields refreshed, with
+every service-owned key (`visit_state`, `terrace_table`, `terrace_map_id`,
+`moved_at`, `clearedFromBoard`) carried over byte-for-byte. A row Service made
+itself is returned untouched. A cancellation withdraws a party from the board
+unless they are already on the terrace or dining, in which case the live row
+stays — it is the only record that they are here. An unchanged poll returns the
+caller's own array by reference, so the board↔reservations reconcile never sees a
+change that did not happen.
+
+The reader (`components/reservations/useServiceReservationFeed.js`) is a
+once-a-minute poll, deliberately not a subscription: a live channel could put a
+reservation write inside the service transaction, which is the coupling this
+boundary exists to prevent.
+
+**Loop 2 — Service → guest history** (`VITE_RESERVATIONS_LOOP2_ENABLED`).
+`src/domain/reservations/guestHistory.js` reads the archive that has just been
+filed and produces one visit per party that actually sat: table, covers, menu,
+courses fired, restrictions as they stood at the pass. A table templated and
+never used produces nothing — a no-show is not a visit. A joined party is one
+visit, not one per table. The fold is idempotent on (party, service instance),
+so re-archiving a service replaces its own row rather than giving a guest a
+dinner they never ate. It runs after the board is clear, unawaited: guest
+history is never worth holding up the end of a service. Stored in
+`reservation_guests.visits`; the server action is `recordVisits`.
+
+**Loop 3 — dining room → reservations** (`VITE_RESERVATIONS_LOOP3_ENABLED`).
+`src/domain/reservations/tableImport.js` reads the active floor plan **once, on
+request**, from Admin › Reservations › Tables. Seats come from the map's own
+geometry; a floor merge becomes a joinable *pair*, not a table that only exists
+when the room is rearranged; anything it cannot import honestly is skipped and
+named. It shows what would change before applying, and applies only to the draft
+— the manager still saves. The floor plan is never written, and availability
+never reads it.
+
+Guardrails that must survive: reservation writes never touch `service_tables`,
+`service_settings`, floor maps, courses or the service clock; Loop 2 runs after
+service end, from the archive, and is idempotent; Loop 3 is a copy, never a live
+dependency.
+
+## One copy of every rule
+
+Three rule sets were once written twice — in `src/domain/reservations/` for the
+app and the Vercel route, and again by hand inside the Supabase edge function.
+They had already drifted: the edge copy of the availability engine knew nothing
+about joinable tables and read a joined party as holding only its first table,
+which would have handed the second to the next booking.
+
+There is now one copy of each, and the edge function imports it:
+
+| Rule set | Source | Entry point |
+| --- | --- | --- |
+| Availability | `domain/reservations/availability.js` | `availabilityForRequest()` |
+| Payload limits | `domain/reservations/validation.js` | `validateBookingPayload()`, `validateWaitlistEntry()` |
+| Lifecycle | `domain/reservations/lifecycle.js` | `assertReservationTransition()` |
+
+The Supabase bundler cannot reach `../../src`, so `npm run sync:edge-domain`
+copies the domain modules into `supabase/functions/_shared/reservations/`.
+`src/__tests__/edgeDomainSync.test.js` fails the suite if the copies drift, so a
+rule cannot be changed on one server and not the other.
+
+## What a stranger may write
+
+`/book` and the waitlist are unauthenticated. Every guest-supplied string is
+bounded by `domain/reservations/validation.js` — name 120, telephone 40, email
+200 and it must look like an address, note 1000, forty dietary entries of 200
+characters each. It refuses rather than truncates, and names the field it is
+refusing. The public form carries the same numbers as `maxLength` so a guest is
+stopped as they type.
+
+The manage link is a random 24-byte token stored only as a SHA-256 hash. It is
+also the *only* way to exclude a booking from an availability listing — the
+route derives the exclusion from the token and never accepts a raw booking id,
+so nobody can free a table they do not hold. Its expiry moves with the booking,
+so a guest who changes to a later date keeps their link.
 
 ## Current functional scope
 
@@ -55,6 +138,11 @@ The future `serviceBridge` remains unimplemented and OFF.
 - Admin includes weekly schedules, booking limits, exceptions, privacy and
   audit history.
 - Guest manage links use random tokens stored only as SHA-256 hashes.
+- The public page says which kind of "no" a closed time is — "no table of the
+  right size" rather than a bare "Full" — naming a capacity or a table size,
+  never another guest.
 
-Email, SMS, deposits, PowerSync and the Service bridge are intentionally not
-connected in the LAB.
+Email, SMS, deposits and PowerSync are intentionally not connected in the LAB.
+The three Service connections above are implemented but ship dark: every flag
+defaults to false, and with all three off no reservation code runs during a
+service, exactly as before.
