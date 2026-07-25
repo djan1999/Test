@@ -1,90 +1,70 @@
-// PublicBookingPage — the guest-facing half of the reservation system (/book).
+// PublicBookingPage — the guest half of the reservation system, for /book.
 //
-// Presentation only: every decision comes from the server through the handlers
-// passed in as props (Codex's reservationClient). This component never computes
-// availability, never writes storage, and knows nothing of the legacy
-// `reservations` shape — reservation_bookings is the canonical source behind the
-// API it calls.
+// Mobile-first, one question per screen: party and day → a time that is
+// genuinely available → experience → who you are → allergies and access →
+// review with the conditions and consent → confirmation with a reference and a
+// private manage link.
 //
-// Mobile-first: one question per screen, 44 px minimum targets, no horizontal
-// scroll at 320 px. It reads as the restaurant's own page, not a booking widget.
+// Presentation only. It computes no availability of its own: every time shown
+// comes back from the server, and the submit re-validates against the freshest
+// state. No table inventory, pacing number, other guest or staff field ever
+// reaches this page.
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 
 const FONT = tokens.font;
-const STEPS = ["when", "time", "experience", "you", "needs", "confirm"];
 
-const page = {
-  minHeight: "100vh", background: tokens.tint.parchment, color: tokens.ink[0],
-  fontFamily: FONT, display: "flex", justifyContent: "center",
-  padding: "18px 14px 56px", boxSizing: "border-box",
-};
-const sheet = { width: "100%", maxWidth: 440 };
-const card = { background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}`, padding: "16px 16px 18px" };
-const eyebrow = { fontSize: 8, letterSpacing: 3, textTransform: "uppercase", color: tokens.ink[3] };
-const heading = { fontSize: 17, fontWeight: 500, lineHeight: 1.35, margin: "6px 0 4px", color: tokens.ink[0] };
-const body = { fontSize: 11, lineHeight: 1.75, color: tokens.ink[2] };
-const primary = {
-  width: "100%", minHeight: 48, fontFamily: FONT, fontSize: 10, letterSpacing: 2.4,
-  textTransform: "uppercase", fontWeight: 600, cursor: "pointer", borderRadius: 0,
-  border: `1px solid ${tokens.charcoal.default}`, background: tokens.charcoal.default, color: tokens.neutral[0],
-};
-const secondary = { ...primary, background: tokens.neutral[0], color: tokens.ink[0] };
-const option = (active, disabled) => ({
-  minHeight: 46, fontFamily: FONT, fontSize: 12, cursor: disabled ? "not-allowed" : "pointer",
-  borderRadius: 0, padding: "10px 12px", textAlign: "left",
-  border: `1px solid ${active ? tokens.green.border : tokens.ink[4]}`,
-  background: active ? tokens.green.bg : tokens.neutral[0],
-  color: disabled ? tokens.ink[4] : active ? tokens.green.text : tokens.ink[0],
-  fontWeight: active ? 600 : 400,
-});
-const field = {
-  width: "100%", boxSizing: "border-box", minHeight: 46, fontFamily: FONT,
-  fontSize: tokens.mobileInputSize, padding: "11px 12px", borderRadius: 0,
-  border: `1px solid ${tokens.ink[4]}`, outline: "none", background: tokens.neutral[0], color: tokens.ink[1],
-};
-const labelStyle = { ...eyebrow, display: "block", marginBottom: 6 };
-const errorBox = {
-  fontSize: 11, lineHeight: 1.7, color: tokens.red.text, background: tokens.red.bg,
-  border: `1px solid ${tokens.red.border}`, padding: "9px 11px", marginBottom: 14,
-};
+const ACCESS_OPTIONS = ["Step-free access", "Wheelchair space at the table", "Assistance dog", "High chair"];
+const OCCASIONS = ["Birthday", "Anniversary", "Celebration"];
+const WINDOWS = ["Lunch", "Early dinner", "Late dinner", "Any time"];
+const STEPS = ["date", "time", "details", "prefs", "review"];
+const STEP_LABELS = ["Date", "Time", "Details", "Preferences", "Review"];
 
-const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const pad = (value) => String(value).padStart(2, "0");
-const isoOf = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-const shiftISO = (iso, days) => { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + days); return isoOf(d); };
-const readable = (iso) => {
+const DOW = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const MON = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+const pad = (n) => String(n).padStart(2, "0");
+const isoOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const fmtDate = (iso) => {
   const d = new Date(`${iso}T12:00:00`);
-  return `${DAY_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
 };
-// The restaurant's calendar day, not the guest's. A diner browsing from another
-// timezone must start on the same day the server anchors availability to, or the
-// first (pre-selected) date is one the server already treats as past.
-const todayIn = (timezone) => {
-  try {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone || "Europe/Ljubljana", year: "numeric", month: "2-digit", day: "2-digit",
-    }).format(new Date());
-  } catch { return isoOf(new Date()); }
-};
-const daysBetween = (fromISO, toISO) => Math.round(
-  (new Date(`${toISO}T12:00:00`) - new Date(`${fromISO}T12:00:00`)) / 86400000,
-);
-// The day strip is paged rather than rendered whole: a 365-day window must be
-// reachable without three hundred buttons on a phone.
-const PAGE_DAYS = 21;
 
-/**
- * @param {object}   publicConfig   guest-safe configuration from the server
- * @param {Function} loadAvailability (date, pax) => Promise<{ services: [...] }>
- * @param {Function} submitBooking    (booking, idempotencyKey) => Promise<{ ref, manageUrl, status }>
- * @param {Function} joinWaitlist     (entry) => Promise
- * @param {boolean}  testMode         validates for real, creates nothing
- * @param {string}   startDate        optional ISO date to open on
- * @param {object}   initialBooking   server-validated booking when changing a manage link
- */
+const page = { minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, color: tokens.ink[1], display: "flex", flexDirection: "column", alignItems: "center" };
+const column = { width: "100%", maxWidth: 480, padding: "30px 20px 70px", boxSizing: "border-box" };
+const eyebrow = { fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3] };
+const bigInput = { fontSize: 16, border: `1px solid ${tokens.ink[4]}`, padding: 12, outline: "none", width: "100%", boxSizing: "border-box", background: tokens.neutral[0], color: tokens.ink[1], fontFamily: FONT, borderRadius: 0 };
+const primary = { width: "100%", minHeight: 48, marginTop: 24, border: `1px solid ${tokens.charcoal.default}`, background: tokens.charcoal.default, color: tokens.neutral[0], fontSize: 10, letterSpacing: "0.16em", fontWeight: 600, textTransform: "uppercase", cursor: "pointer", fontFamily: FONT, borderRadius: 0 };
+const secondary = { ...primary, background: tokens.neutral[0], color: tokens.ink[1], border: `1px solid ${tokens.ink[3]}` };
+const errorText = { fontSize: 9, color: tokens.red.text, marginTop: 4, minHeight: 12 };
+
+function chip(on, opts = {}) {
+  return {
+    fontSize: opts.fs || 10,
+    letterSpacing: "0.06em",
+    padding: opts.pad || "11px 13px",
+    minHeight: 44,
+    border: `1px solid ${on ? tokens.charcoal.default : tokens.ink[4]}`,
+    background: on ? tokens.tint.parchment : tokens.neutral[0],
+    color: on ? tokens.ink[0] : tokens.ink[2],
+    fontWeight: on ? 600 : 400,
+    cursor: "pointer",
+    fontFamily: FONT,
+    boxSizing: "border-box",
+    borderRadius: 0,
+  };
+}
+
+/** Policies arrive as a string or a list; render either as separate lines. */
+const policyLines = (policies) => {
+  if (Array.isArray(policies)) return policies.filter(Boolean);
+  return String(policies || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+};
+
 export default function PublicBookingPage({
   publicConfig,
   loadAvailability,
@@ -95,513 +75,825 @@ export default function PublicBookingPage({
   initialBooking,
 }) {
   const config = publicConfig || {};
-  const restaurantName = config.restaurantName || "Restaurant";
   const maxPax = Number(config.maxPax || 6);
   const minPax = Number(config.minPax || 1);
-  const windowDays = Number(config.windowDays || 90);
-  const experiences = config.experiences || [];
-  const policies = useMemo(() => (
-    Array.isArray(config.policies) ? config.policies : String(config.policies || "").split("\n").filter(Boolean)
-  ), [config.policies]);
+  const windowDays = Number(config.windowDays || 60);
+  const languages = config.languages?.length ? config.languages : ["en", "sl"];
+  const experiences = useMemo(() => config.experiences || [], [config.experiences]);
 
-  const today = useMemo(() => todayIn(config.timezone), [config.timezone]);
-  const [step, setStep] = useState("when");
-  const [date, setDate] = useState(startDate || initialBooking?.date || today);
-  // Open on the page holding the day we were handed — a manage-link change can
-  // point deep into the window.
-  const [dayPage, setDayPage] = useState(() => Math.max(0, Math.floor(daysBetween(today, date) / PAGE_DAYS)));
-  const [pax, setPax] = useState(Number(initialBooking?.pax || 2));
-  const [availability, setAvailability] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [choice, setChoice] = useState(null);          // { time, service }
-  const [experience, setExperience] = useState(initialBooking?.experience || experiences[0]?.key || "");
-  const [guest, setGuest] = useState({
+  const [step, setStep] = useState("date");
+  const [guest, setGuest] = useState(() => ({
+    date: initialBooking?.date || startDate || isoOf(new Date()),
+    pax: Number(initialBooking?.pax || 2),
+    time: "",
+    service: "",
+    experience: initialBooking?.experience || "",
     name: initialBooking?.name || "",
-    phone: initialBooking?.phone || "",
     email: initialBooking?.email || "",
-    language: initialBooking?.language || (config.languages || ["en"])[0],
-  });
-  const [needs, setNeeds] = useState({
-    allergies: Array.isArray(initialBooking?.allergies) ? initialBooking.allergies.join(", ") : initialBooking?.allergies || "",
-    accessibility: Array.isArray(initialBooking?.accessibility) ? initialBooking.accessibility.join(", ") : initialBooking?.accessibility || "",
+    phone: initialBooking?.phone || "",
+    language: initialBooking?.language || languages[0] || "en",
+    allergies: initialBooking?.allergies || [],
+    accessibility: initialBooking?.accessibility || [],
     occasion: initialBooking?.occasion || "",
     notes: initialBooking?.notes || "",
-  });
-  const [consent, setConsent] = useState(false);
-  const [news, setNews] = useState(false);
-  const [error, setError] = useState("");
-  const [done, setDone] = useState(null);
-  const [waitlistSent, setWaitlistSent] = useState(false);
-  // One key per attempt at THIS booking: a double tap or a retry after a dropped
-  // connection can never produce two reservations.
-  const [submitKey] = useState(() => `book-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    consent: false,
+    news: false,
+  }));
+  const [errors, setErrors] = useState({});
+  const [services, setServices] = useState(null);
+  const [loadingTimes, setLoadingTimes] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState("");
+  const [takenNotice, setTakenNotice] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(null);
+  const [waitlist, setWaitlist] = useState({ name: "", phone: "", email: "", window: "" });
+  const [waitlistErrors, setWaitlistErrors] = useState({});
+  const [waitlistDone, setWaitlistDone] = useState(null);
+
+  const patch = (next) => setGuest((current) => ({ ...current, ...next }));
 
   const dates = useMemo(() => {
-    const first = dayPage * PAGE_DAYS;
-    const count = Math.max(0, Math.min(PAGE_DAYS, windowDays - first));
-    return Array.from({ length: count }, (_, index) => shiftISO(today, first + index));
-  }, [today, windowDays, dayPage]);
-  const morePages = (dayPage + 1) * PAGE_DAYS < windowDays;
-  // "Show our phone number" is an explicit admin choice: on a full day it must
-  // replace the waitlist form, not sit next to it.
-  // A closed online diary offers the telephone, never a waitlist form: taking
-  // details online is exactly what the restaurant has just switched off.
-  const offerWaitlist = config.onlineEnabled !== false
-    && config.whenFull !== "phone" && config.waitlistEnabled !== false && Boolean(joinWaitlist);
+    const base = new Date(`${startDate || isoOf(new Date())}T12:00:00`);
+    return Array.from({ length: Math.min(14, Math.max(1, windowDays)) }, (_, index) => {
+      const d = new Date(base);
+      d.setDate(base.getDate() + index);
+      return { iso: isoOf(d), dow: DOW[d.getDay()], dd: String(d.getDate()) };
+    });
+  }, [startDate, windowDays]);
 
-  useEffect(() => {
-    if (step !== "time" || !loadAvailability) return undefined;
-    let cancelled = false;
-    setLoading(true);
-    setError("");
-    loadAvailability(date, pax)
-      .then((result) => { if (!cancelled) setAvailability(result?.services || result || []); })
-      .catch(() => { if (!cancelled) setError("We could not read the diary just now. Please try again."); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [step, date, pax, loadAvailability]);
+  const fetchTimes = useCallback(
+    async (date, pax) => {
+      setLoadingTimes(true);
+      setAvailabilityError("");
+      try {
+        const result = await loadAvailability(date, pax);
+        setServices(Array.isArray(result) ? result : []);
+      } catch (loadError) {
+        setServices([]);
+        setAvailabilityError(loadError?.message || "We could not check availability just now.");
+      } finally {
+        setLoadingTimes(false);
+      }
+    },
+    [loadAvailability],
+  );
 
-  const openSlots = useMemo(() => (
-    (availability || []).flatMap((service) => (service.slots || [])
-      .map((slot) => ({ ...slot, service: service.service })))
-  ), [availability]);
-  const anyOpen = openSlots.some((slot) => slot.ok);
-  const offered = experiences.filter((item) => !choice || !item.services || item.services.includes(choice.service));
-
-  const go = (next) => { setError(""); setStep(next); };
-  const back = () => {
-    const index = STEPS.indexOf(step);
-    if (index > 0) go(STEPS[index - 1]);
+  const goToTimes = () => {
+    setStep("time");
+    setTakenNotice("");
+    fetchTimes(guest.date, guest.pax);
   };
 
-  async function confirm() {
-    if (!consent) { setError("Please accept the booking conditions so we can hold the table."); return; }
-    if (!guest.name.trim()) { setError("We need a name for the table."); go("you"); return; }
-    if (config.requirePhone !== false && !guest.phone.trim()) { setError("A telephone number lets us reach you on the day."); go("you"); return; }
-    if (config.requireEmail !== false && !guest.email.trim()) { setError("An email address is where your confirmation goes."); go("you"); return; }
+  const anyOpen = (services || []).some((service) => service.slots?.some((slot) => slot.ok));
+
+  const confirm = async () => {
+    if (!guest.consent) {
+      setErrors({ consent: "Please accept the reservation conditions to continue." });
+      return;
+    }
+    if (submitting) return;
     setSubmitting(true);
-    setError("");
+    setErrors({});
+    const key = idempotencyKey || `idem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setIdempotencyKey(key);
     try {
-      const result = await submitBooking({
-        date,
-        time: choice.time,
-        service: choice.service,
-        pax,
-        experience,
-        name: guest.name.trim(),
-        phone: guest.phone.trim(),
-        email: guest.email.trim(),
-        language: guest.language,
-        allergies: needs.allergies.trim(),
-        accessibility: needs.accessibility.trim(),
-        occasion: needs.occasion.trim(),
-        notes: needs.notes.trim(),
-        consentNews: news,
-        source: "public",
-      }, submitKey);
+      const result = await submitBooking(
+        {
+          date: guest.date,
+          service: guest.service,
+          time: guest.time,
+          pax: guest.pax,
+          name: guest.name.trim(),
+          email: guest.email.trim(),
+          phone: guest.phone.trim(),
+          language: guest.language,
+          experience: guest.experience,
+          allergies: guest.allergies,
+          accessibility: guest.accessibility,
+          occasion: guest.occasion,
+          notes: guest.notes.trim(),
+          consentNews: guest.news,
+        },
+        key,
+      );
       setDone(result || {});
+      setStep("done");
     } catch (submitError) {
-      // The server is the authority: if the table went while the guest typed,
-      // say so plainly and send them back to pick another time.
-      if (submitError?.code === "slot_taken" || submitError?.code === "no_table") {
-        setAvailability(null);
-        setChoice(null);
-        setError("That time was taken while you were filling this in. Here are the times still free.");
-        go("time");
-      } else if (submitError?.code === "party_too_large") {
-        setError(`We take online bookings up to ${maxPax} guests. For a larger party, please call us.`);
+      const code = submitError?.code;
+      if (code === "slot_taken" || code === "no_table") {
+        // The table went while the guest was deciding. Nothing was booked —
+        // say so plainly and show what is actually free now.
+        setTakenNotice(
+          code === "no_table"
+            ? "The last table at that time went while you were choosing. Nothing was booked — these times are current."
+            : "That time was taken just before we could confirm it. Nothing was booked — these times are current.",
+        );
+        setStep("time");
+        patch({ time: "", service: "" });
+        setIdempotencyKey(null);
+        fetchTimes(guest.date, guest.pax);
+      } else if (code === "party_too_large") {
+        setStep("waitlist");
+        setWaitlist((current) => ({ ...current, name: guest.name, phone: guest.phone, email: guest.email }));
       } else {
-        setError(submitError?.message || "That did not go through. Nothing was booked — please try again.");
+        setErrors({ submit: submitError?.message || "We could not complete that booking." });
       }
     } finally {
       setSubmitting(false);
     }
-  }
+  };
 
-  if (done) {
-    return (
-      <main style={page}>
-        <div style={sheet}>
-          <Masthead name={restaurantName} />
-          <div style={card}>
-            <span style={eyebrow}>{done.status === "pending" ? "Requested" : "Confirmed"}</span>
-            <h1 style={heading}>
-              {done.status === "pending"
-                ? "We have your request"
-                : `We look forward to seeing you, ${guest.name.split(" ")[0] || "and thank you"}`}
-            </h1>
-            <p style={body}>
-              {pax} {pax === 1 ? "guest" : "guests"} · {readable(date)} · {choice?.time}
-              {done.ref ? <><br />Reference <strong>{done.ref}</strong></> : null}
-            </p>
-            {done.status === "pending" ? (
-              <p style={{ ...body, marginTop: 10 }}>
-                A larger party is arranged personally — we will confirm by {config.requireEmail === false ? "telephone" : "email"} shortly.
-              </p>
-            ) : null}
-            {testMode ? (
-              <p style={{ ...body, border: `1px dashed ${tokens.signal.active}`, padding: "9px 11px", marginTop: 12 }}>
-                Test booking — nothing was saved. This is exactly what a guest sees.
-              </p>
-            ) : null}
-            {done.manageUrl ? (
-              <a href={done.manageUrl} style={{ ...secondary, display: "block", textAlign: "center", lineHeight: "48px", textDecoration: "none", marginTop: 14 }}>
-                Change or cancel this booking
-              </a>
-            ) : null}
-            <p style={{ ...body, marginTop: 14, color: tokens.ink[3] }}>
-              {config.phone ? `Anything else — ${config.phone}` : null}
-            </p>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  const stepIndex = STEPS.indexOf(step);
+  const offeredExperiences = experiences.filter(
+    (item) => !guest.service || !item.services || item.services.includes(guest.service),
+  );
 
   return (
-    <main style={page}>
-      <div style={sheet}>
-        <Masthead name={restaurantName} tagline={step === "when" ? config.tagline : ""} />
-
-        {testMode ? (
-          <div style={{ ...body, background: tokens.neutral[0], border: `1px dashed ${tokens.signal.active}`, padding: "8px 11px", marginBottom: 12 }}>
-            Test mode — availability is checked for real, but confirming will not create a booking.
+    <div style={page}>
+      <div style={column}>
+        <header style={{ textAlign: "center", marginBottom: 26 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.34em", color: tokens.ink[0] }}>
+            {(config.restaurantName || "MILKA").toUpperCase()}
           </div>
-        ) : null}
+          {config.tagline && <div style={{ fontSize: 8, letterSpacing: "0.22em", color: tokens.ink[3], marginTop: 6 }}>{config.tagline}</div>}
+          <div style={{ borderBottom: `1px solid ${tokens.ink[4]}`, marginTop: 16 }} />
+        </header>
 
-        <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
-          {STEPS.map((key) => (
-            <span key={key} style={{ flex: 1, height: 2, background: STEPS.indexOf(step) >= STEPS.indexOf(key) ? tokens.charcoal.default : tokens.ink[5] }} />
-          ))}
-        </div>
+        {testMode && (
+          <div style={{ display: "flex", gap: 10, alignItems: "center", border: `1px dashed ${tokens.signal.active}`, background: tokens.neutral[0], padding: "8px 12px", marginBottom: 18 }}>
+            <span style={{ width: 6, height: 6, background: tokens.signal.active, flexShrink: 0 }} />
+            <span style={{ fontSize: 9, letterSpacing: "0.10em", color: tokens.ink[2], lineHeight: 1.6 }}>
+              Test mode — availability is checked for real, but confirming will not create a reservation.
+            </span>
+          </div>
+        )}
 
-        <div style={card}>
-          {error ? <div style={errorBox}>{error}</div> : null}
+        {stepIndex >= 0 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
+            <div style={{ display: "flex", gap: 4 }}>
+              {STEPS.map((_, index) => (
+                <span
+                  key={index}
+                  style={{
+                    width: 8,
+                    height: 8,
+                    display: "inline-block",
+                    background: index <= stepIndex ? tokens.charcoal.default : tokens.neutral[0],
+                    border: `1px solid ${index <= stepIndex ? tokens.charcoal.default : tokens.ink[4]}`,
+                  }}
+                />
+              ))}
+            </div>
+            <span style={{ fontSize: 8, letterSpacing: "0.16em", color: tokens.ink[3], textTransform: "uppercase" }}>
+              Step {pad(stepIndex + 1)} / {pad(STEPS.length)} — {STEP_LABELS[stepIndex]}
+            </span>
+          </div>
+        )}
 
-          {step === "when" ? (
-            <>
-              <span style={eyebrow}>Step one</span>
-              <h1 style={heading}>How many of you, and when?</h1>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "14px 0 18px" }}>
-                <button type="button" style={{ ...option(false), minWidth: 52, textAlign: "center" }} onClick={() => setPax(Math.max(minPax, pax - 1))}>−</button>
-                <span style={{ fontSize: 20, fontWeight: 500, minWidth: 96, textAlign: "center" }}>
-                  {pax} {pax === 1 ? "guest" : "guests"}
-                </span>
-                <button type="button" style={{ ...option(false), minWidth: 52, textAlign: "center" }} onClick={() => setPax(Math.min(maxPax, pax + 1))}>+</button>
+        {step === "date" && (
+          <section>
+            <h1 style={{ fontSize: 18, fontWeight: 500, color: tokens.ink[0], lineHeight: 1.4, margin: 0 }}>Reserve a table</h1>
+            <div style={{ ...eyebrow, margin: "22px 0 8px" }}>Date</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
+              {dates.map((item) => (
+                <button
+                  key={item.iso}
+                  type="button"
+                  onClick={() => patch({ date: item.iso, time: "", service: "" })}
+                  style={{
+                    padding: "8px 0",
+                    textAlign: "center",
+                    minHeight: 46,
+                    border: `1px solid ${guest.date === item.iso ? tokens.charcoal.default : tokens.ink[4]}`,
+                    background: guest.date === item.iso ? tokens.tint.parchment : tokens.neutral[0],
+                    color: tokens.ink[1],
+                    cursor: "pointer",
+                    fontFamily: FONT,
+                    boxSizing: "border-box",
+                    borderRadius: 0,
+                  }}
+                >
+                  <span style={{ fontSize: 7, letterSpacing: "0.10em", display: "block", color: tokens.ink[3] }}>{item.dow}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, display: "block", marginTop: 2 }}>{item.dd}</span>
+                </button>
+              ))}
+            </div>
+
+            <div style={{ ...eyebrow, margin: "22px 0 8px" }}>Guests</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 18 }}>
+              <button type="button" onClick={() => patch({ pax: Math.max(minPax, guest.pax - 1) })} style={{ ...chip(false), width: 48, height: 48, fontSize: 18 }}>
+                −
+              </button>
+              <span style={{ fontSize: 22, fontWeight: 600, minWidth: 34, textAlign: "center", color: tokens.ink[0] }}>{guest.pax}</span>
+              <button type="button" onClick={() => patch({ pax: guest.pax + 1 })} style={{ ...chip(false), width: 48, height: 48, fontSize: 18 }}>
+                +
+              </button>
+            </div>
+            <div style={{ fontSize: 9, color: tokens.ink[3], textAlign: "center", marginTop: 10, lineHeight: 1.7 }}>
+              {guest.pax > maxPax
+                ? `For parties of more than ${maxPax} we arrange the evening personally${config.phone ? ` — call us on ${config.phone}` : ""}.`
+                : `${fmtDate(guest.date)} · ${guest.pax} ${guest.pax === 1 ? "guest" : "guests"}`}
+            </div>
+
+            <button
+              type="button"
+              style={primary}
+              onClick={() => {
+                if (guest.pax > maxPax) {
+                  if (joinWaitlist) {
+                    setStep("waitlist");
+                    setWaitlist((current) => ({ ...current, name: guest.name, phone: guest.phone, email: guest.email }));
+                  }
+                  return;
+                }
+                goToTimes();
+              }}
+            >
+              {guest.pax > maxPax ? (joinWaitlist ? "Continue to waitlist" : "Please call us") : "Find a time"}
+            </button>
+          </section>
+        )}
+
+        {step === "time" && (
+          <section>
+            <BackLink onClick={() => setStep("date")} />
+            <div style={{ fontSize: 14, fontWeight: 500, color: tokens.ink[0] }}>
+              {fmtDate(guest.date)} · {guest.pax} {guest.pax === 1 ? "guest" : "guests"}
+            </div>
+
+            {takenNotice && (
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-start", border: `1px solid ${tokens.signal.warn}`, background: tokens.neutral[0], padding: "10px 12px", marginTop: 14 }}>
+                <span style={{ width: 6, height: 6, background: tokens.signal.warn, flexShrink: 0, marginTop: 3 }} />
+                <span style={{ fontSize: 10, color: tokens.ink[2], lineHeight: 1.6 }}>{takenNotice}</span>
               </div>
-              {pax >= maxPax ? (
-                <p style={{ ...body, marginBottom: 14 }}>
-                  For more than {maxPax} guests, please call us{config.phone ? ` on ${config.phone}` : ""} — larger tables are arranged personally.
-                </p>
-              ) : null}
-              <span style={labelStyle}>Which day?</span>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 5, marginBottom: dayPage > 0 || morePages ? 5 : 18 }}>
-                {dates.map((value) => (
-                  <button key={value} type="button" style={{ ...option(value === date), textAlign: "center", fontSize: 11 }} onClick={() => setDate(value)}>
-                    {readable(value)}
-                  </button>
-                ))}
-              </div>
-              {dayPage > 0 || morePages ? (
-                <div style={{ display: "flex", gap: 5, marginBottom: 18 }}>
-                  <button
-                    type="button"
-                    style={{ ...option(false, dayPage === 0), flex: 1, textAlign: "center", fontSize: 11 }}
-                    disabled={dayPage === 0}
-                    onClick={() => setDayPage(dayPage - 1)}
-                  >
-                    Earlier
-                  </button>
-                  <button
-                    type="button"
-                    style={{ ...option(false, !morePages), flex: 1, textAlign: "center", fontSize: 11 }}
-                    disabled={!morePages}
-                    onClick={() => setDayPage(dayPage + 1)}
-                  >
-                    Further ahead
-                  </button>
-                </div>
-              ) : null}
-              <button type="button" style={primary} onClick={() => go("time")}>See times</button>
-            </>
-          ) : null}
+            )}
 
-          {step === "time" ? (
-            <>
-              <span style={eyebrow}>{readable(date)} · {pax} {pax === 1 ? "guest" : "guests"}</span>
-              <h1 style={heading}>What time suits you?</h1>
-              {loading ? (
-                <p style={{ ...body, marginTop: 12 }}>Looking at the diary…</p>
-              ) : !anyOpen ? (
-                <>
-                  <p style={{ ...body, marginTop: 12 }}>
-                    {/* Online booking switched off is not the same as a full day —
-                        saying "nothing free" would send the guest away believing
-                        the restaurant is booked out. */}
-                    {config.onlineEnabled === false
-                      ? `We are not taking bookings online at the moment${config.phone ? " — please telephone us and we will look after you" : ""}.`
-                      : `Nothing free for ${pax} on ${readable(date)}. Try another day${offerWaitlist ? " — or leave your details and we will call if a table opens" : ""}.`}
-                  </p>
-                  <button type="button" style={{ ...secondary, marginTop: 14 }} onClick={() => go("when")}>Choose another day</button>
-                  {offerWaitlist ? (
-                    waitlistSent ? (
-                      <p style={{ ...body, marginTop: 12, color: tokens.green.text }}>We have your details — thank you.</p>
-                    ) : (
-                      <div style={{ marginTop: 16, borderTop: `1px solid ${tokens.ink[5]}`, paddingTop: 14 }}>
-                        <span style={labelStyle}>Name</span>
-                        <input style={field} value={guest.name} onChange={(event) => setGuest({ ...guest, name: event.target.value })} />
-                        <span style={{ ...labelStyle, marginTop: 10 }}>Telephone</span>
-                        <input style={field} inputMode="tel" value={guest.phone} onChange={(event) => setGuest({ ...guest, phone: event.target.value })} />
-                        <button
-                          type="button"
-                          style={{ ...primary, marginTop: 14 }}
-                          onClick={async () => {
-                            if (!guest.name.trim() || !guest.phone.trim()) { setError("A name and telephone number, and we will call you."); return; }
-                            try {
-                              await joinWaitlist({ date, pax, guestName: guest.name.trim(), phone: guest.phone.trim(), note: needs.notes.trim() });
-                              setWaitlistSent(true);
-                            } catch { setError("That did not go through. Please try again."); }
-                          }}
-                        >
-                          Let me know if a table opens
-                        </button>
+            {availabilityError && (
+              <div style={{ border: `1px solid ${tokens.red.border}`, background: tokens.red.bg, padding: "10px 12px", marginTop: 14, fontSize: 10, color: tokens.red.text, lineHeight: 1.6 }}>
+                {availabilityError}
+              </div>
+            )}
+
+            {loadingTimes && (
+              <div style={{ textAlign: "center", padding: "44px 0", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: tokens.ink[3] }}>
+                Checking availability…
+              </div>
+            )}
+
+            {!loadingTimes && services && anyOpen && (
+              <>
+                {services.map((service) => {
+                  const slots = service.slots || [];
+                  if (!slots.length) return null;
+                  return (
+                    <div key={service.service}>
+                      <div style={{ ...eyebrow, margin: "20px 0 8px" }}>{service.service}</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 5 }}>
+                        {slots.map((slot) => (
+                          <button
+                            key={slot.time}
+                            type="button"
+                            disabled={!slot.ok}
+                            title={slot.ok ? "" : slot.reason || ""}
+                            onClick={() =>
+                              patch({
+                                time: slot.time,
+                                service: service.service,
+                                experience: guest.experience || offeredExperiences[0]?.key || "",
+                              })
+                            }
+                            style={{
+                              ...chip(guest.time === slot.time && guest.service === service.service, { pad: "9px 4px" }),
+                              textAlign: "center",
+                              opacity: slot.ok ? 1 : 0.55,
+                              cursor: slot.ok ? "pointer" : "not-allowed",
+                              borderColor: guest.time === slot.time ? tokens.charcoal.default : slot.ok ? tokens.ink[4] : tokens.ink[5],
+                              color: slot.ok ? tokens.ink[1] : tokens.neutral[400],
+                            }}
+                          >
+                            <span style={{ fontSize: 12, fontWeight: 600, display: "block" }}>{slot.time}</span>
+                            <span style={{ fontSize: 7, letterSpacing: "0.12em", color: tokens.ink[4], display: "block", marginTop: 2, minHeight: 9, textTransform: "uppercase" }}>
+                              {slot.ok ? "" : "Full"}
+                            </span>
+                          </button>
+                        ))}
                       </div>
-                    )
-                  ) : config.phone ? (
-                    <div style={{ marginTop: 16, borderTop: `1px solid ${tokens.ink[5]}`, paddingTop: 14 }}>
-                      <p style={body}>If the day matters more than the hour, call us — we keep a little back for the telephone.</p>
-                      <a
-                        href={`tel:${String(config.phone).replace(/[^+\d]/g, "")}`}
-                        style={{ ...primary, display: "block", textAlign: "center", lineHeight: "48px", textDecoration: "none", marginTop: 12 }}
-                      >
-                        Call {config.phone}
-                      </a>
                     </div>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  {(availability || []).map((service) => {
-                    const slots = (service.slots || []).filter((slot) => slot.ok);
-                    if (slots.length === 0) return null;
-                    return (
-                      <div key={service.service} style={{ marginTop: 14 }}>
-                        <span style={labelStyle}>{service.service}</span>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 5 }}>
-                          {slots.map((slot) => (
-                            <button
-                              key={`${service.service}-${slot.time}`}
-                              type="button"
-                              style={{ ...option(choice?.time === slot.time && choice?.service === service.service), textAlign: "center" }}
-                              onClick={() => { setChoice({ time: slot.time, service: service.service }); go(offered.length > 1 ? "experience" : "you"); }}
-                            >
-                              {slot.time}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <button type="button" style={{ ...secondary, marginTop: 18 }} onClick={back}>Change day or party</button>
-                </>
-              )}
-            </>
-          ) : null}
+                  );
+                })}
 
-          {step === "experience" ? (
-            <>
-              <span style={eyebrow}>{readable(date)} · {choice?.time} · {pax} {pax === 1 ? "guest" : "guests"}</span>
-              <h1 style={heading}>How would you like to dine?</h1>
-              <div style={{ display: "grid", gap: 6, marginTop: 14 }}>
-                {offered.map((item) => (
-                  <button key={item.key} type="button" style={option(experience === item.key)} onClick={() => setExperience(item.key)}>
-                    <span style={{ fontSize: 13, fontWeight: 600, display: "block" }}>{item.title}</span>
-                    <span style={{ ...body, display: "block", marginTop: 3 }}>{item.description}</span>
-                  </button>
-                ))}
-              </div>
-              <button type="button" style={{ ...primary, marginTop: 18 }} onClick={() => go("you")}>Continue</button>
-              <button type="button" style={{ ...secondary, marginTop: 6 }} onClick={back}>Back</button>
-            </>
-          ) : null}
+                {joinWaitlist && (
+                  <div style={{ marginTop: 14 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStep("waitlist");
+                        setWaitlist((current) => ({ ...current, name: guest.name, phone: guest.phone, email: guest.email }));
+                      }}
+                      style={{ border: "none", background: "none", color: tokens.green.text, fontSize: 9, letterSpacing: "0.08em", padding: 0, cursor: "pointer", fontFamily: FONT, textDecoration: "underline" }}
+                    >
+                      Preferred time not available? Join the waitlist →
+                    </button>
+                  </div>
+                )}
 
-          {step === "you" ? (
-            <>
-              <span style={eyebrow}>Almost there</span>
-              <h1 style={heading}>Who shall we expect?</h1>
-              <div style={{ marginTop: 14 }}>
-                <span style={labelStyle}>Name</span>
-                <input style={field} value={guest.name} autoComplete="name" onChange={(event) => setGuest({ ...guest, name: event.target.value })} />
-                <span style={{ ...labelStyle, marginTop: 12 }}>Telephone{config.requirePhone === false ? " (optional)" : ""}</span>
-                <input style={field} inputMode="tel" autoComplete="tel" value={guest.phone} onChange={(event) => setGuest({ ...guest, phone: event.target.value })} />
-                <span style={{ ...labelStyle, marginTop: 12 }}>Email{config.requireEmail === false ? " (optional)" : ""}</span>
-                <input style={field} inputMode="email" autoComplete="email" value={guest.email} onChange={(event) => setGuest({ ...guest, email: event.target.value })} />
-                {(config.languages || []).length > 1 ? (
+                {guest.time && offeredExperiences.length > 0 && (
                   <>
-                    <span style={{ ...labelStyle, marginTop: 12 }}>Language</span>
-                    <div style={{ display: "flex", gap: 5 }}>
-                      {config.languages.map((code) => (
-                        <button key={code} type="button" style={{ ...option(guest.language === code), flex: 1, textAlign: "center" }} onClick={() => setGuest({ ...guest, language: code })}>
-                          {code === "sl" ? "Slovenščina" : "English"}
+                    <div style={{ ...eyebrow, margin: "22px 0 8px" }}>Dining experience</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {offeredExperiences.map((item) => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => patch({ experience: item.key })}
+                          style={{ ...chip(guest.experience === item.key), textAlign: "left", padding: "12px 14px", width: "100%" }}
+                        >
+                          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", display: "block", textTransform: "uppercase" }}>{item.title}</span>
+                          {item.description && (
+                            <span style={{ fontSize: 9, color: tokens.ink[3], display: "block", marginTop: 4, lineHeight: 1.6 }}>{item.description}</span>
+                          )}
                         </button>
                       ))}
                     </div>
                   </>
-                ) : null}
+                )}
+
+                <button type="button" style={primary} disabled={!guest.time} onClick={() => guest.time && setStep("details")}>
+                  Continue
+                </button>
+              </>
+            )}
+
+            {!loadingTimes && services && !anyOpen && (
+              <div style={{ border: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0], padding: 18, marginTop: 20, textAlign: "center" }}>
+                <div style={{ fontSize: 11, fontWeight: 500, color: tokens.ink[0], lineHeight: 1.7 }}>No tables are available online for this date.</div>
+                <div style={{ fontSize: 9, color: tokens.ink[3], lineHeight: 1.8, marginTop: 6 }}>
+                  {config.whenFull === "phone" || !joinWaitlist
+                    ? `Choose another date${config.phone ? `, or call us on ${config.phone}` : ""}.`
+                    : "Choose another date, or leave your details and we will call if a table opens."}
+                </div>
+                {joinWaitlist && config.whenFull !== "phone" && (
+                  <button
+                    type="button"
+                    style={primary}
+                    onClick={() => {
+                      setStep("waitlist");
+                      setWaitlist((current) => ({ ...current, name: guest.name, phone: guest.phone, email: guest.email }));
+                    }}
+                  >
+                    Join the waitlist
+                  </button>
+                )}
               </div>
-              <button type="button" style={{ ...primary, marginTop: 18 }} onClick={() => go("needs")}>Continue</button>
-              <button type="button" style={{ ...secondary, marginTop: 6 }} onClick={back}>Back</button>
-            </>
-          ) : null}
+            )}
+          </section>
+        )}
 
-          {step === "needs" ? (
-            <>
-              <span style={eyebrow}>So the kitchen can prepare</span>
-              <h1 style={heading}>Anything we should know?</h1>
-              <div style={{ marginTop: 14 }}>
-                <span style={labelStyle}>Allergies or dietary needs</span>
-                <textarea
-                  style={{ ...field, minHeight: 70, resize: "vertical", lineHeight: 1.6 }}
-                  value={needs.allergies}
-                  placeholder="Every course is prepared to order — tell us and we will adapt."
-                  onChange={(event) => setNeeds({ ...needs, allergies: event.target.value })}
-                />
-                <span style={{ ...labelStyle, marginTop: 12 }}>Access needs</span>
-                <input style={field} value={needs.accessibility} onChange={(event) => setNeeds({ ...needs, accessibility: event.target.value })} />
-                <span style={{ ...labelStyle, marginTop: 12 }}>Occasion</span>
-                <input style={field} value={needs.occasion} placeholder="Birthday, anniversary…" onChange={(event) => setNeeds({ ...needs, occasion: event.target.value })} />
-                <span style={{ ...labelStyle, marginTop: 12 }}>Anything else</span>
-                <textarea
-                  style={{ ...field, minHeight: 60, resize: "vertical", lineHeight: 1.6 }}
-                  value={needs.notes}
-                  onChange={(event) => setNeeds({ ...needs, notes: event.target.value })}
-                />
-              </div>
-              <button type="button" style={{ ...primary, marginTop: 18 }} onClick={() => go("confirm")}>Review</button>
-              <button type="button" style={{ ...secondary, marginTop: 6 }} onClick={back}>Back</button>
-            </>
-          ) : null}
+        {step === "details" && (
+          <section>
+            <BackLink onClick={() => setStep("time")} />
+            <div style={{ fontSize: 14, fontWeight: 500, color: tokens.ink[0], marginBottom: 18 }}>Your details</div>
 
-          {step === "confirm" ? (
-            <>
-              <span style={eyebrow}>One last look</span>
-              <h1 style={heading}>{readable(date)} at {choice?.time}</h1>
-              <p style={body}>
-                {pax} {pax === 1 ? "guest" : "guests"}
-                {experience ? ` · ${(experiences.find((item) => item.key === experience) || {}).title || ""}` : ""}
-                <br />{guest.name}
-                {guest.phone ? ` · ${guest.phone}` : ""}
-                {guest.email ? <><br />{guest.email}</> : null}
-                {needs.allergies ? <><br /><strong>Allergies:</strong> {needs.allergies}</> : null}
-              </p>
+            <div style={{ ...eyebrow, marginBottom: 6 }}>Full name</div>
+            <input value={guest.name} onChange={(event) => patch({ name: event.target.value })} placeholder="Name and surname" style={bigInput} />
+            <div style={errorText}>{errors.name || ""}</div>
 
-              {policies.length ? (
-                <div style={{ borderTop: `1px solid ${tokens.ink[5]}`, marginTop: 14, paddingTop: 12 }}>
-                  <span style={eyebrow}>Booking conditions</span>
-                  {policies.map((line, index) => (
-                    <p key={index} style={{ ...body, marginTop: 6 }}>{line}</p>
+            <div style={{ ...eyebrow, margin: "10px 0 6px" }}>Email{config.requireEmail === false ? " (optional)" : ""}</div>
+            <input value={guest.email} onChange={(event) => patch({ email: event.target.value })} placeholder="you@example.com" style={bigInput} />
+            <div style={errorText}>{errors.email || ""}</div>
+
+            <div style={{ ...eyebrow, margin: "10px 0 6px" }}>Telephone{config.requirePhone === false ? " (optional)" : ""}</div>
+            <input value={guest.phone} onChange={(event) => patch({ phone: event.target.value })} placeholder="+386 …" style={bigInput} />
+            <div style={errorText}>{errors.phone || ""}</div>
+
+            {languages.length > 1 && (
+              <>
+                <div style={{ ...eyebrow, margin: "10px 0 6px" }}>Preferred language</div>
+                <div style={{ display: "flex", gap: 5 }}>
+                  {languages.map((code) => (
+                    <button key={code} type="button" style={chip(guest.language === code, { fs: 9 })} onClick={() => patch({ language: code })}>
+                      {code === "sl" ? "Slovenščina" : "English"}
+                    </button>
                   ))}
                 </div>
-              ) : null}
+              </>
+            )}
 
-              <label style={{ display: "flex", gap: 9, alignItems: "flex-start", marginTop: 14, cursor: "pointer" }}>
-                <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} style={{ width: 20, height: 20, marginTop: 1 }} />
-                <span style={body}>I accept the booking conditions above.</span>
-              </label>
-              <label style={{ display: "flex", gap: 9, alignItems: "flex-start", marginTop: 10, cursor: "pointer" }}>
-                <input type="checkbox" checked={news} onChange={(event) => setNews(event.target.checked)} style={{ width: 20, height: 20, marginTop: 1 }} />
-                <span style={body}>Write to me occasionally about the seasonal menus.</span>
-              </label>
+            <button
+              type="button"
+              style={primary}
+              onClick={() => {
+                const next = {};
+                if (guest.name.trim().length < 2) next.name = "Please enter your name.";
+                if (config.requireEmail !== false && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(guest.email.trim())) {
+                  next.email = "Please enter a valid email — your confirmation goes here.";
+                }
+                if (config.requirePhone !== false && guest.phone.replace(/\D/g, "").length < 8) {
+                  next.phone = "Please enter a telephone number we can reach.";
+                }
+                if (Object.keys(next).length) {
+                  setErrors(next);
+                  return;
+                }
+                setErrors({});
+                setStep("prefs");
+              }}
+            >
+              Continue
+            </button>
+          </section>
+        )}
 
-              <button type="button" style={{ ...primary, marginTop: 18, opacity: submitting ? 0.6 : 1 }} disabled={submitting} onClick={confirm}>
-                {submitting ? "Sending…" : pax > (config.autoConfirmMaxPax ?? maxPax) ? "Request this table" : "Confirm this table"}
-              </button>
-              <button type="button" style={{ ...secondary, marginTop: 6 }} onClick={back}>Back</button>
-            </>
-          ) : null}
-        </div>
+        {step === "prefs" && (
+          <section>
+            <BackLink onClick={() => setStep("details")} />
+            <div style={{ fontSize: 14, fontWeight: 500, color: tokens.ink[0] }}>Allergies and preferences</div>
+            <div style={{ fontSize: 9, color: tokens.ink[3], lineHeight: 1.8, marginTop: 6 }}>
+              The kitchen adapts each course. Please tell us about allergies before your visit.
+            </div>
 
-        <p style={{ ...body, textAlign: "center", marginTop: 16, color: tokens.ink[3] }}>
-          {config.phone ? `${restaurantName} · ${config.phone}` : restaurantName}
-        </p>
+            <div style={{ ...eyebrow, margin: "18px 0 8px" }}>Allergies and dietary needs</div>
+            <textarea
+              value={(guest.allergies || []).join(", ")}
+              onChange={(event) => patch({ allergies: event.target.value.split(",").map((item) => item.trim()).filter(Boolean) })}
+              placeholder="Gluten, nuts, vegetarian…"
+              style={{ ...bigInput, minHeight: 60, resize: "vertical", lineHeight: 1.5 }}
+            />
+
+            <div style={{ ...eyebrow, margin: "18px 0 8px" }}>Accessibility</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+              {ACCESS_OPTIONS.map((option) => {
+                const on = (guest.accessibility || []).includes(option);
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    style={chip(on, { fs: 9, pad: "10px 11px" })}
+                    onClick={() =>
+                      patch({ accessibility: on ? guest.accessibility.filter((item) => item !== option) : [...(guest.accessibility || []), option] })
+                    }
+                  >
+                    {option}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ ...eyebrow, margin: "18px 0 8px" }}>Occasion (optional)</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+              {OCCASIONS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  style={chip(guest.occasion === option, { fs: 9, pad: "10px 11px" })}
+                  onClick={() => patch({ occasion: guest.occasion === option ? "" : option })}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ ...eyebrow, margin: "18px 0 8px" }}>Anything else</div>
+            <textarea
+              value={guest.notes}
+              onChange={(event) => patch({ notes: event.target.value })}
+              placeholder="Timings, a surprise, several guests sharing an allergy…"
+              style={{ ...bigInput, minHeight: 72, resize: "vertical", lineHeight: 1.5 }}
+            />
+
+            <button type="button" style={primary} onClick={() => setStep("review")}>
+              Review reservation
+            </button>
+          </section>
+        )}
+
+        {step === "review" && (
+          <section>
+            <BackLink onClick={() => setStep("prefs")} />
+            <div style={{ fontSize: 14, fontWeight: 500, color: tokens.ink[0], marginBottom: 14 }}>Review and confirm</div>
+
+            <SummaryRows
+              rows={[
+                { k: "Date", v: `${fmtDate(guest.date)} ${guest.date.slice(0, 4)}` },
+                { k: "Time", v: `${guest.time} · ${(guest.service || "").toUpperCase()}` },
+                { k: "Guests", v: String(guest.pax) },
+                { k: "Experience", v: experiences.find((item) => item.key === guest.experience)?.title || "—" },
+                { k: "Name", v: guest.name.trim() },
+                ...(guest.phone.trim() ? [{ k: "Telephone", v: guest.phone.trim() }] : []),
+                ...(guest.email.trim() ? [{ k: "Email", v: guest.email.trim() }] : []),
+                ...(guest.allergies?.length ? [{ k: "Allergies", v: guest.allergies.join(", ") }] : []),
+                ...(guest.accessibility?.length ? [{ k: "Accessibility", v: guest.accessibility.join(", ") }] : []),
+                ...(guest.occasion ? [{ k: "Occasion", v: guest.occasion }] : []),
+              ]}
+            />
+
+            {policyLines(config.policies).length > 0 && (
+              <div style={{ border: `1px solid ${tokens.ink[5]}`, background: tokens.neutral[0], padding: 12, marginTop: 12, fontSize: 9, color: tokens.ink[2], lineHeight: 1.9 }}>
+                <span style={{ ...eyebrow, display: "block", marginBottom: 6 }}>Reservation conditions</span>
+                {policyLines(config.policies).map((line, index) => (
+                  <div key={index}>{line}</div>
+                ))}
+              </div>
+            )}
+
+            <Checkbox
+              checked={guest.consent}
+              onToggle={() => patch({ consent: !guest.consent })}
+              label={
+                <>
+                  I accept the reservation conditions and consent to my details being used to manage this reservation.{" "}
+                  <span style={{ color: tokens.red.text }}>(required)</span>
+                </>
+              }
+            />
+            <Checkbox muted checked={guest.news} onToggle={() => patch({ news: !guest.news })} label="Send me occasional news from the restaurant. (optional)" />
+
+            <div style={{ ...errorText, marginTop: 8 }}>{errors.consent || errors.submit || ""}</div>
+
+            <button type="button" style={{ ...primary, minHeight: 52, marginTop: 12 }} disabled={submitting} onClick={confirm}>
+              {submitting ? "Confirming…" : "Confirm reservation"}
+            </button>
+          </section>
+        )}
+
+        {step === "done" && done && (
+          <section style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 600, color: done.status === "pending" ? tokens.signal.warn : tokens.green.text }}>
+              {done.status === "pending" ? "Request received — awaiting confirmation" : "Reservation confirmed"}
+            </div>
+            {done.ref && <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: "0.06em", color: tokens.ink[0], marginTop: 14 }}>{done.ref}</div>}
+            <div style={{ fontSize: 9, color: tokens.ink[3], lineHeight: 1.9, marginTop: 10, maxWidth: 340, margin: "10px auto 0" }}>
+              {done.status === "pending"
+                ? "We review larger parties personally — you will hear from us shortly."
+                : "We look forward to welcoming you."}
+            </div>
+
+            <div style={{ marginTop: 18, textAlign: "left" }}>
+              <SummaryRows
+                rows={[
+                  { k: "Date", v: `${fmtDate(guest.date)} ${guest.date.slice(0, 4)}` },
+                  { k: "Time", v: guest.time },
+                  { k: "Guests", v: String(guest.pax) },
+                  { k: "Name", v: guest.name.trim() },
+                ]}
+              />
+            </div>
+
+            {testMode && (
+              <div style={{ border: `1px dashed ${tokens.signal.active}`, background: tokens.neutral[0], padding: "10px 12px", marginTop: 14, fontSize: 9, color: tokens.ink[2], lineHeight: 1.7, textAlign: "left" }}>
+                Test booking — nothing was saved. This is exactly what a guest would see; the reference above is not a real reservation.
+              </div>
+            )}
+
+            {done.manageUrl && (
+              <a href={done.manageUrl} style={{ ...secondary, display: "block", textAlign: "center", lineHeight: "48px", textDecoration: "none", marginTop: 14 }}>
+                Change or cancel this reservation
+              </a>
+            )}
+          </section>
+        )}
+
+        {step === "waitlist" && joinWaitlist && (
+          <section>
+            <BackLink onClick={() => setStep("date")} />
+            <div style={{ fontSize: 14, fontWeight: 500, color: tokens.ink[0] }}>Join the waitlist</div>
+            <div style={{ fontSize: 9, color: tokens.ink[3], lineHeight: 1.8, marginTop: 6 }}>
+              Leave your details — we call the moment something opens.
+            </div>
+
+            <div style={{ ...eyebrow, margin: "16px 0 6px" }}>Full name</div>
+            <input value={waitlist.name} onChange={(event) => setWaitlist({ ...waitlist, name: event.target.value })} placeholder="Name and surname" style={bigInput} />
+            <div style={errorText}>{waitlistErrors.name || ""}</div>
+
+            <div style={{ ...eyebrow, margin: "8px 0 6px" }}>Telephone</div>
+            <input value={waitlist.phone} onChange={(event) => setWaitlist({ ...waitlist, phone: event.target.value })} placeholder="+386 …" style={bigInput} />
+            <div style={errorText}>{waitlistErrors.phone || ""}</div>
+
+            <div style={{ ...eyebrow, margin: "8px 0 6px" }}>Email (optional)</div>
+            <input value={waitlist.email} onChange={(event) => setWaitlist({ ...waitlist, email: event.target.value })} placeholder="you@example.com" style={bigInput} />
+
+            <div style={{ ...eyebrow, margin: "14px 0 8px" }}>When suits you</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+              {WINDOWS.map((option) => (
+                <button key={option} type="button" style={chip(waitlist.window === option, { fs: 9, pad: "10px 11px" })} onClick={() => setWaitlist({ ...waitlist, window: option })}>
+                  {option}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ ...errorText, marginTop: 8 }}>{waitlistErrors.submit || ""}</div>
+
+            <button
+              type="button"
+              style={primary}
+              onClick={async () => {
+                const next = {};
+                if (waitlist.name.trim().length < 2) next.name = "Please enter your name.";
+                if (waitlist.phone.replace(/\D/g, "").length < 8) next.phone = "We need a number to call you back.";
+                if (Object.keys(next).length) {
+                  setWaitlistErrors(next);
+                  return;
+                }
+                try {
+                  await joinWaitlist({
+                    date: guest.date,
+                    pax: guest.pax,
+                    name: waitlist.name.trim(),
+                    phone: waitlist.phone.trim(),
+                    email: waitlist.email.trim(),
+                    flexibility: waitlist.window || "Any time",
+                  });
+                  setWaitlistErrors({});
+                  setWaitlistDone({ name: waitlist.name.trim().split(/[ ,]/)[0], phone: waitlist.phone.trim(), pax: guest.pax });
+                  setStep("waitlistDone");
+                } catch (waitlistError) {
+                  setWaitlistErrors({ submit: waitlistError?.message || "We could not add you to the waitlist." });
+                }
+              }}
+            >
+              Join waitlist
+            </button>
+          </section>
+        )}
+
+        {step === "waitlistDone" && waitlistDone && (
+          <section style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: tokens.green.text, fontWeight: 600 }}>You are on the list</div>
+            <div style={{ fontSize: 12, color: tokens.ink[0], lineHeight: 1.9, marginTop: 14, maxWidth: 320, margin: "14px auto 0" }}>
+              Thank you, {waitlistDone.name}. We will call {waitlistDone.phone} the moment a table for {waitlistDone.pax} opens.
+            </div>
+          </section>
+        )}
+
+        <footer style={{ borderTop: `1px solid ${tokens.ink[5]}`, marginTop: 40, paddingTop: 14, textAlign: "center" }}>
+          <div style={{ fontSize: 8, letterSpacing: "0.14em", color: tokens.ink[3], lineHeight: 2, textTransform: "uppercase" }}>
+            {config.restaurantName || "Milka"}
+            {config.phone ? ` · ${config.phone}` : ""}
+          </div>
+        </footer>
       </div>
-    </main>
-  );
-}
-
-function Masthead({ name, tagline }) {
-  return (
-    <header style={{ textAlign: "center", marginBottom: 16 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 6, textTransform: "uppercase" }}>{name}</div>
-      {tagline ? <p style={{ ...body, marginTop: 8 }}>{tagline}</p> : null}
-    </header>
+    </div>
   );
 }
 
 /**
- * ManageBooking — what a guest sees after following the manage link. The token
- * is validated server-side; this only renders the outcome.
- *
- * @param {object}   booking   { ref, date, time, pax, status, name } or null
- * @param {boolean}  expired   true when the link is spent, revoked or wrong
- * @param {Function} onCancel  (reason) => Promise
- * @param {Function} onChange  () => void — hand back to the booking flow
+ * The manage-link outcome: the booking as the guest sees it, a way to change
+ * or cancel, and an honest expired state when the link has been spent.
  */
 export function ManageBooking({ booking, expired, onCancel, onChange, restaurantName = "Restaurant", phone }) {
-  const [cancelled, setCancelled] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState("view");
+  const [reason, setReason] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setMode("view");
+  }, [booking?.id]);
+
+  if (expired || !booking) {
+    return (
+      <div style={page}>
+        <div style={{ ...column, textAlign: "center" }}>
+          <div style={{ fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: tokens.red.text, fontWeight: 600, marginTop: 40 }}>
+            Link expired or invalid
+          </div>
+          <div style={{ fontSize: 10, color: tokens.ink[2], lineHeight: 1.9, marginTop: 14, maxWidth: 320, margin: "14px auto 0" }}>
+            This manage link is no longer active — the reservation may have been cancelled, or already taken place.
+            {phone ? ` Please call ${restaurantName} on ${phone} if you need help.` : ""}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <main style={page}>
-      <div style={sheet}>
-        <Masthead name={restaurantName} />
-        <div style={card}>
-          {expired || !booking ? (
-            <>
-              <span style={eyebrow}>Link expired</span>
-              <h1 style={heading}>This link no longer works</h1>
-              <p style={body}>
-                Manage links expire after the visit, and a cancelled booking releases its link straight away.
-                {phone ? ` Call us on ${phone} and we will sort it out.` : ""}
-              </p>
-            </>
-          ) : cancelled ? (
-            <>
-              <span style={eyebrow}>Cancelled</span>
-              <h1 style={heading}>Your table has been released</h1>
-              <p style={body}>Thank you for telling us — we hope to welcome you another time.</p>
-            </>
-          ) : (
-            <>
-              <span style={eyebrow}>Your booking · {booking.ref}</span>
-              <h1 style={heading}>{readable(booking.date)} at {booking.time}</h1>
-              <p style={body}>{booking.pax} {booking.pax === 1 ? "guest" : "guests"} · {booking.name}</p>
-              {error ? <div style={{ ...errorBox, marginTop: 12, marginBottom: 0 }}>{error}</div> : null}
-              <button type="button" style={{ ...primary, marginTop: 18 }} onClick={onChange}>Change day or time</button>
-              <button
-                type="button"
-                style={{ ...secondary, marginTop: 6, opacity: busy ? 0.6 : 1 }}
-                disabled={busy}
-                onClick={async () => {
-                  const reason = window.prompt("Cancelling — may we ask why?", "Plans changed");
-                  if (reason === null) return;
-                  setBusy(true);
-                  try { await onCancel(reason.trim() || "Cancelled by guest"); setCancelled(true); }
-                  catch { setError("That did not go through. Your booking still stands — please try again."); }
-                  finally { setBusy(false); }
-                }}
-              >
-                {busy ? "Cancelling…" : "Cancel this booking"}
-              </button>
-            </>
-          )}
+    <div style={page}>
+      <div style={column}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: tokens.green.text, fontWeight: 600 }}>
+            {booking.status === "pending" ? "Awaiting confirmation" : "Confirmed"}
+          </div>
+          {booking.ref && <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "0.06em", color: tokens.ink[0], marginTop: 10 }}>{booking.ref}</div>}
         </div>
-        <p style={{ ...body, textAlign: "center", marginTop: 16, color: tokens.ink[3] }}>
-          {phone ? `${restaurantName} · ${phone}` : restaurantName}
-        </p>
+
+        <div style={{ marginTop: 16 }}>
+          <SummaryRows
+            rows={[
+              { k: "Date", v: `${fmtDate(booking.date)} ${String(booking.date).slice(0, 4)}` },
+              { k: "Time", v: booking.time },
+              { k: "Guests", v: String(booking.pax) },
+              { k: "Name", v: booking.name },
+            ]}
+          />
+        </div>
+
+        {mode === "view" && (
+          <>
+            {onChange && (
+              <button type="button" style={secondary} onClick={onChange}>
+                Change time
+              </button>
+            )}
+            <button type="button" style={{ ...secondary, borderColor: tokens.red.border, background: tokens.red.bg, color: tokens.red.text }} onClick={() => setMode("cancel")}>
+              Cancel reservation
+            </button>
+          </>
+        )}
+
+        {mode === "cancel" && (
+          <div style={{ border: `1px solid ${tokens.red.border}`, background: tokens.neutral[0], padding: 16, marginTop: 16 }}>
+            <div style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: tokens.red.text, fontWeight: 600 }}>
+              Cancel {booking.ref || "this reservation"}
+            </div>
+            <div style={{ fontSize: 10, color: tokens.ink[2], lineHeight: 1.8, marginTop: 10 }}>
+              This releases your table, and the manage link stops working afterwards.
+            </div>
+            <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reason (optional)" style={{ ...bigInput, fontSize: 14, marginTop: 12 }} />
+            {error && <div style={errorText}>{error}</div>}
+            <button
+              type="button"
+              disabled={busy}
+              style={{ ...secondary, borderColor: tokens.red.border, background: tokens.red.bg, color: tokens.red.text }}
+              onClick={async () => {
+                setBusy(true);
+                setError("");
+                try {
+                  await onCancel(reason.trim());
+                  setMode("done");
+                } catch (cancelError) {
+                  setError(cancelError?.message || "We could not cancel that just now.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {busy ? "Cancelling…" : "Yes — cancel it"}
+            </button>
+            <button type="button" style={{ ...secondary, marginTop: 8 }} onClick={() => setMode("view")}>
+              Keep the reservation
+            </button>
+          </div>
+        )}
+
+        {mode === "done" && (
+          <div style={{ textAlign: "center", padding: "30px 0" }}>
+            <div style={{ fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: tokens.ink[3], fontWeight: 600 }}>Reservation cancelled</div>
+            <div style={{ fontSize: 10, color: tokens.ink[2], lineHeight: 1.9, marginTop: 14 }}>
+              Your table has been released. We hope to welcome you another time.
+            </div>
+          </div>
+        )}
       </div>
-    </main>
+    </div>
+  );
+}
+
+function BackLink({ onClick }) {
+  return (
+    <button type="button" onClick={onClick} style={{ border: "none", background: "none", color: tokens.ink[3], fontSize: 9, letterSpacing: "0.12em", padding: "6px 0", marginBottom: 8, cursor: "pointer", fontFamily: FONT, textTransform: "uppercase" }}>
+      ← Back
+    </button>
+  );
+}
+
+function SummaryRows({ rows }) {
+  return (
+    <div style={{ border: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0] }}>
+      {rows.map((row) => (
+        <div key={row.k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 12px", borderBottom: `1px solid ${tokens.neutral[100]}` }}>
+          <span style={{ fontSize: 8, letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase" }}>{row.k}</span>
+          <span style={{ fontSize: 11, color: tokens.ink[0], textAlign: "right", fontWeight: 500 }}>{row.v}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Checkbox({ checked, onToggle, label, muted }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      style={{ display: "flex", gap: 10, alignItems: "flex-start", border: "none", background: "none", padding: muted ? "10px 0 0" : "12px 0 0", textAlign: "left", width: "100%", cursor: "pointer", fontFamily: FONT }}
+    >
+      <span
+        style={{
+          width: 16,
+          height: 16,
+          border: `1px solid ${checked ? tokens.charcoal.default : tokens.ink[4]}`,
+          background: checked ? tokens.charcoal.default : tokens.neutral[0],
+          color: tokens.neutral[0],
+          fontSize: 11,
+          lineHeight: "16px",
+          textAlign: "center",
+          flexShrink: 0,
+          display: "inline-block",
+        }}
+      >
+        {checked ? "✓" : ""}
+      </span>
+      <span style={{ fontSize: 9, color: muted ? tokens.ink[3] : tokens.ink[2], lineHeight: 1.7, flex: 1 }}>{label}</span>
+    </button>
   );
 }
