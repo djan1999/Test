@@ -57,6 +57,9 @@ const SERVICE_NAMES = ["lunch", "dinner"];
 
 const ACTIVE_STATUSES = new Set(["pending", "confirmed", "arrived"]);
 const clone = (value) => JSON.parse(JSON.stringify(value));
+// A calendar rule is identified by (date, kind, service) — the same key the
+// table is unique on — so a lunch override never stands in for a dinner one.
+const sameException = (a, b) => a.date === b.date && a.kind === b.kind && (a.service ?? null) === (b.service ?? null);
 const hours = (minutes) => `${Math.round((minutes / 60) * 10) / 10} h`;
 
 // ── small shared bits, all built from the admin primitives ──────────────────
@@ -220,11 +223,19 @@ export default function ReservationsAdminPanel({
             after.onlineEnabled === false ? "staff only" : "guests may book",
             after.onlineEnabled === false ? "Guests can no longer book this service online. Staff can still take bookings by phone." : "");
         }
+        // Compared as the engine reads it (absent means allowed), so a row that
+        // simply never carried the key does not read as a change.
+        if ((before.walkInsEnabled !== false) !== (after.walkInsEnabled !== false)) {
+          push(`${label} walk-ins`, before.walkInsEnabled === false ? "not taken" : "taken",
+            after.walkInsEnabled === false ? "not taken" : "taken", "");
+        }
       });
     });
 
     const pairs = [
+      ["online.enabled", "Online booking", (v) => (v === false ? "paused" : "open to guests")],
       ["online.maxPax", "Largest party bookable online", (v) => `${v} guests`],
+      ["online.minPax", "Smallest party bookable online", (v) => `${v} guests`],
       ["online.autoConfirmMaxPax", "Automatically confirm parties up to", (v) => `${v} guests`],
       ["online.leadMinutes", "How close to arrival guests may book", (v) => `${v} min`],
       ["online.windowDays", "How far ahead guests may book", (v) => `${v} days`],
@@ -234,6 +245,8 @@ export default function ReservationsAdminPanel({
       ["durations.medium", "Table time — 3 to 5 guests", hours],
       ["durations.large", "Table time — 6 or more", hours],
       ["durations.buffer", "Reset time between parties", (v) => `${v} min`],
+      ["walkIns.enabled", "Walk-ins", (v) => (v === false ? "not taken" : "taken")],
+      ["walkIns.holdMinutes", "How long a walk-in table is held", (v) => `${v} min`],
       ["waitlist.defaultQuoteMinutes", "Wait we quote by default", (v) => `${v} min`],
       ["privacy.retentionMonths", "Guest history kept for", (v) => `${v} months`],
     ];
@@ -252,11 +265,14 @@ export default function ReservationsAdminPanel({
       if (path === "online.autoConfirmMaxPax" && Number(after) === 0) {
         warning = "Every online booking will wait as pending until someone confirms it.";
       }
+      if (path === "online.enabled" && after === false) {
+        warning = "Guests cannot book from the public page at all while this is paused. Staff bookings, the day book and the calendar are unaffected.";
+      }
       push(label, format(before), format(after), warning);
     });
 
     if (JSON.stringify(a.exceptions) !== JSON.stringify(b.exceptions)) {
-      const added = b.exceptions.filter((rule) => !a.exceptions.some((old) => old.date === rule.date && old.kind === rule.kind));
+      const added = b.exceptions.filter((rule) => !a.exceptions.some((old) => sameException(old, rule)));
       const affected = bookings.filter((booking) => added.some((rule) => rule.date === booking.date) && ACTIVE_STATUSES.has(booking.status));
       push("Calendar exceptions", `${a.exceptions.length} dates`, `${b.exceptions.length} dates`,
         affected.length ? `${affected.length} existing reservation${affected.length > 1 ? "s" : ""} on those dates need a personal call — they are not cancelled automatically.` : "");
@@ -376,8 +392,14 @@ export default function ReservationsAdminPanel({
           {section === "calendar" ? (
             <CalendarExceptions
               state={current}
-              onAdd={(rule) => edit((next) => { next.exceptions = [...next.exceptions.filter((row) => !(row.date === rule.date && row.kind === rule.kind)), rule]; })}
-              onRemove={(rule) => edit((next) => { next.exceptions = next.exceptions.filter((row) => row !== rule && !(row.date === rule.date && row.kind === rule.kind)); })}
+              onAdd={(rule) => edit((next) => { next.exceptions = [...next.exceptions.filter((row) => !sameException(row, rule)), rule]; })}
+              onRemove={(rule) => edit((next) => {
+                // The draft is cloned on every edit, so the row handed back is
+                // never the same object — a saved rule is found again by its id.
+                next.exceptions = rule.id
+                  ? next.exceptions.filter((row) => row.id !== rule.id)
+                  : next.exceptions.filter((row) => !sameException(row, rule));
+              })}
             />
           ) : null}
 
@@ -645,6 +667,9 @@ function WeeklySchedule({ state, onToggle, onPatch, onCopy }) {
                   <button type="button" style={toggleBtn(row.onlineEnabled !== false)} onClick={() => onPatch(service, weekday, { onlineEnabled: row.onlineEnabled === false })}>
                     {row.onlineEnabled === false ? "STAFF BOOKINGS ONLY" : "GUESTS MAY BOOK ONLINE"}
                   </button>
+                  <button type="button" style={toggleBtn(row.walkInsEnabled !== false)} onClick={() => onPatch(service, weekday, { walkInsEnabled: row.walkInsEnabled === false })}>
+                    {row.walkInsEnabled === false ? "NO WALK-INS" : "WALK-INS WELCOME"}
+                  </button>
                   <button type="button" style={{ ...panelBtn(false), padding: "6px 12px" }} onClick={() => onCopy(service, weekday)}>
                     Copy these times to every day
                   </button>
@@ -663,6 +688,12 @@ function CalendarExceptions({ state, onAdd, onRemove }) {
   const [kind, setKind] = useState("closed");
   const [label, setLabel] = useState("");
   const [capacity, setCapacity] = useState("");
+  const [service, setService] = useState("dinner");
+  const [mode, setMode] = useState("on");
+  const [first, setFirst] = useState("18:00");
+  const [last, setLast] = useState("19:30");
+  const [slotInterval, setSlotInterval] = useState(30);
+  const [onlineOff, setOnlineOff] = useState(false);
   const kinds = [
     ["closed", "Closed all day"],
     ["private_event", "Private event"],
@@ -694,18 +725,73 @@ function CalendarExceptions({ state, onAdd, onRemove }) {
           <div style={{ marginTop: 10 }}>
             <div style={{ ...fieldLabel, marginBottom: 6 }}>How many covers that day?</div>
             <input value={capacity} onChange={(event) => setCapacity(event.target.value.replace(/\D/g, ""))} placeholder="16" style={{ ...baseInp, width: 110 }} />
+            {Number(capacity) < 1 ? (
+              <div style={{ fontSize: 10, color: tokens.ink[3], lineHeight: 1.7, marginTop: 6 }}>
+                Tell us how many covers before adding this one.
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {kind === "service_override" ? (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ ...fieldLabel, marginBottom: 6 }}>Which service is different?</div>
+            <Choice
+              options={[["dinner", "Dinner"], ["lunch", "Lunch"]]}
+              value={service}
+              onChange={(value) => {
+                setService(value);
+                setFirst(value === "lunch" ? "12:00" : "18:00");
+                setLast(value === "lunch" ? "13:30" : "19:30");
+              }}
+            />
+            <div style={{ ...fieldLabel, margin: "12px 0 6px" }}>What happens to it that day?</div>
+            <Choice options={[["on", "Served, with these hours"], ["off", "Not served at all"]]} value={mode} onChange={setMode} />
+            {mode === "on" ? (
+              <>
+                <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 12, alignItems: "flex-end" }}>
+                  <div>
+                    <div style={{ ...fieldLabel, marginBottom: 6 }}>First seating</div>
+                    <TimeStepper value={first} onChange={setFirst} />
+                  </div>
+                  <div>
+                    <div style={{ ...fieldLabel, marginBottom: 6 }}>Last seating</div>
+                    <TimeStepper value={last} onChange={setLast} />
+                  </div>
+                  <div>
+                    <div style={{ ...fieldLabel, marginBottom: 6 }}>How often can guests book?</div>
+                    <Choice options={[[15, "Every 15 min"], [30, "Every 30 min"]]} value={slotInterval} onChange={(value) => setSlotInterval(Number(value))} />
+                  </div>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <button type="button" style={toggleBtn(!onlineOff)} onClick={() => setOnlineOff(!onlineOff)}>
+                    {onlineOff ? "STAFF BOOKINGS ONLY" : "GUESTS MAY BOOK ONLINE"}
+                  </button>
+                </div>
+              </>
+            ) : null}
           </div>
         ) : null}
         <div style={{ marginTop: 12 }}>
           <button
             type="button"
             style={primaryBtn}
+            disabled={!date || (kind === "capacity_override" && Number(capacity) < 1)}
             onClick={() => {
               if (!date) return;
               const rule = { date, kind };
               if (kind === "private_event") rule.label = label || "Private event";
-              if (kind === "capacity_override") rule.capacity = Number(capacity || 0);
-              if (kind === "service_override") { rule.service = "lunch"; rule.mode = "on"; }
+              // Never send capacity 0 — the table only accepts a real number of covers.
+              if (kind === "capacity_override") rule.capacity = Number(capacity);
+              if (kind === "service_override") {
+                rule.service = service;
+                rule.mode = mode;
+                if (mode === "on") {
+                  rule.first = first;
+                  rule.last = last;
+                  rule.interval = slotInterval;
+                  rule.onlineOff = onlineOff;
+                }
+              }
               onAdd(rule);
               setLabel(""); setCapacity("");
             }}
@@ -731,6 +817,9 @@ function CalendarExceptions({ state, onAdd, onRemove }) {
               {rule.date} · {({ closed: "Closed", private_event: "Private event", capacity_override: "Capacity", service_override: "Different hours" })[rule.kind] || rule.kind}
               {rule.label ? ` · ${rule.label}` : ""}
               {rule.capacity ? ` · ${rule.capacity} covers` : ""}
+              {rule.service ? ` · ${rule.service}` : ""}
+              {rule.mode === "off" ? " · not served" : rule.first ? ` · ${rule.first}–${rule.last}` : ""}
+              {rule.onlineOff ? " · staff only" : ""}
             </span>
             <button type="button" style={dangerBtn} onClick={() => onRemove(rule)}>Remove</button>
           </div>
@@ -799,8 +888,13 @@ function Tables({ config, onEdit }) {
           type="button"
           style={{ ...panelBtn(false), padding: "8px 12px", marginTop: 10 }}
           onClick={() => onEdit((next) => {
-            const nextNumber = next.config.tables.length + 1;
-            next.config.tables.push({ id: `T${String(nextNumber).padStart(2, "0")}`, seats: 2 });
+            // The id is what the availability engine keys occupancy on and it
+            // cannot be edited afterwards, so take the first FREE number — after
+            // a deletion the list length no longer tells us what is free.
+            const taken = new Set(next.config.tables.map((table) => String(table.id)));
+            let number = 1;
+            while (taken.has(`T${String(number).padStart(2, "0")}`)) number += 1;
+            next.config.tables.push({ id: `T${String(number).padStart(2, "0")}`, seats: 2 });
           })}
         >
           + Add a table
@@ -851,6 +945,11 @@ function BookingRules({ config, onEdit }) {
   return (
     <>
       <Card>
+        <Row label="Can guests book online at all?" hint="Pausing closes the booking page for every date at once. Staff keep taking bookings by telephone, and nothing already booked is touched.">
+          <button type="button" style={toggleBtn(config.online.enabled !== false)} onClick={() => onEdit((next) => { next.config.online.enabled = next.config.online.enabled === false; })}>
+            {config.online.enabled === false ? "ONLINE BOOKING PAUSED" : "GUESTS MAY BOOK ONLINE"}
+          </button>
+        </Row>
         <Row
           label="Automatically confirm parties up to…"
           hint={Number(config.online.autoConfirmMaxPax) === 0
@@ -861,6 +960,9 @@ function BookingRules({ config, onEdit }) {
         </Row>
         <Row label="Largest party bookable online" hint="Bigger groups are invited to leave a note or call, so you can arrange the evening personally.">
           <Stepper value={config.online.maxPax} min={1} max={20} onChange={(value) => onEdit((next) => { next.config.online.maxPax = value; })} format={(value) => `${value} guests`} />
+        </Row>
+        <Row label="Smallest party bookable online" hint="Below this, guests are asked to call so you can seat them yourself.">
+          <Stepper value={config.online.minPax} min={1} max={Number(config.online.maxPax)} onChange={(value) => onEdit((next) => { next.config.online.minPax = value; })} format={(value) => `${value} guests`} />
         </Row>
         <Row label="How close to arrival can guests book?">
           <Stepper value={config.online.leadMinutes} min={0} max={240} step={15} onChange={(value) => onEdit((next) => { next.config.online.leadMinutes = value; })} format={(value) => `${value} min`} />
@@ -874,6 +976,16 @@ function BookingRules({ config, onEdit }) {
             value={config.online.whenFull}
             onChange={(value) => onEdit((next) => { next.config.online.whenFull = value; })}
           />
+        </Row>
+      </Card>
+      <Card>
+        <Row label="Do we take walk-ins?" hint="A walk-in is a staff action at the door — the booking page never offers one.">
+          <button type="button" style={toggleBtn(config.walkIns.enabled !== false)} onClick={() => onEdit((next) => { next.config.walkIns.enabled = next.config.walkIns.enabled === false; })}>
+            {config.walkIns.enabled === false ? "NO WALK-INS" : "YES, WE TAKE WALK-INS"}
+          </button>
+        </Row>
+        <Row label="How long do we hold a table for a walk-in?" hint="How long the door may keep a free table before it goes back to the booking page.">
+          <Stepper value={config.walkIns.holdMinutes} min={5} max={60} step={5} onChange={(value) => onEdit((next) => { next.config.walkIns.holdMinutes = value; })} format={(value) => `${value} min`} />
         </Row>
       </Card>
       <Card>
@@ -962,6 +1074,16 @@ function PublicPage({ config, state, onEdit }) {
           </Row>
           <Row label="Telephone">
             <input value={config.publicPage.phone} onChange={(event) => onEdit((next) => { next.config.publicPage.phone = event.target.value; })} style={{ ...baseInp, maxWidth: 220 }} />
+          </Row>
+          <Row label="Must a guest leave a telephone number?" hint="We need one way to reach a guest — leave at least one of these two required.">
+            <button type="button" style={toggleBtn(config.publicPage.requirePhone !== false)} onClick={() => onEdit((next) => { next.config.publicPage.requirePhone = next.config.publicPage.requirePhone === false; })}>
+              {config.publicPage.requirePhone === false ? "OPTIONAL" : "REQUIRED"}
+            </button>
+          </Row>
+          <Row label="Must a guest leave an email address?" hint="Switch this off for a telephone-only booking page.">
+            <button type="button" style={toggleBtn(config.publicPage.requireEmail !== false)} onClick={() => onEdit((next) => { next.config.publicPage.requireEmail = next.config.publicPage.requireEmail === false; })}>
+              {config.publicPage.requireEmail === false ? "OPTIONAL" : "REQUIRED"}
+            </button>
           </Row>
           <Row label="Languages guests can choose">
             <div style={{ display: "flex", gap: 6 }}>
@@ -1092,11 +1214,13 @@ function Permissions({ config, onEdit }) {
           <div key={`${member.name}-${index}`} style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderBottom: `1px solid ${tokens.ink[5]}`, padding: "8px 0" }}>
             <span style={{ fontSize: 12, minWidth: 120 }}>{member.name}</span>
             <Choice options={ROLES.map(([key, label]) => [key, label])} value={member.role} onChange={(role) => onEdit((next) => { next.config.team[index].role = role; })} />
+            <button type="button" style={dangerBtn} onClick={() => onEdit((next) => { next.config.team.splice(index, 1); })}>Remove</button>
           </div>
         ))}
         {team.length === 0 ? (
           <div style={{ fontSize: 10, color: tokens.ink[3] }}>Reservations uses the same people and sign-in as the rest of Admin. Give someone a reservation role here when they need one.</div>
         ) : null}
+        <TeamAdd onAdd={(member) => onEdit((next) => { next.config.team = [...(next.config.team || []), member]; })} />
       </Card>
       <Card tone="quiet">
         {ROLES.map(([key, label, description]) => (
@@ -1109,6 +1233,23 @@ function Permissions({ config, onEdit }) {
         </div>
       </Card>
     </>
+  );
+}
+
+function TeamAdd({ onAdd }) {
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("host");
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 12, flexWrap: "wrap" }}>
+      <div>
+        <div style={{ ...fieldLabel, marginBottom: 6 }}>Who needs a reservation role?</div>
+        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Name" style={{ ...baseInp, width: 170 }} />
+      </div>
+      <Choice options={ROLES.map(([key, label]) => [key, label])} value={role} onChange={setRole} />
+      <button type="button" style={{ ...panelBtn(false), padding: "8px 12px" }} disabled={!name.trim()} onClick={() => { onAdd({ name: name.trim(), role }); setName(""); }}>
+        Give them this role
+      </button>
+    </div>
   );
 }
 
