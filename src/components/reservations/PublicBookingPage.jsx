@@ -145,7 +145,10 @@ export default function PublicBookingPage({
   const morePages = (dayPage + 1) * PAGE_DAYS < windowDays;
   // "Show our phone number" is an explicit admin choice: on a full day it must
   // replace the waitlist form, not sit next to it.
-  const offerWaitlist = config.whenFull !== "phone" && config.waitlistEnabled !== false && Boolean(joinWaitlist);
+  // A closed online diary offers the telephone, never a waitlist form: taking
+  // details online is exactly what the restaurant has just switched off.
+  const offerWaitlist = config.onlineEnabled !== false
+    && config.whenFull !== "phone" && config.waitlistEnabled !== false && Boolean(joinWaitlist);
 
   useEffect(() => {
     if (step !== "time" || !loadAvailability) return undefined;
@@ -333,7 +336,12 @@ export default function PublicBookingPage({
               ) : !anyOpen ? (
                 <>
                   <p style={{ ...body, marginTop: 12 }}>
-                    Nothing free for {pax} on {readable(date)}. Try another day{offerWaitlist ? " — or leave your details and we will call if a table opens" : ""}.
+                    {/* Online booking switched off is not the same as a full day —
+                        saying "nothing free" would send the guest away believing
+                        the restaurant is booked out. */}
+                    {config.onlineEnabled === false
+                      ? `We are not taking bookings online at the moment${config.phone ? " — please telephone us and we will look after you" : ""}.`
+                      : `Nothing free for ${pax} on ${readable(date)}. Try another day${offerWaitlist ? " — or leave your details and we will call if a table opens" : ""}.`}
                   </p>
                   <button type="button" style={{ ...secondary, marginTop: 14 }} onClick={() => go("when")}>Choose another day</button>
                   {offerWaitlist ? (

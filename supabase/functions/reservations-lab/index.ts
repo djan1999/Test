@@ -203,6 +203,9 @@ function tableFor(date: string, time: string, pax: number, bookings: any[], conf
 
 function availability(date: string, pax: number, context: any, publicOnly = false) {
   if (publicOnly) {
+    // Online booking switched off closes /book here, not merely in the guest's
+    // browser, so the switch holds against a hand-made request too.
+    if (context.config.online?.enabled === false) return [];
     const now = restaurantNow();
     const max = new Date(`${now.date}T12:00:00Z`);
     max.setUTCDate(max.getUTCDate() + Number(context.config.online?.windowDays || 90));
@@ -382,6 +385,11 @@ Deno.serve(async (request: Request) => {
         ? { ...context, bookings: context.bookings.filter((booking: any) => booking.id !== excludeBookingId) }
         : context;
       const options = availability(input.date, Number(input.pax), scopedContext, publicOnly);
+      if (publicOnly && context.config.online?.enabled === false) {
+        const error: any = new Error("Online booking is closed. Please telephone the restaurant.");
+        error.code = "online_closed";
+        throw error;
+      }
       if (publicOnly && Number(input.pax) > Number(context.config.online?.maxPax || 6)) {
         const error: any = new Error("This party is too large for online booking.");
         error.code = "party_too_large";
@@ -530,6 +538,7 @@ Deno.serve(async (request: Request) => {
         tagline: config.tagline,
         timezone: config.timezone,
         ...(config.publicPage || {}),
+        onlineEnabled: config.online?.enabled !== false,
         maxPax: config.online?.maxPax,
         minPax: config.online?.minPax,
         leadMinutes: config.online?.leadMinutes,

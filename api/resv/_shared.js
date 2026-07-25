@@ -268,7 +268,10 @@ export async function getAvailability(client, workspaceId, {
   const outsideWindow = Boolean(publicOnly) && (
     date < now.date || date > shiftDate(now.date, context.config.online.windowDays)
   );
-  const services = outsideWindow ? [] : evaluateAvailability({
+  // Online booking switched off closes /book at the server, not merely in the
+  // guest's browser: the switch has to hold against a hand-made request too.
+  const onlineClosed = Boolean(publicOnly) && context.config.online.enabled === false;
+  const services = (outsideWindow || onlineClosed) ? [] : evaluateAvailability({
     date,
     pax: Number(pax),
     services: context.services,
@@ -279,7 +282,7 @@ export async function getAvailability(client, workspaceId, {
     isToday: publicOnly && date === now.date,
     nowMinutes: publicOnly ? now.minutes : null,
   });
-  return { ...context, services, outsideWindow };
+  return { ...context, services, outsideWindow, onlineClosed };
 }
 
 export function createReference() {
@@ -460,6 +463,11 @@ export async function validateBookingChoice(client, workspaceId, input, {
     publicOnly,
     excludeBookingId,
   });
+  if (availability.onlineClosed) {
+    const error = new Error("Online booking is closed. Please telephone the restaurant.");
+    error.code = "online_closed";
+    throw error;
+  }
   if (availability.outsideWindow) {
     const error = new Error("That date is outside the online booking window.");
     error.code = "outside_window";

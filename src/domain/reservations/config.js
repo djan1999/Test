@@ -218,6 +218,7 @@ export function publicConfigOf(config) {
     requireEmail: normalized.publicPage.requireEmail !== false,
     requirePhone: normalized.publicPage.requirePhone !== false,
     policies: normalized.publicPage.policies,
+    onlineEnabled: normalized.online.enabled !== false,
     maxPax: normalized.online.maxPax,
     minPax: normalized.online.minPax,
     leadMinutes: normalized.online.leadMinutes,
