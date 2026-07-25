@@ -1,0 +1,4 @@
+# These files are byte-compared by the edge-domain sync gate. Keep their
+# working-tree representation identical on Windows, macOS, and Linux.
+src/domain/reservations/*.js text eol=lf
+supabase/functions/_shared/reservations/*.js text eol=lf

@@ -7,6 +7,10 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./src/__tests__/setup.js"],
+    // Vitest otherwise uses every reported CPU for file workers. The UI-heavy
+    // jsdom files become slower under that contention and can exceed their
+    // normal per-test timeout even though they pass quickly in isolation.
+    maxWorkers: 4,
     include: [
       "src/__tests__/**/*.test.{js,jsx}",
       "src/domain/reservations/__tests__/**/*.test.js",
