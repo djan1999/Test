@@ -1008,17 +1008,22 @@ function WaitlistTab({ entries, date, bookings, config, weeklyServices, calendar
 function PrintTab({ date, service, bookings, compact, onPrintKitchenTicket, onPrintBreakdown, onPrintAllergySheet, onPrintWeekly }) {
   const live = bookings.filter((booking) => ACTIVE.has(booking.status));
   const withRestrictions = live.filter((booking) => restrictionsOf(booking).length > 0);
+  // A sheet is offered only when its generator was actually passed. Filtering
+  // on the wrapper instead of the handler always passed — an arrow is a
+  // function whether or not the handler behind it exists — so a surface that
+  // supplied no handler still showed the card, and its Print button did
+  // nothing at all when pressed.
   const sheets = [
-    ["Service breakdown", `${live.length} bookings · ${live.reduce((total, booking) => total + Number(booking.pax || 0), 0)} covers`, () => onPrintBreakdown?.({ date, service })],
-    ["Allergy sheet", withRestrictions.length ? `${withRestrictions.length} part${withRestrictions.length === 1 ? "y" : "ies"} with restrictions` : "No restrictions this service", () => onPrintAllergySheet?.({ date, service })],
-    ["Kitchen tickets", "One ticket per party, in seating order", () => onPrintKitchenTicket?.({ date, service })],
-    ["Week ahead", "Seven days from the selected date", () => onPrintWeekly?.({ from: date })],
-  ].filter(([, , action]) => typeof action === "function");
+    ["Service breakdown", `${live.length} bookings · ${live.reduce((total, booking) => total + Number(booking.pax || 0), 0)} covers`, onPrintBreakdown, () => onPrintBreakdown({ date, service })],
+    ["Allergy sheet", withRestrictions.length ? `${withRestrictions.length} part${withRestrictions.length === 1 ? "y" : "ies"} with restrictions` : "No restrictions this service", onPrintAllergySheet, () => onPrintAllergySheet({ date, service })],
+    ["Kitchen tickets", "One ticket per party, in seating order", onPrintKitchenTicket, () => onPrintKitchenTicket({ date, service })],
+    ["Week ahead", "Seven days from the selected date", onPrintWeekly, () => onPrintWeekly({ from: date })],
+  ].filter(([, , handler]) => typeof handler === "function");
 
   return (
     <>
       <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "repeat(auto-fit, minmax(230px, 1fr))", gap: 10, marginBottom: 12 }}>
-        {sheets.map(([title, detail, action]) => (
+        {sheets.map(([title, detail, , action]) => (
           <div key={title} style={{ ...box, padding: "14px 16px" }}>
             <div style={{ fontSize: 12, color: tokens.ink[0] }}>{title}</div>
             <div style={{ fontSize: 10, color: tokens.ink[3], lineHeight: 1.7, marginTop: 5 }}>{detail}</div>
