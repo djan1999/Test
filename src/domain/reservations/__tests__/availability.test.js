@@ -189,3 +189,36 @@ describe("walk-ins", () => {
     expect(walkInsAllowed({ date: TUESDAY, services, config, exceptions: [{ date: TUESDAY, kind: "closed" }] })).toBe(false);
   });
 });
+
+// A guest following their manage link to move an existing booking must not be
+// blocked by the table they already hold. The callers express that by removing
+// the booking from the set before evaluating (getAvailability's
+// `excludeBookingId`), so what is pinned here is the behaviour they rely on:
+// the same evening reads as full or as free depending only on whether the
+// guest's own row is in the list.
+describe("a guest's own booking must not block their own move", () => {
+  const single = normalizeReservationConfig({
+    tables: [{ id: "T01", seats: 2 }, { id: "T05", seats: 4 }],
+    combos: [],
+    pacing: { coversPerSlot: 8, coversPerService: 20 },
+    durations: { small: 120, medium: 150, large: 180, buffer: 15 },
+  });
+  const services = normalizeWeeklyServices([
+    { service: "dinner", weekday: 2, enabled: true, first: "18:00", last: "19:00", interval: 30, onlineEnabled: true },
+  ]);
+  const own = { ...booking("own", "18:00", 4, ["T05"]), service: "dinner" };
+  const evaluate = (bookings) => evaluateAvailability({
+    date: TUESDAY, pax: 4, services, bookings, config: single, publicOnly: true,
+  })[0].slots.find((slot) => slot.time === "18:00");
+
+  it("reports no table while their own booking is counted", () => {
+    expect(evaluate([own]).ok).toBe(false);
+    expect(evaluate([own]).reason).toBe("no_table");
+  });
+
+  it("offers the same sitting once their own booking is excluded", () => {
+    const slot = evaluate([]);
+    expect(slot.ok).toBe(true);
+    expect(slot.tables).toContain("T05");
+  });
+});

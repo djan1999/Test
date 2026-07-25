@@ -553,7 +553,14 @@ Deno.serve(async (request: Request) => {
     }
     if (action === "availability") {
       const context = await loadContext(body.date);
-      const services = availability(body.date, Number(body.pax || 2), context, true)
+      // A guest changing an existing booking must not be blocked by their own
+      // table. The booking to exclude is derived from the manage token, never
+      // taken as a raw id, so nobody can free a table they do not hold.
+      const managed = body.token ? await resolveToken(String(body.token)) : null;
+      const scoped = managed
+        ? { ...context, bookings: context.bookings.filter((booking: any) => booking.id !== managed.booking.id) }
+        : context;
+      const services = availability(body.date, Number(body.pax || 2), scoped, true)
         .map((service) => ({ service: service.service, slots: service.slots.map(({ time, ok }) => ({ time, ok })) }));
       return json(200, { ok: true, services, anyOk: services.some((service) => service.slots.some((slot) => slot.ok)) });
     }

@@ -141,7 +141,7 @@ function ManageRoute({ token }) {
         publicConfig={config}
         initialBooking={booking}
         startDate={booking.date}
-        loadAvailability={async (date, pax) => (await loadPublicAvailability(date, pax)).services}
+        loadAvailability={async (date, pax) => (await loadPublicAvailability(date, pax, token)).services}
         submitBooking={(nextBooking, idempotencyKey) => changeManagedBooking(token, {
           ...nextBooking,
           allergies: splitGuestList(nextBooking.allergies),

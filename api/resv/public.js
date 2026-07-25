@@ -37,7 +37,17 @@ export default async function handler(request, response) {
       if (mode === "availability") {
         const date = String(request.query.date || "");
         const pax = Number(request.query.pax || 2);
-        const result = await getAvailability(client, workspace.id, { date, pax, publicOnly: true });
+        // A guest changing an existing booking must not be blocked by their own
+        // table. The booking to exclude is derived from the manage token, never
+        // taken as a raw id, so nobody can free a table they do not hold.
+        const manageToken = String(request.query.token || "").trim();
+        const managed = manageToken ? await resolveManageToken(client, manageToken) : null;
+        const result = await getAvailability(client, workspace.id, {
+          date,
+          pax,
+          publicOnly: true,
+          excludeBookingId: managed?.booking?.id || null,
+        });
         return sendJson(response, 200, {
           ok: true,
           services: publicAvailability(result.services),

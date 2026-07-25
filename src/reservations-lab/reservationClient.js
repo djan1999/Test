@@ -97,9 +97,12 @@ export async function loadPublicConfig() {
   return parseResponse(response);
 }
 
-export async function loadPublicAvailability(date, pax) {
-  if (EDGE_API) return edgeRequest("availability", { date, pax });
+/** `manageToken` excludes that guest's own booking, so changing a time is not
+ *  blocked by the table they are already sitting on. */
+export async function loadPublicAvailability(date, pax, manageToken = "") {
+  if (EDGE_API) return edgeRequest("availability", { date, pax, ...(manageToken ? { token: manageToken } : {}) });
   const params = new URLSearchParams({ mode: "availability", date, pax: String(pax) });
+  if (manageToken) params.set("token", manageToken);
   const response = await fetch(`/api/resv/public?${params}`, { cache: "no-store" });
   return parseResponse(response);
 }
