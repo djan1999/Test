@@ -176,6 +176,11 @@ function resolveServices(date: string, services: any[], rules: any[], publicOnly
       last: override?.last || weekly?.last || (serviceName === "lunch" ? "13:30" : "19:30"),
       interval: Number(override?.interval || weekly?.interval || 30),
       onlineEnabled: override?.onlineOff ? false : weekly?.onlineEnabled !== false,
+      // Per-service party limits and walk-in permission travel with the resolved
+      // service, exactly as resolveServicesForDate does for the client engine.
+      minPax: weekly?.minPax != null ? Number(weekly.minPax) : null,
+      maxPax: weekly?.maxPax != null ? Number(weekly.maxPax) : null,
+      walkInsEnabled: weekly?.walkInsEnabled !== false,
     };
     return publicOnly && !resolved.onlineEnabled ? [] : [resolved];
   }).sort((a, b) => minutesOf(a.first) - minutesOf(b.first));
@@ -206,10 +211,17 @@ function availability(date: string, pax: number, context: any, publicOnly = fals
   const dayServices = resolveServices(date, context.services, context.exceptions, publicOnly);
   const active = context.bookings.filter((booking) => booking.date === date && activeStatuses.has(booking.status));
   const capacityRule = context.exceptions.find((rule) => rule.date === date && rule.kind === "capacity_override");
-  const serviceCap = Number(capacityRule?.capacity || context.config.pacing?.coversPerService || 44);
+  // A capacity override caps the whole DAY, not each service: it replaces the
+  // per-service cap and is also checked against every active cover of the date.
+  const dayCap = capacityRule?.capacity != null ? Number(capacityRule.capacity) : null;
+  const dayCovers = active.reduce((total, booking) => total + booking.pax, 0);
+  const serviceCap = dayCap != null ? dayCap : Number(context.config.pacing?.coversPerService || 44);
   return dayServices.map((service) => {
     const inService = active.filter((booking) => booking.service === service.service);
     const serviceCovers = inService.reduce((total, booking) => total + booking.pax, 0);
+    // Per-service limits win, the global online limits are the fallback.
+    const minPax = service.minPax != null ? service.minPax : Number(context.config.online?.minPax || 1);
+    const maxPax = service.maxPax != null ? service.maxPax : Number(context.config.online?.maxPax || 6);
     return {
       ...service,
       slots: slotsBetween(service.first, service.last, service.interval).map((time) => {
@@ -220,8 +232,10 @@ function availability(date: string, pax: number, context: any, publicOnly = fals
           || date !== now?.date
           || minutesOf(time) >= Number(now?.minutes || 0) + Number(context.config.online?.leadMinutes || 0);
         let reason = null;
-        if (pax > Number(context.config.online?.maxPax || 6)) reason = "party_too_large";
+        if (pax < minPax) reason = "party_too_small";
+        else if (pax > maxPax) reason = "party_too_large";
         else if (!passesLeadTime) reason = "too_late";
+        else if (dayCap != null && dayCovers + pax > dayCap) reason = "day_full";
         else if (serviceCovers + pax > serviceCap) reason = "service_full";
         else if (slotCovers + pax > Number(context.config.pacing?.coversPerSlot || 12)) reason = "sitting_full";
         else if (!tableLabel) reason = "no_table";
@@ -453,6 +467,28 @@ Deno.serve(async (request: Request) => {
         p_actor: publicOnly ? "WEB" : staffActor,
       });
       if (error) {
+        // A concurrent retry of the same key gets past the replay SELECT above and
+        // then loses the unique (workspace_id, idempotency_key) race. It must still
+        // resolve to the ORIGINAL booking, never a duplicate-key error.
+        if ((error as any).code === "23505") {
+          const { data: duplicate, error: duplicateError } = await client.from("reservation_bookings")
+            .select("*").eq("workspace_id", workspace.id).eq("idempotency_key", idempotencyKey).single();
+          if (duplicateError) throw duplicateError;
+          let duplicateToken = null;
+          if (publicOnly) {
+            duplicateToken = randomToken();
+            const expires = new Date(`${duplicate.date}T23:59:59+02:00`);
+            expires.setDate(expires.getDate() + 1);
+            const { error: tokenError } = await client.from("reservation_manage_tokens").insert({
+              token_hash: await sha256(duplicateToken),
+              workspace_id: workspace.id,
+              booking_id: duplicate.id,
+              expires_at: expires.toISOString(),
+            });
+            if (tokenError) throw tokenError;
+          }
+          return { booking: mapBooking(duplicate), replay: true, token: duplicateToken };
+        }
         if (String(error.message || "").includes("slot_taken")) error.code = "slot_taken";
         throw error;
       }
