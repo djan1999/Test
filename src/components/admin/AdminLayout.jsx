@@ -365,6 +365,7 @@ export default function AdminLayout({
             <ReservationsAdminModule
               accessToken={accessToken}
               workspaceId={workspaceId}
+              floorMaps={floorMaps}
             />
           )}
 

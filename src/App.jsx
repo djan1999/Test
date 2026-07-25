@@ -101,6 +101,8 @@ import { tokens } from "./styles/tokens.js";
 import ServiceDatePicker from "./components/reservations/ServiceDatePicker.jsx";
 import ResvForm from "./components/reservations/ResvForm.jsx";
 import { useReservationWorkspace } from "./components/reservations/useReservationWorkspace.js";
+import { useServiceReservationFeed } from "./components/reservations/useServiceReservationFeed.js";
+import { projectBookingsForService } from "./domain/reservations/serviceProjection.js";
 import CenteredModal from "./components/ui/CenteredModal.jsx";
 import Header from "./components/ui/Header.jsx";
 import GlobalStyle from "./components/ui/GlobalStyle.jsx";
@@ -136,6 +138,16 @@ const toLocalDateISO = (date = new Date()) =>
 const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
 const APP_SUBTITLE = String(import.meta.env.VITE_APP_SUBTITLE || "SERVICE BOARD").trim() || "SERVICE BOARD";
 const RESERVATIONS_V2_ENABLED = import.meta.env.VITE_RESERVATIONS_V2_ENABLED === "true";
+// Loop 1 — reservation_bookings projected onto the board Service reads.
+// Its own flag, off by default: switching it on adds a poll of the reservation
+// store to every service, and a restaurant still running the legacy planner
+// must be able to leave it alone. See domain/reservations/serviceProjection.js.
+const RESERVATIONS_LOOP1_ENABLED = import.meta.env.VITE_RESERVATIONS_LOOP1_ENABLED === "true";
+// Loop 2 — the finished service writes guest history, from the archive, after
+// the service is closed. Never a live listener: a subscription would put
+// reservation writes inside the service transaction, which is the coupling the
+// Service Boundary Contract exists to prevent.
+const RESERVATIONS_LOOP2_ENABLED = import.meta.env.VITE_RESERVATIONS_LOOP2_ENABLED === "true";
 const DEFAULT_RESTAURANT_CONFIG = makeDefaultRestaurantConfig({ name: APP_NAME, subtitle: APP_SUBTITLE });
 
 // Board sync history follows a table's stable id, never its screen position.
@@ -630,6 +642,45 @@ export default function App() {
   const [reservations, setReservations] = useState(() => readLocalReservations() || []);
   const reservationsRef = useRef(reservations);
   reservationsRef.current = reservations;
+
+  // ── Loop 1: reservations → Service ────────────────────────────────────────
+  // The reservation store's bookings, projected into the legacy row shape the
+  // board already reads. Read-only and forward-only: the projection preserves
+  // every service-owned key byte-for-byte, so a party on the terrace can never
+  // be rewritten by a change typed at the host stand. See
+  // domain/reservations/serviceProjection.js for the exact rules, and
+  // components/reservations/useServiceReservationFeed.js for the reader.
+  const projectionWindow = useMemo(() => {
+    const past = new Date(); past.setDate(past.getDate() - 7);
+    const future = new Date(); future.setDate(future.getDate() + 30);
+    return { from: toLocalDateISO(past), to: toLocalDateISO(future) };
+  }, []);
+  const reservationFeedCredentials = useMemo(
+    () => (session?.access_token && workspaceId ? { accessToken: session.access_token, workspaceId } : null),
+    [session?.access_token, workspaceId],
+  );
+  const projectedBookings = useServiceReservationFeed({
+    // Either loop needs the feed: Loop 1 to show bookings on the board, Loop 2
+    // to tie an archived table back to the booking it came from. Each stays
+    // independently switchable — neither flag implies the other.
+    enabled: (RESERVATIONS_LOOP1_ENABLED || RESERVATIONS_LOOP2_ENABLED)
+      && RESERVATIONS_V2_ENABLED
+      && Boolean(reservationFeedCredentials),
+    credentials: reservationFeedCredentials,
+    from: projectionWindow.from,
+    to: projectionWindow.to,
+  });
+  const projectedBookingsRef = useRef(projectedBookings);
+  projectedBookingsRef.current = projectedBookings;
+  useEffect(() => {
+    if (!RESERVATIONS_LOOP1_ENABLED || !projectedBookings.length) return;
+    setReservations((prev) => {
+      const result = projectBookingsForService(prev, projectedBookings, projectionWindow);
+      // `rows` is `prev` itself when nothing moved, so an unchanged poll never
+      // re-renders the board or looks like a change to the reconcile effect.
+      return result.rows;
+    });
+  }, [projectedBookings, projectionWindow]);
   // Gates the board↔reservations reconciliation effect: it must not run (and
   // especially must not clear ghost tables) until both reservations and the
   // remote service-table state have actually loaded.
@@ -2192,6 +2243,34 @@ export default function App() {
         return { ok: false, reason: "persist-failed", error: result.error };
       }
       applyFinishedServiceLocally(result.rows);
+      // ── Loop 2: the archive writes guest history ──────────────────────────
+      // AFTER the service is closed and the board is clear, never during. The
+      // visits are computed from the archive we have just filed (a pure
+      // function) and the write is idempotent per service instance, so a retry
+      // or a second tablet ending the same service adds nothing. It is also
+      // deliberately unawaited and unreported: guest history is worth having,
+      // and it is never worth holding up the end of a service or showing a
+      // waiter an error about it.
+      if (RESERVATIONS_LOOP2_ENABLED && archive) {
+        void (async () => {
+          try {
+            const [{ visitsFromArchive }, { recordServiceVisits }] = await Promise.all([
+              import("./domain/reservations/guestHistory.js"),
+              import("./reservations-lab/reservationClient.js"),
+            ]);
+            const visits = visitsFromArchive(archive, projectedBookingsRef.current);
+            if (!visits.length) return;
+            await recordServiceVisits(
+              visits,
+              session?.access_token && getWorkspaceId()
+                ? { accessToken: session.access_token, workspaceId: getWorkspaceId() }
+                : undefined,
+            );
+          } catch (error) {
+            recordClientDiagnostic("reservation guest history", error);
+          }
+        })();
+      }
       // Persist the strip wipe so the store's floor_status doesn't carry this
       // service's SET markers into the next one (adopters only clear locally).
       updateFloorStatus({});

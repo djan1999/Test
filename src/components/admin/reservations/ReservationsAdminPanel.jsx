@@ -15,6 +15,21 @@ import { tokens } from "../../../styles/tokens.js";
 import { FONT, baseInp, dangerBtn, primaryBtn, saveBtn, sectionHeader, toggleBtn } from "../adminStyles.js";
 import { RESERVATION_ROLES } from "../../../domain/reservations/config.js";
 import { dateWeekday, generateSlots, minutesOf, timeOf } from "../../../domain/reservations/availability.js";
+import { tablesFromDiningMap } from "../../../domain/reservations/tableImport.js";
+
+// Loop 3 — "take the current dining room". Off by default: a restaurant whose
+// floor plan is still being drawn should not have its bookable tables replaced
+// by a half-finished one.
+const TABLE_IMPORT_ENABLED = import.meta.env.VITE_RESERVATIONS_LOOP3_ENABLED === "true";
+
+// The floor map is READ here and nowhere else in this file, exactly once, to
+// produce a copy. Availability never reads it — see tableImport.js.
+const activeDiningMap = (floorMaps) => {
+  const maps = Array.isArray(floorMaps?.maps) ? floorMaps.maps : [];
+  return maps.find((map) => map.id === floorMaps?.activeDiningMapId && map.kind === "dining")
+    || maps.find((map) => map.kind === "dining")
+    || null;
+};
 
 const NAV = [
   ["overview", "Overview", "start here"],
@@ -49,7 +64,7 @@ const label = { fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: tokens.i
 const explain = { fontFamily: FONT, fontSize: 9, color: tokens.ink[3], lineHeight: 1.7, marginTop: 8 };
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
-export default function ReservationsAdminPanel({ config, weeklyServices = [], exceptions = [], bookings = [], audit = [], onSave, canEdit = true }) {
+export default function ReservationsAdminPanel({ config, weeklyServices = [], exceptions = [], bookings = [], audit = [], floorMaps = null, enableTableImport = TABLE_IMPORT_ENABLED, onSave, canEdit = true }) {
   const applied = useMemo(
     () => ({ config: clone(config || {}), weeklyServices: clone(weeklyServices), exceptions: clone(exceptions) }),
     [config, weeklyServices, exceptions],
@@ -143,7 +158,7 @@ export default function ReservationsAdminPanel({ config, weeklyServices = [], ex
 
           {section === "capacity" && <Capacity cfg={cfg} edit={edit} />}
 
-          {section === "tables" && <Tables cfg={cfg} edit={edit} scratch={scratch} setScratch={setScratch} setMessage={setMessage} />}
+          {section === "tables" && <Tables cfg={cfg} edit={edit} scratch={scratch} setScratch={setScratch} setMessage={setMessage} floorMaps={floorMaps} enableImport={enableTableImport} />}
 
           {section === "rules" && <BookingRules cfg={cfg} edit={edit} />}
 
@@ -556,11 +571,12 @@ function Capacity({ cfg, edit }) {
   );
 }
 
-function Tables({ cfg, edit, scratch, setScratch, setMessage }) {
+function Tables({ cfg, edit, scratch, setScratch, setMessage, floorMaps, enableImport }) {
   const tables = cfg.tables || [];
   return (
     <>
       <div style={sectionHeader}>Tables — reservation inventory</div>
+      {enableImport && <ImportFromDiningRoom cfg={cfg} edit={edit} floorMaps={floorMaps} />}
       <div style={card}>
         <div style={explain}>A reservation-only copy of the dining room. Changing it never touches the live Service board or the floor plan.</div>
         {tables.map((table, index) => (
@@ -626,6 +642,96 @@ function Tables({ cfg, edit, scratch, setScratch, setMessage }) {
         <div style={explain}>Joined pairs let a bigger party book two tables as one — the suggestion engine uses them automatically.</div>
       </div>
     </>
+  );
+}
+
+/**
+ * Loop 3 — take the current dining room.
+ *
+ * A copy, taken when somebody asks for it, shown in full before it is applied.
+ * The live floor plan is never written, and availability never depends on it:
+ * everything the engine uses lives in the reservation config from here on.
+ */
+function ImportFromDiningRoom({ cfg, edit, floorMaps }) {
+  const [preview, setPreview] = useState(null);
+  const map = activeDiningMap(floorMaps);
+
+  if (!map) {
+    return (
+      <div style={card}>
+        <div style={label}>Take the current dining room</div>
+        <div style={explain}>No dining room layout is available to read. Draw one in Floor first.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={card}>
+      <div style={label}>Take the current dining room</div>
+      <div style={explain}>
+        Reads the floor plan ({map.name || map.id}) and copies it into the reservation table list. The floor plan itself is
+        never changed, and bookings never read it again — this is a copy you can edit afterwards.
+      </div>
+
+      {!preview && (
+        <button type="button" style={{ ...saveBtn("idle"), marginTop: 10 }} onClick={() => setPreview(tablesFromDiningMap(map, cfg))}>
+          See what would change
+        </button>
+      )}
+
+      {preview && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 10, color: tokens.ink[1], lineHeight: 1.8 }}>
+            {preview.tables.length} bookable {preview.tables.length === 1 ? "table" : "tables"} ·{" "}
+            {preview.tables.reduce((total, table) => total + Number(table.seats), 0)} seats ·{" "}
+            {preview.combos.length} joinable {preview.combos.length === 1 ? "pair" : "pairs"}
+          </div>
+
+          {preview.changes.length === 0 && (
+            <div style={explain}>Nothing would change — the reservation list already matches the room.</div>
+          )}
+
+          {preview.changes.map((change) => (
+            <div key={change.label} style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap", borderTop: `1px solid ${tokens.neutral[100]}`, padding: "6px 0" }}>
+              <span style={{ fontSize: 10, color: tokens.ink[1], flex: "1 1 200px" }}>{change.label}</span>
+              <span style={{ fontSize: 9, color: tokens.ink[3] }}>{change.from} → </span>
+              <span style={{ fontSize: 10, color: tokens.ink[0], fontWeight: 600 }}>{change.to}</span>
+              {change.warning && <span style={{ fontSize: 9, color: tokens.signal.warn, flexBasis: "100%" }}>{change.warning}</span>}
+            </div>
+          ))}
+
+          {preview.skipped.length > 0 && (
+            <div style={explain}>
+              Not imported: {preview.skipped.map((item) => `${item.label} (${item.reason})`).join(", ")}. Nothing on the floor
+              plan was altered — add these by hand if they should be bookable.
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              style={saveBtn("idle")}
+              onClick={() => {
+                edit((next) => {
+                  next.config.tables = preview.tables.map((table) => ({ ...table }));
+                  next.config.combos = preview.combos.map((pair) => [...pair]);
+                });
+                setPreview(null);
+              }}
+            >
+              Take this room
+            </button>
+            <button type="button" style={dangerBtn} onClick={() => setPreview(null)}>
+              Leave it as it is
+            </button>
+          </div>
+          <div style={explain}>
+            Taking the room only fills in the draft — nothing is saved until you review and save at the bottom of the page,
+            like every other setting here.
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

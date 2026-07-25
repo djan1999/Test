@@ -13,6 +13,7 @@ import {
 } from "./_shared.js";
 import { normalizeReservationConfig } from "../../src/domain/reservations/config.js";
 import { legacyReservationToBooking } from "../../src/domain/reservations/bookingAdapter.js";
+import { foldVisitsIntoGuests } from "../../src/domain/reservations/guestHistory.js";
 
 // Status events for exactly the bookings being returned. A workspace-wide row
 // cap would leave older bookings with an empty history, and the Record then
@@ -253,6 +254,42 @@ export default async function handler(request, response) {
         .single();
       if (error) throw error;
       return sendJson(response, 200, { ok: true, entry: data });
+    }
+    // Loop 2 — the finished service writes guest history.
+    //
+    // The client computes the visits from the archive it has just written (a
+    // pure function, domain/reservations/guestHistory.js) and posts them here.
+    // The fold is idempotent on visitId, so a re-archived service replaces its
+    // own rows rather than giving a guest a dinner they never ate. Nothing in
+    // this action reads or writes any live-service table.
+    if (action === "recordVisits") {
+      const visits = Array.isArray(request.body.visits) ? request.body.visits : [];
+      const keys = [...new Set(visits.map((visit) => String(visit.guestKey || "")).filter(Boolean))];
+      if (!keys.length) return sendJson(response, 200, { ok: true, updated: 0, skipped: visits.length });
+
+      const { data: guests, error: guestError } = await client
+        .from("reservation_guests")
+        .select("id,name_key,visits,visit_count,last_visit")
+        .eq("workspace_id", workspace.id)
+        .in("name_key", keys);
+      if (guestError) throw guestError;
+
+      const folded = foldVisitsIntoGuests(guests || [], visits);
+      const touched = folded.guests.filter((guest) => Array.isArray(guest.visits));
+      for (const guest of touched) {
+        const { error: updateError } = await client
+          .from("reservation_guests")
+          .update({
+            visits: guest.visits,
+            visit_count: guest.visits.length,
+            last_visit: guest.last_visit || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("workspace_id", workspace.id)
+          .eq("id", guest.id);
+        if (updateError) throw updateError;
+      }
+      return sendJson(response, 200, { ok: true, updated: folded.updated, skipped: folded.skipped });
     }
     if (action === "saveConfig") {
       const { data: before, error: beforeError } = await client.from("reservation_config")

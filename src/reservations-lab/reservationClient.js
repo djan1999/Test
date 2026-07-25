@@ -91,6 +91,14 @@ export async function staffAction(action, body = {}, credentials = getLabAccessC
   return parseResponse(response);
 }
 
+/** Loop 2 — hand a finished service's visits to the reservation store.
+ *  Idempotent server-side: calling it twice for the same service is a no-op,
+ *  so a retry after a flaky end-of-service is always safe. */
+export async function recordServiceVisits(visits, credentials = getLabAccessCode()) {
+  if (!Array.isArray(visits) || !visits.length) return { ok: true, updated: 0 };
+  return staffAction("recordVisits", { visits }, credentials);
+}
+
 export async function loadPublicConfig() {
   if (EDGE_API) return edgeRequest("publicConfig");
   const response = await fetch("/api/resv/public?mode=config", { cache: "no-store" });

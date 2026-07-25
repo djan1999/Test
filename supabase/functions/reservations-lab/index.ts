@@ -14,6 +14,7 @@ import {
   publicConfigOf,
 } from "../_shared/reservations/config.js";
 import { assertReservationTransition } from "../_shared/reservations/lifecycle.js";
+import { foldVisitsIntoGuests } from "../_shared/reservations/guestHistory.js";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -736,6 +737,32 @@ Deno.serve(async (request: Request) => {
       const { error } = await client.from("reservation_waitlist").update(patch).eq("workspace_id", workspace.id).eq("id", body.id);
       if (error) throw error;
       return json(200, { ok: true });
+    }
+    // Loop 2 — the finished service writes guest history. Idempotent on
+    // visitId, so a re-archived service replaces its own rows. Reads and
+    // writes reservation_guests only; no live-service table is touched.
+    if (action === "recordVisits") {
+      const visits = Array.isArray(body.visits) ? body.visits : [];
+      const keys = [...new Set(visits.map((visit: any) => String(visit.guestKey || "")).filter(Boolean))];
+      if (!keys.length) return json(200, { ok: true, updated: 0, skipped: visits.length });
+      const { data: guests, error: guestError } = await client
+        .from("reservation_guests")
+        .select("id,name_key,visits,visit_count,last_visit")
+        .eq("workspace_id", workspace.id)
+        .in("name_key", keys);
+      if (guestError) throw guestError;
+      const folded = foldVisitsIntoGuests(guests || [], visits);
+      for (const guest of folded.guests) {
+        if (!Array.isArray(guest.visits)) continue;
+        const { error: updateError } = await client.from("reservation_guests").update({
+          visits: guest.visits,
+          visit_count: guest.visits.length,
+          last_visit: guest.last_visit || null,
+          updated_at: new Date().toISOString(),
+        }).eq("workspace_id", workspace.id).eq("id", guest.id);
+        if (updateError) throw updateError;
+      }
+      return json(200, { ok: true, updated: folded.updated, skipped: folded.skipped });
     }
     if (action === "saveConfig") {
       const { data: before, error: beforeError } = await client.from("reservation_config").select("config,version").eq("workspace_id", workspace.id).single();

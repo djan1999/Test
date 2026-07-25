@@ -495,11 +495,12 @@ export async function upsertGuest(client, workspaceId, booking) {
   const nameKey = `${String(booking.name).trim().toLowerCase()}|${String(contact).trim().toLowerCase()}`;
   const { data: existing, error } = await client
     .from("reservation_guests")
-    .select("id,visit_count")
+    .select("id,visit_count,last_visit")
     .eq("workspace_id", workspaceId)
     .eq("name_key", nameKey)
     .maybeSingle();
   if (error) throw error;
+  const completed = booking.status === "completed";
   const row = {
     workspace_id: workspaceId,
     name_key: nameKey,
@@ -507,8 +508,13 @@ export async function upsertGuest(client, workspaceId, booking) {
     phone: booking.phone || null,
     email: booking.email || null,
     language: booking.language || "en",
-    visit_count: Number(existing?.visit_count || 0) + (booking.status === "completed" ? 1 : 0),
-    last_visit: booking.status === "completed" ? booking.date : null,
+    visit_count: Number(existing?.visit_count || 0) + (completed ? 1 : 0),
+    // A guest booking again is not a reason to forget that they have been
+    // here. Writing `null` on every non-completed upsert erased last_visit the
+    // moment a returning guest made their next reservation.
+    last_visit: completed
+      ? (existing?.last_visit && existing.last_visit > booking.date ? existing.last_visit : booking.date)
+      : (existing?.last_visit || null),
     updated_at: new Date().toISOString(),
   };
   if (existing) return client.from("reservation_guests").update(row).eq("id", existing.id);

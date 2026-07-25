@@ -18,7 +18,7 @@ const displayAuditValue = (value) => {
   }
 };
 
-export default function ReservationsAdminModule({ accessToken, workspaceId }) {
+export default function ReservationsAdminModule({ accessToken, workspaceId, floorMaps = null }) {
   const [state, setState] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -146,6 +146,7 @@ export default function ReservationsAdminModule({ accessToken, workspaceId }) {
         bookings={state.bookings}
         audit={audit}
         canEdit
+        floorMaps={floorMaps}
         onSave={save}
       />
     </>

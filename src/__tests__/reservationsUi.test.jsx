@@ -317,6 +317,61 @@ describe("ReservationsAdminPanel", () => {
     ...overrides,
   });
 
+  // Loop 3 — "take the current dining room". The floor plan is read exactly
+  // once, on request, and only into the draft; the panel must never present it
+  // as saved, and must never touch the floor plan itself.
+  const floorMaps = {
+    activeDiningMapId: "dining_a",
+    maps: [{
+      id: "dining_a",
+      kind: "dining",
+      name: "LAYOUT A",
+      tables: [
+        { label: "T1", seats: [{ no: 1 }, { no: 2 }] },
+        { label: "T2", seats: [{ no: 1 }, { no: 2 }] },
+        { label: "T2-3", members: ["T2", "T3"], seats: [{ no: 1 }] },
+        { label: "T3", seats: [{ no: 1 }, { no: 2 }, { no: 3 }, { no: 4 }] },
+      ],
+    }],
+  };
+
+  it("stays out of the Tables section until the loop is switched on", () => {
+    render(<ReservationsAdminPanel {...adminProps({ floorMaps })} />);
+    fireEvent.click(screen.getAllByRole("button", { name: /Tables/ })[0]);
+    expect(screen.queryByRole("button", { name: "See what would change" })).not.toBeInTheDocument();
+  });
+
+  it("shows what taking the dining room would change, before anything is saved", () => {
+    const props = adminProps({ floorMaps, enableTableImport: true });
+    render(<ReservationsAdminPanel {...props} />);
+    fireEvent.click(screen.getAllByRole("button", { name: /Tables/ })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "See what would change" }));
+
+    // The room seats T03 for four; the reservation list still said two.
+    expect(screen.getByText("T03 seats")).toBeInTheDocument();
+    expect(screen.getByText(/T04 is no longer in the dining room/)).toBeInTheDocument();
+    // One warning per table the room no longer has — T04 through T08.
+    expect(screen.getAllByText(/Bookings already on this table keep it/).length).toBe(5);
+    // Nothing has been written yet — no save has been attempted.
+    expect(props.onSave).not.toHaveBeenCalled();
+  });
+
+  it("takes the room into the draft only, leaving the save to the manager", () => {
+    const props = adminProps({ floorMaps, enableTableImport: true });
+    render(<ReservationsAdminPanel {...props} />);
+    fireEvent.click(screen.getAllByRole("button", { name: /Tables/ })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "See what would change" }));
+    fireEvent.click(screen.getByRole("button", { name: "Take this room" }));
+
+    expect(props.onSave).not.toHaveBeenCalled();
+    // The draft now holds the room: three tables, the merge kept as a join.
+    expect(screen.getByText("T01")).toBeInTheDocument();
+    expect(screen.getByText("T03")).toBeInTheDocument();
+    expect(screen.queryByText("T08")).not.toBeInTheDocument();
+    expect(screen.getByText("4 seats")).toBeInTheDocument(); // T03, as the room draws it
+    expect(screen.getByRole("button", { name: "What will change?" })).toBeInTheDocument();
+  });
+
   it("names the change and its consequence before saving", async () => {
     const props = adminProps({
       bookings: [{ ...booking({ date: "2099-01-01", time: "18:00", pax: 14 }) }],
