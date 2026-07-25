@@ -14,15 +14,34 @@ import {
 import { normalizeReservationConfig } from "../../src/domain/reservations/config.js";
 import { legacyReservationToBooking } from "../../src/domain/reservations/bookingAdapter.js";
 
+// Status events for exactly the bookings being returned. A workspace-wide row
+// cap would leave older bookings with an empty history, and the Record then
+// says "No changes recorded" about a booking that was in fact changed. The ids
+// travel in the query string, so they go in chunks.
+async function loadStatusEvents(client, workspaceId, bookingIds) {
+  const events = [];
+  for (let index = 0; index < bookingIds.length; index += 200) {
+    const { data, error } = await client
+      .from("reservation_status_events")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .in("booking_id", bookingIds.slice(index, index + 200))
+      .order("occurred_at", { ascending: false });
+    if (error) throw error;
+    events.push(...(data || []));
+  }
+  return events;
+}
+
 async function loadState(client, workspaceId) {
   const context = await loadReservationContext(client, workspaceId);
   const [waitlist, guests, events, audit] = await Promise.all([
     client.from("reservation_waitlist").select("*").eq("workspace_id", workspaceId).order("created_at"),
     client.from("reservation_guests").select("*").eq("workspace_id", workspaceId).is("merged_into", null).order("name"),
-    client.from("reservation_status_events").select("*").eq("workspace_id", workspaceId).order("occurred_at", { ascending: false }).limit(300),
+    loadStatusEvents(client, workspaceId, context.bookings.map((booking) => booking.id)),
     client.from("reservation_admin_audit").select("*").eq("workspace_id", workspaceId).order("occurred_at", { ascending: false }).limit(200),
   ]);
-  for (const result of [waitlist, guests, events, audit]) if (result.error) throw result.error;
+  for (const result of [waitlist, guests, audit]) if (result.error) throw result.error;
   return {
     ...context,
     waitlist: (waitlist.data || []).map((entry) => ({
@@ -41,7 +60,7 @@ async function loadState(client, workspaceId) {
       createdAt: entry.created_at,
     })),
     guests: guests.data || [],
-    events: events.data || [],
+    events,
     audit: audit.data || [],
   };
 }
@@ -49,9 +68,9 @@ async function loadState(client, workspaceId) {
 export default async function handler(request, response) {
   try {
     const client = getAdminClient();
-    const workspace = await getWorkspace(client);
     if (request.method === "GET") {
-      await assertStaffAccess(request, client);
+      const access = await assertStaffAccess(request, client);
+      const workspace = await getWorkspace(client, access.workspaceId);
       return sendJson(response, 200, { ok: true, workspace, state: await loadState(client, workspace.id) });
     }
     if (request.method !== "POST") return methodNotAllowed(response);
@@ -64,6 +83,9 @@ export default async function handler(request, response) {
     const access = await assertStaffAccess(request, client, {
       adminOnly: adminActions.has(action),
     });
+    // Resolved only after the access check, so every read and write below is
+    // scoped to the workspace this caller was proved a member of.
+    const workspace = await getWorkspace(client, access.workspaceId);
     const actor = access.userId ? `MILKA:${access.userId}` : "LAB STAFF";
     if (action === "staffState") {
       return sendJson(response, 200, { ok: true, workspace, state: await loadState(client, workspace.id) });
