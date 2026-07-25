@@ -9,7 +9,7 @@ import { FONT, coversOf, darkButton, dayLabel } from "./shared.js";
  * only when its handler is wired, so nothing here promises paper the app
  * cannot actually produce.
  */
-export default function PlanningPrint({ date, dayBookings, onPrintBreakdown, onPrintAllergySheet, onPrintKitchenTicket, onPrintWeekly }) {
+export default function PlanningPrint({ date, service, dayBookings, onPrintBreakdown, onPrintAllergySheet, onPrintKitchenTicket, onPrintWeekly }) {
   const withRestrictions = dayBookings.filter((booking) => {
     const list = booking.operationalData?.restrictions || booking.allergies || [];
     return Array.isArray(list) && list.length > 0;
@@ -19,9 +19,9 @@ export default function PlanningPrint({ date, dayBookings, onPrintBreakdown, onP
     onPrintBreakdown && {
       key: "breakdown",
       title: "Service breakdown",
-      body: `Every party for ${dayLabel(date)}, grouped by seating — tables, covers, menu, dietaries and notes.`,
+      body: `Every ${service} party for ${dayLabel(date)}, grouped by seating — tables, covers, menu, dietaries and notes.`,
       note: `${dayBookings.length} ${dayBookings.length === 1 ? "party" : "parties"} · ${coversOf(dayBookings)} covers`,
-      action: () => onPrintBreakdown(date),
+      action: () => onPrintBreakdown({ date, service }),
     },
     onPrintAllergySheet && {
       key: "allergy",
@@ -30,21 +30,21 @@ export default function PlanningPrint({ date, dayBookings, onPrintBreakdown, onP
       note: withRestrictions.length
         ? `${withRestrictions.length} ${withRestrictions.length === 1 ? "party" : "parties"} with restrictions`
         : "No restrictions recorded for this day",
-      action: () => onPrintAllergySheet(date),
+      action: () => onPrintAllergySheet({ date, service }),
     },
     onPrintKitchenTicket && {
       key: "ticket",
       title: "Kitchen tickets",
       body: "The per-table tickets, exactly as service prints them today.",
       note: `${dayBookings.length} ${dayBookings.length === 1 ? "ticket" : "tickets"}`,
-      action: () => onPrintKitchenTicket(date),
+      action: () => onPrintKitchenTicket({ date, service }),
     },
     onPrintWeekly && {
       key: "weekly",
       title: "Weekly overview",
       body: "The week's reservations and allergy sheet, for the office wall.",
       note: "Week containing " + dayLabel(date),
-      action: () => onPrintWeekly(date),
+      action: () => onPrintWeekly({ from: date }),
     },
   ].filter(Boolean);
 

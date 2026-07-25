@@ -1,56 +1,61 @@
 import { tokens } from "../../../styles/tokens.js";
 import { suggestTables } from "../../../domain/reservations/availability.js";
-import { FONT, darkButton, quietButton, sectionLabel } from "./shared.js";
+import { FONT, darkButton, dayLabel, quietButton, sectionLabel } from "./shared.js";
+
+// The server hands entries back as
+//   { id, date, service, time, window, name, phone, email, pax, quotedMinutes,
+//     notes, status, createdAt }
+// and keeps removed and converted rows in the table, so the list filters them
+// out rather than showing a party that is no longer waiting.
+const WAITING = new Set(["waiting", "notified", "", undefined, null]);
 
 /**
  * Unplaced demand.
  *
- * CONVERT opens the booking form already filled in, so a party is never
- * retyped. REMOVE asks for a reason. A suggested table is offered where one
- * genuinely fits — it is a hint for the host, not an automatic placement, and
- * nobody is messaged without a person deciding to.
+ * CONVERT opens the party as a booking on the date and service they actually
+ * asked for — nothing is retyped, and nothing is invented. REMOVE asks for a
+ * reason. A suggested table appears only where one genuinely fits: it is a
+ * hint for the host, not an automatic placement, and nobody is messaged
+ * without a person deciding to.
  */
-export default function WaitlistTab({ waitlist, bookings, config, date, services, onConvert, onRemove, canEdit, isMobile }) {
+export default function WaitlistTab({ waitlist, bookings, config, onConvert, onRemove, canEdit, isMobile }) {
+  const waiting = (waitlist || []).filter((entry) => WAITING.has(entry.status));
+
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-start" }}>
       <div style={{ flex: "1 1 420px", maxWidth: 680, background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}` }}>
         <div style={{ padding: "12px 14px", borderBottom: `1px solid ${tokens.ink[4]}` }}>
-          <span style={sectionLabel}>[Waitlist — unplaced demand · {waitlist.length}]</span>
+          <span style={sectionLabel}>[Waitlist — unplaced demand · {waiting.length}]</span>
         </div>
 
         <div style={{ padding: "2px 14px 8px" }}>
-          {waitlist.length === 0 && (
+          {waiting.length === 0 && (
             <div style={{ padding: "40px 0", textAlign: "center", fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: tokens.ink[3] }}>
               Nobody waiting
             </div>
           )}
 
-          {waitlist.map((entry) => {
-            const requested = entry.requestedTime || entry.req || "";
-            const service = services.find((item) => item.service === (entry.service || "dinner")) || services[0];
-            const probeTime = requested || service?.last || "";
-            const suggestion = probeTime
-              ? suggestTables({ date, time: probeTime, pax: entry.pax, bookings, config })
+          {waiting.map((entry) => {
+            // The entry carries its own date and service — a suggestion is only
+            // honest if it is checked against the evening they asked for.
+            const probeTime = entry.time || "";
+            const suggestion = entry.date && probeTime
+              ? suggestTables({ date: entry.date, time: probeTime, pax: entry.pax, bookings, config })
               : null;
-            const restrictions = Array.isArray(entry.restrictions) ? entry.restrictions : [];
 
             const meta = [
-              requested ? `REQ ${requested}` : "",
-              entry.flexibility || entry.flex ? `FLEX ${entry.flexibility || entry.flex}` : "",
-              entry.quotedMinutes || entry.quoted ? `QUOTED ${entry.quotedMinutes || entry.quoted}M` : "",
-              entry.addedAt ? `ADDED ${String(entry.addedAt).slice(0, 16).replace("T", " ")}` : "",
-              entry.source === "web" ? "WEB" : "",
+              entry.date ? dayLabel(entry.date) : "",
+              entry.service ? entry.service.toUpperCase() : "",
+              entry.time ? `req ${entry.time}` : "",
+              entry.window ? `flex ${entry.window}` : "",
+              entry.quotedMinutes ? `quoted ${entry.quotedMinutes}m` : "",
+              entry.createdAt ? `added ${String(entry.createdAt).slice(0, 16).replace("T", " ")}` : "",
             ].filter(Boolean);
 
             return (
               <div key={entry.id} style={{ borderBottom: `1px solid ${tokens.ink[5]}`, padding: "12px 0" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                  <span style={{ fontSize: 13, color: tokens.ink[0] }}>
-                    {entry.name}
-                    {entry.priority || entry.vip ? (
-                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", marginLeft: 6 }}>[VIP]</span>
-                    ) : null}
-                  </span>
+                  <span style={{ fontSize: 13, color: tokens.ink[0] }}>{entry.name}</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: tokens.ink[0] }}>{entry.pax}P</span>
                 </div>
 
@@ -58,19 +63,13 @@ export default function WaitlistTab({ waitlist, bookings, config, date, services
                   {meta.join(" · ")}
                 </div>
 
-                {entry.phone && (
-                  <div style={{ fontSize: 9, letterSpacing: "0.04em", color: tokens.ink[2], marginTop: 3 }}>{entry.phone}</div>
-                )}
-
-                {restrictions.length > 0 && (
-                  <div style={{ fontSize: 9, color: tokens.signal.alert, fontWeight: 600, letterSpacing: "0.06em", marginTop: 3 }}>
-                    {restrictions.map((item) => `[${String(item.note || item).toUpperCase()}]`).join(" ")}
+                {(entry.phone || entry.email) && (
+                  <div style={{ fontSize: 9, letterSpacing: "0.04em", color: tokens.ink[2], marginTop: 3 }}>
+                    {[entry.phone, entry.email].filter(Boolean).join(" · ")}
                   </div>
                 )}
 
-                {entry.notes && (
-                  <div style={{ fontSize: 9, color: tokens.ink[2], marginTop: 3, lineHeight: 1.6 }}>{entry.notes}</div>
-                )}
+                {entry.notes && <div style={{ fontSize: 9, color: tokens.ink[2], marginTop: 3, lineHeight: 1.6 }}>{entry.notes}</div>}
 
                 <div
                   style={{
@@ -83,7 +82,9 @@ export default function WaitlistTab({ waitlist, bookings, config, date, services
                 >
                   {suggestion
                     ? `✓ ${suggestion.tables.join("+")} could take them at ${probeTime}`
-                    : "No fit in this service — convert onto another date or seating"}
+                    : probeTime
+                      ? "Nothing fits that time — convert onto another seating"
+                      : "No time requested — convert and choose one"}
                 </div>
 
                 {canEdit && (
@@ -106,9 +107,8 @@ export default function WaitlistTab({ waitlist, bookings, config, date, services
         <div style={{ flex: "0 1 300px", background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}`, padding: "12px 14px" }}>
           <span style={sectionLabel}>[How it works]</span>
           <div style={{ fontSize: 9, color: tokens.ink[2], lineHeight: 1.9, marginTop: 8, fontFamily: FONT }}>
-            Convert opens the booking form pre-filled for any date and seating, so nothing is retyped. Removal asks for a reason and is
-            recorded. When a cancellation frees a table, matching parties surface here and in the Day Book — a person always confirms
-            before anyone is called.
+            Convert books the party on the date and service they asked for, so nothing is retyped. Removal asks for a reason and is
+            recorded. When a cancellation frees a table, a match appears here — a person always confirms before anyone is called.
           </div>
         </div>
       )}

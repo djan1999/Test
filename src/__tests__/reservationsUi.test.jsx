@@ -146,6 +146,69 @@ describe("ReservationWorkspace", () => {
     expect(screen.queryByRole("button", { name: "[+] New booking" })).not.toBeInTheDocument();
   });
 
+
+  it("calls the print generators with the shape useReservationWorkspace expects", () => {
+    const handlers = {
+      onPrintBreakdown: vi.fn(),
+      onPrintAllergySheet: vi.fn(),
+      onPrintKitchenTicket: vi.fn(),
+      onPrintWeekly: vi.fn(),
+    };
+    render(<ReservationWorkspace {...workspaceProps(handlers)} />);
+    fireEvent.click(screen.getByRole("button", { name: "Planning & Print" }));
+    screen.getAllByRole("button", { name: "Print" }).forEach((button) => fireEvent.click(button));
+
+    expect(handlers.onPrintBreakdown).toHaveBeenCalledWith({ date: DATE, service: "dinner" });
+    expect(handlers.onPrintAllergySheet).toHaveBeenCalledWith({ date: DATE, service: "dinner" });
+    expect(handlers.onPrintKitchenTicket).toHaveBeenCalledWith({ date: DATE, service: "dinner" });
+    expect(handlers.onPrintWeekly).toHaveBeenCalledWith({ from: DATE });
+  });
+
+  it("converts a waitlist party onto the evening they asked for, not the day on screen", () => {
+    const entry = {
+      id: "w1",
+      date: "2026-07-24",
+      service: "lunch",
+      time: "12:30",
+      window: "",
+      name: "Perko, Ana",
+      phone: "+386 40 335 660",
+      email: "ana@example.com",
+      pax: 3,
+      quotedMinutes: 30,
+      notes: "by the window",
+      status: "waiting",
+      createdAt: "2026-07-21T18:12:00Z",
+    };
+    const props = workspaceProps({ waitlist: [entry] });
+    render(<ReservationWorkspace {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Waitlist" }));
+    fireEvent.click(screen.getByRole("button", { name: "Convert" }));
+
+    const payload = props.onConvertWaitlist.mock.calls[0][0];
+    expect(payload).toMatchObject({ id: "w1", date: "2026-07-24", service: "lunch", time: "12:30", pax: 3, name: "Perko, Ana" });
+  });
+
+  it("hides waitlist parties that are no longer waiting", () => {
+    const base = { date: DATE, service: "dinner", time: "19:00", pax: 2, quotedMinutes: 30, createdAt: "2026-07-21T18:00:00Z" };
+    render(
+      <ReservationWorkspace
+        {...workspaceProps({
+          waitlist: [
+            { ...base, id: "w1", name: "Still Waiting", status: "waiting" },
+            { ...base, id: "w2", name: "Already Removed", status: "removed" },
+            { ...base, id: "w3", name: "Already Converted", status: "converted" },
+          ],
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Waitlist" }));
+    expect(screen.getByText("Still Waiting")).toBeInTheDocument();
+    expect(screen.queryByText("Already Removed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Already Converted")).not.toBeInTheDocument();
+    expect(screen.getByText(/unplaced demand · 1/i)).toBeInTheDocument();
+  });
+
   it("shows loading and error states rather than an empty screen", () => {
     const { rerender } = render(<ReservationWorkspace {...workspaceProps({ loading: true })} />);
     expect(screen.getByText(/Loading reservations/i)).toBeInTheDocument();

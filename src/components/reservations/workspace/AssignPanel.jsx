@@ -199,7 +199,7 @@ export default function AssignPanel({ booking, bookings, config, onClose, onAssi
                 <input
                   value={overrideReason}
                   onChange={(event) => setOverrideReason(event.target.value)}
-                  placeholder="Manager override reason (written to the audit trail)"
+                  placeholder="Manager override reason (required)"
                   style={inputStyle}
                 />
                 <div style={{ display: "flex", gap: 5, marginTop: 6 }}>

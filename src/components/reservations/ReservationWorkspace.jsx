@@ -294,13 +294,24 @@ export default function ReservationWorkspace({
   const convertWaitlist = useCallback(
     (entry, suggestion) => {
       if (onConvertWaitlist) {
-        runAction(() => onConvertWaitlist({ id: entry.id, tables: suggestion?.tables || [] }), `${entry.name} converted`);
+        // convertWaitlist builds the booking from this entry, so it must carry
+        // the evening the guest actually asked for — not the date being viewed.
+        runAction(
+          () =>
+            onConvertWaitlist({
+              ...entry,
+              service: entry.service || currentService,
+              time: entry.time || "",
+              tables: suggestion?.tables || [],
+            }),
+          `${entry.name} converted`,
+        );
         return;
       }
       // No conversion handler wired: fall back to the composer, pre-filled, so
       // the party is still never retyped.
       const ids = (suggestion?.tables || []).map(tableLabelToId).filter(Boolean);
-      const legacy = blankLegacy(viewDate, currentService, entry.requestedTime || entry.req || "", ids);
+      const legacy = blankLegacy(entry.date || viewDate, entry.service || currentService, entry.time || "", ids);
       setComposer({
         legacy: {
           ...legacy,
@@ -310,6 +321,7 @@ export default function ReservationWorkspace({
             guests: entry.pax,
             phone: entry.phone || "",
             restrictions: entry.restrictions || [],
+            email: entry.email || "",
             notes: entry.notes || "",
           },
         },
@@ -594,8 +606,6 @@ export default function ReservationWorkspace({
             waitlist={waitlist}
             bookings={bookings}
             config={config}
-            date={viewDate}
-            services={dayServices}
             canEdit={canEdit}
             isMobile={isTablet}
             onConvert={convertWaitlist}
@@ -606,7 +616,8 @@ export default function ReservationWorkspace({
         {tab === "print" && (
           <PlanningPrint
             date={viewDate}
-            dayBookings={dayBookings.filter(isActiveBooking)}
+            service={currentService}
+            dayBookings={serviceBookings.filter(isActiveBooking)}
             onPrintBreakdown={onPrintBreakdown}
             onPrintAllergySheet={onPrintAllergySheet}
             onPrintKitchenTicket={onPrintKitchenTicket}
