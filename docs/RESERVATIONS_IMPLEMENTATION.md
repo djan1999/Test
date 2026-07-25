@@ -122,6 +122,39 @@ route derives the exclusion from the token and never accepts a raw booking id,
 so nobody can free a table they do not hold. Its expiry moves with the booking,
 so a guest who changes to a later date keeps their link.
 
+## Filling the LAB, and exercising the loops
+
+An empty Day Book tells you nothing. `npm run sync:edge-domain` aside, the two
+things that make this branch testable are:
+
+**Seeding.** `domain/reservations/labSeed.js` builds a restaurant's worth of
+fictional service — about three months finished, a full evening today, four
+weeks ahead; regulars on their own cadences, a few no-shows, parties of eight on
+two tables pushed together. It is deterministic and date-relative, so the same
+day always produces the same world (a second run overwrites its own rows rather
+than filing a second summer) and seeding in March gives you March.
+
+The button lives in Admin › Reservations › Overview and appears only with
+`VITE_RESERVATIONS_LAB_TOOLS_ENABLED=true`. The server refuses regardless unless
+`RESERVATIONS_LAB_SEED_ENABLED=true` **and** the workspace slug is
+`milka-reservations-lab`, so it cannot reach a real book. Every contact detail
+is in a reserved-for-fiction range.
+
+**The loop harness.** Loops 1 and 2 only run inside a real service against a
+real Supabase, so `src/__tests__/reservationLoops.integration.test.js` stands in
+for one: it seeds a book, projects it onto a board, seats parties, ends the
+service into an archive shaped exactly as `src/App.jsx` writes one, and folds
+the result back into guest history — including the re-archive that must change
+nothing. It is the closest thing to switching the flags on that runs offline.
+
+## Access
+
+The edge function decides whether an action needs staff access from a list of
+the actions a **guest** may take; everything else needs staff, including
+anything added tomorrow. It used to be the other way round — a list of actions
+that needed access — and `recordVisits` shipped outside it and was briefly
+callable by anyone. `src/__tests__/edgeAuthGate.test.js` fails if that inverts.
+
 ## Current functional scope
 
 - Day Book works for any selected date; Today is a shortcut only.

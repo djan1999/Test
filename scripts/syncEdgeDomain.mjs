@@ -20,7 +20,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 export const SOURCE_DIR = join(root, "src/domain/reservations");
 export const TARGET_DIR = join(root, "supabase/functions/_shared/reservations");
-export const SYNCED_FILES = ["config.js", "availability.js", "lifecycle.js", "bookingAdapter.js", "guestHistory.js", "validation.js"];
+export const SYNCED_FILES = ["config.js", "availability.js", "lifecycle.js", "bookingAdapter.js", "guestHistory.js", "validation.js", "labSeed.js"];
 
 export const BANNER = [
   "// GENERATED FILE — DO NOT EDIT.",

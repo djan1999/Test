@@ -64,7 +64,7 @@ const label = { fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: tokens.i
 const explain = { fontFamily: FONT, fontSize: 9, color: tokens.ink[3], lineHeight: 1.7, marginTop: 8 };
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
-export default function ReservationsAdminPanel({ config, weeklyServices = [], exceptions = [], bookings = [], audit = [], floorMaps = null, enableTableImport = TABLE_IMPORT_ENABLED, onSave, canEdit = true }) {
+export default function ReservationsAdminPanel({ config, weeklyServices = [], exceptions = [], bookings = [], audit = [], floorMaps = null, enableTableImport = TABLE_IMPORT_ENABLED, onSeedLab = null, onSave, canEdit = true }) {
   const applied = useMemo(
     () => ({ config: clone(config || {}), weeklyServices: clone(weeklyServices), exceptions: clone(exceptions) }),
     [config, weeklyServices, exceptions],
@@ -148,7 +148,7 @@ export default function ReservationsAdminPanel({ config, weeklyServices = [], ex
         </nav>
 
         <div style={{ flex: 1, minWidth: 280, padding: "18px 20px 40px", maxWidth: 860 }}>
-          {section === "overview" && <Overview cfg={cfg} services={services} onGo={setSection} />}
+          {section === "overview" && <Overview cfg={cfg} services={services} onGo={setSection} onSeedLab={onSeedLab} />}
 
           {section === "hours" && <ServicesAndHours services={services} cfg={cfg} edit={edit} canEdit={canEdit} />}
 
@@ -282,7 +282,7 @@ function Stepper({ value, onDown, onUp, width = 92, size = 34 }) {
 
 /* ── sections ────────────────────────────────────────────────────────────── */
 
-function Overview({ cfg, services, onGo }) {
+function Overview({ cfg, services, onGo, onSeedLab }) {
   const enabledFor = (service) => services.filter((row) => row.service === service && row.enabled);
   const summarise = (service) => {
     const rows = enabledFor(service);
@@ -318,7 +318,56 @@ function Overview({ cfg, services, onGo }) {
           </button>
         ))}
       </div>
+      {onSeedLab && <SeedLabCard onSeedLab={onSeedLab} />}
     </>
+  );
+}
+
+/**
+ * LAB seeding. Present only when the build asks for it, and refused by the
+ * server unless it is the LAB workspace with seeding switched on — so this
+ * cannot reach a restaurant's real book even if the button is rendered by
+ * mistake. Everything it writes is fictional and safe to write twice: the same
+ * day always produces the same world, so a second run overwrites the first.
+ */
+function SeedLabCard({ onSeedLab }) {
+  const [state, setState] = useState("idle");
+  const [summary, setSummary] = useState(null);
+  const [problem, setProblem] = useState("");
+
+  const run = async () => {
+    setState("working");
+    setProblem("");
+    try {
+      setSummary(await onSeedLab({}));
+      setState("done");
+    } catch (error) {
+      setProblem(error?.message || "Seeding failed.");
+      setState("idle");
+    }
+  };
+
+  return (
+    <div style={{ ...card, marginTop: 14, borderColor: tokens.signal.warn }}>
+      <div style={label}>LAB — fill the book with fictional service</div>
+      <div style={explain}>
+        Writes about three months of finished service, a full evening today and four weeks ahead: regulars on their own
+        cadences, a few no-shows, parties of eight on two tables pushed together. Everything is invented, and running it
+        again writes over the same rows rather than filing a second summer.
+      </div>
+      {problem && (
+        <div role="alert" style={{ fontSize: 10, color: tokens.red.text, marginTop: 8, lineHeight: 1.6 }}>{problem}</div>
+      )}
+      {summary && state === "done" && (
+        <div role="status" style={{ fontSize: 10, color: tokens.ink[1], marginTop: 8, lineHeight: 1.7 }}>
+          {summary.bookings} bookings · {summary.guests} guests · {summary.combined} on joined tables ·{" "}
+          {summary.from} → {summary.to}
+        </div>
+      )}
+      <button type="button" style={{ ...saveBtn("idle"), marginTop: 10 }} disabled={state === "working"} onClick={run}>
+        {state === "working" ? "Filling the book…" : "Seed the LAB"}
+      </button>
+    </div>
   );
 }
 

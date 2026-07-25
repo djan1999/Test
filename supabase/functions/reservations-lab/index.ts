@@ -16,6 +16,8 @@ import {
 import { assertReservationTransition } from "../_shared/reservations/lifecycle.js";
 import { foldVisitsIntoGuests } from "../_shared/reservations/guestHistory.js";
 import { validateBookingPayload, validateWaitlistEntry } from "../_shared/reservations/validation.js";
+import { buildLabWorld } from "../_shared/reservations/labSeed.js";
+import { normalizeWeeklyServices } from "../_shared/reservations/config.js";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -179,18 +181,24 @@ Deno.serve(async (request: Request) => {
     const { data: workspace, error: workspaceError } = await client.from("workspaces").select("id,slug,name").eq("slug", "milka-reservations-lab").single();
     if (workspaceError) throw workspaceError;
 
-    const staffActions = new Set([
-      "staffState", "createBooking", "updateBooking", "transition", "addWaitlist",
-      "updateWaitlist", "saveConfig", "saveAdminSettings", "saveSchedule", "saveServices",
-      "saveCalendarRule", "saveCalendarRules", "deleteCalendarRule", "saveLegacyReservation",
-      "saveLegacyReservations", "assignTables", "swapTables", "deleteBooking", "convertWaitlist",
+    // DENY BY DEFAULT. This used to be an allowlist of actions that NEEDED
+    // staff access, which is safe only for as long as everybody remembers to
+    // add to it — and somebody did not: `recordVisits` shipped outside the
+    // list and was callable by anyone. The list is now of actions a guest may
+    // take; every other action, including one added tomorrow, needs staff.
+    const publicActions = new Set([
+      "publicConfig", "availability", "validate", "submit", "waitlist",
+      "manage", "cancel", "change",
     ]);
+    // Actions only a Milka Admin may take. Seeding is here because it writes
+    // several hundred rows over the book.
     const adminActions = new Set([
       "saveConfig", "saveAdminSettings", "saveSchedule", "saveServices",
       "saveCalendarRule", "saveCalendarRules", "deleteCalendarRule",
+      "seedLab",
     ]);
     let staffActor = "LAB STAFF";
-    if (staffActions.has(action)) {
+    if (!publicActions.has(action)) {
       const code = String(request.headers.get("x-milka-lab-access") || body.accessCode || "");
       let authorizedByCode = false;
       if (code) {
@@ -766,6 +774,60 @@ Deno.serve(async (request: Request) => {
         if (updateError) throw updateError;
       }
       return json(200, { ok: true, updated: folded.updated, skipped: folded.skipped });
+    }
+    // Fill the LAB with fictional service — see api/resv/staff.js for the two
+    // locks this rests on. Deterministic, so a second run overwrites its own
+    // rows rather than filing a second summer.
+    if (action === "seedLab") {
+      if (String(Deno.env.get("RESERVATIONS_LAB_SEED_ENABLED") || "").toLowerCase() !== "true") {
+        const error: any = new Error("Seeding is not enabled on this server.");
+        error.code = "seed_disabled";
+        throw error;
+      }
+      if (workspace.slug !== "milka-reservations-lab") {
+        const error: any = new Error("Seeding refused: this is not the reservations LAB workspace.");
+        error.code = "seed_refused";
+        throw error;
+      }
+      const context = await loadContext();
+      const world = buildLabWorld({
+        today: String(body.today || restaurantClock(normalizeReservationConfig(context.config).timezone).date),
+        config: normalizeReservationConfig(context.config),
+        services: normalizeWeeklyServices(context.services),
+        pastDays: Number(body.pastDays ?? 90),
+        futureDays: Number(body.futureDays ?? 28),
+        seed: Number(body.seed ?? 20260721),
+      });
+      const BATCH = 100;
+      for (let index = 0; index < world.bookings.length; index += BATCH) {
+        const { error } = await client.rpc("save_reservation_booking_rows", {
+          p_workspace: workspace.id,
+          p_bookings: world.bookings.slice(index, index + BATCH),
+          p_actor: "LAB SEED",
+        });
+        if (error) throw error;
+      }
+      const { error: waitlistError } = await client.from("reservation_waitlist").upsert(
+        world.waitlist.map((entry: any) => ({
+          id: entry.id,
+          workspace_id: workspace.id,
+          date: entry.date,
+          service: entry.service || null,
+          requested_time: entry.time || null,
+          time_window: entry.window || null,
+          guest_name: entry.name,
+          phone: entry.phone || null,
+          email: entry.email || null,
+          pax: entry.pax,
+          quoted_minutes: entry.quotedMinutes,
+          notes: entry.notes || null,
+          status: entry.status,
+          source: "staff",
+        })),
+        { onConflict: "id" },
+      );
+      if (waitlistError) throw waitlistError;
+      return json(200, { ok: true, summary: world.summary });
     }
     if (action === "saveConfig") {
       const { data: before, error: beforeError } = await client.from("reservation_config").select("config,version").eq("workspace_id", workspace.id).single();

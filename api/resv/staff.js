@@ -16,6 +16,30 @@ import { normalizeReservationConfig } from "../../src/domain/reservations/config
 import { legacyReservationToBooking } from "../../src/domain/reservations/bookingAdapter.js";
 import { foldVisitsIntoGuests } from "../../src/domain/reservations/guestHistory.js";
 import { assertReservationTransition } from "../../src/domain/reservations/lifecycle.js";
+import { buildLabWorld } from "../../src/domain/reservations/labSeed.js";
+import { normalizeWeeklyServices } from "../../src/domain/reservations/config.js";
+import { restaurantClock } from "../../src/domain/reservations/availability.js";
+
+// Seeding writes a few hundred fictional bookings. Two locks, because doing it
+// to a restaurant's real book would be unrecoverable:
+//   · the workspace must be the LAB workspace, by slug;
+//   · RESERVATIONS_LAB_SEED_ENABLED must be "true" on the server.
+// Neither is set in production, and neither can be turned on from the browser.
+const LAB_SLUG = "milka-reservations-lab";
+function assertSeedable(workspace) {
+  if (String(process.env.RESERVATIONS_LAB_SEED_ENABLED || "").toLowerCase() !== "true") {
+    const error = new Error("Seeding is not enabled on this server.");
+    error.statusCode = 403;
+    error.code = "seed_disabled";
+    throw error;
+  }
+  if (workspace?.slug !== LAB_SLUG) {
+    const error = new Error("Seeding refused: this is not the reservations LAB workspace.");
+    error.statusCode = 403;
+    error.code = "seed_refused";
+    throw error;
+  }
+}
 
 // Status events for exactly the bookings being returned. A workspace-wide row
 // cap would leave older bookings with an empty history, and the Record then
@@ -82,6 +106,7 @@ export default async function handler(request, response) {
     const adminActions = new Set([
       "saveConfig", "saveAdminSettings", "saveSchedule", "saveServices",
       "saveCalendarRule", "saveCalendarRules", "deleteCalendarRule",
+      "seedLab",
     ]);
     const access = await assertStaffAccess(request, client, {
       adminOnly: adminActions.has(action),
@@ -301,6 +326,58 @@ export default async function handler(request, response) {
         if (updateError) throw updateError;
       }
       return sendJson(response, 200, { ok: true, updated: folded.updated, skipped: folded.skipped });
+    }
+    // Fill the LAB with a restaurant's worth of fictional service, so every
+    // screen can be judged against a book that looks real. Deterministic: run
+    // it twice and it writes over its own rows rather than a second summer.
+    if (action === "seedLab") {
+      assertSeedable(workspace);
+      const context = await loadReservationContext(client, workspace.id);
+      const clock = restaurantClock(context.config.timezone);
+      const world = buildLabWorld({
+        today: String(request.body.today || clock.date),
+        config: context.config,
+        services: normalizeWeeklyServices(context.services),
+        pastDays: Number(request.body.pastDays ?? 90),
+        futureDays: Number(request.body.futureDays ?? 28),
+        seed: Number(request.body.seed ?? 20260721),
+      });
+
+      // In batches: one RPC carrying several hundred bookings is a long
+      // transaction, and a failure halfway through a batch leaves the earlier
+      // batches standing — which a re-run then simply overwrites.
+      const BATCH = 100;
+      for (let index = 0; index < world.bookings.length; index += BATCH) {
+        const { error } = await client.rpc("save_reservation_booking_rows", {
+          p_workspace: workspace.id,
+          p_bookings: world.bookings.slice(index, index + BATCH),
+          p_actor: "LAB SEED",
+        });
+        if (error) throw error;
+      }
+
+      const { error: waitlistError } = await client.from("reservation_waitlist").upsert(
+        world.waitlist.map((entry) => ({
+          id: entry.id,
+          workspace_id: workspace.id,
+          date: entry.date,
+          service: entry.service || null,
+          requested_time: entry.time || null,
+          time_window: entry.window || null,
+          guest_name: entry.name,
+          phone: entry.phone || null,
+          email: entry.email || null,
+          pax: entry.pax,
+          quoted_minutes: entry.quotedMinutes,
+          notes: entry.notes || null,
+          status: entry.status,
+          source: "staff",
+        })),
+        { onConflict: "id" },
+      );
+      if (waitlistError) throw waitlistError;
+
+      return sendJson(response, 200, { ok: true, summary: world.summary });
     }
     if (action === "saveConfig") {
       const { data: before, error: beforeError } = await client.from("reservation_config")

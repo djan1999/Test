@@ -3,6 +3,7 @@ import { tokens } from "../../../styles/tokens.js";
 import {
   getLabAccessCode,
   loadStaffState,
+  seedReservationLab,
   staffAction,
 } from "../../../reservations-lab/reservationClient.js";
 import ReservationsAdminPanel from "./ReservationsAdminPanel.jsx";
@@ -78,6 +79,19 @@ export default function ReservationsAdminModule({ accessToken, workspaceId, floo
     await refresh();
   }, [credentials, refresh]);
 
+  // The LAB seeding button only exists if the build asked for it. The server
+  // refuses anyway unless it is the LAB workspace with seeding switched on —
+  // this flag only decides whether the button is worth rendering.
+  const seedLab = useMemo(() => (
+    import.meta.env.VITE_RESERVATIONS_LAB_TOOLS_ENABLED === "true"
+      ? async (options) => {
+        const result = await seedReservationLab(options, credentials);
+        await refresh();
+        return result.summary;
+      }
+      : null
+  ), [credentials, refresh]);
+
   const audit = useMemo(() => (state?.audit || []).map((row) => ({
     id: row.id,
     at: row.occurred_at
@@ -147,6 +161,7 @@ export default function ReservationsAdminModule({ accessToken, workspaceId, floo
         audit={audit}
         canEdit
         floorMaps={floorMaps}
+        onSeedLab={seedLab}
         onSave={save}
       />
     </>

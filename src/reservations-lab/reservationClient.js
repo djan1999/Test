@@ -99,6 +99,13 @@ export async function recordServiceVisits(visits, credentials = getLabAccessCode
   return staffAction("recordVisits", { visits }, credentials);
 }
 
+/** Fill the LAB with a restaurant's worth of fictional service. Refused by the
+ *  server unless it is the LAB workspace AND seeding is enabled there, so this
+ *  cannot be pointed at a real book by mistake. Safe to run twice. */
+export async function seedReservationLab(options = {}, credentials = getLabAccessCode()) {
+  return staffAction("seedLab", options, credentials);
+}
+
 export async function loadPublicConfig() {
   if (EDGE_API) return edgeRequest("publicConfig");
   const response = await fetch("/api/resv/public?mode=config", { cache: "no-store" });
