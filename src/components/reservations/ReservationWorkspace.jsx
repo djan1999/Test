@@ -630,9 +630,18 @@ function BookingRow({ booking, narrow, onEdit, onAssign, onStatus, onGuest, onDe
         <button type="button" style={{ ...quiet, fontWeight: 700 }} onClick={() => onAssign(booking)}>
           {seated.length ? seated.join("+") : "Assign table"}
         </button>
-        {narrow ? null : (
-          <button type="button" style={{ ...quiet, marginLeft: 4 }} onClick={() => onDetail(booking)} title="Full record and history">Record</button>
-        )}
+        {/* Record stays on every width. Cancelling with a reason, marking a
+            no-show and reading the status history all live behind it, and the
+            name beside it opens the guest, not the booking — so hiding it on a
+            phone left a host with no way to reach any of them. */}
+        <button
+          type="button"
+          style={narrow ? quiet : { ...quiet, marginLeft: 4 }}
+          onClick={() => onDetail(booking)}
+          title="Full record and history"
+        >
+          Record
+        </button>
         {narrow ? (
           <>
             {booking.status === "pending" ? <button type="button" style={strong} onClick={() => onStatus(booking, "confirmed")}>Confirm</button> : null}
