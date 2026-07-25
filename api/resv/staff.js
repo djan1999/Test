@@ -10,10 +10,12 @@ import {
   sendJson,
   transitionBooking,
   validateBookingPayload,
+  validateWaitlistEntry,
 } from "./_shared.js";
 import { normalizeReservationConfig } from "../../src/domain/reservations/config.js";
 import { legacyReservationToBooking } from "../../src/domain/reservations/bookingAdapter.js";
 import { foldVisitsIntoGuests } from "../../src/domain/reservations/guestHistory.js";
+import { assertReservationTransition } from "../../src/domain/reservations/lifecycle.js";
 
 // Status events for exactly the bookings being returned. A workspace-wide row
 // cap would leave older bookings with an empty history, and the Record then
@@ -109,11 +111,19 @@ export default async function handler(request, response) {
         .eq("id", booking.id)
         .single();
       if (beforeError) throw beforeError;
+      // An edit is not a back door around the lifecycle. `transition` enforces
+      // the allowed moves and demands a reason for a cancellation or a no-show;
+      // without this check the same result could be had by saving the booking
+      // with a different status, and the reason would simply be missing.
+      const nextStatus = booking.status || before.status;
+      if (nextStatus !== before.status) {
+        assertReservationTransition(before.status, nextStatus, request.body.reason || booking.reason || "");
+      }
       const merged = {
         ...mapBooking(before),
         ...booking,
         id: before.id,
-        status: booking.status || before.status,
+        status: nextStatus,
         operationalData: {
           ...(before.operational_data || {}),
           ...(booking.operationalData || {}),
@@ -223,6 +233,7 @@ export default async function handler(request, response) {
     }
     if (action === "addWaitlist") {
       const entry = request.body.entry || {};
+      validateWaitlistEntry(entry);
       const { data, error } = await client.from("reservation_waitlist").insert({
         workspace_id: workspace.id,
         date: entry.date,

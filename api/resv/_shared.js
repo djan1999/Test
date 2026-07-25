@@ -10,6 +10,12 @@ import {
   publicConfigOf,
 } from "../../src/domain/reservations/config.js";
 import { assertReservationTransition } from "../../src/domain/reservations/lifecycle.js";
+// One copy of the payload rules, shared with the edge function and with /book.
+export {
+  validateBookingPayload,
+  validateWaitlistEntry,
+} from "../../src/domain/reservations/validation.js";
+import { validateBookingPayload } from "../../src/domain/reservations/validation.js";
 
 const PRODUCTION_PROJECT_REF = "cvljktjmksfibuyphdln";
 const LAB_WORKSPACE_SLUG = "milka-reservations-lab";
@@ -197,16 +203,6 @@ function bookingInsert(workspaceId, payload, extra = {}) {
     created_by: payload.actor || "SYSTEM",
     ...extra,
   };
-}
-
-export function validateBookingPayload(payload) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(payload.date || ""))) throw new Error("Choose a valid date.");
-  if (!/^\d{2}:\d{2}$/.test(String(payload.time || ""))) throw new Error("Choose a valid time.");
-  if (!/^[a-z][a-z0-9_-]{1,31}$/.test(String(payload.service || ""))) throw new Error("Choose a valid service.");
-  if (!String(payload.name || "").trim()) throw new Error("Guest name is required.");
-  if (!Number.isInteger(Number(payload.pax)) || Number(payload.pax) < 1 || Number(payload.pax) > 30) {
-    throw new Error("Party size must be between 1 and 30.");
-  }
 }
 
 export async function loadReservationContext(client, workspaceId, { from, to } = {}) {

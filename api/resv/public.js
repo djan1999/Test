@@ -10,6 +10,7 @@ import {
   sendJson,
   transitionBooking,
   validateBookingChoice,
+  validateWaitlistEntry,
 } from "./_shared.js";
 
 // The reason travels with the slot. It names a capacity or a table size — never
@@ -133,8 +134,10 @@ export default async function handler(request, response) {
       });
     }
     if (action === "waitlist") {
+      // Unauthenticated write: the same bounds the booking form is held to,
+      // so nobody can park unbounded text in the waitlist table.
       const entry = request.body.entry || {};
-      if (!entry.date || !entry.name || !Number(entry.pax)) throw new Error("Date, name and party size are required.");
+      validateWaitlistEntry(entry);
       const { error } = await client.from("reservation_waitlist").insert({
         workspace_id: workspace.id,
         date: entry.date,

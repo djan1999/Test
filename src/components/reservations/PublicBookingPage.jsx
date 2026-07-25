@@ -13,6 +13,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { UNAVAILABLE_REASONS } from "../../domain/reservations/availability.js";
+// The same bounds the server holds this form to. Applied here so a guest is
+// stopped as they type rather than losing what they wrote on submit.
+import { LIMITS } from "../../domain/reservations/validation.js";
 
 const FONT = tokens.font;
 
@@ -472,15 +475,15 @@ export default function PublicBookingPage({
             <div style={{ fontSize: 14, fontWeight: 500, color: tokens.ink[0], marginBottom: 18 }}>Your details</div>
 
             <div style={{ ...eyebrow, marginBottom: 6 }}>Full name</div>
-            <input value={guest.name} onChange={(event) => patch({ name: event.target.value })} placeholder="Name and surname" style={bigInput} />
+            <input value={guest.name} onChange={(event) => patch({ name: event.target.value })} placeholder="Name and surname" maxLength={LIMITS.name} style={bigInput} />
             <div style={errorText}>{errors.name || ""}</div>
 
             <div style={{ ...eyebrow, margin: "10px 0 6px" }}>Email{config.requireEmail === false ? " (optional)" : ""}</div>
-            <input value={guest.email} onChange={(event) => patch({ email: event.target.value })} placeholder="you@example.com" style={bigInput} />
+            <input value={guest.email} onChange={(event) => patch({ email: event.target.value })} placeholder="you@example.com" type="email" inputMode="email" maxLength={LIMITS.email} style={bigInput} />
             <div style={errorText}>{errors.email || ""}</div>
 
             <div style={{ ...eyebrow, margin: "10px 0 6px" }}>Telephone{config.requirePhone === false ? " (optional)" : ""}</div>
-            <input value={guest.phone} onChange={(event) => patch({ phone: event.target.value })} placeholder="+386 …" style={bigInput} />
+            <input value={guest.phone} onChange={(event) => patch({ phone: event.target.value })} placeholder="+386 …" type="tel" inputMode="tel" maxLength={LIMITS.phone} style={bigInput} />
             <div style={errorText}>{errors.phone || ""}</div>
 
             {languages.length > 1 && (
@@ -532,7 +535,14 @@ export default function PublicBookingPage({
             <div style={{ ...eyebrow, margin: "18px 0 8px" }}>Allergies and dietary needs</div>
             <textarea
               value={(guest.allergies || []).join(", ")}
-              onChange={(event) => patch({ allergies: event.target.value.split(",").map((item) => item.trim()).filter(Boolean) })}
+              onChange={(event) => patch({
+                allergies: event.target.value
+                  .split(",")
+                  .map((item) => item.trim())
+                  .filter(Boolean)
+                  .slice(0, LIMITS.allergies),
+              })}
+              maxLength={LIMITS.allergyNote}
               placeholder="Gluten, nuts, vegetarian…"
               style={{ ...bigInput, minHeight: 60, resize: "vertical", lineHeight: 1.5 }}
             />
@@ -575,6 +585,7 @@ export default function PublicBookingPage({
               value={guest.notes}
               onChange={(event) => patch({ notes: event.target.value })}
               placeholder="Timings, a surprise, several guests sharing an allergy…"
+              maxLength={LIMITS.notes}
               style={{ ...bigInput, minHeight: 72, resize: "vertical", lineHeight: 1.5 }}
             />
 
@@ -679,15 +690,15 @@ export default function PublicBookingPage({
             </div>
 
             <div style={{ ...eyebrow, margin: "16px 0 6px" }}>Full name</div>
-            <input value={waitlist.name} onChange={(event) => setWaitlist({ ...waitlist, name: event.target.value })} placeholder="Name and surname" style={bigInput} />
+            <input value={waitlist.name} onChange={(event) => setWaitlist({ ...waitlist, name: event.target.value })} placeholder="Name and surname" maxLength={LIMITS.name} style={bigInput} />
             <div style={errorText}>{waitlistErrors.name || ""}</div>
 
             <div style={{ ...eyebrow, margin: "8px 0 6px" }}>Telephone</div>
-            <input value={waitlist.phone} onChange={(event) => setWaitlist({ ...waitlist, phone: event.target.value })} placeholder="+386 …" style={bigInput} />
+            <input value={waitlist.phone} onChange={(event) => setWaitlist({ ...waitlist, phone: event.target.value })} placeholder="+386 …" type="tel" inputMode="tel" maxLength={LIMITS.phone} style={bigInput} />
             <div style={errorText}>{waitlistErrors.phone || ""}</div>
 
             <div style={{ ...eyebrow, margin: "8px 0 6px" }}>Email (optional)</div>
-            <input value={waitlist.email} onChange={(event) => setWaitlist({ ...waitlist, email: event.target.value })} placeholder="you@example.com" style={bigInput} />
+            <input value={waitlist.email} onChange={(event) => setWaitlist({ ...waitlist, email: event.target.value })} placeholder="you@example.com" type="email" inputMode="email" maxLength={LIMITS.email} style={bigInput} />
 
             <div style={{ ...eyebrow, margin: "14px 0 8px" }}>When suits you</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>

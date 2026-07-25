@@ -15,6 +15,7 @@ import {
 } from "../_shared/reservations/config.js";
 import { assertReservationTransition } from "../_shared/reservations/lifecycle.js";
 import { foldVisitsIntoGuests } from "../_shared/reservations/guestHistory.js";
+import { validateBookingPayload, validateWaitlistEntry } from "../_shared/reservations/validation.js";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -130,14 +131,6 @@ function legacyToBooking(row: any) {
     consentNews: Boolean(data.consentNews),
     operationalData: { ...data, tableGroup: labels },
   };
-}
-
-function validateBooking(input: Record<string, any>) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(input.date || ""))) throw new Error("Choose a valid date.");
-  if (!/^\d{2}:\d{2}$/.test(String(input.time || ""))) throw new Error("Choose a valid time.");
-  if (!/^[a-z][a-z0-9_-]{1,31}$/.test(String(input.service || ""))) throw new Error("Choose a valid service.");
-  if (!String(input.name || "").trim()) throw new Error("Guest name is required.");
-  if (!Number.isInteger(Number(input.pax)) || Number(input.pax) < 1 || Number(input.pax) > 30) throw new Error("Party size must be between 1 and 30.");
 }
 
 /** One request's availability, decided by the shared domain engine. The window,
@@ -294,7 +287,7 @@ Deno.serve(async (request: Request) => {
     };
 
     const choiceFor = async (input: any, publicOnly: boolean, excludeBookingId?: string) => {
-      validateBooking(input);
+      validateBookingPayload(input);
       const context = await loadContext(input.date);
       const result = availabilityOf(context, {
         date: input.date,
@@ -351,7 +344,7 @@ Deno.serve(async (request: Request) => {
     };
 
     const createBooking = async (input: any, publicOnly: boolean) => {
-      validateBooking(input);
+      validateBookingPayload(input);
       const idempotencyKey = String(input.idempotencyKey || crypto.randomUUID());
       const { data: replay, error: replayError } = await client.from("reservation_bookings").select("*").eq("workspace_id", workspace.id).eq("idempotency_key", idempotencyKey).maybeSingle();
       if (replayError) throw replayError;
@@ -506,8 +499,10 @@ Deno.serve(async (request: Request) => {
       return json(200, { ok: true, ref: result.booking.ref, status: result.booking.status, manageUrl: result.token ? `${origin}/book/manage/${result.token}` : null, replay: result.replay });
     }
     if (action === "waitlist") {
+      // Unauthenticated write: the same bounds the booking form is held to,
+      // so nobody can park unbounded text in the waitlist table.
       const entry = body.entry || {};
-      if (!entry.date || !entry.name || !Number(entry.pax)) throw new Error("Date, name and party size are required.");
+      validateWaitlistEntry(entry);
       const { error } = await client.from("reservation_waitlist").insert({
         workspace_id: workspace.id, date: entry.date, service: entry.service || null,
         requested_time: entry.time || null, time_window: entry.window || null,
@@ -618,15 +613,22 @@ Deno.serve(async (request: Request) => {
     }
     if (action === "updateBooking") {
       const booking = body.booking || {};
-      validateBooking(booking);
+      validateBookingPayload(booking);
       const { data: current, error: currentError } = await client.from("reservation_bookings")
         .select("*").eq("workspace_id", workspace.id).eq("id", booking.id).single();
       if (currentError) throw currentError;
+      // An edit is not a back door around the lifecycle — see the same guard in
+      // api/resv/staff.js. Without it, a cancellation could be made by saving
+      // the booking with a different status, and the reason would be missing.
+      const nextStatus = booking.status || current.status;
+      if (nextStatus !== current.status) {
+        assertReservationTransition(current.status, nextStatus, body.reason || booking.reason || "");
+      }
       const merged = {
         ...mapBooking(current),
         ...booking,
         id: current.id,
-        status: booking.status || current.status,
+        status: nextStatus,
         operationalData: {
           ...(current.operational_data || {}),
           ...(booking.operationalData || {}),
@@ -644,7 +646,7 @@ Deno.serve(async (request: Request) => {
       const rows = action === "saveLegacyReservation" ? [body.row] : body.rows;
       if (!Array.isArray(rows) || rows.some((row) => !row)) throw new Error("Reservation rows are required.");
       const bookings = rows.map(legacyToBooking);
-      bookings.forEach(validateBooking);
+      bookings.forEach(validateBookingPayload);
       const { data, error } = await client.rpc("save_reservation_booking_rows", {
         p_workspace: workspace.id,
         p_bookings: bookings,
@@ -708,7 +710,7 @@ Deno.serve(async (request: Request) => {
     }
     if (action === "convertWaitlist") {
       const booking = { ...(body.booking || {}), source: "waitlist" };
-      validateBooking(booking);
+      validateBookingPayload(booking);
       const { data, error } = await client.rpc("convert_reservation_waitlist", {
         p_workspace: workspace.id,
         p_waitlist: body.waitlistId,
@@ -720,6 +722,7 @@ Deno.serve(async (request: Request) => {
     }
     if (action === "addWaitlist") {
       const entry = body.entry || {};
+      validateWaitlistEntry(entry);
       const { error } = await client.from("reservation_waitlist").insert({
         workspace_id: workspace.id, date: entry.date, service: entry.service || null,
         requested_time: entry.time || null, time_window: entry.window || null,
