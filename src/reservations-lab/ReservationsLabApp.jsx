@@ -92,11 +92,23 @@ function PublicRoute() {
           ? validatePublicBooking(payload, idempotencyKey)
           : submitPublicBooking(payload, idempotencyKey);
       }}
-      joinWaitlist={(entry) => submitPublicWaitlist({
-        ...entry,
-        name: entry.name || entry.guestName,
-        notes: entry.notes || entry.note || "",
-      })}
+      joinWaitlist={(entry) => {
+        const payload = {
+          ...entry,
+          name: entry.name || entry.guestName,
+          notes: entry.notes || entry.note || "",
+        };
+        // Test mode writes nothing at all, so the entry is checked against the same
+        // required fields the server enforces and then dropped. A test run must never
+        // leave a real row for the staff Waitlist tab to call back.
+        if (testMode) {
+          if (!payload.date || !payload.name || !Number(payload.pax)) {
+            return Promise.reject(new Error("Date, name and party size are required."));
+          }
+          return Promise.resolve({ ok: true, test: true });
+        }
+        return submitPublicWaitlist(payload);
+      }}
       testMode={testMode}
     />
   </div>;

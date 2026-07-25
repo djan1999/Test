@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { evaluateAvailability } from "../../src/domain/reservations/availability.js";
 import {
+  experiencesFor,
   normalizeReservationConfig,
   publicConfigOf,
 } from "../../src/domain/reservations/config.js";
@@ -53,7 +54,7 @@ export async function assertStaffAccess(request, client, { adminOnly = false } =
   const expectedCode = String(process.env.RESERVATIONS_LAB_ACCESS_CODE || "").trim();
   const receivedCode = String(request.headers["x-milka-lab-access"] || "");
   if (expectedCode && safeEqual(expectedCode, receivedCode)) {
-    return { kind: "lab_code", role: "admin", userId: null };
+    return { kind: "lab_code", role: "admin", userId: null, workspaceId: null };
   }
 
   const authorization = String(request.headers.authorization || "");
@@ -90,15 +91,18 @@ export async function assertStaffAccess(request, client, { adminOnly = false } =
     error.statusCode = 403;
     throw error;
   }
-  return { kind: "milka_session", role, userId };
+  return { kind: "milka_session", role, userId, workspaceId };
 }
 
-export async function getWorkspace(client) {
-  const { data, error } = await client
-    .from("workspaces")
-    .select("id,slug,name")
-    .eq("slug", LAB_WORKSPACE_SLUG)
-    .single();
+// Reservations belong to the workspace the caller is signed into — the
+// membership for that id has just been proved above. Only the standalone LAB
+// entry points (access code, public /book) carry no caller workspace, and they
+// keep resolving the lab slug.
+export async function getWorkspace(client, workspaceId = null) {
+  const query = client.from("workspaces").select("id,slug,name");
+  const { data, error } = await (workspaceId
+    ? query.eq("id", workspaceId)
+    : query.eq("slug", LAB_WORKSPACE_SLUG)).single();
   if (error) throw error;
   return data;
 }
@@ -204,7 +208,9 @@ export function validateBookingPayload(payload) {
 
 export async function loadReservationContext(client, workspaceId, { from, to } = {}) {
   const [configResult, servicesResult, rulesResult, bookingsResult] = await Promise.all([
-    client.from("reservation_config").select("config,version,updated_at").eq("workspace_id", workspaceId).single(),
+    // maybeSingle: a workspace that has never saved reservation settings reads
+    // as the defaults rather than failing the whole staff load.
+    client.from("reservation_config").select("config,version,updated_at").eq("workspace_id", workspaceId).maybeSingle(),
     client.from("reservation_services").select("*").eq("workspace_id", workspaceId).order("weekday").order("first_seating"),
     client.from("reservation_calendar_rules").select("*").eq("workspace_id", workspaceId).order("date"),
     (() => {
@@ -242,6 +248,12 @@ function restaurantClock(timeZone) {
   };
 }
 
+function shiftDate(date, days) {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + Number(days));
+  return value.toISOString().slice(0, 10);
+}
+
 export async function getAvailability(client, workspaceId, {
   date,
   pax,
@@ -250,7 +262,16 @@ export async function getAvailability(client, workspaceId, {
 }) {
   const context = await loadReservationContext(client, workspaceId, { from: date, to: date });
   const now = restaurantClock(context.config.timezone || "Europe/Ljubljana");
-  const services = evaluateAvailability({
+  // The booking window is the server's to enforce, never the browser's: a
+  // public request for a past date, or one beyond online.windowDays, is offered
+  // nothing at all. Mirrors the edge function so both servers agree.
+  const outsideWindow = Boolean(publicOnly) && (
+    date < now.date || date > shiftDate(now.date, context.config.online.windowDays)
+  );
+  // Online booking switched off closes /book at the server, not merely in the
+  // guest's browser: the switch has to hold against a hand-made request too.
+  const onlineClosed = Boolean(publicOnly) && context.config.online.enabled === false;
+  const services = (outsideWindow || onlineClosed) ? [] : evaluateAvailability({
     date,
     pax: Number(pax),
     services: context.services,
@@ -261,7 +282,7 @@ export async function getAvailability(client, workspaceId, {
     isToday: publicOnly && date === now.date,
     nowMinutes: publicOnly ? now.minutes : null,
   });
-  return { ...context, services };
+  return { ...context, services, outsideWindow, onlineClosed };
 }
 
 export function createReference() {
@@ -306,11 +327,16 @@ export async function createBooking(client, workspaceId, input, { publicOnly = f
     };
   }
 
-  const { availability, slot } = await validateBookingChoice(
+  // Staff rules, not public rules, decide a staff write: a host takes a table
+  // by telephone on a closed day, seats a walk-in of eight, or accepts an
+  // overbook the manager approved. The server still validates the payload and
+  // still computes the slot (for the table suggestion), and the override is
+  // recorded below rather than waved through silently.
+  const { availability, slot, overrideReason } = await validateBookingChoice(
     client,
     workspaceId,
     input,
-    { publicOnly, allowOverride: Boolean(input.overrideReason) },
+    { publicOnly, allowOverride: Boolean(input.overrideReason) || !publicOnly },
   );
 
   const status = input.status || (
@@ -409,6 +435,18 @@ export async function createBooking(client, workspaceId, input, { publicOnly = f
     });
     if (tokenError) throw tokenError;
   }
+  if (overrideReason) {
+    const { error: eventError } = await client.from("reservation_status_events").insert({
+      workspace_id: workspaceId,
+      booking_id: data.id,
+      actor: input.actor || (publicOnly ? "WEB" : "LAB STAFF"),
+      event_type: "override",
+      to_status: data.status,
+      reason: String(input.overrideReason || "").trim()
+        || `Taken outside availability (${overrideReason}).`,
+    });
+    if (eventError) throw eventError;
+  }
   await upsertGuest(client, workspaceId, mapBooking(data));
   return { booking: mapBooking(data), replay: false, manageToken: manageToken?.raw || null };
 }
@@ -425,6 +463,28 @@ export async function validateBookingChoice(client, workspaceId, input, {
     publicOnly,
     excludeBookingId,
   });
+  if (availability.onlineClosed) {
+    const error = new Error("Online booking is closed. Please telephone the restaurant.");
+    error.code = "online_closed";
+    throw error;
+  }
+  if (availability.outsideWindow) {
+    const error = new Error("That date is outside the online booking window.");
+    error.code = "outside_window";
+    throw error;
+  }
+  // Step 4 of the resolution order — experience restrictions — before any
+  // capacity rule: an experience the restaurant curates may only be booked on a
+  // service that offers it. Free text a host typed matches no configured key
+  // and stays unrestricted, as bookings have always recorded it that way.
+  const requested = String(input.experience || "").trim();
+  const curated = requested && availability.config.experiences.some((item) => item.key === requested);
+  if (curated && !allowOverride
+      && !experiencesFor(input.service, availability.config).some((item) => item.key === requested)) {
+    const error = new Error("That menu is not served at this time.");
+    error.code = "not_offered";
+    throw error;
+  }
   if (publicOnly && Number(input.pax) > Number(availability.config.online.maxPax)) {
     const error = new Error("This party is too large for online booking.");
     error.code = "party_too_large";
@@ -445,6 +505,9 @@ export async function validateBookingChoice(client, workspaceId, input, {
   return {
     availability,
     slot,
+    // Why the slot was refused, so an override that records the booking anyway
+    // can say so in the booking's history.
+    overrideReason: slot ? null : (candidate?.reason || "unavailable"),
     status: input.status || (
       publicOnly && Number(input.pax) > Number(availability.config.online.autoConfirmMaxPax)
         ? "pending"

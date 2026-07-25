@@ -101,7 +101,6 @@ import { tokens } from "./styles/tokens.js";
 import ServiceDatePicker from "./components/reservations/ServiceDatePicker.jsx";
 import ResvForm from "./components/reservations/ResvForm.jsx";
 import { useReservationWorkspace } from "./components/reservations/useReservationWorkspace.js";
-import { staffAction as reservationStaffAction } from "./reservations-lab/reservationClient.js";
 import CenteredModal from "./components/ui/CenteredModal.jsx";
 import Header from "./components/ui/Header.jsx";
 import GlobalStyle from "./components/ui/GlobalStyle.jsx";
@@ -362,11 +361,29 @@ export default function App() {
   const [cocktails, setCocktails] = useState(localBev?.cocktails ?? initCocktails);
   const [spirits,   setSpirits]   = useState(localBev?.spirits   ?? initSpirits);
   const [beers,     setBeers]     = useState(localBev?.beers      ?? initBeers);
+  /** /reservations/admin redirects here as ?admin=reservations. The parameter
+   *  chooses which Admin SECTION opens — it must never choose whether Admin
+   *  opens at all, or a bookmarkable URL would walk straight past the admin
+   *  PIN that LoginScreen enforces. Read once on boot, then dropped from the
+   *  URL so a later reload cannot keep forcing the panel. */
+  const [requestedAdminSection] = useState(() => {
+    try {
+      return RESERVATIONS_V2_ENABLED
+        && new URLSearchParams(window.location.search).get("admin") === "reservations"
+        ? "reservations"
+        : null;
+    } catch { return null; }
+  });
+  useEffect(() => {
+    if (!requestedAdminSection) return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("admin");
+      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+    } catch {}
+  }, [requestedAdminSection]);
   const [mode, setMode] = useState(() => {
     try {
-      const requestedAdmin = RESERVATIONS_V2_ENABLED
-        && new URLSearchParams(window.location.search).get("admin") === "reservations";
-      if (requestedAdmin) return "admin";
       const storedMode = localStorage.getItem(workspaceKey("milka_mode")) || null;
       const storedDate = localStorage.getItem(workspaceKey("milka_service_date"));
       const chosenOn   = localStorage.getItem(workspaceKey(SERVICE_DATE_CHOSEN_ON_KEY));
@@ -411,14 +428,6 @@ export default function App() {
   );
   const canAdmin = canAdminister(currentRole);
   const effectiveAppName = restaurantConfig.name || currentWorkspace?.name || APP_NAME;
-  const reservationCredentialsRef = useRef({
-    accessToken: session?.access_token || null,
-    workspaceId,
-  });
-  reservationCredentialsRef.current = {
-    accessToken: session?.access_token || null,
-    workspaceId,
-  };
 
   // Restaurant identity and table definitions are workspace data, not build
   // constants. A missing setting deliberately falls back to Milka's current
@@ -1094,19 +1103,6 @@ export default function App() {
     if (sandboxRef.current) return { ok: true }; // test service: memory only
 
     try {
-      if (RESERVATIONS_V2_ENABLED) {
-        const previous = reservationsRef.current.find((reservation) => reservation.id === id);
-        const result = await reservationStaffAction("saveLegacyReservation", {
-          row: {
-            id,
-            date: date || previous?.date,
-            table_id: table_id ?? previous?.table_id ?? null,
-            data: data || previous?.data || {},
-            created_at: created_at || previous?.created_at,
-          },
-        }, reservationCredentialsRef.current);
-        return { ok: true, data: result.booking || null };
-      }
       if (sqlitePrimaryRef.current) {
         const { writeReservation } = await import("./powersync/writes.js");
         await writeReservation({ id, date, table_id, data, created_at });
@@ -1150,12 +1146,6 @@ export default function App() {
     if (sandboxRef.current) return { ok: true }; // test service: memory only
 
     try {
-      if (RESERVATIONS_V2_ENABLED) {
-        const result = await reservationStaffAction("saveLegacyReservations", {
-          rows,
-        }, reservationCredentialsRef.current);
-        return { ok: true, data: result.bookings || [] };
-      }
       if (sqlitePrimaryRef.current) {
         const { writeReservations } = await import("./powersync/writes.js");
         await writeReservations(rows);
@@ -2893,13 +2883,6 @@ export default function App() {
     // New reservation: mint the uuid client-side so the local write, the
     // uploaded row, and the optimistic React state all share one identity.
     const local = { ...dbRow, id: randomUuid(), created_at: new Date().toISOString() };
-    if (RESERVATIONS_V2_ENABLED && supabase && !sandboxRef.current) {
-      const result = await persistReservationRow(local);
-      if (!result.ok) return result;
-      setReservations(prev => [...prev, local]);
-      syncStartedTablesFromReservation(date, rData, Number(table_id));
-      return { ok: true, data: local };
-    }
     if (supabase && !sandboxRef.current) {
       let inserted = local;
       if (sqlitePrimaryRef.current) {
@@ -2933,11 +2916,6 @@ export default function App() {
       return { ok: true };
     }
     try {
-      if (RESERVATIONS_V2_ENABLED) {
-        await reservationStaffAction("deleteBooking", { bookingId: id }, reservationCredentialsRef.current);
-        setReservations(prev => prev.filter(r => r.id !== id));
-        return { ok: true };
-      }
       if (sqlitePrimaryRef.current) {
         const { deleteReservationRow } = await import("./powersync/writes.js");
         await deleteReservationRow(id);
@@ -4962,10 +4940,7 @@ export default function App() {
       {sandboxBannerEl}
       <Suspense fallback={lazyViewFallback}><AdminLayout
         appName={effectiveAppName}
-        initialSection={RESERVATIONS_V2_ENABLED
-          && new URLSearchParams(window.location.search).get("admin") === "reservations"
-          ? "reservations"
-          : null}
+        initialSection={requestedAdminSection}
         restaurantConfig={restaurantConfig}
         onSaveRestaurantConfig={saveRestaurantConfiguration}
         accessToken={session?.access_token || null}

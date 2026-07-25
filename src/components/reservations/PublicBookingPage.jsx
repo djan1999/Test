@@ -59,6 +59,22 @@ const readable = (iso) => {
   const d = new Date(`${iso}T12:00:00`);
   return `${DAY_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 };
+// The restaurant's calendar day, not the guest's. A diner browsing from another
+// timezone must start on the same day the server anchors availability to, or the
+// first (pre-selected) date is one the server already treats as past.
+const todayIn = (timezone) => {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone || "Europe/Ljubljana", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date());
+  } catch { return isoOf(new Date()); }
+};
+const daysBetween = (fromISO, toISO) => Math.round(
+  (new Date(`${toISO}T12:00:00`) - new Date(`${fromISO}T12:00:00`)) / 86400000,
+);
+// The day strip is paged rather than rendered whole: a 365-day window must be
+// reachable without three hundred buttons on a phone.
+const PAGE_DAYS = 21;
 
 /**
  * @param {object}   publicConfig   guest-safe configuration from the server
@@ -82,15 +98,18 @@ export default function PublicBookingPage({
   const restaurantName = config.restaurantName || "Restaurant";
   const maxPax = Number(config.maxPax || 6);
   const minPax = Number(config.minPax || 1);
-  const windowDays = Number(config.windowDays || 60);
+  const windowDays = Number(config.windowDays || 90);
   const experiences = config.experiences || [];
   const policies = useMemo(() => (
     Array.isArray(config.policies) ? config.policies : String(config.policies || "").split("\n").filter(Boolean)
   ), [config.policies]);
 
-  const today = isoOf(new Date());
+  const today = useMemo(() => todayIn(config.timezone), [config.timezone]);
   const [step, setStep] = useState("when");
   const [date, setDate] = useState(startDate || initialBooking?.date || today);
+  // Open on the page holding the day we were handed — a manage-link change can
+  // point deep into the window.
+  const [dayPage, setDayPage] = useState(() => Math.max(0, Math.floor(daysBetween(today, date) / PAGE_DAYS)));
   const [pax, setPax] = useState(Number(initialBooking?.pax || 2));
   const [availability, setAvailability] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -118,10 +137,18 @@ export default function PublicBookingPage({
   const [submitKey] = useState(() => `book-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const [submitting, setSubmitting] = useState(false);
 
-  const dates = useMemo(
-    () => Array.from({ length: Math.min(windowDays, 21) }, (_, index) => shiftISO(today, index)),
-    [today, windowDays],
-  );
+  const dates = useMemo(() => {
+    const first = dayPage * PAGE_DAYS;
+    const count = Math.max(0, Math.min(PAGE_DAYS, windowDays - first));
+    return Array.from({ length: count }, (_, index) => shiftISO(today, first + index));
+  }, [today, windowDays, dayPage]);
+  const morePages = (dayPage + 1) * PAGE_DAYS < windowDays;
+  // "Show our phone number" is an explicit admin choice: on a full day it must
+  // replace the waitlist form, not sit next to it.
+  // A closed online diary offers the telephone, never a waitlist form: taking
+  // details online is exactly what the restaurant has just switched off.
+  const offerWaitlist = config.onlineEnabled !== false
+    && config.whenFull !== "phone" && config.waitlistEnabled !== false && Boolean(joinWaitlist);
 
   useEffect(() => {
     if (step !== "time" || !loadAvailability) return undefined;
@@ -269,13 +296,33 @@ export default function PublicBookingPage({
                 </p>
               ) : null}
               <span style={labelStyle}>Which day?</span>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 5, marginBottom: 18 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 5, marginBottom: dayPage > 0 || morePages ? 5 : 18 }}>
                 {dates.map((value) => (
                   <button key={value} type="button" style={{ ...option(value === date), textAlign: "center", fontSize: 11 }} onClick={() => setDate(value)}>
                     {readable(value)}
                   </button>
                 ))}
               </div>
+              {dayPage > 0 || morePages ? (
+                <div style={{ display: "flex", gap: 5, marginBottom: 18 }}>
+                  <button
+                    type="button"
+                    style={{ ...option(false, dayPage === 0), flex: 1, textAlign: "center", fontSize: 11 }}
+                    disabled={dayPage === 0}
+                    onClick={() => setDayPage(dayPage - 1)}
+                  >
+                    Earlier
+                  </button>
+                  <button
+                    type="button"
+                    style={{ ...option(false, !morePages), flex: 1, textAlign: "center", fontSize: 11 }}
+                    disabled={!morePages}
+                    onClick={() => setDayPage(dayPage + 1)}
+                  >
+                    Further ahead
+                  </button>
+                </div>
+              ) : null}
               <button type="button" style={primary} onClick={() => go("time")}>See times</button>
             </>
           ) : null}
@@ -289,10 +336,15 @@ export default function PublicBookingPage({
               ) : !anyOpen ? (
                 <>
                   <p style={{ ...body, marginTop: 12 }}>
-                    Nothing free for {pax} on {readable(date)}. Try another day — or leave your details and we will call if a table opens.
+                    {/* Online booking switched off is not the same as a full day —
+                        saying "nothing free" would send the guest away believing
+                        the restaurant is booked out. */}
+                    {config.onlineEnabled === false
+                      ? `We are not taking bookings online at the moment${config.phone ? " — please telephone us and we will look after you" : ""}.`
+                      : `Nothing free for ${pax} on ${readable(date)}. Try another day${offerWaitlist ? " — or leave your details and we will call if a table opens" : ""}.`}
                   </p>
                   <button type="button" style={{ ...secondary, marginTop: 14 }} onClick={() => go("when")}>Choose another day</button>
-                  {config.waitlistEnabled !== false && joinWaitlist ? (
+                  {offerWaitlist ? (
                     waitlistSent ? (
                       <p style={{ ...body, marginTop: 12, color: tokens.green.text }}>We have your details — thank you.</p>
                     ) : (
@@ -316,6 +368,16 @@ export default function PublicBookingPage({
                         </button>
                       </div>
                     )
+                  ) : config.phone ? (
+                    <div style={{ marginTop: 16, borderTop: `1px solid ${tokens.ink[5]}`, paddingTop: 14 }}>
+                      <p style={body}>If the day matters more than the hour, call us — we keep a little back for the telephone.</p>
+                      <a
+                        href={`tel:${String(config.phone).replace(/[^+\d]/g, "")}`}
+                        style={{ ...primary, display: "block", textAlign: "center", lineHeight: "48px", textDecoration: "none", marginTop: 12 }}
+                      >
+                        Call {config.phone}
+                      </a>
+                    </div>
                   ) : null}
                 </>
               ) : (

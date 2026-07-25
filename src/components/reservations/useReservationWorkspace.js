@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createElement, useCallback, useEffect, useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
 import { RESTRICTIONS } from "../../constants/dietary.js";
+import ServiceBreakdown from "../ServiceBreakdown.jsx";
 import {
   bookingToLegacyReservation,
   tableIdToLabel,
@@ -56,6 +58,32 @@ function dateRange(from, days = 7) {
     date.setDate(date.getDate() + index);
     return date;
   });
+}
+
+// The weekly generators dereference weekDays[0] and weekDays[6] unconditionally,
+// so a single-service sheet is driven by seven copies of the same day: the header
+// then reads as that one date and the generator's own week filter keeps it.
+function singleDayWeek(from) {
+  const [day] = dateRange(from, 1);
+  return Array.from({ length: 7 }, () => day);
+}
+
+// ServiceBreakdown is a component, not an HTML generator — it renders an editable
+// sheet and prints itself. This hook has no tree of its own to render it in, so
+// the existing component is mounted into its own root and torn down on close.
+function openServiceBreakdown(dateStr, reservations) {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const close = () => {
+    // Deferred: onClose fires from inside the overlay's own event handler, and
+    // React warns when a root is unmounted while it is still rendering.
+    window.setTimeout(() => {
+      root.unmount();
+      host.remove();
+    }, 0);
+  };
+  root.render(createElement(ServiceBreakdown, { dateStr, reservations, onClose: close }));
 }
 
 function activeForPrint(bookings, { date, service, from, to } = {}) {
@@ -188,12 +216,12 @@ export function useReservationWorkspace({
 
   const onPrintBreakdown = useCallback(({ date, service }) => {
     const rows = activeForPrint(bookings, { date, service });
-    printHtml(generateWeeklyReservationsHTML(rows, dateRange(date, 1), RESTRICTIONS));
+    openServiceBreakdown(date, rows);
   }, [bookings]);
 
   const onPrintAllergySheet = useCallback(({ date, service }) => {
     const rows = activeForPrint(bookings, { date, service });
-    printHtml(generateWeeklyAllergyHTML(rows, menuCourses, dateRange(date, 1), RESTRICTIONS, profiles, assignments));
+    printHtml(generateWeeklyAllergyHTML(rows, menuCourses, singleDayWeek(date), RESTRICTIONS, profiles, assignments));
   }, [assignments, bookings, menuCourses, profiles]);
 
   const onPrintWeekly = useCallback(({ from }) => {

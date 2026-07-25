@@ -34,6 +34,7 @@ import {
 } from "../../domain/reservations/availability.js";
 import { statusLabel } from "../../domain/reservations/lifecycle.js";
 import {
+  activeLegacyReservations,
   bookingToLegacyReservation,
   legacyReservationToBooking,
 } from "../../domain/reservations/bookingAdapter.js";
@@ -60,6 +61,9 @@ const shiftISO = (iso, days) => { const d = new Date(`${iso}T12:00:00`); d.setDa
 const mondayOf = (iso) => shiftISO(iso, -((dateWeekday(iso) + 6) % 7));
 const dayLabel = (iso) => `${DAY_SHORT[dateWeekday(iso)]} ${Number(iso.slice(8))} ${MONTHS[Number(iso.slice(5, 7)) - 1].slice(0, 3)}`;
 const opsOf = (booking) => booking?.operationalData || {};
+// ResvForm always writes a kitchenCourseNotes key, empty or not, so the presence
+// of the object says nothing — only its contents mean the kitchen has a note.
+const hasCourseNotes = (booking) => Object.keys(opsOf(booking).kitchenCourseNotes || {}).length > 0;
 
 /** Tables a booking occupies — a combined party holds its whole group. */
 function tablesOf(booking) {
@@ -201,6 +205,7 @@ export default function ReservationWorkspace({
   const [filter, setFilter] = useState("all");
   const [editing, setEditing] = useState(null);
   const [assigning, setAssigning] = useState(null);
+  const [assignError, setAssignError] = useState("");
   const [guestQuery, setGuestQuery] = useState("");
   const [guestName, setGuestName] = useState(null);
   const [month, setMonth] = useState((serviceDate || isoOf(new Date())).slice(0, 7));
@@ -252,8 +257,10 @@ export default function ReservationWorkspace({
     if (filter === "cancelled") return booking.status === "cancelled" || booking.status === "no_show";
     return true;
   });
+  // ResvForm treats every reservation it is given as occupying its table, so a
+  // cancelled or no-show party would keep blocking one. Only live bookings go in.
   const legacyFormReservations = useMemo(
-    () => bookings.map(bookingToLegacyReservation),
+    () => activeLegacyReservations(bookings),
     [bookings],
   );
 
@@ -483,9 +490,32 @@ export default function ReservationWorkspace({
           bookings={dayBookings}
           config={config}
           compact={compact}
-          onAssign={async (chosen) => { await onAssignTables?.({ id: assigning.id, tables: chosen }); setAssigning(null); say(`Table ${chosen.join(" + ")} assigned.`); }}
-          onSwap={async (other) => { await onSwapBookings?.({ aId: assigning.id, bId: other.id }); setAssigning(null); say(`Swapped with ${other.name || "the other party"}.`); }}
-          onClose={() => setAssigning(null)}
+          error={assignError}
+          // A refused table change has to be reported inside the modal: the page's
+          // error banner sits behind the overlay, so it would never be seen.
+          onAssign={async (chosen) => {
+            try {
+              setAssignError("");
+              await onAssignTables?.({ id: assigning.id, tables: chosen });
+            } catch (changeError) {
+              setAssignError(changeError?.message || "That table could not be assigned.");
+              return;
+            }
+            setAssigning(null);
+            say(`Table ${chosen.join(" + ")} assigned.`);
+          }}
+          onSwap={async (other) => {
+            try {
+              setAssignError("");
+              await onSwapBookings?.({ aId: assigning.id, bId: other.id });
+            } catch (changeError) {
+              setAssignError(changeError?.message || "Those tables could not be swapped.");
+              return;
+            }
+            setAssigning(null);
+            say(`Swapped with ${other.name || "the other party"}.`);
+          }}
+          onClose={() => { setAssigning(null); setAssignError(""); }}
         />
       ) : null}
     </div>
@@ -927,7 +957,9 @@ function WaitlistTab({ entries, date, bookings, config, weeklyServices, calendar
       ) : entries.map((entry) => {
         const entryDate = entry.date || date;
         const pax = Number(entry.pax || 2);
-        const requested = entry.requestedTime || entry.requested_time || null;
+        // The server delivers waitlist entries as { name, time, window, … };
+        // `time` is the time they asked for, `window` the range they accept.
+        const requested = entry.time || null;
         const services = resolveServicesForDate(entryDate, weeklyServices, calendarRules);
         const options = services.flatMap((item) => generateSlots(item.first, item.last, item.interval)
           .map((time) => ({ time, service: item.service, fit: suggestFor({ date: entryDate, time, pax, bookings: live, config }) }))
@@ -937,12 +969,12 @@ function WaitlistTab({ entries, date, bookings, config, weeklyServices, calendar
           <div key={entry.id} style={{ ...box, padding: "12px 14px", marginBottom: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
               <div>
-                <div style={{ fontSize: 13 }}>{entry.guestName || entry.guest_name || "Guest"} · {pax}p</div>
+                <div style={{ fontSize: 13 }}>{entry.name || "Guest"} · {pax}p</div>
                 <div style={{ fontSize: 9, color: tokens.ink[3], marginTop: 3, lineHeight: 1.6 }}>
                   {entryDate}
-                  {requested ? ` · asked for ${requested}` : entry.windowFrom || entry.window_from ? ` · ${entry.windowFrom || entry.window_from}–${entry.windowTo || entry.window_to}` : " · any time"}
+                  {requested ? ` · asked for ${requested}` : entry.window ? ` · ${entry.window}` : " · any time"}
                   {entry.phone ? ` · ${entry.phone}` : ""}
-                  {entry.quotedMinutes || entry.quoted_minutes ? ` · quoted ${entry.quotedMinutes || entry.quoted_minutes} min` : ""}
+                  {entry.quotedMinutes ? ` · quoted ${entry.quotedMinutes} min` : ""}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
@@ -1001,7 +1033,7 @@ function PrintTab({ date, service, bookings, compact, onPrintKitchenTicket, onPr
             <div key={booking.id} style={{ fontSize: 10, borderBottom: `1px solid ${tokens.ink[5]}`, padding: "7px 0", lineHeight: 1.6 }}>
               <strong>{booking.time} · {booking.name} · {booking.pax}p{tablesOf(booking).length ? ` · ${tablesOf(booking).join("+")}` : ""}</strong>
               <span style={{ color: tokens.red.text, marginLeft: 8 }}>{restrictionsOf(booking).map(restrictionText).join(" · ")}</span>
-              {opsOf(booking).kitchenCourseNotes ? (
+              {hasCourseNotes(booking) ? (
                 <span style={{ color: tokens.ink[3], marginLeft: 8 }}>· kitchen note on file</span>
               ) : null}
             </div>
@@ -1014,19 +1046,25 @@ function PrintTab({ date, service, bookings, compact, onPrintKitchenTicket, onPr
 
 // ── Assign / swap ───────────────────────────────────────────────────────────
 
-function AssignModal({ booking, bookings, config, compact, onAssign, onSwap, onClose }) {
+function AssignModal({ booking, bookings, config, compact, error, onAssign, onSwap, onClose }) {
   const suggestion = suggestFor({ date: booking.date, time: booking.time, pax: booking.pax, bookings, config, excludeId: booking.id });
   const options = swapOptions({ booking, bookings, config });
   const hold = durationForParty(booking.pax, config);
   const current = tablesOf(booking);
   return (
     <CenteredModal onClose={onClose}>
-      <div style={{ fontFamily: FONT, padding: compact ? 14 : 18, minWidth: compact ? 260 : 330 }}>
+      <div style={{ ...box, fontFamily: FONT, padding: compact ? 14 : 18, minWidth: compact ? 260 : 330 }}>
         <div style={{ ...label9, marginBottom: 10 }}>Table for {booking.name || "this party"}</div>
         <div style={{ fontSize: 11, color: tokens.ink[2], lineHeight: 1.7, marginBottom: 12 }}>
           {booking.pax} guests at {booking.time} · about {Math.round(hold / 60 * 10) / 10} h at the table
           {current.length ? ` · currently ${current.join(" + ")}` : " · no table yet"}
         </div>
+
+        {error ? (
+          <div style={{ fontSize: 10, color: tokens.red.text, background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, padding: "7px 9px", marginBottom: 12, lineHeight: 1.6 }}>
+            {error}
+          </div>
+        ) : null}
 
         {suggestion ? (
           <button type="button" style={{ ...strong, width: "100%", marginBottom: 12 }} onClick={() => onAssign(suggestion.tables)}>
@@ -1034,7 +1072,7 @@ function AssignModal({ booking, bookings, config, compact, onAssign, onSwap, onC
           </button>
         ) : (
           <div style={{ fontSize: 10, color: tokens.red.text, background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, padding: "7px 9px", marginBottom: 12, lineHeight: 1.6 }}>
-            No free table of that size at this time. Swap with another party below, or change the time.
+            No free table of that size at this time. {current.length ? "Swap with another party below, or change the time." : "Free a table below, or change the time."}
           </div>
         )}
 
@@ -1047,15 +1085,21 @@ function AssignModal({ booking, bookings, config, compact, onAssign, onSwap, onC
             </span>
             {option.free ? (
               <button type="button" style={quiet} onClick={() => onAssign([option.table])}>Move here</button>
-            ) : (
+            ) : current.length ? (
               <button type="button" style={quiet} onClick={() => onSwap(option.occupant)}>
                 Swap with {String(option.occupant.name || "party").split(",")[0]}
               </button>
+            ) : (
+              // A swap exchanges two tables, so a party holding none has nothing to
+              // give: the server refuses it. Do not offer the action at all.
+              <span style={{ fontSize: 9, color: tokens.ink[3] }}>Taken — free it, or change the time</span>
             )}
           </div>
         ))}
         <div style={{ fontSize: 9, color: tokens.ink[3], lineHeight: 1.7, marginTop: 10 }}>
-          A swap exchanges both parties’ tables in one step, so neither is left without one.
+          {current.length
+            ? "A swap exchanges both parties’ tables in one step, so neither is left without one."
+            : "This party holds no table yet, so there is nothing to swap — take a free one, or change the time."}
         </div>
       </div>
     </CenteredModal>
@@ -1213,7 +1257,7 @@ function DetailModal({ booking, config, compact, onEdit, onAssign, onStatus, onD
   ];
   return (
     <CenteredModal onClose={onClose}>
-      <div style={{ fontFamily: FONT, padding: compact ? 14 : 18, minWidth: compact ? 260 : 360, maxWidth: 560 }}>
+      <div style={{ ...box, fontFamily: FONT, padding: compact ? 14 : 18, minWidth: compact ? 260 : 360, maxWidth: 560 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
           <div style={{ fontSize: 15, fontWeight: 600 }}>{booking.name || "Booking"}</div>
           <span style={{ ...label9, fontSize: 8 }}>{booking.source === "web" ? "booked online" : booking.source || "staff"}</span>
@@ -1231,7 +1275,7 @@ function DetailModal({ booking, config, compact, onEdit, onAssign, onStatus, onD
         {restrictions.length ? (
           <div style={{ fontSize: 10, color: tokens.red.text, background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, padding: "7px 9px", marginTop: 12, lineHeight: 1.7 }}>
             <strong>Kitchen must know:</strong> {restrictions.map(restrictionText).join(" · ")}
-            {ops.kitchenCourseNotes ? <div style={{ marginTop: 4 }}>Course notes on file.</div> : null}
+            {hasCourseNotes(booking) ? <div style={{ marginTop: 4 }}>Course notes on file.</div> : null}
           </div>
         ) : null}
 
@@ -1264,6 +1308,14 @@ function DetailModal({ booking, config, compact, onEdit, onAssign, onStatus, onD
               if (reason && reason.trim()) onStatus("cancelled", reason.trim());
             }}>Cancel</button>
           ) : null}
+          {/* Only a confirmed booking may become a no-show, and like a cancellation
+              it needs a reason on the record. */}
+          {booking.status === "confirmed" ? (
+            <button type="button" style={quiet} onClick={() => {
+              const reason = window.prompt("Why is this booking a no-show?");
+              if (reason && reason.trim()) onStatus("no_show", reason.trim());
+            }}>No-show</button>
+          ) : null}
           {onDelete ? (
             <button type="button" style={{ ...quiet, color: tokens.red.text, borderColor: tokens.red.border }} onClick={onDelete}>
               Delete
@@ -1288,7 +1340,7 @@ function WalkInModal({ pax, date, service, seatings, bookings, config, compact, 
 
   return (
     <CenteredModal onClose={onClose}>
-      <div style={{ fontFamily: FONT, padding: compact ? 14 : 18, minWidth: compact ? 260 : 330 }}>
+      <div style={{ ...box, fontFamily: FONT, padding: compact ? 14 : 18, minWidth: compact ? 260 : 330 }}>
         <div style={{ ...label9, marginBottom: 10 }}>Walk-in — {service} on {dayLabel(date)}</div>
 
         {walkInsOff ? (
