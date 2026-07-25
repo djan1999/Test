@@ -10,7 +10,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "check": "npm run test:run && npm run build",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "sync:edge-domain": "node scripts/syncEdgeDomain.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

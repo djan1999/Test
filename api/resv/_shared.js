@@ -1,6 +1,9 @@
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { evaluateAvailability } from "../../src/domain/reservations/availability.js";
+import {
+  availabilityForRequest,
+  restaurantClock,
+} from "../../src/domain/reservations/availability.js";
 import {
   experiencesFor,
   normalizeReservationConfig,
@@ -232,28 +235,6 @@ export async function loadReservationContext(client, workspaceId, { from, to } =
   };
 }
 
-function restaurantClock(timeZone) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date()).reduce((values, part) => ({ ...values, [part.type]: part.value }), {});
-  return {
-    date: `${parts.year}-${parts.month}-${parts.day}`,
-    minutes: Number(parts.hour) * 60 + Number(parts.minute),
-  };
-}
-
-function shiftDate(date, days) {
-  const value = new Date(`${date}T12:00:00Z`);
-  value.setUTCDate(value.getUTCDate() + Number(days));
-  return value.toISOString().slice(0, 10);
-}
-
 export async function getAvailability(client, workspaceId, {
   date,
   pax,
@@ -261,28 +242,21 @@ export async function getAvailability(client, workspaceId, {
   excludeBookingId = null,
 }) {
   const context = await loadReservationContext(client, workspaceId, { from: date, to: date });
-  const now = restaurantClock(context.config.timezone || "Europe/Ljubljana");
-  // The booking window is the server's to enforce, never the browser's: a
-  // public request for a past date, or one beyond online.windowDays, is offered
-  // nothing at all. Mirrors the edge function so both servers agree.
-  const outsideWindow = Boolean(publicOnly) && (
-    date < now.date || date > shiftDate(now.date, context.config.online.windowDays)
-  );
-  // Online booking switched off closes /book at the server, not merely in the
-  // guest's browser: the switch has to hold against a hand-made request too.
-  const onlineClosed = Boolean(publicOnly) && context.config.online.enabled === false;
-  const services = (outsideWindow || onlineClosed) ? [] : evaluateAvailability({
+  // Every rule lives in the domain engine, which the edge function calls too —
+  // so a window, a lead time or an exclusion can never mean one thing here and
+  // another there.
+  const result = availabilityForRequest({
     date,
-    pax: Number(pax),
+    pax,
     services: context.services,
     exceptions: context.exceptions,
-    bookings: context.bookings.filter((booking) => booking.id !== excludeBookingId),
+    bookings: context.bookings,
     config: context.config,
     publicOnly,
-    isToday: publicOnly && date === now.date,
-    nowMinutes: publicOnly ? now.minutes : null,
+    excludeBookingId,
+    now: restaurantClock(context.config.timezone),
   });
-  return { ...context, services, outsideWindow, onlineClosed };
+  return { ...context, ...result };
 }
 
 export function createReference() {

@@ -1,5 +1,19 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+// The availability rules are NOT written here. They are the same domain modules
+// the app and the Vercel route use, copied in verbatim by
+// `npm run sync:edge-domain` because the Supabase bundler cannot reach ../../src.
+// A hand-written second copy is how this function came to miss combined tables.
+import {
+  availabilityForRequest,
+  restaurantClock,
+} from "../_shared/reservations/availability.js";
+import {
+  experiencesFor,
+  normalizeReservationConfig,
+  publicConfigOf,
+} from "../_shared/reservations/config.js";
+import { assertReservationTransition } from "../_shared/reservations/lifecycle.js";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -8,46 +22,9 @@ const cors = {
   "Content-Type": "application/json; charset=utf-8",
 };
 
-const activeStatuses = new Set(["pending", "confirmed", "arrived"]);
-const transitions: Record<string, string[]> = {
-  pending: ["confirmed", "cancelled"],
-  confirmed: ["arrived", "cancelled", "no_show"],
-  arrived: ["completed", "confirmed"],
-  completed: [],
-  cancelled: ["pending"],
-  no_show: ["confirmed"],
-};
-
 const json = (status: number, payload: unknown) =>
   new Response(JSON.stringify(payload), { status, headers: { ...cors, "Cache-Control": "no-store" } });
 
-const minutesOf = (time: string) => {
-  const [hours, minutes] = String(time || "00:00").split(":").map(Number);
-  return hours * 60 + minutes;
-};
-const timeOf = (minutes: number) =>
-  `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-const slotsBetween = (first: string, last: string, interval: number) => {
-  const slots: string[] = [];
-  for (let at = minutesOf(first); at <= minutesOf(last); at += interval) slots.push(timeOf(at));
-  return slots;
-};
-const weekdayOf = (date: string) => new Date(`${date}T12:00:00Z`).getUTCDay();
-const restaurantNow = () => {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/Ljubljana",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date()).reduce((acc, part) => ({ ...acc, [part.type]: part.value }), {} as Record<string, string>);
-  return {
-    date: `${parts.year}-${parts.month}-${parts.day}`,
-    minutes: Number(parts.hour) * 60 + Number(parts.minute),
-  };
-};
 const sha256 = async (value: string) => {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -154,106 +131,43 @@ function legacyToBooking(row: any) {
   };
 }
 
-function durationForParty(pax: number, config: Record<string, any>) {
-  if (pax <= 2) return Number(config.durations?.small || 120);
-  if (pax <= 5) return Number(config.durations?.medium || 150);
-  return Number(config.durations?.large || 180);
-}
-
-function resolveServices(date: string, services: any[], rules: any[], publicOnly = false) {
-  const weekday = weekdayOf(date);
-  const dayRules = rules.filter((rule) => rule.date === date);
-  if (dayRules.some((rule) => ["closed", "private_event"].includes(rule.kind))) return [];
-  const overrides = new Map(dayRules.filter((rule) => rule.kind === "service_override" && rule.service).map((rule) => [rule.service, rule]));
-  const names = new Set([...services.map((item) => item.service), ...overrides.keys()]);
-  return [...names].flatMap((serviceName) => {
-    const weekly = services.find((item) => item.service === serviceName && Number(item.weekday) === weekday);
-    const override: any = overrides.get(serviceName);
-    if (override?.mode === "off" || (!weekly?.enabled && override?.mode !== "on")) return [];
-    const resolved = {
-      service: serviceName,
-      first: override?.first || weekly?.first || (serviceName === "lunch" ? "12:00" : "18:00"),
-      last: override?.last || weekly?.last || (serviceName === "lunch" ? "13:30" : "19:30"),
-      interval: Number(override?.interval || weekly?.interval || 30),
-      onlineEnabled: override?.onlineOff ? false : weekly?.onlineEnabled !== false,
-      // Per-service party limits and walk-in permission travel with the resolved
-      // service, exactly as resolveServicesForDate does for the client engine.
-      minPax: weekly?.minPax != null ? Number(weekly.minPax) : null,
-      maxPax: weekly?.maxPax != null ? Number(weekly.maxPax) : null,
-      walkInsEnabled: weekly?.walkInsEnabled !== false,
-    };
-    return publicOnly && !resolved.onlineEnabled ? [] : [resolved];
-  }).sort((a, b) => minutesOf(a.first) - minutesOf(b.first));
-}
-
-function tableFor(date: string, time: string, pax: number, bookings: any[], config: Record<string, any>) {
-  const start = minutesOf(time);
-  const end = start + durationForParty(pax, config) + Number(config.durations?.buffer || 15);
-  const occupied = bookings.filter((booking) => {
-    if (booking.date !== date || !activeStatuses.has(booking.status) || !booking.tableLabel) return false;
-    const otherStart = minutesOf(booking.time);
-    const otherEnd = otherStart + durationForParty(booking.pax, config) + Number(config.durations?.buffer || 15);
-    return start < otherEnd && otherStart < end;
-  });
-  return [...(config.tables || [])]
-    .filter((table) => Number(table.seats) >= pax)
-    .sort((a, b) => Number(a.seats) - Number(b.seats))
-    .find((table) => !occupied.some((booking) => booking.tableLabel === table.id))?.id || null;
-}
-
-function availability(date: string, pax: number, context: any, publicOnly = false) {
-  if (publicOnly) {
-    // Online booking switched off closes /book here, not merely in the guest's
-    // browser, so the switch holds against a hand-made request too.
-    if (context.config.online?.enabled === false) return [];
-    const now = restaurantNow();
-    const max = new Date(`${now.date}T12:00:00Z`);
-    max.setUTCDate(max.getUTCDate() + Number(context.config.online?.windowDays || 90));
-    if (date < now.date || date > max.toISOString().slice(0, 10)) return [];
-  }
-  const dayServices = resolveServices(date, context.services, context.exceptions, publicOnly);
-  const active = context.bookings.filter((booking) => booking.date === date && activeStatuses.has(booking.status));
-  const capacityRule = context.exceptions.find((rule) => rule.date === date && rule.kind === "capacity_override");
-  // A capacity override caps the whole DAY, not each service: it replaces the
-  // per-service cap and is also checked against every active cover of the date.
-  const dayCap = capacityRule?.capacity != null ? Number(capacityRule.capacity) : null;
-  const dayCovers = active.reduce((total, booking) => total + booking.pax, 0);
-  const serviceCap = dayCap != null ? dayCap : Number(context.config.pacing?.coversPerService || 44);
-  return dayServices.map((service) => {
-    const inService = active.filter((booking) => booking.service === service.service);
-    const serviceCovers = inService.reduce((total, booking) => total + booking.pax, 0);
-    // Per-service limits win, the global online limits are the fallback.
-    const minPax = service.minPax != null ? service.minPax : Number(context.config.online?.minPax || 1);
-    const maxPax = service.maxPax != null ? service.maxPax : Number(context.config.online?.maxPax || 6);
-    return {
-      ...service,
-      slots: slotsBetween(service.first, service.last, service.interval).map((time) => {
-        const slotCovers = inService.filter((booking) => booking.time === time).reduce((total, booking) => total + booking.pax, 0);
-        const tableLabel = tableFor(date, time, pax, active, context.config);
-        const now = publicOnly ? restaurantNow() : null;
-        const passesLeadTime = !publicOnly
-          || date !== now?.date
-          || minutesOf(time) >= Number(now?.minutes || 0) + Number(context.config.online?.leadMinutes || 0);
-        let reason = null;
-        if (pax < minPax) reason = "party_too_small";
-        else if (pax > maxPax) reason = "party_too_large";
-        else if (!passesLeadTime) reason = "too_late";
-        else if (dayCap != null && dayCovers + pax > dayCap) reason = "day_full";
-        else if (serviceCovers + pax > serviceCap) reason = "service_full";
-        else if (slotCovers + pax > Number(context.config.pacing?.coversPerSlot || 12)) reason = "sitting_full";
-        else if (!tableLabel) reason = "no_table";
-        return { time, ok: reason === null, reason, tableLabel: reason === null ? tableLabel : null };
-      }),
-    };
-  });
-}
-
 function validateBooking(input: Record<string, any>) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(input.date || ""))) throw new Error("Choose a valid date.");
   if (!/^\d{2}:\d{2}$/.test(String(input.time || ""))) throw new Error("Choose a valid time.");
   if (!/^[a-z][a-z0-9_-]{1,31}$/.test(String(input.service || ""))) throw new Error("Choose a valid service.");
   if (!String(input.name || "").trim()) throw new Error("Guest name is required.");
   if (!Number.isInteger(Number(input.pax)) || Number(input.pax) < 1 || Number(input.pax) > 30) throw new Error("Party size must be between 1 and 30.");
+}
+
+/** One request's availability, decided by the shared domain engine. The window,
+ *  the online switch, today's lead time and the guest's own booking are all
+ *  handled there, so this function and the Vercel route cannot disagree. */
+function availabilityOf(context: any, {
+  date, pax, publicOnly = false, experience = null, excludeBookingId = null,
+}: Record<string, any>) {
+  return availabilityForRequest({
+    date,
+    pax: Number(pax),
+    services: context.services,
+    exceptions: context.exceptions,
+    bookings: context.bookings,
+    config: context.config,
+    publicOnly,
+    experience,
+    excludeBookingId,
+    now: restaurantClock(normalizeReservationConfig(context.config).timezone),
+  });
+}
+
+/** The manage link has to outlive a change of date. A guest who moves from next
+ *  week to next month keeps the same link, so its expiry moves with them. */
+async function extendManageToken(client: any, tokenHash: string, date: string) {
+  const expires = new Date(`${date}T23:59:59+02:00`);
+  expires.setDate(expires.getDate() + 1);
+  const { error } = await client.from("reservation_manage_tokens")
+    .update({ expires_at: expires.toISOString() })
+    .eq("token_hash", tokenHash);
+  if (error) throw error;
 }
 
 Deno.serve(async (request: Request) => {
@@ -381,24 +295,44 @@ Deno.serve(async (request: Request) => {
     const choiceFor = async (input: any, publicOnly: boolean, excludeBookingId?: string) => {
       validateBooking(input);
       const context = await loadContext(input.date);
-      const scopedContext = excludeBookingId
-        ? { ...context, bookings: context.bookings.filter((booking: any) => booking.id !== excludeBookingId) }
-        : context;
-      const options = availability(input.date, Number(input.pax), scopedContext, publicOnly);
-      if (publicOnly && context.config.online?.enabled === false) {
+      const result = availabilityOf(context, {
+        date: input.date,
+        pax: input.pax,
+        publicOnly,
+        excludeBookingId: excludeBookingId || null,
+      });
+      const config = result.config;
+      if (result.onlineClosed) {
         const error: any = new Error("Online booking is closed. Please telephone the restaurant.");
         error.code = "online_closed";
         throw error;
       }
-      if (publicOnly && Number(input.pax) > Number(context.config.online?.maxPax || 6)) {
+      if (result.outsideWindow) {
+        const error: any = new Error("That date is outside the online booking window.");
+        error.code = "outside_window";
+        throw error;
+      }
+      const allowOverride = Boolean(input.overrideReason) || !publicOnly;
+      // Step 4 of the resolution order — an experience the restaurant curates
+      // may only be booked on a service that offers it. Free text a host typed
+      // matches no configured key and stays unrestricted.
+      const requested = String(input.experience || "").trim();
+      const curated = requested && config.experiences.some((item: any) => item.key === requested);
+      if (curated && !allowOverride
+          && !experiencesFor(input.service, config).some((item: any) => item.key === requested)) {
+        const error: any = new Error("That menu is not served at this time.");
+        error.code = "not_offered";
+        throw error;
+      }
+      if (publicOnly && Number(input.pax) > Number(config.online.maxPax)) {
         const error: any = new Error("This party is too large for online booking.");
         error.code = "party_too_large";
         throw error;
       }
-      const service = options.find((item) => item.service === input.service);
-      const candidate = service?.slots.find((item) => item.time === input.time);
+      const service = result.services.find((item: any) => item.service === input.service);
+      const candidate = service?.slots.find((item: any) => item.time === input.time);
       const slot = candidate?.ok ? candidate : null;
-      if (!slot && !input.overrideReason) {
+      if (!slot && !allowOverride) {
         const error: any = new Error(candidate?.reason === "no_table"
           ? "No table of the right size is free then."
           : "That time is no longer available.");
@@ -408,11 +342,11 @@ Deno.serve(async (request: Request) => {
         throw error;
       }
       const status = input.status || (
-        publicOnly && Number(input.pax) > Number(context.config.online?.autoConfirmMaxPax || 4)
+        publicOnly && Number(input.pax) > Number(config.online.autoConfirmMaxPax)
           ? "pending"
           : "confirmed"
       );
-      return { context, slot, status };
+      return { context, config, slot, status, overrideReason: slot ? null : (candidate?.reason || "no_slot") };
     };
 
     const createBooking = async (input: any, publicOnly: boolean) => {
@@ -464,8 +398,10 @@ Deno.serve(async (request: Request) => {
         createdBy: publicOnly ? "WEB" : staffActor,
         operationalData: {
           ...(input.operationalData || {}),
+          // A joined party holds EVERY table in the group. Recording only the
+          // first would leave the second looking free to the next booking.
           tableGroup: input.operationalData?.tableGroup || (
-            input.tableLabel ? [input.tableLabel] : (slot?.tableLabel ? [slot.tableLabel] : [])
+            input.tableLabel ? [input.tableLabel] : (slot?.tables || [])
           ),
         },
       };
@@ -532,24 +468,7 @@ Deno.serve(async (request: Request) => {
 
     if (action === "publicConfig") {
       const context = await loadContext();
-      const config = context.config;
-      return json(200, { ok: true, config: {
-        restaurantName: config.restaurantName,
-        tagline: config.tagline,
-        timezone: config.timezone,
-        ...(config.publicPage || {}),
-        onlineEnabled: config.online?.enabled !== false,
-        maxPax: config.online?.maxPax,
-        minPax: config.online?.minPax,
-        leadMinutes: config.online?.leadMinutes,
-        windowDays: config.online?.windowDays,
-        autoConfirmMaxPax: config.online?.autoConfirmMaxPax,
-        whenFull: config.online?.whenFull,
-        waitlistEnabled: config.waitlist?.enabled !== false,
-        experiences: (config.experiences || [])
-          .filter((experience: any) => experience.active !== false)
-          .map(({ key, title, description, services }: any) => ({ key, title, description, services })),
-      } });
+      return json(200, { ok: true, config: publicConfigOf(context.config) });
     }
     if (action === "availability") {
       const context = await loadContext(body.date);
@@ -557,12 +476,24 @@ Deno.serve(async (request: Request) => {
       // table. The booking to exclude is derived from the manage token, never
       // taken as a raw id, so nobody can free a table they do not hold.
       const managed = body.token ? await resolveToken(String(body.token)) : null;
-      const scoped = managed
-        ? { ...context, bookings: context.bookings.filter((booking: any) => booking.id !== managed.booking.id) }
-        : context;
-      const services = availability(body.date, Number(body.pax || 2), scoped, true)
-        .map((service) => ({ service: service.service, slots: service.slots.map(({ time, ok }) => ({ time, ok })) }));
-      return json(200, { ok: true, services, anyOk: services.some((service) => service.slots.some((slot) => slot.ok)) });
+      const result = availabilityOf(context, {
+        date: body.date,
+        pax: Number(body.pax || 2),
+        publicOnly: true,
+        excludeBookingId: managed?.booking?.id || null,
+      });
+      // The reason travels with the slot. It names a capacity or a table size —
+      // never another guest — and it is the difference between "no" and a "no"
+      // the guest can act on.
+      const services = result.services.map((service: any) => ({
+        service: service.service,
+        slots: service.slots.map(({ time, ok, reason }: any) => ({ time, ok, reason })),
+      }));
+      return json(200, {
+        ok: true,
+        services,
+        anyOk: services.some((service: any) => service.slots.some((slot: any) => slot.ok)),
+      });
     }
     if (action === "validate") {
       const { status } = await choiceFor({ ...body.booking, idempotencyKey: body.idempotencyKey, source: "web" }, true);
@@ -601,7 +532,7 @@ Deno.serve(async (request: Request) => {
     if (action === "cancel") {
       const managed = await resolveToken(body.token);
       if (!managed) return json(404, { ok: false, error: "expired_link" });
-      if (!transitions[managed.booking.status]?.includes("cancelled")) throw new Error("This reservation cannot be cancelled.");
+      assertReservationTransition(managed.booking.status, "cancelled", body.reason || "Cancelled by guest");
       const { error } = await client.from("reservation_bookings").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", managed.booking.id);
       if (error) throw error;
       await event(managed.booking.id, { actor: "WEB", event_type: "status_changed", from_status: managed.booking.status, to_status: "cancelled", reason: body.reason || "Cancelled by guest" });
@@ -631,7 +562,9 @@ Deno.serve(async (request: Request) => {
         operationalData: {
           ...(managed.booking.operationalData || {}),
           ...(input.operationalData || {}),
-          tableGroup: slot?.tableLabel ? [slot.tableLabel] : [],
+          // Every table of a joined party, not just the first: dropping the
+          // rest silently hands the second table to the next booking.
+          tableGroup: slot?.tables || [],
           lastManageChangeKey: idempotencyKey || null,
         },
       };
@@ -643,6 +576,8 @@ Deno.serve(async (request: Request) => {
       if (error) throw error;
       if (!data?.[0]) throw new Error("Reservation change returned no booking.");
       const saved = mapBooking(data[0]);
+      // The link must still work on the new date — see extendManageToken.
+      await extendManageToken(client, managed.hash, saved.date);
       await event(saved.id, {
         actor: "WEB",
         event_type: "booking_changed",
@@ -762,8 +697,7 @@ Deno.serve(async (request: Request) => {
     if (action === "transition") {
       const { data: current, error: currentError } = await client.from("reservation_bookings").select("*").eq("workspace_id", workspace.id).eq("id", body.bookingId).single();
       if (currentError) throw currentError;
-      if (!transitions[current.status]?.includes(body.toStatus)) throw new Error(`Reservation cannot move from ${current.status} to ${body.toStatus}.`);
-      if (["cancelled", "no_show"].includes(body.toStatus) && !String(body.reason || "").trim()) throw new Error("A reason is required.");
+      assertReservationTransition(current.status, body.toStatus, body.reason || "");
       const { data, error } = await client.from("reservation_bookings").update({ status: body.toStatus, updated_at: new Date().toISOString() }).eq("id", current.id).eq("status", current.status).select("*").single();
       if (error) throw error;
       await event(current.id, { actor: staffActor, event_type: "status_changed", from_status: current.status, to_status: body.toStatus, reason: body.reason || null });

@@ -1,3 +1,7 @@
+// GENERATED FILE — DO NOT EDIT.
+// Copied verbatim from src/domain/reservations by scripts/syncEdgeDomain.mjs.
+// Edit the source and re-run `npm run sync:edge-domain`.
+
 // Availability engine — the single authority for "can this party book this time".
 //
 // Used identically by the staff workspace, the Calendar, the public /book page

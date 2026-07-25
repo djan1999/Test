@@ -237,6 +237,29 @@ describe("PublicBookingPage", () => {
     expect(screen.getByRole("button", { name: /18:30/ })).toBeDisabled();
   });
 
+  // The servers used to strip `reason` from the public response, so every
+  // closed time read "Full" — including one that was closed because no table of
+  // that SIZE was free, which a smaller party could have taken.
+  it("says which kind of no a closed time is", async () => {
+    const mixed = [{
+      service: "dinner", first: "18:00", last: "19:30", interval: 30,
+      slots: [
+        { time: "18:00", ok: true },
+        { time: "18:30", ok: false, reason: "no_table" },
+        { time: "19:00", ok: false, reason: "too_late" },
+        { time: "19:30", ok: false, reason: "sitting_full" },
+      ],
+    }];
+    render(<PublicBookingPage publicConfig={publicConfig} loadAvailability={vi.fn().mockResolvedValue(mixed)} submitBooking={vi.fn()} joinWaitlist={vi.fn()} startDate={DATE} />);
+    fireEvent.click(screen.getByRole("button", { name: "Find a time" }));
+
+    expect(await screen.findByRole("button", { name: /19:30/ })).toHaveTextContent("Full");
+    const noTable = screen.getByRole("button", { name: /18:30/ });
+    expect(noTable).toHaveTextContent("No table");
+    expect(noTable).toHaveAttribute("title", "No table of the right size is free then.");
+    expect(screen.getByRole("button", { name: /19:00/ })).toHaveTextContent("Too late");
+  });
+
   it("returns the guest to live times when the table goes mid-flow", async () => {
     const loadAvailability = vi.fn().mockResolvedValue(services);
     const submitBooking = vi.fn().mockRejectedValue(Object.assign(new Error("gone"), { code: "slot_taken" }));

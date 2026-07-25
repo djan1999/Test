@@ -12,8 +12,24 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
+import { UNAVAILABLE_REASONS } from "../../domain/reservations/availability.js";
 
 const FONT = tokens.font;
+
+// A closed time says which kind of "no" it is. None of these names another
+// guest or reveals a table count — but "no table of the right size" and "that
+// seating is full" send a guest to two different next moves, and a bare "Full"
+// sends them away.
+const SLOT_BADGES = {
+  not_offered: "Not served",
+  party_too_small: "Min party",
+  party_too_large: "Call us",
+  too_late: "Too late",
+  day_full: "Full",
+  service_full: "Full",
+  sitting_full: "Full",
+  no_table: "No table",
+};
 
 const ACCESS_OPTIONS = ["Step-free access", "Wheelchair space at the table", "Assistance dog", "High chair"];
 const OCCASIONS = ["Birthday", "Anniversary", "Celebration"];
@@ -355,7 +371,7 @@ export default function PublicBookingPage({
                             key={slot.time}
                             type="button"
                             disabled={!slot.ok}
-                            title={slot.ok ? "" : slot.reason || ""}
+                            title={slot.ok ? "" : (UNAVAILABLE_REASONS[slot.reason] || "")}
                             onClick={() =>
                               patch({
                                 time: slot.time,
@@ -374,7 +390,7 @@ export default function PublicBookingPage({
                           >
                             <span style={{ fontSize: 12, fontWeight: 600, display: "block" }}>{slot.time}</span>
                             <span style={{ fontSize: 7, letterSpacing: "0.12em", color: tokens.ink[4], display: "block", marginTop: 2, minHeight: 9, textTransform: "uppercase" }}>
-                              {slot.ok ? "" : "Full"}
+                              {slot.ok ? "" : (SLOT_BADGES[slot.reason] || "Full")}
                             </span>
                           </button>
                         ))}

@@ -12,11 +12,27 @@ import {
   validateBookingChoice,
 } from "./_shared.js";
 
+// The reason travels with the slot. It names a capacity or a table size — never
+// another guest — and it is the difference between a bare "no" and a "no" the
+// guest can act on ("that seating is full" invites another time; "no table of
+// the right size" invites a smaller party or a call).
 function publicAvailability(services) {
   return services.map((service) => ({
     service: service.service,
-    slots: service.slots.map(({ time, ok }) => ({ time, ok })),
+    slots: service.slots.map(({ time, ok, reason }) => ({ time, ok, reason })),
   }));
+}
+
+/** The manage link has to outlive a change of date. A guest who moves from next
+ *  week to next month keeps the same link, so its expiry moves with them. */
+async function extendManageToken(client, tokenHash, date) {
+  const expiry = new Date(`${date}T23:59:59+02:00`);
+  expiry.setDate(expiry.getDate() + 1);
+  const { error } = await client
+    .from("reservation_manage_tokens")
+    .update({ expires_at: expiry.toISOString() })
+    .eq("token_hash", tokenHash);
+  if (error) throw error;
 }
 
 export default async function handler(request, response) {
@@ -192,6 +208,8 @@ export default async function handler(request, response) {
       if (error) throw error;
       if (!data?.[0]) throw new Error("Reservation change returned no booking.");
       const saved = mapBooking(data[0]);
+      // The link must still work on the new date — see extendManageToken.
+      await extendManageToken(client, managed.tokenHash, saved.date);
       await client.from("reservation_status_events").insert({
         workspace_id: managed.workspaceId,
         booking_id: saved.id,

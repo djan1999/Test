@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 import { normalizeReservationConfig, normalizeWeeklyServices } from "../config.js";
 import {
   UNAVAILABLE_REASONS,
+  availabilityForRequest,
   evaluateAvailability,
+  restaurantClock,
+  shiftISODate,
   suggestTables,
   swapCandidates,
   walkInsAllowed,
@@ -220,5 +223,94 @@ describe("a guest's own booking must not block their own move", () => {
     const slot = evaluate([]);
     expect(slot.ok).toBe(true);
     expect(slot.tables).toContain("T05");
+  });
+});
+
+
+// availabilityForRequest is what BOTH servers call — the Vercel route and the
+// Supabase edge function. The rules it owns are the ones that belong to the
+// request rather than to a single slot, and each of them has been wrong on one
+// server and right on the other at some point in this system's life.
+describe("availabilityForRequest", () => {
+  const services = normalizeWeeklyServices([
+    { service: "dinner", weekday: 2, enabled: true, first: "18:00", last: "19:00", interval: 30, onlineEnabled: true },
+  ]);
+  const now = { date: TUESDAY, minutes: 10 * 60 };
+  const request = (extra) => availabilityForRequest({
+    date: TUESDAY, pax: 2, services, bookings: [], config, now, ...extra,
+  });
+
+  it("offers the evening to a guest inside the window", () => {
+    const result = request({ publicOnly: true });
+    expect(result.outsideWindow).toBe(false);
+    expect(result.onlineClosed).toBe(false);
+    expect(result.services[0].slots.every((slot) => slot.ok)).toBe(true);
+  });
+
+  it("offers a public request nothing for a date already past", () => {
+    const result = request({ publicOnly: true, now: { date: SATURDAY, minutes: 600 } });
+    expect(result.outsideWindow).toBe(true);
+    expect(result.services).toEqual([]);
+  });
+
+  it("offers a public request nothing beyond the booking window", () => {
+    const far = shiftISODate(TUESDAY, 400);
+    expect(availabilityForRequest({
+      date: far, pax: 2, services, bookings: [], config, publicOnly: true, now,
+    }).outsideWindow).toBe(true);
+  });
+
+  it("closes the public page when online booking is switched off", () => {
+    const closed = normalizeReservationConfig({ ...config, online: { ...config.online, enabled: false } });
+    const result = request({ publicOnly: true, config: closed });
+    expect(result.onlineClosed).toBe(true);
+    expect(result.services).toEqual([]);
+  });
+
+  it("still answers staff after hours, and past the guest window", () => {
+    const result = availabilityForRequest({
+      date: shiftISODate(TUESDAY, 400), pax: 2, services, bookings: [], config, publicOnly: false, now,
+    });
+    expect(result.outsideWindow).toBe(false);
+    expect(result.services.length).toBe(0); // 400 days on is not a Tuesday
+    expect(request({ publicOnly: false }).services[0].slots.every((slot) => slot.ok)).toBe(true);
+  });
+
+  // The manage link. Without the exclusion a guest moving from 18:00 to 18:30
+  // is refused by the table they are themselves sitting at.
+  it("does not count a guest's own booking against them", () => {
+    const single = normalizeReservationConfig({ ...config, tables: [{ id: "T05", seats: 4 }], combos: [] });
+    const mine = { ...booking("mine", "18:00", 4, ["T05"]), service: "dinner" };
+    const slotAt = (extra) => availabilityForRequest({
+      date: TUESDAY, pax: 4, services, bookings: [mine], config: single, publicOnly: true, now, ...extra,
+    }).services[0].slots.find((slot) => slot.time === "18:00");
+
+    expect(slotAt().reason).toBe("no_table");
+    expect(slotAt({ excludeBookingId: "mine" }).ok).toBe(true);
+  });
+
+  it("excludes by identity, not by a loose match, so no other booking is freed", () => {
+    const single = normalizeReservationConfig({ ...config, tables: [{ id: "T05", seats: 4 }], combos: [] });
+    const theirs = { ...booking("theirs", "18:00", 4, ["T05"]), service: "dinner" };
+    const result = availabilityForRequest({
+      date: TUESDAY, pax: 4, services, bookings: [theirs], config: single,
+      publicOnly: true, now, excludeBookingId: "mine",
+    });
+    expect(result.services[0].slots.find((slot) => slot.time === "18:00").ok).toBe(false);
+  });
+});
+
+describe("restaurantClock", () => {
+  it("reads the restaurant's own wall clock, not the server's", () => {
+    // 21:30 UTC on a summer evening is 23:30 in Ljubljana — still the same day.
+    const clock = restaurantClock("Europe/Ljubljana", new Date("2026-07-21T21:30:00Z"));
+    expect(clock.date).toBe("2026-07-21");
+    expect(clock.minutes).toBe((23 * 60) + 30);
+  });
+
+  it("rolls the date over with the restaurant, not with UTC", () => {
+    const clock = restaurantClock("Europe/Ljubljana", new Date("2026-07-21T22:30:00Z"));
+    expect(clock.date).toBe("2026-07-22");
+    expect(clock.minutes).toBe(30);
   });
 });
