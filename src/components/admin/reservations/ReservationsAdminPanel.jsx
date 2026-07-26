@@ -1,7 +1,11 @@
 // ReservationsAdminPanel — reservation settings inside the existing Admin shell.
 //
-// No sidebar of its own and no second gate: the Admin gate already authorised
-// whoever is here. Everything is written in plain restaurant language, with
+// One panel in the existing admin, reached from the existing admin navigation.
+// It draws no header, no page padding, no width cap and no second gate — all of
+// those belong to AdminLayout, and drawing them twice is what made this read as
+// a second admin application nested in the first. The left-hand section list is
+// the one piece of navigation it owns, and the Admin gate has already authorised
+// whoever is reading it. Everything is written in plain restaurant language, with
 // steppers and toggles rather than raw fields, and nothing saves until the
 // manager has seen a plain-English summary of what will change and what it
 // costs them.
@@ -114,8 +118,12 @@ export default function ReservationsAdminPanel({ config, weeklyServices = [], ex
   return (
     <div style={{ fontFamily: FONT, color: tokens.ink[1], paddingBottom: draft ? 76 : 0 }}>
       <div style={{ display: "flex", alignItems: "stretch", gap: 0, flexWrap: "wrap" }}>
-        <nav style={{ width: 220, flexShrink: 0, borderRight: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0], minWidth: 180 }}>
-          <div style={{ padding: "12px 14px", borderBottom: `1px solid ${tokens.ink[5]}` }}>
+        {/* The section list is navigation inside this panel, not a second app
+            sidebar. It carries no panel background and no chrome of its own, so
+            Admin's frame stays the only frame on the page — a manager should see
+            one application, not one nested in another. */}
+        <nav style={{ width: 200, flexShrink: 0, borderRight: `1px solid ${tokens.ink[4]}`, minWidth: 160, marginRight: 20 }}>
+          <div style={{ paddingRight: 14, paddingBottom: 12, borderBottom: `1px solid ${tokens.ink[5]}` }}>
             <input value={navQuery} onChange={(event) => setNavQuery(event.target.value)} placeholder="Search settings" style={{ ...baseInp, width: "100%", boxSizing: "border-box" }} />
           </div>
           {navItems.map(([key, title, sub]) => (
@@ -127,12 +135,12 @@ export default function ReservationsAdminPanel({ config, weeklyServices = [], ex
                 display: "block",
                 width: "100%",
                 textAlign: "left",
-                padding: "10px 14px",
+                padding: "10px 14px 10px 12px",
                 minHeight: 44,
                 border: "none",
                 borderBottom: `1px solid ${tokens.neutral[100]}`,
                 borderLeft: `2px solid ${section === key ? tokens.green.border : "transparent"}`,
-                background: section === key ? tokens.green.bg : tokens.neutral[0],
+                background: section === key ? tokens.green.bg : "transparent",
                 color: section === key ? tokens.green.text : tokens.ink[2],
                 fontSize: 10,
                 letterSpacing: "0.06em",
@@ -147,7 +155,11 @@ export default function ReservationsAdminPanel({ config, weeklyServices = [], ex
           ))}
         </nav>
 
-        <div style={{ flex: 1, minWidth: 280, padding: "18px 20px 40px", maxWidth: 860 }}>
+        {/* No padding and no width cap here: AdminLayout's <main> already sets
+            the page padding and content column every other panel sits in, and a
+            second set of both is what made this read as an admin inside an
+            admin. */}
+        <div style={{ flex: 1, minWidth: 280 }}>
           {section === "overview" && <Overview cfg={cfg} services={services} onGo={setSection} onSeedLab={onSeedLab} />}
 
           {section === "hours" && <ServicesAndHours services={services} cfg={cfg} edit={edit} canEdit={canEdit} />}
