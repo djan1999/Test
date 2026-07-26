@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import SystemPanel from "../components/admin/SystemPanel.jsx";
-import ReservationModal from "../components/reservations/ReservationModal.jsx";
 
 describe("extracted component smoke tests", () => {
   // SystemPanel hosts the app's single manual sync trigger (the legacy
@@ -24,18 +23,8 @@ describe("extracted component smoke tests", () => {
     expect(screen.getByText("Connected")).toBeInTheDocument();
   });
 
-  it("renders ReservationModal and basic controls", () => {
-    render(
-      <ReservationModal
-        table={{ id: 1, guests: 2, tableGroup: [1], restrictions: [] }}
-        tables={Array.from({ length: 10 }, (_, i) => ({ id: i + 1, active: false }))}
-        onSave={vi.fn()}
-        onClose={vi.fn()}
-      />
-    );
-
-    expect(screen.getByText("TABLE · RESERVATION")).toBeInTheDocument();
-    expect(screen.getByText("SAVE")).toBeInTheDocument();
-    expect(screen.getByText("CANCEL")).toBeInTheDocument();
-  });
+  // ReservationModal was the seat-a-table dialog of the pre-v2 reservation
+  // surface. ResvForm inside ReservationWorkspace does that job now, and is
+  // covered by reservationsUi.test.jsx, so the component and its smoke test
+  // went together rather than leaving a file for someone to edit by mistake.
 });

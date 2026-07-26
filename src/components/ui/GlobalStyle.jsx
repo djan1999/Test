@@ -1,6 +1,6 @@
 import { tokens } from "../../styles/tokens.js";
 
-// Shared body/input baseline styles used across modes (App, Gate, Login, ReservationManager).
+// Shared body/input baseline styles used across modes (App, Gate, Login, ReservationWorkspace).
 // Keep this minimal — only normalise box-sizing, prevent iOS auto-zoom on inputs,
 // and opt EVERY element into manipulation touch-action: the app's tap targets
 // are mostly clickable divs/SVG shapes, and anything outside the rule gets

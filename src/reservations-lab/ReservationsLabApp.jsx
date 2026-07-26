@@ -1,7 +1,10 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { tokens } from "../styles/tokens.js";
 import PublicBookingPage, { ManageBooking } from "../components/reservations/PublicBookingPage.jsx";
-import StaffWorkspace from "./StaffWorkspace.jsx";
+import ReservationWorkspace from "../components/reservations/ReservationWorkspace.jsx";
+import { useReservationWorkspace } from "../components/reservations/useReservationWorkspace.js";
+import { normalizeReservationConfig } from "../domain/reservations/config.js";
+import { tableLabelToId } from "../domain/reservations/bookingAdapter.js";
 import {
   cancelManagedBooking,
   changeManagedBooking,
@@ -9,45 +12,138 @@ import {
   loadManagedBooking,
   loadPublicAvailability,
   loadPublicConfig,
-  loadStaffState,
   setLabAccessCode,
   submitPublicBooking,
   submitPublicWaitlist,
   validatePublicBooking,
 } from "./reservationClient.js";
-import "./ReservationsLab.css";
 
-const labTheme = {
-  "--resv-bg": tokens.ink.bg,
-  "--resv-card": tokens.neutral[0],
-  "--resv-ink": tokens.ink[0],
-  "--resv-body": tokens.ink[2],
-  "--resv-muted": tokens.ink[3],
-  "--resv-line": tokens.ink[4],
-  "--resv-soft": tokens.ink[5],
-  "--resv-green-bg": tokens.green.bg,
-  "--resv-green": tokens.green.text,
-  "--resv-green-line": tokens.green.border,
-  "--resv-red-bg": tokens.red.bg,
-  "--resv-red": tokens.red.text,
-  "--resv-red-line": tokens.red.border,
-  "--resv-gold": tokens.signal.active,
-  "--resv-paper": tokens.tint.parchment,
-  "--resv-font": tokens.font,
+const page = {
+  minHeight: "100vh",
+  background: tokens.ink.bg,
+  fontFamily: tokens.font,
+  color: tokens.ink[1],
 };
+
+const eyebrow = {
+  fontSize: 9,
+  letterSpacing: "0.16em",
+  textTransform: "uppercase",
+  color: tokens.ink[3],
+};
+
+const quietButton = {
+  fontFamily: tokens.font,
+  fontSize: 9,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  padding: "6px 12px",
+  background: "transparent",
+  color: tokens.ink[2],
+  border: `${tokens.rule.hairline} solid ${tokens.ink[4]}`,
+  borderRadius: tokens.radius,
+  cursor: "pointer",
+};
+
+/** The ribbon is the one piece of chrome that must never be missed: it is the
+ *  difference between a host trying something out and a host editing the book
+ *  the floor is about to work from. */
+const ribbon = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  padding: "8px 16px",
+  background: tokens.tint.parchment,
+  borderBottom: `${tokens.rule.hairline} solid ${tokens.ink[4]}`,
+  fontSize: 9,
+  letterSpacing: "0.16em",
+  textTransform: "uppercase",
+  color: tokens.ink[2],
+};
+
+function LabNotice({ children, tone = "body" }) {
+  return <main style={{ ...page, display: "grid", placeItems: "center", padding: 24 }}>
+    <p style={{
+      fontSize: 11,
+      letterSpacing: "0.08em",
+      color: tone === "error" ? tokens.red.text : tokens.ink[2],
+    }}>{children}</p>
+  </main>;
+}
 
 function LabGate({ onUnlock, error, busy }) {
   const [code, setCode] = useState("");
-  return <main className="lab-gate" style={labTheme}>
-    <div className="lab-ribbon">ISOLATED RESERVATIONS LAB · TEST DATA ONLY</div>
-    <form onSubmit={(event) => { event.preventDefault(); onUnlock(code); }}>
-      <span className="eyebrow">Milka Reservations</span>
-      <h1>Open the LAB</h1>
-      <p>This workspace uses the staging database and cannot change the restaurant’s live Service system.</p>
-      <label><span>LAB access code</span><input type="password" autoFocus required value={code} onChange={(event) => setCode(event.target.value)} /></label>
-      {error && <p className="form-error">{error}</p>}
-      <button className="primary-button" disabled={busy}>{busy ? "Opening…" : "Open reservations LAB"}</button>
-      <a href="/book">Test the guest booking page instead →</a>
+  return <main style={{ ...page, display: "grid", placeItems: "center", padding: 24 }}>
+    <form
+      onSubmit={(event) => { event.preventDefault(); onUnlock(code); }}
+      style={{
+        width: "100%",
+        maxWidth: 420,
+        background: tokens.neutral[0],
+        border: `${tokens.rule.hairline} solid ${tokens.ink[4]}`,
+        borderRadius: tokens.radius,
+        padding: 32,
+      }}
+    >
+      <div style={{ ...ribbon, margin: "-32px -32px 24px", borderBottom: `${tokens.rule.hairline} solid ${tokens.ink[4]}` }}>
+        Isolated reservations LAB · test data only
+      </div>
+      <span style={eyebrow}>Milka Reservations</span>
+      <h1 style={{ fontSize: 22, fontWeight: 500, letterSpacing: "0.02em", margin: "8px 0 12px", color: tokens.ink[0] }}>
+        Open the LAB
+      </h1>
+      <p style={{ fontSize: 12, lineHeight: 1.6, color: tokens.ink[2], marginBottom: 20 }}>
+        This workspace uses the staging database and cannot change the restaurant’s live Service system.
+      </p>
+      <label style={{ display: "block", marginBottom: 16 }}>
+        <span style={{ ...eyebrow, display: "block", marginBottom: 6 }}>LAB access code</span>
+        <input
+          type="password"
+          autoFocus
+          required
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+          style={{
+            width: "100%",
+            fontFamily: tokens.font,
+            fontSize: tokens.mobileInputSize,
+            padding: "10px 12px",
+            background: tokens.ink.bg,
+            color: tokens.ink[0],
+            border: `${tokens.rule.hairline} solid ${tokens.ink[4]}`,
+            borderRadius: tokens.radius,
+          }}
+        />
+      </label>
+      {error && (
+        <p style={{ fontSize: 11, lineHeight: 1.5, color: tokens.red.text, marginBottom: 16 }}>{error}</p>
+      )}
+      <button
+        type="submit"
+        disabled={busy}
+        style={{
+          width: "100%",
+          fontFamily: tokens.font,
+          fontSize: 10,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          padding: "12px 16px",
+          background: tokens.ink[0],
+          color: tokens.neutral[0],
+          border: "none",
+          borderRadius: tokens.radius,
+          cursor: busy ? "default" : "pointer",
+          opacity: busy ? 0.6 : 1,
+        }}
+      >
+        {busy ? "Opening…" : "Open reservations LAB"}
+      </button>
+      <a
+        href="/book"
+        style={{ display: "inline-block", marginTop: 16, fontSize: 11, color: tokens.ink[2] }}
+      >
+        Test the guest booking page instead →
+      </a>
     </form>
   </main>;
 }
@@ -64,6 +160,19 @@ function flattenPublicConfig(config) {
   };
 }
 
+/** ResvForm speaks the live board's table shape — a numeric id and a display
+ *  label. The LAB has no live board and must not read one, so a host picks from
+ *  the reservation system's own table inventory instead. */
+function labTables(reservationConfig) {
+  return normalizeReservationConfig(reservationConfig).tables
+    .map((table) => ({
+      id: tableLabelToId(table.id),
+      displayLabel: String(table.id),
+      seats: Number(table.seats) || 0,
+    }))
+    .filter((table) => table.id != null);
+}
+
 function PublicRoute() {
   const [config, setConfig] = useState(null);
   const [error, setError] = useState("");
@@ -75,9 +184,9 @@ function PublicRoute() {
       .catch((requestError) => setError(requestError.message));
   }, []);
 
-  if (error) return <main className="lab-gate" style={labTheme}><div className="form-error">{error}</div></main>;
-  if (!config) return <main className="lab-gate" style={labTheme}><div>Opening the booking diary…</div></main>;
-  return <div style={labTheme}>
+  if (error) return <LabNotice tone="error">{error}</LabNotice>;
+  if (!config) return <LabNotice>Opening the booking diary…</LabNotice>;
+  return <div style={page}>
     <PublicBookingPage
       publicConfig={config}
       loadAvailability={async (date, pax) => (await loadPublicAvailability(date, pax)).services}
@@ -128,15 +237,14 @@ function ManageRoute({ token }) {
     ]).then(([configResult, bookingResult]) => {
       setConfig(flattenPublicConfig(configResult.config));
       setBooking(bookingResult.booking);
-    }).catch((requestError) => {
-      if (requestError.code === "expired_link" || requestError.status === 404) setExpired(true);
-      else setExpired(true);
+    }).catch(() => {
+      setExpired(true);
     }).finally(() => setLoading(false));
   }, [token]);
 
-  if (loading) return <main className="lab-gate" style={labTheme}><div>Checking your manage link…</div></main>;
+  if (loading) return <LabNotice>Checking your manage link…</LabNotice>;
   if (changing && booking && config) {
-    return <div style={labTheme}>
+    return <div style={page}>
       <PublicBookingPage
         publicConfig={config}
         initialBooking={booking}
@@ -152,7 +260,7 @@ function ManageRoute({ token }) {
       />
     </div>;
   }
-  return <div style={labTheme}>
+  return <div style={page}>
     <ManageBooking
       booking={booking}
       expired={expired}
@@ -165,53 +273,78 @@ function ManageRoute({ token }) {
 }
 
 function StaffLab() {
+  const [accessCode, setAccessCode] = useState(getLabAccessCode);
+  // The same hook the in-app reservations mode uses, so the standalone route and
+  // the mode cannot drift into two different workspaces.
+  const workspace = useReservationWorkspace({
+    enabled: Boolean(accessCode),
+    accessCode,
+  });
 
-  const [payload, setPayload] = useState(null);
-  const [accessCode, setAccessCodeState] = useState(getLabAccessCode);
-  const [busy, setBusy] = useState(Boolean(accessCode));
-  const [error, setError] = useState("");
-
-  const refresh = useCallback(async (explicitCode = accessCode) => {
-    setBusy(true);
-    try {
-      const result = await loadStaffState(explicitCode);
-      setPayload(result);
-      setError("");
-      return result;
-    } catch (requestError) {
-      setPayload(null);
-      setError(requestError.status === 401 ? "That LAB access code is not correct." : requestError.message);
-      if (requestError.status === 401) setLabAccessCode("");
-      throw requestError;
-    } finally {
-      setBusy(false);
-    }
-  }, [accessCode]);
-
+  // A refused code must not survive in session storage, or every reload spends a
+  // request proving again that it is wrong.
   useEffect(() => {
-    if (accessCode) refresh(accessCode).catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function unlock(code) {
-    setError("");
-    try {
-      await refresh(code);
-      setLabAccessCode(code);
-      setAccessCodeState(code);
-    } catch {
-      // Error copy is handled by refresh.
+    if (accessCode && workspace.errorStatus === 401) {
+      setLabAccessCode("");
+      setAccessCode("");
     }
+  }, [accessCode, workspace.errorStatus]);
+
+  const tables = useMemo(
+    () => labTables(workspace.reservationConfig),
+    [workspace.reservationConfig],
+  );
+
+  if (!accessCode) {
+    return <LabGate
+      onUnlock={(code) => { setLabAccessCode(code); setAccessCode(code); }}
+      error={workspace.errorStatus === 401 ? "That LAB access code is not correct." : workspace.error}
+      busy={workspace.loading}
+    />;
   }
 
   function signOut() {
     setLabAccessCode("");
-    setAccessCodeState("");
-    setPayload(null);
+    setAccessCode("");
   }
 
-  if (!payload) return <LabGate onUnlock={unlock} error={error} busy={busy} />;
-  return <div style={labTheme}>
-    <StaffWorkspace state={payload.state} refresh={() => refresh(accessCode)} onSignOut={signOut} />
+  return <div style={page}>
+    <div style={ribbon}>
+      <span>Isolated reservations LAB · test data only</span>
+      <span style={{ flex: 1 }} />
+      <button
+        type="button"
+        style={quietButton}
+        onClick={() => workspace.retry().catch(() => {})}
+        disabled={workspace.loading}
+      >
+        {workspace.loading ? "Refreshing…" : "Refresh"}
+      </button>
+      <button type="button" style={quietButton} onClick={signOut}>Sign out</button>
+    </div>
+    <ReservationWorkspace
+      bookings={workspace.bookings}
+      reservationConfig={workspace.reservationConfig}
+      weeklyServices={workspace.weeklyServices}
+      calendarRules={workspace.calendarRules}
+      waitlist={workspace.waitlist}
+      tables={tables}
+      onSaveBooking={workspace.onSaveBooking}
+      onDeleteBooking={workspace.onDeleteBooking}
+      onStatusChange={workspace.onStatusChange}
+      onAssignTables={workspace.onAssignTables}
+      onSwapBookings={workspace.onSwapBookings}
+      onResolveConflict={workspace.onResolveConflict}
+      onConvertWaitlist={workspace.onConvertWaitlist}
+      onRemoveWaitlist={workspace.onRemoveWaitlist}
+      onPrintKitchenTicket={workspace.onPrintKitchenTicket}
+      onPrintBreakdown={workspace.onPrintBreakdown}
+      onPrintAllergySheet={workspace.onPrintAllergySheet}
+      onPrintWeekly={workspace.onPrintWeekly}
+      loading={workspace.loading}
+      error={workspace.error}
+      onRetry={workspace.retry}
+    />
   </div>;
 }
 

@@ -100,30 +100,45 @@ export function useReservationWorkspace({
   enabled,
   accessToken,
   workspaceId,
+  accessCode = "",
   menuCourses = [],
   profiles = [],
   assignments = {},
 }) {
-  const credentials = useMemo(() => ({ accessToken, workspaceId }), [accessToken, workspaceId]);
+  // Two doors into the same room. Milka staff arrive with a Supabase session
+  // scoped to a workspace; the LAB is opened with the shared access code and has
+  // no Milka login at all. reservationClient's staffHeaders speaks both, so the
+  // standalone /reservations route and the in-app mode can share one hook rather
+  // than growing a second workspace that drifts from this one.
+  const credentials = useMemo(
+    () => (accessCode ? accessCode : { accessToken, workspaceId }),
+    [accessCode, accessToken, workspaceId],
+  );
+  const authorized = Boolean(accessCode || (accessToken && workspaceId));
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // The LAB gate needs to tell a wrong access code from a server that is simply
+  // down, and only the status carries that.
+  const [errorStatus, setErrorStatus] = useState(0);
 
   const refresh = useCallback(async () => {
-    if (!enabled || !accessToken || !workspaceId) return null;
+    if (!enabled || !authorized) return null;
     setLoading(true);
     try {
       const payload = await loadStaffState(credentials);
       setState(payload.state);
       setError("");
+      setErrorStatus(0);
       return payload.state;
     } catch (requestError) {
       setError(requestError.message || "Reservations could not be loaded.");
+      setErrorStatus(Number(requestError.status) || 0);
       throw requestError;
     } finally {
       setLoading(false);
     }
-  }, [accessToken, credentials, enabled, workspaceId]);
+  }, [authorized, credentials, enabled]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -234,6 +249,7 @@ export function useReservationWorkspace({
   return {
     loading,
     error,
+    errorStatus,
     retry: refresh,
     bookings,
     reservationConfig: state?.config,
