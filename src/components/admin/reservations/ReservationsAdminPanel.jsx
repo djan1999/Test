@@ -19,7 +19,7 @@
 import { useMemo, useState } from "react";
 import { tokens } from "../../../styles/tokens.js";
 import { FONT, baseInp, dangerBtn, panelBtn, primaryBtn, saveBtn, sectionHeader, toggleBtn } from "../adminStyles.js";
-import { RESERVATION_ROLES } from "../../../domain/reservations/config.js";
+import { RESERVATION_ROLES, normalizeReservationConfig } from "../../../domain/reservations/config.js";
 import { dateWeekday, generateSlots, minutesOf, timeOf } from "../../../domain/reservations/availability.js";
 import { tablesFromDiningMap } from "../../../domain/reservations/tableImport.js";
 
@@ -945,16 +945,32 @@ function BookingRules({ cfg, edit }) {
   );
 }
 
+// A config that has never been saved carries no experiences key, and the guest
+// page falls back to the defaults through normalizeReservationConfig. Reading
+// the raw value here showed the manager an empty screen while /book was busy
+// offering two menus — the same setting, two different answers. Show what the
+// guest sees, and write it down the first time it is touched.
+const experienceList = (cfg) => (
+  Array.isArray(cfg.experiences) ? cfg.experiences : normalizeReservationConfig(cfg).experiences
+);
+const materialize = (next) => {
+  if (!Array.isArray(next.config.experiences)) {
+    next.config.experiences = experienceList(next.config).map((item) => ({ ...item }));
+  }
+  return next.config.experiences;
+};
+
 function Experiences({ cfg, edit }) {
+  const shown = experienceList(cfg);
   return (
     <>
       <div style={sectionHeader}>Experiences</div>
-      {(cfg.experiences || []).map((experience, index) => (
+      {shown.map((experience, index) => (
         <div key={experience.key} style={card}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
             <input
               value={experience.title}
-              onChange={(event) => edit((next) => { next.config.experiences[index].title = event.target.value; })}
+              onChange={(event) => edit((next) => { materialize(next)[index].title = event.target.value; })}
               style={{ ...baseInp, fontSize: 13, fontWeight: 600, minWidth: 220 }}
             />
             <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
@@ -967,7 +983,7 @@ function Experiences({ cfg, edit }) {
                     style={toggleBtn(on)}
                     onClick={() =>
                       edit((next) => {
-                        const item = next.config.experiences[index];
+                        const item = materialize(next)[index];
                         item.services = on ? item.services.filter((value) => value !== service) : [...(item.services || []), service];
                       })
                     }
@@ -976,14 +992,14 @@ function Experiences({ cfg, edit }) {
                   </button>
                 );
               })}
-              <button type="button" style={toggleBtn(experience.active !== false)} onClick={() => edit((next) => { next.config.experiences[index].active = !(next.config.experiences[index].active !== false); })}>
+              <button type="button" style={toggleBtn(experience.active !== false)} onClick={() => edit((next) => { const item = materialize(next)[index]; item.active = !(item.active !== false); })}>
                 {experience.active !== false ? "Offered" : "Hidden"}
               </button>
             </div>
           </div>
           <textarea
             value={experience.description || ""}
-            onChange={(event) => edit((next) => { next.config.experiences[index].description = event.target.value; })}
+            onChange={(event) => edit((next) => { materialize(next)[index].description = event.target.value; })}
             style={{ ...baseInp, width: "100%", boxSizing: "border-box", minHeight: 44, resize: "vertical", lineHeight: 1.6, marginTop: 8 }}
           />
           <div style={{ fontSize: 9, color: tokens.ink[3], lineHeight: 1.6, marginTop: 6 }}>
@@ -1001,7 +1017,7 @@ function Experiences({ cfg, edit }) {
           new restaurant starts with no experiences saved, and "+ Add an
           experience" gave a blank card that meant nothing to the kitchen. */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {MENU_EXPERIENCES.filter(({ key }) => !(cfg.experiences || []).some((item) => item.key === key))
+        {MENU_EXPERIENCES.filter(({ key }) => !shown.some((item) => item.key === key))
           .map(({ key, menuType, title, description }) => (
             <button
               key={key}
@@ -1011,7 +1027,7 @@ function Experiences({ cfg, edit }) {
                 // `edit` clones the SAVED config, which need not carry the key
                 // at all — pushing onto undefined is what made this button do
                 // nothing at all on a fresh workspace.
-                next.config.experiences = [...(next.config.experiences || []), {
+                next.config.experiences = [...materialize(next), {
                   key, menuType, title, description, services: ["lunch", "dinner"], active: true, deposit: "none",
                 }];
               })}
@@ -1023,7 +1039,7 @@ function Experiences({ cfg, edit }) {
           type="button"
           style={{ ...saveBtn("idle"), borderStyle: "dashed" }}
           onClick={() => edit((next) => {
-            const list = next.config.experiences || [];
+            const list = materialize(next);
             next.config.experiences = [...list, {
               key: `exp_${list.length + 1}`,
               title: "New experience",
