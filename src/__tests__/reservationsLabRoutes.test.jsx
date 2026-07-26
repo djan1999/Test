@@ -9,6 +9,7 @@ import { DEFAULT_RESERVATION_CONFIG, DEFAULT_WEEKLY_SERVICES } from "../domain/r
 const loadStaffState = vi.fn();
 const loadPublicConfig = vi.fn();
 const loadPublicAvailability = vi.fn();
+const loadManagedBooking = vi.fn();
 
 vi.mock("../reservations-lab/reservationClient.js", () => ({
   loadStaffState: (...args) => loadStaffState(...args),
@@ -18,7 +19,7 @@ vi.mock("../reservations-lab/reservationClient.js", () => ({
   submitPublicBooking: vi.fn(),
   validatePublicBooking: vi.fn(),
   submitPublicWaitlist: vi.fn(),
-  loadManagedBooking: vi.fn(),
+  loadManagedBooking: (...args) => loadManagedBooking(...args),
   cancelManagedBooking: vi.fn(),
   changeManagedBooking: vi.fn(),
   getLabAccessCode: () => "LAB-CODE",
@@ -58,7 +59,18 @@ beforeEach(() => {
   loadStaffState.mockReset();
   loadPublicConfig.mockReset();
   loadPublicAvailability.mockReset();
+  loadManagedBooking.mockReset();
 });
+
+const publicConfig = {
+  config: {
+    restaurantName: "Milka",
+    phone: "+386 40 000 000",
+    languages: ["en", "sl"],
+    online: { maxPax: 6, minPax: 1, windowDays: 90 },
+    experiences: [],
+  },
+};
 
 describe("/reservations", () => {
   it("mounts ReservationWorkspace with its six tabs, not the old staff workspace", async () => {
@@ -97,19 +109,45 @@ describe("/reservations", () => {
 
 describe("/book", () => {
   it("mounts PublicBookingPage, not the superseded lab booking page", async () => {
-    loadPublicConfig.mockResolvedValue({
-      config: {
-        restaurantName: "Milka",
-        phone: "+386 40 000 000",
-        languages: ["en", "sl"],
-        online: { maxPax: 6, minPax: 1, windowDays: 90 },
-        experiences: [],
-      },
-    });
+    loadPublicConfig.mockResolvedValue(publicConfig);
     loadPublicAvailability.mockResolvedValue({ services: [] });
     render(<ReservationsLabApp routePath="/book" />);
 
     // The one-question-per-screen flow opens on party size and day.
     expect(await screen.findByText("Reserve a table")).toBeInTheDocument();
+  });
+});
+
+describe("/book/manage/:token", () => {
+  it("mounts ManageBooking with the server-validated booking", async () => {
+    loadPublicConfig.mockResolvedValue(publicConfig);
+    loadManagedBooking.mockResolvedValue({
+      booking: {
+        ref: "MK-260722-AB12CD",
+        date: "2026-07-22",
+        service: "dinner",
+        time: "19:00",
+        pax: 2,
+        name: "Zupan, Marko",
+        status: "confirmed",
+        allergies: [],
+        accessibility: [],
+      },
+    });
+    render(<ReservationsLabApp routePath="/book/manage/tok-123" />);
+
+    expect(await screen.findByText("MK-260722-AB12CD")).toBeInTheDocument();
+    // The booking is read from the token, never from an id in the URL.
+    expect(loadManagedBooking).toHaveBeenCalledWith("tok-123");
+  });
+
+  it("shows an expired link rather than a blank page", async () => {
+    loadPublicConfig.mockResolvedValue(publicConfig);
+    loadManagedBooking.mockRejectedValue(
+      Object.assign(new Error("expired_link"), { code: "expired_link", status: 404 }),
+    );
+    render(<ReservationsLabApp routePath="/book/manage/tok-dead" />);
+
+    expect(await screen.findByText(/link expired or invalid/i)).toBeInTheDocument();
   });
 });
