@@ -28,7 +28,6 @@ import { durationForParty, normalizeReservationConfig } from "../../domain/reser
 import { generateSlots, resolveServicesForDate, walkInsAllowed } from "../../domain/reservations/availability.js";
 import { canTransitionReservation, statusLabel } from "../../domain/reservations/lifecycle.js";
 import {
-  activeLegacyReservations,
   bookingToLegacyReservation,
   legacyReservationToBooking,
   tableLabelToId,
@@ -57,7 +56,7 @@ import {
   todayISO,
 } from "./workspace/shared.js";
 
-const ResvForm = lazy(() => import("./ResvForm.jsx"));
+const BookingComposer = lazy(() => import("./workspace/BookingComposer.jsx"));
 
 const TABS = [
   ["daybook", "Day Book", "Day"],
@@ -70,7 +69,7 @@ const TABS = [
 
 const CLOSED_STATUSES = new Set(["cancelled", "no_show", "completed"]);
 
-/** A blank legacy row for ResvForm, so a new booking starts on the right date. */
+/** A blank legacy row for the composer, so a new booking starts on the right date. */
 const blankLegacy = (date, service, time, tableIds) => ({
   id: null,
   date,
@@ -95,7 +94,6 @@ export default function ReservationWorkspace({
   weeklyServices = [],
   calendarRules = [],
   waitlist = [],
-  tables,
   onSaveBooking,
   onStatusChange,
   onAssignTables,
@@ -635,15 +633,15 @@ export default function ReservationWorkspace({
       {composer && (
         <CenteredModal onClose={() => setComposer(null)} maxWidth={960} label={composer.existing ? "Edit reservation" : "New reservation"}>
           <Suspense fallback={<div style={{ background: tokens.neutral[0], padding: 20, fontFamily: FONT, fontSize: 10 }}>Loading form…</div>}>
-            <ResvForm
+            <BookingComposer
               initial={composer.legacy}
-              tables={tables}
-              reservations={activeLegacyReservations(bookings.filter((booking) => booking.date === composer.legacy.date))}
-              excludeId={composer.legacy.id}
+              existing={composer.existing}
+              config={config}
+              weeklyServices={weeklyServices}
+              calendarRules={calendarRules}
+              bookings={bookings}
               onSave={saveFromForm}
               onCancel={() => setComposer(null)}
-              onResolveConflict={onResolveConflict}
-              onSwapReservations={onSwapBookings}
             />
           </Suspense>
         </CenteredModal>
