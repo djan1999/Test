@@ -74,4 +74,19 @@ describe("Reservations Admin sits inside the admin content area", () => {
     const { container } = render(<ReservationsAdminPanel {...panelProps()} />);
     expect(container.querySelector("nav").style.background).toBe("");
   });
+
+  it("lays the section list out as a row, never a column beside Admin's sidebar", () => {
+    // Two nav columns side by side read as two applications however plainly the
+    // second is painted, so the shape itself is what this pins: a row, with no
+    // fixed width and no dividing rule down its edge.
+    const { container } = render(<ReservationsAdminPanel {...panelProps()} />);
+    const nav = container.querySelector("nav");
+
+    expect(nav.style.flexDirection).not.toBe("column");
+    expect(nav.style.width).toBe("");
+    expect(nav.style.borderRight).toBe("");
+
+    // The body follows the nav rather than sitting beside it.
+    expect(nav.parentElement.style.display).not.toBe("flex");
+  });
 });

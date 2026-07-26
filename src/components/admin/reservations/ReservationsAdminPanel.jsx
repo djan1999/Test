@@ -1,11 +1,13 @@
 // ReservationsAdminPanel — reservation settings inside the existing Admin shell.
 //
 // One panel in the existing admin, reached from the existing admin navigation.
-// It draws no header, no page padding, no width cap and no second gate — all of
-// those belong to AdminLayout, and drawing them twice is what made this read as
-// a second admin application nested in the first. The left-hand section list is
-// the one piece of navigation it owns, and the Admin gate has already authorised
-// whoever is reading it. Everything is written in plain restaurant language, with
+// It draws no header, no page padding, no width cap, no sidebar and no second
+// gate — all of those belong to AdminLayout, and drawing them twice is what made
+// this read as a second admin application nested in the first. Its section list
+// is a row of tabs above the body, not a column beside Admin's own sidebar:
+// two nav columns side by side read as two applications no matter how plainly
+// the second one is painted. The Admin gate has already authorised whoever is
+// reading this. Everything is written in plain restaurant language, with
 // steppers and toggles rather than raw fields, and nothing saves until the
 // manager has seen a plain-English summary of what will change and what it
 // costs them.
@@ -16,7 +18,7 @@
 
 import { useMemo, useState } from "react";
 import { tokens } from "../../../styles/tokens.js";
-import { FONT, baseInp, dangerBtn, primaryBtn, saveBtn, sectionHeader, toggleBtn } from "../adminStyles.js";
+import { FONT, baseInp, dangerBtn, panelBtn, primaryBtn, saveBtn, sectionHeader, toggleBtn } from "../adminStyles.js";
 import { RESERVATION_ROLES } from "../../../domain/reservations/config.js";
 import { dateWeekday, generateSlots, minutesOf, timeOf } from "../../../domain/reservations/availability.js";
 import { tablesFromDiningMap } from "../../../domain/reservations/tableImport.js";
@@ -122,7 +124,6 @@ export default function ReservationsAdminPanel({ config, weeklyServices = [], ex
   );
 
   const [section, setSection] = useState("overview");
-  const [navQuery, setNavQuery] = useState("");
   const [draft, setDraft] = useState(null);
   const [review, setReview] = useState(null);
   const [status, setStatus] = useState("idle");
@@ -159,45 +160,24 @@ export default function ReservationsAdminPanel({ config, weeklyServices = [], ex
     }
   };
 
-  const needle = navQuery.toLowerCase();
-  const navItems = NAV.filter(([, title, sub]) => !needle || `${title} ${sub}`.toLowerCase().includes(needle));
-
   return (
     <div style={{ fontFamily: FONT, color: tokens.ink[1], paddingBottom: draft ? 76 : 0 }}>
-      <div style={{ display: "flex", alignItems: "stretch", gap: 0, flexWrap: "wrap" }}>
-        {/* The section list is navigation inside this panel, not a second app
-            sidebar. It carries no panel background and no chrome of its own, so
-            Admin's frame stays the only frame on the page — a manager should see
-            one application, not one nested in another. */}
-        <nav style={{ width: 200, flexShrink: 0, borderRight: `1px solid ${tokens.ink[4]}`, minWidth: 160, marginRight: 20 }}>
-          <div style={{ paddingRight: 14, paddingBottom: 12, borderBottom: `1px solid ${tokens.ink[5]}` }}>
-            <input value={navQuery} onChange={(event) => setNavQuery(event.target.value)} placeholder="Search settings" style={{ ...baseInp, width: "100%", boxSizing: "border-box" }} />
-          </div>
-          {navItems.map(([key, title, sub]) => (
+      <div>
+        {/* A row of tabs, the idiom every other admin panel uses.
+            This was a left-hand column, and a column of links beside Admin's
+            own sidebar is what made the whole thing read as one application
+            nested in another, however plainly it was painted. There is one
+            sidebar on this page and it belongs to Admin. */}
+        <nav style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 12 }}>
+          {NAV.map(([key, title, sub]) => (
             <button
               key={key}
               type="button"
+              title={sub}
               onClick={() => setSection(key)}
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                padding: "10px 14px 10px 12px",
-                minHeight: 44,
-                border: "none",
-                borderBottom: `1px solid ${tokens.neutral[100]}`,
-                borderLeft: `2px solid ${section === key ? tokens.green.border : "transparent"}`,
-                background: section === key ? tokens.green.bg : "transparent",
-                color: section === key ? tokens.green.text : tokens.ink[2],
-                fontSize: 10,
-                letterSpacing: "0.06em",
-                cursor: "pointer",
-                fontFamily: FONT,
-                fontWeight: section === key ? 600 : 400,
-              }}
+              style={{ ...panelBtn(section === key), minHeight: 30 }}
             >
-              <span style={{ display: "block" }}>{title}</span>
-              <span style={{ fontSize: 7, letterSpacing: "0.08em", color: tokens.neutral[400], display: "block", marginTop: 2 }}>{sub}</span>
+              {title}
             </button>
           ))}
         </nav>
@@ -206,7 +186,7 @@ export default function ReservationsAdminPanel({ config, weeklyServices = [], ex
             the page padding and content column every other panel sits in, and a
             second set of both is what made this read as an admin inside an
             admin. */}
-        <div style={{ flex: 1, minWidth: 280 }}>
+        <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, paddingTop: 16 }}>
           {section === "overview" && <Overview cfg={cfg} services={services} onGo={setSection} onSeedLab={onSeedLab} />}
 
           {section === "hours" && <ServicesAndHours services={services} cfg={cfg} edit={edit} canEdit={canEdit} />}
