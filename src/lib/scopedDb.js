@@ -3,7 +3,7 @@ import { supabase, getWorkspaceId } from "./supabaseClient.js";
 // Tables whose primary key is composite (workspace_id + a natural key). Upserts
 // against these must target the composite conflict columns or PostgREST errors.
 const COMPOSITE_CONFLICT = {
-  service_tables: "workspace_id,table_id",
+  service_tables: "workspace_id,service_id,table_id",
   service_settings: "workspace_id,id",
   menu_courses: "workspace_id,position",
   wines: "workspace_id,key",

@@ -136,10 +136,18 @@ export function foldFloorMaps(ancestor, mine, server) {
   };
 }
 
+// Floor SET strips live under per-service keys since the service-entity
+// rework (`floor_status_v2:<serviceId>`); the legacy shared key keeps its
+// fold for any straggler writes.
+const isFloorStatusKey = (id) =>
+  id === "floor_status_v1" || String(id).startsWith("floor_status_v2:");
+
 export function foldSettingState(id, ancestor, mine, server) {
-  if (id === "floor_status_v1") return foldFloorStatus(ancestor, mine, server);
+  if (isFloorStatusKey(id)) return foldFloorStatus(ancestor, mine, server);
   if (id === "floor_maps_v1") return foldFloorMaps(ancestor, mine, server);
   return { state: mine, conflicts: [] };
 }
 
 export const MERGEABLE_SETTING_KEYS = new Set(["floor_status_v1", "floor_maps_v1"]);
+export const isMergeableSettingKey = (id) =>
+  MERGEABLE_SETTING_KEYS.has(id) || isFloorStatusKey(id);

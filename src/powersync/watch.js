@@ -3,8 +3,8 @@
 
 import { getPowerSync } from "./system.js";
 import {
-  readReservations, readServiceTables, readWines, readBeverages, readMenuCourses,
-  readLiveSettings,
+  readReservations, readServiceTables, readServices, readWines, readBeverages,
+  readMenuCourses, readLiveSettings,
 } from "./reads.js";
 
 const disposeSubscription = (subscription) => {
@@ -17,6 +17,9 @@ const disposeSubscription = (subscription) => {
 
 // `onError` receives { source, phase, error }. `onReady` fires only after every
 // enabled source has completed a successful first mapped read.
+// `lifecycle.getServiceId` supplies the CURRENT service id at read time: the
+// board reader is service-scoped, and the services watch re-runs it whenever
+// the lifecycle changes so a newly adopted service's rows paint immediately.
 export function startWatches(handlers, range, lifecycle = {}) {
   const db = getPowerSync();
   const controller = new AbortController();
@@ -63,8 +66,14 @@ export function startWatches(handlers, range, lifecycle = {}) {
 
   bind("reservations", "SELECT count(*) AS n FROM reservations",
     () => readReservations(range.from, range.to), handlers.onReservations);
-  bind("service_tables", "SELECT count(*) AS n FROM service_tables",
-    readServiceTables, handlers.onServiceTables);
+  bind("services", "SELECT count(*) AS n, max(updated_at) AS ts FROM services",
+    () => readServices(), handlers.onServices);
+  // The board is service-scoped: read the CURRENT service's rows. Triggered by
+  // service_tables changes AND by services changes (a start/adopt switches
+  // which namespace the reader should return).
+  bind("service_tables",
+    "SELECT (SELECT count(*) FROM service_tables) AS n, (SELECT count(*) || '|' || coalesce(max(updated_at), '') FROM services) AS s",
+    () => readServiceTables(lifecycle.getServiceId?.()), handlers.onServiceTables);
   bind("wines", "SELECT count(*) AS n FROM wines", readWines, handlers.onWines);
   bind("beverages", "SELECT count(*) AS n FROM beverages", readBeverages, handlers.onBeverages);
   bind("menu_courses", "SELECT count(*) AS n FROM menu_courses", readMenuCourses, handlers.onMenuCourses);

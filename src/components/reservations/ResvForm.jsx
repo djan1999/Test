@@ -6,6 +6,7 @@ import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { reservationTableIds } from "../../utils/tableHelpers.js";
 import { pickFlowKeys } from "../../utils/terraceFlow.js";
 import GuestMemory from "./GuestMemory.jsx";
+import { groupRestrictionsByGuest, nextGuestId } from "../../utils/restrictionGroups.js";
 
 const FONT = tokens.font;
 const MOBILE_SAFE_INPUT_SIZE = tokens.mobileInputSize;
@@ -62,7 +63,15 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
   );
   const [birthday, setBirthday] = useState(!!initial?.data?.birthday);
   const [cakeNote, setCakeNote] = useState(initial?.data?.cakeNote || "");
-  const [restrictions, setRestrictions] = useState(initial?.data?.restrictions || []);
+  // Restrictions belong to PEOPLE — but you often take the booking before you
+  // know WHICH person. So the default is UNATTRIBUTED (activeGuest null): each
+  // restriction stands alone and counts as its own cover, exactly as it always
+  // did. Naming a guest is the deliberate act of saying "these belong to one
+  // person", and only then do they print as one combined line. Entries are
+  // never stamped with a guest id on load — that would invent knowledge the
+  // booking never had.
+  const [restrictions, setRestrictions] = useState(() => initial?.data?.restrictions || []);
+  const [activeGuest, setActiveGuest] = useState(null);
   const [notes, setNotes] = useState(initial?.data?.notes || "");
   const [customLabel, setCustomLabel] = useState("");
   const [customDetail, setCustomDetail] = useState("");
@@ -71,6 +80,41 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
 
   const sortedGroup = [...tableIds].sort((a, b) => a - b);
   const primaryId = sortedGroup[0] ?? null;
+
+  // ── Restrictions, per guest ────────────────────────────────────────────────
+  const guestGroups = groupRestrictionsByGuest(restrictions);
+  const guestIds = guestGroups.map((g) => g.guest).filter(Boolean);
+  // The guest currently being filled in always has a chip, even before their
+  // first restriction is picked. `null` is the unattributed slot and is
+  // always offered — it is where a booking starts.
+  const shownGuestIds = (activeGuest && !guestIds.includes(activeGuest))
+    ? [...guestIds, activeGuest] : guestIds;
+  const guestNumber = (id) => shownGuestIds.indexOf(id) + 1;
+  const notesForGuest = (id) => (id
+    ? (guestGroups.find((g) => g.guest === id)?.notes || [])
+    // Unattributed: every entry with no guest id, each its own cover.
+    : guestGroups.filter((g) => !g.guest && g.pos == null).flatMap((g) => g.notes));
+
+  // Tapping a restriction toggles it for the ACTIVE guest. Two guests with the
+  // same allergy are still two entries — the count badge shows how many people
+  // carry it — but one guest never accumulates the same restriction twice.
+  const toggleRestriction = (key, detail = "") => {
+    setRestrictions((rs) => {
+      const idx = rs.findIndex((r) => r.note === key && (r.guest || null) === activeGuest && r.pos == null);
+      if (idx >= 0) return rs.filter((_, i) => i !== idx);
+      // No active guest → no `guest` key at all: one unattributed restriction,
+      // one prospective cover, combined later by seat once it is known.
+      return [...rs, { pos: null, note: key, ...(activeGuest ? { guest: activeGuest } : {}), ...(detail ? { detail } : {}) }];
+    });
+  };
+  // Count the empty guest already on screen, or "+ Guest" would hand back the
+  // id that is active right now and appear to do nothing.
+  const addGuest = () => setActiveGuest(nextGuestId([...restrictions, { guest: activeGuest }]));
+  const removeGuest = (id) => {
+    const remaining = restrictions.filter((r) => (r.guest || null) !== id);
+    setRestrictions(remaining);
+    if (activeGuest === id) setActiveGuest(null);
+  };
 
   const findConflict = (tid) => reservations.find((r) => {
     if (r.id === excludeId) return false;
@@ -469,22 +513,73 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
 
       <div style={{ marginBottom: 10 }}>
         <div style={{ ...fieldLabel, marginBottom: 8 }}>Dietary restrictions</div>
+
+        {/* Which guest is being described. Everything tapped below lands on
+            this person, so the kitchen ticket prints one combined line per
+            cover instead of one line per restriction. */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center", marginBottom: 10 }}>
+          <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[4], textTransform: "uppercase", flexShrink: 0 }}>Guest</span>
+          {/* Default slot: we don't know who yet. Restrictions added here each
+              stand alone until someone pins them to a seat during service. */}
+          {(() => {
+            const active = activeGuest === null;
+            const count = notesForGuest(null).length;
+            return (
+              <button onClick={() => setActiveGuest(null)} title="Don't know who yet — each restriction counts as its own guest" style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "8px 10px",
+                borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
+                border: `1px ${active ? "solid" : "dashed"} ${active ? tokens.charcoal.default : tokens.neutral[200]}`,
+                background: active ? tokens.charcoal.default : tokens.neutral[50],
+                color: active ? tokens.neutral[0] : tokens.text.muted,
+                fontWeight: active ? 600 : 400,
+              }}>
+                ?{count > 0 ? ` · ${count}` : ""}
+              </button>
+            );
+          })()}
+          {shownGuestIds.map((id) => {
+            const active = id === activeGuest;
+            const count = notesForGuest(id).length;
+            return (
+              <button key={id} onClick={() => setActiveGuest(id)} style={{
+                fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "8px 10px",
+                borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
+                border: `1px solid ${active ? tokens.charcoal.default : tokens.neutral[200]}`,
+                background: active ? tokens.charcoal.default : tokens.neutral[50],
+                color: active ? tokens.neutral[0] : tokens.text.muted,
+                fontWeight: active ? 600 : 400,
+              }}>
+                {guestNumber(id)}{count > 0 ? ` · ${count}` : ""}
+              </button>
+            );
+          })}
+          <button onClick={addGuest} style={{
+            fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "8px 10px",
+            borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
+            border: `1px dashed ${tokens.ink[4]}`, background: tokens.neutral[0], color: tokens.text.muted,
+          }}>+ Guest</button>
+        </div>
+
         {Object.entries(RESTRICTION_GROUPS).map(([group, groupLabel]) => {
           const items = RESTRICTIONS.filter((r) => r.group === group);
+          const mine = new Set(notesForGuest(activeGuest));
           return (
             <div key={group} style={{ marginBottom: 10 }}>
               <div style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", color: tokens.ink[4], textTransform: "uppercase", marginBottom: 5 }}>{groupLabel}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
                 {items.map((opt) => {
-                  const cnt = restrictions.filter((r) => r.note === opt.key).length;
+                  // Badge = how many PEOPLE at the table carry it; the filled
+                  // state = whether the guest being edited right now does.
+                  const cnt = guestGroups.filter((g) => g.notes.includes(opt.key)).length;
+                  const on = mine.has(opt.key);
                   return (
-                    <button key={opt.key} onClick={() => setRestrictions((rs) => [...rs, { pos: null, note: opt.key }])} style={{
+                    <button key={opt.key} onClick={() => toggleRestriction(opt.key)} style={{
                       fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "10px 9px",
                       borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
-                      border: `1px solid ${cnt > 0 ? tokens.red.border : tokens.neutral[200]}`,
-                      background: cnt > 0 ? tokens.red.bg : tokens.neutral[50],
-                      color: cnt > 0 ? tokens.red.text : tokens.text.muted,
-                      fontWeight: cnt > 0 ? 600 : 400,
+                      border: `1px solid ${on || cnt > 0 ? tokens.red.border : tokens.neutral[200]}`,
+                      background: on ? tokens.red.bg : tokens.neutral[50],
+                      color: on || cnt > 0 ? tokens.red.text : tokens.text.muted,
+                      fontWeight: on ? 600 : 400,
                     }}>
                       {opt.emoji} {opt.label}
                       {cnt > 0 && <span style={{ marginLeft: 4, background: tokens.red.border, color: tokens.neutral[0], borderRadius: 0, fontSize: 8, padding: "1px 4px" }}>{cnt}</span>}
@@ -532,7 +627,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
                 <button onClick={() => {
                   const label = customLabel.trim();
                   if (!label) return;
-                  setRestrictions((rs) => [...rs, { pos: null, note: label, detail: customDetail.trim() }]);
+                  setRestrictions((rs) => [...rs, { pos: null, note: label, detail: customDetail.trim(), ...(activeGuest ? { guest: activeGuest } : {}) }]);
                   setCustomLabel(""); setCustomDetail(""); setShowCustomInput(false);
                 }} disabled={!customLabel.trim()} style={{
                   fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
@@ -545,22 +640,44 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
             </div>
           )}
         </div>
-        {restrictions.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 10 }}>
-            {restrictions.map((r, i) => {
-              const def = RESTRICTIONS.find((x) => x.key === r.note);
-              const label = def ? `${def.emoji} ${def.label}` : r.note;
-              const detail = !def && r.detail ? r.detail : "";
-              return (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, borderRadius: 0 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text }}>
-                    {label}
-                    {detail && <span style={{ opacity: 0.75, marginLeft: 4 }}>({detail})</span>}
-                  </span>
-                  <button onClick={() => setRestrictions((rs) => rs.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: tokens.red.border, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0, width: 28, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation", flexShrink: 0 }}>×</button>
-                </div>
-              );
-            })}
+        {/* One row per guest — what the kitchen will read as one cover. */}
+        {guestGroups.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+            {guestGroups.map((g) => (
+              <div key={g.key} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                {/* An unattributed entry says so: "?" — one cover, guest
+                    unknown. Only a named guest claims a combined line. */}
+                <button onClick={() => setActiveGuest(g.guest || null)} style={{
+                  fontFamily: FONT, fontSize: 8, letterSpacing: "0.12em", textTransform: "uppercase",
+                  color: tokens.ink[3], background: "none", border: "none", padding: 0,
+                  cursor: "pointer", flexShrink: 0, minWidth: 46, textAlign: "left",
+                }}>{g.guest ? `Guest ${guestNumber(g.guest)}` : "?"}</button>
+                {g.entries.map((r, i) => {
+                  const def = RESTRICTIONS.find((x) => x.key === r.note);
+                  const label = def ? `${def.emoji} ${def.label}` : r.note;
+                  const detail = !def && r.detail ? r.detail : "";
+                  return (
+                    <div key={`${r.note}-${i}`} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, borderRadius: 0 }}>
+                      <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text }}>
+                        {label}
+                        {detail && <span style={{ opacity: 0.75, marginLeft: 4 }}>({detail})</span>}
+                      </span>
+                      <button
+                        onClick={() => setRestrictions((rs) => rs.filter((x) => x !== r))}
+                        aria-label={`Remove ${label}`}
+                        style={{ background: "none", border: "none", color: tokens.red.border, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0, width: 28, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center", touchAction: "manipulation", flexShrink: 0 }}>×</button>
+                    </div>
+                  );
+                })}
+                {g.guest && (
+                  <button onClick={() => removeGuest(g.guest)} aria-label={`Remove guest ${guestNumber(g.guest)}`} style={{
+                    fontFamily: FONT, fontSize: 8, letterSpacing: "0.10em", textTransform: "uppercase",
+                    padding: "4px 7px", border: `1px solid ${tokens.neutral[200]}`, borderRadius: 0,
+                    background: tokens.neutral[0], color: tokens.text.muted, cursor: "pointer", touchAction: "manipulation",
+                  }}>clear</button>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>

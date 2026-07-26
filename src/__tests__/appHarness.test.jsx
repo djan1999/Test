@@ -22,7 +22,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import {
-  backend, resetBackend, seed, remoteRows, localRows,
+  backend, resetBackend, seed, seedService, remoteRows, localRows,
   drainUploads, syncDown, WORKSPACE_ID,
   emitRealtime, subscribedChannelCount,
 } from "./harness/fakeBackend.js";
@@ -33,6 +33,7 @@ vi.mock("../lib/supabaseClient.js", async () => {
   const h = await import("./harness/fakeBackend.js");
   return {
     TABLES: {
+      SERVICES: "services",
       SERVICE_TABLES: "service_tables", SERVICE_SETTINGS: "service_settings",
       SERVICE_ARCHIVE: "service_archive", MENU_COURSES: "menu_courses",
       WINES: "wines", BEVERAGES: "beverages", RESERVATIONS: "reservations",
@@ -89,25 +90,24 @@ const daysAgoISO = (n) => { const d = new Date(); d.setDate(d.getDate() - n); re
 
 const TODAY = () => currentServiceDay();
 
-// A live dinner: Anna seated on T1 (service content — sacrosanct), Bruno a
-// reservation on T2 not yet seated (reconcile templates his table).
+// A live dinner SERVICE ENTITY: Anna seated on T1 (service content —
+// sacrosanct), Bruno a reservation on T2 not yet seated (reconcile templates
+// his table). Returns the service id the board rows belong to.
+const SVC = "svc-live";
 const seedLiveService = ({ serviceDate = TODAY(), boardUpdatedAt = new Date().toISOString() } = {}) => {
   const anna = {
     ...blankTable(1), active: true, arrivedAt: "19:43",
     resName: "Anna Harness", resTime: "19:30", guests: 2,
   };
-  seed("service_settings", [{
-    id: "service_date",
-    state: { date: serviceDate, chosenOn: serviceDate, session: "dinner", startedAt: boardUpdatedAt },
-    updated_at: boardUpdatedAt,
-  }]);
-  seed("service_tables", [{ table_id: 1, data: anna, updated_at: boardUpdatedAt }]);
+  seedService({ id: SVC, date: serviceDate, session: "dinner", startedAt: boardUpdatedAt });
+  seed("service_tables", [{ service_id: SVC, table_id: 1, data: anna, updated_at: boardUpdatedAt }]);
   seed("reservations", [
     { id: "res-anna", date: serviceDate, table_id: 1, created_at: boardUpdatedAt,
       data: { resName: "Anna Harness", resTime: "19:30", guests: 2, tableGroup: [], service_session: "dinner" } },
     { id: "res-bruno", date: serviceDate, table_id: 2, created_at: boardUpdatedAt,
       data: { resName: "Bruno Harness", resTime: "20:15", guests: 3, tableGroup: [], service_session: "dinner" } },
   ]);
+  return SVC;
 };
 
 const seedSeatlessCombinedService = () => {
@@ -122,14 +122,10 @@ const seedSeatlessCombinedService = () => {
     seats: [],
     tableGroup: [2, 3],
   });
-  seed("service_settings", [{
-    id: "service_date",
-    state: { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: now },
-    updated_at: now,
-  }]);
+  seedService({ id: SVC, date: TODAY(), session: "dinner", startedAt: now });
   seed("service_tables", [
-    { table_id: 2, data: grouped(2), updated_at: now },
-    { table_id: 3, data: grouped(3), updated_at: now },
+    { service_id: SVC, table_id: 2, data: grouped(2), updated_at: now },
+    { service_id: SVC, table_id: 3, data: grouped(3), updated_at: now },
   ]);
   seed("reservations", [{
     id: "res-seatless-group",
@@ -142,6 +138,9 @@ const seedSeatlessCombinedService = () => {
     },
   }]);
 };
+
+const liveServiceRow = (rows = remoteRows("services")) =>
+  rows.find((r) => r.status === "live") || null;
 
 const enterService = async () => {
   fireEvent.click(await screen.findByText("[Service]", {}, { timeout: 5000 }));
@@ -173,11 +172,12 @@ describe.each([
     render(<App />);
     await enterService();
 
-    // Joined, not restarted: the persisted service_date is untouched and the
-    // seated table survived (no reconcile rebuild, no blank push).
+    // Joined, not restarted: the SAME service entity is still live and the
+    // seated table survived (no new entity minted, no blank push).
     await waitFor(() => {
-      const state = remoteRows("service_settings").find((r) => r.id === "service_date")?.state;
-      expect(state?.date).toBe(TODAY());
+      const live = liveServiceRow();
+      expect(live?.id).toBe(SVC);
+      expect(live?.date).toBe(TODAY());
       expect(annaRowCount(remoteRows("service_tables"))).toBe(1);
       expect(rowFor(remoteRows("service_tables"), 1)?.data?.active).toBe(true);
     }, { timeout: 5000 });
@@ -275,20 +275,21 @@ describe.each([
     }
   });
 
-  it("stale service_date over a LIVE board re-dates forward and keeps the board (04.07 incident)", async () => {
-    // The board's seated activity is from TODAY, but the persisted date lags
-    // two days behind (a woken tablet / mislabeled service). Auto-end must
-    // heal the date, not archive-and-clear a running dinner.
+  it("stale service date over a LIVE board re-dates forward and keeps the board (04.07 incident)", async () => {
+    // The board's activity is from TODAY, but the service's date lags two
+    // days behind (a woken tablet / mislabeled service). Auto-end must heal
+    // the date on the SAME entity, not end a running dinner.
     seedLiveService({ serviceDate: daysAgoISO(2), boardUpdatedAt: new Date().toISOString() });
     render(<App />);
 
     await waitFor(() => {
-      const state = remoteRows("service_settings").find((r) => r.id === "service_date")?.state;
-      expect(state?.date).toBe(TODAY());
+      const live = liveServiceRow();
+      expect(live?.id).toBe(SVC);
+      expect(live?.date).toBe(TODAY());
     }, { timeout: 5000 });
 
     // Board kept, nothing filed: the dinner goes on.
-    expect(remoteRows("service_archive")).toHaveLength(0);
+    expect(remoteRows("services").filter((r) => r.status === "ended")).toHaveLength(0);
     const t1 = rowFor(remoteRows("service_tables"), 1);
     expect(t1?.data?.resName).toBe("Anna Harness");
     expect(t1?.data?.active).toBe(true);
@@ -297,34 +298,30 @@ describe.each([
     await enterService();
   });
 
-  it("genuine overnight leftover archives FIRST, then clears the board", async () => {
+  it("genuine overnight leftover is FILED (status flip) with every table row preserved", async () => {
     // Same stale date, but the board's last activity is ALSO two days old —
-    // an abandoned service. Auto-end files it and resets for the new day.
-    // Also pins the mass-blank guard's flagged pass-through: the whole-board
-    // blank must NOT trip the '[board-guard]' refusal — a guard regression
-    // that refuses a legitimate end-of-service would be a worse incident than
-    // the wipe it exists to prevent. (The refusal branch itself is pinned at
-    // unit level in boardGuard.test.js — it is unreachable through honest UI
-    // vectors by design.)
+    // an abandoned service. Entity model: auto-end flips ITS row to 'ended'
+    // and touches nothing else. The night's data is not copied-then-cleared;
+    // it simply stays under the ended service, visible in the Archive.
     const errSpy = vi.spyOn(console, "error");
     const stale = daysAgoISO(2);
     seedLiveService({ serviceDate: stale, boardUpdatedAt: `${stale}T21:00:00.000Z` });
     render(<App />);
 
     await waitFor(() => {
-      const archives = remoteRows("service_archive");
-      expect(archives).toHaveLength(1);
-      expect(archives[0].label).toMatch(/DINNER/);
-      expect(archives[0].state?.autoEnded).toBe(true);
-      expect(archives[0].state?.tables?.some((t) => t.resName === "Anna Harness")).toBe(true);
+      const svc = remoteRows("services").find((r) => r.id === SVC);
+      expect(svc?.status).toBe("ended");
+      expect(svc?.end_reason).toBe("rollover");
+      expect(svc?.label).toMatch(/DINNER/);
     }, { timeout: 5000 });
 
-    await waitFor(() => {
-      // Board cleared in the store (data blanked), date released.
-      expect(annaRowCount(remoteRows("service_tables"))).toBe(0);
-      const state = remoteRows("service_settings").find((r) => r.id === "service_date")?.state;
-      expect(state?.date).toBeUndefined();
-    }, { timeout: 5000 });
+    // THE point of the rework: the board rows still exist, untouched, under
+    // the ended service — nothing was blanked anywhere.
+    const t1 = rowFor(remoteRows("service_tables"), 1);
+    expect(t1?.data?.resName).toBe("Anna Harness");
+    expect(t1?.service_id).toBe(SVC);
+    // No live service remains, so a fresh start prompts for today.
+    expect(liveServiceRow()).toBe(null);
 
     const guardRefusals = errSpy.mock.calls.filter((args) => String(args[0]).includes("[board-guard]"));
     expect(guardRefusals).toHaveLength(0);
@@ -497,31 +494,35 @@ describe.each([
     resetBackend({ psMode });
   });
 
-  it("a service ENDED on another device ends here too, with no duplicate archive", async () => {
+  it("a service ENDED on another device releases here too — its rows stay in the store", async () => {
     seedLiveService();
     render(<App />);
     await enterService();
 
-    // Another device ENDs the service: archives (its job), blanks the board,
-    // releases the date — all remotely.
+    // Another device ENDs the service: ONE status flip on the entity row.
+    // Nothing is blanked anywhere — that operation no longer exists.
     const stamp = new Date(Date.now() + 1500).toISOString();
-    const dateRow = remoteRows("service_settings").find((r) => r.id === "service_date");
-    dateRow.state = {};
-    dateRow.updated_at = stamp;
-    remoteRows("service_tables").forEach((r) => { r.data = {}; r.updated_at = stamp; });
+    const svcRow = remoteRows("services").find((r) => r.id === SVC);
+    svcRow.status = "ended";
+    svcRow.ended_at = stamp;
+    svcRow.end_reason = "manual";
+    svcRow.updated_at = stamp;
 
     if (psMode) {
       await act(async () => { await syncDown(); });
     } else {
       await act(async () => {
-        emitRealtime("service_settings", { eventType: "UPDATE", new: { ...dateRow }, old: null });
+        emitRealtime("services", { eventType: "UPDATE", new: { ...svcRow }, old: null });
       });
     }
 
     // This device leaves the live view and returns to mode selection…
     await screen.findByText("[Service]", {}, { timeout: 5000 });
-    // …WITHOUT filing its own archive or resurrecting the date.
-    expect(remoteRows("service_archive")).toHaveLength(0);
+    // …without writing anything: the ended service keeps every row, and the
+    // local identity is released.
+    expect(rowFor(remoteRows("service_tables"), 1)?.data?.resName).toBe("Anna Harness");
+    expect(remoteRows("services").find((r) => r.id === SVC)?.status).toBe("ended");
+    expect(localStorage.getItem(`milka_service_id:${WORKSPACE_ID}`)).toBeNull();
     expect(localStorage.getItem(`milka_service_date:${WORKSPACE_ID}`)).toBeNull();
   }, 15000);
 
@@ -534,106 +535,135 @@ describe.each([
     render(<App />);
     await screen.findByText("[Service]", {}, { timeout: 5000 });
 
-    // Another device starts tonight's dinner.
+    // Another device starts tonight's dinner: one new services row.
     const stamp = new Date(Date.now() + 1500).toISOString();
     const row = {
-      workspace_id: WORKSPACE_ID, id: "service_date",
-      state: { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: stamp },
-      updated_at: stamp,
+      workspace_id: WORKSPACE_ID, id: "svc-elsewhere",
+      date: TODAY(), session: "dinner", chosen_on: TODAY(),
+      started_at: stamp, status: "live", ended_at: null, end_reason: null,
+      label: null, snapshot: null, deleted_at: null, updated_at: stamp,
     };
-    remoteRows("service_settings").push({ ...row });
+    remoteRows("services").push({ ...row });
     if (psMode) {
       await act(async () => { await syncDown(); });
     } else {
       await act(async () => {
-        emitRealtime("service_settings", { eventType: "UPDATE", new: { ...row }, old: null });
+        emitRealtime("services", { eventType: "INSERT", new: { ...row }, old: null });
       });
     }
 
-    // The live day is adopted without entering service…
-    await waitFor(() => expect(localStorage.getItem(`milka_service_date:${WORKSPACE_ID}`)).toBe(TODAY()), { timeout: 5000 });
+    // The live service is adopted without entering service…
+    await waitFor(() => {
+      expect(localStorage.getItem(`milka_service_id:${WORKSPACE_ID}`)).toBe("svc-elsewhere");
+      expect(localStorage.getItem(`milka_service_date:${WORKSPACE_ID}`)).toBe(TODAY());
+    }, { timeout: 5000 });
     // …and tapping [Service] drops straight into the live board (no start prompt).
     fireEvent.click(screen.getByText("[Service]"));
     await screen.findByText(/Anna Harness/, {}, { timeout: 5000 });
   }, 15000);
 });
 
-// ── Stale-device END cannot wipe a newer service ─────────────────────────────
-// The store-side finish clear used to be unconditional: a device that slept
-// through "D1 ended, D2 started" and then ended "its" D1 blanked D2's fresh
-// board for everyone. The pre-check + identity-guarded finish refuse it and
-// adopt the store's reality instead.
-describe("app harness — stale END cannot clear a newer service (fallback)", () => {
+// ── Stale-device END cannot touch a newer service ────────────────────────────
+// THE property the entity rework exists for. A device that slept through
+// "D1 ended, D2 started" and then ends "its" D1 can only flip D1's own row —
+// an idempotent no-op. D2 is a different row it has never heard of; there is
+// no code path from a stale device to D2's board. (22.07 / 11.07 wipe class.)
+describe("app harness — stale END cannot touch a newer service (fallback)", () => {
   beforeEach(() => {
     resetBackend({ psMode: false });
   });
 
-  it("END SERVICE on a stale device is refused; the new service's board survives", async () => {
+  it("END SERVICE on a stale device flips only ITS service; the new service's board survives untouched", async () => {
     seedLiveService();
     render(<App />);
     await enterService();
 
-    // Elsewhere: the service is ended AND a fresh one started — new startedAt,
-    // new guest on T1. This device gets NO realtime event (it is stale).
+    // Elsewhere: this service ends and a FRESH one starts with a new guest.
+    // This device gets NO realtime event (it is stale).
     const stamp = new Date(Date.now() + 1500).toISOString();
-    const dateRow = remoteRows("service_settings").find((r) => r.id === "service_date");
-    dateRow.state = { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: stamp };
-    dateRow.updated_at = stamp;
-    const t1 = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
-    t1.data = { ...blankTable(1), active: true, arrivedAt: "12:05", resName: "Fresh Service Guest", guests: 2 };
-    t1.updated_at = stamp;
+    const oldSvc = remoteRows("services").find((r) => r.id === SVC);
+    oldSvc.status = "ended"; oldSvc.ended_at = stamp; oldSvc.end_reason = "manual"; oldSvc.updated_at = stamp;
+    remoteRows("services").push({
+      workspace_id: WORKSPACE_ID, id: "svc-new", date: TODAY(), session: "dinner",
+      chosen_on: TODAY(), started_at: stamp, status: "live",
+      ended_at: null, end_reason: null, label: null, snapshot: null, deleted_at: null, updated_at: stamp,
+    });
+    remoteRows("service_tables").push({
+      workspace_id: WORKSPACE_ID, service_id: "svc-new", table_id: 1,
+      data: { ...blankTable(1), active: true, arrivedAt: "12:05", resName: "Fresh Service Guest", guests: 2 },
+      updated_at: stamp,
+    });
 
-    const alerts = [];
-    window.alert = (msg) => alerts.push(String(msg));
+    window.confirm = () => true;
     fireEvent.click(screen.getByText("END SERVICE"));
-    await waitFor(() => expect(alerts.length).toBeGreaterThan(0), { timeout: 5000 });
-    expect(alerts[0]).toMatch(/already ended|new one started/i);
 
-    // Nothing was cleared or filed: the fresh service is intact.
-    const row = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
-    expect(row.data.resName).toBe("Fresh Service Guest");
-    expect(row.data.active).toBe(true);
-    expect(remoteRows("service_archive")).toHaveLength(0);
-    expect(remoteRows("service_settings").find((r) => r.id === "service_date").state.startedAt).toBe(stamp);
+    // The stale device released its (already ended) service and returned to
+    // the mode picker — a graceful no-op, no alert dance required.
+    await screen.findByText("[Service]", {}, { timeout: 5000 });
+
+    // THE pin: the newer service and its board are byte-for-byte untouched,
+    // and the old service's rows also survive (nothing blanks, ever).
+    const freshRow = remoteRows("service_tables")
+      .find((r) => r.service_id === "svc-new" && Number(r.table_id) === 1);
+    expect(freshRow.data.resName).toBe("Fresh Service Guest");
+    expect(freshRow.data.active).toBe(true);
+    expect(remoteRows("services").find((r) => r.id === "svc-new")?.status).toBe("live");
+    const oldRow = remoteRows("service_tables")
+      .find((r) => r.service_id === SVC && Number(r.table_id) === 1);
+    expect(oldRow?.data?.resName).toBe("Anna Harness");
   }, 20000);
 
-  it("does not start Lunch when the Dinner handover is refused as stale", async () => {
+  it("a Lunch started against a NEWER Dinner elsewhere loses the arbitration — the Dinner survives", async () => {
     seedLiveService();
     render(<App />);
     await enterService();
 
-    // Open the session picker from the live readout and choose Lunch.
+    // Elsewhere, Dinner already ended and a NEWER service started (its
+    // started_at is in this device's future). This device receives no event.
+    const newerStamp = new Date(Date.now() + 60_000).toISOString();
+    const oldSvc = remoteRows("services").find((r) => r.id === SVC);
+    oldSvc.status = "ended"; oldSvc.ended_at = newerStamp; oldSvc.end_reason = "manual"; oldSvc.updated_at = newerStamp;
+    remoteRows("services").push({
+      workspace_id: WORKSPACE_ID, id: "svc-newer-dinner", date: TODAY(), session: "dinner",
+      chosen_on: TODAY(), started_at: newerStamp, status: "live",
+      ended_at: null, end_reason: null, label: null, snapshot: null, deleted_at: null, updated_at: newerStamp,
+    });
+    remoteRows("service_tables").push({
+      workspace_id: WORKSPACE_ID, service_id: "svc-newer-dinner", table_id: 1,
+      data: { ...blankTable(1), active: true, arrivedAt: "12:05", resName: "Fresh Service Guest", guests: 2 },
+      updated_at: newerStamp,
+    });
+
+    // Open the session picker from the live readout and start Lunch.
+    window.confirm = () => true;
     fireEvent.click(screen.getByTitle("Click to switch lunch / dinner (opens the service picker)"));
     fireEvent.click(await screen.findByText("LUNCH", { selector: "button" }));
-
-    // Elsewhere, Dinner already ended and a newer service started. This
-    // device receives no realtime event, so its handover request must be
-    // refused by the identity check and MUST NOT mint another Lunch identity.
-    const newerStamp = new Date(Date.now() + 2500).toISOString();
-    const dateRow = remoteRows("service_settings").find((r) => r.id === "service_date");
-    dateRow.state = { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: newerStamp };
-    dateRow.updated_at = newerStamp;
-
-    const alerts = [];
-    window.alert = (msg) => alerts.push(String(msg));
     fireEvent.click(screen.getByText(/^START LUNCH/));
 
-    await waitFor(() => expect(alerts.some((msg) => /already ended|new one started/i.test(msg))).toBe(true), { timeout: 5000 });
-    expect(dateRow.state).toEqual({
-      date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: newerStamp,
-    });
-    expect(remoteRows("service_tables").find((r) => Number(r.table_id) === 1)?.data?.active).toBe(true);
-    expect(remoteRows("service_archive")).toHaveLength(0);
-    // The picker stays open so the operator can see the adopted service and
-    // decide again instead of being silently dropped into a mixed lifecycle.
-    expect(screen.getByText(/^START LUNCH/)).toBeTruthy();
+    // The store trigger arbitrates: newest started_at wins, so the stale
+    // device's Lunch is immediately superseded — NON-destructively — and the
+    // device adopts the real live Dinner instead of believing its Lunch won.
+    await waitFor(() => {
+      const lunch = remoteRows("services").find((r) => r.session === "lunch");
+      expect(lunch?.status).toBe("ended");
+      expect(lunch?.end_reason).toBe("superseded");
+      expect(remoteRows("services").find((r) => r.id === "svc-newer-dinner")?.status).toBe("live");
+      expect(localStorage.getItem(`milka_service_id:${WORKSPACE_ID}`)).toBe("svc-newer-dinner");
+    }, { timeout: 5000 });
+
+    // The newer Dinner's board is untouched.
+    const freshRow = remoteRows("service_tables")
+      .find((r) => r.service_id === "svc-newer-dinner" && Number(r.table_id) === 1);
+    expect(freshRow.data.resName).toBe("Fresh Service Guest");
+    expect(freshRow.data.active).toBe(true);
   }, 20000);
 });
 
 // ── Floor SET markers sync live ───────────────────────────────────────────────
-// floor_status_v1 was boot-read only until 11.07: a SET marker tapped on one
-// tablet reached the store but no other device until a full reload. It now
-// rides the live settings adoption on both storage modes.
+// The strips were boot-read only until 11.07: a SET marker tapped on one
+// tablet reached the store but no other device until a full reload. They now
+// ride the live settings adoption on both storage modes — under a
+// PER-SERVICE key, so a stale device's strips can never touch a later service.
 describe.each([
   ["fallback", false],
   ["sqlite-primary", true],
@@ -647,10 +677,10 @@ describe.each([
     render(<App />);
     await enterService();
 
-    // Another device marks dining T4 as SET.
+    // Another device marks dining T4 as SET (per-service floor key).
     const stamp = new Date(Date.now() + 1500).toISOString();
     const row = {
-      workspace_id: WORKSPACE_ID, id: "floor_status_v1",
+      workspace_id: WORKSPACE_ID, id: `floor_status_v2:${SVC}`,
       state: { dining_a: { T4: "SET" } }, updated_at: stamp,
     };
     remoteRows("service_settings").push({ ...row });

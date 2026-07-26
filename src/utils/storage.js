@@ -206,3 +206,60 @@ export function readLocalCourseNotes() {
 export function writeLocalCourseNotes(map) {
   writeJsonCache(COURSE_NOTES_KEY, map && typeof map === "object" ? map : {});
 }
+
+// ── Printable sheet edits ─────────────────────────────────────────────────────
+// The weekly overview / allergy sheets and the per-day service breakdown are
+// editable print documents. Their edits used to live only in component state,
+// so closing the view, adding a reservation, or a reload around printing threw
+// them away. They persist here per workspace, keyed by week start (sheets) or
+// service date (breakdown), pruned oldest-first so the cache stays bounded.
+
+function readKeyedEntry(base, key) {
+  const all = readJsonCache(base);
+  if (!all || typeof all !== "object" || Array.isArray(all)) return null;
+  return all[key] ?? null;
+}
+
+function writeKeyedEntry(base, key, value, maxEntries) {
+  const raw = readJsonCache(base);
+  const all = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  if (value === null || value === undefined) delete all[key];
+  else all[key] = { ...value, savedAt: Date.now() };
+  const keys = Object.keys(all);
+  if (keys.length > maxEntries) {
+    keys.sort((a, b) => (all[a]?.savedAt || 0) - (all[b]?.savedAt || 0));
+    keys.slice(0, keys.length - maxEntries).forEach(k => delete all[k]);
+  }
+  writeJsonCache(base, all);
+}
+
+export const WEEKLY_SHEET_EDITS_KEY = "milka-weekly-sheet-edits-v1";
+
+// sheet: "overview" | "allergies". Returns the edits overlay map (cell key →
+// edited value), or {} when nothing was saved for that sheet + week.
+export function readWeeklySheetEdits(sheet, weekStart) {
+  const entry = readKeyedEntry(WEEKLY_SHEET_EDITS_KEY, `${sheet}:${weekStart}`);
+  return entry && entry.edits && typeof entry.edits === "object" && !Array.isArray(entry.edits)
+    ? entry.edits
+    : {};
+}
+
+export function writeWeeklySheetEdits(sheet, weekStart, edits) {
+  const hasEdits = edits && typeof edits === "object" && Object.keys(edits).length > 0;
+  writeKeyedEntry(WEEKLY_SHEET_EDITS_KEY, `${sheet}:${weekStart}`, hasEdits ? { edits } : null, 12);
+}
+
+export const SERVICE_BREAKDOWN_DOC_KEY = "milka-service-breakdown-doc-v1";
+
+// Returns { doc, baseline } or null. `doc` is the last edited document for the
+// date; `baseline` is what auto-generation produced at save time, so callers
+// can tell user edits apart from stale auto-content.
+export function readServiceBreakdownDoc(dateStr) {
+  const entry = readKeyedEntry(SERVICE_BREAKDOWN_DOC_KEY, dateStr);
+  return entry && entry.doc && typeof entry.doc === "object" ? entry : null;
+}
+
+export function writeServiceBreakdownDoc(dateStr, doc, baseline) {
+  if (!doc || typeof doc !== "object") return;
+  writeKeyedEntry(SERVICE_BREAKDOWN_DOC_KEY, dateStr, { doc, baseline }, 21);
+}

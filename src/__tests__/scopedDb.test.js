@@ -69,7 +69,7 @@ describe("scopedFrom", () => {
       { table_id: 1, data: {}, workspace_id: "ws-1" },
       { table_id: 2, data: {}, workspace_id: "ws-1" },
     ]);
-    expect(opts).toEqual({ onConflict: "workspace_id,table_id" });
+    expect(opts).toEqual({ onConflict: "workspace_id,service_id,table_id" });
   });
 
   it("upserts menu_courses on the composite (workspace_id, position) key", () => {

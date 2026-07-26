@@ -4,7 +4,7 @@
 // or archive real service data.
 //
 // Module-level (mirrors powersync/primary.js) so the seams outside the App
-// component tree — lib/stateStore.js, lib/serviceLifecycleStore.js — can check
+// component tree — lib/stateStore.js, lib/serviceLifecycle.js — can check
 // it without prop drilling. LIGHT module, no SDK imports, safe to import
 // anywhere. App.jsx is the only writer (setSandbox on test start/end).
 //

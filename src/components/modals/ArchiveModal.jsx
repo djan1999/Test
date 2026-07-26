@@ -21,6 +21,10 @@ export default function ArchiveModal({
   canClearAll = false,
   onClose,
   onRestoreTicket,
+  // RESUME an accidentally-ended service: only service-entity entries from
+  // the CURRENT service day offer it — resuming a past night makes no sense.
+  onResumeService,
+  resumableDate = null,
   menuCourses,
 }) {
   const isMobile = useIsMobile(640);
@@ -29,6 +33,7 @@ export default function ArchiveModal({
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [resuming, setResuming] = useState(null);
   const [showTrash, setShowTrash] = useState(false);
   const [loadError, setLoadError] = useState("");
 
@@ -81,6 +86,27 @@ export default function ArchiveModal({
       setExpanded(null);
     }
     setDeleting(null);
+  };
+
+  const resumeEntry = async (entry) => {
+    if (!onResumeService || resuming) return;
+    if (!window.confirm(
+      `Resume "${entry.label}"?\n\nThe service comes back LIVE on every device with all its tables exactly as they were.`,
+    )) return;
+    setResuming(entry.id);
+    const result = await onResumeService(entry);
+    setResuming(null);
+    if (!result?.ok) {
+      alert("Resume failed: " + (result?.error?.message || "unknown error"));
+      return;
+    }
+    if (result.resumed === false) {
+      // The store's single-live trigger refused: a newer service is running.
+      alert("A newer service is already live — this one stays archived.\n\nEnd the live service first if you really want to switch back.");
+      loadEntries();
+      return;
+    }
+    onClose?.(); // the board behind the modal is the resumed service now
   };
 
   const restoreEntry = async (id) => {
@@ -260,6 +286,13 @@ export default function ArchiveModal({
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {onResumeService && entry._kind === "service" && entry.date === resumableDate && (
+                    <button onClick={() => resumeEntry(entry)} disabled={resuming === entry.id} style={{
+                      fontFamily: FONT, fontSize: 9, letterSpacing: 1.5, padding: "4px 12px",
+                      border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.green.text,
+                      textTransform: "uppercase", opacity: resuming === entry.id ? 0.5 : 1,
+                    }}>{resuming === entry.id ? "…" : "RESUME"}</button>
+                  )}
                   <button onClick={() => deleteEntry(entry.id)} disabled={deleting === entry.id} style={{
                     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px",
                     border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text,

@@ -1,38 +1,33 @@
-// ── App harness: END SERVICE against an identity-less service state ──────────
+// ── App harness: END SERVICE in the service-entity model ─────────────────────
 //
-// The 11.07 production incident: the shared service_date state was an
-// identity-less blob — {date, chosenOn}, no startedAt, no session (written by
-// the orphan-heal path) — while the tablet still held the startedAt it had
-// kept from an EARLIER service in localStorage. The guarded end compared that
-// stale stamp against the store's missing one, refused ("This service was
-// already ended on another device"), and adoption had nothing to adopt — so
-// END SERVICE was refused all night while the board kept showing the whole
-// service, every ticket already archived on the kitchen display.
+// The 11.07 production incident ("can't end service all night") came from the
+// old identity-guard machinery: a stale startedAt stamp against an
+// identity-less shared blob refused every END. In the entity model that whole
+// machinery is GONE — ending is one idempotent status flip on the service's
+// own row, so there is no identity to mismatch and no refusal path left.
 //
 // Pinned here through the real App, in both storage modes:
-//   1. The production state ends cleanly: the stale local stamp is dropped at
-//      boot (never presented as the live service's identity), the store-side
-//      guard treats a startedAt-less state as date-checked, and the archive is
-//      filed under a FRESH id — NOT the stale stamp's deterministic id, which
-//      would have collided with the earlier night's archive and silently
-//      dropped tonight's ("on conflict do nothing").
-//   2. healOrphanedService writes a FULL identity (date, chosenOn, session,
-//      startedAt) — the identity-less blob is what created the trap.
+//   1. END SERVICE always completes: the entity flips to 'ended' with a
+//      label, EVERY board row survives under it (nothing is copied, nothing
+//      is blanked), and the device releases its local identity.
+//   2. The archive view shows the ended service NEXT TO older legacy
+//      service_archive snapshots — no deterministic-id collision can drop a
+//      night, because nothing is inserted that could collide.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import {
-  backend, resetBackend, seed, remoteRows, localRows,
+  resetBackend, seed, seedService, remoteRows, localRows,
   WORKSPACE_ID, setWorkspaceId,
 } from "./harness/fakeBackend.js";
-import { currentServiceDay, SERVICE_DATE_CHOSEN_ON_KEY } from "../utils/serviceDay.js";
+import { currentServiceDay } from "../utils/serviceDay.js";
 import { blankTable } from "../utils/tableHelpers.js";
-import { archiveIdForService } from "../utils/archiveIdentity.js";
 
 vi.mock("../lib/supabaseClient.js", async () => {
   const h = await import("./harness/fakeBackend.js");
   return {
     TABLES: {
+      SERVICES: "services",
       SERVICE_TABLES: "service_tables", SERVICE_SETTINGS: "service_settings",
       SERVICE_ARCHIVE: "service_archive", MENU_COURSES: "menu_courses",
       WINES: "wines", BEVERAGES: "beverages", RESERVATIONS: "reservations",
@@ -65,10 +60,7 @@ window.scrollTo = () => {};
 Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || (() => {});
 
 const TODAY = () => currentServiceDay();
-
-// The startedAt this tablet kept from an EARLIER service (localStorage
-// survives ends that happen on other devices).
-const STALE_STARTED_AT = "2026-07-10T18:00:00.000Z";
+const SVC = "svc-tonight";
 
 const rowFor = (rows, tableId) => rows.find((r) => Number(r.table_id) === Number(tableId));
 
@@ -77,9 +69,10 @@ const rowFor = (rows, tableId) => rows.find((r) => Number(r.table_id) === Number
 const seedFinishedNight = () => {
   const now = new Date().toISOString();
   const fired = { amuse: { firedAt: "21:10" }, venison: { firedAt: "21:40" } };
+  seedService({ id: SVC, date: TODAY(), session: "dinner", startedAt: now });
   seed("service_tables", [
-    { table_id: 2, data: { ...blankTable(2), active: true, arrivedAt: "19:07", resName: "Anna Harness", resTime: "19:00", guests: 3, kitchenLog: fired, kitchenArchived: true }, updated_at: now },
-    { table_id: 4, data: { ...blankTable(4), active: true, arrivedAt: "17:54", resName: "Marco Harness", resTime: "18:00", guests: 2, kitchenLog: fired, kitchenArchived: true }, updated_at: now },
+    { service_id: SVC, table_id: 2, data: { ...blankTable(2), active: true, arrivedAt: "19:07", resName: "Anna Harness", resTime: "19:00", guests: 3, kitchenLog: fired, kitchenArchived: true }, updated_at: now },
+    { service_id: SVC, table_id: 4, data: { ...blankTable(4), active: true, arrivedAt: "17:54", resName: "Marco Harness", resTime: "18:00", guests: 2, kitchenLog: fired, kitchenArchived: true }, updated_at: now },
   ]);
   seed("reservations", [
     { id: "res-anna", date: TODAY(), table_id: 2, created_at: now,
@@ -92,34 +85,19 @@ const seedFinishedNight = () => {
 describe.each([
   ["fallback", false],
   ["sqlite-primary", true],
-])("app harness — identity-less service state still ends (%s)", (modeName, psMode) => {
+])("app harness — END SERVICE files the entity, preserves every row (%s)", (modeName, psMode) => {
   beforeEach(() => {
     resetBackend({ psMode });
   });
 
-  it("END SERVICE archives and clears when the store state has no startedAt and the device holds a stale one (11.07 incident)", async () => {
-    // The store's live state is the identity-less production blob.
-    seed("service_settings", [{
-      id: "service_date",
-      state: { date: TODAY(), chosenOn: TODAY() }, // no session, no startedAt
-      updated_at: new Date().toISOString(),
-    }]);
+  it("END SERVICE flips the entity, keeps the whole board in the store, and releases the device", async () => {
     seedFinishedNight();
 
-    // An earlier night's archive already sits under the STALE stamp's
-    // deterministic id — tonight's archive must not collide with it.
-    const staleId = await archiveIdForService(WORKSPACE_ID, STALE_STARTED_AT);
-    seed("service_archive", [{
-      id: staleId, date: "2026-07-10", label: "10. 07. 2026 – DINNER",
-      state: { tables: [], startedAt: STALE_STARTED_AT }, created_at: "2026-07-10T22:00:00.000Z", deleted_at: null,
-    }]);
-
-    // This tablet was mid-service before the reload: workspace known, today's
-    // date restored from localStorage, and the stale stamp still in place.
+    // This tablet was mid-service before a reload: identity cached locally.
     setWorkspaceId(WORKSPACE_ID);
+    localStorage.setItem(`milka_service_id:${WORKSPACE_ID}`, SVC);
     localStorage.setItem(`milka_service_date:${WORKSPACE_ID}`, TODAY());
-    localStorage.setItem(`${SERVICE_DATE_CHOSEN_ON_KEY}:${WORKSPACE_ID}`, TODAY());
-    localStorage.setItem(`milka_service_started_at:${WORKSPACE_ID}`, STALE_STARTED_AT);
+    localStorage.setItem(`milka_service_chosen_on:${WORKSPACE_ID}`, TODAY());
 
     const alerts = [];
     window.alert = (msg) => alerts.push(String(msg));
@@ -130,70 +108,65 @@ describe.each([
 
     fireEvent.click(screen.getByText("END SERVICE"));
 
-    // The end goes through: back at mode selection, no refusal alert.
+    // The end goes through: back at mode selection, no refusal alert — there
+    // is no identity machinery left that could refuse it.
     await screen.findByText("[Service]", {}, { timeout: 5000 });
     expect(alerts).toEqual([]);
 
-    // The night is FILED — under a fresh id, next to (not instead of) the
-    // earlier night's archive.
-    await waitFor(() => {
-      const archives = remoteRows("service_archive");
-      expect(archives).toHaveLength(2);
-      const tonight = archives.find((a) => a.id !== staleId);
-      expect(tonight.date).toBe(TODAY());
-      expect(tonight.state?.tables?.some((t) => t.resName === "Anna Harness")).toBe(true);
-      expect(tonight.state?.tables?.some((t) => t.resName === "Marco Harness")).toBe(true);
-      // The stale stamp never names tonight's archive.
-      expect(tonight.state?.startedAt ?? null).not.toBe(STALE_STARTED_AT);
-    }, { timeout: 5000 });
-
-    // Board clearing follows the archive write asynchronously. Wait for the
-    // complete end-service transaction instead of racing the final store
-    // writes on faster/slower CI workers. This wait used to flake for real:
-    // a straggler board autosave (in flight when END was tapped) landed
-    // AFTER the store-side clear and resurrected the archived board in the
-    // store — persistServiceEnd now waits out in-flight flushes and blocks
-    // new ones for the duration (the recurring red on #105/#107). The wide
-    // window is slow-runner headroom; it only costs time on genuine failure.
+    // The night is FILED: the entity is ended and labeled…
     await waitFor(() => {
       const store = psMode ? localRows : remoteRows;
-      expect(store("service_tables").filter((r) => r?.data?.resName).length).toBe(0);
-      expect(store("service_settings").find((r) => r.id === "service_date")?.state?.date).toBeUndefined();
-      // The stale stamp is gone from this device, not re-presented next boot.
-      expect(localStorage.getItem(`milka_service_started_at:${WORKSPACE_ID}`)).toBeNull();
+      const svc = store("services").find((r) => r.id === SVC);
+      expect(svc?.status).toBe("ended");
+      expect(svc?.end_reason).toBe("manual");
+      expect(svc?.label).toMatch(/DINNER/);
     }, { timeout: 20000 });
+
+    // …and EVERY board row survives under it, byte-for-byte. Nothing was
+    // copied to an archive table and nothing was blanked — the ended service
+    // IS the archive.
+    const store = psMode ? localRows : remoteRows;
+    expect(rowFor(store("service_tables"), 2)?.data?.resName).toBe("Anna Harness");
+    expect(rowFor(store("service_tables"), 4)?.data?.resName).toBe("Marco Harness");
+    expect(rowFor(store("service_tables"), 2)?.service_id).toBe(SVC);
+
+    // The device released its local identity.
+    expect(localStorage.getItem(`milka_service_id:${WORKSPACE_ID}`)).toBeNull();
+    expect(localStorage.getItem(`milka_service_date:${WORKSPACE_ID}`)).toBeNull();
+    expect(localStorage.getItem(`milka_service_started_at:${WORKSPACE_ID}`)).toBeNull();
   }, 45000);
 
-  it("healOrphanedService re-attaches an orphaned live board with a FULL identity, and that service ends cleanly", async () => {
-    // No service_date anywhere — but the board carries a live dinner (the
-    // 19.06 orphan shape). The boot heal must write date+chosenOn+session+
-    // startedAt: the identity-less blob it used to write is what deadlocked
-    // the guarded end.
+  it("the ended service appears in the archive view NEXT TO older legacy snapshots", async () => {
     seedFinishedNight();
+    // An earlier night's LEGACY archive row (pre-entity model).
+    seed("service_archive", [{
+      id: "legacy-10-07", date: "2026-07-10", label: "10. 07. 2026 – DINNER",
+      state: { tables: [{ id: 1, resName: "Old Guest" }] },
+      created_at: "2026-07-10T22:00:00.000Z", deleted_at: null,
+    }]);
+
+    setWorkspaceId(WORKSPACE_ID);
+    localStorage.setItem(`milka_service_id:${WORKSPACE_ID}`, SVC);
+    localStorage.setItem(`milka_service_date:${WORKSPACE_ID}`, TODAY());
+    localStorage.setItem(`milka_service_chosen_on:${WORKSPACE_ID}`, TODAY());
 
     render(<App />);
-    await screen.findByText("[Service]", {}, { timeout: 5000 });
-
-    await waitFor(() => {
-      const state = remoteRows("service_settings").find((r) => r.id === "service_date")?.state;
-      expect(state?.date).toBe(TODAY());
-      expect(state?.chosenOn).toBe(TODAY());
-      expect(state?.session).toBeTruthy();
-      expect(state?.startedAt).toBeTruthy();
-    }, { timeout: 5000 });
-
-    // The healed service is joinable and endable — the full loop closes.
-    const alerts = [];
-    window.alert = (msg) => alerts.push(String(msg));
-    fireEvent.click(screen.getByText("[Service]"));
+    fireEvent.click(await screen.findByText("[Service]", {}, { timeout: 5000 }));
     await screen.findByText(/Anna Harness/, {}, { timeout: 5000 });
     fireEvent.click(screen.getByText("END SERVICE"));
     await screen.findByText("[Service]", {}, { timeout: 5000 });
-    expect(alerts).toEqual([]);
-    await waitFor(() => {
-      const archives = remoteRows("service_archive");
-      expect(archives).toHaveLength(1);
-      expect(archives[0].state?.tables?.some((t) => t.resName === "Anna Harness")).toBe(true);
-    }, { timeout: 5000 });
-  }, 30000);
+
+    // Merged archive view: tonight's ended service + the legacy snapshot.
+    const { fetchArchive } = await import("../lib/archiveStore.js");
+    await waitFor(async () => {
+      const { active } = await fetchArchive();
+      expect(active).toHaveLength(2);
+      const tonight = active.find((entry) => entry._kind === "service");
+      expect(tonight?.id).toBe(SVC);
+      expect(tonight?.state?.tables?.some((t) => t.resName === "Anna Harness")).toBe(true);
+      expect(tonight?.state?.tables?.some((t) => t.resName === "Marco Harness")).toBe(true);
+      const legacy = active.find((entry) => entry._kind === "legacy");
+      expect(legacy?.id).toBe("legacy-10-07");
+    }, { timeout: 20000 });
+  }, 45000);
 });

@@ -90,3 +90,95 @@ describe("ResvForm — flow-key carry-through", () => {
     expect("last_bite_fired_at" in saved.data).toBe(false);
   });
 });
+
+// ── ResvForm — restrictions belong to a GUEST ────────────────────────────────
+// A guest who is "no pork + no alcohol" is ONE cover. Entered as two loose
+// entries they printed two separate "1×" lines on the kitchen ticket, which
+// the pass reads as two people.
+
+describe("ResvForm — per-guest restrictions", () => {
+  const openForm = () => {
+    const onSave = vi.fn(async () => {});
+    render(
+      <ResvForm
+        initial={makeInitial()}
+        tables={tables}
+        reservations={[]}
+        excludeId="res-1"
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />
+    );
+    return onSave;
+  };
+
+  const save = async (onSave) => {
+    fireEvent.click(screen.getByText("SAVE"));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    return onSave.mock.calls[0][0];
+  };
+
+  it("naming a guest first lands the restrictions on that ONE person", async () => {
+    const onSave = openForm();
+    fireEvent.click(screen.getByText("+ Guest"));   // deliberate: "these are one person"
+    fireEvent.click(screen.getByText(/No Pork/));
+    fireEvent.click(screen.getByText(/No Alcohol/));
+    const saved = await save(onSave);
+    const restr = saved.data.restrictions;
+    expect(restr.map(r => r.note).sort()).toEqual(["no_alcohol", "no_pork"]);
+    expect(restr[0].guest).toBeTruthy();
+    expect(restr[0].guest).toBe(restr[1].guest);
+  });
+
+  it("+ Guest starts a second person, so the two do not merge", async () => {
+    const onSave = openForm();
+    fireEvent.click(screen.getByText(/No Pork/));
+    fireEvent.click(screen.getByText("+ Guest"));
+    fireEvent.click(screen.getByText(/Gluten Free/));
+    const saved = await save(onSave);
+    const restr = saved.data.restrictions;
+    expect(restr).toHaveLength(2);
+    expect(restr[0].guest).not.toBe(restr[1].guest);
+  });
+
+  it("tapping the same restriction twice removes it from that guest", async () => {
+    const onSave = openForm();
+    // [0] is the picker chip; the summary row below repeats the label once
+    // the restriction is on a guest.
+    fireEvent.click(screen.getAllByText(/No Pork/)[0]);
+    fireEvent.click(screen.getAllByText(/No Pork/)[0]);
+    const saved = await save(onSave);
+    expect(saved.data.restrictions).toEqual([]);
+  });
+
+  it("existing entries load untouched — no invented attribution", async () => {
+    const onSave = vi.fn(async () => {});
+    render(
+      <ResvForm
+        initial={makeInitial({ restrictions: [{ pos: null, note: "veg" }, { pos: null, note: "veg" }] })}
+        tables={tables}
+        reservations={[]}
+        excludeId="res-1"
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />
+    );
+    const saved = await save(onSave);
+    const restr = saved.data.restrictions;
+    // Two loose entries stay two unattributed covers. Stamping guest ids on
+    // load would claim knowledge the booking never had.
+    expect(restr).toEqual([{ pos: null, note: "veg" }, { pos: null, note: "veg" }]);
+  });
+
+  it("restrictions default to unattributed — one cover each until a guest is named", async () => {
+    const onSave = openForm();
+    fireEvent.click(screen.getByText(/No Pork/));
+    fireEvent.click(screen.getByText(/No Alcohol/));
+    const saved = await save(onSave);
+    // No guest was named, so neither entry claims to be the same person.
+    expect(saved.data.restrictions).toEqual([
+      { pos: null, note: "no_pork" },
+      { pos: null, note: "no_alcohol" },
+    ]);
+  });
+});

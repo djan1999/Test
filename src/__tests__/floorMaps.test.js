@@ -196,6 +196,21 @@ describe("planLayoutSwitch (acceptance 12)", () => {
     expect(fine.every((r) => r.status === "unchanged")).toBe(true);
   });
 
+  it("same table on different dates is NOT a conflict; the same date still is", () => {
+    // The planning set spans today forward (App feeds all future-dated rows) —
+    // two dinners on T9 a week apart must not cross-flag.
+    const apart = planLayoutSwitch(mapB, [
+      { ...res("a", 9, { service_session: "dinner" }), date: "2026-07-23" },
+      { ...res("b", 9, { service_session: "dinner" }), date: "2026-07-30" },
+    ]);
+    expect(apart.every((r) => r.status === "unchanged")).toBe(true);
+    const sameNight = planLayoutSwitch(mapB, [
+      { ...res("a", 9, { service_session: "dinner" }), date: "2026-07-23" },
+      { ...res("b", 9, { service_session: "dinner" }), date: "2026-07-23" },
+    ]);
+    expect(sameNight.every((r) => r.status === "conflict")).toBe(true);
+  });
+
   it("applyLayoutSwitchRow applies only moves and writes table_id + tableGroup", () => {
     const rows = planLayoutSwitch(mapB, [res("a", 2, { resName: "X" })]);
     expect(rows[0].status).toBe("move"); // T2 → T2-3 [2,3]

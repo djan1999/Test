@@ -10,7 +10,7 @@ import { scopedFrom } from "./scopedDb.js";
 import { isSqlitePrimary } from "../powersync/primary.js";
 import { isSandbox } from "./sandbox.js";
 import { saveServiceSettingWithCas } from "./serviceSettingCas.js";
-import { MERGEABLE_SETTING_KEYS } from "../utils/foldSettingState.js";
+import { isMergeableSettingKey } from "../utils/foldSettingState.js";
 import { recordClientDiagnostic } from "./clientDiagnostics.js";
 
 // → the state object, or null when the row doesn't exist. Throws on real
@@ -44,7 +44,7 @@ async function writeStateKeyOnce(id, state, ancestor = null, workspaceId = getWo
     await writeSetting(id, state);
     return { state, conflicts: [] };
   }
-  if (MERGEABLE_SETTING_KEYS.has(id)) {
+  if (isMergeableSettingKey(id)) {
     const result = await saveServiceSettingWithCas({
       client: supabase,
       workspaceId,
