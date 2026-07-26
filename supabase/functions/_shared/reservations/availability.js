@@ -111,6 +111,61 @@ function busyTablesAt({ date, time, pax, bookings, config, excludeId }) {
 }
 
 /**
+ * Every configured table with its verdict for one party at one time, in the
+ * order the host reads them off the floor.
+ *
+ * A "no" is never hidden. The host is standing in front of a guest, and
+ * "T04 — Novak 19:00" is the sentence they can say out loud; a table that has
+ * simply vanished from the grid tells them nothing and invites a second guess.
+ * Reason wording here is for STAFF and may name the party holding the table —
+ * the public page's rule about never naming another guest is enforced where
+ * the public page is served, not here.
+ *
+ * @returns {Array<{ id: string, seats: number, ok: boolean, reason: string|null,
+ *                   takenBy: { name: string, time: string } | null }>}
+ */
+export function tableAvailabilityAt({ date, time, pax, bookings = [], config, excludeId = null }) {
+  const normalized = normalizeReservationConfig(config);
+  const party = Number(pax) || 0;
+  // No sitting time yet: seats are still knowable, occupancy is not.
+  if (!time) {
+    return normalized.tables.map((table) => ({
+      id: String(table.id),
+      seats: Number(table.seats) || 0,
+      ok: false,
+      reason: "pick_time",
+      takenBy: null,
+    }));
+  }
+
+  const busy = busyTablesAt({ date, time, pax: party, bookings, config: normalized, excludeId });
+  const holder = new Map();
+  const start = minutesOf(time);
+  const end = start + durationForParty(party, normalized) + normalized.durations.buffer;
+  bookings.forEach((booking) => {
+    if (booking.date !== date) return;
+    if (excludeId && booking.id === excludeId) return;
+    if (!ACTIVE_STATUSES.has(booking.status)) return;
+    const bookingStart = minutesOf(booking.time);
+    const bookingEnd = bookingStart + durationForParty(booking.pax, normalized) + normalized.durations.buffer;
+    if (!intervalsOverlap(start, end, bookingStart, bookingEnd)) return;
+    tablesOfBooking(booking).forEach((label) => {
+      if (!holder.has(label)) holder.set(label, { name: booking.name || "Reservation", time: booking.time || "" });
+    });
+  });
+
+  return normalized.tables.map((table) => {
+    const id = String(table.id);
+    const seats = Number(table.seats) || 0;
+    if (busy.has(id)) return { id, seats, ok: false, reason: "taken", takenBy: holder.get(id) || null };
+    // Seats are advice, not a lock: a host may seat four at a six-top, and
+    // combining is what covers a party larger than any single table.
+    if (party && seats < party) return { id, seats, ok: false, reason: "too_small", takenBy: null };
+    return { id, seats, ok: true, reason: null, takenBy: null };
+  });
+}
+
+/**
  * Smallest table that seats the party; failing that, the first configured
  * joinable pair whose combined seats fit. Returns null when nothing fits.
  * @returns {{ tables: string[], combined: boolean } | null}

@@ -4721,7 +4721,6 @@ export default function App() {
       weeklyServices={reservationWorkspace.weeklyServices}
       calendarRules={reservationWorkspace.calendarRules}
       waitlist={reservationWorkspace.waitlist}
-      tables={displayTables}
       onSaveBooking={reservationWorkspace.onSaveBooking}
       onDeleteBooking={reservationWorkspace.onDeleteBooking}
       onStatusChange={reservationWorkspace.onStatusChange}

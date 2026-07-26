@@ -1,10 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { tokens } from "../styles/tokens.js";
 import PublicBookingPage, { ManageBooking } from "../components/reservations/PublicBookingPage.jsx";
 import ReservationWorkspace from "../components/reservations/ReservationWorkspace.jsx";
 import { useReservationWorkspace } from "../components/reservations/useReservationWorkspace.js";
-import { normalizeReservationConfig } from "../domain/reservations/config.js";
-import { tableLabelToId } from "../domain/reservations/bookingAdapter.js";
 import {
   cancelManagedBooking,
   changeManagedBooking,
@@ -160,19 +158,6 @@ function flattenPublicConfig(config) {
   };
 }
 
-/** ResvForm speaks the live board's table shape — a numeric id and a display
- *  label. The LAB has no live board and must not read one, so a host picks from
- *  the reservation system's own table inventory instead. */
-function labTables(reservationConfig) {
-  return normalizeReservationConfig(reservationConfig).tables
-    .map((table) => ({
-      id: tableLabelToId(table.id),
-      displayLabel: String(table.id),
-      seats: Number(table.seats) || 0,
-    }))
-    .filter((table) => table.id != null);
-}
-
 function PublicRoute() {
   const [config, setConfig] = useState(null);
   const [error, setError] = useState("");
@@ -290,11 +275,6 @@ function StaffLab() {
     }
   }, [accessCode, workspace.errorStatus]);
 
-  const tables = useMemo(
-    () => labTables(workspace.reservationConfig),
-    [workspace.reservationConfig],
-  );
-
   if (!accessCode) {
     return <LabGate
       onUnlock={(code) => { setLabAccessCode(code); setAccessCode(code); }}
@@ -328,7 +308,6 @@ function StaffLab() {
       weeklyServices={workspace.weeklyServices}
       calendarRules={workspace.calendarRules}
       waitlist={workspace.waitlist}
-      tables={tables}
       onSaveBooking={workspace.onSaveBooking}
       onDeleteBooking={workspace.onDeleteBooking}
       onStatusChange={workspace.onStatusChange}
