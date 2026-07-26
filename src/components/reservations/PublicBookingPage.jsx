@@ -12,7 +12,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
-import { UNAVAILABLE_REASONS } from "../../domain/reservations/availability.js";
+import {
+  UNAVAILABLE_REASONS,
+  isDateBookable,
+  monthState,
+} from "../../domain/reservations/availability.js";
 // The same bounds the server holds this form to. Applied here so a guest is
 // stopped as they type rather than losing what they wrote on submit.
 import { LIMITS } from "../../domain/reservations/validation.js";
@@ -42,6 +46,9 @@ const STEP_LABELS = ["Date", "Time", "Details", "Preferences", "Review"];
 
 const DOW = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const MON = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const MONTHS = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+// Monday-first: the week the restaurant works to.
+const WEEK_HEAD = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
 const pad = (n) => String(n).padStart(2, "0");
 const isoOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -132,14 +139,83 @@ export default function PublicBookingPage({
 
   const patch = (next) => setGuest((current) => ({ ...current, ...next }));
 
-  const dates = useMemo(() => {
-    const base = new Date(`${startDate || isoOf(new Date())}T12:00:00`);
-    return Array.from({ length: Math.min(14, Math.max(1, windowDays)) }, (_, index) => {
-      const d = new Date(base);
-      d.setDate(base.getDate() + index);
-      return { iso: isoOf(d), dow: DOW[d.getDay()], dd: String(d.getDate()) };
+  // The whole booking window, month by month. This used to be a flat strip of
+  // the next fourteen days, which quietly told a guest the restaurant was full
+  // past a fortnight when the book was in fact open for months — the server has
+  // always answered on windowDays, and the page was the only thing disagreeing.
+  const today = isoOf(new Date());
+  // The page asks the same engine the server answers with, so it can never
+  // offer a day that is then refused, nor hide one the restaurant has opened.
+  const windowConfig = useMemo(
+    () => ({ online: { windowDays, months: config.months || {} } }),
+    [config.months, windowDays],
+  );
+
+  const [month, setMonth] = useState(() => (startDate || today).slice(0, 7));
+
+  const monthGrid = useMemo(() => {
+    const [year, monthIndex] = month.split("-").map(Number);
+    const first = new Date(year, monthIndex - 1, 1);
+    const days = new Date(year, monthIndex, 0).getDate();
+    // Monday-first: the week the floor works to, not the American Sunday.
+    const lead = (first.getDay() + 6) % 7;
+    return [
+      ...Array.from({ length: lead }, () => null),
+      ...Array.from({ length: days }, (_, index) => {
+        const iso = isoOf(new Date(year, monthIndex - 1, index + 1));
+        return { iso, dd: String(index + 1), open: isDateBookable(iso, { config: windowConfig, today }) };
+      }),
+    ];
+  }, [month, today, windowConfig]);
+
+  const shiftMonth = (by) => {
+    const [year, monthIndex] = month.split("-").map(Number);
+    const next = new Date(year, monthIndex - 1 + by, 1);
+    setMonth(`${next.getFullYear()}-${pad(next.getMonth() + 1)}`);
+  };
+  // Arrows run from this month to the furthest one the book reaches. That
+  // last month is the rolling window's OR any month opened by hand beyond it —
+  // walking to a December put on sale in September has to pass through months
+  // the window never reached, and stopping at the first of those would leave
+  // an open month a guest cannot get to.
+  const lastMonth = useMemo(() => {
+    const rolling = new Date(`${today}T12:00:00`);
+    rolling.setDate(rolling.getDate() + Math.max(1, windowDays));
+    let furthest = `${rolling.getFullYear()}-${pad(rolling.getMonth() + 1)}`;
+    Object.entries(config.months || {}).forEach(([key, open]) => {
+      if (open === true && key > furthest) furthest = key;
     });
-  }, [startDate, windowDays]);
+    return furthest;
+  }, [config.months, today, windowDays]);
+
+  const canGo = (by) => {
+    const [year, monthIndex] = month.split("-").map(Number);
+    const target = new Date(year, monthIndex - 1 + by, 1);
+    const key = `${target.getFullYear()}-${pad(target.getMonth() + 1)}`;
+    return key >= today.slice(0, 7) && key <= lastMonth;
+  };
+
+  const shownState = monthState(month, { config: windowConfig, today });
+  const monthNotice = shownState === "closed_month"
+    ? `We are not taking bookings in ${MONTHS[Number(month.slice(5, 7)) - 1].toLowerCase()}.`
+    : monthGrid.some((item) => item && item.open)
+      ? null
+      : "The book is not open this far ahead yet.";
+
+  // The furthest date a guest may take, counting any month opened by hand
+  // beyond the rolling window.
+  const lastDay = useMemo(() => {
+    const rolling = new Date(`${today}T12:00:00`);
+    rolling.setDate(rolling.getDate() + Math.max(1, windowDays));
+    let furthest = isoOf(rolling);
+    Object.entries(config.months || {}).forEach(([key, open]) => {
+      if (open !== true) return;
+      const [year, monthIndex] = key.split("-").map(Number);
+      const end = isoOf(new Date(year, monthIndex, 0));
+      if (end > furthest) furthest = end;
+    });
+    return furthest;
+  }, [config.months, today, windowDays]);
 
   const fetchTimes = useCallback(
     async (date, pax) => {
@@ -274,11 +350,42 @@ export default function PublicBookingPage({
           <section>
             <h1 style={{ fontSize: 18, fontWeight: 500, color: tokens.ink[0], lineHeight: 1.4, margin: 0 }}>Reserve a table</h1>
             <div style={{ ...eyebrow, margin: "22px 0 8px" }}>Date</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+              <button
+                type="button"
+                aria-label="Previous month"
+                disabled={!canGo(-1)}
+                onClick={() => shiftMonth(-1)}
+                style={{ ...chip(false), width: 40, height: 40, opacity: canGo(-1) ? 1 : 0.3, cursor: canGo(-1) ? "pointer" : "default" }}
+              >
+                ‹
+              </button>
+              <span style={{ fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[0] }}>
+                {MONTHS[Number(month.slice(5, 7)) - 1]} {month.slice(0, 4)}
+              </span>
+              <button
+                type="button"
+                aria-label="Next month"
+                disabled={!canGo(1)}
+                onClick={() => shiftMonth(1)}
+                style={{ ...chip(false), width: 40, height: 40, opacity: canGo(1) ? 1 : 0.3, cursor: canGo(1) ? "pointer" : "default" }}
+              >
+                ›
+              </button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 4 }}>
+              {WEEK_HEAD.map((day) => (
+                <span key={day} style={{ fontSize: 7, letterSpacing: "0.10em", textAlign: "center", color: tokens.ink[3] }}>{day}</span>
+              ))}
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
-              {dates.map((item) => (
+              {monthGrid.map((item, index) => (item === null ? (
+                <span key={`blank-${index}`} />
+              ) : (
                 <button
                   key={item.iso}
                   type="button"
+                  disabled={!item.open}
                   onClick={() => patch({ date: item.iso, time: "", service: "" })}
                   style={{
                     padding: "8px 0",
@@ -286,17 +393,19 @@ export default function PublicBookingPage({
                     minHeight: 46,
                     border: `1px solid ${guest.date === item.iso ? tokens.charcoal.default : tokens.ink[4]}`,
                     background: guest.date === item.iso ? tokens.tint.parchment : tokens.neutral[0],
-                    color: tokens.ink[1],
-                    cursor: "pointer",
+                    color: item.open ? tokens.ink[1] : tokens.ink[4],
+                    cursor: item.open ? "pointer" : "default",
                     fontFamily: FONT,
                     boxSizing: "border-box",
                     borderRadius: 0,
                   }}
                 >
-                  <span style={{ fontSize: 7, letterSpacing: "0.10em", display: "block", color: tokens.ink[3] }}>{item.dow}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, display: "block", marginTop: 2 }}>{item.dd}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, display: "block" }}>{item.dd}</span>
                 </button>
-              ))}
+              )))}
+            </div>
+            <div style={{ fontSize: 8, letterSpacing: "0.08em", color: monthNotice ? tokens.red.text : tokens.ink[3], marginTop: 8 }}>
+              {monthNotice || `Bookings open to ${fmtDate(lastDay)}.`}
             </div>
 
             <div style={{ ...eyebrow, margin: "22px 0 8px" }}>Guests</div>
