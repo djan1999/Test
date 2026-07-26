@@ -123,7 +123,7 @@ import FloorMap from "./components/floor/FloorMap.jsx";
 // generated chunk, so these still open offline once the app is installed.
 const AdminLayout = lazy(() => import("./components/admin/AdminLayout.jsx"));
 const KitchenBoard = lazy(() => import("./components/kitchen/KitchenBoard.jsx"));
-const ReservationManager = lazy(() => import("./components/reservations/ReservationWorkspace.jsx"));
+const ReservationWorkspace = lazy(() => import("./components/reservations/ReservationWorkspace.jsx"));
 const MenuPage = lazy(() => import("./components/menu/MenuPage.jsx"));
 const SummaryModal = lazy(() => import("./components/modals/SummaryModal.jsx"));
 const ArchiveModal = lazy(() => import("./components/modals/ArchiveModal.jsx"));
@@ -4848,8 +4848,8 @@ export default function App() {
       onSignOut={supabase ? signOut : undefined}
     /></>;
 
-  // Reservation Manager mode
-  if (renderMode === "reservation") return (<>{serviceDatePickerEl}{sandboxBannerEl}<Suspense fallback={lazyViewFallback}><ReservationManager
+  // Reservation workspace mode
+  if (renderMode === "reservation") return (<>{serviceDatePickerEl}{sandboxBannerEl}<Suspense fallback={lazyViewFallback}><ReservationWorkspace
       bookings={reservationWorkspace.bookings}
       reservationConfig={reservationWorkspace.reservationConfig}
       weeklyServices={reservationWorkspace.weeklyServices}
