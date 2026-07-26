@@ -50,7 +50,16 @@ export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd
     const r = [];
     wines.forEach((w) => {
       if (w.name.toLowerCase().includes(lq) || w.producer?.toLowerCase().includes(lq) || w.vintage?.includes(lq)) {
-        r.push({ type: w.byGlass ? "wine" : "bottle", item: w, label: w.name, sub: `${w.producer} · ${w.vintage}` });
+        const sub = `${w.producer} · ${w.vintage}`;
+        if (w.byGlass) {
+          // A by-the-glass wine is available both ways, so offer it as a glass
+          // and as a bottle. The stored item's byGlass drives the chip label, so
+          // the bottle option carries byGlass:false to render as a bottle.
+          r.push({ type: "wine",   item: w,                    label: w.name, sub });
+          r.push({ type: "bottle", item: { ...w, byGlass: false }, label: w.name, sub });
+        } else {
+          r.push({ type: "bottle", item: w, label: w.name, sub });
+        }
       }
     });
     cocktails.forEach((c) => {

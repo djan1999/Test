@@ -2,6 +2,7 @@
  * Menu data utility functions shared across the application.
  */
 import { DIETARY_KEYS, RESTRICTIONS } from "../constants/dietary.js";
+import { groupRestrictionsByGuest } from "./restrictionGroups.js";
 
 export const firstFilled = (...vals) => vals.find(v => String(v ?? "").trim()) ?? "";
 
@@ -234,8 +235,15 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
   const active = new Set((activeRestrictions || [])
     .map((k) => RESTRICTION_COLUMN_TO_KEY[k] || k));
 
-  // Live-vocabulary order, allergies first — see restrictionPriorityKeys().
-  for (const key of restrictionPriorityKeys()) {
+  // EVERY active restriction is applied, LOWEST priority first, so the
+  // top-ranked one still wins any field it defines while the others land the
+  // fields it leaves alone. The loop used to `break` on the first match: a
+  // guest who is shellfish-allergic AND eats no pork got the shellfish
+  // variant of a dish and the pork substitution was silently skipped — one
+  // constraint honoured, the other served to the guest.
+  const keys = restrictionPriorityKeys();
+  for (let i = keys.length - 1; i >= 0; i--) {
+    const key = keys[i];
     if (!active.has(RESTRICTION_COLUMN_TO_KEY[key] || key)) continue;
 
     // courseVariantFor is tolerant of every storage form (runtime key, DB
@@ -252,7 +260,6 @@ export function applyCourseRestriction(course, activeRestrictions, lang = "en") 
     const altSub  = String(next?.sub  || "").trim();
     if (altName) dish = { ...dish, name: altName };
     if (altSub)  dish = { ...dish, sub:  altSub  };
-    break;
   }
 
   return dish;
@@ -294,51 +301,123 @@ export function deriveKitchenNote(course, restrKey, baseName = "", baseSub = "")
 }
 
 /**
- * Get the modification string for a course given restriction keys,
- * matching exactly what the kitchen ticket displays.
- * Returns null if the dish is unchanged (standard).
+ * Every distinct modification a set of restriction keys makes to one course,
+ * in allergies-first priority order, deduplicated.
+ *
+ * Resolved PER KEY: one guest carrying two restrictions that each change the
+ * dish needs both changes on the pass. Resolving the keys together (what
+ * getCourseMod used to do) surfaced only the highest-priority one, so a
+ * shellfish + pork guest's ticket said "no crayfish" and the cracklings went
+ * out on the plate.
  */
-export function getCourseMod(course, restrKeys) {
-  if (!restrKeys || !restrKeys.length) return null;
+export function courseModList(course, restrKeys) {
+  if (!restrKeys || !restrKeys.length) return [];
   // Trim to match applyCourseRestriction, which returns a trimmed name/sub.
   // Without this, a stray leading/trailing space in the stored dish makes an
   // UNCHANGED dish compare as "modified", and the fallback below then prints
   // the whole sub as a bogus modification for every restricted guest.
   const baseName = String(course?.menu?.name || "").trim();
   const baseSub  = String(course?.menu?.sub  || "").trim();
-
-  // Priority 1: restriction notes — check all storage patterns (flat _note,
-  // raw-key _note, and nested kitchen_note inside the variant object), in the
-  // same allergies-first live-vocabulary order (and the same key
-  // normalization) the substitution uses.
   const activeKeys = new Set(restrKeys.map((k) => RESTRICTION_COLUMN_TO_KEY[k] || k));
+
+  const mods = [];
+  const seen = new Set();
+  const push = (text) => {
+    const value = String(text || "").trim();
+    if (!value || seen.has(value.toLowerCase())) return;
+    seen.add(value.toLowerCase());
+    mods.push(value);
+  };
+
   for (const key of restrictionPriorityKeys()) {
     if (!activeKeys.has(RESTRICTION_COLUMN_TO_KEY[key] || key)) continue;
-    const cr = course.restrictions || {};
-    const note = courseVariantFor(cr, key, "_note") || courseVariantFor(cr, key)?.kitchen_note;
-    if (note) return String(note).toUpperCase();
-  }
+    const cr = course?.restrictions || {};
 
-  // Priority 2: full substitution
-  const modified = applyCourseRestriction(course, restrKeys);
-  if (modified) {
-    if (modified.name !== baseName) return modified.name;
+    // Priority 1: restriction notes — check all storage patterns (flat _note,
+    // raw-key _note, and nested kitchen_note inside the variant object).
+    const note = courseVariantFor(cr, key, "_note") || courseVariantFor(cr, key)?.kitchen_note;
+    if (note) { push(String(note).toUpperCase()); continue; }
+
+    // Priority 2: this key's own substitution, resolved in isolation.
+    const modified = applyCourseRestriction(course, [key]);
+    if (!modified) continue;
+    if (modified.name !== baseName) { push(modified.name); continue; }
     if (modified.sub !== baseSub) {
       const baseTokens = new Set(baseSub.split(/[,·]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
       const modList = modified.sub.split(/[,·]+/).map(s => s.trim()).filter(Boolean);
       const newOnes = modList.filter(t => !baseTokens.has(t.toLowerCase()));
-      if (newOnes.length > 0) return newOnes[0].toUpperCase();
+      if (newOnes.length > 0) { push(newOnes[0].toUpperCase()); continue; }
       // No genuinely new ingredient. If the substitute carries the same
       // ingredient set as the base (just reordered/respaced), it is not a real
       // modification — don't surface the whole sub as a fake mod.
       const modSet = new Set(modList.map(t => t.toLowerCase()));
       const sameSet = modSet.size === baseTokens.size && [...modSet].every(t => baseTokens.has(t));
-      if (sameSet) return null;
-      return modified.sub.toUpperCase();
+      if (!sameSet) push(modified.sub.toUpperCase());
     }
   }
 
-  return null;
+  return mods;
+}
+
+/**
+ * Fold one person's modifications into a single ticket line.
+ *
+ * "NO CRAYFISH" + "NO CRACKLINGS" reads as "NO CRAYFISH, CRACKLINGS" — one
+ * guest, one line, the shared leading word said once. Two lines of "1× …" for
+ * the same chair is what the pass misreads as two covers.
+ */
+export function combineCourseMods(mods) {
+  const list = (mods || []).map(m => String(m || "").trim()).filter(Boolean);
+  if (list.length === 0) return null;
+  if (list.length === 1) return list[0];
+
+  const words = list.map(m => m.split(/\s+/));
+  const lead = words[0][0];
+  const sharedLead = lead.length > 1
+    && words.every(w => w.length > 1 && w[0].toLowerCase() === lead.toLowerCase());
+  if (sharedLead) return `${lead} ${words.map(w => w.slice(1).join(" ")).join(", ")}`;
+  return list.join(", ");
+}
+
+/**
+ * The modification string for a course given ONE person's restriction keys,
+ * matching exactly what the kitchen ticket displays.
+ * Returns null if the dish is unchanged (standard).
+ */
+export function getCourseMod(course, restrKeys) {
+  return combineCourseMods(courseModList(course, restrKeys));
+}
+
+/**
+ * Per-ticket override of a restriction-derived mod label. Staff can rewrite
+ * the auto-applied substitution text ("CHARRED CUCUMBER" → "CHARRED CUCUMBER,
+ * NO CREAM") for ONE reservation/table from the ticket editor. Overrides live
+ * in kitchenCourseNotes[courseKey].modOverrides, keyed by the ORIGINAL derived
+ * label — the admin course config is never touched, and if admin later changes
+ * the variant text the stale override simply stops matching and the new
+ * default resurfaces instead of being silently shadowed.
+ */
+export function applyModOverride(mod, kcNote) {
+  if (!mod) return mod;
+  const overrides = kcNote?.modOverrides;
+  const hit = overrides && typeof overrides === "object" ? overrides[mod] : null;
+  return typeof hit === "string" && hit.trim() ? hit.trim() : mod;
+}
+
+/**
+ * Map a { [mod]: count } object through applyModOverride, merging counts when
+ * two different derived mods are overridden to the same text.
+ */
+export function overrideModCounts(counts, kcNote) {
+  if (!counts) return counts;
+  const overrides = kcNote?.modOverrides;
+  if (!overrides || typeof overrides !== "object") return counts;
+  const out = {};
+  for (const [mod, count] of Object.entries(counts)) {
+    const label = applyModOverride(mod, kcNote);
+    out[label] = (out[label] || 0) + count;
+  }
+  return out;
 }
 
 export const RESTRICTION_KEYS = DIETARY_KEYS;
@@ -362,14 +441,18 @@ export const resolveSeatRestrictionKeys = (tableRestrictions, seatId) =>
  * kitchen ticket's "N× MOD" line.
  *
  * A restriction ASSIGNED to a seat (pos === seat.id) counts once for that seat,
- * resolving all of that seat's dietaries together (getCourseMod picks one by
- * priority). A restriction still UNASSIGNED (pos == null) is ONE prospective
- * guest — it counts once, on its own, NOT once per seat. The old kitchen count
- * resolved every seat with resolveSeatRestrictionKeys, which broadcasts an
- * unassigned restriction to every seat, so a single vegetarian on a four-top
- * read as "4× " until someone pinned it to a chair (then it snapped to "1× ").
+ * resolving all of that seat's dietaries together into ONE combined mod. A
+ * restriction still UNASSIGNED (pos == null) is ONE prospective guest — it
+ * counts once, on its own, NOT once per seat. The old kitchen count resolved
+ * every seat with resolveSeatRestrictionKeys, which broadcasts an unassigned
+ * restriction to every seat, so a single vegetarian on a four-top read as "4× "
+ * until someone pinned it to a chair (then it snapped to "1× ").
  * Now it reads "1× " from the moment it's entered — the count is the number of
  * guests who actually have it, in advance of seat assignment.
+ *
+ * Unassigned entries sharing a `guest` id are the SAME person, so they resolve
+ * together too: "1× NO CRACKLINGS, CRAYFISH" for one guest instead of "1× NO
+ * CRACKLINGS" and "1× NO CRAYFISH", which reads as two covers on the pass.
  *
  * The printed menu keeps the broadcast semantics (resolveSeatRestrictionKeys)
  * on purpose — an unassigned "table has a vegetarian" must still vary every
@@ -388,14 +471,17 @@ export function courseRestrictionModCounts(course, seats, restrictions) {
       .map(r => r.note);
     if (keys.length) bump(getCourseMod(course, keys));
   }
-  // Unassigned dietaries: each entry is one guest-to-be — counted individually
-  // so the ticket shows the real headcount, not once per chair at the table.
-  // A pin that matches NO live seat id (non-contiguous chair-identity ids, or
-  // a mid-service resize dropped that P) counts here too — it used to be
-  // skipped by BOTH loops and the allergy vanished from the mod counts.
-  for (const r of restrictions || []) {
-    if (!r || !r.note || (r.pos != null && seatIds.has(r.pos))) continue;
-    bump(getCourseMod(course, [r.note]));
+  // Unassigned dietaries: one guest-to-be per PERSON — entries grouped by
+  // `guest` (or by a pin that matches no live seat) resolve together, so the
+  // ticket shows the real headcount, not once per chair and not once per
+  // restriction. A pin that matches NO live seat id (non-contiguous
+  // chair-identity ids, or a mid-service resize dropped that P) counts here
+  // too — it used to be skipped by BOTH loops and the allergy vanished from
+  // the mod counts.
+  const unassigned = (restrictions || [])
+    .filter(r => r && r.note && !(r.pos != null && seatIds.has(r.pos)));
+  for (const group of groupRestrictionsByGuest(unassigned)) {
+    bump(getCourseMod(course, group.notes));
   }
   return Object.keys(counts).length ? counts : null;
 }

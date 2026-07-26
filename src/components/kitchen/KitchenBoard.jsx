@@ -2,7 +2,8 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
-import { optionalPairingsFromCourses, courseRestrictionModCounts } from "../../utils/menuUtils.js";
+import { optionalPairingsFromCourses, courseRestrictionModCounts, overrideModCounts } from "../../utils/menuUtils.js";
+import { groupRestrictionsByGuest } from "../../utils/restrictionGroups.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
@@ -64,9 +65,21 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     footerPad: "7px 12px", archiveBtnPad: "9px 10px",
   };
   const seats = table.seats || [];
-  const restrictions = table.restrictions || [];
+  // Array.isArray, not `|| []` — a truthy non-array here threw on .map and
+  // took the ticket (and with it the board) down.
+  const restrictions = Array.isArray(table.restrictions) ? table.restrictions : [];
   const log = table.kitchenLog || {};
+  // Which PERSON (guest group key) is currently being pinned to a chair.
   const [assigningRestrIdx, setAssigningRestrIdx] = useState(null);
+  // Restrictions still floating — never pinned, or pinned to a position that
+  // matches no live seat. Grouped per person so one guest's whole set moves
+  // to a chair in a single tap and reads as one cover on the pass.
+  const unassignedGroups = (() => {
+    const seatIds = new Set(seats.map(s => s.id));
+    return groupRestrictionsByGuest(
+      restrictions.filter(r => r?.note && (r.pos == null || !seatIds.has(r.pos)))
+    );
+  })();
   // STABLE fallback, never an inline {}: kitchenCourseNotes is a dependency
   // of the draft-sync effect below, and a table without the field (walk-ins,
   // directly-seeded tables — reservation templating is what usually adds it)
@@ -127,8 +140,20 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     setPickingRestr(null);
     setCustomNote("");
   };
-  const removeKitchenRestr = (origIdx) => {
-    upd(table.id, "restrictions", (prev) => (prev || []).filter((_, i) => i !== origIdx));
+  // Remove by IDENTITY, not by render index: the captured array can be a beat
+  // behind another device's write, and an index that shifted underneath us
+  // deletes somebody else's allergy.
+  const removeKitchenRestr = (entry) => {
+    if (!entry) return;
+    upd(table.id, "restrictions", (prev) => {
+      const list = prev || [];
+      const idx = list.findIndex(r =>
+        r?.note === entry.note
+        && (r?.pos ?? null) === (entry.pos ?? null)
+        && (r?.guest || "") === (entry.guest || "")
+        && !!r?.kitchenAdded === !!entry.kitchenAdded);
+      return idx === -1 ? list : list.filter((_, i) => i !== idx);
+    });
   };
   const updateDraftEntry = (key, patch) => {
     setDraftNotes((prev) => {
@@ -137,11 +162,29 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       if (!next.name) delete next.name;
       if (!next.note) delete next.note;
       if (next.presets && Object.keys(next.presets).length === 0) delete next.presets;
+      if (next.modOverrides && Object.keys(next.modOverrides).length === 0) delete next.modOverrides;
       const out = { ...prev };
-      if (!next.name && !next.note && !next.presets) delete out[key];
+      if (!next.name && !next.note && !next.presets && !next.modOverrides) delete out[key];
       else out[key] = next;
       return out;
     });
+  };
+  // Per-ticket rewrite of an auto-applied restriction text, keyed by the
+  // ORIGINAL derived label. The bar renders pre-filled with the applied text,
+  // so an EMPTIED bar has to stay empty — deleting the key on blank made the
+  // default text spring straight back into the field mid-edit and you could
+  // never retype it. Blank is stored, and a blank override never reaches the
+  // ticket (applyModOverride ignores it), so the default still shows there.
+  // ↺ removes the key outright and restores the pre-filled default.
+  const setDraftModOverride = (key, mod, text) => {
+    const current = { ...(draftNotes[key]?.modOverrides || {}) };
+    current[mod] = text;
+    updateDraftEntry(key, { modOverrides: current });
+  };
+  const clearDraftModOverride = (key, mod) => {
+    const current = { ...(draftNotes[key]?.modOverrides || {}) };
+    delete current[mod];
+    updateDraftEntry(key, { modOverrides: current });
   };
   const bumpDraftPreset = (key, text) => {
     const current = draftNotes[key]?.presets || {};
@@ -159,8 +202,24 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       return out;
     });
   };
+  // A bar emptied during the edit keeps its blank override in the DRAFT (so
+  // the field stays empty under the cursor instead of the default text
+  // springing back), but a blank is not a rewrite — it means "use the
+  // default". Strip them on the way out so nothing but real edits is stored,
+  // and an entry left with nothing disappears entirely.
   const saveDraftNotes = () => {
-    upd(table.id, "kitchenCourseNotes", draftNotes);
+    const clean = {};
+    for (const [key, entry] of Object.entries(draftNotes)) {
+      const next = { ...entry };
+      if (next.modOverrides) {
+        const kept = Object.fromEntries(
+          Object.entries(next.modOverrides).filter(([, text]) => String(text || "").trim()));
+        if (Object.keys(kept).length) next.modOverrides = kept;
+        else delete next.modOverrides;
+      }
+      if (next.name || next.note || next.presets || next.modOverrides) clean[key] = next;
+    }
+    upd(table.id, "kitchenCourseNotes", clean);
     setShowEdit(false);
   };
   const cancelDraftNotes = () => {
@@ -187,11 +246,25 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     });
   };
 
+  // Assign a whole PERSON to a chair, not one restriction at a time: the
+  // guest who is "no pork + no alcohol + no fish" is one guest, and pinning
+  // them chip by chip left half their restrictions floating as separate
+  // prospective covers. Matching is by note+guest rather than by index — the
+  // render-captured array can be a beat behind another device's write.
   const assignRestrToSeat = (seatId) => {
     if (assigningRestrIdx === null) return;
-    upd(table.id, "restrictions", (prev) => (prev || []).map((r, i) =>
-      i === assigningRestrIdx ? { ...r, pos: seatId } : r
-    ));
+    const group = unassignedGroups.find(g => g.key === assigningRestrIdx);
+    if (!group) { setAssigningRestrIdx(null); return; }
+    const wanted = group.entries.map(r => `${r.note}|${r.guest || ""}|${r.pos ?? ""}`);
+    upd(table.id, "restrictions", (prev) => {
+      const remaining = [...wanted];
+      return (prev || []).map((r) => {
+        const idx = remaining.indexOf(`${r?.note}|${r?.guest || ""}|${r?.pos ?? ""}`);
+        if (idx === -1) return r;
+        remaining.splice(idx, 1);
+        return { ...r, pos: seatId };
+      });
+    });
     setAssigningRestrIdx(null);
   };
 
@@ -268,14 +341,19 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   // drives course visibility/order via deriveCourseKeysFromTemplate; otherwise
   // we fall back to the legacy show_on_short / position rules so older
   // sessions stay stable.
-  const visibleCoursesForTable = getVisibleCoursesForTable(
-    table,
-    menuCourses || [],
-    kitchenTemplate
-      ? { kitchenTemplate }
-      : { kitchenTemplate: resolveGuestTemplate(table, profiles, assignments) }
-  );
-  const kitchenItemByCourseKey = visibleCoursesForTable.reduce((acc, vc) => {
+  const courseOptions = kitchenTemplate
+    ? { kitchenTemplate }
+    : { kitchenTemplate: resolveGuestTemplate(table, profiles, assignments) };
+  const visibleCoursesForTable = getVisibleCoursesForTable(table, menuCourses || [], courseOptions);
+  // Edit mode shows EVERY course, including optional dishes nobody has
+  // ordered yet (cheese, an extra course, the cake). A restriction or a note
+  // has to be settable on them in advance — the dish is added at the table or
+  // during the menu, and it must arrive carrying the guest's restrictions
+  // rather than as a blank plate the pass has to remember to modify.
+  const editableCourseEntries = (editable && showEdit)
+    ? getVisibleCoursesForTable(table, menuCourses || [], { ...courseOptions, includeUnordered: true })
+    : visibleCoursesForTable;
+  const kitchenItemByCourseKey = editableCourseEntries.reduce((acc, vc) => {
     if (vc.kitchenItem) acc[vc.key] = vc.kitchenItem;
     return acc;
   }, {});
@@ -507,7 +585,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               </span>
               <button
                 onPointerDown={e => e.stopPropagation()}
-                onClick={e => { e.stopPropagation(); removeKitchenRestr(i); }}
+                onClick={e => { e.stopPropagation(); removeKitchenRestr(r); }}
                 aria-label={`Remove restriction ${restrLabel(r.note)}`}
                 style={{ fontFamily: FONT, fontSize: "10px", padding: 0, width: 32, height: 32, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation", flexShrink: 0 }}>✕</button>
             </div>
@@ -611,26 +689,26 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             chips above nor this strip and the allergy silently vanished
             from every kitchen surface. */}
         {(() => {
-          const seatIds = new Set(seats.map(s => s.id));
-          const unassigned = restrictions.map((r, i) => ({ ...r, _i: i }))
-            .filter(r => r.note && (!r.pos || !seatIds.has(r.pos)));
+          const unassigned = unassignedGroups;
           if (unassigned.length === 0) return null;
           return (
             <div style={{ marginTop: compact ? 3 : 7, paddingTop: compact ? 3 : 7, borderTop: `1px solid ${RULE_SOFT}` }}>
               <div style={{ display: "flex", gap: compact ? 4 : 6, flexWrap: "wrap", alignItems: "center" }}>
                 <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em", color: tokens.red.text, textTransform: "uppercase", flexShrink: 0 }}>⚠ UNASSIGNED</span>
-                {unassigned.map(r => (
+                {unassigned.map(g => (
+                  // One chip per PERSON — every restriction that guest carries,
+                  // pinned to a chair together.
                   <span
-                    key={r._i}
-                    onClick={() => setAssigningRestrIdx(assigningRestrIdx === r._i ? null : r._i)}
+                    key={g.key}
+                    onClick={() => setAssigningRestrIdx(assigningRestrIdx === g.key ? null : g.key)}
                     style={{
                       fontFamily: FONT, fontSize: "8px", padding: dz.assignBtnPad, borderRadius: 0,
                       border: `1px solid ${tokens.red.border}`,
-                      background: assigningRestrIdx === r._i ? tokens.red.text : tokens.red.bg,
-                      color: assigningRestrIdx === r._i ? tokens.neutral[0] : tokens.red.text,
+                      background: assigningRestrIdx === g.key ? tokens.red.text : tokens.red.bg,
+                      color: assigningRestrIdx === g.key ? tokens.neutral[0] : tokens.red.text,
                       fontWeight: 500, cursor: "pointer", userSelect: "none", touchAction: "manipulation",
                     }}
-                  >{restrLabel(r.note)} {assigningRestrIdx === r._i ? "→ pick seat" : "→"}</span>
+                  >{g.notes.map(restrLabel).join(" · ")} {assigningRestrIdx === g.key ? "→ pick seat" : "→"}</span>
                 ))}
               </div>
               {assigningRestrIdx !== null && (
@@ -679,10 +757,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
       {/* ── Courses ── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        {courses.map((course, idx) => {
+        {editableCourseEntries.map((entry, idx) => {
+          const course = entry.rawCourse;
           const key = course.course_key || `course_${idx}`;
-          const fired = !!log[key];
-          const firedAt = log[key]?.firedAt;
+          // Optional dish nobody has ordered yet — visible in edit mode only,
+          // to carry restrictions/notes forward to the moment it IS added.
+          const pending = !!entry.pending;
+          const fired = !pending && !!log[key];
+          const firedAt = pending ? null : log[key]?.firedAt;
 
           // Kitchen layout item (when this table's assigned kitchen layout
           // contains this course). It can override the display name and turn
@@ -702,7 +784,11 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               // Count per GUEST, not per seat: an unassigned restriction is one
               // prospective guest and reads "1×" from entry, not "N×" broadcast
               // across every chair until it's pinned to a seat.
-              const restrCounts = courseRestrictionModCounts(course, seats, restrictions);
+              // Per-ticket text overrides (edited in the ticket editor, saved
+              // on the reservation) rewrite the derived label for THIS table
+              // only — admin course config stays the source for everyone else.
+              const restrCounts = overrideModCounts(
+                courseRestrictionModCounts(course, seats, restrictions), kcNotePreview);
               if (restrCounts) Object.assign(counts, restrCounts);
             }
             // Per-course quick-note presets are applied in reservations mode
@@ -749,30 +835,46 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           const displayName = kcNote.name || baseName;
           const draftEntry = draftNotes[key] || {};
           const draftPresets = draftEntry.presets || {};
+          const draftOverrides = draftEntry.modOverrides || {};
+          // Base (pre-override) restriction texts this course derives from the
+          // guest's dietaries — the rows the editor exposes for rewriting.
+          const restrModBase = (editable && showEdit)
+            ? courseRestrictionModCounts(course, seats, restrictions)
+            : null;
+          const restrModEntries = Object.entries(restrModBase || {});
+          // A course with no restriction of its own still needs somewhere to
+          // put a free note; so does one that already carries a note from
+          // before the fields merged (or it would be stranded, unreadable and
+          // uneditable, on the reservation).
+          const showPlainNote = (editable && showEdit)
+            && (restrModEntries.length === 0 || !!draftEntry.note);
           const chips = (editable && showEdit) ? (quickNotes[key] || []) : [];
-          const draftHasAny = draftEntry.name || draftEntry.note || Object.keys(draftPresets).length > 0;
+          const draftHasAny = draftEntry.name || draftEntry.note
+            || Object.keys(draftPresets).length > 0
+            || Object.values(draftOverrides).some(v => String(v || "").trim());
 
           return (
             <div key={key} style={{
-              background: fired ? tokens.green.bg : tokens.neutral[0],
+              background: fired ? tokens.green.bg : pending ? tokens.neutral[50] : tokens.neutral[0],
               borderLeft: fired ? `4px solid ${tokens.green.border}` : kcNote.name || kcNote.note ? `4px solid ${tokens.red.text}` : "4px solid transparent",
             }}>
               <div
-                onClick={() => { if (editable && showEdit) return; fired ? unfire(key) : fire(key); }}
+                onClick={() => { if (pending || (editable && showEdit)) return; fired ? unfire(key) : fire(key); }}
                 style={{ display: "flex", alignItems: "center", padding: dz.coursePad, gap: dz.courseGap, cursor: editable && showEdit ? "default" : "pointer" }}>
-                <span style={{ fontFamily: FONT, fontSize: dz.courseGlyph, color: fired ? tokens.green.border : tokens.ink[4], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : "○"}</span>
+                <span style={{ fontFamily: FONT, fontSize: dz.courseGlyph, color: fired ? tokens.green.border : tokens.ink[4], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : pending ? "＋" : "○"}</span>
                 {(() => {
                   const hasSub = (pairingAlert || mods || (kcNote.note && showCourseNotes)) && !fired;
                   const nameEl = (
                     <div style={{
                       fontFamily: FONT, fontSize: dz.courseFont, fontWeight: 700, lineHeight: dz.courseLH,
-                      color: fired ? tokens.ink[4] : kcNote.name ? tokens.red.text : tokens.ink[0],
+                      color: fired ? tokens.ink[4] : kcNote.name ? tokens.red.text : pending ? tokens.ink[2] : tokens.ink[0],
                       textDecoration: fired ? "line-through" : "none",
                       letterSpacing: "0.02em",
                       ...(inlineMods ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 0, maxWidth: hasSub ? "60%" : "100%" } : {}),
                     }}>
                       {displayName}
                       {kcNote.name && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[3], marginLeft: 5 }}>({baseName})</span>}
+                      {pending && <span style={{ fontFamily: FONT, fontSize: "7px", fontWeight: 600, letterSpacing: "0.10em", color: tokens.ink[3], border: `1px solid ${tokens.ink[4]}`, padding: "0 3px", marginLeft: 6 }}>NOT ADDED</span>}
                       {extraLabel && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[4], marginLeft: 6 }}>{extraLabel}</span>}
                     </div>
                   );
@@ -818,18 +920,45 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               </div>
               {editable && showEdit && (
                 <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} style={{ padding: "0 10px 8px 28px", display: "flex", flexDirection: "column", gap: 5, background: draftHasAny ? tokens.red.bg : "transparent" }}>
-                  <input
-                    value={draftEntry.name || ""}
-                    onChange={e => updateDraftEntry(key, { name: e.target.value })}
-                    placeholder={`Rename "${baseName}"…`}
-                    style={{ fontFamily: FONT, fontSize: "10px", padding: "8px 7px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
-                  />
-                  <input
-                    value={draftEntry.note || ""}
-                    onChange={e => updateDraftEntry(key, { note: e.target.value })}
-                    placeholder="Note (e.g. No Ricotta)…"
-                    style={{ fontFamily: FONT, fontSize: "10px", padding: "8px 7px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
-                  />
+                  {/* ONE bar per line the ticket shows. The applied
+                      restriction text is WRITTEN IN, not dangled as a
+                      placeholder, so staff extend what the kitchen already
+                      reads instead of retyping it from memory. ↺ restores the
+                      admin-configured default. A course carrying no
+                      restriction gets a plain note bar in its place — the
+                      separate note field and the dish-rename field are gone. */}
+                  {restrModEntries.map(([mod, count]) => {
+                    const draft = draftOverrides[mod];
+                    const touched = typeof draft === "string";
+                    return (
+                      <div key={mod} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, color: tokens.red.text, flexShrink: 0 }}>{count}×</span>
+                        <input
+                          value={touched ? draft : mod}
+                          onChange={e => setDraftModOverride(key, mod, e.target.value)}
+                          placeholder={mod}
+                          aria-label={`Restriction text for ${mod}`}
+                          style={{ fontFamily: FONT, fontSize: "10px", padding: "8px 7px", border: `1px solid ${touched && draft.trim() ? tokens.red.border : tokens.ink[4]}`, borderRadius: 0, flex: 1, minWidth: 0, boxSizing: "border-box", background: touched && draft.trim() ? tokens.red.bg : tokens.neutral[0] }}
+                        />
+                        {touched && (
+                          <button
+                            onPointerDown={e => e.stopPropagation()}
+                            onClick={e => { e.stopPropagation(); clearDraftModOverride(key, mod); }}
+                            aria-label={`Reset restriction text for ${mod}`}
+                            title="Reset to default"
+                            style={{ fontFamily: FONT, fontSize: "10px", padding: 0, width: 30, height: 30, display: "inline-flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text, touchAction: "manipulation", flexShrink: 0 }}>↺</button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {showPlainNote && (
+                    <input
+                      value={draftEntry.note || ""}
+                      onChange={e => updateDraftEntry(key, { note: e.target.value })}
+                      placeholder="Note (e.g. No Ricotta)…"
+                      style={{ fontFamily: FONT, fontSize: "10px", padding: "8px 7px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, width: "100%", boxSizing: "border-box" }}
+                    />
+                  )}
                   {chips.length > 0 && (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                       {chips.map(chip => {

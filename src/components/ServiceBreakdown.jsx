@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { tokens } from "../styles/tokens.js";
 import { RESTRICTIONS } from "../constants/dietary.js";
 import { useFocusChain } from "../hooks/useFocusChain.js";
 import { useModalEscape } from "../hooks/useModalEscape.js";
+import { readServiceBreakdownDoc, writeServiceBreakdownDoc } from "../utils/storage.js";
 
 const FONT = tokens.font;
 
@@ -159,7 +160,8 @@ function buildTimeSlotEntries(list, session) {
 
 // Build the initial editable document state by pre-filling from reservations.
 // Reservations are grouped into LUNCH and DINNER sections if both exist.
-function buildInitialState(dateStr, reservations) {
+// Exported for tests.
+export function buildInitialState(dateStr, reservations) {
   const all = reservations || [];
   const lunch = all.filter(r => getResvSession(r) === "lunch");
   const dinner = all.filter(r => getResvSession(r) === "dinner");
@@ -214,6 +216,61 @@ function buildInitialState(dateStr, reservations) {
     slots,
     bread: "",
     announcements: ["", "", "", ""],
+  };
+}
+
+const fieldEq = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+// Merge a previously saved document into a freshly rebuilt one. A saved field
+// wins only where it differs from the saved baseline (the auto-generated value
+// at save time) — i.e. the user actually edited it. Everything else re-derives
+// from current reservations, so tables added after saving still show up and
+// auto counts stay fresh. Exported for tests.
+export function mergeSavedDoc(fresh, savedDoc, savedBaseline) {
+  if (!savedDoc || typeof savedDoc !== "object") return fresh;
+  const base = savedBaseline && typeof savedBaseline === "object" ? savedBaseline : {};
+  const pick = (savedVal, baseVal, freshVal) =>
+    savedVal !== undefined && !fieldEq(savedVal, baseVal) ? savedVal : freshVal;
+
+  const slotKey = (s) => `${s.type}:${s.session}:${s.key}`;
+  const savedSlotByKey = new Map((savedDoc.slots || []).map(s => [slotKey(s), s]));
+  const baseSlotByKey = new Map((base.slots || []).map(s => [slotKey(s), s]));
+  const savedResvById = new Map();
+  (savedDoc.slots || []).forEach(s => (s.reservations || []).forEach(r => savedResvById.set(r.id, r)));
+  const baseResvById = new Map();
+  (base.slots || []).forEach(s => (s.reservations || []).forEach(r => baseResvById.set(r.id, r)));
+
+  const slots = fresh.slots.map(slot => {
+    const savedSlot = savedSlotByKey.get(slotKey(slot));
+    const baseSlot = baseSlotByKey.get(slotKey(slot));
+    const reservations = slot.reservations.map(r => {
+      const savedR = savedResvById.get(r.id);
+      if (!savedR) return r;
+      const baseR = baseResvById.get(r.id);
+      return {
+        ...r,
+        headerText: pick(savedR.headerText, baseR?.headerText, r.headerText),
+        bullets: pick(savedR.bullets, baseR?.bullets, r.bullets),
+        intel: pick(savedR.intel, baseR?.intel, r.intel),
+      };
+    });
+    return {
+      ...slot,
+      label: savedSlot ? pick(savedSlot.label, baseSlot?.label, slot.label) : slot.label,
+      reservations,
+    };
+  });
+
+  return {
+    ...fresh,
+    headerText: pick(savedDoc.headerText, base.headerText, fresh.headerText),
+    summaryText: pick(savedDoc.summaryText, base.summaryText, fresh.summaryText),
+    lunchSummaryText: pick(savedDoc.lunchSummaryText, base.lunchSummaryText, fresh.lunchSummaryText),
+    dinnerSummaryText: pick(savedDoc.dinnerSummaryText, base.dinnerSummaryText, fresh.dinnerSummaryText),
+    slots,
+    bread: pick(savedDoc.bread, base.bread, fresh.bread),
+    announcements: fresh.announcements.map((v, i) =>
+      pick(savedDoc.announcements?.[i], base.announcements?.[i], v)),
   };
 }
 
@@ -299,7 +356,19 @@ function AutoTextarea({ value, onChange, style, minRows = 1, placeholder, autoBu
 
 // ── Component ───────────────────────────────────────────────────────────────
 export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
-  const [doc, setDoc] = useState(() => buildInitialState(dateStr, reservations));
+  // Fresh auto-generated doc for the current reservations. Saved edits are
+  // merged over it on open, and it rides along as the baseline of every save
+  // so the next open can tell edits apart from stale auto-content.
+  const baselineRef = useRef(null);
+  const [doc, setDoc] = useState(() => {
+    const fresh = buildInitialState(dateStr, reservations);
+    baselineRef.current = fresh;
+    const saved = readServiceBreakdownDoc(dateStr);
+    return saved ? mergeSavedDoc(fresh, saved.doc, saved.baseline) : fresh;
+  });
+  useEffect(() => {
+    writeServiceBreakdownDoc(dateStr, doc, baselineRef.current);
+  }, [dateStr, doc]);
   const initHasLunch = (reservations || []).some(r => getResvSession(r) === "lunch");
   const [activeTab, setActiveTab] = useState(initHasLunch ? "lunch" : "dinner");
   const chain = useFocusChain();

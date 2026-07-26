@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import {
-  resetBackend, seed, remoteRows, localRows, WORKSPACE_ID,
+  resetBackend, seed, seedService, remoteRows, localRows, WORKSPACE_ID,
 } from "./harness/fakeBackend.js";
 import { currentServiceDay } from "../utils/serviceDay.js";
 import { blankTable } from "../utils/tableHelpers.js";
@@ -19,6 +19,7 @@ vi.mock("../lib/supabaseClient.js", async () => {
   const h = await import("./harness/fakeBackend.js");
   return {
     TABLES: {
+      SERVICES: "services",
       SERVICE_TABLES: "service_tables", SERVICE_SETTINGS: "service_settings",
       SERVICE_ARCHIVE: "service_archive", MENU_COURSES: "menu_courses",
       WINES: "wines", BEVERAGES: "beverages", RESERVATIONS: "reservations",
@@ -50,18 +51,15 @@ window.scrollTo = () => {};
 Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || (() => {});
 
 const TODAY = () => currentServiceDay();
+const SVC = "svc-live";
 
 // A live dinner already running: Anna seated on T1, one reservation, and an
 // existing archive entry — all real data the test service must never touch.
 const seedLiveService = () => {
   const now = new Date().toISOString();
   const anna = { ...blankTable(1), active: true, arrivedAt: "19:43", resName: "Anna Harness", resTime: "19:30", guests: 2 };
-  seed("service_settings", [{
-    id: "service_date",
-    state: { date: TODAY(), chosenOn: TODAY(), session: "dinner", startedAt: now },
-    updated_at: now,
-  }]);
-  seed("service_tables", [{ table_id: 1, data: anna, updated_at: now }]);
+  seedService({ id: SVC, date: TODAY(), session: "dinner", startedAt: now });
+  seed("service_tables", [{ service_id: SVC, table_id: 1, data: anna, updated_at: now }]);
   seed("reservations", [
     { id: "res-anna", date: TODAY(), table_id: 1, created_at: now,
       data: { resName: "Anna Harness", resTime: "19:30", guests: 2, tableGroup: [], service_session: "dinner" } },

@@ -55,7 +55,12 @@ vi.mock("../lib/supabaseClient.js", () => ({
   getWorkspaceId: () => h.workspaceId,
 }));
 
+// The connector surfaces dropped CAS refusals through recordClientDiagnostic;
+// the 23.07 wedge regressions assert on it.
+vi.mock("../lib/clientDiagnostics.js", () => ({ recordClientDiagnostic: vi.fn() }));
+
 import { SupabaseConnector } from "../powersync/SupabaseConnector.js";
+import { recordClientDiagnostic } from "../lib/clientDiagnostics.js";
 
 const makeTx = (crud) => ({ crud, complete: vi.fn(async () => {}) });
 const makeDb = (tx) => ({ getNextCrudTransaction: async () => tx });
@@ -79,146 +84,63 @@ beforeEach(() => {
 });
 
 describe("SupabaseConnector.uploadData — natural-key rebuild per table", () => {
-  it("uploads an end-service SQLite batch through one atomic Postgres RPC", async () => {
-    const workspace_id = "ws-a";
-    const crud = [put("service_archive", "archive-1", {
-      workspace_id,
-      date: "2026-07-10",
-      label: "10. 07. 2026 – DINNER",
-      state: '{"tables":[]}',
-      created_at: "2026-07-10T23:00:00Z",
-    })];
-    for (let table_id = 1; table_id <= 10; table_id += 1) {
-      crud.push(patch("service_tables", `${workspace_id}|${table_id}`, {
-        workspace_id, table_id, data: "{}", updated_at: "2026-07-10T23:00:01Z",
-      }));
-    }
-    crud.push(patch("service_settings", `${workspace_id}|service_date`, {
-      workspace_id, id: "service_date", state: "{}", updated_at: "2026-07-10T23:00:01Z",
-    }));
-    const tx = makeTx(crud);
-
-    await new SupabaseConnector().uploadData(makeDb(tx));
-
-    expect(h.calls).toHaveLength(1);
-    expect(h.calls[0].name).toBe("archive_and_finish_service");
-    expect(h.calls[0].payload).toEqual({
-      p_workspace_id: workspace_id,
-      p_archive_id: "archive-1",
-      p_archive_date: "2026-07-10",
-      p_archive_label: "10. 07. 2026 – DINNER",
-      p_archive_state: { tables: [] },
-      p_expected_started_at: null,
-      p_expected_date: null,
-    });
-    expect(tx.complete).toHaveBeenCalledTimes(1);
-  });
-
-  it("passes the ended service's identity from tracked previousValues so the server guard engages", async () => {
-    const workspace_id = "ws-a";
-    const crud = Array.from({ length: 10 }, (_, index) => patch(
-      "service_tables", `${workspace_id}|${index + 1}`,
-      { workspace_id, table_id: index + 1, data: "{}" },
-    ));
-    crud.push({
-      op: "PATCH",
-      table: "service_settings",
-      id: `${workspace_id}|service_date`,
-      opData: { workspace_id, id: "service_date", state: "{}" },
-      previousValues: {
-        workspace_id,
-        id: "service_date",
-        state: '{"date":"2026-07-18","chosenOn":"2026-07-18","session":"lunch","startedAt":"2026-07-18T09:12:00.000Z"}',
-      },
-    });
-    const tx = makeTx(crud);
-
-    await new SupabaseConnector().uploadData(makeDb(tx));
-
-    expect(h.calls).toHaveLength(1);
-    expect(h.calls[0].name).toBe("archive_and_finish_service");
-    expect(h.calls[0].payload.p_expected_started_at).toBe("2026-07-18T09:12:00.000Z");
-    expect(h.calls[0].payload.p_expected_date).toBe("2026-07-18");
-    expect(tx.complete).toHaveBeenCalledTimes(1);
-  });
-
-  it("completes a superseded finish without wiping — the queued blanks are dropped, not replayed", async () => {
-    h.rpcData = { superseded: true };
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const workspace_id = "ws-a";
-    const crud = Array.from({ length: 10 }, (_, index) => patch(
-      "service_tables", `${workspace_id}|${index + 1}`,
-      { workspace_id, table_id: index + 1, data: "{}" },
-    ));
-    crud.push({
-      op: "PATCH",
-      table: "service_settings",
-      id: `${workspace_id}|service_date`,
-      opData: { workspace_id, id: "service_date", state: "{}" },
-      previousValues: {
-        workspace_id, id: "service_date",
-        state: '{"date":"2026-07-18","startedAt":"2026-07-18T09:12:00.000Z"}',
-      },
-    });
-    const tx = makeTx(crud);
-
-    await new SupabaseConnector().uploadData(makeDb(tx));
-
-    // One RPC, no fallthrough into per-op uploads, transaction completed so
-    // the stale finish never replays against the newer live service.
-    expect(h.calls).toHaveLength(1);
-    expect(h.calls[0].name).toBe("archive_and_finish_service");
-    expect(tx.complete).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalled();
-  });
-
-  it("recognizes an atomic end for a custom table set", async () => {
-    const workspace_id = "ws-a";
-    const crud = [2, 7, 12].map((table_id) => patch(
-      "service_tables", `${workspace_id}|${table_id}`,
-      { workspace_id, table_id, data: "{}", updated_at: "end" },
-    ));
-    crud.push(patch("service_settings", `${workspace_id}|service_date`, {
-      workspace_id, id: "service_date", state: "{}", updated_at: "end",
-    }));
-    const tx = makeTx(crud);
-
-    await new SupabaseConnector().uploadData(makeDb(tx));
-
-    expect(h.calls).toHaveLength(1);
-    expect(h.calls[0].name).toBe("archive_and_finish_service");
-    expect(tx.complete).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps an atomic end-service batch queued when its server RPC fails", async () => {
-    h.errorFor = (call) => call.name === "archive_and_finish_service"
-      ? { code: "", message: "network down" }
-      : null;
-    const workspace_id = "ws-a";
-    const crud = Array.from({ length: 10 }, (_, index) => patch(
-      "service_tables", `${workspace_id}|${index + 1}`,
-      { workspace_id, table_id: index + 1, data: "{}" },
-    ));
-    crud.push(patch("service_settings", `${workspace_id}|service_date`, {
-      workspace_id, id: "service_date", state: "{}",
-    }));
-    const tx = makeTx(crud);
-
-    await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toBeTruthy();
-    expect(tx.complete).not.toHaveBeenCalled();
-  });
-
-  it("service_tables PUT → compare-and-swap RPC with parsed jsonb and workspace-safe id", async () => {
-    const tx = makeTx([put("service_tables", "ws-a|3", {
-      id: "ws-a|3", table_id: 3, data: '{"resName":"Kovač","seats":[]}',
-      updated_at: "2026-06-06T18:00:00Z", workspace_id: "ws-a",
+  it("a queued END uploads as ONE services UPDATE by id — no RPC, no board writes (wipe-impossibility)", async () => {
+    // Entity model: an offline device's late END is a single-row status flip
+    // addressed by the OLD service's uuid. There is no transaction-collapse
+    // RPC and no blanking op left; the newer live service cannot be touched.
+    const tx = makeTx([patch("services", "svc-old", {
+      status: "ended", ended_at: "2026-07-22T23:00:00Z", end_reason: "manual",
+      updated_at: "2026-07-22T23:00:00Z", workspace_id: "ws-a",
     })]);
     await new SupabaseConnector().uploadData(makeDb(tx));
 
     expect(h.calls).toHaveLength(1);
-    const c = h.calls[0];
-    expect(c.op).toBe("rpc");
+    expect(h.calls[0]).toMatchObject({
+      table: "services",
+      op: "update",
+      match: { id: "svc-old", workspace_id: "ws-a" },
+    });
+    expect(h.calls[0].payload.status).toBe("ended");
+    expect(h.calls.some((c) => c.table === "service_tables")).toBe(false);
+    expect(h.calls.some((c) => c.name === "archive_and_finish_service")).toBe(false);
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("a queued START uploads as a services upsert on its uuid", async () => {
+    const tx = makeTx([put("services", "svc-new", {
+      date: "2026-07-23", session: "dinner", chosen_on: "2026-07-23",
+      started_at: "2026-07-23T16:00:00Z", status: "live",
+      snapshot: null, updated_at: "u", workspace_id: "ws-a",
+    })]);
+    await new SupabaseConnector().uploadData(makeDb(tx));
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0]).toMatchObject({ table: "services", op: "upsert" });
+    expect(h.calls[0].payload.id).toBe("svc-new");
+    expect(h.calls[0].payload.status).toBe("live");
+    expect(h.calls[0].opts).toEqual({ onConflict: "id" });
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a queued services write when the server fails (never dropped)", async () => {
+    h.errorFor = (call) => (call.table === "services" ? { code: "", message: "network down" } : null);
+    const tx = makeTx([patch("services", "svc-old", {
+      status: "ended", workspace_id: "ws-a",
+    })]);
+    await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toBeTruthy();
+    expect(tx.complete).not.toHaveBeenCalled();
+  });
+
+  it("service_tables PUT → compare-and-swap RPC with parsed jsonb and the (service, table) key", async () => {
+    const tx = makeTx([put("service_tables", "ws-a|svc-1|3", {
+      id: "ws-a|svc-1|3", service_id: "svc-1", table_id: 3, data: '{"resName":"Kovač","seats":[]}',
+      updated_at: "2026-06-06T18:00:00Z", workspace_id: "ws-a",
+    })]);
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls).toHaveLength(1); // reads aren't recorded — just the RPC
+    const c = h.calls.find((call) => call.op === "rpc");
     expect(c.name).toBe("save_service_table_if_current");
+    expect(c.payload.p_service_id).toBe("svc-1");
     expect(c.payload.p_table_id).toBe(3);
     expect(c.payload.p_data).toEqual({ resName: "Kovač", seats: [] });
     expect(c.payload.p_workspace_id).toBe("ws-a");
@@ -226,13 +148,22 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     expect(tx.complete).toHaveBeenCalledTimes(1);
   });
 
-  it("service_tables PATCH → compare-and-swap RPC matched on the natural key", async () => {
-    const tx = makeTx([patch("service_tables", "ws-active|7", { data: "{}", updated_at: "t" })]);
+  it("service_tables PATCH → the (service, table) key is restored from the local id alias", async () => {
+    const tx = makeTx([patch("service_tables", "ws-active|svc-9|7", { data: "{}", updated_at: "t" })]);
     await new SupabaseConnector().uploadData(makeDb(tx));
-    const c = h.calls[0];
-    expect(c.op).toBe("rpc");
+    const c = h.calls.find((call) => call.op === "rpc");
+    expect(c.payload.p_service_id).toBe("svc-9");
     expect(c.payload.p_table_id).toBe(7);
     expect(c.payload.p_data).toEqual({});
+  });
+
+  it("service_tables op with NO resolvable service is skipped as permanent — never guessed", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const tx = makeTx([patch("service_tables", "7", { data: "{}", updated_at: "t" })]);
+    await new SupabaseConnector().uploadData(makeDb(tx));
+    expect(h.calls.filter((c) => c.op === "rpc")).toHaveLength(0);
+    expect(errSpy).toHaveBeenCalled();
+    expect(tx.complete).toHaveBeenCalledTimes(1);
   });
 
   it("merges different-seat concurrent edits before the compare-and-swap", async () => {
@@ -241,7 +172,8 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
       updated_at: "2026-07-10T18:00:01Z",
     };
     const tx = makeTx([{
-      ...patch("service_tables", "ws-a|3", {
+      ...patch("service_tables", "ws-a|svc-1|3", {
+        service_id: "svc-1",
         table_id: 3,
         data: JSON.stringify({ id: 3, resName: "A", seats: [{ id: 1, water: "Tap" }, { id: 2, water: "Still" }] }),
         workspace_id: "ws-a",
@@ -252,7 +184,8 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
       },
     }]);
     await new SupabaseConnector().uploadData(makeDb(tx));
-    expect(h.calls[0].payload.p_data.seats).toEqual([
+    const c = h.calls.find((call) => call.op === "rpc");
+    expect(c.payload.p_data.seats).toEqual([
       { id: 1, water: "Tap" },
       { id: 2, water: "Sparkling" },
     ]);
@@ -268,27 +201,62 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
       7: { data: betaAtDestination, updated_at: "2026-07-20T18:00:01.000Z" },
     };
     const sourceBlank = {
-      ...patch("service_tables", "ws-a|3", {
-        table_id: 3, data: JSON.stringify({ ...blank, id: 3 }), workspace_id: "ws-a",
+      ...patch("service_tables", "ws-a|svc-1|3", {
+        service_id: "svc-1", table_id: 3, data: JSON.stringify({ ...blank, id: 3 }), workspace_id: "ws-a",
       }),
       previousValues: { workspace_id: "ws-a", data: JSON.stringify(alphaAtSource) },
     };
     const destinationClaim = {
-      ...patch("service_tables", "ws-a|7", {
-        table_id: 7, data: JSON.stringify(alphaAtDestination), workspace_id: "ws-a",
+      ...patch("service_tables", "ws-a|svc-1|7", {
+        service_id: "svc-1", table_id: 7, data: JSON.stringify(alphaAtDestination), workspace_id: "ws-a",
       }),
       previousValues: { workspace_id: "ws-a", data: JSON.stringify(blank) },
     };
     // Deliberately source-first: the connector must reorder this safely.
     const tx = makeTx([sourceBlank, destinationClaim]);
 
-    await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toMatchObject({
-      code: "MILKA_TABLE_CONFLICT",
-      conflict: "destination-occupied",
-    });
+    // REGRESSION (23.07): this refusal used to rethrow as transient, so the
+    // engine retried the same deterministic fold forever — wedging the queue
+    // and (since checkpoints never apply over pending uploads) freezing the
+    // device in both directions. The refusal now DROPS the whole gesture:
+    // the source blank never uploads, the party stays on its server table.
+    vi.mocked(recordClientDiagnostic).mockClear();
+    await new SupabaseConnector().uploadData(makeDb(tx));
 
-    expect(h.calls).toHaveLength(0); // no destination overwrite and no source clear RPC
-    expect(tx.complete).not.toHaveBeenCalled();
+    // Only the destination's CAS read ran — no overwrite, no source clear RPC.
+    expect(h.calls.filter((c) => c.op === "rpc")).toHaveLength(0);
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+    expect(recordClientDiagnostic).toHaveBeenCalledTimes(1);
+  });
+
+  it("REGRESSION (23.07): a concurrent-clear refusal completes the transaction instead of freezing the device", async () => {
+    // The Demo-drill wedge: a queued CLEAR of table 9 whose ancestor is stale
+    // (the table changed on another device / the service moved on). The fold
+    // refuses as concurrent-clear — a verdict that re-runs identically on
+    // every retry. The queue must move past it: complete the transaction,
+    // record a diagnostic, upload nothing for the refused table.
+    const alpha = { id: 9, active: true, resName: "ALPHA", resTime: "19:00", seats: [] };
+    const beta = { id: 9, active: true, resName: "BETA", resTime: "19:15", seats: [] };
+    const blank = { id: 9, active: false, resName: "", resTime: "", seats: [] };
+    h.remoteServiceTables = { 9: { data: beta, updated_at: "2026-07-23T21:33:00.000Z" } };
+    const clearOp = {
+      ...patch("service_tables", "ws-a|svc-1|9", {
+        service_id: "svc-1", table_id: 9, data: JSON.stringify(blank), workspace_id: "ws-a",
+      }),
+      previousValues: { workspace_id: "ws-a", data: JSON.stringify(alpha) },
+    };
+    const tx = makeTx([clearOp]);
+
+    vi.mocked(recordClientDiagnostic).mockClear();
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls.filter((c) => c.op === "rpc")).toHaveLength(0);
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+    expect(recordClientDiagnostic).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordClientDiagnostic).mock.calls[0][1]).toMatchObject({
+      code: "MILKA_TABLE_CONFLICT",
+      conflict: "concurrent-clear",
+    });
   });
 
   it("REGRESSION (09.07): reservations PATCH without date keeps the stored date through CAS", async () => {
@@ -549,7 +517,7 @@ describe("SupabaseConnector.uploadData — error policy", () => {
     h.errorFor = (call) => (call.table === "menu_courses" ? { code: "23505", message: "dup" } : null);
     const tx = makeTx([
       put("menu_courses", "1", { position: 1, workspace_id: "ws-a" }),
-      put("service_tables", "1", { table_id: 1, data: "{}", workspace_id: "ws-a" }),
+      put("service_tables", "ws-a|svc-1|1", { service_id: "svc-1", table_id: 1, data: "{}", workspace_id: "ws-a" }),
     ]);
     await new SupabaseConnector().uploadData(makeDb(tx));
     expect(h.calls).toHaveLength(2); // both attempted
@@ -559,7 +527,9 @@ describe("SupabaseConnector.uploadData — error policy", () => {
 
   it("transient errors rethrow WITHOUT completing, so the engine retries", async () => {
     h.errorFor = () => ({ code: "", message: "fetch failed" });
-    const tx = makeTx([put("service_tables", "1", { table_id: 1, data: "{}", workspace_id: "ws-a" })]);
+    const tx = makeTx([put("service_tables", "ws-a|svc-1|1", {
+      service_id: "svc-1", table_id: 1, data: "{}", workspace_id: "ws-a",
+    })]);
     await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toBeTruthy();
     expect(tx.complete).not.toHaveBeenCalled();
   });
@@ -568,8 +538,8 @@ describe("SupabaseConnector.uploadData — error policy", () => {
     h.errorFor = (call) => call.op === "rpc"
       ? { code: "PGRST202", message: "save_service_table_if_current not found" }
       : null;
-    const tx = makeTx([put("service_tables", "ws-a|1", {
-      table_id: 1, data: "{}", workspace_id: "ws-a",
+    const tx = makeTx([put("service_tables", "ws-a|svc-1|1", {
+      service_id: "svc-1", table_id: 1, data: "{}", workspace_id: "ws-a",
     })]);
     await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toBeTruthy();
     expect(tx.complete).not.toHaveBeenCalled();

@@ -73,8 +73,14 @@ function pickKitchenTemplate(table, options) {
  * - Celebration courses appear when birthday is on, or a seat ordered them
  * - Each entry exposes a `kitchenItem` (per-courseKey overlay options
  *   read from the matching course block in the template).
+ *
+ * `includeUnordered` keeps the not-yet-ordered optional/celebration courses in
+ * the list, flagged `pending: true`. The ticket EDITOR uses it: restrictions
+ * and kitchen notes have to be settable on a cheese or a cake before anyone
+ * orders it, so that when it is added — at the table or in advance — it
+ * arrives with the guest's restrictions already on it.
  */
-function visibleFromTemplate(template, table, menuCourses) {
+function visibleFromTemplate(template, table, menuCourses, includeUnordered = false) {
   const seats = Array.isArray(table?.seats) ? table.seats : [];
   const log = table?.kitchenLog || {};
   const overrides = table?.kitchenCourseNotes || {};
@@ -108,12 +114,19 @@ function visibleFromTemplate(template, table, menuCourses) {
 
     const category = normCategory(course);
     const flag = normFlag(course.optional_flag);
+    let pending = false;
     if (category === "celebration") {
       const ordered = (orderedSeatsForFlag[flag] || []).length > 0;
-      if (!table?.birthday && !ordered) continue;
+      if (!table?.birthday && !ordered) {
+        if (!includeUnordered) continue;
+        pending = true;
+      }
     } else if (category === "optional" && flag) {
       const ordered = (orderedSeatsForFlag[flag] || []).length > 0;
-      if (!ordered) continue;
+      if (!ordered) {
+        if (!includeUnordered) continue;
+        pending = true;
+      }
     }
 
     const kitchenItem = itemMap[key] || null;
@@ -129,6 +142,7 @@ function visibleFromTemplate(template, table, menuCourses) {
       firedAt:  log[course.course_key]?.firedAt || null,
       rawCourse: course,
       kitchenItem,
+      pending,
     });
   }
   return out;
@@ -147,11 +161,16 @@ function visibleFromTemplate(template, table, menuCourses) {
  *   - Optional/celebration courses hidden unless at least one seat ordered them
  *   - All active courses sorted by position
  *
- * Each returned object: { index, key, name, firedAt, rawCourse, kitchenItem? }
+ * `options.includeUnordered` additionally keeps optional/celebration courses
+ * nobody has ordered yet, flagged `pending: true` — the ticket editor needs
+ * every course on screen to pre-apply restrictions and notes to them.
+ *
+ * Each returned object: { index, key, name, firedAt, rawCourse, kitchenItem?, pending }
  */
 export function getVisibleCoursesForTable(table, menuCourses, options) {
+  const includeUnordered = !!options?.includeUnordered;
   const template = pickKitchenTemplate(table, options);
-  if (template) return visibleFromTemplate(template, table || {}, menuCourses || []);
+  if (template) return visibleFromTemplate(template, table || {}, menuCourses || [], includeUnordered);
 
   // ── Legacy path (no template configured) ──────────────────────────────────
   const log       = table?.kitchenLog        || {};
@@ -171,22 +190,21 @@ export function getVisibleCoursesForTable(table, menuCourses, options) {
     return acc;
   }, {});
 
+  const isPending = (c) => {
+    const category = normCategory(c);
+    const flag = normFlag(c?.optional_flag);
+    if (category === "celebration" && table?.birthday) return false;
+    if ((category === "optional" || category === "celebration") && flag) {
+      return (orderedSeatsForFlag[flag] || []).length === 0;
+    }
+    return false;
+  };
+
   const filtered = (menuCourses || [])
     .filter(c => c?.course_key)
     .filter(c => c.is_active !== false)
     .filter(c => !c.is_snack)
-    .filter(c => {
-      const category = normCategory(c);
-      const flag = normFlag(c?.optional_flag);
-
-      if (category === "celebration" && table?.birthday) return true;
-
-      if ((category === "optional" || category === "celebration") && flag) {
-        if ((orderedSeatsForFlag[flag] || []).length === 0) return false;
-      }
-
-      return true;
-    })
+    .filter(c => includeUnordered || !isPending(c))
     .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0));
 
   return filtered.map((c, i) => ({
@@ -195,6 +213,7 @@ export function getVisibleCoursesForTable(table, menuCourses, options) {
     name:      overrides[c.course_key]?.name || c?.menu?.name || c?.menu_si?.name || c.course_key,
     firedAt:   log[c.course_key]?.firedAt || null,
     rawCourse: c,
+    pending:   isPending(c),
   }));
 }
 

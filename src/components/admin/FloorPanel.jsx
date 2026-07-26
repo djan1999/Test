@@ -85,7 +85,7 @@ export default function FloorPanel({
       {pendingSwitch && (
         <div style={{ border: `1px solid ${tokens.ink[1]}`, background: tokens.neutral[0], padding: "12px 14px", marginTop: 10 }}>
           <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[1], fontWeight: 700, marginBottom: 8 }}>
-            SWITCH TO {floorMaps.maps.find((m) => m.id === pendingSwitch.mapId)?.name} — RE-RESOLVES TONIGHT'S ASSIGNMENTS
+            SWITCH TO {floorMaps.maps.find((m) => m.id === pendingSwitch.mapId)?.name} — RE-RESOLVES UPCOMING ASSIGNMENTS
           </div>
           {pendingSwitch.rows.length === 0 && (
             <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginBottom: 8 }}>no reservations for this service</div>
@@ -95,6 +95,7 @@ export default function FloorPanel({
               <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.1em", fontWeight: 700, minWidth: 84, textTransform: "uppercase", color: statusColor[r.status] }}>
                 {r.status === "needs_table" ? "NEEDS TABLE" : r.status}
               </span>
+              {r.date && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3] }}>{r.date}</span>}
               <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[1], fontWeight: 600 }}>{r.name || "—"}</span>
               <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3] }}>
                 T{r.from.join("-")}{r.to ? ` → ${r.label} (T${r.to.join("-")})` : " → unresolved in this layout"}

@@ -72,15 +72,130 @@ create policy "members_self_read" on public.workspace_members
 --     with check (private.is_workspace_member(workspace_id));
 
 -- ── service_tables ──────────────────────────────────────────
+-- ── services ────────────────────────────────────────────────
+-- THE service lifecycle: every service is its own row. START = insert a new
+-- row (creates a fresh board namespace — clears nothing). END = flip that one
+-- row to status='ended' (idempotent, destroys nothing — the ended service IS
+-- the archive). A stale device can only ever end the old service it knows;
+-- "blank the board" does not exist as an operation in this model.
+create table if not exists public.services (
+  id uuid primary key,
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  date date not null,
+  session text not null default 'dinner' check (session in ('lunch','dinner')),
+  chosen_on date,
+  started_at timestamptz not null default now(),
+  status text not null default 'live' check (status in ('live','ended')),
+  ended_at timestamptz,
+  end_reason text,
+  label text,
+  snapshot jsonb,
+  deleted_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists services_workspace_status_idx
+  on public.services(workspace_id, status);
+create index if not exists services_workspace_date_idx
+  on public.services(workspace_id, date desc, started_at desc);
+
+alter table public.services enable row level security;
+
+-- Per-command policies: members read and write, but DELETE is allowed ONLY
+-- for archive-trash purge — an ENDED service that is already soft-deleted
+-- (double-confirmed destruction, mirroring the legacy archive purge). A LIVE
+-- service can never be deleted through any path. (Deliberately NOT `for all`:
+-- policies OR together per command, and an all-policy would re-grant delete
+-- on live rows.)
+drop policy if exists "services_member_select" on public.services;
+create policy "services_member_select" on public.services
+  for select to authenticated
+  using (private.is_workspace_member(workspace_id));
+drop policy if exists "services_member_insert" on public.services;
+create policy "services_member_insert" on public.services
+  for insert to authenticated
+  with check (private.is_workspace_member(workspace_id));
+drop policy if exists "services_member_update" on public.services;
+create policy "services_member_update" on public.services
+  for update to authenticated
+  using (private.is_workspace_member(workspace_id))
+  with check (private.is_workspace_member(workspace_id));
+drop policy if exists "services_purge_trash_only" on public.services;
+create policy "services_purge_trash_only" on public.services
+  for delete to authenticated
+  using (
+    private.is_workspace_member(workspace_id)
+    and status = 'ended'
+    and deleted_at is not null
+  );
+revoke all on table public.services from anon;
+grant select, insert, update, delete on table public.services to authenticated;
+grant all on table public.services to service_role;
+
+-- Single-live-service invariant: a row going live ends every OTHER live
+-- service in the workspace (non-destructively). Newest started_at wins, so an
+-- offline device uploading an hours-old start cannot supersede the genuinely
+-- newer live service — the stale row is ended instead.
+create or replace function private.services_single_live()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.status <> 'live' then
+    return new;
+  end if;
+  if exists (
+    select 1 from public.services
+     where workspace_id = new.workspace_id
+       and status = 'live'
+       and id <> new.id
+       and started_at > new.started_at
+  ) then
+    update public.services
+       set status = 'ended',
+           ended_at = clock_timestamp(),
+           end_reason = coalesce(end_reason, 'superseded'),
+           updated_at = clock_timestamp()
+     where id = new.id;
+  else
+    update public.services
+       set status = 'ended',
+           ended_at = clock_timestamp(),
+           end_reason = coalesce(end_reason, 'superseded'),
+           updated_at = clock_timestamp()
+     where workspace_id = new.workspace_id
+       and status = 'live'
+       and id <> new.id;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function private.services_single_live() from public, anon, authenticated;
+
+drop trigger if exists services_single_live on public.services;
+create trigger services_single_live
+after insert or update of status on public.services
+for each row execute function private.services_single_live();
+
 -- One row per configured workspace table. The app creates rows from the
 -- restaurant configuration, so no global seed is needed here.
+-- Every board row belongs to ONE service (see public.services above). A blank
+-- table is the ABSENCE of a row — nothing ever writes empty rows, and ending a
+-- service touches no row here at all. That is the wipe-proofing: no operation
+-- in the system can blank another service's board.
 create table if not exists public.service_tables (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  service_id uuid not null references public.services(id) on delete cascade,
   table_id integer not null check (table_id between 1 and 999),
   data jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now(),
-  primary key (workspace_id, table_id)
+  primary key (workspace_id, service_id, table_id)
 );
+create index if not exists service_tables_service_idx
+  on public.service_tables(service_id);
 
 alter table public.service_tables enable row level security;
 
@@ -515,8 +630,30 @@ revoke all on function public.replace_synced_catalog(uuid, jsonb, text[], jsonb,
 grant execute on function public.replace_synced_catalog(uuid, jsonb, text[], jsonb, text[])
   to service_role;
 
+-- Legacy signature (pre-entity builds): fails loudly. After the entity
+-- migration a write without a service_id cannot name which service's row it
+-- means; guessing would be how wipes happen. Old devices surface a sync-error
+-- and keep their data locally until they are updated.
 create or replace function public.save_service_table_if_current(
   p_workspace_id uuid,
+  p_table_id integer,
+  p_expected_updated_at timestamptz,
+  p_data jsonb,
+  p_updated_at timestamptz
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  raise exception 'save_service_table_if_current now requires p_service_id — update the app (service entity lifecycle release)';
+end;
+$$;
+
+create or replace function public.save_service_table_if_current(
+  p_workspace_id uuid,
+  p_service_id uuid,
   p_table_id integer,
   p_expected_updated_at timestamptz,
   p_data jsonb,
@@ -530,14 +667,18 @@ as $$
 declare
   changed integer := 0;
 begin
+  if p_workspace_id is null or p_service_id is null then
+    raise exception 'workspace_id and service_id are required';
+  end if;
   if p_expected_updated_at is null then
-    insert into public.service_tables(workspace_id, table_id, data, updated_at)
-    values (p_workspace_id, p_table_id, coalesce(p_data, '{}'::jsonb), p_updated_at)
-    on conflict (workspace_id, table_id) do nothing;
+    insert into public.service_tables(workspace_id, service_id, table_id, data, updated_at)
+    values (p_workspace_id, p_service_id, p_table_id, coalesce(p_data, '{}'::jsonb), p_updated_at)
+    on conflict (workspace_id, service_id, table_id) do nothing;
   else
     update public.service_tables
        set data = coalesce(p_data, '{}'::jsonb), updated_at = p_updated_at
      where workspace_id = p_workspace_id
+       and service_id = p_service_id
        and table_id = p_table_id
        and updated_at = p_expected_updated_at;
   end if;
@@ -549,6 +690,10 @@ $$;
 revoke all on function public.save_service_table_if_current(uuid, integer, timestamptz, jsonb, timestamptz)
   from public, anon;
 grant execute on function public.save_service_table_if_current(uuid, integer, timestamptz, jsonb, timestamptz)
+  to authenticated, service_role;
+revoke all on function public.save_service_table_if_current(uuid, uuid, integer, timestamptz, jsonb, timestamptz)
+  from public, anon;
+grant execute on function public.save_service_table_if_current(uuid, uuid, integer, timestamptz, jsonb, timestamptz)
   to authenticated, service_role;
 
 -- Version-checked writes for shared service_settings documents.
@@ -669,90 +814,9 @@ grant execute on function public.save_reservation_if_current(
 ) to authenticated, service_role;
 
 
--- Identity-checked finish (11.07): the clear names WHICH service it ends.
--- Passing p_expected_started_at / p_expected_date makes the whole call a
--- NO-OP with {superseded:true} when the store no longer holds that service
--- — a stale device can never blank a freshly started one. The guard lives
--- in the UPDATE's WHERE clause, re-evaluated on the row's current version,
--- so it is atomic against a concurrent start. Identity-less calls keep the
--- legacy unconditional behavior.
-create or replace function public.archive_and_finish_service(
-  p_workspace_id uuid,
-  p_archive_id uuid default null,
-  p_archive_date date default null,
-  p_archive_label text default null,
-  p_archive_state jsonb default null,
-  p_expected_started_at text default null,
-  p_expected_date text default null
-)
-returns jsonb
-language plpgsql
-security invoker
-set search_path = ''
-as $$
-declare
-  guarded boolean := (p_expected_started_at is not null or p_expected_date is not null);
-  cleared integer := 0;
-begin
-  if p_workspace_id is null then
-    raise exception 'workspace_id is required';
-  end if;
-  if p_archive_id is not null and (p_archive_date is null or nullif(p_archive_label, '') is null) then
-    raise exception 'archive date and label are required';
-  end if;
-
-  -- A state with NO startedAt has no identity to mismatch — date decides
-  -- (an identity-less live state used to refuse every guarded end forever,
-  -- because NULL = '<stamp>' is never true and adoption had nothing to adopt).
-  update public.service_settings
-     set state = '{}'::jsonb, updated_at = clock_timestamp()
-   where workspace_id = p_workspace_id
-     and id = 'service_date'
-     and (
-       not guarded
-       or (
-         (p_expected_started_at is null
-           or state->>'startedAt' is null
-           or state->>'startedAt' = p_expected_started_at)
-         and (p_expected_date is null or state->>'date' = p_expected_date)
-       )
-     );
-  get diagnostics cleared = row_count;
-
-  if guarded and cleared = 0 then
-    return jsonb_build_object('superseded', true);
-  end if;
-
-  if cleared = 0 then
-    insert into public.service_settings(workspace_id, id, state, updated_at)
-    values (p_workspace_id, 'service_date', '{}'::jsonb, clock_timestamp())
-    on conflict (workspace_id, id)
-    do update set state = '{}'::jsonb, updated_at = excluded.updated_at;
-  end if;
-
-  if p_archive_id is not null then
-    insert into public.service_archive(
-      id, workspace_id, date, label, state, created_at, deleted_at
-    )
-    values (
-      p_archive_id, p_workspace_id, p_archive_date, p_archive_label,
-      coalesce(p_archive_state, '{}'::jsonb), clock_timestamp(), null
-    )
-    on conflict (id) do nothing;
-  end if;
-
-  update public.service_tables
-  set data = '{}'::jsonb, updated_at = clock_timestamp()
-  where workspace_id = p_workspace_id;
-
-  return jsonb_build_object('superseded', false);
-end;
-$$;
-
-revoke all on function public.archive_and_finish_service(uuid, uuid, date, text, jsonb, text, text)
-  from public, anon;
-grant execute on function public.archive_and_finish_service(uuid, uuid, date, text, jsonb, text, text)
-  to authenticated, service_role;
+-- (The legacy archive_and_finish_service function is defined at the end of
+-- this file as a NEUTERED straggler shield — see the service entity lifecycle
+-- section. It can file an archive snapshot but can never blank the board.)
 
 -- Realtime DELETE events carry only the old row; the workspace_id channel
 -- filter needs it, so PK-only replica identity silently dropped deletes for
@@ -770,6 +834,14 @@ begin
      ) then
     alter publication supabase_realtime add table public.service_archive;
   end if;
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1 from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public' and tablename = 'services'
+     ) then
+    alter publication supabase_realtime add table public.services;
+  end if;
 end
 $$;
 
@@ -786,6 +858,7 @@ begin
 
   foreach table_name in array array[
     'workspace_members',
+    'services',
     'service_tables',
     'reservations',
     'service_settings',
@@ -1105,6 +1178,14 @@ alter table public.service_tables
   add constraint service_tables_table_id_check
   check (table_id between 1 and 999);
 
+-- NEUTERED straggler shield (service entity lifecycle release). A device
+-- still running a pre-entity build (stale PWA cache, old dev checkout) may
+-- replay a queued END SERVICE through this function — possibly UNGUARDED.
+-- It must never again be able to blank the board:
+--   • the archive snapshot it carries is still filed (a genuine record of the
+--     OLD service that device saw),
+--   • the legacy service_date pointer is cleared only when the guard matches,
+--   • service_tables are NEVER touched — the blanking UPDATE is gone.
 create or replace function public.archive_and_finish_service(
   p_workspace_id uuid,
   p_archive_id uuid default null,
@@ -1126,13 +1207,8 @@ begin
   if p_workspace_id is null then
     raise exception 'workspace_id is required';
   end if;
-  if p_archive_id is not null and (p_archive_date is null or nullif(p_archive_label, '') is null) then
-    raise exception 'archive date and label are required';
-  end if;
 
-  -- File the archive first: even a superseded finish carries a genuine
-  -- snapshot of the service it ended. Deterministic ids dedup double-ends.
-  if p_archive_id is not null then
+  if p_archive_id is not null and p_archive_date is not null and nullif(p_archive_label, '') is not null then
     insert into public.service_archive(
       id, workspace_id, date, label, state, created_at, deleted_at
     )
@@ -1143,40 +1219,26 @@ begin
     on conflict (id) do nothing;
   end if;
 
-  update public.service_settings
-     set state = '{}'::jsonb, updated_at = clock_timestamp()
-   where workspace_id = p_workspace_id
-     and id = 'service_date'
-     and (
-       not guarded
-       or (
-         (p_expected_started_at is null
-           or state->>'startedAt' is null
-           or state->>'startedAt' = p_expected_started_at)
-         and (p_expected_date is null or state->>'date' = p_expected_date)
-       )
-     );
-  get diagnostics cleared = row_count;
-
-  if guarded and cleared = 0 then
-    return jsonb_build_object('superseded', true);
+  if guarded then
+    update public.service_settings
+       set state = '{}'::jsonb, updated_at = clock_timestamp()
+     where workspace_id = p_workspace_id
+       and id = 'service_date'
+       and (p_expected_started_at is null
+             or state->>'startedAt' is null
+             or state->>'startedAt' = p_expected_started_at)
+       and (p_expected_date is null or state->>'date' = p_expected_date);
+    get diagnostics cleared = row_count;
+    if cleared = 0 then
+      return jsonb_build_object('superseded', true);
+    end if;
+    return jsonb_build_object('superseded', false);
   end if;
 
-  if cleared = 0 then
-    insert into public.service_settings(workspace_id, id, state, updated_at)
-    values (p_workspace_id, 'service_date', '{}'::jsonb, clock_timestamp())
-    on conflict (workspace_id, id)
-    do update set state = '{}'::jsonb, updated_at = excluded.updated_at;
-  end if;
-
-  -- Clear exactly the rows this workspace currently owns. This automatically
-  -- covers 6, 10, 14, or any later configured table count and also cleans old
-  -- retired rows left from a previous layout.
-  update public.service_tables
-     set data = '{}'::jsonb, updated_at = clock_timestamp()
-   where workspace_id = p_workspace_id;
-
-  return jsonb_build_object('superseded', false);
+  -- Unguarded legacy call: refuse. It cannot name which service it is ending,
+  -- so it may not end anything. (Pre-entity builds treat superseded as
+  -- "adopt the live state and move on" — exactly right here.)
+  return jsonb_build_object('superseded', true);
 end;
 $$;
 
