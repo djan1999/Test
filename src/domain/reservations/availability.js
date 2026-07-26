@@ -331,11 +331,10 @@ export function availabilityForRequest({
 }) {
   const normalized = normalizeReservationConfig(config);
   // The booking window and the online switch are the server's to enforce, never
-  // the browser's: a hand-made request for a past date, for one beyond
-  // online.windowDays, or made while online booking is off, is offered nothing.
-  const outsideWindow = Boolean(publicOnly) && Boolean(now) && (
-    date < now.date || date > shiftISODate(now.date, normalized.online.windowDays)
-  );
+  // the browser's: a hand-made request for a past date, for one outside the
+  // open months, or made while online booking is off, is offered nothing.
+  const outsideWindow = Boolean(publicOnly) && Boolean(now)
+    && !isDateBookable(date, { config: normalized, today: now.date });
   const onlineClosed = Boolean(publicOnly) && normalized.online.enabled === false;
   const visible = excludeBookingId
     ? bookings.filter((booking) => String(booking.id) !== String(excludeBookingId))
@@ -358,6 +357,41 @@ export function availabilityForRequest({
       nowMinutes: publicOnly && now ? now.minutes : null,
     }),
   };
+}
+
+/**
+ * Is this month open to online booking, and why.
+ *
+ * Two rules, in this order. A month the restaurant has decided about by hand
+ * wins: `true` opens December in September, before the rolling window has
+ * reached it; `false` shuts the annual closure even though it sits inside the
+ * window. A month nobody has touched follows windowDays exactly as before —
+ * the book must never close quietly because no one remembered to open it.
+ *
+ * @returns {"open"|"closed_month"|"outside_window"}
+ */
+export function monthState(month, { config, today }) {
+  const normalized = normalizeReservationConfig(config);
+  const decided = normalized.online.months?.[month];
+  if (decided === false) return "closed_month";
+  if (decided === true) return "open";
+  const lastDay = shiftISODate(today, normalized.online.windowDays);
+  // Any overlap with the window makes the month reachable; the day check below
+  // is what trims the individual dates.
+  return month >= today.slice(0, 7) && month <= lastDay.slice(0, 7) ? "open" : "outside_window";
+}
+
+/** One date's verdict, shared by the server, the edge function and /book so
+ *  the page can never offer a day the server is about to refuse. */
+export function isDateBookable(date, { config, today }) {
+  if (!date || date < today) return false;
+  const normalized = normalizeReservationConfig(config);
+  const state = monthState(String(date).slice(0, 7), { config: normalized, today });
+  if (state === "closed_month") return false;
+  if (state === "outside_window") return false;
+  // A hand-opened month is open in full; otherwise the window still trims it.
+  if (normalized.online.months?.[String(date).slice(0, 7)] === true) return true;
+  return date <= shiftISODate(today, normalized.online.windowDays);
 }
 
 export const UNAVAILABLE_REASONS = {

@@ -22,6 +22,12 @@ export const DEFAULT_RESERVATION_CONFIG = {
     windowDays: 90,
     autoConfirmMaxPax: 4,
     whenFull: "waitlist",
+    // Months the restaurant has decided about by hand, keyed "YYYY-MM":
+    // true opens a month the rolling window has not reached yet (December,
+    // put on sale in September), false shuts one inside it (the annual
+    // closure). A month with no entry follows windowDays as before, so the
+    // book never silently closes because nobody remembered to open it.
+    months: {},
   },
   pacing: {
     coversPerSlot: 12,
@@ -136,7 +142,10 @@ export function normalizeReservationConfig(value) {
   return {
     ...base,
     ...input,
-    online: mergeSection(base.online, input.online),
+    online: {
+      ...mergeSection(base.online, input.online),
+      months: input.online?.months && typeof input.online.months === "object" ? input.online.months : {},
+    },
     pacing: mergeSection(base.pacing, input.pacing),
     durations: mergeSection(base.durations, input.durations),
     publicPage: mergeSection(base.publicPage, input.publicPage),
@@ -223,6 +232,10 @@ export function publicConfigOf(config) {
     minPax: normalized.online.minPax,
     leadMinutes: normalized.online.leadMinutes,
     windowDays: normalized.online.windowDays,
+    // Which months the restaurant has opened or shut by hand. The guest page
+    // needs this to grey a closed month rather than let someone pick a date
+    // the server will then refuse.
+    months: normalized.online.months,
     autoConfirmMaxPax: normalized.online.autoConfirmMaxPax,
     whenFull: normalized.online.whenFull,
     waitlistEnabled: normalized.waitlist.enabled !== false,

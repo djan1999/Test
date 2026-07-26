@@ -122,3 +122,38 @@ describe("admin states the window in months", () => {
     expect(windowEndLabel(120)).toContain(String(end.getDate()));
   });
 });
+
+describe("the guest page honours months decided by hand", () => {
+  const nextMonthKey = () => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
+
+  it("says plainly when a month is shut, instead of a silent grid of dead days", () => {
+    const key = nextMonthKey();
+    render(page({ windowDays: 120, months: { [key]: false } }));
+    fireEvent.click(screen.getByRole("button", { name: /next month/i }));
+    expect(screen.getByText(/not taking bookings in/i)).toBeInTheDocument();
+  });
+
+  it("keeps a closed month reachable, so it reads as shut rather than missing", () => {
+    const key = nextMonthKey();
+    render(page({ windowDays: 120, months: { [key]: false } }));
+    expect(screen.getByRole("button", { name: /next month/i })).not.toBeDisabled();
+  });
+
+  it("reaches a month opened beyond the rolling window", () => {
+    const far = new Date();
+    far.setMonth(far.getMonth() + 5, 1);
+    const key = `${far.getFullYear()}-${String(far.getMonth() + 1).padStart(2, "0")}`;
+
+    // 30 days alone would stop after one month; the hand-opened month must
+    // still be walkable to.
+    render(page({ windowDays: 30, months: { [key]: true } }));
+    for (let step = 0; step < 5; step += 1) {
+      fireEvent.click(screen.getByRole("button", { name: /next month/i }));
+    }
+    expect(monthHeading().textContent).toBe(`${MONTHS[far.getMonth()]} ${far.getFullYear()}`);
+  });
+});

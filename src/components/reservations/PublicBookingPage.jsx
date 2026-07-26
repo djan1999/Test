@@ -12,7 +12,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
-import { UNAVAILABLE_REASONS } from "../../domain/reservations/availability.js";
+import {
+  UNAVAILABLE_REASONS,
+  isDateBookable,
+  monthState,
+} from "../../domain/reservations/availability.js";
 // The same bounds the server holds this form to. Applied here so a guest is
 // stopped as they type rather than losing what they wrote on submit.
 import { LIMITS } from "../../domain/reservations/validation.js";
@@ -139,14 +143,15 @@ export default function PublicBookingPage({
   // the next fourteen days, which quietly told a guest the restaurant was full
   // past a fortnight when the book was in fact open for months — the server has
   // always answered on windowDays, and the page was the only thing disagreeing.
-  const [firstDay, lastDay] = useMemo(() => {
-    const from = new Date(`${isoOf(new Date())}T12:00:00`);
-    const to = new Date(from);
-    to.setDate(from.getDate() + Math.max(1, windowDays));
-    return [isoOf(from), isoOf(to)];
-  }, [windowDays]);
+  const today = isoOf(new Date());
+  // The page asks the same engine the server answers with, so it can never
+  // offer a day that is then refused, nor hide one the restaurant has opened.
+  const windowConfig = useMemo(
+    () => ({ online: { windowDays, months: config.months || {} } }),
+    [config.months, windowDays],
+  );
 
-  const [month, setMonth] = useState(() => (startDate || isoOf(new Date())).slice(0, 7));
+  const [month, setMonth] = useState(() => (startDate || today).slice(0, 7));
 
   const monthGrid = useMemo(() => {
     const [year, monthIndex] = month.split("-").map(Number);
@@ -157,28 +162,60 @@ export default function PublicBookingPage({
     return [
       ...Array.from({ length: lead }, () => null),
       ...Array.from({ length: days }, (_, index) => {
-        const d = new Date(year, monthIndex - 1, index + 1);
-        const iso = isoOf(d);
-        return { iso, dd: String(index + 1), open: iso >= firstDay && iso <= lastDay };
+        const iso = isoOf(new Date(year, monthIndex - 1, index + 1));
+        return { iso, dd: String(index + 1), open: isDateBookable(iso, { config: windowConfig, today }) };
       }),
     ];
-  }, [firstDay, lastDay, month]);
+  }, [month, today, windowConfig]);
 
   const shiftMonth = (by) => {
     const [year, monthIndex] = month.split("-").map(Number);
     const next = new Date(year, monthIndex - 1 + by, 1);
     setMonth(`${next.getFullYear()}-${pad(next.getMonth() + 1)}`);
   };
-  // A month is reachable when any part of it falls inside the window, so the
-  // arrows stop exactly where the book closes rather than scrolling into empty
-  // months a guest can do nothing with.
+  // Arrows run from this month to the furthest one the book reaches. That
+  // last month is the rolling window's OR any month opened by hand beyond it —
+  // walking to a December put on sale in September has to pass through months
+  // the window never reached, and stopping at the first of those would leave
+  // an open month a guest cannot get to.
+  const lastMonth = useMemo(() => {
+    const rolling = new Date(`${today}T12:00:00`);
+    rolling.setDate(rolling.getDate() + Math.max(1, windowDays));
+    let furthest = `${rolling.getFullYear()}-${pad(rolling.getMonth() + 1)}`;
+    Object.entries(config.months || {}).forEach(([key, open]) => {
+      if (open === true && key > furthest) furthest = key;
+    });
+    return furthest;
+  }, [config.months, today, windowDays]);
+
   const canGo = (by) => {
     const [year, monthIndex] = month.split("-").map(Number);
     const target = new Date(year, monthIndex - 1 + by, 1);
-    const start = isoOf(target);
-    const end = isoOf(new Date(target.getFullYear(), target.getMonth() + 1, 0));
-    return end >= firstDay && start <= lastDay;
+    const key = `${target.getFullYear()}-${pad(target.getMonth() + 1)}`;
+    return key >= today.slice(0, 7) && key <= lastMonth;
   };
+
+  const shownState = monthState(month, { config: windowConfig, today });
+  const monthNotice = shownState === "closed_month"
+    ? `We are not taking bookings in ${MONTHS[Number(month.slice(5, 7)) - 1].toLowerCase()}.`
+    : monthGrid.some((item) => item && item.open)
+      ? null
+      : "The book is not open this far ahead yet.";
+
+  // The furthest date a guest may take, counting any month opened by hand
+  // beyond the rolling window.
+  const lastDay = useMemo(() => {
+    const rolling = new Date(`${today}T12:00:00`);
+    rolling.setDate(rolling.getDate() + Math.max(1, windowDays));
+    let furthest = isoOf(rolling);
+    Object.entries(config.months || {}).forEach(([key, open]) => {
+      if (open !== true) return;
+      const [year, monthIndex] = key.split("-").map(Number);
+      const end = isoOf(new Date(year, monthIndex, 0));
+      if (end > furthest) furthest = end;
+    });
+    return furthest;
+  }, [config.months, today, windowDays]);
 
   const fetchTimes = useCallback(
     async (date, pax) => {
@@ -367,8 +404,8 @@ export default function PublicBookingPage({
                 </button>
               )))}
             </div>
-            <div style={{ fontSize: 8, letterSpacing: "0.08em", color: tokens.ink[3], marginTop: 8 }}>
-              Bookings open to {fmtDate(lastDay)}.
+            <div style={{ fontSize: 8, letterSpacing: "0.08em", color: monthNotice ? tokens.red.text : tokens.ink[3], marginTop: 8 }}>
+              {monthNotice || `Bookings open to ${fmtDate(lastDay)}.`}
             </div>
 
             <div style={{ ...eyebrow, margin: "22px 0 8px" }}>Guests</div>

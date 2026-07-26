@@ -96,6 +96,25 @@ export function shiftWindowMonths(days, by) {
   return Math.min(365, Math.max(1, months * 30));
 }
 
+/** The months a manager can decide about: this month and the next fifteen, so
+ *  next year's Christmas can be put on sale while this one is still running.
+ *  `rolling` says what the window alone would do with each, so the buttons can
+ *  admit that leaving a month on ROLLING currently means shut. */
+export function upcomingMonths(windowDays, from = new Date()) {
+  const end = new Date(from);
+  end.setDate(end.getDate() + Math.max(1, Number(windowDays) || 0));
+  const endKey = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}`;
+  return Array.from({ length: 16 }, (_, index) => {
+    const month = new Date(from.getFullYear(), from.getMonth() + index, 1);
+    const key = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}`;
+    return {
+      key,
+      title: `${MONTH_NAMES[month.getMonth()]} ${month.getFullYear()}`,
+      rolling: key <= endKey,
+    };
+  });
+}
+
 export default function ReservationsAdminPanel({ config, weeklyServices = [], exceptions = [], bookings = [], audit = [], floorMaps = null, enableTableImport = TABLE_IMPORT_ENABLED, onSeedLab = null, onSave, canEdit = true }) {
   const applied = useMemo(
     () => ({ config: clone(config || {}), weeklyServices: clone(weeklyServices), exceptions: clone(exceptions) }),
@@ -536,8 +555,48 @@ function ServicesAndHours({ services, cfg, edit, canEdit }) {
         </div>
         <div style={explain}>
           A guest can book online until {cfg.online?.leadMinutes ?? 30} minutes before a seating.
-          The book is open to {windowEndLabel(cfg.online?.windowDays ?? 90)} ({cfg.online?.windowDays ?? 90} days);
+          The book rolls open to {windowEndLabel(cfg.online?.windowDays ?? 90)} ({cfg.online?.windowDays ?? 90} days);
           past that the page says booking is not open yet.
+        </div>
+
+        {/* Months decided by hand. This is how a restaurant actually talks
+            about the book — "December is on sale", "we are shut in January" —
+            and neither of those is a number of days. A month left on ROLLING
+            follows the window above, so forgetting to touch this screen can
+            never close the book by accident. */}
+        <div style={{ ...card, marginTop: 12 }}>
+          <div style={label}>Open or close a month</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(210px,1fr))", gap: 6 }}>
+            {upcomingMonths(cfg.online?.windowDays ?? 90).map(({ key, title, rolling }) => {
+              const decided = cfg.online?.months?.[key];
+              const set = (value) => edit((next) => {
+                const months = { ...(next.config.online.months || {}) };
+                if (value === null) delete months[key];
+                else months[key] = value;
+                next.config.online.months = months;
+              });
+              const state = decided === true ? "open" : decided === false ? "closed" : "rolling";
+              return (
+                <div key={key} style={{ border: `1px solid ${tokens.ink[4]}`, padding: "8px 10px" }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.08em", color: tokens.ink[0], marginBottom: 6 }}>
+                    {title}
+                  </div>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    <button type="button" style={toggleBtn(state === "rolling")} onClick={() => set(null)}>
+                      Rolling{rolling ? "" : " (shut)"}
+                    </button>
+                    <button type="button" style={toggleBtn(state === "open")} onClick={() => set(true)}>Open</button>
+                    <button type="button" style={toggleBtn(state === "closed")} onClick={() => set(false)}>Closed</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={explain}>
+            ROLLING follows the window above. OPEN puts a month on sale even if the
+            window has not reached it yet — how December goes live in September.
+            CLOSED shuts a month inside the window, for the annual closure.
+          </div>
         </div>
       </div>
     </>
@@ -1202,6 +1261,7 @@ function computeChanges(applied, draft, bookings) {
     ["online.maxPax", "Largest online party"],
     ["online.leadMinutes", "Booking lead time"],
     ["online.windowDays", "Booking window"],
+    ["online.months", "Months open or closed"],
     ["online.whenFull", "When fully booked"],
     ["pacing.coversPerSlot", "Guests per seating"],
     ["pacing.coversPerService", "Guests per service"],
