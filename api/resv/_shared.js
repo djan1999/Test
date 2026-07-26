@@ -6,6 +6,7 @@ import {
 } from "../../src/domain/reservations/availability.js";
 import {
   experiencesFor,
+  menuTypeForExperience,
   normalizeReservationConfig,
   publicConfigOf,
 } from "../../src/domain/reservations/config.js";
@@ -266,6 +267,10 @@ export function createManageToken() {
   return { raw, hash };
 }
 
+const menuOf = (input, config) => (
+  input.operationalData?.menuType || menuTypeForExperience(input.experience, config)
+);
+
 export async function createBooking(client, workspaceId, input, { publicOnly = false } = {}) {
   validateBookingPayload(input);
   const idempotencyKey = String(input.idempotencyKey || "").trim() || crypto.randomUUID();
@@ -325,6 +330,11 @@ export async function createBooking(client, workspaceId, input, { publicOnly = f
       : (input.tableLabel || slot?.tableLabel),
     operationalData: {
       ...(input.operationalData || {}),
+      // An experience IS a menu. The guest's choice decides what the kitchen
+      // cooks, so it is written onto the booking here rather than left as a
+      // label the ticket has to interpret. A caller that already named a
+      // menuType — a host who overrode it in the composer — keeps theirs.
+      ...(menuOf(input, availability.config) ? { menuType: menuOf(input, availability.config) } : {}),
       tableGroup: input.operationalData?.tableGroup || slot?.tables || (
         input.tableLabel ? [input.tableLabel] : []
       ),

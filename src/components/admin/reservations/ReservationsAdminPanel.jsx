@@ -64,6 +64,13 @@ const WEEKDAYS = [
 ];
 const DAY_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const SERVICES = ["lunch", "dinner"];
+// The two menus Menu Layout builds. `menuType` is the value written onto a
+// booking, so these keys must stay "long" and "short" — getAssignedProfile
+// reads exactly that word to choose which template the guest menu renders.
+const MENU_EXPERIENCES = [
+  { key: "long", menuType: "long", title: "Long menu", description: "The full seasonal tasting menu. Allow around three hours." },
+  { key: "short", menuType: "short", title: "Short menu", description: "A shorter expression of the season. Allow around two hours." },
+];
 
 const card = { background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}`, padding: "14px 16px", marginBottom: 12 };
 const label = { fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: tokens.ink[3], textTransform: "uppercase", marginBottom: 6 };
@@ -604,7 +611,9 @@ function CalendarClosures({ rules, edit, scratch, setScratch, canEdit, setMessag
       <div style={card}>
         <div style={label}>Close a date · add a private event · cap a day</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-          <input value={scratch.date} onChange={(event) => setScratch({ ...scratch, date: event.target.value })} placeholder="2026-07-28" style={{ ...baseInp, width: 120 }} />
+          {/* A real date picker. Typing 2026-07-28 by hand is a spelling test
+              nobody should sit, and the failure mode was a refused save. */}
+          <input type="date" value={scratch.date} onChange={(event) => setScratch({ ...scratch, date: event.target.value })} style={{ ...baseInp, width: 160 }} />
           <input value={scratch.label} onChange={(event) => setScratch({ ...scratch, label: event.target.value })} placeholder="Reason / event name" style={{ ...baseInp, width: 180 }} />
           <input value={scratch.capacity} onChange={(event) => setScratch({ ...scratch, capacity: event.target.value })} placeholder="Cap" style={{ ...baseInp, width: 60, textAlign: "center" }} />
         </div>
@@ -977,22 +986,57 @@ function Experiences({ cfg, edit }) {
             onChange={(event) => edit((next) => { next.config.experiences[index].description = event.target.value; })}
             style={{ ...baseInp, width: "100%", boxSizing: "border-box", minHeight: 44, resize: "vertical", lineHeight: 1.6, marginTop: 8 }}
           />
+          <div style={{ fontSize: 9, color: tokens.ink[3], lineHeight: 1.6, marginTop: 6 }}>
+            {experience.menuType
+              ? `Serves the ${experience.menuType} menu — the one Menu Layout builds and the kitchen ticket prints. Choosing this sets the booking's menu.`
+              : "Wording only: this experience commits the kitchen to no particular menu."}
+            {" "}Offered on {(experience.services || []).length ? experience.services.join(" and ") : "no service — guests cannot pick it"}.
+          </div>
           <div style={{ fontSize: 9, color: tokens.signal.warn, lineHeight: 1.6, marginTop: 6 }}>
             Deposits need a payment provider — not configured, so this experience takes no deposit.
           </div>
         </div>
       ))}
-      <button
-        type="button"
-        style={{ ...saveBtn("idle"), borderStyle: "dashed" }}
-        onClick={() =>
-          edit((next) => {
-            next.config.experiences.push({ key: `exp_${next.config.experiences.length + 1}`, title: "New experience", description: "Describe it for guests.", services: ["dinner"], active: false, deposit: "none" });
-          })
-        }
-      >
-        + Add an experience
-      </button>
+      {/* The two menus, offered as one tap when they are missing. A LAB or a
+          new restaurant starts with no experiences saved, and "+ Add an
+          experience" gave a blank card that meant nothing to the kitchen. */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {MENU_EXPERIENCES.filter(({ key }) => !(cfg.experiences || []).some((item) => item.key === key))
+          .map(({ key, menuType, title, description }) => (
+            <button
+              key={key}
+              type="button"
+              style={{ ...saveBtn("idle"), borderStyle: "dashed" }}
+              onClick={() => edit((next) => {
+                // `edit` clones the SAVED config, which need not carry the key
+                // at all — pushing onto undefined is what made this button do
+                // nothing at all on a fresh workspace.
+                next.config.experiences = [...(next.config.experiences || []), {
+                  key, menuType, title, description, services: ["lunch", "dinner"], active: true, deposit: "none",
+                }];
+              })}
+            >
+              + {title}
+            </button>
+          ))}
+        <button
+          type="button"
+          style={{ ...saveBtn("idle"), borderStyle: "dashed" }}
+          onClick={() => edit((next) => {
+            const list = next.config.experiences || [];
+            next.config.experiences = [...list, {
+              key: `exp_${list.length + 1}`,
+              title: "New experience",
+              description: "Describe it for guests.",
+              services: ["dinner"],
+              active: false,
+              deposit: "none",
+            }];
+          })}
+        >
+          + Another experience
+        </button>
+      </div>
     </>
   );
 }

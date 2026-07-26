@@ -10,6 +10,7 @@ import {
 } from "../_shared/reservations/availability.js";
 import {
   experiencesFor,
+  menuTypeForExperience,
   normalizeReservationConfig,
   publicConfigOf,
 } from "../_shared/reservations/config.js";
@@ -372,7 +373,11 @@ Deno.serve(async (request: Request) => {
         }
         return { booking: mapBooking(replay), replay: true, token };
       }
-      const { slot, status } = await choiceFor(input, publicOnly);
+      const { slot, status, config: chosenConfig } = await choiceFor(input, publicOnly);
+      // An experience IS a menu — see api/resv/_shared.js, same rule, same
+      // domain helper. A caller that already named a menuType keeps theirs.
+      const menuType = input.operationalData?.menuType
+        || menuTypeForExperience(input.experience, chosenConfig);
       const ref = randomRef();
       const rpcBooking = {
         id: input.id,
@@ -400,6 +405,7 @@ Deno.serve(async (request: Request) => {
         createdBy: publicOnly ? "WEB" : staffActor,
         operationalData: {
           ...(input.operationalData || {}),
+          ...(menuType ? { menuType } : {}),
           // A joined party holds EVERY table in the group. Recording only the
           // first would leave the second looking free to the next booking.
           tableGroup: input.operationalData?.tableGroup || (

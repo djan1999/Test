@@ -61,18 +61,28 @@ export const DEFAULT_RESERVATION_CONFIG = {
     enabled: true,
     holdMinutes: 15,
   },
+  // An experience IS a menu. The restaurant serves a long menu and a short
+  // one — the same two Menu Layout builds and the same two the kitchen ticket
+  // prints — so `menuType` here is not a label, it is the value written onto
+  // the booking when a guest chooses. An experience with no menuType is just
+  // wording; one with a menuType decides what the kitchen cooks.
+  //
+  // `services` is what makes a season expressible: short menu on ["lunch"] is
+  // summer, short menu on ["lunch","dinner"] is winter. Nothing else changes.
   experiences: [
     {
-      key: "grand_tasting",
-      title: "Grand tasting",
+      key: "long",
+      menuType: "long",
+      title: "Long menu",
       description: "The full seasonal tasting menu. Allow around three hours.",
       services: ["lunch", "dinner"],
       active: true,
       deposit: "none",
     },
     {
-      key: "seasonal",
-      title: "Seasonal menu",
+      key: "short",
+      menuType: "short",
+      title: "Short menu",
       description: "A shorter expression of the season. Allow around two hours.",
       services: ["lunch", "dinner"],
       active: true,
@@ -216,6 +226,18 @@ export function experiencesFor(serviceName, config) {
   return normalizeReservationConfig(config).experiences
     .filter((experience) => experience.active !== false)
     .filter((experience) => !experience.services || experience.services.includes(serviceName));
+}
+
+/** The menu a chosen experience commits the kitchen to, or null when the
+ *  experience is only wording. This is the one place the guest's choice turns
+ *  into the `menuType` the ticket, the allergy sheet and Menu Layout all read,
+ *  so the two can never mean different things. */
+export function menuTypeForExperience(experienceKey, config) {
+  const key = String(experienceKey || "").trim();
+  if (!key) return null;
+  const match = normalizeReservationConfig(config).experiences
+    .find((experience) => experience.key === key);
+  return match?.menuType || null;
 }
 
 /** Guest-safe subset — everything /book may know, and nothing more. No table
