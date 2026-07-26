@@ -68,6 +68,34 @@ const label = { fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: tokens.i
 const explain = { fontFamily: FONT, fontSize: 9, color: tokens.ink[3], lineHeight: 1.7, marginTop: 8 };
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
+// The booking window is stored in days because that is what the availability
+// engine compares against, but a manager thinks in months: "we are open through
+// November". These translate between the two and always name the real date, so
+// nobody has to work out what 120 days lands on.
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+const windowEnd = (days) => {
+  const end = new Date();
+  end.setDate(end.getDate() + Math.max(1, Number(days) || 0));
+  return end;
+};
+export function windowMonthsLabel(days) {
+  const months = Math.round((Number(days) || 0) / 30);
+  if (months < 1) return `${Math.max(1, Number(days) || 0)} days`;
+  return `${months} month${months === 1 ? "" : "s"}`;
+}
+export function windowEndLabel(days) {
+  const end = windowEnd(days);
+  return `${MONTH_NAMES[end.getMonth()]} ${end.getDate()}, ${end.getFullYear()}`;
+}
+/** Step the window by whole months, keeping the stored value in days. */
+export function shiftWindowMonths(days, by) {
+  const months = Math.max(1, Math.round((Number(days) || 30) / 30) + by);
+  return Math.min(365, Math.max(1, months * 30));
+}
+
 export default function ReservationsAdminPanel({ config, weeklyServices = [], exceptions = [], bookings = [], audit = [], floorMaps = null, enableTableImport = TABLE_IMPORT_ENABLED, onSeedLab = null, onSave, canEdit = true }) {
   const applied = useMemo(
     () => ({ config: clone(config || {}), weeklyServices: clone(weeklyServices), exceptions: clone(exceptions) }),
@@ -489,16 +517,27 @@ function ServicesAndHours({ services, cfg, edit, canEdit }) {
             />
           </div>
           <div>
+            {/* Restaurants open the book by the month — "we are taking bookings
+                through November" — so the step is a month and the exact date it
+                lands on is spelled out underneath. The stored value stays
+                windowDays: it is what the availability engine, the edge
+                function and the public page all read. */}
             <div style={label}>How far ahead can guests book?</div>
             <Stepper
-              value={`${cfg.online?.windowDays ?? 90} days`}
-              onDown={() => edit((next) => { next.config.online.windowDays = Math.max(1, (next.config.online.windowDays ?? 90) - 5); })}
-              onUp={() => edit((next) => { next.config.online.windowDays = Math.min(365, (next.config.online.windowDays ?? 90) + 5); })}
+              value={windowMonthsLabel(cfg.online?.windowDays ?? 90)}
+              onDown={() => edit((next) => {
+                next.config.online.windowDays = shiftWindowMonths(next.config.online.windowDays ?? 90, -1);
+              })}
+              onUp={() => edit((next) => {
+                next.config.online.windowDays = shiftWindowMonths(next.config.online.windowDays ?? 90, 1);
+              })}
             />
           </div>
         </div>
         <div style={explain}>
-          A guest can book online until {cfg.online?.leadMinutes ?? 30} minutes before a seating; beyond {cfg.online?.windowDays ?? 90} days the page says booking is not open yet.
+          A guest can book online until {cfg.online?.leadMinutes ?? 30} minutes before a seating.
+          The book is open to {windowEndLabel(cfg.online?.windowDays ?? 90)} ({cfg.online?.windowDays ?? 90} days);
+          past that the page says booking is not open yet.
         </div>
       </div>
     </>
