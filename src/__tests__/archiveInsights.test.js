@@ -84,6 +84,66 @@ describe("archiveEntryStats", () => {
   });
 });
 
+// The archive's kitchen timings live on the TABLE (kitchenLog). Menu context
+// can go missing in three real ways, and each one used to erase those timings.
+describe("kitchen timings survive thin menu context", () => {
+  it("keeps the night's timings when the entry was filed with NO menu snapshot", () => {
+    // The rollover auto-end (and the store's single-live supersede) files a
+    // service without a snapshot. Reading courses from the menu alone left
+    // such a night with zero gaps, zero durations and no cadence history —
+    // the fire times were in the store the whole time.
+    const noMenu = { date: "2026-06-02", label: "02.06.2026 – DINNER", state: { tables: [archivedTable()], menuCourses: [] } };
+    const s = archiveEntryStats(noMenu);
+    expect(s.gaps).toEqual([20, 25, 30]);
+    expect(s.medianGap).toBe(25);
+    expect(s.durations).toEqual([75]);
+    expect(historyGapsByMenuType([noMenu])["tasting"]).toEqual([20, 25, 30]);
+
+    // Course names come from the raw keys on their own, and from the live menu
+    // when the caller passes it — so those samples aggregate with every other
+    // night's instead of splitting into a second name.
+    expect([...archiveEntryStats(noMenu).courseGaps.keys()]).toEqual(["amuse", "soup", "main"]);
+    const named = archiveEntryStats(noMenu, { menuCourses: COURSES });
+    expect(named.courseGaps.get("Soup")).toEqual([25]);
+    expect(named.courseGaps.get("Main")).toEqual([30]);
+  });
+
+  it("keeps the timing of a course the menu no longer shows", () => {
+    // `soup` was retired since that night (is_active = false) and `cake` is a
+    // celebration dish whose ordered marker isn't in the snapshot — both fired
+    // and both were dropped, which also cut the night's duration to 20 min.
+    const menu = [
+      { course_key: "amuse", position: 1, menu: { name: "Amuse" } },
+      { course_key: "soup", position: 2, menu: { name: "Soup" }, is_active: false },
+      { course_key: "cake", position: 3, menu: { name: "Cake" }, course_category: "celebration", optional_flag: "cake" },
+    ];
+    const t = archivedTable({ kitchenLog: {
+      amuse: { firedAt: "19:20" }, soup: { firedAt: "19:45" }, cake: { firedAt: "20:15" },
+    } });
+    const s = archiveEntryStats({ date: "2026-06-03", label: "x", state: { tables: [t], menuCourses: menu } });
+    expect(s.gaps).toEqual([20, 25, 30]);
+    expect(s.durations).toEqual([75]);
+    expect(s.courseGaps.get("Soup")).toEqual([25]);
+    expect(s.courseGaps.get("Cake")).toEqual([30]);
+  });
+
+  it("names an off-menu fire from the table's own kitchen override, then the key", () => {
+    const t = archivedTable({
+      kitchenLog: { amuse: { firedAt: "19:20" }, ghost: { firedAt: "19:50" } },
+      kitchenCourseNotes: { ghost: { name: "Chef's Extra" } },
+    });
+    const s = archiveEntryStats({ date: "2026-06-04", label: "x", state: { tables: [t], menuCourses: COURSES } });
+    expect(s.courseGaps.get("Chef's Extra")).toEqual([30]);
+  });
+
+  it("ignores a logged course that never fired", () => {
+    const t = archivedTable({ kitchenLog: { amuse: { firedAt: "19:20" }, dessert: { firedAt: null } } });
+    const s = archiveEntryStats({ date: "2026-06-05", label: "x", state: { tables: [t], menuCourses: [] } });
+    expect(s.gaps).toEqual([20]); // arrival → amuse only
+    expect([...s.courseGaps.keys()]).toEqual(["amuse"]); // no phantom "dessert"
+  });
+});
+
 describe("aggregateInsights", () => {
   it("aggregates across services and ranks slowest courses with ≥3 samples", () => {
     const entries = [entry(), entry(), entry()];

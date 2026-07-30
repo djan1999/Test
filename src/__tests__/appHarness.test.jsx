@@ -28,6 +28,8 @@ import {
 } from "./harness/fakeBackend.js";
 import { currentServiceDay } from "../utils/serviceDay.js";
 import { blankTable } from "../utils/tableHelpers.js";
+import { archiveEntryFromService } from "../lib/serviceEntity.js";
+import { archiveEntryStats } from "../utils/archiveInsights.js";
 
 vi.mock("../lib/supabaseClient.js", async () => {
   const h = await import("./harness/fakeBackend.js");
@@ -326,6 +328,48 @@ describe.each([
     const guardRefusals = errSpy.mock.calls.filter((args) => String(args[0]).includes("[board-guard]"));
     expect(guardRefusals).toHaveLength(0);
     errSpy.mockRestore();
+  });
+
+  it("a night nobody ended by hand still carries its KITCHEN TIMINGS into the archive", async () => {
+    // The rollover auto-end filed the entry with no snapshot at all, so the
+    // archive entry it produced had no menu — and the Archive reads the fire
+    // times through the night's courses. Result: every auto-ended service (the
+    // common case — nobody taps END on a service left running overnight) showed
+    // up with no timings, no duration and taught the cadence history nothing.
+    const stale = daysAgoISO(2);
+    const boardAt = `${stale}T21:00:00.000Z`;
+    const course = (position, key, name) => ({
+      position, course_key: key, is_active: true, is_snack: false,
+      menu: { name, sub: "" }, optional_flag: "", course_category: "main",
+    });
+    seedService({ id: SVC, date: stale, session: "dinner", startedAt: boardAt });
+    seed("menu_courses", [course(1, "amuse", "Amuse"), course(2, "venison", "Venison")]);
+    seed("service_tables", [{
+      service_id: SVC, table_id: 1, updated_at: boardAt,
+      data: {
+        ...blankTable(1), active: true, arrivedAt: "19:00",
+        resName: "Anna Harness", resTime: "19:00", guests: 2,
+        kitchenLog: { amuse: { firedAt: "19:20" }, venison: { firedAt: "19:50" } },
+      },
+    }]);
+    render(<App />);
+
+    const store = () => (psMode ? localRows : remoteRows);
+    await waitFor(() => {
+      const svc = store()("services").find((r) => r.id === SVC);
+      expect(svc?.status).toBe("ended");
+      expect(svc?.end_reason).toBe("rollover");
+    }, { timeout: 5000 });
+
+    // Read the filed night exactly as the Archive does: the entry adapter over
+    // the ended service + its rows, then the insights scan.
+    const svc = store()("services").find((r) => r.id === SVC);
+    const entry = archiveEntryFromService(svc, store()("service_tables").filter((r) => r.service_id === SVC));
+    expect(entry.state.menuCourses.map((c) => c.course_key)).toEqual(["amuse", "venison"]);
+    const stats = archiveEntryStats(entry);
+    expect(stats.gaps).toEqual([20, 30]);      // 19:00 → 19:20 → 19:50
+    expect(stats.durations).toEqual([50]);
+    expect(stats.courseGaps.get("Venison")).toEqual([30]);
   });
 
   it("offline edits survive and converge to the store after reconnect", async () => {

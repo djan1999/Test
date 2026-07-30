@@ -2378,7 +2378,34 @@ export default function App() {
       // service entity itself, never this device's local default.
       const session = svc.session || activeServiceSessionRef.current || "dinner";
       const label = await labelForEndingService(svc.date, session);
-      const result = await endServiceStore(svc.id, { reason: "rollover", label });
+      // Decorate the entry exactly like a manual end does. Without it the
+      // archive entry carried no menu, so the night's kitchen timings had no
+      // course to hang off and the Archive reported none — a service nobody
+      // ended by hand (the common case) lost its fire times, and its rhythm
+      // never reached the cadence history. The menu and beverage lists are
+      // workspace-level, so this device's copies are the closest thing to what
+      // the service ran on.
+      let snapCourses = menuCoursesRef.current || [];
+      if (snapCourses.length === 0) {
+        // A boot-time auto-end can beat the menu load on a device with no warm
+        // cache: read the menu from the store rather than file the night blind.
+        try {
+          if (sqlitePrimaryRef.current) {
+            const { readMenuCourses } = await import("./powersync/reads.js");
+            snapCourses = ((await readMenuCourses()) || []).map(supabaseRowToCourse);
+          } else {
+            snapCourses = (await fetchMenuCourses()) || [];
+          }
+        } catch { /* no menu reachable — file the night without the decoration */ }
+      }
+      const board = boardStateRef.current;
+      const snapshot = snapCourses.length > 0
+        ? {
+            menuCourses: snapCourses,
+            cocktails: board.cocktails, spirits: board.spirits, beers: board.beers,
+          }
+        : null;
+      const result = await endServiceStore(svc.id, { reason: "rollover", label, snapshot });
       if (!result.ok) {
         console.error("Auto-end failed; leaving service visible:", result.error);
         return;
@@ -4325,7 +4352,9 @@ export default function App() {
       .then(({ fetchArchive }) => fetchArchive())
       .then(({ active }) => {
         if (cancelled) return;
-        setHistoryGapsByMenu(historyGapsByMenuType((active || []).slice(0, 10)));
+        setHistoryGapsByMenu(historyGapsByMenuType((active || []).slice(0, 10), {
+          menuCourses: menuCoursesRef.current || [],
+        }));
       })
       .catch(() => {});
     return () => { cancelled = true; };

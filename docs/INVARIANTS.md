@@ -55,6 +55,7 @@ offline→reconnect through the actual UI in BOTH storage modes.
 | L3 | Ending service is one durable operation: archive (when present), all ten board clears, and the lifecycle clear commit together locally and upload through one Postgres transaction. | `serviceLifecycleStore.test.js`; `powersyncWrites.test.js`; `supabaseConnector.test.js`; `appHarness.test.jsx`; drill F in `docs/SERVICE_DRILLS.md` |
 | L5 | A second device joining a live service just drops in — never a "start" prompt, never a board rebuild. | `appHarness.test.jsx` (join scenario); `serviceDay.test.js` (`resolveServiceEntry`) |
 | L6 | Offline edits are never silently dropped: fallback autosave retries then re-queues for the next flush; SQLite-primary writes land locally and upload after reconnect. | `appHarness.test.jsx` (offline→reconnect scenario, both modes) |
+| L7 | An archived service keeps its KITCHEN TIMINGS. Both end paths (manual and the rollover auto-end) file the menu with the entry, and the archive scans read every `kitchenLog` fire even when the menu context is gone — an entry filed without a snapshot, or a course retired/left unordered since that night. | `archiveInsights.test.js` (thin menu context); `appHarness.test.jsx` (rollover files the menu, both modes) |
 | L4 | Concurrent edits to different seats of the same table both survive. The upload connector folds against the tracked ancestor and commits with a server compare-and-swap; same-seat edits remain last-write-wins. | `foldTable.test.js`; `supabaseConnector.test.js` |
 
 ### Output contracts
