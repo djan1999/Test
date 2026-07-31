@@ -241,6 +241,28 @@ export const tableHasServiceContent = (t, ignoreExtraKeys = null) => {
   return (t.seats || []).some((s) => seatHasContent(s, ignore));
 };
 
+// True when an archived night recorded ANYTHING for this table — the filter
+// the archive surfaces apply before they render or count a row.
+//
+// Deliberately WIDER than tableHasServiceContent: a booking nobody showed up
+// for (resName/resTime, blank seats), a table note, or a restriction taken in
+// advance all belong in the night's record, even though none of them is
+// staff-entered service content. (Covers still exclude a no-show — that
+// judgement lives in archiveInsights, and is a different question.)
+//
+// What it excludes is the row the board leaves behind when a table is unseated
+// or its party moves elsewhere: `active: false`, no name, no arrival, empty
+// seats, and the default `guests` scaffold still on it. The archive rendered
+// those as nameless "2 guests" cards and — worse — summed that default pax
+// into the night's table and guest totals.
+export const tableBelongsInArchive = (t) => {
+  if (!t) return false;
+  if (tableHasServiceContent(t)) return true;
+  if (String(t.resName || "").trim() || String(t.resTime || "").trim()) return true;
+  if (String(t.notes || "").trim()) return true;
+  return Array.isArray(t.restrictions) && t.restrictions.length > 0;
+};
+
 // Indices of tables an autosave pass would BLANK that previously HELD service
 // content — the input to App's mass-blank guard (refuse a blank of 2+ such
 // tables unless a legitimate whole-board clear flagged it). Pure so the

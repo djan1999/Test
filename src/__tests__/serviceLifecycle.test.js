@@ -65,7 +65,7 @@ vi.mock("../lib/scopedDb.js", () => ({
 import {
   startServiceStore, endServiceStore, resumeServiceStore, updateServiceStore, readLiveServiceStore,
 } from "../lib/serviceLifecycle.js";
-import { currentServiceFrom, sanitizeService, archiveEntryFromService } from "../lib/serviceEntity.js";
+import { currentServiceFrom, sanitizeService, archiveEntryFromService, mergeArchiveEntries } from "../lib/serviceEntity.js";
 
 beforeEach(() => {
   h.rows.length = 0;
@@ -217,8 +217,63 @@ describe("archiveEntryFromService — the ended service IS the archive", () => {
     expect(entry._kind).toBe("service");
     expect(entry.label).toBe("22. 07. 2026 – DINNER");
     expect(entry.created_at).toBe("2026-07-22T23:00:00Z");
-    expect(entry.state.tables.map((t) => t.id)).toEqual([1, 2]); // sorted, ALL rows kept
+    expect(entry.state.tables.map((t) => t.id)).toEqual([1, 2]); // sorted; a table note counts
     expect(entry.state.serviceSession).toBe("dinner");
     expect(entry.state.menuCourses).toEqual([{ id: 1 }]);
+  });
+
+  // A row's existence is not evidence the table was used: unseating a party,
+  // or moving it elsewhere, leaves the row behind carrying nothing but its
+  // default `guests` scaffold. Those rendered as nameless "2 guests" cards in
+  // the archive and their phantom pax inflated the night's totals.
+  it("drops board rows the night never recorded anything for", () => {
+    const svc = sanitizeService({
+      id: "s2", workspace_id: "ws-1", date: "2026-07-24", session: "dinner",
+      started_at: "2026-07-24T16:00:00Z", status: "ended", ended_at: "2026-07-24T23:00:00Z",
+    });
+    const blank = { active: false, guests: 2, resName: "", resTime: "", arrivedAt: null,
+      seats: [{ id: 1, water: "—", pairing: "" }, { id: 2, water: "—", pairing: "" }],
+      kitchenLog: {}, restrictions: [], bottleWines: [], notes: "" };
+    const entry = archiveEntryFromService(svc, [
+      { service_id: "s2", table_id: 8, data: blank, updated_at: "U" },
+      { service_id: "s2", table_id: 9, data: { ...blank, active: true, arrivedAt: "19:04", resName: "Elham", guests: 2 }, updated_at: "U" },
+      { service_id: "s2", table_id: 10, data: blank, updated_at: "U" },
+    ]);
+    expect(entry.state.tables.map((t) => t.id)).toEqual([9]);
+    expect(entry.state.tables.reduce((a, t) => a + (t.guests || 0), 0)).toBe(2); // not 6
+  });
+
+  it("keeps a no-show booking and a table carrying only restrictions", () => {
+    const svc = sanitizeService({
+      id: "s3", workspace_id: "ws-1", date: "2026-07-24", session: "dinner",
+      started_at: "2026-07-24T16:00:00Z", status: "ended", ended_at: "2026-07-24T23:00:00Z",
+    });
+    const entry = archiveEntryFromService(svc, [
+      { service_id: "s3", table_id: 3, data: { resName: "Ghost", resTime: "19:00", guests: 2, active: false }, updated_at: "U" },
+      { service_id: "s3", table_id: 5, data: { restrictions: [{ note: "gluten-free", pos: 1 }], guests: 2 }, updated_at: "U" },
+      { service_id: "s3", table_id: 6, data: { guests: 2 }, updated_at: "U" },
+    ]);
+    expect(entry.state.tables.map((t) => t.id)).toEqual([3, 5]); // T6 is a blank row
+  });
+});
+
+describe("mergeArchiveEntries — legacy snapshots", () => {
+  it("drops the untouched board rows a whole-board snapshot copied along", () => {
+    const { active } = mergeArchiveEntries({
+      legacyActive: [{
+        id: "a1", date: "2026-07-01", label: "01. 07. 2026 – DINNER", created_at: "2026-07-01T23:00:00Z",
+        state: {
+          menuCourses: [],
+          tables: [
+            { id: 1, guests: 2, active: false, seats: [] },
+            { id: 2, guests: 3, active: true, arrivedAt: "19:10", resName: "Real", seats: [] },
+            { id: 3, guests: 2, active: false, seats: [] },
+          ],
+        },
+      }],
+    });
+    expect(active[0].state.tables.map((t) => t.id)).toEqual([2]);
+    expect(active[0]._kind).toBe("legacy");
+    expect(active[0].label).toBe("01. 07. 2026 – DINNER"); // the rest of the row is untouched
   });
 });
