@@ -4,6 +4,15 @@
 // timestamps, pairings, restrictions) and the menu courses that were live —
 // everything needed to answer "how do our services actually run?" without
 // any new data entry.
+//
+// The kitchen's fire timestamps live on the TABLE (`kitchenLog`), so every
+// scan here reads them from there and treats the menu as naming/ordering
+// context only (see firedCoursesForTable). Entries whose menu context is thin
+// — an auto-ended service filed without a snapshot, a course retired since the
+// night, an optional dish whose "ordered" marker never made it into the
+// snapshot — therefore keep their timings instead of silently reporting none.
+// Callers may pass `{ menuCourses }` as a fallback (the live menu) to name
+// courses an entry can no longer name for itself.
 
 import { getVisibleCoursesForTable } from "./courseProgress.js";
 import { fireGapsForTable, median, toMonotonicMinutes } from "./fireCadence.js";
@@ -16,13 +25,59 @@ import { celebrationKeysFromCourses } from "./menuUtils.js";
 // and fire timelines. mergeTableGroups() collapses each group to one primary
 // row (with combined seats/kitchenLog and a correct `_groupGuests`), exactly
 // as the archive screen already does — so every scan here runs on it first.
-// Judged against the entry's OWN menu: birthday-seeded celebration extras
-// must not make a secondary table's blank seats count as covers.
-const partyTables = (entry) => mergeTableGroups(
+// Judged against the entry's own menu where it has one (see menuFor):
+// birthday-seeded celebration extras must not make a secondary table's blank
+// seats count as covers.
+const partyTables = (entry, menuCourses) => mergeTableGroups(
   entry?.state?.tables || [],
-  celebrationKeysFromCourses(entry?.state?.menuCourses || []),
+  celebrationKeysFromCourses(menuCourses || []),
 );
 const tableGuests = (t) => Number(t?._groupGuests ?? t?.guests) || 0;
+
+// The menu context for one entry: its own snapshot when it has one, otherwise
+// the caller's fallback (the live menu). A service ended by the rollover
+// auto-end — or by the store's single-live trigger — is filed with no
+// snapshot at all, and reading `state.menuCourses` alone left every scan here
+// with no courses for that night.
+const menuFor = (entry, fallback) => {
+  const own = entry?.state?.menuCourses;
+  if (Array.isArray(own) && own.length > 0) return own;
+  return Array.isArray(fallback) ? fallback : [];
+};
+
+// Best available display name for a course key: the table's own kitchen
+// override first, then the menu row (retired courses still carry their name),
+// then the raw key.
+const courseNameFor = (key, table, menuCourses) => {
+  const override = table?.kitchenCourseNotes?.[key]?.name;
+  if (override) return String(override);
+  const row = (menuCourses || []).find((c) => c?.course_key === key);
+  return row?.menu?.name || row?.menu_si?.name || String(key);
+};
+
+/**
+ * The courses one archived table has fire data for: { key, name, firedAt }.
+ *
+ * Menu-derived visibility comes first — it carries the display names and the
+ * menu order. Every OTHER key the kitchen logged a fire against is appended,
+ * because a logged fire is hard evidence the course was cooked and must not be
+ * discarded for lacking menu context. Three real cases produced exactly that:
+ * a course retired since the night (is_active = false hides it), an
+ * optional/celebration dish that fired without an "ordered" marker in the
+ * snapshot, and an entry carrying no menu snapshot at all. Each silently
+ * erased that course's timings — and with them the night's gaps and duration.
+ */
+export function firedCoursesForTable(table, menuCourses) {
+  const visible = getVisibleCoursesForTable(table, menuCourses || []);
+  const log = table?.kitchenLog || {};
+  const known = new Set(visible.map((c) => c.key));
+  const extras = [];
+  for (const key of Object.keys(log)) {
+    if (known.has(key) || !log[key]?.firedAt) continue;
+    extras.push({ key, name: courseNameFor(key, table, menuCourses), firedAt: log[key].firedAt });
+  }
+  return extras.length > 0 ? [...visible, ...extras] : visible;
+}
 
 // A party that actually SAT: arrival/kitchen markers, or seats carrying real
 // service content (pairings/drinks — staff served them even if nobody tapped
@@ -50,13 +105,14 @@ const seatHasPairing = (seat) => {
 };
 
 /**
- * Stats for one archived service.
+ * Stats for one archived service. `fallbackMenuCourses` (the live menu) names
+ * courses for entries filed without a menu snapshot.
  * Returns { date, label, covers, tableCount, gaps, medianGap, seats, paired,
  *           durations, courseGaps: Map<name, number[]> }.
  */
-export function archiveEntryStats(entry) {
-  const tables = partyTables(entry);
-  const menuCourses = entry?.state?.menuCourses || [];
+export function archiveEntryStats(entry, { menuCourses: fallbackMenuCourses = null } = {}) {
+  const menuCourses = menuFor(entry, fallbackMenuCourses);
+  const tables = partyTables(entry, menuCourses);
   const stats = {
     date: entry?.date || null,
     label: entry?.label || "",
@@ -85,7 +141,7 @@ export function archiveEntryStats(entry) {
     stats.seats += guestCount > 0 ? guestCount : seatList.length;
     stats.paired += guestCount > 0 ? Math.min(pairedSeats, guestCount) : pairedSeats;
 
-    const courses = getVisibleCoursesForTable(t, menuCourses);
+    const courses = firedCoursesForTable(t, menuCourses);
     stats.gaps.push(...fireGapsForTable(t, courses));
 
     // Per-course gap attribution: the wait that *ended* when course X fired
@@ -123,10 +179,11 @@ export function archiveEntryStats(entry) {
 
 /**
  * Aggregate insights across archived services (newest first or any order).
- * Returns null when there is nothing to aggregate.
+ * `menuCourses` (the live menu) is the naming fallback for entries filed
+ * without a menu snapshot. Returns null when there is nothing to aggregate.
  */
-export function aggregateInsights(entries) {
-  const perEntry = (entries || []).map(archiveEntryStats)
+export function aggregateInsights(entries, { menuCourses = null } = {}) {
+  const perEntry = (entries || []).map((entry) => archiveEntryStats(entry, { menuCourses }))
     .filter(e => e.tableCount > 0 || e.covers > 0);
   if (perEntry.length === 0) return null;
 
@@ -166,14 +223,16 @@ export function aggregateInsights(entries) {
 /**
  * Historical fire gaps grouped by menu type (lowercased), plus "*" for all.
  * Used to seed tonight's cadence prediction before the room has any rhythm.
+ * Gaps come from the tables' own fire log, so a night filed without a menu
+ * snapshot still teaches the prediction its rhythm.
  */
-export function historyGapsByMenuType(entries) {
+export function historyGapsByMenuType(entries, { menuCourses: fallbackMenuCourses = null } = {}) {
   const out = { "*": [] };
   for (const entry of entries || []) {
-    const tables = partyTables(entry);
-    const menuCourses = entry?.state?.menuCourses || [];
+    const menuCourses = menuFor(entry, fallbackMenuCourses);
+    const tables = partyTables(entry, menuCourses);
     for (const t of tables) {
-      const courses = getVisibleCoursesForTable(t, menuCourses);
+      const courses = firedCoursesForTable(t, menuCourses);
       const gaps = fireGapsForTable(t, courses);
       if (gaps.length === 0) continue;
       out["*"].push(...gaps);
@@ -204,12 +263,12 @@ export function gapsForMenuType(gapsByMenuType, menuType) {
  * Each match: { date, label, name, guests, menuType, pairings: string[],
  *               restrictions: string[], birthday, drinks: number }.
  */
-export function findGuestHistory(name, entries, { limit = 5 } = {}) {
+export function findGuestHistory(name, entries, { limit = 5, menuCourses = null } = {}) {
   const q = normName(name);
   if (q.length < 3) return [];
   const matches = [];
   for (const entry of entries || []) {
-    for (const t of partyTables(entry)) {
+    for (const t of partyTables(entry, menuFor(entry, menuCourses))) {
       const resName = normName(t?.resName);
       if (!resName || !resName.includes(q)) continue;
       const pairings = [...new Set((t.seats || []).map(s => String(s?.pairing || "").trim())

@@ -251,7 +251,7 @@ export default function ArchiveModal({
           </div>
         )}
         {supabase && !loading && !loadError && entries.length === 0 && archivedTickets.length === 0 && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[400], padding: "60px 0", textAlign: "center" }}>No archived services yet</div>}
-        {supabase && !loading && entries.length > 0 && <InsightsSection entries={entries} />}
+        {supabase && !loading && entries.length > 0 && <InsightsSection entries={entries} menuCourses={menuCourses} />}
         {supabase && !loading && entries.length > 0 && (
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
             <button onClick={deleteAll} disabled={deleting === "all"} style={{
@@ -266,9 +266,17 @@ export default function ArchiveModal({
           // Merge tableGroup members so a past T02-03 reservation collapses to
           // one row across both the summary count and the per-table cards.
           const rawTables = entry.state?.tables || [];
-          const entryMenuCourses = entry.state?.menuCourses || [];
-          // Judge seeded celebration extras against the ENTRY's own menu —
-          // the night the party was served, not whatever menu is live now.
+          // The entry's own menu is the truth for the night it was served. A
+          // service the rollover auto-ended is filed WITHOUT one, though, and
+          // with no menu the ticket below had no courses to draw — so the
+          // night's fire times were nowhere on screen. Fall back to the live
+          // menu: same course keys, so every logged fire lands on its course.
+          const entryMenuCourses = entry.state?.menuCourses?.length
+            ? entry.state.menuCourses
+            : (menuCourses || []);
+          // Judge seeded celebration extras against the menu resolved above —
+          // the night the party was served whenever the entry recorded it,
+          // never today's menu over a snapshot the entry actually has.
           const entryTables = mergeTableGroups(rawTables, celebrationKeysFromCourses(entryMenuCourses));
           const entryOptionalPairings = optionalPairingsFromCourses(entryMenuCourses);
           const totalGuests = entryTables.reduce((a, t) => a + (t._groupGuests || t.guests || 0), 0);
@@ -363,9 +371,14 @@ export default function ArchiveModal({
 // Aggregates the loaded archive entries into service intelligence: covers,
 // course rhythm, pairing uptake, and the chronically slow courses. Computed
 // lazily on expand — the math walks every seat of every archived table.
-function InsightsSection({ entries }) {
+function InsightsSection({ entries, menuCourses = [] }) {
   const [open, setOpen] = useState(false);
-  const insights = useMemo(() => (open ? aggregateInsights(entries) : null), [open, entries]);
+  // The live menu names courses for entries filed without a menu snapshot, so
+  // their fire times aggregate under the same names as every other night's.
+  const insights = useMemo(
+    () => (open ? aggregateInsights(entries, { menuCourses }) : null),
+    [open, entries, menuCourses],
+  );
 
   const fmtMins = (m) => {
     if (m == null) return "—";
