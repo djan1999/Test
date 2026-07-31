@@ -26,6 +26,12 @@ describe("nextArchiveLabel (always save; distinguish duplicates)", () => {
   it("is safe with missing input", () => {
     expect(nextArchiveLabel(undefined, LABEL)).toBe(LABEL);
   });
+
+  it("never re-issues a suffix already in use (hole in the sequence)", () => {
+    // Base label deleted, " · 2" kept: count+1 handed out " · 2" again.
+    expect(nextArchiveLabel([{ label: `${LABEL} · 2` }], LABEL)).toBe(`${LABEL} · 3`);
+    expect(nextArchiveLabel([{ label: LABEL }, { label: `${LABEL} · 4` }], LABEL)).toBe(`${LABEL} · 5`);
+  });
 });
 
 describe("isSameServiceLabel", () => {

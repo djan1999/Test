@@ -260,6 +260,12 @@ export const tableBelongsInArchive = (t) => {
   if (tableHasServiceContent(t)) return true;
   if (String(t.resName || "").trim() || String(t.resTime || "").trim()) return true;
   if (String(t.notes || "").trim()) return true;
+  // A group member always rides along: mergeTableGroups keys every group off
+  // its lowest-id member, so dropping a (hypothetically) blank primary would
+  // make the WHOLE party vanish from the archive view. The reconcile clears
+  // tableGroup whenever it blanks a table, so real leftover rows never carry
+  // one — this only shields group integrity.
+  if (Array.isArray(t.tableGroup) && t.tableGroup.length > 1) return true;
   return Array.isArray(t.restrictions) && t.restrictions.length > 0;
 };
 

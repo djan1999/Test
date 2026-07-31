@@ -74,7 +74,7 @@ export default function ArchivePanel({ optionalExtras = [] }) {
     } else {
       const entry = deleted.find(x => x.id === id);
       setDeleted(d => d.filter(x => x.id !== id));
-      if (entry) setEntries(e => [{ ...entry, deleted_at: null }, ...e].sort((a, b) => b.created_at.localeCompare(a.created_at)));
+      if (entry) setEntries(e => [{ ...entry, deleted_at: null }, ...e].sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || ""))));
     }
     setDeleting(null);
   };

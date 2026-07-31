@@ -22,5 +22,11 @@ export function isSameServiceLabel(rowLabel, baseLabel) {
 export function nextArchiveLabel(existing = [], archiveLabel) {
   const rows = Array.isArray(existing) ? existing : [];
   const sameSlot = rows.filter((e) => isSameServiceLabel(e.label, archiveLabel));
-  return sameSlot.length > 0 ? `${archiveLabel} · ${sameSlot.length + 1}` : archiveLabel;
+  if (sameSlot.length === 0) return archiveLabel;
+  // One past the HIGHEST suffix in use, not count+1: with a hole in the
+  // sequence (base label deleted, " · 2" kept) counting produced " · 2"
+  // again — two archives under the same name.
+  const taken = sameSlot.map((e) =>
+    e.label === archiveLabel ? 1 : Number(e.label.slice(archiveLabel.length + 3)) || 1);
+  return `${archiveLabel} · ${Math.max(...taken) + 1}`;
 }

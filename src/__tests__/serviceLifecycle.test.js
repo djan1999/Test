@@ -255,6 +255,21 @@ describe("archiveEntryFromService — the ended service IS the archive", () => {
     ]);
     expect(entry.state.tables.map((t) => t.id)).toEqual([3, 5]); // T6 is a blank row
   });
+
+  it("never drops a group member — a blank primary would vanish the whole party", () => {
+    // mergeTableGroups keys each group off its lowest-id member; if that row
+    // were filtered out, the surviving members are skipped as "secondaries"
+    // and the party disappears from every archive surface.
+    const svc = sanitizeService({
+      id: "s4", workspace_id: "ws-1", date: "2026-07-24", session: "dinner",
+      started_at: "2026-07-24T16:00:00Z", status: "ended", ended_at: "2026-07-24T23:00:00Z",
+    });
+    const entry = archiveEntryFromService(svc, [
+      { service_id: "s4", table_id: 2, data: { guests: 4, active: false, tableGroup: [2, 3], seats: [] }, updated_at: "U" },
+      { service_id: "s4", table_id: 3, data: { guests: 4, active: true, arrivedAt: "19:00", tableGroup: [2, 3], seats: [] }, updated_at: "U" },
+    ]);
+    expect(entry.state.tables.map((t) => t.id)).toEqual([2, 3]);
+  });
 });
 
 describe("mergeArchiveEntries — legacy snapshots", () => {
