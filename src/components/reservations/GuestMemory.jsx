@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../../lib/supabaseClient.js";
+import { supabase, getWorkspaceId } from "../../lib/supabaseClient.js";
 import { fetchArchive } from "../../lib/archiveStore.js";
 import { findGuestHistory } from "../../utils/archiveInsights.js";
 import { tokens } from "../../styles/tokens.js";
@@ -8,9 +8,16 @@ const FONT = tokens.font;
 
 // Recent archives, fetched once and shared across form opens (5 min TTL) —
 // typing a guest name must not hammer Supabase with snapshot downloads.
-let archiveCache = { at: 0, entries: null, promise: null };
+// Keyed by WORKSPACE: the cache outlives a workspace switch (module scope),
+// and serving one workspace's archived guests while typing in another leaked
+// guest names, restrictions and visit history across tenants on any account
+// that can see both (e.g. the real restaurant + Demo).
+let archiveCache = { at: 0, ws: null, entries: null, promise: null };
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const ARCHIVE_LIMIT = 20;
+
+const cachedEntries = () =>
+  (archiveCache.ws && archiveCache.ws === getWorkspaceId() ? archiveCache.entries : null);
 
 async function fetchRecentArchives() {
   // The archive seam merges ENDED SERVICES (entity model) with legacy
@@ -20,19 +27,24 @@ async function fetchRecentArchives() {
 }
 
 function loadRecentArchives() {
-  const fresh = archiveCache.entries && Date.now() - archiveCache.at < CACHE_TTL_MS;
+  const ws = getWorkspaceId();
+  const sameWs = archiveCache.ws === ws;
+  const fresh = sameWs && archiveCache.entries && Date.now() - archiveCache.at < CACHE_TTL_MS;
   if (fresh) return Promise.resolve(archiveCache.entries);
-  if (archiveCache.promise) return archiveCache.promise;
-  archiveCache.promise = fetchRecentArchives()
+  if (sameWs && archiveCache.promise) return archiveCache.promise;
+  const promise = fetchRecentArchives()
     .then((rows) => {
-      archiveCache = { at: Date.now(), entries: rows, promise: null };
-      return archiveCache.entries;
+      archiveCache = { at: Date.now(), ws, entries: rows, promise: null };
+      return rows;
     })
     .catch(() => {
-      archiveCache.promise = null;
-      return archiveCache.entries || [];
+      if (archiveCache.ws === ws) archiveCache.promise = null;
+      return cachedEntries() || [];
     });
-  return archiveCache.promise;
+  // A workspace switch invalidates the old entries immediately — never serve
+  // them while the new workspace's fetch is in flight.
+  archiveCache = { at: 0, ws, entries: sameWs ? archiveCache.entries : null, promise };
+  return promise;
 }
 
 /**
@@ -41,7 +53,7 @@ function loadRecentArchives() {
  * when there is no match.
  */
 export default function GuestMemory({ name }) {
-  const [entries, setEntries] = useState(archiveCache.entries);
+  const [entries, setEntries] = useState(cachedEntries);
   const [query, setQuery] = useState("");
 
   // Debounce the typed name so the scan (and first fetch) waits for a pause.

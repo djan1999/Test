@@ -8,7 +8,7 @@
 // operation can ever touch another service's data — the property that makes
 // the old wipe class structurally impossible.
 
-import { sanitizeTable } from "../utils/tableHelpers.js";
+import { sanitizeTable, tableBelongsInArchive } from "../utils/tableHelpers.js";
 import { nextArchiveLabel } from "../utils/archiveDedup.js";
 
 const asObject = (value) => {
@@ -90,10 +90,14 @@ export function archiveEntryFromService(service, tableRows) {
   const svc = sanitizeService(service);
   if (!svc) return null;
   const snapshot = svc.snapshot || {};
-  // Every stored row rides along — the new model never writes blank rows, so
-  // a row's existence means staff touched that table during the service.
+  // Only rows the night actually recorded something for. A row's existence is
+  // NOT evidence staff touched that table: unseating a party, or moving it to
+  // another table, leaves the row behind blank but for its default `guests`
+  // scaffold. Those reached the archive as nameless "2 guests" cards and their
+  // phantom pax landed in the night's table/guest totals.
   const tables = (tableRows || [])
     .map((row) => sanitizeTable({ id: Number(row.table_id), ...(asObject(row.data) || {}) }))
+    .filter(tableBelongsInArchive)
     .sort((a, b) => a.id - b.id);
   return {
     id: svc.id,
@@ -121,7 +125,14 @@ export function archiveEntryFromService(service, tableRows) {
 // { active, deleted } shape the archive surfaces consume — active newest-first
 // capped at 60, trash newest-first capped at 30 (the legacy caps).
 export function mergeArchiveEntries({ serviceEntries = [], legacyActive = [], legacyDeleted = [] }) {
-  const legacy = (rows) => (rows || []).map((row) => ({ ...row, _kind: "legacy" }));
+  // Legacy snapshots were whole-board copies, so they carry a row for every
+  // table on the floor — most of them blank on a quiet night. Same filter as
+  // the service path: an untouched table is not part of the night's record.
+  const legacy = (rows) => (rows || []).map((row) => {
+    const state = asObject(row.state) || {};
+    if (!Array.isArray(state.tables)) return { ...row, _kind: "legacy" };
+    return { ...row, _kind: "legacy", state: { ...state, tables: state.tables.filter(tableBelongsInArchive) } };
+  });
   const svc = (serviceEntries || []).filter(Boolean);
   const active = [
     ...svc.filter((entry) => !entry.deleted_at),

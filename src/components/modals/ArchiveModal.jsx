@@ -118,7 +118,7 @@ export default function ArchiveModal({
     } else {
       const entry = deleted.find((x) => x.id === id);
       setDeleted((d) => d.filter((x) => x.id !== id));
-      if (entry) setEntries((e) => [{ ...entry, deleted_at: null }, ...e].sort((a, b) => b.created_at.localeCompare(a.created_at)));
+      if (entry) setEntries((e) => [{ ...entry, deleted_at: null }, ...e].sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || ""))));
     }
     setDeleting(null);
   };
@@ -162,8 +162,12 @@ export default function ArchiveModal({
 
   // Merge multi-table reservations (T02 + T03 → "T02-03" with all seats combined)
   // so the archive view doesn't show ghost rows for the secondary tables that
-  // only carry empty placeholder seats.
-  const archivedTickets = mergeTableGroups((tables || []).filter((t) => t.kitchenArchived), liveCelebrationKeys);
+  // only carry empty placeholder seats. MERGE FIRST, then filter: the kitchen
+  // archives a group by flagging only the primary's row, so filtering the raw
+  // list first handed mergeTableGroups a list missing the secondaries — the
+  // archived ticket rendered without their seats, drinks and fires (and a
+  // group whose primary row was absent vanished from the strip entirely).
+  const archivedTickets = mergeTableGroups(tables || [], liveCelebrationKeys).filter((t) => t.kitchenArchived);
   const [expandedTicket, setExpandedTicket] = useState(null);
   const fmtDuration = (mins) => {
     if (mins == null) return null;
