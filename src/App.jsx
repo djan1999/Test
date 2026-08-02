@@ -110,7 +110,7 @@ import LoginScreen from "./components/login/LoginScreen.jsx";
 import AuthScreen from "./components/auth/AuthScreen.jsx";
 import PasswordRecoveryScreen from "./components/auth/PasswordRecoveryScreen.jsx";
 import ProfilePicker from "./components/auth/ProfilePicker.jsx";
-import Detail from "./components/service/Detail.jsx";
+import TableSheet, { TABLE_SHEET_WIDTH, TABLE_SHEET_BP } from "./components/service/TableSheet.jsx";
 import { DisplayBoard } from "./components/service/DisplayBoard.jsx";
 export { DisplayBoardCard } from "./components/service/DisplayBoard.jsx";
 import TableCard from "./components/TableCard/TableCard.jsx";
@@ -128,6 +128,7 @@ const SummaryModal = lazy(() => import("./components/modals/SummaryModal.jsx"));
 const ArchiveModal = lazy(() => import("./components/modals/ArchiveModal.jsx"));
 const InventoryModal = lazy(() => import("./components/modals/InventoryModal.jsx"));
 const KitchenFloorView = lazy(() => import("./components/kitchen/KitchenFloorView.jsx"));
+const MenuGenerator = lazy(() => import("./components/menu/MenuGenerator.jsx"));
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const reservationWriteKey = (workspaceId, id) => `${workspaceId}\u0000${id}`;
@@ -333,6 +334,9 @@ export default function App() {
   const localBev = readLocalBeverages();
   const loadMenuCoursesRef = useRef(null);
   const appIsMobile = useIsMobile(BP.md);
+  // The sheet goes full-width below its own breakpoint; the board only
+  // reserves space for it above that.
+  const sheetReservesWidth = !useIsMobile(TABLE_SHEET_BP);
   const [restaurantConfig, setRestaurantConfig] = useState(DEFAULT_RESTAURANT_CONFIG);
   const restaurantConfigRef = useRef(restaurantConfig);
   restaurantConfigRef.current = restaurantConfig;
@@ -451,7 +455,11 @@ export default function App() {
     return () => { cancelled = true; };
   }, [workspaceId, currentWorkspace?.name]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The table whose side sheet is open. The board stays mounted behind it —
+  // `sel` never swaps the view, it only raises the sheet.
   const [sel,          setSel]          = useState(null);
+  // TICKET & MENUS, raised from the sheet's action grid.
+  const [ticketTableId, setTicketTableId] = useState(null);
   // Which table (if any) is currently expanded into Quick Access on the board.
   // Clicking a reservation name toggles this; the rest of the board stays compact.
   const [quickTableId, setQuickTableId] = useState(null);
@@ -1322,7 +1330,6 @@ export default function App() {
       : displayLabel;
     return { ...table, displayLabel, displayGroupLabel };
   }), [tables, configuredLabelById]);
-  const selTable = displayTables.find((table) => table.id === sel);
 
   const upd = (id, f, v) => {
     setTables(p => p.map(t => t.id === id ? { ...t, [f]: typeof v === "function" ? v(t[f]) : v } : t));
@@ -1345,59 +1352,6 @@ export default function App() {
         return { ...s, [f]: next };
       }),
     };
-  }));
-  };
-
-  const setGuests = (tid, n) => {
-    setTables(p => p.map(t =>
-    t.id !== tid ? t : { ...t, guests: n, seats: makeSeats(n, t.seats) }
-  ));
-  };
-
-  const applySeatTemplateToAll = (tableId, sourceSeatId = 1) => {
-    setTables(prev => prev.map(t => {
-    if (t.id !== tableId) return t;
-    const seats = t.seats || [];
-    if (seats.length <= 1) return t;
-    const source = seats.find(s => s.id === sourceSeatId) || seats[0];
-    if (!source) return t;
-    const clonedExtras = source.extras
-      ? Object.fromEntries(Object.entries(source.extras).map(([k, v]) => [k, v ? { ...v } : v]))
-      : {};
-    const clonedOptionalPairings = source.optionalPairings ? { ...source.optionalPairings } : {};
-    const nextSeats = seats.map(s => (
-      s.id === source.id
-        ? s
-        : {
-            ...s,
-            water: source.water || "Still",
-            pairing: source.pairing || "—",
-            aperitifs: [...(source.aperitifs || [])],
-            glasses: [...(source.glasses || [])],
-            cocktails: [...(source.cocktails || [])],
-            spirits: [...(source.spirits || [])],
-            beers: [...(source.beers || [])],
-            extras: clonedExtras,
-            optionalPairings: clonedOptionalPairings,
-          }
-    ));
-    return { ...t, seats: nextSeats };
-  }));
-  };
-
-  const clearSeatBeverages = (tableId) => {
-    setTables(prev => prev.map(t => {
-    if (t.id !== tableId) return t;
-    const nextSeats = (t.seats || []).map(s => ({
-      ...s,
-      pairing: "—",
-      aperitifs: [],
-      glasses: [],
-      cocktails: [],
-      spirits: [],
-      beers: [],
-    }));
-    return { ...t, seats: nextSeats };
   }));
   };
 
@@ -1451,8 +1405,12 @@ export default function App() {
     ));
   };
 
-  const clear = async id => {
-    if (typeof window !== "undefined" && !window.confirm("Clear this table and reset its details?")) return;
+  // `skipConfirm` is for callers that already showed the consequence: the table
+  // sheet's CLEAR TABLE runs through its own confirm dialog (which states what
+  // is lost and that the ticket can be restored), so a second window.confirm
+  // would be a worse dialog asked twice.
+  const clear = async (id, { skipConfirm = false } = {}) => {
+    if (!skipConfirm && typeof window !== "undefined" && !window.confirm("Clear this table and reset its details?")) return;
     const boardRow = tablesRef.current?.find(t => Number(t.id) === Number(id));
     const owner = serviceDate && (mode === "service" || mode === "display")
       ? reservationOnTable(id)
@@ -1591,6 +1549,27 @@ export default function App() {
     return reservations.filter(r =>
       r.date === serviceDate && resolveReservationSession(r.data) === activeServiceSession);
   }, [reservations, serviceDate, activeServiceSession]);
+
+  // Terrace-flow decoration: which board tables hold a party that is still
+  // outside (terrace) or mid kitchen-visit (arriving). Derived per render,
+  // never persisted — and shared, so the board card and the table sheet can
+  // never disagree about a party's state.
+  const visitByTable = useMemo(() => {
+    const out = {};
+    serviceReservations.forEach(r => {
+      const vs = visitStateOf(r.data);
+      if (vs !== "terrace" && vs !== "arriving") return;
+      reservationTableIds(r.data, r.table_id).forEach(id => {
+        out[id] = { visit: vs, terraceLabel: r.data?.terrace_table || null };
+      });
+    });
+    return out;
+  }, [serviceReservations]);
+
+  const selBoardTable = displayTables.find((table) => table.id === sel);
+  const selTable = selBoardTable && visitByTable[selBoardTable.id]
+    ? { ...selBoardTable, _visit: visitByTable[selBoardTable.id] }
+    : selBoardTable;
 
   // MARK SEATED reached from a dining-table card (the arriving party's table).
   const markSeatedOnTable = (tableId) => {
@@ -2804,6 +2783,179 @@ export default function App() {
     }
   };
 
+  // ── Table sheet writes ─────────────────────────────────────────────────────
+  // The sheet's booking chips (menu, language, guest type, cake, notes,
+  // restrictions) are BOOKING facts, not board scratch: writing them only to
+  // the board row means the reconcile re-applies the reservation's stale value
+  // the next time the table has no service content, and the tap silently
+  // reverts. Route them through the reservation when one owns the table, and
+  // fall back to a plain board write for a walk-in that has none.
+  const updBookingField = (tableId, field, value) => {
+    const owner = reservationOnTable(tableId);
+    if (owner) { updTableFromReservation(owner.id, tableId, field, value); return; }
+    upd(tableId, field, value);
+  };
+
+  // JOIN TABLE + — add a free table to this party's combined booking.
+  // The group lives on the reservation (reservationTableIds / the board's
+  // primary-table filter both read it), but it is ALSO written straight onto
+  // the board rows: the reconcile refuses to rebuild a table holding live
+  // service content, so a seated party would never learn about the join.
+  const joinTables = async (primaryId, addId) => {
+    const from = Number(primaryId);
+    const to = Number(addId);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return { ok: false, reason: "bad-target" };
+    const owner = reservationOnTable(from);
+    if (!owner) return { ok: false, reason: "no-reservation" };
+    if (reservationOnTable(to)) return { ok: false, reason: "occupied" };
+    const dst = tablesRef.current?.find(t => Number(t.id) === to);
+    if (dst && tableHasServiceContent(dst)) return { ok: false, reason: "occupied" };
+
+    const group = [...new Set([...reservationTableIds(owner.data, owner.table_id).map(Number), to])]
+      .sort((a, b) => a - b);
+    const nextData = { ...(owner.data || {}), tableGroup: group };
+    const persisted = await persistReservationRow({
+      id: owner.id, date: owner.date, table_id: owner.table_id, data: nextData,
+    });
+    if (!persisted.ok) {
+      const error = persisted.error || new Error("The tables could not be joined.");
+      setSyncStatus("sync-error");
+      noteSyncError("join tables", error);
+      recordClientDiagnostic("join tables", error);
+      return { ok: false, reason: "persist-failed", error };
+    }
+    setReservations(prev => prev.map(r => r.id === owner.id ? { ...r, data: nextData } : r));
+    setTables(prev => prev.map(t => (group.includes(Number(t.id)) ? { ...t, tableGroup: group } : t)));
+    setSel(Math.min(...group));
+    return { ok: true, group };
+  };
+
+  // SPLIT Tnn+Tnn — break the combination back into single tables. The party
+  // stays where the booking points; every other member is released to blank so
+  // the room can re-seat it immediately.
+  const splitTables = async (primaryId) => {
+    const boardRow = tablesRef.current?.find(t => Number(t.id) === Number(primaryId));
+    const owner = reservationOnTable(primaryId);
+    const group = [...new Set([
+      Number(primaryId),
+      ...((boardRow?.tableGroup || []).map(Number)),
+      ...((owner?.data?.tableGroup || []).map(Number)),
+    ].filter(Number.isFinite))].sort((a, b) => a - b);
+    if (group.length < 2) return { ok: false, reason: "not-grouped" };
+
+    const ownerTable = Number(owner?.table_id);
+    const keep = group.includes(ownerTable) ? ownerTable : group[0];
+    const release = group.filter(id => id !== keep);
+
+    if (owner) {
+      const nextData = { ...(owner.data || {}), tableGroup: [] };
+      const persisted = await persistReservationRow({
+        id: owner.id, date: owner.date, table_id: keep, data: nextData,
+      });
+      if (!persisted.ok) {
+        const error = persisted.error || new Error("The tables could not be split.");
+        setSyncStatus("sync-error");
+        noteSyncError("split tables", error);
+        recordClientDiagnostic("split tables", error);
+        return { ok: false, reason: "persist-failed", error };
+      }
+      setReservations(prev => prev.map(r => r.id === owner.id ? { ...r, table_id: keep, data: nextData } : r));
+    }
+    // Flag the blanks as intentional or the mass-blank guard restores them.
+    release.forEach(id => intentionalBoardBlankRef.current.add(id));
+    setTables(prev => prev.map(t => {
+      if (Number(t.id) === keep) return { ...t, tableGroup: [] };
+      if (release.includes(Number(t.id))) return blankTable(t.id);
+      return t;
+    }));
+    setSel(keep);
+    return { ok: true, keep, released: release };
+  };
+
+  // MOVE TABLE / SWAP TABLES from the sheet. `mvMode` "auto" resolves to a
+  // swap when the destination is occupied; the picker sends "swap" explicitly
+  // when the operator chose SWAP TABLES.
+  const moveTableFromSheet = async (fromId, toId, mvMode = "auto") => {
+    const from = Number(fromId);
+    const to = Number(toId);
+    const originalTables = tablesRef.current || [];
+    const originalReservations = reservations;
+    const dst = tablesRef.current?.find(t => t.id === to);
+    const dstStarted = dst && (dst.active || dst.arrivedAt
+      || (dst.kitchenLog && Object.keys(dst.kitchenLog).length > 0)
+      || dst.kitchenArchived);
+    const dstHasReservation = !!(dst?.resName || dst?.resTime);
+    const dstOccupied = !!(dstStarted || dstHasReservation);
+    const useSwap = mvMode === "swap" || (mvMode === "auto" && dstOccupied);
+    const result = useSwap ? swapTableState(from, to) : moveTableState(from, to);
+    if (!result.ok) return result;
+
+    // Repoint the owning reservation(s) so they follow the live state we
+    // just moved/swapped. CRITICAL: do it in ONE atomic setReservations
+    // (and persist directly), not two separate async upserts. The old
+    // path moved one reservation, awaited the DB, then moved the other —
+    // and in the gap the board↔reservations reconcile saw a table whose
+    // reservation had already left but whose replacement hadn't arrived,
+    // so it blanked the table. A single-table blank isn't caught by the
+    // mass-wipe guard, so the wipe persisted: the "switching tables
+    // deletes one of them" bug.
+    const ownerOf = (tid) => reservations.find(r =>
+      r.date === serviceDate
+      && resolveReservationSession(r.data) === activeServiceSession
+      && reservationTableIds(r.data, r.table_id).includes(tid));
+    // repointReservation (utils/tableHelpers) swaps from↔to on the
+    // primary table_id AND inside the tableGroup so a grouped
+    // reservation's member list never dangles at the old id.
+    const srcResv = ownerOf(from);
+    const dstResv = useSwap ? ownerOf(to) : null;
+    // The destination's owner only moves on a SWAP; a plain move targets
+    // a free table. Guard against the same reservation matching both.
+    const repoint = (r) => repointReservation(r, from, to);
+    if (srcResv || (dstResv && dstResv.id !== srcResv?.id)) {
+      setReservations(prev => prev.map(r => {
+        if (srcResv && r.id === srcResv.id) return { ...r, ...repoint(r) };
+        if (dstResv && dstResv.id !== srcResv?.id && r.id === dstResv.id) return { ...r, ...repoint(r) };
+        return r;
+      }));
+      if (supabase) {
+        // Persist through the store seam (SQLite when primary), NOT a
+        // direct Supabase write: on the SQLite-primary path the
+        // reservations watch re-reads from the local DB, so a direct
+        // Supabase-only write would be reverted by the next watch tick
+        // and the switch would bounce back — leaving the guest on both
+        // tables (the duplicate) and the other table hidden.
+        const writes = [];
+        if (srcResv) { const rp = repoint(srcResv); writes.push({ id: srcResv.id, date: srcResv.date, table_id: rp.table_id, data: rp.data }); }
+        if (dstResv && dstResv.id !== srcResv?.id) { const rp = repoint(dstResv); writes.push({ id: dstResv.id, date: dstResv.date, table_id: rp.table_id, data: rp.data }); }
+        const persisted = await persistReservationRows(writes);
+        if (!persisted.ok) {
+          setTables(originalTables);
+          setReservations(originalReservations);
+          const error = persisted.error || new Error("Reservation table move persistence failed.");
+          setSyncStatus("sync-error");
+          noteSyncError("table sheet move", error);
+          recordClientDiagnostic("table sheet move", error);
+          if (typeof window !== "undefined") window.alert("Table move failed. The original assignments were restored.");
+          return { ok: false, reason: "persist-failed", error };
+        }
+      }
+    }
+    setSel(to);
+    return { ...result, swapped: useSwap };
+  };
+
+  // MARK ARRIVING — the terrace party is walking to its dining table. Only
+  // reachable from 'terrace' (see utils/terraceFlow), which is exactly what
+  // the sheet's action grid gates on.
+  const markArrivingOnTable = (tableId) => {
+    const owner = serviceReservations.find(r =>
+      visitStateOf(r.data) === "terrace" && reservationTableIds(r.data, r.table_id).includes(Number(tableId)));
+    if (!owner) return;
+    persistVisitData(owner, moveToDiningData(owner.data, new Date().toISOString(), { singleTap: false }));
+    const label = owner.data?.terrace_table || null;
+    if (label) clearTerraceStrip(label);
+  };
+
   // Mode is per-session only (never persisted): the next open starts at the
   // mode-selection screen.
   const enterMode = (nextMode) => {
@@ -2901,8 +3053,9 @@ export default function App() {
 
   // Escape = back. The hook stacks handlers so the most recently enabled
   // one fires first: detail closes before mode exits.
+  // The table sheet owns its own Escape (it registers while mounted, so it
+  // stacks above this and below any picker it opens).
   useModalEscape(() => changeMode(null), !!mode);
-  useModalEscape(() => setSel(null), !!sel);
   useModalEscape(() => setAddResOpen(false), addResOpen);
 
   // ── Self-heal stale SET banners ──────────────────────────────────────────────
@@ -4871,7 +5024,16 @@ export default function App() {
   // Service mode only
   return (<>
     {serviceDatePickerEl}{sandboxBannerEl}
-    <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
+    {/* On desktop the open sheet RESERVES its width instead of overlapping:
+        the whole service column reflows left so the board stays readable
+        beside it. Below the sheet's own breakpoint it goes full-width and the
+        reserve would leave nothing, so it is dropped there. */}
+    <div style={{
+      minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT,
+      overflowX: "hidden", WebkitTextSizeAdjust: "100%",
+      paddingRight: sel !== null && sheetReservesWidth ? TABLE_SHEET_WIDTH : 0,
+      transition: "padding-right 200ms ease",
+    }}>
       <GlobalStyle />
 
       <Header
@@ -4889,8 +5051,10 @@ export default function App() {
       />
       {pastDateWarningEl}
 
-      {sel === null ? (
-        <div style={{ padding: appIsMobile ? "0 0 32px" : "0 0 48px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
+      {/* The board is ALWAYS mounted. Opening a table raises a side sheet over
+          it — nothing navigates away, so the room stays readable (and live)
+          behind the scrim while one table is worked. */}
+      <div style={{ padding: appIsMobile ? "0 0 32px" : "0 0 48px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
           {/* [SERVICE READOUT] strip — stats + Quick Access toggle */}
           <div style={{
             borderBottom: `1px solid ${tokens.ink[4]}`,
@@ -5021,17 +5185,6 @@ export default function App() {
               // Terrace-flow decoration: mark each board table whose party is
               // still outside (terrace) or mid kitchen-visit (arriving) so the
               // room reads honestly. Derived per render, never persisted.
-              const visitByTable = {};
-              serviceReservations.forEach(r => {
-                const vs = visitStateOf(r.data);
-                if (vs !== "terrace" && vs !== "arriving") return;
-                reservationTableIds(r.data, r.table_id).forEach(id => {
-                  visitByTable[id] = {
-                    visit: vs,
-                    terraceLabel: r.data?.terrace_table || null,
-                  };
-                });
-              });
               const visibleTables = displayTables
                 .filter(t => t.active || t.resName || t.resTime)
                 .filter(t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup))
@@ -5062,99 +5215,80 @@ export default function App() {
             })()
           )}
         </div>
-      ) : (
-        <Detail
+
+      {/* ── TABLE SIDE SHEET ── slides in over the live board ── */}
+      {/* No `key`: selecting a different table must swap the sheet's CONTENT
+          in place, not unmount and re-animate a second sheet. */}
+      {selTable && (
+        <TableSheet
           table={selTable}
           tables={displayTables}
-          optionalExtras={dishes}
-          optionalPairings={pairings}
+          reservations={serviceReservations}
+          menuCourses={activeMenuCourses}
+          profiles={profilesState.profiles}
+          assignments={profilesState.assignments}
           wines={wines}
           cocktails={cocktails}
           spirits={spirits}
           beers={beers}
-          menuCourses={activeMenuCourses}
           aperitifOptions={serviceAperitifOptions}
-          mode={mode}
-          onBack={() => setSel(null)}
+          reservationOnTable={reservationOnTable}
+          seatCapOf={id => mapSeatCountForBoardTable(getActiveDiningMap(floorMapsState), id)}
+          onClose={() => setSel(null)}
           upd={(f, v) => upd(sel, f, v)}
           updSeat={(sid, f, v) => updSeat(sel, sid, f, v)}
-          setGuests={n => setGuests(sel, n)}
-          swapSeats={(aId, bId) => swapSeats(sel, aId, bId)}
-          onApplySeatToAll={(tableId, sourceSeatId) => applySeatTemplateToAll(tableId, sourceSeatId)}
-          onClearBeverages={tableId => clearSeatBeverages(tableId)}
-          onClearTable={tableId => clear(tableId)}
-          onMoveTable={async (fromId, toId, mvMode = "auto") => {
-            const from = Number(fromId);
-            const to = Number(toId);
-            const originalTables = tablesRef.current || [];
-            const originalReservations = reservations;
-            const dst = tablesRef.current?.find(t => t.id === to);
-            const dstStarted = dst && (dst.active || dst.arrivedAt
-              || (dst.kitchenLog && Object.keys(dst.kitchenLog).length > 0)
-              || dst.kitchenArchived);
-            const dstHasReservation = !!(dst?.resName || dst?.resTime);
-            const dstOccupied = !!(dstStarted || dstHasReservation);
-            const useSwap = mvMode === "swap" || (mvMode === "auto" && dstOccupied);
-            const result = useSwap ? swapTableState(from, to) : moveTableState(from, to);
-            if (!result.ok) return result;
-
-            // Repoint the owning reservation(s) so they follow the live state we
-            // just moved/swapped. CRITICAL: do it in ONE atomic setReservations
-            // (and persist directly), not two separate async upserts. The old
-            // path moved one reservation, awaited the DB, then moved the other —
-            // and in the gap the board↔reservations reconcile saw a table whose
-            // reservation had already left but whose replacement hadn't arrived,
-            // so it blanked the table. A single-table blank isn't caught by the
-            // mass-wipe guard, so the wipe persisted: the "switching tables
-            // deletes one of them" bug.
-            const ownerOf = (tid) => reservations.find(r =>
-              r.date === serviceDate
-              && resolveReservationSession(r.data) === activeServiceSession
-              && reservationTableIds(r.data, r.table_id).includes(tid));
-            // repointReservation (utils/tableHelpers) swaps from↔to on the
-            // primary table_id AND inside the tableGroup so a grouped
-            // reservation's member list never dangles at the old id.
-            const srcResv = ownerOf(from);
-            const dstResv = useSwap ? ownerOf(to) : null;
-            // The destination's owner only moves on a SWAP; a plain move targets
-            // a free table. Guard against the same reservation matching both.
-            const repoint = (r) => repointReservation(r, from, to);
-            if (srcResv || (dstResv && dstResv.id !== srcResv?.id)) {
-              setReservations(prev => prev.map(r => {
-                if (srcResv && r.id === srcResv.id) return { ...r, ...repoint(r) };
-                if (dstResv && dstResv.id !== srcResv?.id && r.id === dstResv.id) return { ...r, ...repoint(r) };
-                return r;
-              }));
-              if (supabase) {
-                // Persist through the store seam (SQLite when primary), NOT a
-                // direct Supabase write: on the SQLite-primary path the
-                // reservations watch re-reads from the local DB, so a direct
-                // Supabase-only write would be reverted by the next watch tick
-                // and the switch would bounce back — leaving the guest on both
-                // tables (the duplicate) and the other table hidden.
-                const writes = [];
-                if (srcResv) { const rp = repoint(srcResv); writes.push({ id: srcResv.id, date: srcResv.date, table_id: rp.table_id, data: rp.data }); }
-                if (dstResv && dstResv.id !== srcResv?.id) { const rp = repoint(dstResv); writes.push({ id: dstResv.id, date: dstResv.date, table_id: rp.table_id, data: rp.data }); }
-                const persisted = await persistReservationRows(writes);
-                if (!persisted.ok) {
-                  setTables(originalTables);
-                  setReservations(originalReservations);
-                  const error = persisted.error || new Error("Reservation table move persistence failed.");
-                  setSyncStatus("sync-error");
-                  noteSyncError("detail table move", error);
-                  recordClientDiagnostic("detail table move", error);
-                  if (typeof window !== "undefined") window.alert("Table move failed. The original assignments were restored.");
-                  return { ok: false, reason: "persist-failed", error };
-                }
-              }
-            }
-            setSel(to);
-            return { ...result, swapped: useSwap };
+          updBooking={(f, v) => updBookingField(sel, f, v)}
+          onFire={courseKey => {
+            const now = fmt(new Date());
+            upd(sel, "kitchenLog", prev => ({ ...(prev || {}), [courseKey]: { firedAt: now } }));
+            if (selTable.courseReady?.key === courseKey) upd(sel, "courseReady", null);
           }}
-          reservationOnTable={reservationOnTable}
-          mapSeatCap={mapSeatCountForBoardTable(getActiveDiningMap(floorMapsState), sel)}
+          onUnfire={courseKey => upd(sel, "kitchenLog", prev => {
+            const next = { ...(prev || {}) };
+            delete next[courseKey];
+            return next;
+          })}
+          // An ARRIVING party is seated through the terrace flow (which seats
+          // the board table itself); anything else is a plain board seat.
+          onMarkSeated={() => {
+            if (visitByTable[sel]?.visit === "arriving") markSeatedOnTable(sel);
+            else seatTable(sel);
+          }}
+          onMarkArriving={() => markArrivingOnTable(sel)}
+          onSetKitchen={() => sendSetToKitchen([sel])}
+          onUnsetKitchen={() => upd(sel, "courseReady", null)}
+          onMoveTable={(toId, mvMode) => moveTableFromSheet(sel, toId, mvMode)}
+          onJoinTable={toId => joinTables(sel, toId)}
+          onSplitTable={() => splitTables(sel)}
+          onOpenTicket={() => setTicketTableId(sel)}
+          onClearTable={() => clear(sel, { skipConfirm: true })}
         />
       )}
+
+      {/* TICKET & MENUS for one table, raised from the sheet's action grid. */}
+      {ticketTableId != null && (() => {
+        const ticketTable = displayTables.find(t => t.id === ticketTableId);
+        if (!ticketTable) return null;
+        return (
+          <Suspense fallback={null}>
+            <MenuGenerator
+              table={ticketTable}
+              menuCourses={activeMenuCourses}
+              upd={(f, v) => upd(ticketTableId, f, v)}
+              profiles={profilesState.profiles}
+              assignments={profilesState.assignments}
+              logoDataUri={logoDataUri}
+              wines={wines}
+              cocktails={cocktails}
+              spirits={spirits}
+              beers={beers}
+              aperitifOptions={aperitifOptions}
+              menuRules={menuRules}
+              onClose={() => setTicketTableId(null)}
+            />
+          </Suspense>
+        );
+      })()}
 
       {summaryOpen && (
         <Suspense fallback={null}>

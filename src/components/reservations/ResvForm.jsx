@@ -145,6 +145,13 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
       rooms: sortedRooms,
       birthday, cakeNote: birthday ? cakeNote : "", restrictions, notes,
       tableGroup: sortedGroup,
+      // Carried, not edited here: the table sheet owns the kitchen note, and
+      // source/reference come from whoever took the booking. This form rebuilds
+      // `data` wholesale, so anything it doesn't carry is silently deleted by a
+      // routine mid-service edit.
+      kitchenNote: initial?.data?.kitchenNote || "",
+      source: initial?.data?.source || "",
+      reference: initial?.data?.reference || "",
       courseOverrides: initial?.data?.courseOverrides || {},
       kitchenCourseNotes: initial?.data?.kitchenCourseNotes || {},
       // Carry the terrace-flow keys through the edit — this form rebuilds
