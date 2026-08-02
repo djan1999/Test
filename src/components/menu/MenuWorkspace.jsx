@@ -1,15 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
+import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
+import { getAssignedGuestProfile } from "../../utils/menuLayoutProfiles.js";
+import { writeTeamNames, readTeamNames, writeMenuTitle, readMenuTitle, writeThankYouNote, readThankYouNote } from "../../utils/storage.js";
+import { optionalExtrasFromCourses, optionalPairingsFromCourses, resolveSeatRestrictionKeys } from "../../utils/menuUtils.js";
+import { supabase } from "../../lib/supabaseClient.js";
+import { readStateKey, saveStateKey } from "../../lib/stateStore.js";
+import { BEV_TYPES } from "../../constants/beverageTypes.js";
+import { PAIRINGS } from "../../constants/pairings.js";
+import BeverageSearch from "../service/BeverageSearch.jsx";
+import { resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
 import {
-  PAIRING_SETS,
-  buildSeatMenu,
-  seatRestrictionKeys,
+  courseKeyOf,
+  substitutionAttribution,
   restrictionTag,
   defaultMenuTitle,
   defaultThankYou,
 } from "../../utils/seatMenuPlan.js";
-import { renderSeatMenuHTML, printSeatMenu, PAGE_W_PX, PAGE_H_PX } from "../../utils/seatMenuPrint.js";
 
 const FONT = tokens.font;
 const { ink, neutral, red, rule, signal } = tokens;
@@ -17,6 +25,9 @@ const { ink, neutral, red, rule, signal } = tokens;
 const RAIL_W = 270;
 const RAIL_STRIP_MAX_H = 200;
 const PREVIEW_W = 280;
+// A5 portrait in CSS pixels at 96dpi — what generateMenuHTML's page measures.
+const PAGE_W_PX = (148 / 25.4) * 96;
+const PAGE_H_PX = (210 / 25.4) * 96;
 const PREVIEW_SCALE = PREVIEW_W / PAGE_W_PX;
 
 // ── Shared chrome, built from the app's existing scale/colours ───────────────
@@ -81,20 +92,10 @@ const metaLineOf = (t) => [
   statusOf(t),
 ].join(" · ");
 
-/**
- * The courses this print run covers. SHORT is the booking's short menu — the
- * courses flagged for it, in their short order. A menu with nothing flagged
- * falls back to the full list rather than printing an empty sheet.
- */
-const coursesForMenuType = (courses, menuType) => {
-  const all = (courses || []).filter((c) => c && c.menu?.name);
-  if (menuType !== "short") return all;
-  const short = all.filter((c) => c.show_on_short);
-  if (short.length === 0) return all;
-  return [...short].sort(
-    (a, b) => (Number(a.short_order) || 0) - (Number(b.short_order) || 0),
-  );
-};
+// A stored template with zero rows renders a completely blank menu, so treat
+// it as absent — the fallback chain (short → long → auto-built default in
+// generateMenuHTML) then produces a printable menu instead of an empty page.
+const nonEmptyTemplate = (t) => (t && Array.isArray(t.rows) && t.rows.length > 0) ? t : null;
 
 /**
  * MENU workspace — per-guest printed menus generated from the live service.
@@ -102,15 +103,33 @@ const coursesForMenuType = (courses, menuType) => {
  * A menu belongs to a SEAT, not a table: the seat tabs below the options are
  * the unit of work, and PRINT ALL walks them. Every option change re-runs
  * generation immediately, so there is no generate button to forget to press.
- * Nothing on this screen writes to the master menu — substitutions come from
- * the course records, and one-time edits live in local state only.
+ *
+ * There is ONE menu engine in this app — generateMenuHTML — and this screen is
+ * only a face on it: the preview iframe, the printed page, and the course
+ * cards all come from that engine (the cards via `_rowsOnly: true`). The
+ * assigned layout profile's template + layoutStyles drive everything, exactly
+ * as they do everywhere else.
+ *
+ * Substitutions come from the course records; one-time edits live in local
+ * state only, keyed by the engine's courseKey, and feed straight into
+ * seatOutputOverrides. Nothing on this screen writes to the master menu —
+ * per-seat pairing/drinks/extras write to the SEAT through `upd`, the same
+ * path the service board uses, so the kitchen sees them too.
  */
 export default function MenuWorkspace({
   tables = [],
   menuCourses = [],
+  upd,
+  logoDataUri = "",
+  wines: winesCatalog = [],
+  cocktails: cocktailsCatalog = [],
+  spirits: spiritsCatalog = [],
+  beers: beersCatalog = [],
   aperitifOptions = [],
-  wordmark = "MILKA",
-  onSelectTable,
+  menuRules = DEFAULT_MENU_RULES,
+  profiles = [],
+  assignments = {},
+  initialTableId = null,
 }) {
   const isNarrow = useIsMobile(BP.lg);
 
@@ -119,25 +138,28 @@ export default function MenuWorkspace({
     [tables],
   );
 
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(initialTableId);
+  // Resolve from the full table list, not just the rail's live parties, so a
+  // caller-preselected table (initialTableId) works even before it is "live".
   const table = useMemo(
-    () => parties.find((t) => t.id === selectedId) || null,
-    [parties, selectedId],
+    () => (tables || []).find((t) => t.id === selectedId) || null,
+    [tables, selectedId],
   );
 
-  // ── Print-run options — seeded from the booking, scoped to this run ────────
+  // ── Print options ──────────────────────────────────────────────────────────
+  // menuType/lang are seeded from the booking; changing them here affects only
+  // this screen's output (menuType picks the profile's long/short template).
   const [menuType, setMenuType] = useState("long");
   const [lang, setLang] = useState("en");
-  const [pairingSet, setPairingSet] = useState("");
-  const [aperitif, setAperitif] = useState("");
-  const [title, setTitle] = useState("");
-  const [thankYou, setThankYou] = useState("");
   const [seatIndex, setSeatIndex] = useState(0);
-  // One-time edits — { [seatId]: { [courseKey]: { name } } }. Seat + course
-  // scoped, never persisted, and wiped by CLEAR EDITS.
-  const [edits, setEdits] = useState({});
+  // One-time edits — { [seatId]: { [courseKey]: { name?, sub?, drinkName?, drinkSub? } } }.
+  // Keyed by the ENGINE's courseKey and fed to generateMenuHTML as
+  // seatOutputOverrides. Never persisted; wiped by CLEAR EDITS and consumed
+  // (cleared for the seat) by printing that seat.
+  const [seatEdits, setSeatEdits] = useState({});
   const [openCourse, setOpenCourse] = useState(null);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState({ name: "", sub: "", drinkName: "", drinkSub: "" });
+  const [drinksOpen, setDrinksOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
 
@@ -148,74 +170,225 @@ export default function MenuWorkspace({
   };
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
-  // Selecting a party reseeds every option from that booking and drops the
+  // ── Team names / menu title / thank-you — persistence shared with the rest
+  // of the app (localStorage seeds, Supabase state store as source of truth).
+  // Title and thank-you are stored as { en, si } so both languages persist
+  // independently — storing a single value caused the last-switched language
+  // to overwrite the other language on the next open.
+  const [teamNames, setTeamNames] = useState(readTeamNames);
+  const [menuTitle, setMenuTitle] = useState(() => readMenuTitle("en") || defaultMenuTitle("en"));
+  const [thankYouNote, setThankYouNote] = useState(() => readThankYouNote("en") || defaultThankYou("en"));
+  const genLoaded = useRef(false);
+
+  useEffect(() => {
+    if (!supabase) { genLoaded.current = true; return; }
+    const currentLang = lang;
+    Promise.all([
+      readStateKey("menu_gen_team").catch(() => null),
+      readStateKey("menu_gen_title").catch(() => null),
+      readStateKey("menu_gen_thankyou").catch(() => null),
+    ]).then(([teamState, titleState, thankYouState]) => {
+      if (teamState?.value) setTeamNames(teamState.value);
+
+      // Only apply store values when in the new bilingual { en, si } format.
+      // The legacy { value } format has no language tag — applying it blindly
+      // would overwrite the correct language's localStorage value (e.g. showing
+      // the SI title when opening in EN mode). If the row is still in the old
+      // format, leave the state as-is (already seeded from localStorage in useState).
+      if (titleState && (typeof titleState.en === "string" || typeof titleState.si === "string")) {
+        const val = titleState[currentLang] ?? "";
+        if (val) {
+          writeMenuTitle(currentLang, val); // Hydrate current lang to localStorage so the menuTitle effect reads the correct value
+          setMenuTitle(val);
+        }
+        const otherLang = currentLang === "en" ? "si" : "en";
+        if (titleState[otherLang]) writeMenuTitle(otherLang, titleState[otherLang]);
+      }
+
+      if (thankYouState && (typeof thankYouState.en === "string" || typeof thankYouState.si === "string")) {
+        const val = thankYouState[currentLang] ?? "";
+        if (val) {
+          writeThankYouNote(currentLang, val); // Same fix for thank-you note
+          setThankYouNote(val);
+        }
+        const otherLang = currentLang === "en" ? "si" : "en";
+        if (thankYouState[otherLang]) writeThankYouNote(otherLang, thankYouState[otherLang]);
+      }
+
+      genLoaded.current = true;
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save team names to localStorage + Supabase when changed
+  useEffect(() => {
+    writeTeamNames(teamNames);
+    if (!genLoaded.current || !supabase) return;
+    saveStateKey("menu_gen_team", { value: teamNames });
+  }, [teamNames]);
+
+  // Save menu title to Supabase when changed — store both languages so switching
+  // lang never clobbers the other language's stored value.
+  // Note: localStorage writes happen directly in onChange and setLanguageWithDefaults
+  // (not here) to avoid a React batching race where lang changes before menuTitle.
+  useEffect(() => {
+    if (!genLoaded.current || !supabase) return;
+    saveStateKey("menu_gen_title", { en: readMenuTitle("en"), si: readMenuTitle("si") });
+  }, [menuTitle]);
+
+  // Save thank-you note to Supabase when changed — same multi-lang approach.
+  useEffect(() => {
+    if (!genLoaded.current || !supabase) return;
+    saveStateKey("menu_gen_thankyou", { en: readThankYouNote("en"), si: readThankYouNote("si") });
+  }, [thankYouNote]);
+
+  const normalizedMenuRules = normalizeMenuRules(menuRules);
+
+  const setLanguageWithDefaults = (nextLang) => {
+    writeMenuTitle(lang, menuTitle);
+    writeThankYouNote(lang, thankYouNote);
+    setLang(nextLang);
+    if (normalizedMenuRules?.overwriteTitleAndThankYouOnLanguageSwitch !== false) {
+      setMenuTitle(readMenuTitle(nextLang) || defaultMenuTitle(nextLang));
+      setThankYouNote(readThankYouNote(nextLang) || defaultThankYou(nextLang));
+    }
+  };
+
+  // ── Layout profile → template + styles (the app's ONE engine setup) ────────
+  const assignedProfile = useMemo(
+    () => getAssignedGuestProfile("", profiles, assignments),
+    [profiles, assignments],
+  );
+  const isShortMenu = menuType === "short";
+  const menuTemplate = isShortMenu
+    ? (nonEmptyTemplate(assignedProfile?.shortMenuTemplate) || nonEmptyTemplate(assignedProfile?.menuTemplate) || null)
+    : (nonEmptyTemplate(assignedProfile?.menuTemplate) || null);
+  const layoutStyles = assignedProfile?.layoutStyles || {};
+
+  // Selecting a party reseeds the options from that booking and drops the
   // previous party's one-time edits — they were scoped to seats that are gone.
   useEffect(() => {
     if (!table) return;
-    const nextLang = langOf(table);
     setMenuType(menuTypeOf(table));
-    setLang(nextLang);
-    setPairingSet("");
-    setAperitif("");
-    setTitle(defaultMenuTitle(nextLang));
-    setThankYou(defaultThankYou(nextLang));
+    const nextLang = langOf(table);
+    if (nextLang !== lang) setLanguageWithDefaults(nextLang);
     setSeatIndex(0);
-    setEdits({});
+    setSeatEdits({});
     setOpenCourse(null);
+    setDrinksOpen(false);
   }, [table?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Language drives the pre-filled copy, so switching it refreshes both fields.
-  const changeLang = (next) => {
-    setLang(next);
-    setTitle(defaultMenuTitle(next));
-    setThankYou(defaultThankYou(next));
-  };
-
-  // Aperitif shortcuts come from the workspace's Quick Access config, so this
-  // screen offers the same bottles the floor does rather than a private list.
-  const aperitifShortcuts = useMemo(() => {
-    const labels = (aperitifOptions || [])
-      .map((o) => String(o?.label || o || "").trim().toUpperCase())
-      .filter(Boolean);
-    return [...new Set(labels)].slice(0, 4);
-  }, [aperitifOptions]);
 
   const seats = table?.seats || [];
   const restrictions = table?.restrictions || [];
-  const courses = useMemo(
-    () => coursesForMenuType(menuCourses, menuType),
-    [menuCourses, menuType],
-  );
-
+  const tableBottles = table?.bottleWines || [];
   const activeSeat = seats[Math.min(seatIndex, Math.max(seats.length - 1, 0))] || null;
 
-  const planFor = (seat, i) => buildSeatMenu({
+  const optionalExtras   = useMemo(() => optionalExtrasFromCourses(menuCourses),   [menuCourses]);
+  const optionalPairings = useMemo(() => optionalPairingsFromCourses(menuCourses), [menuCourses]);
+
+  // Engine-keyed course lookup, for the attribution pass on the cards.
+  const courseByKey = useMemo(() => {
+    const m = new Map();
+    (menuCourses || []).forEach((c, i) => m.set(courseKeyOf(c, i), c));
+    return m;
+  }, [menuCourses]);
+
+  // ── Seat writes — the app's one seat-update path, through `upd` ───────────
+  const updSeat = (seatId, field, valueOrFn) => {
+    if (!upd || !table) return;
+    upd(table.id, "seats", prev => (prev || []).map(s =>
+      s.id === seatId ? { ...s, [field]: typeof valueOrFn === "function" ? valueOrFn(s[field], s) : valueOrFn } : s
+    ));
+  };
+  // Atomically update multiple fields (or the whole seat) from latest committed state.
+  const updSeatFull = (seatId, fn) => {
+    if (!upd || !table) return;
+    upd(table.id, "seats", prev => (prev || []).map(s => s.id === seatId ? fn(s) : s));
+  };
+
+  // ── The ONE generator — everything below renders through generateMenuHTML ──
+  const engineArgs = (seat, overrides) => ({
     seat,
-    seatNumber: i + 1,
-    seatCount: seats.length,
-    restrictions,
-    courses,
+    table: {
+      menuType: isShortMenu ? "short" : (table?.menuType || ""),
+      restrictions,
+      bottleWines: tableBottles,
+      birthday: table?.birthday || false,
+    },
+    menuTitle,
+    teamNames,
+    menuCourses,
+    beerChoice: seat.pairing === "Non-Alc" ? "nonalc" : "alco",
     lang,
-    pairingSet,
-    menuTitle: title,
-    thankYou,
-    aperitif,
-    edits: edits[seat?.id] || {},
-    wordmark,
+    seatOutputOverrides: overrides,
+    thankYouNote,
+    layoutStyles,
+    menuRules: normalizedMenuRules,
+    menuTemplate,
+    catalog: { wines: winesCatalog, cocktails: cocktailsCatalog, spirits: spiritsCatalog, beers: beersCatalog },
+    _logo: logoDataUri,
   });
 
+  const htmlFor = (seat) => generateMenuHTML(engineArgs(seat, seatEdits[seat.id] || {}));
+  const courseRowsFor = (seat, overrides) =>
+    generateMenuHTML({ ...engineArgs(seat, overrides), _rowsOnly: true })
+      .filter((r) => r.type === "course" && r.courseKey);
+
+  /**
+   * The course cards — the engine's OWN row model for this seat (via
+   * `_rowsOnly`), so the list can never diverge from the printed page. The
+   * attribution pass runs alongside to explain WHY a wording differs.
+   */
+  const cardsFor = (seat) => {
+    const edits = seatEdits[seat.id] || {};
+    const rows = courseRowsFor(seat, edits);
+    const baseRows = Object.keys(edits).length > 0 ? courseRowsFor(seat, {}) : rows;
+    const baseByKey = new Map(baseRows.map((r) => [r.courseKey, r]));
+    const seatKeys = resolveSeatRestrictionKeys(restrictions, seat.id);
+    return rows.map((row, idx) => {
+      const base = baseByKey.get(row.courseKey) || row;
+      const course = courseByKey.get(row.courseKey) || null;
+      const attribution = course ? substitutionAttribution(course, seatKeys, lang) : null;
+      const edit = edits[row.courseKey] || null;
+      return {
+        index: idx + 1,
+        courseKey: row.courseKey,
+        name: row.left?.title || "",
+        sub: row.left?.sub || "",
+        drinkName: row.right?.title || "",
+        drinkSub: row.right?.sub || "",
+        pairing: row.right ? [row.right.title, row.right.sub].filter(Boolean).join(" · ") : null,
+        baseName: base.left?.title || "",
+        baseSub: base.left?.sub || "",
+        baseDrinkName: base.right?.title || "",
+        baseDrinkSub: base.right?.sub || "",
+        substituted: !!attribution,
+        substitutedForTag: attribution?.tag || "",
+        wasName: attribution?.wasName || "",
+        edited: !!edit && Object.keys(edit).length > 0,
+      };
+    });
+  };
+
   // Regenerated on every render — every option change is already live here.
-  const activePlan = activeSeat ? planFor(activeSeat, seats.indexOf(activeSeat)) : null;
-  const previewHtml = activePlan ? renderSeatMenuHTML(activePlan) : "";
+  const activeCards = activeSeat ? cardsFor(activeSeat) : [];
+  const previewHtml = activeSeat ? htmlFor(activeSeat) : "";
 
-  const hasEdits = Object.values(edits).some((m) => Object.keys(m || {}).length > 0);
+  const hasEdits = Object.values(seatEdits).some((m) => Object.keys(m || {}).length > 0);
 
-  const saveEdit = (seatId, courseKey, value) => {
-    const text = String(value || "").trim();
-    setEdits((prev) => {
+  const saveEdit = (seatId, card) => {
+    setSeatEdits((prev) => {
       const forSeat = { ...(prev[seatId] || {}) };
-      if (!text) delete forSeat[courseKey];
-      else forSeat[courseKey] = { name: text };
+      const baseline = {
+        name: card.baseName, sub: card.baseSub,
+        drinkName: card.baseDrinkName, drinkSub: card.baseDrinkSub,
+      };
+      const entry = {};
+      ["name", "sub", "drinkName", "drinkSub"].forEach((f) => {
+        const v = String(draft[f] ?? "").trim();
+        if (v && v !== String(baseline[f] || "").trim()) entry[f] = v;
+      });
+      if (Object.keys(entry).length === 0) delete forSeat[card.courseKey];
+      else forSeat[card.courseKey] = entry;
       const next = { ...prev };
       if (Object.keys(forSeat).length === 0) delete next[seatId];
       else next[seatId] = forSeat;
@@ -224,16 +397,52 @@ export default function MenuWorkspace({
     setOpenCourse(null);
   };
 
+  const clearCourseEdit = (seatId, courseKey) => {
+    setSeatEdits((prev) => {
+      const forSeat = { ...(prev[seatId] || {}) };
+      delete forSeat[courseKey];
+      const next = { ...prev };
+      if (Object.keys(forSeat).length === 0) delete next[seatId];
+      else next[seatId] = forSeat;
+      return next;
+    });
+    setOpenCourse(null);
+  };
+
+  /**
+   * Print = the engine's HTML in a print window, same as the preview.
+   * Returns false when the browser blocked the pop-up so callers report the
+   * sheet did NOT go out instead of toasting success for a print that never
+   * happened. A printed seat's one-time edits are consumed by the print.
+   */
+  const openPrint = (seat) => {
+    const html = htmlFor(seat);
+    const w = window.open("", "_blank", "width=620,height=880");
+    if (!w) { flash("POP-UP BLOCKED — ALLOW POP-UPS TO PRINT"); return false; }
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    // The webfont has to land before the page is measured, otherwise the first
+    // sheet prints in the fallback monospace at a different metric.
+    setTimeout(() => w.print(), 600);
+    setSeatEdits((prev) => {
+      if (!prev[seat.id]) return prev;
+      const next = { ...prev };
+      delete next[seat.id];
+      return next;
+    });
+    setOpenCourse(null);
+    return true;
+  };
+
   const printOne = (seat, i) => {
-    const ok = printSeatMenu(planFor(seat, i));
-    flash(ok ? `SEAT ${i + 1} SENT TO PRINT` : "POP-UP BLOCKED — ALLOW POP-UPS TO PRINT");
-    return ok;
+    if (openPrint(seat)) flash(`SEAT ${i + 1} SENT TO PRINT`);
   };
 
   const printAll = () => {
     if (seats.length === 0) return;
     // Staggered: browsers drop print windows opened in the same tick.
-    seats.forEach((seat, i) => setTimeout(() => printSeatMenu(planFor(seat, i)), i * 700));
+    seats.forEach((seat, i) => setTimeout(() => openPrint(seat), i * 700));
     flash(`${seats.length} SEAT MENUS SENT TO PRINT`);
   };
 
@@ -274,7 +483,7 @@ export default function MenuWorkspace({
           return (
             <button
               key={t.id}
-              onClick={() => { setSelectedId(t.id); onSelectTable?.(t.id); }}
+              onClick={() => setSelectedId(t.id)}
               style={{
                 display: "flex", alignItems: "center", gap: 10, textAlign: "left",
                 padding: "11px 12px",
@@ -341,6 +550,13 @@ export default function MenuWorkspace({
     seatedAt ? `${statusOf(table)} ${seatedAt}` : statusOf(table),
   ].join(" · ");
 
+  // ── Active-seat drink lists (for the drinks editor) ────────────────────────
+  const seatAperitifs = activeSeat?.aperitifs || [];
+  const seatGlasses   = activeSeat?.glasses   || [];
+  const seatCocktails = activeSeat?.cocktails || [];
+  const seatSpirits   = activeSeat?.spirits   || [];
+  const seatBeers     = activeSeat?.beers     || [];
+
   return (
     <div style={{ display: "flex", flexDirection: isNarrow ? "column" : "row", flex: 1, minHeight: 0 }}>
       {rail}
@@ -362,65 +578,55 @@ export default function MenuWorkspace({
                 border: `${rule.hairline} solid ${signal.warn}`, color: signal.warn,
                 background: neutral[0],
               }}>EDITED — ONE-TIME CHANGES</span>
-              <button onClick={() => { setEdits({}); setOpenCourse(null); flash("ONE-TIME EDITS CLEARED"); }}
+              <button onClick={() => { setSeatEdits({}); setOpenCourse(null); flash("ONE-TIME EDITS CLEARED"); }}
                 style={button()}>CLEAR EDITS</button>
             </>
           )}
         </div>
 
-        {/* 2 — Menu type + language. Defaults come from the booking; changing
-            them here affects only this print run. */}
+        {/* 2 — Menu type + language. Defaults come from the booking. The type
+            picks the assigned profile's long/short template; the language
+            switch carries the bilingual title/thank-you store with it. */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
           {[["long", "LONG MENU"], ["short", "SHORT MENU"]].map(([val, label]) => (
             <button key={val} onClick={() => setMenuType(val)} style={chip(menuType === val)}>{label}</button>
           ))}
           <span style={{ color: ink[4], fontFamily: FONT, fontSize: "9px" }}>·</span>
           {[["en", "EN"], ["si", "SLO"]].map(([val, label]) => (
-            <button key={val} onClick={() => changeLang(val)} style={chip(lang === val)}>{label}</button>
+            <button key={val} onClick={() => setLanguageWithDefaults(val)} style={chip(lang === val)}>{label}</button>
           ))}
         </div>
 
-        {/* 3 — Pairing set + aperitif shortcuts. The pairing set rewrites the
-            grey line under every course. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
-          {PAIRING_SETS.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setPairingSet(pairingSet === p.key ? "" : p.key)}
-              style={chip(pairingSet === p.key)}
-            >{p.label}</button>
-          ))}
-          <span style={{ color: ink[4], fontFamily: FONT, fontSize: "9px" }}>·</span>
-          {aperitifShortcuts.map((label) => (
-            <button
-              key={label}
-              onClick={() => setAperitif(aperitif === label ? "" : label)}
-              style={chip(aperitif === label)}
-            >{label}</button>
-          ))}
-        </div>
-
-        {/* 4 — Title + thank-you */}
+        {/* 3 — Title + team + thank-you (persisted: localStorage + state store) */}
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-          <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+          <div style={{ flex: "1 1 200px", minWidth: 0 }}>
             <div style={fieldLabel}>MENU TITLE</div>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} style={textInput} />
+            <input value={menuTitle}
+              onChange={(e) => { setMenuTitle(e.target.value); writeMenuTitle(lang, e.target.value); }}
+              style={textInput} />
           </div>
-          <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+          <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+            <div style={fieldLabel}>TEAM</div>
+            <input value={teamNames} onChange={(e) => setTeamNames(e.target.value)} style={textInput} />
+          </div>
+          <div style={{ flex: "1 1 200px", minWidth: 0 }}>
             <div style={fieldLabel}>THANK-YOU LINE</div>
-            <input value={thankYou} onChange={(e) => setThankYou(e.target.value)} style={textInput} />
+            <input value={thankYouNote}
+              onChange={(e) => { setThankYouNote(e.target.value); writeThankYouNote(lang, e.target.value); }}
+              style={textInput} />
           </div>
         </div>
 
-        {/* 5 — Seat tabs + print actions */}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-start", marginBottom: 18 }}>
+        {/* 4 — Seat tabs + print actions */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-start", marginBottom: 12 }}>
           {seats.map((seat, i) => {
-            const tags = seatRestrictionKeys(restrictions, seat.id).map(restrictionTag);
+            const tags = resolveSeatRestrictionKeys(restrictions, seat.id).map(restrictionTag);
             const active = seat.id === activeSeat?.id;
+            const seatHasEdits = Object.keys(seatEdits[seat.id] || {}).length > 0;
             return (
               <button key={seat.id} onClick={() => { setSeatIndex(i); setOpenCourse(null); }}
                 style={{ ...chip(active), padding: "6px 10px", textAlign: "left" }}>
-                <span style={{ display: "block" }}>SEAT {i + 1}</span>
+                <span style={{ display: "block" }}>SEAT {i + 1}{seatHasEdits ? " ✎" : ""}</span>
                 {tags.length > 0 && (
                   <span style={{
                     display: "block", marginTop: 3, fontSize: "7px", letterSpacing: "0.06em",
@@ -445,26 +651,325 @@ export default function MenuWorkspace({
           )}
         </div>
 
+        {/* 5 — Active seat's pairing + drinks. Pairing is per SEAT — the chips
+            write seat.pairing through `upd`, the same field the kitchen reads. */}
+        {activeSeat && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            <span style={{ ...railHeader }}>PAIRING · SEAT {seats.indexOf(activeSeat) + 1}</span>
+            {PAIRINGS.map((p) => {
+              const active = (activeSeat.pairing || "—") === p;
+              return (
+                <button key={p} onClick={() => updSeat(activeSeat.id, "pairing", p)} style={chip(active)}>
+                  {p}
+                </button>
+              );
+            })}
+            <span style={{ color: ink[4], fontFamily: FONT, fontSize: "9px" }}>·</span>
+            <button onClick={() => setDrinksOpen((v) => !v)} style={chip(drinksOpen)}>
+              {drinksOpen ? "▲ DRINKS + EXTRAS" : "▼ DRINKS + EXTRAS"}
+            </button>
+          </div>
+        )}
+
+        {/* 6 — Drinks & extras editor for the active seat — writes through the
+            same updSeat/updSeatFull paths the full generator used. */}
+        {activeSeat && drinksOpen && (
+          <div style={{
+            border: `${rule.hairline} solid ${ink[4]}`, background: neutral[50],
+            padding: "12px 16px 14px", marginBottom: 18,
+          }}>
+            {/* Aperitif — generates above the first course */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: tokens.text.body, textTransform: "uppercase", marginBottom: 6 }}>Aperitif</div>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
+                {aperitifOptions.map((ap) => {
+                  const label = ap.label ?? ap;
+                  return (
+                    <button key={label} type="button" onClick={() => {
+                      const found = resolveAperitifFromQuickAccessOption(ap, {
+                        wines: winesCatalog,
+                        cocktails: cocktailsCatalog,
+                        spirits: spiritsCatalog,
+                        beers: beersCatalog,
+                      });
+                      const item = found || { name: ap.searchKey || ap.label, notes: "", __cocktail: true };
+                      updSeat(activeSeat.id, "aperitifs", [...seatAperitifs, item]);
+                    }} style={{
+                      fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 9px",
+                      border: `1px solid ${tokens.neutral[300]}`, borderRadius: 0, cursor: "pointer",
+                      background: tokens.neutral[0], color: tokens.text.body,
+                    }}>{label}</button>
+                  );
+                })}
+              </div>
+              <BeverageSearch
+                wines={winesCatalog} cocktails={cocktailsCatalog} spirits={spiritsCatalog} beers={beersCatalog}
+                onAdd={({ item }) => {
+                  updSeat(activeSeat.id, "aperitifs", [...seatAperitifs, item]);
+                }}
+              />
+              {seatAperitifs.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                  {seatAperitifs.map((x, i) => {
+                    const ts = BEV_TYPES.aperitif;
+                    const label = x?.name || x?.producer || "?";
+                    const sub = x?.producer && x?.name ? x.producer : (x?.notes || "");
+                    return (
+                      <div key={`ap${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: 0, background: ts.bg, border: `1px solid ${ts.border}` }}>
+                        <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>{label}{sub ? ` · ${sub}` : ""}</span>
+                        <button onClick={() => updSeat(activeSeat.id, "aperitifs", seatAperitifs.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* By the Glass — wines, cocktails, spirits, beers */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 6 }}>By the Glass</div>
+              <BeverageSearch
+                wines={winesCatalog} cocktails={cocktailsCatalog} spirits={spiritsCatalog} beers={beersCatalog}
+                onAdd={({ type, item }) => {
+                  if (type === "wine" || type === "bottle") updSeat(activeSeat.id, "glasses", [...seatGlasses, item]);
+                  if (type === "cocktail") updSeat(activeSeat.id, "cocktails", [...seatCocktails, item]);
+                  if (type === "spirit")   updSeat(activeSeat.id, "spirits",   [...seatSpirits,   item]);
+                  if (type === "beer")     updSeat(activeSeat.id, "beers",     [...seatBeers,     item]);
+                }}
+              />
+              {(() => {
+                const allBevs = [
+                  ...seatGlasses.map((x, i)   => ({ key: `g${i}`,  type: x?.byGlass === false ? "bottle" : "wine", label: x?.name, sub: x?.producer, onRemove: () => updSeat(activeSeat.id, "glasses",   seatGlasses.filter((_, idx) => idx !== i)) })),
+                  ...seatCocktails.map((x, i) => ({ key: `c${i}`,  type: "cocktail", label: x?.name, sub: x?.notes, onRemove: () => updSeat(activeSeat.id, "cocktails", seatCocktails.filter((_, idx) => idx !== i)) })),
+                  ...seatSpirits.map((x, i)   => ({ key: `sp${i}`, type: "spirit",   label: x?.name, sub: x?.notes, onRemove: () => updSeat(activeSeat.id, "spirits",   seatSpirits.filter((_, idx) => idx !== i)) })),
+                  ...seatBeers.map((x, i)     => ({ key: `b${i}`,  type: "beer",     label: x?.name, sub: x?.notes, onRemove: () => updSeat(activeSeat.id, "beers",     seatBeers.filter((_, idx) => idx !== i)) })),
+                ];
+                if (allBevs.length === 0) return null;
+                return (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                    {allBevs.map((bev) => {
+                      const ts = BEV_TYPES[bev.type];
+                      return (
+                        <div key={bev.key} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: 0, background: ts.bg, border: `1px solid ${ts.border}` }}>
+                          <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>{bev.label}{bev.sub ? ` · ${bev.sub}` : ""}</span>
+                          <button onClick={bev.onRemove} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Optional pairings without linked extra dish (e.g. Beer, Martini) */}
+            {(() => {
+              const standalones = optionalPairings.filter((opt) => !opt.extraKey);
+              if (!standalones.length) return null;
+              return (
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${tokens.neutral[100]}` }}>
+                  <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 6 }}>Pairings</div>
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                    {standalones.map((opt, oi) => {
+                      const raw = activeSeat.optionalPairings?.[opt.key];
+                      const ordered = raw?.ordered !== undefined ? !!raw.ordered : (opt.defaultOn !== false);
+                      const mode = raw?.mode || null;
+                      const states = ["off", ...(opt.hasAlco ? ["alco"] : []), ...(opt.hasNonAlco ? ["nonalc"] : [])];
+                      let cur;
+                      if (!ordered) cur = "off";
+                      else if (mode === "alco") cur = "alco";
+                      else if (mode === "nonalc") cur = "nonalc";
+                      else cur = states[1] || "off";
+                      const applyNext = () => updSeatFull(activeSeat.id, (seat) => {
+                        const r = seat.optionalPairings?.[opt.key];
+                        const o = r?.ordered !== undefined ? !!r.ordered : (opt.defaultOn !== false);
+                        const m = r?.mode || null;
+                        let c;
+                        if (!o) c = "off";
+                        else if (m === "alco") c = "alco";
+                        else if (m === "nonalc") c = "nonalc";
+                        else c = states[1] || "off";
+                        const nx = states[(states.indexOf(c) + 1) % states.length];
+                        return {
+                          ...seat,
+                          optionalPairings: {
+                            ...(seat.optionalPairings || {}),
+                            [opt.key]: {
+                              ...(r || {}),
+                              ordered: nx !== "off",
+                              ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }),
+                            },
+                          },
+                        };
+                      });
+                      const onlyOne = states.length === 2;
+                      const shortLabel = opt.label.length > 6 ? opt.label.slice(0, 5) : opt.label;
+                      const label =
+                        cur === "off"    ? `${opt.label} off` :
+                        cur === "alco"   ? (onlyOne ? `${opt.label} ✓` : `${shortLabel} · ALCO`) :
+                        cur === "nonalc" ? (onlyOne ? `${opt.label} ✓` : `${shortLabel} · N/A`) :
+                        `${opt.label} ✓`;
+                      const colors =
+                        cur === "off"    ? { border: tokens.neutral[300],    bg: tokens.neutral[50],    color: tokens.text.muted     } :
+                        onlyOne          ? { border: tokens.green.border,     bg: tokens.green.bg,       color: tokens.green.text     } :
+                        cur === "alco"   ? { border: tokens.charcoal.default, bg: tokens.tint.parchment, color: tokens.text.body      } :
+                                           { border: tokens.neutral[400],    bg: tokens.neutral[100],   color: tokens.text.secondary };
+                      return (
+                        <div key={opt.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                          {oi > 0 && <div style={{ width: 1, height: 18, background: tokens.neutral[200], marginRight: 2 }} />}
+                          <button onClick={applyNext} style={{
+                            fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                            border: `1px solid ${colors.border}`, borderRadius: 0, cursor: "pointer",
+                            background: colors.bg, color: colors.color,
+                          }}>{label}</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Extras — optional dishes (some have optional drink pairings) */}
+            {optionalExtras.length > 0 && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${tokens.neutral[100]}` }}>
+                <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1.5, color: tokens.text.disabled, textTransform: "uppercase", marginBottom: 6 }}>Extras</div>
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                  {(() => {
+                    const pairingByExtraKey = new Map();
+                    optionalPairings.forEach((opt) => { if (opt.extraKey) pairingByExtraKey.set(opt.extraKey, opt); });
+                    return optionalExtras.map((dish, di) => {
+                      const extra = activeSeat.extras?.[dish.key] || activeSeat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                      const dishOn = !!extra.ordered;
+                      const linked = pairingByExtraKey.get(dish.key);
+
+                      if (linked) {
+                        // Cycling button: off → on → on·ALCO → on·N/A → off
+                        const raw = activeSeat.optionalPairings?.[linked.key];
+                        const pairingOrdered = raw?.ordered !== undefined ? !!raw.ordered : false;
+                        const pmode = raw?.mode || null;
+                        const states = ["off", "on"];
+                        if (linked.hasAlco) states.push("alco");
+                        if (linked.hasNonAlco) states.push("nonalc");
+                        let cur;
+                        if (!dishOn) cur = "off";
+                        else if (!pairingOrdered) cur = "on";
+                        else if (pmode === "alco") cur = "alco";
+                        else if (pmode === "nonalc") cur = "nonalc";
+                        else cur = "on";
+                        // Single atomic update — reads latest committed seat state, no stale closure
+                        const applyNext = () => updSeatFull(activeSeat.id, (seat) => {
+                          const xtra = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                          const r = seat.optionalPairings?.[linked.key];
+                          const po = r?.ordered !== undefined ? !!r.ordered : false;
+                          const pm = r?.mode || null;
+                          let c;
+                          if (!xtra.ordered) c = "off";
+                          else if (!po) c = "on";
+                          else if (pm === "alco") c = "alco";
+                          else if (pm === "nonalc") c = "nonalc";
+                          else c = "on";
+                          const nx = states[(states.indexOf(c) + 1) % states.length];
+                          return {
+                            ...seat,
+                            extras: { ...seat.extras, [dish.key]: { ordered: nx !== "off", pairing: dish.pairings[0] } },
+                            optionalPairings: { ...(seat.optionalPairings || {}), [linked.key]: {
+                              ...(r || {}),
+                              ordered: nx === "alco" || nx === "nonalc",
+                              ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }),
+                            }},
+                          };
+                        });
+                        const labels = { off: `${dish.name} off`, on: `${dish.name} ✓`, alco: `${dish.name.slice(0, 4)} · ALCO`, nonalc: `${dish.name.slice(0, 4)} · N/A` };
+                        const colors = {
+                          off:    { border: tokens.neutral[300],    bg: tokens.neutral[50],    color: tokens.text.muted },
+                          on:     { border: tokens.green.border,     bg: tokens.green.bg,       color: tokens.green.text },
+                          alco:   { border: tokens.charcoal.default, bg: tokens.tint.parchment, color: tokens.text.body },
+                          nonalc: { border: tokens.neutral[400],    bg: tokens.neutral[100],   color: tokens.text.secondary },
+                        }[cur];
+                        return (
+                          <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                            {di > 0 && <div style={{ width: 1, height: 18, background: tokens.neutral[200], marginRight: 2 }} />}
+                            <button onClick={applyNext} style={{
+                              fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                              border: `1px solid ${colors.border}`, borderRadius: 0, cursor: "pointer",
+                              background: colors.bg, color: colors.color,
+                            }}>{labels[cur]}</button>
+                          </div>
+                        );
+                      }
+
+                      // Plain extra (no linked drink pairing) — single cycling button
+                      const pStates = ["off", ...dish.pairings];
+                      const curP = !dishOn ? "off" : (extra.pairing || dish.pairings[0]);
+                      const applyNextP = () => updSeatFull(activeSeat.id, (seat) => {
+                        const xtra = seat.extras?.[dish.key] || seat.extras?.[dish.id] || { ordered: false, pairing: dish.pairings[0] };
+                        const c = !xtra.ordered ? "off" : (xtra.pairing || dish.pairings[0]);
+                        const nx = pStates[(pStates.indexOf(c) + 1) % pStates.length];
+                        return { ...seat, extras: { ...seat.extras, [dish.key]: nx === "off"
+                          ? { ordered: false, pairing: dish.pairings[0] }
+                          : { ordered: true, pairing: nx },
+                        }};
+                      });
+                      const pLabel = curP === "off"
+                        ? `${dish.name} off`
+                        : curP === "—"
+                        ? `${dish.name} ✓`
+                        : `${dish.name.slice(0, 4)} · ${curP}`;
+                      const pColors = curP === "off"
+                        ? { border: tokens.neutral[300], bg: tokens.neutral[50], color: tokens.text.muted }
+                        : curP === "—"
+                        ? { border: tokens.green.border, bg: tokens.green.bg, color: tokens.green.text }
+                        : { border: tokens.neutral[400], bg: tokens.neutral[100], color: tokens.text.secondary };
+                      return (
+                        <div key={dish.key} style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                          {di > 0 && <div style={{ width: 1, height: 18, background: tokens.neutral[200], marginRight: 2 }} />}
+                          <button onClick={applyNextP} style={{
+                            fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "4px 10px",
+                            border: `1px solid ${pColors.border}`, borderRadius: 0, cursor: "pointer",
+                            background: pColors.bg, color: pColors.color,
+                          }}>{pLabel}</button>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* Table bottles — shared by the whole table, printed when no pairing */}
+            {tableBottles.length > 0 && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${tokens.neutral[100]}`, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {tableBottles.map((b, i) => (
+                  <span key={i} style={{ fontFamily: FONT, fontSize: 9, padding: "2px 8px", borderRadius: 0, border: `1px solid ${tokens.neutral[300]}`, color: tokens.text.secondary, background: tokens.neutral[50] }}>
+                    {BEV_TYPES.bottle.glyph} {b.name}{b.vintage ? ` · ${b.vintage}` : ""}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Course list + live preview */}
         <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: isNarrow ? "wrap" : "nowrap" }}>
 
-          {/* Course list */}
+          {/* Course list — the engine's own row model (see cardsFor) */}
           <div style={{ flex: "1 1 320px", minWidth: 0 }}>
-            {(activePlan?.courses || []).map((course) => {
-              const open = openCourse === course.courseKey;
-              const accent = course.substituted ? red.border : course.edited ? signal.warn : ink[4];
+            {activeCards.map((card) => {
+              const open = openCourse === card.courseKey;
+              const accent = card.substituted ? red.border : card.edited ? signal.warn : ink[4];
               return (
                 <div
-                  key={course.courseKey}
+                  key={card.courseKey}
                   onClick={() => {
                     if (open) return;
-                    setOpenCourse(course.courseKey);
-                    setDraft(course.name);
+                    setOpenCourse(card.courseKey);
+                    setDraft({ name: card.name, sub: card.sub, drinkName: card.drinkName, drinkSub: card.drinkSub });
                   }}
                   style={{
-                    // Both children below are flex: 1 1 100% — the edit input
-                    // and the course text must each own a full line. Sharing a
-                    // line collapses the text column to one word per line.
+                    // Every direct child below is flex: 1 1 100% — the edit
+                    // rows and the course text must each own a full line.
+                    // Sharing a line collapses the text column to one word
+                    // per line.
                     display: "flex", flexWrap: "wrap",
                     border: `${rule.hairline} solid ${accent}`,
                     borderLeft: `3px solid ${accent}`,
@@ -476,31 +981,31 @@ export default function MenuWorkspace({
                     <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
                       <span style={{
                         fontFamily: FONT, fontSize: "9px", color: ink[3], flexShrink: 0,
-                      }}>{pad2(course.index)}</span>
+                      }}>{pad2(card.index)}</span>
                       <span style={{
                         fontFamily: FONT, fontSize: "12px", color: ink[0], lineHeight: 1.35,
                         minWidth: 0,
-                      }}>{course.name}{course.sub ? ` — ${course.sub}` : ""}</span>
+                      }}>{card.name}{card.sub ? ` — ${card.sub}` : ""}</span>
                     </div>
 
-                    {course.substituted && (
+                    {card.substituted && (
                       <div style={{
                         marginTop: 6, fontFamily: FONT, fontSize: "8px", letterSpacing: "0.06em",
                         color: red.text, lineHeight: 1.4,
                       }}>
-                        SUBSTITUTED FOR [{course.substitutedForTag}] — WAS: {course.wasName}
+                        SUBSTITUTED FOR [{card.substitutedForTag}] — WAS: {card.wasName}
                       </div>
                     )}
-                    {course.edited && (
+                    {card.edited && (
                       <div style={{
                         marginTop: 6, fontFamily: FONT, fontSize: "8px", letterSpacing: "0.06em",
                         color: signal.warn, lineHeight: 1.4,
                       }}>✎ ONE-TIME EDIT — THIS SEAT ONLY</div>
                     )}
-                    {course.pairing && (
+                    {card.pairing && (
                       <div style={{
                         marginTop: 6, fontFamily: FONT, fontSize: "9px", color: ink[3], lineHeight: 1.4,
-                      }}>{course.pairing}</div>
+                      }}>{card.pairing}</div>
                     )}
                   </div>
 
@@ -508,39 +1013,81 @@ export default function MenuWorkspace({
                     <div style={{ flex: "1 1 100%", display: "flex", gap: 8, marginTop: 10, minWidth: 0 }}>
                       <input
                         autoFocus
-                        value={draft}
+                        value={draft.name}
+                        placeholder={card.baseName}
                         onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => setDraft(e.target.value)}
+                        onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") saveEdit(activeSeat.id, course.courseKey, draft);
+                          if (e.key === "Enter") saveEdit(activeSeat.id, card);
                           if (e.key === "Escape") setOpenCourse(null);
                         }}
                         style={{ ...textInput, flex: 1, minWidth: 0 }}
                       />
                       <button
-                        onClick={(e) => { e.stopPropagation(); saveEdit(activeSeat.id, course.courseKey, draft); }}
+                        onClick={(e) => { e.stopPropagation(); saveEdit(activeSeat.id, card); }}
                         style={{ ...button(true), flexShrink: 0 }}
                       >SAVE</button>
+                    </div>
+                  )}
+                  {open && (
+                    <div style={{ flex: "1 1 100%", display: "flex", gap: 8, marginTop: 8, minWidth: 0, flexWrap: "wrap" }}
+                      onClick={(e) => e.stopPropagation()}>
+                      <input
+                        value={draft.sub}
+                        placeholder={card.baseSub || "SUB LINE"}
+                        onChange={(e) => setDraft((d) => ({ ...d, sub: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit(activeSeat.id, card);
+                          if (e.key === "Escape") setOpenCourse(null);
+                        }}
+                        style={{ ...textInput, flex: "1 1 100%", minWidth: 0 }}
+                      />
+                      <input
+                        value={draft.drinkName}
+                        placeholder={card.baseDrinkName || "DRINK"}
+                        onChange={(e) => setDraft((d) => ({ ...d, drinkName: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit(activeSeat.id, card);
+                          if (e.key === "Escape") setOpenCourse(null);
+                        }}
+                        style={{ ...textInput, flex: "1 1 46%", minWidth: 0 }}
+                      />
+                      <input
+                        value={draft.drinkSub}
+                        placeholder={card.baseDrinkSub || "DRINK SUB"}
+                        onChange={(e) => setDraft((d) => ({ ...d, drinkSub: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit(activeSeat.id, card);
+                          if (e.key === "Escape") setOpenCourse(null);
+                        }}
+                        style={{ ...textInput, flex: "1 1 46%", minWidth: 0 }}
+                      />
+                      {card.edited && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); clearCourseEdit(activeSeat.id, card.courseKey); }}
+                          style={button()}
+                        >CLEAR THIS COURSE</button>
+                      )}
                     </div>
                   )}
                 </div>
               );
             })}
-            {(activePlan?.courses || []).length === 0 && (
+            {activeCards.length === 0 && (
               <div style={{ ...railHeader, color: ink[4] }}>NO COURSES ON THIS MENU</div>
             )}
           </div>
 
-          {/* Live preview — the actual printed page, scaled down */}
-          {activePlan && (
+          {/* Live preview — the engine's actual printed page, scaled down */}
+          {activeSeat && (
             <div style={{ flexShrink: 0, width: PREVIEW_W }}>
-              <div style={{ ...fieldLabel, marginBottom: 8 }}>PREVIEW · SEAT {activePlan.seatNumber} OF {activePlan.seatCount}</div>
+              <div style={{ ...fieldLabel, marginBottom: 8 }}>PREVIEW · SEAT {seats.indexOf(activeSeat) + 1} OF {seats.length}</div>
               <div style={{
                 width: PREVIEW_W, height: PAGE_H_PX * PREVIEW_SCALE,
                 overflow: "hidden", border: `${rule.hairline} solid ${ink[4]}`, background: neutral[0],
               }}>
                 <iframe
-                  title={`Seat ${activePlan.seatNumber} menu preview`}
+                  title={`Seat ${seats.indexOf(activeSeat) + 1} menu preview`}
                   srcDoc={previewHtml}
                   scrolling="no"
                   style={{
