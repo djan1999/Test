@@ -25,11 +25,12 @@ const { ink, neutral, red, rule, signal } = tokens;
 
 const RAIL_W = 270;
 const RAIL_STRIP_MAX_H = 200;
-const PREVIEW_W = 280;
+// Preview sizing: the sheet grows into whatever width the course list leaves
+// free, instead of pinning to a thumbnail and stranding the space.
+const PREVIEW_MIN_W = 280;
 // A5 portrait in CSS pixels at 96dpi — what generateMenuHTML's page measures.
 const PAGE_W_PX = (148 / 25.4) * 96;
 const PAGE_H_PX = (210 / 25.4) * 96;
-const PREVIEW_SCALE = PREVIEW_W / PAGE_W_PX;
 
 // ── Shared chrome, built from the app's existing scale/colours ───────────────
 const railHeader = {
@@ -163,6 +164,34 @@ export default function MenuWorkspace({
   const [drinksOpen, setDrinksOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
+
+  // ── Preview scale — fill the width the course column leaves free ──────────
+  // The sheet scales to its container's live width, capped by the viewport
+  // height (the whole page must stay visible) and by 1:1 (never blow the A5
+  // page up past its print size).
+  const previewBoxRef = useRef(null);
+  const [previewScale, setPreviewScale] = useState(PREVIEW_MIN_W / PAGE_W_PX);
+  useEffect(() => {
+    const measure = () => {
+      const el = previewBoxRef.current;
+      if (!el) return;
+      const w = el.clientWidth || PREVIEW_MIN_W;
+      // ~90px of chrome above the sticky sheet: pane padding + preview label.
+      const maxH = Math.max(window.innerHeight - 90, PAGE_H_PX * (PREVIEW_MIN_W / PAGE_W_PX));
+      const scale = Math.min(w / PAGE_W_PX, maxH / PAGE_H_PX, 1);
+      setPreviewScale((prev) => (Math.abs(prev - scale) > 0.005 ? scale : prev));
+    };
+    measure();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    if (ro && previewBoxRef.current) ro.observe(previewBoxRef.current);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+    // Re-attach when the preview (re)mounts: a party is picked or the layout
+    // flips between rail and strip.
+  }, [selectedId, isNarrow]);
 
   const flash = (msg) => {
     setToast(msg);
@@ -973,14 +1002,11 @@ export default function MenuWorkspace({
         {/* Course list + live preview */}
         <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: isNarrow ? "wrap" : "nowrap" }}>
 
-          {/* Course list — the engine's own row model (see cardsFor). A
-              responsive grid: one full-width column was mostly empty space on
-              wide screens and pushed the tail courses below the fold. */}
-          <div style={{
-            flex: "1 1 320px", minWidth: 0,
-            display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
-            gap: 8, alignItems: "start",
-          }}>
+          {/* Course list — the engine's own row model (see cardsFor). ONE
+              column, reading top to bottom like the printed page; the free
+              width on wide screens belongs to the preview, not to a second
+              column of cards. Capped so lines stay readable. */}
+          <div style={{ flex: "0 1 640px", minWidth: 0 }}>
             {activeCards.map((card) => {
               const open = openCourse === card.courseKey;
               const accent = card.substituted ? red.border : card.edited ? signal.warn : ink[4];
@@ -1000,11 +1026,8 @@ export default function MenuWorkspace({
                     display: "flex", flexWrap: "wrap",
                     border: `${rule.hairline} solid ${accent}`,
                     borderLeft: `3px solid ${accent}`,
-                    background: neutral[0], padding: "10px 12px",
+                    background: neutral[0], padding: "10px 12px", marginBottom: 8,
                     cursor: open ? "default" : "pointer",
-                    // An open editor spans the full grid width so the inputs
-                    // aren't squeezed into a single column cell.
-                    gridColumn: open ? "1 / -1" : "auto",
                   }}
                 >
                   <div style={{ flex: "1 1 100%", minWidth: 0 }}>
@@ -1108,17 +1131,22 @@ export default function MenuWorkspace({
             )}
           </div>
 
-          {/* Live preview — the engine's actual printed page, scaled down.
-              Sticky, so the pass keeps sight of the sheet while scrolling a
-              long course list; the dead space below it is gone. */}
+          {/* Live preview — the engine's actual printed page. It owns ALL the
+              width the course column doesn't use and scales the sheet up to
+              fill it (bounded by the viewport height so the whole page stays
+              on screen). Sticky, so the pass keeps sight of the sheet while
+              scrolling a long course list. */}
           {activeSeat && (
-            <div style={{
-              flexShrink: 0, width: PREVIEW_W,
-              position: isNarrow ? "static" : "sticky", top: 0, alignSelf: "flex-start",
-            }}>
+            <div
+              ref={previewBoxRef}
+              style={{
+                flex: `1 1 ${PREVIEW_MIN_W}px`, minWidth: PREVIEW_MIN_W, maxWidth: PAGE_W_PX,
+                position: isNarrow ? "static" : "sticky", top: 0, alignSelf: "flex-start",
+              }}
+            >
               <div style={{ ...fieldLabel, marginBottom: 8 }}>PREVIEW · SEAT {seats.indexOf(activeSeat) + 1} OF {seats.length}</div>
               <div style={{
-                width: PREVIEW_W, height: PAGE_H_PX * PREVIEW_SCALE,
+                width: PAGE_W_PX * previewScale, height: PAGE_H_PX * previewScale,
                 overflow: "hidden", border: `${rule.hairline} solid ${ink[4]}`, background: neutral[0],
               }}>
                 <iframe
@@ -1127,7 +1155,7 @@ export default function MenuWorkspace({
                   scrolling="no"
                   style={{
                     width: PAGE_W_PX, height: PAGE_H_PX, border: "none",
-                    transform: `scale(${PREVIEW_SCALE})`, transformOrigin: "top left",
+                    transform: `scale(${previewScale})`, transformOrigin: "top left",
                   }}
                 />
               </div>
