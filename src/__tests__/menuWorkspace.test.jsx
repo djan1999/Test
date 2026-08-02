@@ -191,7 +191,39 @@ describe("MenuWorkspace", () => {
 
     fireEvent.click(getByText("PRINT ALL 2 SEATS"));
     expect(getByText("2 SEAT MENUS SENT TO PRINT")).toBeTruthy();
+    // ONE window, one combined document, one page per seat — not one pop-up
+    // per seat (browsers only bless the first window.open of a gesture).
+    expect(window.open).toHaveBeenCalledTimes(2); // print-this-seat + print-all
+    expect(doc.write).toHaveBeenCalledTimes(2);
+    const combined = doc.write.mock.calls[1][0];
+    expect(combined.match(/class="print-page"/g)).toHaveLength(2);
+    expect(combined).toContain("page-break-after");
 
+    window.open.mockRestore();
+  });
+
+  it("clears every seat's one-time edits after PRINT ALL", () => {
+    mockPrintWindow();
+    const { getByText, queryByText, getByDisplayValue } = renderWorkspace();
+    fireEvent.click(getByText("Novak"));
+    fireEvent.click(getByText("Kefir — Cucumber, dill"));
+    fireEvent.change(getByDisplayValue("Kefir"), { target: { value: "Kefir, no dill" } });
+    fireEvent.click(getByText("SAVE"));
+    expect(getByText("EDITED — ONE-TIME CHANGES")).toBeTruthy();
+
+    fireEvent.click(getByText("PRINT ALL 2 SEATS"));
+    expect(queryByText("EDITED — ONE-TIME CHANGES")).toBeNull();
+
+    window.open.mockRestore();
+  });
+
+  it("does not claim success when the PRINT ALL window is blocked", () => {
+    vi.spyOn(window, "open").mockReturnValue(null);
+    const { getByText, queryByText } = renderWorkspace();
+    fireEvent.click(getByText("Novak"));
+    fireEvent.click(getByText("PRINT ALL 2 SEATS"));
+    expect(getByText("POP-UP BLOCKED — ALLOW POP-UPS TO PRINT")).toBeTruthy();
+    expect(queryByText("2 SEAT MENUS SENT TO PRINT")).toBeNull();
     window.open.mockRestore();
   });
 
