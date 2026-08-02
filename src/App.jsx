@@ -4932,6 +4932,7 @@ export default function App() {
         menuRules={menuRules}
         profiles={profilesState.profiles}
         assignments={profilesState.assignments}
+        wordmark={effectiveAppName}
         onExit={() => changeMode(null)}
       /></Suspense>
     </div>
