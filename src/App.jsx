@@ -110,7 +110,7 @@ import LoginScreen from "./components/login/LoginScreen.jsx";
 import AuthScreen from "./components/auth/AuthScreen.jsx";
 import PasswordRecoveryScreen from "./components/auth/PasswordRecoveryScreen.jsx";
 import ProfilePicker from "./components/auth/ProfilePicker.jsx";
-import TableSheet, { TABLE_SHEET_WIDTH, TABLE_SHEET_BP } from "./components/service/TableSheet.jsx";
+import TableSheet from "./components/service/TableSheet.jsx";
 import { DisplayBoard } from "./components/service/DisplayBoard.jsx";
 export { DisplayBoardCard } from "./components/service/DisplayBoard.jsx";
 import TableCard from "./components/TableCard/TableCard.jsx";
@@ -334,9 +334,6 @@ export default function App() {
   const localBev = readLocalBeverages();
   const loadMenuCoursesRef = useRef(null);
   const appIsMobile = useIsMobile(BP.md);
-  // The sheet goes full-width below its own breakpoint; the board only
-  // reserves space for it above that.
-  const sheetReservesWidth = !useIsMobile(TABLE_SHEET_BP);
   const [restaurantConfig, setRestaurantConfig] = useState(DEFAULT_RESTAURANT_CONFIG);
   const restaurantConfigRef = useRef(restaurantConfig);
   restaurantConfigRef.current = restaurantConfig;
@@ -5025,15 +5022,13 @@ export default function App() {
   // Service mode only
   return (<>
     {serviceDatePickerEl}{sandboxBannerEl}
-    {/* On desktop the open sheet RESERVES its width instead of overlapping:
-        the whole service column reflows left so the board stays readable
-        beside it. Below the sheet's own breakpoint it goes full-width and the
-        reserve would leave nothing, so it is dropped there. */}
+    {/* The sheet is a LAYER over this column, not a column beside it — the
+        board must not move when a table is opened. Reserving the sheet's
+        width reflowed the whole room sideways on every open and close, which
+        is exactly the loss of place the sheet exists to avoid. */}
     <div style={{
       minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT,
       overflowX: "hidden", WebkitTextSizeAdjust: "100%",
-      paddingRight: sel !== null && sheetReservesWidth ? TABLE_SHEET_WIDTH : 0,
-      transition: "padding-right 200ms ease",
     }}>
       <GlobalStyle />
 

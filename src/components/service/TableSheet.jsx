@@ -3,7 +3,6 @@ import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
 import { tokens } from "../../styles/tokens.js";
 import { RESTRICTIONS, RESTRICTION_GROUPS, restrCompact } from "../../constants/dietary.js";
-import { WATER_OPTS } from "../../constants/pairings.js";
 import { fmt } from "../../utils/tableHelpers.js";
 import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
 import {
@@ -69,6 +68,11 @@ const textareaStyle = (kitchen = false) => ({
   borderRadius: 0, background: tokens.neutral[0], color: tokens.ink[0],
   resize: "vertical", boxSizing: "border-box", WebkitAppearance: "none",
 });
+
+// Type badge for a search hit. Deliberately NOT BEV_TYPES, whose `wine` label
+// is "Glass" — that read as an answer sitting next to the GLASS button that
+// asks the question.
+const BEV_LABEL = { wine: "WINE", cocktail: "COCKTAIL", spirit: "SPIRIT", beer: "BEER" };
 
 const Section = ({ label, children, right = null }) => (
   <div style={{ padding: "16px 16px 0" }}>
@@ -145,7 +149,14 @@ export default function TableSheet({
   const [confirmClear, setConfirmClear] = useState(false);
   const [addRestrSeat, setAddRestrSeat] = useState(null); // seat id while the add panel is open
   const [addRestrOpen, setAddRestrOpen] = useState(false);
-  const [wineQuery, setWineQuery] = useState("");
+  const [drinkQuery, setDrinkQuery] = useState("");
+  // Where a pick lands: as an aperitif, or with the menu. Same decision the
+  // old detail view made per seat — here it applies to the whole party.
+  const [drinkPhase, setDrinkPhase] = useState("aperitif");
+  // Who the next pick is for: null = the whole party, or one seat id. Drinks
+  // are ordered per person as often as per table, and the sheet was writing
+  // every pick to all four guests with no way to say "just P2".
+  const [drinkSeat, setDrinkSeat] = useState(null);
   const [nowMin, setNowMin] = useState(() => minutesOfDay());
   const scrollRef = useRef(null);
   const toastTimer = useRef(null);
@@ -176,7 +187,9 @@ export default function TableSheet({
     setConfirmClear(false);
     setAddRestrOpen(false);
     setAddRestrSeat(null);
-    setWineQuery("");
+    setDrinkQuery("");
+    setDrinkPhase("aperitif");
+    setDrinkSeat(null);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [table?.id]);
 
@@ -185,15 +198,27 @@ export default function TableSheet({
     [table, menuCourses, profiles, assignments],
   );
 
-  const wineMatches = useMemo(() => {
-    const q = wineQuery.trim().toLowerCase();
+  // The WHOLE catalog, not just wine: a table asking for a Negroni or a beer
+  // should not need a different surface from a table asking for Rebula.
+  const drinkMatches = useMemo(() => {
+    const q = drinkQuery.trim().toLowerCase();
     if (q.length < 2) return [];
-    return (wines || []).filter(w =>
-      (w.name || "").toLowerCase().includes(q)
-      || (w.producer || "").toLowerCase().includes(q)
-      || String(w.vintage || "").includes(q)
-    ).slice(0, 4);
-  }, [wineQuery, wines]);
+    const hit = (x, ...extra) =>
+      [x?.name, ...extra].some(v => String(v || "").toLowerCase().includes(q));
+    const out = [];
+    (wines || []).forEach(w => {
+      if (hit(w, w.producer, w.vintage)) {
+        out.push({ key: `w:${w.id || w.name}`, type: "wine", item: w,
+          sub: [w.producer, w.vintage].filter(Boolean).join(" · ") });
+      }
+    });
+    [["cocktail", cocktails], ["spirit", spirits], ["beer", beers]].forEach(([type, list]) => {
+      (list || []).forEach(d => {
+        if (hit(d, d.notes)) out.push({ key: `${type}:${d.id || d.name}`, type, item: d, sub: d.notes || "" });
+      });
+    });
+    return out.slice(0, 4);
+  }, [drinkQuery, wines, cocktails, spirits, beers]);
 
   if (!table) return null;
 
@@ -216,10 +241,6 @@ export default function TableSheet({
   // ── writes ────────────────────────────────────────────────────────────────
   const write = (field, value, msg) => { upd(field, value); if (msg) flash(msg); };
   const writeBooking = (field, value, msg) => { updBooking(field, value); if (msg) flash(msg); };
-  const writeAllSeats = (field, value, msg) => {
-    seats.forEach(s => updSeat(s.id, field, value));
-    if (msg) flash(msg);
-  };
 
   const fireNext = () => {
     if (!nextCourse) return;
@@ -243,11 +264,99 @@ export default function TableSheet({
     flash(`${restrCompact(key).toUpperCase()} — SEAT_${addRestrSeat}`);
   };
 
-  const addWine = (w, byGlass) => {
-    write("bottleWines", [...(table.bottleWines || []), { ...w, byGlass }],
-      `${byGlass ? "GLASS" : "BOTTLE"} — ${String(w.name || "").toUpperCase()}`);
-    setWineQuery("");
+  // Which per-seat list a with-menu pick belongs to.
+  const MENU_FIELD = { wine: "glasses", cocktail: "cocktails", spirit: "spirits", beer: "beers" };
+  const targetSeats = drinkSeat == null ? seats : seats.filter(s => s.id === drinkSeat);
+
+  /**
+   * Add a beverage to the party.
+   *
+   * A BOTTLE is shared, so it lands on the table's bottle list. Everything else
+   * is per-person and lands on every seat — as an aperitif or with the menu,
+   * per the phase chip. A glass poured by the glass must NEVER land in
+   * bottleWines: that list is what the menu, the summary and the archive read
+   * as "bottles for the table", so a glass sent there came back as a bottle.
+   */
+  const addDrink = (match, how) => {
+    const { type, item } = match;
+    const name = String(item?.name || "").toUpperCase();
+    if (how === "bottle") {
+      write("bottleWines", [...(table.bottleWines || []), { ...item, byGlass: false }],
+        `BOTTLE — ${name}`);
+      setDrinkQuery("");
+      return;
+    }
+    const stored = type === "wine" ? { ...item, byGlass: true } : item;
+    const field = drinkPhase === "aperitif" ? "aperitifs" : (MENU_FIELD[type] || "cocktails");
+    targetSeats.forEach(s => updSeat(s.id, field, [...(s[field] || []), stored]));
+    const who = drinkSeat == null ? "PARTY" : `SEAT_${drinkSeat}`;
+    flash(`${drinkPhase === "aperitif" ? "APERITIF" : "WITH MENU"} · ${who} — ${name}`);
+    setDrinkQuery("");
   };
+
+  /**
+   * What the list reads back, scoped to whoever is selected.
+   *
+   * On the party view a drink can legitimately be on some seats and not
+   * others — Quick Access edits one guest, and so does this panel — so party
+   * rows carry how many seats hold them instead of pretending the table is
+   * uniform. On a single seat there is nothing to count, and removing takes
+   * the drink off that seat alone.
+   */
+  const chosenDrinks = (() => {
+    // The table's bottles are shared, so they show under every scope.
+    const out = (table.bottleWines || []).map((w, i) => ({
+      key: `bottle-${i}`,
+      tag: "BOTTLE",
+      name: w?.name || "—",
+      sub: w?.producer || "",
+      count: null,
+      onRemove: () => write("bottleWines", (table.bottleWines || []).filter((_, j) => j !== i), "DRINK REMOVED"),
+    }));
+    const FIELDS = [
+      ["aperitifs", "APERITIF"],
+      ["glasses", "GLASS"],
+      ["cocktails", "COCKTAIL"],
+      ["spirits", "SPIRIT"],
+      ["beers", "BEER"],
+    ];
+    for (const [field, tag] of FIELDS) {
+      if (drinkSeat != null) {
+        const s = seats.find(x => x.id === drinkSeat);
+        (s?.[field] || []).forEach((x, i) => out.push({
+          key: `${field}-${drinkSeat}-${i}`,
+          tag,
+          name: x?.name || "—",
+          sub: x?.producer || x?.notes || "",
+          count: null,
+          onRemove: () => {
+            updSeat(drinkSeat, field, (s[field] || []).filter((_, j) => j !== i));
+            flash(`REMOVED · SEAT_${drinkSeat}`);
+          },
+        }));
+        continue;
+      }
+      const byName = new Map();
+      seats.forEach(s => (s[field] || []).forEach(x => {
+        const name = x?.name || "—";
+        const e = byName.get(name) || { name, sub: x?.producer || x?.notes || "", count: 0 };
+        e.count += 1;
+        byName.set(name, e);
+      }));
+      byName.forEach(e => out.push({
+        key: `${field}-${e.name}`,
+        tag,
+        name: e.name,
+        sub: e.sub,
+        count: e.count,
+        onRemove: () => {
+          seats.forEach(s => updSeat(s.id, field, (s[field] || []).filter(x => (x?.name || "—") !== e.name)));
+          flash("DRINK REMOVED");
+        },
+      }));
+    }
+    return out;
+  })();
 
   // ── picker plumbing ───────────────────────────────────────────────────────
   const isFreeTable = (t, owner) => !t.active && !t.arrivedAt && !t.resName && !t.resTime && !owner;
@@ -610,6 +719,7 @@ export default function TableSheet({
                   {(seats.length ? seats.map(s => Number(s.id)) : Array.from({ length: covers }, (_, i) => i + 1))
                     .map(id => (
                       <button key={id} type="button" style={chip(addRestrSeat === id)}
+                        aria-label={`Restriction for seat ${id}`}
                         onClick={() => setAddRestrSeat(id)}
                       >S{id}</button>
                     ))}
@@ -640,24 +750,51 @@ export default function TableSheet({
           )}
         </Section>
 
-        {/* ── 6. WATER & WINE ────────────────────────────────────────────── */}
-        <Section label="WATER & WINE">
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 12 }}>
-            {WATER_OPTS.map(opt => {
-              const on = seats.length > 0 && seats.every(s => (s.water || "—") === opt);
-              return (
-                <button key={opt} type="button" style={chip(on)}
-                  onClick={() => writeAllSeats("water", opt, opt === "—" ? "WATER CLEARED" : `WATER — ${opt}`)}
-                >{opt}</button>
-              );
-            })}
-          </div>
+        {/* ── 6. BEVERAGES ──────────────────────────────────────────────
+            Searches the WHOLE catalog, not just wine. The phase chip decides
+            where a pick lands — as an aperitif, or with the menu — exactly as
+            the old detail view did per seat; here it applies to the party.
+            A GLASS is per-person and lands in each guest's glasses; a BOTTLE
+            is shared and lands on the table's bottle list. Sending a glass to
+            the bottle list is what made a by-the-glass pour read as a bottle
+            everywhere downstream. */}
+        <Section
+          label="BEVERAGES"
+          right={
+            <div style={{ display: "flex", gap: 4 }}>
+              {[["aperitif", "APERITIF"], ["menu", "WITH MENU"]].map(([ph, label]) => (
+                <button
+                  key={ph}
+                  type="button"
+                  aria-pressed={drinkPhase === ph}
+                  onClick={() => setDrinkPhase(ph)}
+                  style={{ ...chip(drinkPhase === ph), minHeight: 34, fontSize: 8, padding: "6px 9px" }}
+                >{label}</button>
+              ))}
+            </div>
+          }
+        >
+          {/* Who the pick is for. A drink is ordered per person as often as
+              per table, so the panel has to be able to say "just P2". */}
+          {seats.length > 1 && (
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
+              <button type="button" style={{ ...chip(drinkSeat == null), minHeight: 36 }}
+                aria-label="Drinks for the whole party"
+                onClick={() => setDrinkSeat(null)}>PARTY</button>
+              {seats.map(s => (
+                <button key={s.id} type="button" style={{ ...chip(drinkSeat === s.id), minHeight: 36 }}
+                  aria-label={`Drinks for seat ${s.id}`}
+                  onClick={() => setDrinkSeat(drinkSeat === s.id ? null : s.id)}
+                >S{s.id}</button>
+              ))}
+            </div>
+          )}
 
           <input
-            value={wineQuery}
-            onChange={e => setWineQuery(e.target.value)}
-            aria-label="Search wines"
-            placeholder="search wine…"
+            value={drinkQuery}
+            onChange={e => setDrinkQuery(e.target.value)}
+            aria-label="Search beverages"
+            placeholder="search wine, cocktail, spirit, beer…"
             style={{
               fontFamily: FONT, fontSize: tokens.mobileInputSize, width: "100%", minHeight: TAP,
               padding: "9px 12px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0,
@@ -665,46 +802,68 @@ export default function TableSheet({
               WebkitAppearance: "none",
             }}
           />
-          {wineMatches.length > 0 && (
+          {drinkMatches.length > 0 && (
             <div style={{ border: `1px solid ${tokens.ink[4]}`, borderTop: "none" }}>
-              {wineMatches.map(w => (
-                <div key={w.id || `${w.name}-${w.producer}-${w.vintage}`} style={{
+              {drinkMatches.map(m => (
+                <div key={m.key} style={{
                   display: "flex", alignItems: "center", gap: 8,
                   padding: "7px 10px", borderBottom: `1px solid ${tokens.ink[5]}`,
                 }}>
+                  <span style={{
+                    fontSize: 8, letterSpacing: "0.08em", textTransform: "uppercase", flexShrink: 0,
+                    padding: "2px 5px", color: tokens.ink[2], background: tokens.neutral[50],
+                    border: `1px solid ${tokens.ink[4]}`,
+                  }}>{BEV_LABEL[m.type] || "DRINK"}</span>
                   <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: tokens.ink[0], lineHeight: 1.35 }}>
-                    {w.name}
-                    {(w.producer || w.vintage) && (
-                      <span style={{ color: tokens.ink[3] }}> · {[w.producer, w.vintage].filter(Boolean).join(" · ")}</span>
-                    )}
+                    {m.item.name}
+                    {m.sub && <span style={{ color: tokens.ink[3] }}> · {m.sub}</span>}
                   </span>
-                  <button type="button" style={{ ...quietButton(), padding: "6px 10px" }}
-                    onClick={() => addWine(w, true)}>GLASS</button>
-                  <button type="button" style={{ ...quietButton(), padding: "6px 10px" }}
-                    onClick={() => addWine(w, false)}>BOTTLE</button>
+                  {m.type === "wine" ? (
+                    <>
+                      {/* GLASS only when the catalog actually pours it by the
+                          glass — same rule the beverage search has always
+                          used. A bottle-only wine offers BOTTLE alone. */}
+                      {m.item.byGlass && (
+                        <button type="button" style={{ ...quietButton(), padding: "6px 10px" }}
+                          onClick={() => addDrink(m, "glass")}>GLASS</button>
+                      )}
+                      <button type="button" style={{ ...quietButton(), padding: "6px 10px" }}
+                        onClick={() => addDrink(m, "bottle")}>BOTTLE</button>
+                    </>
+                  ) : (
+                    <button type="button" style={{ ...quietButton(), padding: "6px 12px" }}
+                      onClick={() => addDrink(m, "each")}>ADD</button>
+                  )}
                 </div>
               ))}
             </div>
           )}
 
-          {(table.bottleWines || []).length > 0 && (
+          {chosenDrinks.length === 0 ? (
+            <div style={{ ...micro, letterSpacing: "0.10em", marginTop: 10 }}>
+              {drinkSeat == null ? "NONE ORDERED" : `NONE ON SEAT_${drinkSeat}`}
+            </div>
+          ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 10 }}>
-              {(table.bottleWines || []).map((w, i) => (
-                <div key={`${w?.name}-${i}`} style={{
+              {chosenDrinks.map(d => (
+                <div key={d.key} data-drink-row={d.tag} style={{
                   display: "flex", alignItems: "center", gap: 8,
                   border: `1px solid ${tokens.ink[4]}`, padding: "5px 5px 5px 10px",
                   background: tokens.neutral[0],
                 }}>
                   <span style={{ fontSize: 8, letterSpacing: "0.10em", color: tokens.ink[3], flexShrink: 0 }}>
-                    {w?.byGlass ? "GLASS" : "BOTTLE"}
+                    {d.tag}
                   </span>
                   <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: tokens.ink[0], overflowWrap: "anywhere" }}>
-                    {w?.name}{w?.producer ? ` · ${w.producer}` : ""}
+                    {d.name}{d.sub ? ` · ${d.sub}` : ""}
+                    {d.count != null && (
+                      <span style={{ color: tokens.ink[3] }}> · {d.count}/{seats.length}</span>
+                    )}
                   </span>
                   <button
                     type="button"
-                    aria-label={`Remove ${w?.name || "drink"}`}
-                    onClick={() => write("bottleWines", (table.bottleWines || []).filter((_, j) => j !== i), "DRINK REMOVED")}
+                    aria-label={`Remove ${d.name}`}
+                    onClick={d.onRemove}
                     style={{
                       width: TAP, height: TAP, flexShrink: 0, border: "none", background: "none",
                       color: tokens.ink[3], fontSize: 15, lineHeight: 1, cursor: "pointer",
@@ -724,16 +883,6 @@ export default function TableSheet({
             ariaLabel="Staff note"
             placeholder="VIP, pace, special requests…"
             onCommit={v => writeBooking("notes", v, "STAFF NOTE SAVED")}
-          />
-        </Section>
-
-        <Section label="KITCHEN NOTE">
-          <BlurTextarea
-            kitchen
-            value={table.kitchenNote || ""}
-            ariaLabel="Kitchen note"
-            placeholder="what the pass must read…"
-            onCommit={v => writeBooking("kitchenNote", v, "KITCHEN NOTE SAVED")}
           />
         </Section>
 

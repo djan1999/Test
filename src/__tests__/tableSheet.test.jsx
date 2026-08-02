@@ -35,7 +35,6 @@ const baseTable = (over = {}) => ({
   rooms: [],
   birthday: false,
   notes: "",
-  kitchenNote: "",
   restrictions: [],
   bottleWines: [],
   seats: [seat(1), seat(2)],
@@ -77,6 +76,9 @@ const setup = (over = {}, props = {}) => {
       reservations={[]}
       menuCourses={COURSES}
       wines={[{ id: "w1", name: "Rebula", producer: "Klinec", vintage: "2021", byGlass: true }]}
+      cocktails={[{ id: "c1", name: "Negroni", notes: "bitter" }]}
+      spirits={[{ id: "s1", name: "Negrita Rum", notes: "dark" }]}
+      beers={[{ id: "b1", name: "Human Fish Lager", notes: "pale" }]}
       reservationOnTable={() => null}
       seatCapOf={() => 4}
       {...handlers}
@@ -191,7 +193,13 @@ describe("TableSheet — no Quick Access overlap", () => {
     expect(screen.queryByText("[QUICK APERITIF]")).toBeNull();
     expect(screen.queryByText("SPRITZ")).toBeNull();
     // Table-level drink work is still here.
-    expect(screen.getByText("[WATER & WINE]")).toBeTruthy();
+    expect(screen.getByText("[BEVERAGES]")).toBeTruthy();
+  });
+
+  it("carries no water controls — water is per-seat work on the card", () => {
+    setup();
+    expect(screen.queryByText("[WATER & WINE]")).toBeNull();
+    ["XC", "XW", "OC", "OW"].forEach(o => expect(screen.queryByText(o)).toBeNull());
   });
 });
 
@@ -241,7 +249,7 @@ describe("TableSheet — restrictions by seat", () => {
     const { updBooking } = setup();
     fireEvent.click(screen.getByText("+ ADD"));
     expect(screen.getByText("PICK A SEAT FIRST")).toBeTruthy();
-    fireEvent.click(screen.getByText("S2"));
+    fireEvent.click(screen.getByLabelText("Restriction for seat 2"));
     fireEvent.click(screen.getByText("Gluten Free"));
     expect(updBooking).toHaveBeenCalledWith("restrictions", [{ pos: 2, note: "gluten" }]);
     // The panel closes on the pick — the operator is done in one gesture.
@@ -256,53 +264,203 @@ describe("TableSheet — restrictions by seat", () => {
   });
 });
 
-describe("TableSheet — water & wine", () => {
-  it("applies a water choice to the whole party", () => {
-    const { updSeat } = setup();
-    fireEvent.click(screen.getByText("XC"));
-    expect(updSeat).toHaveBeenCalledWith(1, "water", "XC");
-    expect(updSeat).toHaveBeenCalledWith(2, "water", "XC");
-  });
+describe("TableSheet — beverages", () => {
+  const search = (q) => fireEvent.change(screen.getByLabelText("Search beverages"), { target: { value: q } });
 
-  it("waits for two characters before offering wine matches", () => {
+  it("waits for two characters before offering matches", () => {
     setup();
-    const search = screen.getByLabelText("Search wines");
-    fireEvent.change(search, { target: { value: "r" } });
+    search("r");
     expect(screen.queryByText("GLASS")).toBeNull();
-    fireEvent.change(search, { target: { value: "reb" } });
+    search("reb");
     expect(screen.getByText("GLASS")).toBeTruthy();
     expect(screen.getByText("BOTTLE")).toBeTruthy();
   });
 
-  it("records a glass and a bottle distinctly on the table", () => {
-    const { upd } = setup();
-    fireEvent.change(screen.getByLabelText("Search wines"), { target: { value: "reb" } });
-    fireEvent.click(screen.getByText("GLASS"));
-    expect(upd).toHaveBeenCalledWith("bottleWines", [expect.objectContaining({ name: "Rebula", byGlass: true })]);
+  it("searches the whole catalog, not only wine", () => {
+    setup();
+    search("negro");
+    expect(screen.getByText("Negroni")).toBeTruthy();
+    search("human");
+    expect(screen.getByText("Human Fish Lager")).toBeTruthy();
+    search("negri");
+    expect(screen.getByText("Negrita Rum")).toBeTruthy();
   });
 
-  it("lists chosen drinks with a way to take them off", () => {
-    const { upd } = setup({ bottleWines: [{ name: "Rebula", producer: "Klinec", byGlass: false }] });
-    expect(screen.getByText("BOTTLE")).toBeTruthy();
-    fireEvent.click(screen.getByLabelText("Remove Rebula"));
-    expect(upd).toHaveBeenCalledWith("bottleWines", []);
+  it("offers GLASS/BOTTLE for wine and a single ADD for everything else", () => {
+    setup();
+    search("negro");
+    expect(screen.getByText("ADD")).toBeTruthy();
+    expect(screen.queryByText("GLASS")).toBeNull();
+  });
+
+  it("offers GLASS only on a wine the catalog actually pours by the glass", () => {
+    setup({}, { wines: [
+      { id: "w1", name: "Rebula", producer: "Klinec", vintage: "2021", byGlass: true },
+      { id: "w2", name: "Rebula Ortodox", producer: "Movia", vintage: "2018", byGlass: false },
+    ] });
+    search("rebula");
+    expect(screen.getAllByText("BOTTLE")).toHaveLength(2);
+    expect(screen.getAllByText("GLASS")).toHaveLength(1);
+  });
+
+  it("sends a GLASS to the party's glasses, never to the table's bottles", () => {
+    // bottleWines is what the menu, summary and archive read as "bottles for
+    // the table" — a by-the-glass pour sent there came back as a bottle.
+    const { upd, updSeat } = setup({}, { drinkPhase: undefined });
+    search("reb");
+    fireEvent.click(screen.getByText("WITH MENU"));
+    fireEvent.click(screen.getByText("GLASS"));
+    expect(updSeat).toHaveBeenCalledWith(1, "glasses", [expect.objectContaining({ name: "Rebula", byGlass: true })]);
+    expect(updSeat).toHaveBeenCalledWith(2, "glasses", [expect.objectContaining({ name: "Rebula", byGlass: true })]);
+    expect(upd).not.toHaveBeenCalledWith("bottleWines", expect.anything());
+  });
+
+  it("sends a BOTTLE to the table, since a bottle is shared", () => {
+    const { upd } = setup();
+    search("reb");
+    fireEvent.click(screen.getByText("BOTTLE"));
+    expect(upd).toHaveBeenCalledWith("bottleWines", [expect.objectContaining({ name: "Rebula", byGlass: false })]);
+  });
+
+  it("lands a pick as an APERITIF by default", () => {
+    const { updSeat } = setup();
+    search("negro");
+    fireEvent.click(screen.getByText("ADD"));
+    expect(updSeat).toHaveBeenCalledWith(1, "aperitifs", [expect.objectContaining({ name: "Negroni" })]);
+  });
+
+  it("lands it with the menu once the phase is switched", () => {
+    const { updSeat } = setup();
+    fireEvent.click(screen.getByText("WITH MENU"));
+    search("negro");
+    fireEvent.click(screen.getByText("ADD"));
+    expect(updSeat).toHaveBeenCalledWith(1, "cocktails", [expect.objectContaining({ name: "Negroni" })]);
+    expect(screen.getByText("WITH MENU · PARTY — NEGRONI")).toBeTruthy();
+  });
+
+  it("routes each beverage type to its own list with the menu", () => {
+    const { updSeat } = setup();
+    fireEvent.click(screen.getByText("WITH MENU"));
+    search("human");
+    fireEvent.click(screen.getByText("ADD"));
+    expect(updSeat).toHaveBeenCalledWith(1, "beers", [expect.objectContaining({ name: "Human Fish Lager" })]);
+  });
+
+  it("reads the party's drinks back with how many seats hold each", () => {
+    const { container } = setup({
+      bottleWines: [{ name: "Rebula", producer: "Klinec", byGlass: false }],
+      seats: [
+        { ...seat(1), aperitifs: [{ name: "Negroni" }], glasses: [{ name: "Rebula", byGlass: true }] },
+        { ...seat(2), aperitifs: [{ name: "Negroni" }] },
+      ],
+    });
+    const rowText = (tag) => [...container.querySelectorAll(`[data-drink-row="${tag}"]`)]
+      .map(el => el.textContent);
+    // Two seats hold the Negroni, one holds the glass of Rebula, and the
+    // table's own bottle carries no per-seat count at all.
+    expect(rowText("APERITIF")).toEqual([expect.stringContaining("Negroni · 2/2")]);
+    expect(rowText("GLASS")).toEqual([expect.stringContaining("Rebula · 1/2")]);
+    expect(rowText("BOTTLE")).toEqual([expect.stringContaining("Rebula · Klinec")]);
+    expect(rowText("BOTTLE")[0]).not.toMatch(/\d\/\d/);
+  });
+
+  it("takes a per-seat drink off every seat at once", () => {
+    const { updSeat } = setup({
+      seats: [
+        { ...seat(1), aperitifs: [{ name: "Negroni" }] },
+        { ...seat(2), aperitifs: [{ name: "Negroni" }] },
+      ],
+    });
+    fireEvent.click(screen.getByLabelText("Remove Negroni"));
+    expect(updSeat).toHaveBeenCalledWith(1, "aperitifs", []);
+    expect(updSeat).toHaveBeenCalledWith(2, "aperitifs", []);
+  });
+
+  it("says so when the party has ordered nothing", () => {
+    setup();
+    expect(screen.getByText("NONE ORDERED")).toBeTruthy();
+  });
+});
+
+describe("TableSheet — beverages, per seat", () => {
+  const search = (q) => fireEvent.change(screen.getByLabelText("Search beverages"), { target: { value: q } });
+
+  it("writes a pick to ONE seat when that seat is the target", () => {
+    const { updSeat } = setup();
+    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
+    search("negro");
+    fireEvent.click(screen.getByText("ADD"));
+    expect(updSeat).toHaveBeenCalledTimes(1);
+    expect(updSeat).toHaveBeenCalledWith(2, "aperitifs", [expect.objectContaining({ name: "Negroni" })]);
+    expect(screen.getByText("APERITIF · SEAT_2 — NEGRONI")).toBeTruthy();
+  });
+
+  it("goes back to the whole party when the seat is deselected", () => {
+    const { updSeat } = setup();
+    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
+    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));   // toggle off
+    search("negro");
+    fireEvent.click(screen.getByText("ADD"));
+    expect(updSeat).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads back only that seat's drinks, uncounted", () => {
+    const { container } = setup({
+      seats: [
+        { ...seat(1), aperitifs: [{ name: "Negroni" }] },
+        { ...seat(2), aperitifs: [{ name: "Spritz" }] },
+      ],
+    });
+    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
+    const rows = [...container.querySelectorAll('[data-drink-row="APERITIF"]')].map(el => el.textContent);
+    expect(rows).toEqual([expect.stringContaining("Spritz")]);
+    expect(rows[0]).not.toMatch(/\d\/\d/);              // one seat — nothing to count
+  });
+
+  it("removes from that seat alone, leaving the rest of the party", () => {
+    const { updSeat } = setup({
+      seats: [
+        { ...seat(1), aperitifs: [{ name: "Negroni" }] },
+        { ...seat(2), aperitifs: [{ name: "Negroni" }] },
+      ],
+    });
+    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
+    fireEvent.click(screen.getByLabelText("Remove Negroni"));
+    expect(updSeat).toHaveBeenCalledTimes(1);
+    expect(updSeat).toHaveBeenCalledWith(2, "aperitifs", []);
+  });
+
+  it("still shows the table's bottles under a single seat — a bottle is shared", () => {
+    const { container } = setup({ bottleWines: [{ name: "Rebula", producer: "Klinec" }] });
+    fireEvent.click(screen.getByLabelText("Drinks for seat 1"));
+    expect(container.querySelectorAll('[data-drink-row="BOTTLE"]')).toHaveLength(1);
+  });
+
+  it("says which seat is empty rather than a generic nothing", () => {
+    setup();
+    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
+    expect(screen.getByText("NONE ON SEAT_2")).toBeTruthy();
+  });
+
+  it("offers no seat scope on a table of one", () => {
+    setup({ guests: 1, seats: [seat(1)] });
+    expect(screen.queryByLabelText("Drinks for the whole party")).toBeNull();
   });
 });
 
 describe("TableSheet — notes", () => {
-  it("commits each note on blur, and only the kitchen note is flagged for the pass", () => {
+  it("commits the staff note on blur, not on every keystroke", () => {
     const { updBooking } = setup();
-    const kitchen = screen.getByLabelText("Kitchen note");
-    expect(kitchen.style.borderColor || kitchen.style.border).toMatch(/192, 128, 128|c08080/);
-
     fireEvent.change(screen.getByLabelText("Staff note"), { target: { value: "anniversary" } });
-    expect(updBooking).not.toHaveBeenCalled();          // no write per keystroke
+    expect(updBooking).not.toHaveBeenCalled();
     fireEvent.blur(screen.getByLabelText("Staff note"));
     expect(updBooking).toHaveBeenCalledWith("notes", "anniversary");
+  });
 
-    fireEvent.change(kitchen, { target: { value: "no butter on P2" } });
-    fireEvent.blur(kitchen);
-    expect(updBooking).toHaveBeenCalledWith("kitchenNote", "no butter on P2");
+  it("carries no kitchen note — the concept is gone", () => {
+    setup();
+    expect(screen.queryByLabelText("Kitchen note")).toBeNull();
+    expect(screen.queryByText("[KITCHEN NOTE]")).toBeNull();
   });
 });
 
