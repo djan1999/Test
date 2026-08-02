@@ -11,6 +11,7 @@ import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { PAIRINGS } from "../../constants/pairings.js";
 import BeverageSearch from "../service/BeverageSearch.jsx";
 import { resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
+import { combineMenuPages } from "../../utils/printAllPages.js";
 import {
   courseKeyOf,
   substitutionAttribution,
@@ -439,10 +440,30 @@ export default function MenuWorkspace({
     if (openPrint(seat)) flash(`SEAT ${i + 1} SENT TO PRINT`);
   };
 
+  /**
+   * PRINT ALL — ONE window, one A5 page per seat. Opening a window per seat
+   * on a stagger meant only the first was inside the click gesture; strict
+   * pop-up blockers silently ate seats 2..n while the toast claimed success.
+   * One combined document is one gesture-blessed window and one print dialog,
+   * and the printer collates the whole table.
+   */
   const printAll = () => {
     if (seats.length === 0) return;
-    // Staggered: browsers drop print windows opened in the same tick.
-    seats.forEach((seat, i) => setTimeout(() => openPrint(seat), i * 700));
+    const html = combineMenuPages(
+      seats.map((seat) => htmlFor(seat)),
+      { title: `${menuTitle} — ${tableLabelOf(table)}` },
+    );
+    if (!html) return;
+    const w = window.open("", "_blank", "width=620,height=880");
+    if (!w) { flash("POP-UP BLOCKED — ALLOW POP-UPS TO PRINT"); return; }
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 600);
+    // Every seat printed, so every seat's one-time edits are consumed —
+    // same contract as the single-seat path.
+    setSeatEdits({});
+    setOpenCourse(null);
     flash(`${seats.length} SEAT MENUS SENT TO PRINT`);
   };
 
@@ -563,8 +584,12 @@ export default function MenuWorkspace({
 
       <div style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: isNarrow ? "16px" : "20px 24px" }}>
 
-        {/* 1 — Party line */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
+        {/* 1 — Party line + menu type + language on one row: the identity and
+            the run options are read together, and stacking them cost ~50px of
+            workspace on every party. Defaults come from the booking; the type
+            picks the assigned profile's long/short template; the language
+            switch carries the bilingual title/thank-you store with it. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
           <span style={{ fontFamily: FONT, fontSize: "15px", color: ink[0] }}>{table.resName || "—"}</span>
           <span style={{
             fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em",
@@ -582,23 +607,19 @@ export default function MenuWorkspace({
                 style={button()}>CLEAR EDITS</button>
             </>
           )}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
+            {[["long", "LONG MENU"], ["short", "SHORT MENU"]].map(([val, label]) => (
+              <button key={val} onClick={() => setMenuType(val)} style={chip(menuType === val)}>{label}</button>
+            ))}
+            <span style={{ color: ink[4], fontFamily: FONT, fontSize: "9px" }}>·</span>
+            {[["en", "EN"], ["si", "SLO"]].map(([val, label]) => (
+              <button key={val} onClick={() => setLanguageWithDefaults(val)} style={chip(lang === val)}>{label}</button>
+            ))}
+          </div>
         </div>
 
-        {/* 2 — Menu type + language. Defaults come from the booking. The type
-            picks the assigned profile's long/short template; the language
-            switch carries the bilingual title/thank-you store with it. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-          {[["long", "LONG MENU"], ["short", "SHORT MENU"]].map(([val, label]) => (
-            <button key={val} onClick={() => setMenuType(val)} style={chip(menuType === val)}>{label}</button>
-          ))}
-          <span style={{ color: ink[4], fontFamily: FONT, fontSize: "9px" }}>·</span>
-          {[["en", "EN"], ["si", "SLO"]].map(([val, label]) => (
-            <button key={val} onClick={() => setLanguageWithDefaults(val)} style={chip(lang === val)}>{label}</button>
-          ))}
-        </div>
-
-        {/* 3 — Title + team + thank-you (persisted: localStorage + state store) */}
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+        {/* 2 — Title + team + thank-you (persisted: localStorage + state store) */}
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
           <div style={{ flex: "1 1 200px", minWidth: 0 }}>
             <div style={fieldLabel}>MENU TITLE</div>
             <input value={menuTitle}
@@ -617,7 +638,7 @@ export default function MenuWorkspace({
           </div>
         </div>
 
-        {/* 4 — Seat tabs + print actions */}
+        {/* 3 — Seat tabs + print actions */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-start", marginBottom: 12 }}>
           {seats.map((seat, i) => {
             const tags = resolveSeatRestrictionKeys(restrictions, seat.id).map(restrictionTag);
@@ -651,7 +672,7 @@ export default function MenuWorkspace({
           )}
         </div>
 
-        {/* 5 — Active seat's pairing + drinks. Pairing is per SEAT — the chips
+        {/* 4 — Active seat's pairing + drinks. Pairing is per SEAT — the chips
             write seat.pairing through `upd`, the same field the kitchen reads. */}
         {activeSeat && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
@@ -671,7 +692,7 @@ export default function MenuWorkspace({
           </div>
         )}
 
-        {/* 6 — Drinks & extras editor for the active seat — writes through the
+        {/* 5 — Drinks & extras editor for the active seat — writes through the
             same updSeat/updSeatFull paths the full generator used. */}
         {activeSeat && drinksOpen && (
           <div style={{
@@ -952,8 +973,14 @@ export default function MenuWorkspace({
         {/* Course list + live preview */}
         <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: isNarrow ? "wrap" : "nowrap" }}>
 
-          {/* Course list — the engine's own row model (see cardsFor) */}
-          <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+          {/* Course list — the engine's own row model (see cardsFor). A
+              responsive grid: one full-width column was mostly empty space on
+              wide screens and pushed the tail courses below the fold. */}
+          <div style={{
+            flex: "1 1 320px", minWidth: 0,
+            display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+            gap: 8, alignItems: "start",
+          }}>
             {activeCards.map((card) => {
               const open = openCourse === card.courseKey;
               const accent = card.substituted ? red.border : card.edited ? signal.warn : ink[4];
@@ -973,8 +1000,11 @@ export default function MenuWorkspace({
                     display: "flex", flexWrap: "wrap",
                     border: `${rule.hairline} solid ${accent}`,
                     borderLeft: `3px solid ${accent}`,
-                    background: neutral[0], padding: "10px 12px", marginBottom: 8,
+                    background: neutral[0], padding: "10px 12px",
                     cursor: open ? "default" : "pointer",
+                    // An open editor spans the full grid width so the inputs
+                    // aren't squeezed into a single column cell.
+                    gridColumn: open ? "1 / -1" : "auto",
                   }}
                 >
                   <div style={{ flex: "1 1 100%", minWidth: 0 }}>
@@ -1078,9 +1108,14 @@ export default function MenuWorkspace({
             )}
           </div>
 
-          {/* Live preview — the engine's actual printed page, scaled down */}
+          {/* Live preview — the engine's actual printed page, scaled down.
+              Sticky, so the pass keeps sight of the sheet while scrolling a
+              long course list; the dead space below it is gone. */}
           {activeSeat && (
-            <div style={{ flexShrink: 0, width: PREVIEW_W }}>
+            <div style={{
+              flexShrink: 0, width: PREVIEW_W,
+              position: isNarrow ? "static" : "sticky", top: 0, alignSelf: "flex-start",
+            }}>
               <div style={{ ...fieldLabel, marginBottom: 8 }}>PREVIEW · SEAT {seats.indexOf(activeSeat) + 1} OF {seats.length}</div>
               <div style={{
                 width: PREVIEW_W, height: PAGE_H_PX * PREVIEW_SCALE,
