@@ -249,7 +249,7 @@ describe("TableSheet — restrictions by seat", () => {
     const { updBooking } = setup();
     fireEvent.click(screen.getByText("+ ADD"));
     expect(screen.getByText("PICK A SEAT FIRST")).toBeTruthy();
-    fireEvent.click(screen.getByText("S2"));
+    fireEvent.click(screen.getByLabelText("Restriction for seat 2"));
     fireEvent.click(screen.getByText("Gluten Free"));
     expect(updBooking).toHaveBeenCalledWith("restrictions", [{ pos: 2, note: "gluten" }]);
     // The panel closes on the pick — the operator is done in one gesture.
@@ -335,7 +335,7 @@ describe("TableSheet — beverages", () => {
     search("negro");
     fireEvent.click(screen.getByText("ADD"));
     expect(updSeat).toHaveBeenCalledWith(1, "cocktails", [expect.objectContaining({ name: "Negroni" })]);
-    expect(screen.getByText("WITH MENU — NEGRONI")).toBeTruthy();
+    expect(screen.getByText("WITH MENU · PARTY — NEGRONI")).toBeTruthy();
   });
 
   it("routes each beverage type to its own list with the menu", () => {
@@ -379,6 +379,72 @@ describe("TableSheet — beverages", () => {
   it("says so when the party has ordered nothing", () => {
     setup();
     expect(screen.getByText("NONE ORDERED")).toBeTruthy();
+  });
+});
+
+describe("TableSheet — beverages, per seat", () => {
+  const search = (q) => fireEvent.change(screen.getByLabelText("Search beverages"), { target: { value: q } });
+
+  it("writes a pick to ONE seat when that seat is the target", () => {
+    const { updSeat } = setup();
+    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
+    search("negro");
+    fireEvent.click(screen.getByText("ADD"));
+    expect(updSeat).toHaveBeenCalledTimes(1);
+    expect(updSeat).toHaveBeenCalledWith(2, "aperitifs", [expect.objectContaining({ name: "Negroni" })]);
+    expect(screen.getByText("APERITIF · SEAT_2 — NEGRONI")).toBeTruthy();
+  });
+
+  it("goes back to the whole party when the seat is deselected", () => {
+    const { updSeat } = setup();
+    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
+    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));   // toggle off
+    search("negro");
+    fireEvent.click(screen.getByText("ADD"));
+    expect(updSeat).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads back only that seat's drinks, uncounted", () => {
+    const { container } = setup({
+      seats: [
+        { ...seat(1), aperitifs: [{ name: "Negroni" }] },
+        { ...seat(2), aperitifs: [{ name: "Spritz" }] },
+      ],
+    });
+    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
+    const rows = [...container.querySelectorAll('[data-drink-row="APERITIF"]')].map(el => el.textContent);
+    expect(rows).toEqual([expect.stringContaining("Spritz")]);
+    expect(rows[0]).not.toMatch(/\d\/\d/);              // one seat — nothing to count
+  });
+
+  it("removes from that seat alone, leaving the rest of the party", () => {
+    const { updSeat } = setup({
+      seats: [
+        { ...seat(1), aperitifs: [{ name: "Negroni" }] },
+        { ...seat(2), aperitifs: [{ name: "Negroni" }] },
+      ],
+    });
+    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
+    fireEvent.click(screen.getByLabelText("Remove Negroni"));
+    expect(updSeat).toHaveBeenCalledTimes(1);
+    expect(updSeat).toHaveBeenCalledWith(2, "aperitifs", []);
+  });
+
+  it("still shows the table's bottles under a single seat — a bottle is shared", () => {
+    const { container } = setup({ bottleWines: [{ name: "Rebula", producer: "Klinec" }] });
+    fireEvent.click(screen.getByLabelText("Drinks for seat 1"));
+    expect(container.querySelectorAll('[data-drink-row="BOTTLE"]')).toHaveLength(1);
+  });
+
+  it("says which seat is empty rather than a generic nothing", () => {
+    setup();
+    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
+    expect(screen.getByText("NONE ON SEAT_2")).toBeTruthy();
+  });
+
+  it("offers no seat scope on a table of one", () => {
+    setup({ guests: 1, seats: [seat(1)] });
+    expect(screen.queryByLabelText("Drinks for the whole party")).toBeNull();
   });
 });
 

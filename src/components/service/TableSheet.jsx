@@ -153,6 +153,10 @@ export default function TableSheet({
   // Where a pick lands: as an aperitif, or with the menu. Same decision the
   // old detail view made per seat — here it applies to the whole party.
   const [drinkPhase, setDrinkPhase] = useState("aperitif");
+  // Who the next pick is for: null = the whole party, or one seat id. Drinks
+  // are ordered per person as often as per table, and the sheet was writing
+  // every pick to all four guests with no way to say "just P2".
+  const [drinkSeat, setDrinkSeat] = useState(null);
   const [nowMin, setNowMin] = useState(() => minutesOfDay());
   const scrollRef = useRef(null);
   const toastTimer = useRef(null);
@@ -185,6 +189,7 @@ export default function TableSheet({
     setAddRestrSeat(null);
     setDrinkQuery("");
     setDrinkPhase("aperitif");
+    setDrinkSeat(null);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [table?.id]);
 
@@ -261,6 +266,7 @@ export default function TableSheet({
 
   // Which per-seat list a with-menu pick belongs to.
   const MENU_FIELD = { wine: "glasses", cocktail: "cocktails", spirit: "spirits", beer: "beers" };
+  const targetSeats = drinkSeat == null ? seats : seats.filter(s => s.id === drinkSeat);
 
   /**
    * Add a beverage to the party.
@@ -282,15 +288,23 @@ export default function TableSheet({
     }
     const stored = type === "wine" ? { ...item, byGlass: true } : item;
     const field = drinkPhase === "aperitif" ? "aperitifs" : (MENU_FIELD[type] || "cocktails");
-    seats.forEach(s => updSeat(s.id, field, [...(s[field] || []), stored]));
-    flash(`${drinkPhase === "aperitif" ? "APERITIF" : "WITH MENU"} — ${name}`);
+    targetSeats.forEach(s => updSeat(s.id, field, [...(s[field] || []), stored]));
+    const who = drinkSeat == null ? "PARTY" : `SEAT_${drinkSeat}`;
+    flash(`${drinkPhase === "aperitif" ? "APERITIF" : "WITH MENU"} · ${who} — ${name}`);
     setDrinkQuery("");
   };
 
-  // Everything the party is drinking, read back at party level. Per-seat lists
-  // can diverge (Quick Access edits one guest), so entries carry how many seats
-  // hold them rather than pretending the table is uniform.
+  /**
+   * What the list reads back, scoped to whoever is selected.
+   *
+   * On the party view a drink can legitimately be on some seats and not
+   * others — Quick Access edits one guest, and so does this panel — so party
+   * rows carry how many seats hold them instead of pretending the table is
+   * uniform. On a single seat there is nothing to count, and removing takes
+   * the drink off that seat alone.
+   */
   const chosenDrinks = (() => {
+    // The table's bottles are shared, so they show under every scope.
     const out = (table.bottleWines || []).map((w, i) => ({
       key: `bottle-${i}`,
       tag: "BOTTLE",
@@ -307,6 +321,21 @@ export default function TableSheet({
       ["beers", "BEER"],
     ];
     for (const [field, tag] of FIELDS) {
+      if (drinkSeat != null) {
+        const s = seats.find(x => x.id === drinkSeat);
+        (s?.[field] || []).forEach((x, i) => out.push({
+          key: `${field}-${drinkSeat}-${i}`,
+          tag,
+          name: x?.name || "—",
+          sub: x?.producer || x?.notes || "",
+          count: null,
+          onRemove: () => {
+            updSeat(drinkSeat, field, (s[field] || []).filter((_, j) => j !== i));
+            flash(`REMOVED · SEAT_${drinkSeat}`);
+          },
+        }));
+        continue;
+      }
       const byName = new Map();
       seats.forEach(s => (s[field] || []).forEach(x => {
         const name = x?.name || "—";
@@ -690,6 +719,7 @@ export default function TableSheet({
                   {(seats.length ? seats.map(s => Number(s.id)) : Array.from({ length: covers }, (_, i) => i + 1))
                     .map(id => (
                       <button key={id} type="button" style={chip(addRestrSeat === id)}
+                        aria-label={`Restriction for seat ${id}`}
                         onClick={() => setAddRestrSeat(id)}
                       >S{id}</button>
                     ))}
@@ -744,6 +774,22 @@ export default function TableSheet({
             </div>
           }
         >
+          {/* Who the pick is for. A drink is ordered per person as often as
+              per table, so the panel has to be able to say "just P2". */}
+          {seats.length > 1 && (
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
+              <button type="button" style={{ ...chip(drinkSeat == null), minHeight: 36 }}
+                aria-label="Drinks for the whole party"
+                onClick={() => setDrinkSeat(null)}>PARTY</button>
+              {seats.map(s => (
+                <button key={s.id} type="button" style={{ ...chip(drinkSeat === s.id), minHeight: 36 }}
+                  aria-label={`Drinks for seat ${s.id}`}
+                  onClick={() => setDrinkSeat(drinkSeat === s.id ? null : s.id)}
+                >S{s.id}</button>
+              ))}
+            </div>
+          )}
+
           <input
             value={drinkQuery}
             onChange={e => setDrinkQuery(e.target.value)}
@@ -794,7 +840,9 @@ export default function TableSheet({
           )}
 
           {chosenDrinks.length === 0 ? (
-            <div style={{ ...micro, letterSpacing: "0.10em", marginTop: 10 }}>NONE ORDERED</div>
+            <div style={{ ...micro, letterSpacing: "0.10em", marginTop: 10 }}>
+              {drinkSeat == null ? "NONE ORDERED" : `NONE ON SEAT_${drinkSeat}`}
+            </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 10 }}>
               {chosenDrinks.map(d => (
