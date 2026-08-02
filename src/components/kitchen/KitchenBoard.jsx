@@ -118,6 +118,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   // gesture split the header already uses for drag-vs-tap: remember where the
   // pointer went down, and ignore the click if it travelled or dwelled.
   const courseTap = useRef(null);
+  // The last FIRE or SET this screen made on this ticket. UNDO takes back the
+  // last ACTION, and fire/set stamps are HH:MM — too coarse to order two taps
+  // in the same minute. This ref settles it for the case that actually
+  // matters (the chef undoing what they just did); anything it can't answer
+  // falls back to comparing those stamps, which still covers another screen's
+  // action and a freshly mounted board.
+  const lastActionRef = useRef(null);   // { kind: "fire"|"set", key, clearedSet? }
   const onHeaderPointerDown = (e) => {
     headTap.current = { x: e.clientX, y: e.clientY, t: Date.now() };
     dragListeners?.onPointerDown?.(e);
@@ -255,14 +262,20 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     // one when the second click won the race.
     upd(table.id, "kitchenLog", (prev) => ({ ...(prev || {}), [courseKey]: { firedAt: now } }));
     // Firing the course service asked for fulfils the "table is set" signal.
-    if (table.courseReady?.key === courseKey) upd(table.id, "courseReady", null);
+    const clearedSet = table.courseReady?.key === courseKey ? table.courseReady : null;
+    if (clearedSet) upd(table.id, "courseReady", null);
+    // Remember the SET this fire consumed, so undoing the fire puts the ticket
+    // back exactly as it stood rather than half-way.
+    lastActionRef.current = { kind: "fire", key: courseKey, clearedSet };
   };
-  const unfire = (courseKey) => {
+  const unfire = (courseKey, restoreSet = null) => {
     upd(table.id, "kitchenLog", (prev) => {
       const newLog = { ...(prev || {}) };
       delete newLog[courseKey];
       return newLog;
     });
+    if (restoreSet) upd(table.id, "courseReady", restoreSet);
+    lastActionRef.current = null;
   };
   // SET — raise (or take back) the "table is set for the next course" signal
   // from the kitchen side. Service raises the same flag from the table sheet;
@@ -270,10 +283,15 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   // no way to say so. Tapping SET again on the same course clears it.
   const setNext = (course) => {
     if (!course) return;
-    if (table.courseReady?.key === course.key) { upd(table.id, "courseReady", null); return; }
+    if (table.courseReady?.key === course.key) {
+      upd(table.id, "courseReady", null);
+      lastActionRef.current = null;   // taking a set back IS an undo
+      return;
+    }
     upd(table.id, "courseReady", {
       key: course.key, index: course.index, name: course.name, at: fmt(new Date()),
     });
+    lastActionRef.current = { kind: "set", key: course.key };
   };
 
   // Assign a whole PERSON to a chair, not one restriction at a time: the
@@ -398,6 +416,39 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     .filter(c => c.firedAt)
     .sort((a, b) => (parseHHMM(a.firedAt) ?? 0) - (parseHHMM(b.firedAt) ?? 0))
     .pop() || null;
+
+  // What UNDO takes back: the last ACTION on this ticket, fire OR set.
+  //
+  // The remembered action is checked against live state first — another screen
+  // may have fired or cleared since, and a stale memory must never undo
+  // something that already moved on. When there is nothing to trust, the
+  // persisted stamps decide: a standing SET raised no earlier than the last
+  // fire is the later action.
+  const pendingSet = table.courseReady && !log[table.courseReady.key]?.firedAt
+    ? table.courseReady : null;
+  const undoTarget = (() => {
+    const la = lastActionRef.current;
+    if (la?.kind === "set" && pendingSet?.key === la.key) {
+      return { kind: "set", name: pendingSet.name };
+    }
+    if (la?.kind === "fire" && log[la.key]?.firedAt) {
+      const course = visibleCoursesForTable.find(c => c.key === la.key);
+      if (course) return { kind: "fire", key: course.key, name: course.name, restoreSet: la.clearedSet };
+    }
+    if (pendingSet && (!lastFired || (parseHHMM(pendingSet.at) ?? 0) >= (parseHHMM(lastFired.firedAt) ?? 0))) {
+      return { kind: "set", name: pendingSet.name };
+    }
+    if (lastFired) return { kind: "fire", key: lastFired.key, name: lastFired.name, restoreSet: null };
+    return null;
+  })();
+  const runUndo = () => {
+    if (!undoTarget) return;
+    if (undoTarget.kind === "set") { upd(table.id, "courseReady", null); lastActionRef.current = null; return; }
+    unfire(undoTarget.key, undoTarget.restoreSet);
+  };
+  const undoLabel = undoTarget
+    ? `Take back ${undoTarget.kind === "set" ? "SET" : "FIRE"} — ${undoTarget.name}`
+    : "Nothing to undo";
   // The action bar belongs to the LIVE board only: the reservations ticket
   // preview is a document, not a pass surface, and has no `upd`.
   const showActionBar = !!upd && !editable;
@@ -1159,14 +1210,15 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             }}
           >{table.courseReady?.key === nextFire?.key ? "SET ✓" : "SET"}</button>
           <button
-            disabled={!lastFired}
-            onClick={e => { e.stopPropagation(); if (lastFired) unfire(lastFired.key); }}
-            title={lastFired ? `Take back ${lastFired.name}` : "Nothing fired yet"}
+            disabled={!undoTarget}
+            onClick={e => { e.stopPropagation(); runUndo(); }}
+            title={undoLabel}
+            aria-label={undoLabel}
             style={{
               flex: 1, minWidth: 0, fontFamily: FONT, fontSize: dz.undoFont, fontWeight: 600,
               letterSpacing: "0.06em", textTransform: "uppercase", padding: dz.firePad,
-              border: "none", borderRadius: 0, cursor: lastFired ? "pointer" : "default",
-              background: tokens.neutral[0], color: lastFired ? tokens.ink[3] : tokens.ink[5],
+              border: "none", borderRadius: 0, cursor: undoTarget ? "pointer" : "default",
+              background: tokens.neutral[0], color: undoTarget ? tokens.ink[3] : tokens.ink[5],
               whiteSpace: "nowrap", touchAction: "manipulation",
             }}
           >UNDO</button>
@@ -1210,10 +1262,11 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               {/* UNDO survives completion — the action bar is gone by now, and
                   a mis-tapped last course must not need a hunt through the
                   scrolled list to take back. */}
-              {showActionBar && lastFired && (
+              {showActionBar && undoTarget && (
                 <button
-                  onClick={e => { e.stopPropagation(); unfire(lastFired.key); }}
-                  title={`Take back ${lastFired.name}`}
+                  onClick={e => { e.stopPropagation(); runUndo(); }}
+                  title={undoLabel}
+                  aria-label={undoLabel}
                   style={{
                     fontFamily: FONT, fontSize: compact ? 8 : 9, letterSpacing: compact ? 1 : 1.5, padding: dz.archiveBtnPad,
                     border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
