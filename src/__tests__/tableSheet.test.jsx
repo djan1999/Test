@@ -316,14 +316,38 @@ describe("TableSheet — beverages", () => {
     expect(screen.queryByText("GLASS")).toBeNull();
   });
 
-  it("offers GLASS only on a wine the catalog actually pours by the glass", () => {
+  it("offers GLASS and BOTTLE on every wine, whatever the printed list says", () => {
+    // `byGlass` describes the printed list, not what the room can pour. A
+    // bottle-only wine still goes out by the glass when a guest asks.
     setup({}, { wines: [
       { id: "w1", name: "Rebula", producer: "Klinec", vintage: "2021", byGlass: true },
       { id: "w2", name: "Rebula Ortodox", producer: "Movia", vintage: "2018", byGlass: false },
     ] });
     search("rebula");
     expect(screen.getAllByText("BOTTLE")).toHaveLength(2);
-    expect(screen.getAllByText("GLASS")).toHaveLength(1);
+    expect(screen.getAllByText("GLASS")).toHaveLength(2);
+  });
+
+  it("scrolls the results instead of hiding everything past the fourth", () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      id: `w${i}`, name: `Rebula ${i}`, producer: "Klinec", vintage: "2021", byGlass: true,
+    }));
+    const { container } = setup({}, { wines: many });
+    search("rebula");
+    const list = container.querySelector("[data-drink-results]");
+    expect(list.style.overflowY).toBe("auto");
+    expect(list.style.maxHeight).toBeTruthy();
+    expect(container.querySelectorAll("[data-drink-results] button").length).toBe(24); // 12 × GLASS+BOTTLE
+  });
+
+  it("forgives accents and typos, and does not care about word order", () => {
+    setup({}, { wines: [{ id: "w1", name: "Šipon", producer: "Klinec", vintage: "2021" }] });
+    search("sipon");                      // no diacritic on the keyboard
+    expect(screen.getByText("Šipon")).toBeTruthy();
+    search("sippon");                     // fat finger
+    expect(screen.getByText("Šipon")).toBeTruthy();
+    search("klinec sip");                 // producer first
+    expect(screen.getByText("Šipon")).toBeTruthy();
   });
 
   it("sends a GLASS to the party's glasses, never to the table's bottles", () => {
