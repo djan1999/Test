@@ -57,8 +57,6 @@ const setup = (over = {}, props = {}) => {
     upd: vi.fn(),
     updSeat: vi.fn(),
     updBooking: vi.fn(),
-    onFire: vi.fn(),
-    onUnfire: vi.fn(),
     onMarkSeated: vi.fn(),
     onMarkArriving: vi.fn(),
     onSetKitchen: vi.fn(),
@@ -130,8 +128,6 @@ describe("TableSheet — chrome", () => {
         upd={() => {}}
         updSeat={() => {}}
         updBooking={() => {}}
-        onFire={() => {}}
-        onUnfire={() => {}}
       />,
     );
     expect(container.querySelectorAll("[data-table-sheet]").length).toBe(1);
@@ -160,20 +156,47 @@ describe("TableSheet — courses", () => {
     expect(screen.getByText("COURSE_02/03")).toBeTruthy();
     expect(screen.getByText(/LAST FIRE \d+ MIN AGO/)).toBeTruthy();
     expect(screen.getByText("NEXT")).toBeTruthy();
-    expect(screen.getByText("FIRE — Sea Bass")).toBeTruthy();
   });
 
-  it("fires the next course and confirms with a toast", () => {
-    const { onFire } = setup();
-    fireEvent.click(screen.getByText("FIRE — Sea Bass"));
-    expect(onFire).toHaveBeenCalledWith("starter");
-    expect(screen.getByText("FIRED — SEA BASS")).toBeTruthy();
+  it("SETS the next course — service cannot fire, only the pass can", () => {
+    const { onSetKitchen } = setup();
+    fireEvent.click(screen.getByText("SET — Sea Bass"));
+    expect(onSetKitchen).toHaveBeenCalled();
+    expect(screen.getByText("SET — SEA BASS")).toBeTruthy();
   });
 
-  it("UNDO takes back the last fired course", () => {
-    const { onUnfire } = setup();
+  it("offers no way to fire a course from the floor", () => {
+    setup();
+    expect(screen.queryByText(/^FIRE/)).toBeNull();
+    // …and the action grid no longer duplicates the same signal.
+    expect(screen.queryByText("SET → KITCHEN")).toBeNull();
+    expect(screen.queryByText("UNSET")).toBeNull();
+  });
+
+  it("shows the standing set on its course, and goes inert rather than re-setting", () => {
+    setup({ courseReady: { key: "starter", index: 2, name: "Sea Bass", at: "20:41" } });
+    expect(screen.getByText("SET")).toBeTruthy();          // marked in the list
+    const button = screen.getByText("SET ✓ 20:41 — Sea Bass");
+    expect(button.disabled).toBe(true);
+  });
+
+  it("UNDO takes the SET back, not a fire", () => {
+    const { onUnsetKitchen } = setup({ courseReady: { key: "starter", index: 2, name: "Sea Bass", at: "20:41" } });
+    expect(screen.getByLabelText("Take back SET — Sea Bass")).toBeTruthy();
     fireEvent.click(screen.getByText("UNDO"));
-    expect(onUnfire).toHaveBeenCalledWith("amuse");
+    expect(onUnsetKitchen).toHaveBeenCalled();
+    expect(screen.getByText("UNSET — SEA BASS")).toBeTruthy();
+  });
+
+  it("has nothing to undo when nothing is set", () => {
+    setup();
+    expect(screen.getByText("UNDO").disabled).toBe(true);
+  });
+
+  it("ignores a set whose course the kitchen has already fired", () => {
+    setup({ courseReady: { key: "amuse", index: 1, name: "Amuse Bouche", at: "20:15" } });
+    expect(screen.getByText("SET — Sea Bass")).toBeTruthy();   // moved on to the next
+    expect(screen.getByText("UNDO").disabled).toBe(true);
   });
 
   it("goes inert and reads ALL COURSES FIRED at the end of the menu", () => {
@@ -248,8 +271,8 @@ describe("TableSheet — restrictions by seat", () => {
   it("adds a restriction to a chosen seat through the inline panel", () => {
     const { updBooking } = setup();
     fireEvent.click(screen.getByText("+ ADD"));
-    expect(screen.getByText("PICK A SEAT FIRST")).toBeTruthy();
-    fireEvent.click(screen.getByLabelText("Restriction for seat 2"));
+    expect(screen.getByText("PICK A POSITION FIRST")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Restriction for position 2"));
     fireEvent.click(screen.getByText("Gluten Free"));
     expect(updBooking).toHaveBeenCalledWith("restrictions", [{ pos: 2, note: "gluten" }]);
     // The panel closes on the pick — the operator is done in one gesture.
@@ -258,8 +281,8 @@ describe("TableSheet — restrictions by seat", () => {
 
   it("removes a restriction when its tag is tapped", () => {
     const { upd } = setup({ restrictions: [{ pos: 1, note: "vegan" }, { pos: 2, note: "nut" }] });
-    expect(screen.getByText(/\[Vegan\] SEAT_1/)).toBeTruthy();
-    fireEvent.click(screen.getByLabelText("Remove Vegan from seat 1"));
+    expect(screen.getByText(/\[Vegan\] P1/)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Remove Vegan from position 1"));
     expect(upd).toHaveBeenCalledWith("restrictions", [{ pos: 2, note: "nut" }]);
   });
 });
@@ -387,18 +410,18 @@ describe("TableSheet — beverages, per seat", () => {
 
   it("writes a pick to ONE seat when that seat is the target", () => {
     const { updSeat } = setup();
-    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
+    fireEvent.click(screen.getByLabelText("Drinks for position 2"));
     search("negro");
     fireEvent.click(screen.getByText("ADD"));
     expect(updSeat).toHaveBeenCalledTimes(1);
     expect(updSeat).toHaveBeenCalledWith(2, "aperitifs", [expect.objectContaining({ name: "Negroni" })]);
-    expect(screen.getByText("APERITIF · SEAT_2 — NEGRONI")).toBeTruthy();
+    expect(screen.getByText("APERITIF · P2 — NEGRONI")).toBeTruthy();
   });
 
   it("goes back to the whole party when the seat is deselected", () => {
     const { updSeat } = setup();
-    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
-    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));   // toggle off
+    fireEvent.click(screen.getByLabelText("Drinks for position 2"));
+    fireEvent.click(screen.getByLabelText("Drinks for position 2"));   // toggle off
     search("negro");
     fireEvent.click(screen.getByText("ADD"));
     expect(updSeat).toHaveBeenCalledTimes(2);
@@ -411,7 +434,7 @@ describe("TableSheet — beverages, per seat", () => {
         { ...seat(2), aperitifs: [{ name: "Spritz" }] },
       ],
     });
-    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
+    fireEvent.click(screen.getByLabelText("Drinks for position 2"));
     const rows = [...container.querySelectorAll('[data-drink-row="APERITIF"]')].map(el => el.textContent);
     expect(rows).toEqual([expect.stringContaining("Spritz")]);
     expect(rows[0]).not.toMatch(/\d\/\d/);              // one seat — nothing to count
@@ -424,7 +447,7 @@ describe("TableSheet — beverages, per seat", () => {
         { ...seat(2), aperitifs: [{ name: "Negroni" }] },
       ],
     });
-    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
+    fireEvent.click(screen.getByLabelText("Drinks for position 2"));
     fireEvent.click(screen.getByLabelText("Remove Negroni"));
     expect(updSeat).toHaveBeenCalledTimes(1);
     expect(updSeat).toHaveBeenCalledWith(2, "aperitifs", []);
@@ -432,14 +455,14 @@ describe("TableSheet — beverages, per seat", () => {
 
   it("still shows the table's bottles under a single seat — a bottle is shared", () => {
     const { container } = setup({ bottleWines: [{ name: "Rebula", producer: "Klinec" }] });
-    fireEvent.click(screen.getByLabelText("Drinks for seat 1"));
+    fireEvent.click(screen.getByLabelText("Drinks for position 1"));
     expect(container.querySelectorAll('[data-drink-row="BOTTLE"]')).toHaveLength(1);
   });
 
   it("says which seat is empty rather than a generic nothing", () => {
     setup();
-    fireEvent.click(screen.getByLabelText("Drinks for seat 2"));
-    expect(screen.getByText("NONE ON SEAT_2")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Drinks for position 2"));
+    expect(screen.getByText("NONE ON P2")).toBeTruthy();
   });
 
   it("offers no seat scope on a table of one", () => {
@@ -467,20 +490,19 @@ describe("TableSheet — notes", () => {
 describe("TableSheet — action grid", () => {
   it("shows only the actions the table's state allows", () => {
     setup();
-    expect(screen.getByText("SET → KITCHEN")).toBeTruthy();
     expect(screen.getByText("MOVE TABLE")).toBeTruthy();
     expect(screen.getByText("SWAP TABLES")).toBeTruthy();
     expect(screen.getByText("JOIN TABLE +")).toBeTruthy();
     expect(screen.getByText("CLEAR TABLE")).toBeTruthy();
     expect(screen.queryByText("MARK ARRIVING")).toBeNull();
-    expect(screen.queryByText("UNSET")).toBeNull();
   });
 
-  it("replaces SET with UNSET once the table is set for the kitchen", () => {
-    const { onUnsetKitchen } = setup({ courseReady: { key: "starter", at: "20:40" } });
+  it("leaves setting to the COURSES panel rather than duplicating it here", () => {
+    // SET used to sit in the grid as well, which meant two buttons for one
+    // signal — and the grid one couldn't say WHICH course it would set.
+    setup({ courseReady: { key: "starter", index: 2, name: "Sea Bass", at: "20:40" } });
     expect(screen.queryByText("SET → KITCHEN")).toBeNull();
-    fireEvent.click(screen.getByText("UNSET"));
-    expect(onUnsetKitchen).toHaveBeenCalled();
+    expect(screen.queryByText("UNSET")).toBeNull();
   });
 
   it("offers MARK ARRIVING to a party still on the terrace", () => {

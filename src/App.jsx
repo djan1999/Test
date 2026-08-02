@@ -5233,16 +5233,6 @@ export default function App() {
           upd={(f, v) => upd(sel, f, v)}
           updSeat={(sid, f, v) => updSeat(sel, sid, f, v)}
           updBooking={(f, v) => updBookingField(sel, f, v)}
-          onFire={courseKey => {
-            const now = fmt(new Date());
-            upd(sel, "kitchenLog", prev => ({ ...(prev || {}), [courseKey]: { firedAt: now } }));
-            if (selTable.courseReady?.key === courseKey) upd(sel, "courseReady", null);
-          }}
-          onUnfire={courseKey => upd(sel, "kitchenLog", prev => {
-            const next = { ...(prev || {}) };
-            delete next[courseKey];
-            return next;
-          })}
           // An ARRIVING party is seated through the terrace flow (which seats
           // the board table itself); anything else is a plain board seat.
           onMarkSeated={() => {

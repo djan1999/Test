@@ -17,10 +17,11 @@ import TablePickerModal from "./TablePickerModal.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 
 const FONT = tokens.font;
-// Desktop width. Exported so App can RESERVE it beside the board rather than
-// letting the sheet overlap the room the operator is reading.
-export const TABLE_SHEET_WIDTH = 460;
-export const TABLE_SHEET_BP = BP.lg;
+// Desktop width, and the breakpoint below which the sheet goes full-width.
+// The sheet is a LAYER: it overlaps the board rather than reserving space
+// beside it, so nothing reflows when a table is opened or closed.
+const TABLE_SHEET_WIDTH = 460;
+const TABLE_SHEET_BP = BP.lg;
 const TAP = 44;               // minimum touch target, everywhere
 const TICK_MS = 20000;        // how often the two alarm clocks re-read
 
@@ -131,8 +132,6 @@ export default function TableSheet({
   upd,
   updSeat,
   updBooking,
-  onFire,
-  onUnfire,
   onMarkSeated,
   onMarkArriving,
   onSetKitchen,
@@ -147,13 +146,13 @@ export default function TableSheet({
   const [toast, setToast] = useState(null);
   const [picker, setPicker] = useState(null);        // "move" | "swap" | "join"
   const [confirmClear, setConfirmClear] = useState(false);
-  const [addRestrSeat, setAddRestrSeat] = useState(null); // seat id while the add panel is open
+  const [addRestrSeat, setAddRestrSeat] = useState(null); // position while the add panel is open
   const [addRestrOpen, setAddRestrOpen] = useState(false);
   const [drinkQuery, setDrinkQuery] = useState("");
   // Where a pick lands: as an aperitif, or with the menu. Same decision the
-  // old detail view made per seat — here it applies to the whole party.
+  // old detail view made per position — here it can apply to the whole party.
   const [drinkPhase, setDrinkPhase] = useState("aperitif");
-  // Who the next pick is for: null = the whole party, or one seat id. Drinks
+  // Who the next pick is for: null = the whole party, or one position. Drinks
   // are ordered per person as often as per table, and the sheet was writing
   // every pick to all four guests with no way to say "just P2".
   const [drinkSeat, setDrinkSeat] = useState(null);
@@ -232,7 +231,11 @@ export default function TableSheet({
   const seats = table.seats || [];
   const covers = Number(table._groupGuests || table.guests) || seats.length || 0;
   const nextCourse = courses.find(c => !c.firedAt) || null;
-  const lastFired = [...courses].filter(c => c.firedAt).pop() || null;
+  // Service SETS a course; only the kitchen FIRES it. `courseReady` is that
+  // signal, and it stands until the pass sends the course out.
+  const pendingSet = table.courseReady && !table.kitchenLog?.[table.courseReady.key]?.firedAt
+    ? table.courseReady : null;
+  const nextIsSet = !!pendingSet && pendingSet.key === nextCourse?.key;
 
   const primaryLabel = `TABLE_${String(table.id).padStart(2, "0")}`;
   const joinedLabels = group.filter(id => id !== Number(table.id))
@@ -242,15 +245,15 @@ export default function TableSheet({
   const write = (field, value, msg) => { upd(field, value); if (msg) flash(msg); };
   const writeBooking = (field, value, msg) => { updBooking(field, value); if (msg) flash(msg); };
 
-  const fireNext = () => {
-    if (!nextCourse) return;
-    onFire(nextCourse.key);
-    flash(`FIRED — ${String(nextCourse.name).toUpperCase()}`);
+  const setNext = () => {
+    if (!nextCourse || nextIsSet) return;
+    onSetKitchen();
+    flash(`SET — ${String(nextCourse.name).toUpperCase()}`);
   };
-  const undoFire = () => {
-    if (!lastFired) return;
-    onUnfire(lastFired.key);
-    flash(`UNDONE — ${String(lastFired.name).toUpperCase()}`);
+  const undoSet = () => {
+    if (!pendingSet) return;
+    onUnsetKitchen();
+    flash(`UNSET — ${String(pendingSet.name).toUpperCase()}`);
   };
 
   const removeRestriction = (index) => {
@@ -261,7 +264,7 @@ export default function TableSheet({
     updBooking("restrictions", next);
     setAddRestrOpen(false);
     setAddRestrSeat(null);
-    flash(`${restrCompact(key).toUpperCase()} — SEAT_${addRestrSeat}`);
+    flash(`${restrCompact(key).toUpperCase()} — P${addRestrSeat}`);
   };
 
   // Which per-seat list a with-menu pick belongs to.
@@ -289,7 +292,7 @@ export default function TableSheet({
     const stored = type === "wine" ? { ...item, byGlass: true } : item;
     const field = drinkPhase === "aperitif" ? "aperitifs" : (MENU_FIELD[type] || "cocktails");
     targetSeats.forEach(s => updSeat(s.id, field, [...(s[field] || []), stored]));
-    const who = drinkSeat == null ? "PARTY" : `SEAT_${drinkSeat}`;
+    const who = drinkSeat == null ? "PARTY" : `P${drinkSeat}`;
     flash(`${drinkPhase === "aperitif" ? "APERITIF" : "WITH MENU"} · ${who} — ${name}`);
     setDrinkQuery("");
   };
@@ -331,7 +334,7 @@ export default function TableSheet({
           count: null,
           onRemove: () => {
             updSeat(drinkSeat, field, (s[field] || []).filter((_, j) => j !== i));
-            flash(`REMOVED · SEAT_${drinkSeat}`);
+            flash(`REMOVED · P${drinkSeat}`);
           },
         }));
         continue;
@@ -561,6 +564,7 @@ export default function TableSheet({
               {courses.map(c => {
                 const fired = !!c.firedAt;
                 const isNext = !fired && nextCourse?.key === c.key;
+                const isSet = !fired && pendingSet?.key === c.key;
                 const guestWording = c.rawCourse?.menu?.name && c.rawCourse.menu.name !== c.name
                   ? c.rawCourse.menu.name : "";
                 return (
@@ -589,10 +593,11 @@ export default function TableSheet({
                         </span>
                       )}
                     </span>
-                    {isNext && (
-                      <span style={{ fontSize: 8, letterSpacing: "0.12em", fontWeight: 700, color: tokens.ink[0], flexShrink: 0 }}>
-                        NEXT
-                      </span>
+                    {(isSet || isNext) && (
+                      <span style={{
+                        fontSize: 8, letterSpacing: "0.12em", fontWeight: 700, flexShrink: 0,
+                        color: isSet ? tokens.green.text : tokens.ink[0],
+                      }}>{isSet ? "SET" : "NEXT"}</span>
                     )}
                     <span style={{ fontSize: 9, color: fired ? tokens.green.text : tokens.ink[4], flexShrink: 0, minWidth: 34, textAlign: "right" }}>
                       {c.firedAt || "—"}
@@ -604,18 +609,26 @@ export default function TableSheet({
 
             <div style={{ display: "flex", gap: 8, padding: 8, borderTop: `1px solid ${tokens.ink[4]}` }}>
               <div style={{ flex: 1 }}>
+                {/* Service cannot fire — that is the pass's word, written on
+                    the kitchen ticket. From here a course is SET, and the set
+                    is what UNDO takes back. */}
                 <button
                   type="button"
-                  disabled={!nextCourse}
-                  onClick={fireNext}
-                  style={darkButton(!nextCourse)}
-                >{nextCourse ? `FIRE — ${nextCourse.name}` : "ALL COURSES FIRED"}</button>
+                  disabled={!nextCourse || nextIsSet}
+                  onClick={setNext}
+                  style={darkButton(!nextCourse || nextIsSet)}
+                >{
+                  !nextCourse ? "ALL COURSES FIRED"
+                    : nextIsSet ? `SET ✓ ${pendingSet.at || ""} — ${nextCourse.name}`.replace("  ", " ")
+                    : `SET — ${nextCourse.name}`
+                }</button>
               </div>
               <button
                 type="button"
-                disabled={!lastFired}
-                onClick={undoFire}
-                style={{ ...quietButton(), minWidth: 72, opacity: lastFired ? 1 : 0.4, cursor: lastFired ? "pointer" : "default" }}
+                disabled={!pendingSet}
+                onClick={undoSet}
+                aria-label={pendingSet ? `Take back SET — ${pendingSet.name}` : "Nothing set to take back"}
+                style={{ ...quietButton(), minWidth: 72, opacity: pendingSet ? 1 : 0.4, cursor: pendingSet ? "pointer" : "default" }}
               >UNDO</button>
             </div>
           </div>
@@ -676,9 +689,9 @@ export default function TableSheet({
           )}
         </Section>
 
-        {/* ── 5. RESTRICTIONS — BY SEAT ──────────────────────────────────── */}
+        {/* ── 5. RESTRICTIONS — BY POSITION ──────────────────────────────── */}
         <Section
-          label="RESTRICTIONS — BY SEAT"
+          label="RESTRICTIONS — BY POSITION"
           right={
             <button
               type="button"
@@ -696,7 +709,7 @@ export default function TableSheet({
                   key={`${r.note}-${r.pos ?? "x"}-${i}`}
                   type="button"
                   onClick={() => removeRestriction(i)}
-                  aria-label={`Remove ${restrCompact(r.note)}${r.pos ? ` from seat ${r.pos}` : ""}`}
+                  aria-label={`Remove ${restrCompact(r.note)}${r.pos ? ` from position ${r.pos}` : ""}`}
                   style={{
                     fontFamily: FONT, fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase",
                     minHeight: TAP, padding: "6px 10px",
@@ -705,7 +718,7 @@ export default function TableSheet({
                     cursor: "pointer", touchAction: "manipulation",
                   }}
                 >
-                  [{restrCompact(r.note)}] {r.pos ? `SEAT_${r.pos}` : "TABLE"} ×
+                  [{restrCompact(r.note)}] {r.pos ? `P${r.pos}` : "TABLE"} ×
                 </button>
               ))}
             </div>
@@ -714,14 +727,14 @@ export default function TableSheet({
           {addRestrOpen && (
             <div style={{ border: `1px solid ${tokens.ink[4]}`, marginTop: 10, background: tokens.neutral[50] }}>
               <div style={{ padding: "10px 10px 0" }}>
-                <div style={{ ...micro, marginBottom: 6 }}>SEAT</div>
+                <div style={{ ...micro, marginBottom: 6 }}>POSITION</div>
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                   {(seats.length ? seats.map(s => Number(s.id)) : Array.from({ length: covers }, (_, i) => i + 1))
                     .map(id => (
                       <button key={id} type="button" style={chip(addRestrSeat === id)}
-                        aria-label={`Restriction for seat ${id}`}
+                        aria-label={`Restriction for position ${id}`}
                         onClick={() => setAddRestrSeat(id)}
-                      >S{id}</button>
+                      >P{id}</button>
                     ))}
                 </div>
               </div>
@@ -743,7 +756,7 @@ export default function TableSheet({
                   );
                 })}
                 {addRestrSeat == null && (
-                  <div style={{ ...micro, letterSpacing: "0.10em" }}>PICK A SEAT FIRST</div>
+                  <div style={{ ...micro, letterSpacing: "0.10em" }}>PICK A POSITION FIRST</div>
                 )}
               </div>
             </div>
@@ -753,7 +766,8 @@ export default function TableSheet({
         {/* ── 6. BEVERAGES ──────────────────────────────────────────────
             Searches the WHOLE catalog, not just wine. The phase chip decides
             where a pick lands — as an aperitif, or with the menu — exactly as
-            the old detail view did per seat; here it applies to the party.
+            the old detail view did per position; here it can apply to the
+            whole party or to one guest.
             A GLASS is per-person and lands in each guest's glasses; a BOTTLE
             is shared and lands on the table's bottle list. Sending a glass to
             the bottle list is what made a by-the-glass pour read as a bottle
@@ -783,9 +797,9 @@ export default function TableSheet({
                 onClick={() => setDrinkSeat(null)}>PARTY</button>
               {seats.map(s => (
                 <button key={s.id} type="button" style={{ ...chip(drinkSeat === s.id), minHeight: 36 }}
-                  aria-label={`Drinks for seat ${s.id}`}
+                  aria-label={`Drinks for position ${s.id}`}
                   onClick={() => setDrinkSeat(drinkSeat === s.id ? null : s.id)}
-                >S{s.id}</button>
+                >P{s.id}</button>
               ))}
             </div>
           )}
@@ -841,7 +855,7 @@ export default function TableSheet({
 
           {chosenDrinks.length === 0 ? (
             <div style={{ ...micro, letterSpacing: "0.10em", marginTop: 10 }}>
-              {drinkSeat == null ? "NONE ORDERED" : `NONE ON SEAT_${drinkSeat}`}
+              {drinkSeat == null ? "NONE ORDERED" : `NONE ON P${drinkSeat}`}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 10 }}>
@@ -894,15 +908,6 @@ export default function TableSheet({
                 onClick={() => { onMarkArriving(); flash("MARKED ARRIVING"); }}
               >MARK ARRIVING</button>
             )}
-            {can.unsetKitchen ? (
-              <button type="button" style={quietButton()}
-                onClick={() => { onUnsetKitchen(); flash("UNSET"); }}
-              >UNSET</button>
-            ) : can.setKitchen ? (
-              <button type="button" style={quietButton()}
-                onClick={() => { onSetKitchen(); flash("SET → KITCHEN"); }}
-              >SET → KITCHEN</button>
-            ) : null}
             {can.moveTable && (
               <button type="button" style={quietButton()} onClick={() => setPicker("move")}>MOVE TABLE</button>
             )}

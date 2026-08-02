@@ -117,11 +117,11 @@ export function sheetActionAvailability(table, { visit = null, isGrouped = false
   return {
     // MARK SEATED is the sheet's single primary action, so it is deliberately
     // absent from the grid; it disappears the moment the party is seated.
+    // SET / UNSET are likewise absent — they live in the COURSES panel, which
+    // is where the operator is already looking at what would be set.
     markSeated: !seated && (booked || v === "terrace" || v === "arriving"),
     // The state machine only reaches 'arriving' from 'terrace'.
     markArriving: v === "terrace",
-    setKitchen: seated || v === "terrace",
-    unsetKitchen: !!table?.courseReady,
     // A partial move of a combined booking desyncs the other members'
     // tableGroup and the party vanishes from the board (see App.moveTableState).
     moveTable: live && !isGrouped,
