@@ -110,10 +110,12 @@ describe("sheetActionAvailability", () => {
     expect(sheetActionAvailability({ active: true }, { visit: { visit: "arriving" } }).markArriving).toBe(false);
   });
 
-  it("swaps SET for UNSET once the table is set for the kitchen", () => {
-    const set = sheetActionAvailability({ active: true, courseReady: { key: "main" } });
-    expect(set.unsetKitchen).toBe(true);
-    expect(sheetActionAvailability({ active: true }).unsetKitchen).toBe(false);
+  it("says nothing about setting — that lives in the COURSES panel", () => {
+    // Setting a course is offered next to the course list, where the operator
+    // can see WHICH course would be set. The grid never carried that context.
+    const a = sheetActionAvailability({ active: true, courseReady: { key: "main" } });
+    expect(a.setKitchen).toBeUndefined();
+    expect(a.unsetKitchen).toBeUndefined();
   });
 
   it("hides MOVE / SWAP / JOIN on a combined booking and offers SPLIT instead", () => {
