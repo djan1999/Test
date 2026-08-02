@@ -13,6 +13,7 @@ import {
   sheetActionAvailability,
   tableBadgeState,
 } from "../../utils/tableSheetState.js";
+import { searchBeverages } from "../../utils/beverageSearch.js";
 import TablePickerModal from "./TablePickerModal.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 
@@ -197,27 +198,12 @@ export default function TableSheet({
     [table, menuCourses, profiles, assignments],
   );
 
-  // The WHOLE catalog, not just wine: a table asking for a Negroni or a beer
-  // should not need a different surface from a table asking for Rebula.
-  const drinkMatches = useMemo(() => {
-    const q = drinkQuery.trim().toLowerCase();
-    if (q.length < 2) return [];
-    const hit = (x, ...extra) =>
-      [x?.name, ...extra].some(v => String(v || "").toLowerCase().includes(q));
-    const out = [];
-    (wines || []).forEach(w => {
-      if (hit(w, w.producer, w.vintage)) {
-        out.push({ key: `w:${w.id || w.name}`, type: "wine", item: w,
-          sub: [w.producer, w.vintage].filter(Boolean).join(" · ") });
-      }
-    });
-    [["cocktail", cocktails], ["spirit", spirits], ["beer", beers]].forEach(([type, list]) => {
-      (list || []).forEach(d => {
-        if (hit(d, d.notes)) out.push({ key: `${type}:${d.id || d.name}`, type, item: d, sub: d.notes || "" });
-      });
-    });
-    return out.slice(0, 4);
-  }, [drinkQuery, wines, cocktails, spirits, beers]);
+  // The WHOLE catalog, not just wine, and forgiving about how it is typed —
+  // accents folded, word order free, small typos tolerated (utils/beverageSearch).
+  const drinkMatches = useMemo(
+    () => searchBeverages(drinkQuery, { wines, cocktails, spirits, beers }),
+    [drinkQuery, wines, cocktails, spirits, beers],
+  );
 
   if (!table) return null;
 
@@ -817,7 +803,15 @@ export default function TableSheet({
             }}
           />
           {drinkMatches.length > 0 && (
-            <div style={{ border: `1px solid ${tokens.ink[4]}`, borderTop: "none" }}>
+            /* Scrolls: the old list showed the first four hits and hid the
+               rest, so anything the ranking put fifth was unreachable. */
+            <div
+              data-drink-results=""
+              style={{
+                border: `1px solid ${tokens.ink[4]}`, borderTop: "none",
+                maxHeight: 230, overflowY: "auto", overscrollBehavior: "contain",
+              }}
+            >
               {drinkMatches.map(m => (
                 <div key={m.key} style={{
                   display: "flex", alignItems: "center", gap: 8,
@@ -834,13 +828,13 @@ export default function TableSheet({
                   </span>
                   {m.type === "wine" ? (
                     <>
-                      {/* GLASS only when the catalog actually pours it by the
-                          glass — same rule the beverage search has always
-                          used. A bottle-only wine offers BOTTLE alone. */}
-                      {m.item.byGlass && (
-                        <button type="button" style={{ ...quietButton(), padding: "6px 10px" }}
-                          onClick={() => addDrink(m, "glass")}>GLASS</button>
-                      )}
+                      {/* Every wine offers both. The catalog's `byGlass` flag
+                          describes the printed list, not what the room can
+                          actually pour — a bottle-only wine still goes out by
+                          the glass when a guest asks, and the floor should not
+                          have to record that as something it isn't. */}
+                      <button type="button" style={{ ...quietButton(), padding: "6px 10px" }}
+                        onClick={() => addDrink(m, "glass")}>GLASS</button>
                       <button type="button" style={{ ...quietButton(), padding: "6px 10px" }}
                         onClick={() => addDrink(m, "bottle")}>BOTTLE</button>
                     </>
