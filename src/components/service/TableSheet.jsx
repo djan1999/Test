@@ -14,8 +14,6 @@ import {
   sheetActionAvailability,
   tableBadgeState,
 } from "../../utils/tableSheetState.js";
-import { resolveAperitifFromQuickAccessOption, aperitifMatchesQuickAccessOption }
-  from "../../utils/quickAccessResolve.js";
 import TablePickerModal from "./TablePickerModal.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 
@@ -123,7 +121,6 @@ export default function TableSheet({
   cocktails = [],
   spirits = [],
   beers = [],
-  aperitifOptions = [],
   reservationOnTable,
   seatCapOf,
   onClose,
@@ -643,39 +640,7 @@ export default function TableSheet({
           )}
         </Section>
 
-        {/* ── 6. QUICK APERITIF ──────────────────────────────────────────── */}
-        {aperitifOptions.length > 0 && (
-          <Section label="QUICK APERITIF">
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {aperitifOptions.map(opt => {
-                const label = opt.label ?? String(opt);
-                const catalog = { wines, cocktails, spirits, beers };
-                const matches = x => aperitifMatchesQuickAccessOption(x, opt, catalog);
-                const on = seats.length > 0 && seats.every(s => (s.aperitifs || []).some(matches));
-                return (
-                  <button key={label} type="button" style={chip(on)}
-                    onClick={() => {
-                      if (on) {
-                        seats.forEach(s => updSeat(s.id, "aperitifs", (s.aperitifs || []).filter(x => !matches(x))));
-                        flash(`${label.toUpperCase()} — CLEARED`);
-                        return;
-                      }
-                      const found = resolveAperitifFromQuickAccessOption(opt, catalog);
-                      const item = found || { name: opt.searchKey || label, notes: "", __cocktail: true };
-                      seats.forEach(s => {
-                        if ((s.aperitifs || []).some(matches)) return;
-                        updSeat(s.id, "aperitifs", [...(s.aperitifs || []), item]);
-                      });
-                      flash(`${label.toUpperCase()} — WHOLE PARTY`);
-                    }}
-                  >{label}</button>
-                );
-              })}
-            </div>
-          </Section>
-        )}
-
-        {/* ── 7. WATER & WINE ────────────────────────────────────────────── */}
+        {/* ── 6. WATER & WINE ────────────────────────────────────────────── */}
         <Section label="WATER & WINE">
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 12 }}>
             {WATER_OPTS.map(opt => {
@@ -752,7 +717,7 @@ export default function TableSheet({
           )}
         </Section>
 
-        {/* ── 8. NOTES ───────────────────────────────────────────────────── */}
+        {/* ── 7. NOTES ───────────────────────────────────────────────────── */}
         <Section label="STAFF NOTE">
           <BlurTextarea
             value={table.notes || ""}
@@ -772,7 +737,7 @@ export default function TableSheet({
           />
         </Section>
 
-        {/* ── 9. ACTION GRID ─────────────────────────────────────────────── */}
+        {/* ── 8. ACTION GRID ─────────────────────────────────────────────── */}
         <Section label="ACTIONS">
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {can.markArriving && (

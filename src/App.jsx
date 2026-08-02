@@ -5231,7 +5231,6 @@ export default function App() {
           cocktails={cocktails}
           spirits={spirits}
           beers={beers}
-          aperitifOptions={serviceAperitifOptions}
           reservationOnTable={reservationOnTable}
           seatCapOf={id => mapSeatCountForBoardTable(getActiveDiningMap(floorMapsState), id)}
           onClose={() => setSel(null)}
