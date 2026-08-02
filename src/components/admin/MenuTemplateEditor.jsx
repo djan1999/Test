@@ -761,12 +761,12 @@ export default function MenuTemplateEditor({
   // Which template is being edited: false = LONG (menuTemplate), true = SHORT (shortMenuTemplate).
   const [editingShort,    setEditingShort]      = useState(false);
 
-  // ── Menu title / thank-you note / team names — shared localStorage with MenuGenerator ──
+  // ── Menu title / thank-you note / team names — shared localStorage with the menu workspace ──
   const [menuTitle,    setMenuTitle]    = useState(() => readMenuTitle("en"));
   const [thankYouNote, setThankYouNote] = useState(() => readThankYouNote("en"));
   const [teamNames,    setTeamNames]    = useState(readTeamNames);
 
-  // Persist both languages through the store seam so MenuGenerator's on-mount
+  // Persist both languages through the store seam so the menu workspace's on-mount
   // load sees the admin's latest edits and doesn't overwrite them with a stale
   // value.
   const syncTitleToStore = () => {
@@ -933,7 +933,7 @@ export default function MenuTemplateEditor({
     onUpdateTemplate(migrated);
   }, [menuTemplate, onUpdateTemplate]);
 
-  // menuTitle and thankYouNote come from state (shared localStorage with MenuGenerator)
+  // menuTitle and thankYouNote come from state (shared localStorage with the menu workspace)
 
   // ── Keyboard: Escape deselects / closes picker ──
   useEffect(() => {

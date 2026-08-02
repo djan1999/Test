@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { fireEvent, render, within } from "@testing-library/react";
 import MenuWorkspace from "../components/menu/MenuWorkspace.jsx";
 
@@ -27,8 +28,30 @@ const TABLE = {
   restrictions: [{ note: "gluten", pos: 1 }],
 };
 
-const renderWorkspace = (props = {}) =>
-  render(<MenuWorkspace tables={[TABLE]} menuCourses={COURSES} {...props} />);
+/**
+ * Stateful harness so the workspace's seat writes behave like the app: `upd`
+ * has App's (tableId, field, valueOrFn) shape and commits into React state, so
+ * a pairing chip click really lands on the seat and re-renders the engine.
+ */
+function Harness({ updCalls = [], ...extra }) {
+  const [tables, setTables] = useState([TABLE]);
+  const upd = (id, field, valueOrFn) => {
+    updCalls.push([id, field, valueOrFn]);
+    setTables((prev) => prev.map((t) => t.id === id
+      ? { ...t, [field]: typeof valueOrFn === "function" ? valueOrFn(t[field], t) : valueOrFn }
+      : t));
+  };
+  return <MenuWorkspace tables={tables} menuCourses={COURSES} upd={upd} {...extra} />;
+}
+
+const renderWorkspace = (props = {}) => render(<Harness {...props} />);
+
+const mockPrintWindow = () => {
+  const print = vi.fn();
+  const doc = { write: vi.fn(), close: vi.fn() };
+  vi.spyOn(window, "open").mockReturnValue({ document: doc, focus: vi.fn(), print });
+  return { print, doc };
+};
 
 describe("MenuWorkspace", () => {
   it("shows the empty state until a table is chosen", () => {
@@ -48,7 +71,8 @@ describe("MenuWorkspace", () => {
     const { getByText, queryByText } = renderWorkspace();
     fireEvent.click(getByText("Novak"));
 
-    // Seat 1 carries the gluten restriction — its žganci is substituted.
+    // Seat 1 carries the gluten restriction — its žganci is substituted, and
+    // the attribution line names the key and the original wording.
     expect(getByText("SUBSTITUTED FOR [GLUTEN FREE] — WAS: Žganci")).toBeTruthy();
     expect(getByText("Polenta — Porcini, aged Tolminc")).toBeTruthy();
 
@@ -58,22 +82,43 @@ describe("MenuWorkspace", () => {
     expect(getByText("Žganci — Pork crackling")).toBeTruthy();
   });
 
-  it("re-runs generation on every option change — there is no generate button", () => {
-    const { getByText, queryByText } = renderWorkspace();
+  it("renders the preview from generateMenuHTML — the engine's page, not a lookalike", () => {
+    const { getByText, getByTitle } = renderWorkspace();
+    fireEvent.click(getByText("Novak"));
+    const iframe = getByTitle("Seat 1 menu preview");
+    const html = iframe.getAttribute("srcdoc");
+    // Engine markers: the A5 sheet scaffold and template-driven menu rows.
+    expect(html).toContain('id="sheet"');
+    expect(html).toContain("menu-row");
+    // The seat's substituted wording is what the engine printed.
+    expect(html).toContain("Polenta");
+  });
+
+  it("writes the pairing chip to seat.pairing through upd and re-runs the engine", () => {
+    const updCalls = [];
+    const { getByText, queryByText } = renderWorkspace({ updCalls });
     fireEvent.click(getByText("Novak"));
     expect(queryByText("Rebula · Goriška Brda")).toBeNull();
 
-    fireEvent.click(getByText("WINE"));
+    fireEvent.click(getByText("Wine"));
+    // The write goes through the app's seat path: upd(tableId, "seats", fn).
+    expect(updCalls.length).toBe(1);
+    expect(updCalls[0][0]).toBe(4);
+    expect(updCalls[0][1]).toBe("seats");
+    const nextSeats = updCalls[0][2](TABLE.seats, TABLE);
+    expect(nextSeats.find((s) => s.id === 1)?.pairing).toBe("Wine");
+
+    // The grey pairing line under the course comes from the engine's row model.
     expect(getByText("Rebula · Goriška Brda")).toBeTruthy();
 
-    fireEvent.click(getByText("WINE"));
+    fireEvent.click(getByText("—"));
     expect(queryByText("Rebula · Goriška Brda")).toBeNull();
   });
 
   /**
-   * The one layout invariant this screen cannot get wrong: the edit input and
-   * the course text must each own a full flex line. Sharing one collapses the
-   * text column and wraps the dish one word per line.
+   * The one layout invariant this screen cannot get wrong: the edit input row
+   * and the course text must each own a full flex line. Sharing one collapses
+   * the text column and wraps the dish one word per line.
    */
   it("gives the course text and the edit input a full flex line each", () => {
     const { getByText, getByDisplayValue } = renderWorkspace();
@@ -111,6 +156,17 @@ describe("MenuWorkspace", () => {
     expect(queryByText("✎ ONE-TIME EDIT — THIS SEAT ONLY")).toBeNull();
   });
 
+  it("feeds one-time edits into the engine's seatOutputOverrides for the printed page", () => {
+    const { getByText, getByDisplayValue, getByTitle } = renderWorkspace();
+    fireEvent.click(getByText("Novak"));
+    fireEvent.click(getByText("Kefir — Cucumber, dill"));
+    fireEvent.change(getByDisplayValue("Kefir"), { target: { value: "Kefir, no dill" } });
+    fireEvent.click(getByText("SAVE"));
+
+    const html = getByTitle("Seat 1 menu preview").getAttribute("srcdoc");
+    expect(html).toContain("Kefir, no dill");
+  });
+
   it("shows each seat's restriction tags on its tab", () => {
     const { getByText } = renderWorkspace();
     fireEvent.click(getByText("Novak"));
@@ -118,16 +174,20 @@ describe("MenuWorkspace", () => {
     expect(within(seatTab).getByText("GLUTEN FREE")).toBeTruthy();
   });
 
-  it("confirms both print actions with a toast", () => {
-    const print = vi.fn();
-    const doc = { write: vi.fn(), close: vi.fn() };
-    vi.spyOn(window, "open").mockReturnValue({ document: doc, focus: vi.fn(), print });
+  it("confirms both print actions with a toast and prints the engine's HTML", () => {
+    const { doc } = mockPrintWindow();
 
     const { getByText } = renderWorkspace();
     fireEvent.click(getByText("Novak"));
 
     fireEvent.click(getByText("PRINT THIS SEAT"));
     expect(getByText("SEAT 1 SENT TO PRINT")).toBeTruthy();
+    // The print window receives generateMenuHTML's page — the same engine as
+    // the preview, not a second renderer.
+    expect(doc.write).toHaveBeenCalledTimes(1);
+    const html = doc.write.mock.calls[0][0];
+    expect(html).toContain('id="sheet"');
+    expect(html).toContain("menu-row");
 
     fireEvent.click(getByText("PRINT ALL 2 SEATS"));
     expect(getByText("2 SEAT MENUS SENT TO PRINT")).toBeTruthy();
@@ -135,12 +195,45 @@ describe("MenuWorkspace", () => {
     window.open.mockRestore();
   });
 
+  it("clears a seat's one-time edits after that seat prints", () => {
+    mockPrintWindow();
+    const { getByText, queryByText, getByDisplayValue } = renderWorkspace();
+    fireEvent.click(getByText("Novak"));
+    fireEvent.click(getByText("Kefir — Cucumber, dill"));
+    fireEvent.change(getByDisplayValue("Kefir"), { target: { value: "Kefir, no dill" } });
+    fireEvent.click(getByText("SAVE"));
+    expect(getByText("EDITED — ONE-TIME CHANGES")).toBeTruthy();
+
+    fireEvent.click(getByText("PRINT THIS SEAT"));
+    expect(queryByText("EDITED — ONE-TIME CHANGES")).toBeNull();
+    expect(queryByText("Kefir, no dill — Cucumber, dill")).toBeNull();
+
+    window.open.mockRestore();
+  });
+
   it("says so instead of claiming success when the print window is blocked", () => {
     vi.spyOn(window, "open").mockReturnValue(null);
-    const { getByText } = renderWorkspace();
+    const { getByText, queryByText } = renderWorkspace();
     fireEvent.click(getByText("Novak"));
     fireEvent.click(getByText("PRINT THIS SEAT"));
     expect(getByText("POP-UP BLOCKED — ALLOW POP-UPS TO PRINT")).toBeTruthy();
+    expect(queryByText("SEAT 1 SENT TO PRINT")).toBeNull();
     window.open.mockRestore();
+  });
+
+  it("adds a quick-access aperitif to the seat through upd", () => {
+    const updCalls = [];
+    const { getByText, getAllByText } = renderWorkspace({
+      updCalls,
+      aperitifOptions: [{ label: "Cremant" }],
+    });
+    fireEvent.click(getByText("Novak"));
+    fireEvent.click(getByText("▼ DRINKS + EXTRAS"));
+    fireEvent.click(getByText("Cremant"));
+
+    expect(updCalls.length).toBe(1);
+    expect(updCalls[0][1]).toBe("seats");
+    // The seat now carries the aperitif (chip rendered from the live seat).
+    expect(getAllByText(/Cremant/).length).toBeGreaterThan(1);
   });
 });

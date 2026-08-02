@@ -128,7 +128,8 @@ const SummaryModal = lazy(() => import("./components/modals/SummaryModal.jsx"));
 const ArchiveModal = lazy(() => import("./components/modals/ArchiveModal.jsx"));
 const InventoryModal = lazy(() => import("./components/modals/InventoryModal.jsx"));
 const KitchenFloorView = lazy(() => import("./components/kitchen/KitchenFloorView.jsx"));
-const MenuGenerator = lazy(() => import("./components/menu/MenuGenerator.jsx"));
+const MenuWorkspace = lazy(() => import("./components/menu/MenuWorkspace.jsx"));
+const FullModal = lazy(() => import("./components/ui/FullModal.jsx"));
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const reservationWriteKey = (workspaceId, id) => `${workspaceId}\u0000${id}`;
@@ -3797,7 +3798,7 @@ export default function App() {
   };
 
   // ── Aperitif quick-button options (data-driven from Quick Access config) ──
-  // aperitifOptions: all enabled items (used in MenuGenerator — full list incl. menuOnly).
+  // aperitifOptions: all enabled items (used in the menu workspace — full list incl. menuOnly).
   // serviceAperitifOptions: excludes items marked menuOnly (used in service DisplayBoard).
   const aperitifOptions = useMemo(() => {
     const fromQuickAccess = quickAccessItems.filter(i => i.enabled)
@@ -4932,7 +4933,6 @@ export default function App() {
         menuRules={menuRules}
         profiles={profilesState.profiles}
         assignments={profilesState.assignments}
-        wordmark={effectiveAppName}
         onExit={() => changeMode(null)}
       /></Suspense>
     </div>
@@ -5265,27 +5265,31 @@ export default function App() {
         />
       )}
 
-      {/* TICKET & MENUS for one table, raised from the sheet's action grid. */}
+      {/* TICKET & MENUS for one table, raised from the sheet's action grid.
+          Same workspace as the MENU screen, pre-selected on this table — one
+          engine (generateMenuHTML) behind every preview and print. */}
       {ticketTableId != null && (() => {
         const ticketTable = displayTables.find(t => t.id === ticketTableId);
         if (!ticketTable) return null;
         return (
           <Suspense fallback={null}>
-            <MenuGenerator
-              table={ticketTable}
-              menuCourses={activeMenuCourses}
-              upd={(f, v) => upd(ticketTableId, f, v)}
-              profiles={profilesState.profiles}
-              assignments={profilesState.assignments}
-              logoDataUri={logoDataUri}
-              wines={wines}
-              cocktails={cocktails}
-              spirits={spirits}
-              beers={beers}
-              aperitifOptions={aperitifOptions}
-              menuRules={menuRules}
-              onClose={() => setTicketTableId(null)}
-            />
+            <FullModal title="Ticket & Menus" onClose={() => setTicketTableId(null)}>
+              <MenuWorkspace
+                tables={displayTables}
+                initialTableId={ticketTableId}
+                menuCourses={activeMenuCourses}
+                upd={upd}
+                profiles={profilesState.profiles}
+                assignments={profilesState.assignments}
+                logoDataUri={logoDataUri}
+                wines={wines}
+                cocktails={cocktails}
+                spirits={spirits}
+                beers={beers}
+                aperitifOptions={aperitifOptions}
+                menuRules={menuRules}
+              />
+            </FullModal>
           </Suspense>
         );
       })()}

@@ -103,7 +103,7 @@ export function generateMenuHTML({
   layoutStyles = {},
   // Template v2 — when provided, drives the row order / block resolution.
   // When null/absent, auto-migrated from menuCourses via buildDefaultTemplate().
-  // The caller (MenuGenerator) is expected to resolve the assigned profile
+  // The caller (the menu workspace) is expected to resolve the assigned profile
   // and pass profile.menuTemplate + profile.layoutStyles in.
   menuTemplate = null,
   menuRules = DEFAULT_MENU_RULES,
@@ -308,7 +308,7 @@ export function generateMenuHTML({
     : buildDefaultTemplate(menuCourses);
 
   // ── Effective template rows ───────────────────────────────────────────────
-  // The caller (MenuGenerator) resolves the active profile and passes in the
+  // The caller (the menu workspace) resolves the active profile and passes in the
   // matching template directly — `menuTemplate` (long) or `shortMenuTemplate`
   // (short), chosen by the table's menuType. Rendered exactly as authored; no
   // short-menu reordering happens here.
