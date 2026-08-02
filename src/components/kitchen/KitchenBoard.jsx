@@ -774,23 +774,28 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             const restrShort = k => { const d = RESTRICTIONS.find(r => r.key === k); return d ? d.label : k; };
             const gs = s.gender === "Mr" ? tokens.gender.male : s.gender === "Mrs" ? tokens.gender.female : null;
             return (
-              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                <span style={{
-                  fontFamily: FONT, fontSize: dz.seatFont, fontWeight: 700, padding: dz.seatChipPad, borderRadius: 0,
-                  background: p ? (pairingBg[p] || tokens.ink[5]) : tokens.ink[5],
-                  color: p ? (pairingColor[p] || tokens.ink[2]) : tokens.ink[2],
-                  border: `1px solid ${tokens.ink[4]}`,
-                  display: "inline-flex", alignItems: "center", gap: compact ? 3 : 4,
-                  whiteSpace: "nowrap",
-                }}>
-                  P{s.id}
-                  {gs && <span style={{ fontSize: "7px", fontWeight: 700, padding: "0 3px", background: gs.bg, color: gs.text, letterSpacing: 0 }}>{compact ? (s.gender === "Mr" ? "M" : "F") : s.gender}</span>}
-                  {p ? ` · ${pLabel(p)}` : ""}
-                </span>
+              // ONE box per seat: P-number, gender, pairing AND the seat's
+              // restrictions all ride inside the same chip (per Djan, 18.07 —
+              // the restriction used to float beside the box as bare red
+              // text). A restricted seat's chip borders red so it still reads
+              // as an alert at panel distance.
+              <span key={s.id} style={{
+                fontFamily: FONT, fontSize: dz.seatFont, fontWeight: 700, padding: dz.seatChipPad, borderRadius: 0,
+                background: p ? (pairingBg[p] || tokens.ink[5]) : tokens.ink[5],
+                color: p ? (pairingColor[p] || tokens.ink[2]) : tokens.ink[2],
+                border: `1px solid ${restrList.length > 0 ? tokens.red.border : tokens.ink[4]}`,
+                display: "inline-flex", alignItems: "center", gap: compact ? 3 : 4,
+                whiteSpace: "nowrap",
+              }}>
+                P{s.id}
+                {gs && <span style={{ fontSize: "7px", fontWeight: 700, padding: "0 3px", background: gs.bg, color: gs.text, letterSpacing: 0 }}>{compact ? (s.gender === "Mr" ? "M" : "F") : s.gender}</span>}
+                {p ? ` · ${pLabel(p)}` : ""}
                 {restrList.length > 0 && (
-                  <span style={{ fontFamily: FONT, fontSize: dz.seatFont, color: tokens.red.text, letterSpacing: "0.06em", fontWeight: 600, whiteSpace: "nowrap" }}>{restrList.map(restrShort).join(" · ")}</span>
+                  <span style={{ color: tokens.red.text, letterSpacing: "0.06em" }}>
+                    {" · "}{restrList.map(restrShort).join(" · ")}
+                  </span>
                 )}
-              </div>
+              </span>
             );
           })}
         </div>
@@ -1556,7 +1561,7 @@ export function UpcomingBanner({ table: t, compact = false }) {
   );
 }
 
-export default function KitchenBoard({ tables, menuCourses, upd, updMany, profiles = [], assignments = {}, historyGapsByMenu = null, persistedOrder = null, onOrderChange = null, onSeat = null, floorMaps = null }) {
+export default function KitchenBoard({ tables, menuCourses, upd, updMany, profiles = [], assignments = {}, historyGapsByMenu = null, persistedOrder = null, onOrderChange = null, onSeat = null, floorMaps = null, floorStatus = null, reservations = [], onAssignTerrace = null, onSwapSeats = null, onCycleFloorStatus = null, onSendSetToKitchen = null }) {
   // A party still out on the terrace (t._visit, decorated by App) gets its
   // ticket BEFORE the dining table is seated — the kitchen fires the opening
   // courses from here while the guests are outside.
@@ -1855,6 +1860,12 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
             floorMaps={floorMaps}
             tables={displayTables}
             focusedTableId={focusedTableId}
+            floorStatus={floorStatus}
+            reservations={reservations}
+            onAssign={onAssignTerrace}
+            onSwapSeats={onSwapSeats}
+            onCycleStatus={onCycleFloorStatus}
+            onSendSetToKitchen={onSendSetToKitchen}
           />
         </Suspense>
       </div>
