@@ -6,7 +6,7 @@ import { optionalPairingsFromCourses, courseRestrictionModCounts, overrideModCou
 import { groupRestrictionsByGuest } from "../../utils/restrictionGroups.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
-import { getVisibleCoursesForTable } from "../../utils/courseProgress.js";
+import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 import { estimateNextFire, fireGapsForTable } from "../../utils/fireCadence.js";
 import { gapsForMenuType } from "../../utils/archiveInsights.js";
 import { extraPairingLabel, extraPairingForSeat } from "../../constants/pairings.js";
@@ -47,22 +47,29 @@ function resolveGuestTemplate(table, profiles, assignments) {
 }
 
 export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, inlineMods = false, quickAccess = false, roomGaps = [], historyGaps = [] }) {
-  // Density. Compact tightens the vertical rhythm so two full rows of tickets
-  // fit a 720px-tall kitchen display (32" 1280×720 → 5 columns × 2 rows = 10
-  // tickets). Gated to large boards by the caller; the physical pixels on such
-  // panels are big, so the tighter type stays readable and tappable.
+  // Density. Compact keeps two full rows of tickets on a 720px-tall kitchen
+  // display (32" 1280×720 → 5 columns × 2 rows = 10 tickets). Gated to large
+  // boards by the caller.
+  //
+  // The course list is height-capped and scrolls (see courseListMax), so a
+  // ticket's height no longer grows with its menu: a 19-course long menu takes
+  // exactly as much wall as a 6-course short one. That fixed budget is what
+  // pays for the type here being a real size instead of the 9px it had to be
+  // when every course had to fit on screen at once.
   const dz = compact ? {
-    headerPad: "3px 8px", tNum: "15px", tNumGroup: "12px", nameFont: "9.5px", nameWrap: "nowrap",
-    counterFont: "12px", badgePad: "0 3px", showGrip: false,
-    rowPad: "2px 8px", paceBtnPad: "3px 7px", seatChipPad: "1px 4px", seatFont: "7.5px", assignBtnPad: "4px 8px",
-    coursePad: "1px 8px 1px 6px", courseFont: "9px", courseLH: 1.15, courseGap: 5, courseGlyph: "10px", modsFont: "8.5px",
-    footerPad: "4px 10px", archiveBtnPad: "4px 8px",
+    headerPad: "5px 9px", tNum: "19px", tNumGroup: "15px", nameFont: "11.5px", nameWrap: "nowrap",
+    counterFont: "15px", badgePad: "0 4px", showGrip: false,
+    rowPad: "3px 9px", paceBtnPad: "4px 8px", seatChipPad: "1px 5px", seatFont: "8.5px", assignBtnPad: "5px 9px",
+    coursePad: "4px 9px 4px 7px", courseFont: "11.5px", courseLH: 1.2, courseGap: 6, courseGlyph: "12px", modsFont: "9.5px",
+    footerPad: "5px 10px", archiveBtnPad: "5px 9px",
+    courseListMax: 208, fireFont: "12px", firePad: "9px 8px", setFont: "10px", undoFont: "9px",
   } : {
-    headerPad: "7px 10px", tNum: "20px", tNumGroup: "15px", nameFont: "11px", nameWrap: "wrap",
-    counterFont: "14px", badgePad: "1px 5px", showGrip: true,
+    headerPad: "7px 10px", tNum: "22px", tNumGroup: "16px", nameFont: "12px", nameWrap: "wrap",
+    counterFont: "16px", badgePad: "1px 5px", showGrip: true,
     rowPad: "5px 10px", paceBtnPad: "9px 10px", seatChipPad: "2px 5px", seatFont: "8px", assignBtnPad: "9px 10px",
-    coursePad: "7px 10px 7px 8px", courseFont: "11px", courseLH: 1.25, courseGap: 7, courseGlyph: "12px", modsFont: "9px",
+    coursePad: "7px 10px 7px 8px", courseFont: "13px", courseLH: 1.25, courseGap: 7, courseGlyph: "13px", modsFont: "10px",
     footerPad: "7px 12px", archiveBtnPad: "9px 10px",
+    courseListMax: 300, fireFont: "13px", firePad: "13px 10px", setFont: "11px", undoFont: "10px",
   };
   const seats = table.seats || [];
   // Array.isArray, not `|| []` — a truthy non-array here threw on .map and
@@ -104,6 +111,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   const [quickPick, setQuickPick] = useState(null); // { type: "extra", key, label }
   const [showDietList, setShowDietList] = useState(false);
   const headTap = useRef(null);
+  // The height-capped course list, and the row the ticket keeps in view.
+  const courseListRef = useRef(null);
+  const nextCourseRef = useRef(null);
+  // A tap that ENDS a scroll of the course list must not fire a course. Same
+  // gesture split the header already uses for drag-vs-tap: remember where the
+  // pointer went down, and ignore the click if it travelled or dwelled.
+  const courseTap = useRef(null);
   const onHeaderPointerDown = (e) => {
     headTap.current = { x: e.clientX, y: e.clientY, t: Date.now() };
     dragListeners?.onPointerDown?.(e);
@@ -115,6 +129,11 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     setShowQuick(v => !v);
     setQuickPick(null);
     setShowDietList(false);
+  };
+  const onCoursePointerDown = (e) => { courseTap.current = { x: e.clientX, y: e.clientY, t: Date.now() }; };
+  const courseTapWasScroll = (e) => {
+    const c = courseTap.current;
+    return !!c && (Date.now() - c.t > 500 || Math.abs(e.clientX - c.x) > 10 || Math.abs(e.clientY - c.y) > 10);
   };
   // Functional update (same rule as fire() below): building the array from
   // the render-captured `seats` overwrote whatever landed on the table
@@ -245,6 +264,17 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       return newLog;
     });
   };
+  // SET — raise (or take back) the "table is set for the next course" signal
+  // from the kitchen side. Service raises the same flag from the table sheet;
+  // until now the kitchen could only READ it, so a pass that plated ahead had
+  // no way to say so. Tapping SET again on the same course clears it.
+  const setNext = (course) => {
+    if (!course) return;
+    if (table.courseReady?.key === course.key) { upd(table.id, "courseReady", null); return; }
+    upd(table.id, "courseReady", {
+      key: course.key, index: course.index, name: course.name, at: fmt(new Date()),
+    });
+  };
 
   // Assign a whole PERSON to a chair, not one restriction at a time: the
   // guest who is "no pork + no alcohol + no fish" is one guest, and pinning
@@ -358,6 +388,38 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     return acc;
   }, {});
   const courses = visibleCoursesForTable.map(c => c.rawCourse);
+
+  // What FIRE / SET act on, and what UNDO takes back. `nextFire` is the first
+  // unfired course in menu order; `lastFired` is the latest by the CLOCK, not
+  // by menu position — the pass fires out of order often enough that "the last
+  // course in the list holding a time" is the wrong thing to undo.
+  const { nextFire } = getCourseProgressState(table, visibleCoursesForTable);
+  const lastFired = visibleCoursesForTable
+    .filter(c => c.firedAt)
+    .sort((a, b) => (parseHHMM(a.firedAt) ?? 0) - (parseHHMM(b.firedAt) ?? 0))
+    .pop() || null;
+  // The action bar belongs to the LIVE board only: the reservations ticket
+  // preview is a document, not a pass surface, and has no `upd`.
+  const showActionBar = !!upd && !editable;
+
+  // Follow the menu down. Each time the next course changes — a fire here, or
+  // one streamed in from another kitchen screen — bring that row into view.
+  // `block: "nearest"` scrolls the list only as far as it has to, so the pass
+  // keeps the courses just fired visible above the one it is working on.
+  const nextFireKey = nextFire?.key || null;
+  useEffect(() => {
+    if (!showActionBar || !nextFireKey) return;
+    const row = nextCourseRef.current;
+    const list = courseListRef.current;
+    if (!row || !list || list.scrollHeight <= list.clientHeight) return;
+    // Manual arithmetic rather than scrollIntoView: the ticket lives inside the
+    // page's own scroller and the DnD grid, and scrollIntoView would drag those
+    // ancestors around too — the board jumping on every fire.
+    const top = row.offsetTop - list.offsetTop;
+    const bottom = top + row.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+  }, [nextFireKey, showActionBar]);
 
   const firedCount   = Object.keys(log).length;
   const totalCourses = courses.length; // extras are now included in courses
@@ -764,8 +826,23 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         </div>
       )}
 
-      {/* ── Courses ── */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      {/* ── Courses ──
+          Height-capped and scrolling on the live board: the ticket follows the
+          menu down as courses fire, so a 19-course table occupies exactly as
+          much wall as a 6-course one and every ticket stays the same size.
+          Fired courses scroll off the top rather than disappearing — scroll up
+          and the whole night is still there. The ticket EDITOR is exempt: it is
+          a document you read end to end, not a pass surface. */}
+      <div
+        ref={courseListRef}
+        data-course-list=""
+        style={{
+          display: "flex", flexDirection: "column", gap: 1,
+          ...(showActionBar
+            ? { maxHeight: dz.courseListMax, overflowY: "auto", overscrollBehavior: "contain", touchAction: "pan-y" }
+            : {}),
+        }}
+      >
         {editableCourseEntries.map((entry, idx) => {
           const course = entry.rawCourse;
           const key = course.course_key || `course_${idx}`;
@@ -862,13 +939,25 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             || Object.keys(draftPresets).length > 0
             || Object.values(draftOverrides).some(v => String(v || "").trim());
 
+          const isNextFire = !fired && !pending && nextFire?.key === key;
+
           return (
-            <div key={key} style={{
-              background: fired ? tokens.green.bg : pending ? tokens.neutral[50] : tokens.neutral[0],
-              borderLeft: fired ? `4px solid ${tokens.green.border}` : kcNote.name || kcNote.note ? `4px solid ${tokens.red.text}` : "4px solid transparent",
+            <div key={key} ref={isNextFire ? nextCourseRef : undefined} style={{
+              background: fired ? tokens.green.bg : pending ? tokens.neutral[50] : isNextFire ? tokens.tint.parchment : tokens.neutral[0],
+              borderLeft: fired ? `4px solid ${tokens.green.border}` : kcNote.name || kcNote.note ? `4px solid ${tokens.red.text}` : isNextFire ? `4px solid ${tokens.charcoal.default}` : "4px solid transparent",
+              flexShrink: 0,
             }}>
               <div
-                onClick={() => { if (pending || (editable && showEdit)) return; fired ? unfire(key) : fire(key); }}
+                onPointerDown={onCoursePointerDown}
+                // The row tap survives for OUT-OF-ORDER work (fire C5 before
+                // C4, take one back) — FIRE/SET/UNDO below drive the normal
+                // path. It is guarded so a tap that ends a scroll of this list
+                // can never fire a course by accident.
+                onClick={(e) => {
+                  if (pending || (editable && showEdit)) return;
+                  if (courseTapWasScroll(e)) return;
+                  fired ? unfire(key) : fire(key);
+                }}
                 style={{ display: "flex", alignItems: "center", padding: dz.coursePad, gap: dz.courseGap, cursor: editable && showEdit ? "default" : "pointer" }}>
                 <span style={{ fontFamily: FONT, fontSize: dz.courseGlyph, color: fired ? tokens.green.border : tokens.ink[4], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : pending ? "＋" : "○"}</span>
                 {(() => {
@@ -1017,6 +1106,73 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         })}
       </div>
 
+      {/* ── FIRE / SET / UNDO ──
+          The pass's three verbs, weighted by how often they are used and how
+          costly a mistake is: FIRE takes the room, SET is secondary, UNDO is
+          deliberately the smallest target on the ticket. They act on the next
+          unfired course and the last-fired one, so the common path never needs
+          the chef to aim at a 12px row. */}
+      {showActionBar && !allDone && (
+        <div
+          onPointerDown={e => e.stopPropagation()}
+          style={{ display: "flex", gap: 1, background: RULE_SOFT }}
+        >
+          {/* Two lines, not "FIRE — Sour Soup" on one: at five columns the
+              single line ellipsized into "FIRE — SOUR SO…", which hides the
+              only thing the chef needs to check before committing. The verb
+              stays large and the dish gets the full width beneath it. */}
+          <button
+            disabled={!nextFire}
+            aria-label={nextFire ? `Fire ${nextFire.name}` : "All courses fired"}
+            onClick={e => { e.stopPropagation(); if (nextFire) fire(nextFire.key); }}
+            style={{
+              flex: 5, minWidth: 0, fontFamily: FONT, padding: dz.firePad,
+              border: "none", borderRadius: 0, cursor: nextFire ? "pointer" : "default",
+              background: nextFire ? tokens.charcoal.default : tokens.neutral[50],
+              color: nextFire ? tokens.neutral[0] : tokens.ink[4],
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+              overflow: "hidden", touchAction: "manipulation",
+            }}
+          >
+            <span style={{ fontSize: dz.fireFont, fontWeight: 800, letterSpacing: "0.14em", lineHeight: 1 }}>
+              {nextFire ? "FIRE" : "ALL FIRED"}
+            </span>
+            {nextFire && (
+              <span style={{
+                fontSize: dz.setFont, fontWeight: 600, letterSpacing: "0.04em", lineHeight: 1.15,
+                textTransform: "uppercase", maxWidth: "100%",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>{nextFire.name}</span>
+            )}
+          </button>
+          <button
+            disabled={!nextFire}
+            onClick={e => { e.stopPropagation(); setNext(nextFire); }}
+            title={table.courseReady?.key === nextFire?.key ? "Take back the SET signal" : "Tell service this course is set"}
+            style={{
+              flex: 2, minWidth: 0, fontFamily: FONT, fontSize: dz.setFont, fontWeight: 700,
+              letterSpacing: "0.08em", textTransform: "uppercase", padding: dz.firePad,
+              border: "none", borderRadius: 0, cursor: nextFire ? "pointer" : "default",
+              background: table.courseReady?.key === nextFire?.key ? tokens.tint.parchment : tokens.neutral[0],
+              color: nextFire ? tokens.ink[0] : tokens.ink[4],
+              whiteSpace: "nowrap", touchAction: "manipulation",
+            }}
+          >{table.courseReady?.key === nextFire?.key ? "SET ✓" : "SET"}</button>
+          <button
+            disabled={!lastFired}
+            onClick={e => { e.stopPropagation(); if (lastFired) unfire(lastFired.key); }}
+            title={lastFired ? `Take back ${lastFired.name}` : "Nothing fired yet"}
+            style={{
+              flex: 1, minWidth: 0, fontFamily: FONT, fontSize: dz.undoFont, fontWeight: 600,
+              letterSpacing: "0.06em", textTransform: "uppercase", padding: dz.firePad,
+              border: "none", borderRadius: 0, cursor: lastFired ? "pointer" : "default",
+              background: tokens.neutral[0], color: lastFired ? tokens.ink[3] : tokens.ink[5],
+              whiteSpace: "nowrap", touchAction: "manipulation",
+            }}
+          >UNDO</button>
+        </div>
+      )}
+
       {/* ── Save / cancel bar (ticket-preview only) ── */}
       {editable && showEdit && (
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, padding: "10px 10px 12px", background: tokens.neutral[0] }}>
@@ -1050,14 +1206,30 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                 {!durLabel && !timeRange && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.green.border, fontWeight: 700, letterSpacing: 1 }}>COMPLETE</span>}
               </div>
             </div>
-            <button
-              onClick={e => { e.stopPropagation(); upd && upd(table.id, "kitchenArchived", true); }}
-              style={{
-                fontFamily: FONT, fontSize: compact ? 8 : 9, letterSpacing: compact ? 1 : 1.5, padding: dz.archiveBtnPad,
-                border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer",
-                background: tokens.neutral[0], color: tokens.green.border, textTransform: "uppercase", touchAction: "manipulation",
-              }}
-            >Archive</button>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              {/* UNDO survives completion — the action bar is gone by now, and
+                  a mis-tapped last course must not need a hunt through the
+                  scrolled list to take back. */}
+              {showActionBar && lastFired && (
+                <button
+                  onClick={e => { e.stopPropagation(); unfire(lastFired.key); }}
+                  title={`Take back ${lastFired.name}`}
+                  style={{
+                    fontFamily: FONT, fontSize: compact ? 8 : 9, letterSpacing: compact ? 1 : 1.5, padding: dz.archiveBtnPad,
+                    border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
+                    background: tokens.neutral[0], color: tokens.ink[3], textTransform: "uppercase", touchAction: "manipulation",
+                  }}
+                >Undo</button>
+              )}
+              <button
+                onClick={e => { e.stopPropagation(); upd && upd(table.id, "kitchenArchived", true); }}
+                style={{
+                  fontFamily: FONT, fontSize: compact ? 8 : 9, letterSpacing: compact ? 1 : 1.5, padding: dz.archiveBtnPad,
+                  border: `1px solid ${tokens.green.border}`, borderRadius: 0, cursor: "pointer",
+                  background: tokens.neutral[0], color: tokens.green.border, textTransform: "uppercase", touchAction: "manipulation",
+                }}
+              >Archive</button>
+            </div>
           </div>
         );
       })()}
