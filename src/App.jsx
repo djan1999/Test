@@ -4882,8 +4882,17 @@ export default function App() {
             onOrderChange={saveKitchenTicketOrder}
             // Feeds the persistent minimap in the board's spare bottom-right
             // space (terrace + active dining layout), so the pass sees WHERE a
-            // ticket's food goes without leaving the board.
+            // ticket's food goes without leaving the board. The same service
+            // handlers the kitchen floor view gets make it interactive — seat
+            // swaps, terrace assign / change / SET — with the same local-first
+            // writes (works with the Wi-Fi down, per Djan).
             floorMaps={floorMapsState}
+            floorStatus={floorStatus}
+            reservations={serviceReservations}
+            onAssignTerrace={assignTerraceTable}
+            onSwapSeats={swapSeats}
+            onCycleFloorStatus={(mapId, label) => updateFloorStatus(fs => cycleFloorStatus(fs, mapId, label))}
+            onSendSetToKitchen={sendSetToKitchen}
             // Tap an upcoming banner → seat-only sheet. The kitchen display
             // must be able to seat a walked-in party itself: its local-first
             // writes work with the wifi down, when no other device's seat

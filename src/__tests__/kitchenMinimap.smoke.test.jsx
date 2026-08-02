@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { render } from "@testing-library/react";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { render, fireEvent } from "@testing-library/react";
 import KitchenMinimap from "../components/kitchen/KitchenMinimap.jsx";
 import { buildDefaultFloorMaps } from "../utils/floorMaps.js";
 
@@ -28,6 +28,49 @@ describe("KitchenMinimap", () => {
     expect(queryByText("T8")).toBeTruthy();
     expect(getAllByText("P1").length).toBeGreaterThanOrEqual(1);
     expect(getAllByText("P2").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("free-tile picker offers ONLY parties physically in the house, as name · table · time", () => {
+    try { localStorage.setItem("milka_kitchen_minimap_map", "terrace"); } catch {}
+    const onAssign = vi.fn();
+    const tables = [
+      { id: 5, active: true, seats: [{ id: 1 }] },  // arrived, legacy 'booked' row
+    ];
+    const reservations = [
+      { id: "r-dining", table_id: 8, data: { resName: "Kovac", resTime: "19:00", visit_state: "dining" } },
+      { id: "r-arrived", table_id: 5, data: { resName: "Novak", resTime: "18:30" } },      // booked, but table 5 is live
+      { id: "r-later", table_id: 9, data: { resName: "Zupan", resTime: "20:30" } },        // booked, NOT here yet
+    ];
+    const { container, queryByText, getByText } = render(
+      <KitchenMinimap floorMaps={floorMaps} tables={tables} focusedTableId={null}
+        reservations={reservations} onAssign={onAssign} onSwapSeats={vi.fn()} onCycleStatus={vi.fn()} />
+    );
+    fireEvent.click(container.querySelector('[data-table="T21"]')); // free terrace tile
+    expect(queryByText("ASSIGN PARTY")).toBeTruthy();
+    expect(queryByText("Kovac")).toBeTruthy();  // seated inside
+    expect(queryByText("Novak")).toBeTruthy();  // arrived (board table live)
+    expect(queryByText("Zupan")).toBeFalsy();   // not in the house — never offered
+    fireEvent.click(getByText("Kovac"));
+    expect(onAssign).toHaveBeenCalledWith(reservations[0], "T21");
+  });
+
+  it("occupied terrace tile's sheet shows dining table, name and time with the service actions", () => {
+    try { localStorage.setItem("milka_kitchen_minimap_map", "terrace"); } catch {}
+    const onCycleStatus = vi.fn();
+    const tables = [
+      { id: 8, _visit: { visit: "terrace", terraceLabel: "T22" }, seats: [{ id: 1 }] },
+    ];
+    const reservations = [
+      { id: "r8", table_id: 8, data: { resName: "Kovac", resTime: "19:00", visit_state: "terrace", terrace_table: "T22" } },
+    ];
+    const { container, queryByText } = render(
+      <KitchenMinimap floorMaps={floorMaps} tables={tables} focusedTableId={null}
+        reservations={reservations} onAssign={vi.fn()} onSwapSeats={vi.fn()} onCycleStatus={onCycleStatus} />
+    );
+    fireEvent.click(container.querySelector('[data-table="T8"]')); // renamed occupied tile
+    expect(queryByText(/Kovac/)).toBeTruthy();
+    expect(queryByText("CHANGE TABLE")).toBeTruthy();
+    expect(queryByText("SET → KITCHEN")).toBeTruthy();
   });
 
   it("follows a terrace party onto the terrace map and names the tile after its dining table", () => {
