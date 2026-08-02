@@ -99,6 +99,14 @@ const resRow = (id) => remoteRows("reservations").find((r) => r.id === id);
 const findSvgTable = (container, label) =>
   [...container.querySelectorAll("g")].find((g) => g.textContent.startsWith(label));
 
+// Course cells live inside a ticket's course list. Count THOSE, not every
+// occurrence of the name: the ticket's FIRE button also carries the next
+// course's name, so a bare getAllByText double-counts the ticket it is on.
+const courseCells = (name) =>
+  [...document.querySelectorAll("[data-course-list]")]
+    .flatMap((list) => [...list.querySelectorAll("*")])
+    .filter((el) => el.children.length === 0 && el.textContent.trim() === name);
+
 describe("app harness — kitchen board through the real App", () => {
   beforeEach(() => {
     resetBackend({ psMode: false });
@@ -110,11 +118,11 @@ describe("app harness — kitchen board through the real App", () => {
     await enterKitchen();
 
     // Fire both courses on Anna's ticket — each press must land in the store.
-    fireEvent.click(await screen.findByText("Amuse", {}, { timeout: 5000 }));
+    fireEvent.click(await screen.findByLabelText("Fire Amuse", {}, { timeout: 5000 }));
     await waitFor(() => {
       expect(rowFor(remoteRows("service_tables"), 1)?.data?.kitchenLog?.amuse?.firedAt).toBeTruthy();
     }, { timeout: 5000 });
-    fireEvent.click(screen.getByText("Venison"));
+    fireEvent.click(await screen.findByLabelText("Fire Venison", {}, { timeout: 5000 }));
     await waitFor(() => {
       expect(rowFor(remoteRows("service_tables"), 1)?.data?.kitchenLog?.venison?.firedAt).toBeTruthy();
     }, { timeout: 5000 });
@@ -129,7 +137,7 @@ describe("app harness — kitchen board through the real App", () => {
     await waitFor(() => {
       expect(rowFor(remoteRows("service_tables"), 1)?.data?.kitchenArchived).toBe(false);
     }, { timeout: 5000 });
-    await screen.findByText("Amuse", {}, { timeout: 5000 }); // ticket is back
+    await waitFor(() => expect(courseCells("Amuse")).toHaveLength(1), { timeout: 5000 }); // ticket is back
   }, 25000);
 
   it("with no live service the kitchen idles on NO ACTIVE SERVICE — no board, no popups", async () => {
@@ -152,7 +160,7 @@ describe("app harness — kitchen board through the real App", () => {
     await screen.findByText("Bruno Harness", {}, { timeout: 5000 });
     expect(screen.getByText("20:15")).toBeTruthy();
     // Anna's seated ticket carries the courses; Bruno's banner must not.
-    expect(screen.getAllByText("Amuse")).toHaveLength(1);
+    expect(courseCells("Amuse")).toHaveLength(1);
   }, 20000);
 
   it("kitchen view switch lives IN the header — TICKETS/TERRACE/DINING ROOM, no toggle row, no inner tabs (11.07)", async () => {
@@ -176,7 +184,7 @@ describe("app harness — kitchen board through the real App", () => {
 
     // Back to TICKETS: Anna's board returns.
     fireEvent.click(screen.getByText("tickets"));
-    await screen.findByText("Amuse", {}, { timeout: 5000 });
+    await waitFor(() => expect(courseCells("Amuse")).toHaveLength(1), { timeout: 5000 });
   }, 25000);
 
   it("kitchen's OFFLINE seat + FOH seating the SAME table converge on reconnect — one row, no crash, nothing lost", async () => {
@@ -199,7 +207,7 @@ describe("app harness — kitchen board through the real App", () => {
     backend.failRemoteWrites = true;
     fireEvent.click(await screen.findByText("Bruno Harness", {}, { timeout: 5000 }));
     fireEvent.click(await screen.findByText("SEAT TABLE", {}, { timeout: 5000 }));
-    await waitFor(() => expect(screen.getAllByText("Amuse")).toHaveLength(2), { timeout: 5000 });
+    await waitFor(() => expect(courseCells("Amuse")).toHaveLength(2), { timeout: 5000 });
     await new Promise((r) => setTimeout(r, 3600)); // retries exhausted, write pending
     expect(rowFor(remoteRows("service_tables"), 2)?.data?.active).not.toBe(true);
 
@@ -223,7 +231,7 @@ describe("app harness — kitchen board through the real App", () => {
     }, { timeout: 6000 });
     // The kitchen still shows exactly one Bruno ticket, courses intact.
     expect(screen.getAllByText("Bruno Harness")).toHaveLength(1);
-    expect(screen.getAllByText("Amuse")).toHaveLength(2);
+    expect(courseCells("Amuse")).toHaveLength(2);
   }, 30000);
 
   it("tapping an upcoming banner opens the seat-only sheet; SEAT persists and expands the ticket (11.07)", async () => {
@@ -246,7 +254,7 @@ describe("app harness — kitchen board through the real App", () => {
       expect(rowFor(remoteRows("service_tables"), 2)?.data?.active).toBe(true);
     }, { timeout: 5000 });
     await waitFor(() => {
-      expect(screen.getAllByText("Amuse")).toHaveLength(2);
+      expect(courseCells("Amuse")).toHaveLength(2);
     }, { timeout: 5000 });
     expect(screen.queryByText("SEAT TABLE")).toBeNull(); // sheet closed itself
   }, 25000);
@@ -268,7 +276,7 @@ describe("app harness — kitchen board through the real App", () => {
     render(<App />);
     await enterKitchen();
 
-    fireEvent.click(await screen.findByText("Amuse", {}, { timeout: 5000 }));
+    fireEvent.click(await screen.findByLabelText("Fire Amuse", {}, { timeout: 5000 }));
     await waitFor(() => {
       expect(rowFor(remoteRows("service_tables"), 1)?.data?.courseReady).toBeNull();
     }, { timeout: 5000 });

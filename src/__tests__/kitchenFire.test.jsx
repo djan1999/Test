@@ -6,7 +6,7 @@
 // upd(), which App applies against the latest state.
 
 import { describe, it, expect, vi } from "vitest";
-import { render, fireEvent, screen } from "@testing-library/react";
+import { render, fireEvent, screen, within } from "@testing-library/react";
 import KitchenBoard from "../components/kitchen/KitchenBoard.jsx";
 
 if (typeof window !== "undefined" && !window.ResizeObserver) {
@@ -129,7 +129,9 @@ describe("KitchenBoard — upcoming reservation banners", () => {
       />
     );
     expect(screen.queryByText(/UPCOMING/)).toBeNull();
-    expect(screen.getByText("Course 1")).toBeTruthy(); // full ticket
+    // Scoped to the course list: the ticket's FIRE button also names the
+    // course it will send, so a bare getByText is ambiguous by design.
+    expect(screen.getAllByText("Course 1").length).toBeGreaterThan(0); // full ticket
   });
 
   it("a banner is a sortable grid item — draggable out of the way like an unexpanded ticket", () => {
@@ -269,9 +271,12 @@ describe("KitchenBoard fire — rapid taps", () => {
       state = { ...state, [field]: typeof v === "function" ? v(state[field]) : v };
     });
 
-    render(<KitchenBoard tables={[table]} menuCourses={courses} upd={upd} updMany={vi.fn()} />);
-    fireEvent.click(screen.getByText("Course 1"));
-    fireEvent.click(screen.getByText("Course 2"));
+    const { container } = render(<KitchenBoard tables={[table]} menuCourses={courses} upd={upd} updMany={vi.fn()} />);
+    // Tap the ROWS, not the FIRE button — this pins the out-of-order path,
+    // which is the one that used to drop a fire under rapid taps.
+    const list = container.querySelector("[data-course-list]");
+    fireEvent.click(within(list).getByText("Course 1"));
+    fireEvent.click(within(list).getByText("Course 2"));
 
     // Pre-fix: the second fire rebuilt the log from the stale render copy and
     // ate the first — only one key survived.

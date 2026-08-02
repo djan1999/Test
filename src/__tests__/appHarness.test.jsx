@@ -9,7 +9,7 @@
 //
 //   1. Join a live service mid-shift (second device just drops in — never a
 //      "start" prompt, never a wipe).
-//   2. Table switch via Detail → CHANGE TABLE: state, store rows and the
+//   2. Table switch via the table sheet → MOVE TABLE: state, store rows and the
 //      reservation all repoint; a store round-trip does NOT bounce the guest
 //      back (the PR #44 duplication).
 //   3. Open with a stale service_date while the board carries TODAY's live
@@ -149,10 +149,10 @@ const enterService = async () => {
   await screen.findByText(/Anna Harness/, {}, { timeout: 5000 });
 };
 
-// Detail → CHANGE TABLE → T04 (free) — the real guest-switch flow.
+// Table sheet → MOVE TABLE → T04 (free) — the real guest-switch flow.
 const switchAnnaToT4 = async () => {
   fireEvent.click(await screen.findByText("Details", {}, { timeout: 5000 }));
-  fireEvent.click(await screen.findByText("CHANGE TABLE"));
+  fireEvent.click(await screen.findByText("MOVE TABLE"));
   const t4 = (await screen.findAllByText("T04"))
     .map((el) => el.closest("button")).find(Boolean);
   fireEvent.click(t4);
@@ -211,7 +211,10 @@ describe.each([
     fireEvent.click(await screen.findByText("[Service]", {}, { timeout: 5000 }));
     await screen.findByText("Seatless Group", {}, { timeout: 5000 });
     fireEvent.click(screen.getByText("Details"));
+    // The sheet's CLEAR TABLE opens a consequence-first confirm; the dialog's
+    // own CLEAR TABLE (rendered after the sheet) is what commits.
     fireEvent.click(await screen.findByText("CLEAR TABLE"));
+    fireEvent.click((await screen.findAllByText("CLEAR TABLE")).at(-1));
 
     const activeRows = () => (psMode ? localRows("service_tables") : remoteRows("service_tables"));
     await waitFor(() => {

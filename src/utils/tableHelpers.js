@@ -122,6 +122,14 @@ export const blankTable = id => ({
   birthday: false,
   cakeNote: "",
   notes: "",
+  // The one note the pass reads. Separate from `notes` (the floor's own note)
+  // because the table sheet writes them side by side and only this one is
+  // meant to reach the kitchen ticket.
+  kitchenNote: "",
+  // Where the booking came from and its external id, when the booking carries
+  // them. Display-only on the board; they ride through the reservation blob.
+  source: "",
+  reference: "",
   lang: "en",
   seats: makeSeats(2),
   kitchenLog: {},
@@ -172,6 +180,9 @@ export const reservationDescriptiveFields = (d = {}) => ({
   // .map/.filter on the board threw.
   restrictions:       Array.isArray(d.restrictions) ? d.restrictions : [],
   notes:              d.notes || "",
+  kitchenNote:        d.kitchenNote || "",
+  source:             d.source || "",
+  reference:          d.reference || "",
   kitchenCourseNotes: d.kitchenCourseNotes || {},
 });
 
