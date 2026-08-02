@@ -680,15 +680,6 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         );
       })()}
 
-      {/* ── Kitchen note banner ── the note written FOR the pass, so it reads
-          louder than the floor's own note and sits above it. */}
-      {table.kitchenNote && (
-        <div style={{ background: tokens.red.bg, borderTop: `1px solid ${tokens.red.border}`, borderBottom: `1px solid ${tokens.red.border}`, padding: dz.rowPad, display: "flex", gap: 6, alignItems: "flex-start" }}>
-          <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, flexShrink: 0, lineHeight: 1.4, fontWeight: 700 }}>⚑</span>
-          <span style={{ fontFamily: FONT, fontSize: "10px", color: tokens.red.text, lineHeight: 1.35, fontWeight: 600 }}>{table.kitchenNote}</span>
-        </div>
-      )}
-
       {/* ── Notes banner ── */}
       {table.notes && (
         <div style={{ background: tokens.tint.parchment, padding: dz.rowPad, display: "flex", gap: 6, alignItems: "flex-start" }}>
