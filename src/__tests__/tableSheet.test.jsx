@@ -77,7 +77,6 @@ const setup = (over = {}, props = {}) => {
       reservations={[]}
       menuCourses={COURSES}
       wines={[{ id: "w1", name: "Rebula", producer: "Klinec", vintage: "2021", byGlass: true }]}
-      aperitifOptions={[{ label: "SPRITZ", searchKey: "spritz" }]}
       reservationOnTable={() => null}
       seatCapOf={() => 4}
       {...handlers}
@@ -180,6 +179,19 @@ describe("TableSheet — courses", () => {
     const done = screen.getByText("ALL COURSES FIRED");
     expect(done.disabled).toBe(true);
     expect(screen.queryByText("NEXT")).toBeNull();
+  });
+});
+
+describe("TableSheet — no Quick Access overlap", () => {
+  it("carries no quick-aperitif shortcuts — those stay on the board card", () => {
+    // The sheet is table-level. Per-seat aperitif work belongs to the card's
+    // Quick Access and to TICKET & MENUS; duplicating it here gave the same
+    // party three editors.
+    setup({}, { aperitifOptions: [{ label: "SPRITZ", searchKey: "spritz" }] });
+    expect(screen.queryByText("[QUICK APERITIF]")).toBeNull();
+    expect(screen.queryByText("SPRITZ")).toBeNull();
+    // Table-level drink work is still here.
+    expect(screen.getByText("[WATER & WINE]")).toBeTruthy();
   });
 });
 

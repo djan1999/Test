@@ -5,6 +5,7 @@
 // biggest, SET second, UNDO smallest — over a height-capped course list that
 // follows the menu down as courses fire.
 
+import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, screen, within } from "@testing-library/react";
 import { KitchenTicket } from "../components/kitchen/KitchenBoard.jsx";
@@ -48,6 +49,14 @@ const setup = (over = {}, props = {}) => {
   );
   return { ...view, upd };
 };
+
+// A ticket wired to real state, so a SET → UNDO → UNDO sequence behaves the
+// way it does on the pass rather than against a frozen prop.
+function LiveTicket({ initial }) {
+  const [t, setT] = React.useState(table(initial));
+  const upd = (id, f, v) => setT(prev => ({ ...prev, [f]: typeof v === "function" ? v(prev[f]) : v }));
+  return <KitchenTicket table={t} menuCourses={COURSES} upd={upd} />;
+}
 
 beforeEach(() => { vi.clearAllMocks(); });
 
@@ -125,6 +134,80 @@ describe("UNDO", () => {
     fireEvent.click(screen.getByText("Undo"));
     const [, , updater] = upd.mock.calls.find(c => c[1] === "kitchenLog");
     expect(Object.keys(updater(log)).sort()).toEqual(["c1", "c2", "c3"]);
+  });
+});
+
+describe("UNDO takes back the last ACTION, fire or set", () => {
+  it("clears a SET that was the last thing done", () => {
+    render(<LiveTicket initial={{ kitchenLog: { c1: { firedAt: "18:20" } } }} />);
+    fireEvent.click(screen.getByText("SET"));
+    expect(screen.getByText("SET ✓")).toBeTruthy();
+    expect(screen.getByLabelText("Take back SET — Linzer Eye")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("UNDO"));
+    expect(screen.getByText("SET")).toBeTruthy();               // signal is gone
+    expect(screen.getAllByText("18:20").length).toBeGreaterThan(0); // the fire stayed
+  });
+
+  it("falls back to the fire once the set has been taken back", () => {
+    render(<LiveTicket initial={{ kitchenLog: { c1: { firedAt: "18:20" } } }} />);
+    fireEvent.click(screen.getByText("SET"));
+    fireEvent.click(screen.getByText("UNDO"));                  // undoes the set
+    expect(screen.getByLabelText("Take back FIRE — Sour Soup")).toBeTruthy();
+    fireEvent.click(screen.getByText("UNDO"));                  // undoes the fire
+    expect(screen.queryByText("18:20")).toBeNull();
+  });
+
+  it("undoes the fire when firing was the last thing done", () => {
+    render(<LiveTicket initial={{}} />);
+    fireEvent.click(screen.getByText("SET"));                   // set C01
+    fireEvent.click(screen.getByLabelText("Fire Sour Soup"));   // then fire it
+    expect(screen.getByLabelText("Take back FIRE — Sour Soup")).toBeTruthy();
+  });
+
+  it("restores the SET that the undone fire consumed", () => {
+    // Firing a set course clears the set. Undoing that fire has to put BOTH
+    // back, or the ticket lands half-way: unfired, but no longer reading SET.
+    render(<LiveTicket initial={{}} />);
+    fireEvent.click(screen.getByText("SET"));
+    fireEvent.click(screen.getByLabelText("Fire Sour Soup"));
+    expect(screen.queryByText("SET ✓")).toBeNull();             // consumed by the fire
+    fireEvent.click(screen.getByText("UNDO"));
+    expect(screen.getByText("SET ✓")).toBeTruthy();             // and back again
+    expect(screen.getByLabelText("Fire Sour Soup")).toBeTruthy();
+  });
+
+  it("is inert when the ticket has had nothing done to it", () => {
+    setup();
+    expect(screen.getByText("UNDO").disabled).toBe(true);
+  });
+});
+
+describe("UNDO on a ticket this screen did not act on", () => {
+  it("takes back a set raised after the last fire", () => {
+    // Another screen's work, or a fresh mount: no local memory, so the
+    // persisted stamps order the two.
+    setup({
+      kitchenLog: { c1: { firedAt: "18:20" } },
+      courseReady: { key: "c2", index: 2, name: "Linzer Eye", at: "18:31" },
+    });
+    expect(screen.getByLabelText("Take back SET — Linzer Eye")).toBeTruthy();
+  });
+
+  it("takes back the fire when the standing set predates it", () => {
+    setup({
+      kitchenLog: { c1: { firedAt: "18:20" }, c2: { firedAt: "18:44" } },
+      courseReady: { key: "c3", index: 3, name: "Trout Belly", at: "18:30" },
+    });
+    expect(screen.getByLabelText("Take back FIRE — Linzer Eye")).toBeTruthy();
+  });
+
+  it("ignores a set that has already been fired", () => {
+    setup({
+      kitchenLog: { c1: { firedAt: "18:20" } },
+      courseReady: { key: "c1", index: 1, name: "Sour Soup", at: "18:15" },
+    });
+    expect(screen.getByLabelText("Take back FIRE — Sour Soup")).toBeTruthy();
   });
 });
 
