@@ -2772,6 +2772,36 @@ export default function App() {
     upd(tableId, field, value);
   };
 
+  // EDIT RESERVATION, from the sheet's action grid. One MERGED write, not a
+  // field-at-a-time trickle: the patch carries the guest count, and a changed
+  // count has to resize the live table's seats — upsertReservation does that
+  // through syncStartedTablesFromReservation, once, for the whole edit. Merged
+  // (not rebuilt) so nothing the form doesn't ask about — flow keys, course
+  // overrides, source/reference — is silently dropped mid-service.
+  const saveBookingEdit = async (tableId, patch) => {
+    const id = Number(tableId);
+    const owner = reservationOnTable(id);
+    if (owner) {
+      return await upsertReservation({
+        id: owner.id,
+        date: owner.date,
+        table_id: owner.table_id,
+        data: { ...(owner.data || {}), ...patch },
+      });
+    }
+    // A walk-in with no reservation row: the board row IS the booking, so the
+    // patch lands there — including the seat resize the reservation path would
+    // have done on the way.
+    const t = tablesRef.current?.find(x => Number(x.id) === id);
+    const guests = Number(patch.guests) > 0 ? Number(patch.guests) : Number(t?.guests) || 0;
+    const resized = !!t && guests > 0 && guests !== (Number(t.guests) || 0);
+    updMany(id, {
+      ...patch,
+      ...(resized ? { guests, seats: makeSeats(guests, t.seats || []) } : {}),
+    });
+    return { ok: true };
+  };
+
   // JOIN TABLE + — add a free table to this party's combined booking.
   // The group lives on the reservation (reservationTableIds / the board's
   // primary-table filter both read it), but it is ALSO written straight onto
@@ -5214,6 +5244,7 @@ export default function App() {
           onSplitTable={() => splitTables(sel)}
           onOpenTicket={() => setTicketTableId(sel)}
           onClearTable={() => clear(sel, { skipConfirm: true })}
+          onEditBooking={patch => saveBookingEdit(sel, patch)}
         />
       )}
 

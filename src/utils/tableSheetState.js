@@ -127,5 +127,10 @@ export function sheetActionAvailability(table, { visit = null, isGrouped = false
     splitTable: isGrouped,
     ticket: live,
     clearTable: live,
+    // EDIT RESERVATION — the booking facts (name, covers, sitting, menu,
+    // language, room, cake). Offered wherever there IS a booking to correct;
+    // a blank table has nothing to edit and gets the button hidden rather
+    // than a form full of empty fields.
+    editBooking: live,
   };
 }

@@ -280,6 +280,34 @@ describe.each([
     }
   });
 
+  it("EDIT RESERVATION corrects the covers on a LIVE table — booking AND seats follow", async () => {
+    // A party of 2 turns out to be 4. The correction is a BOOKING edit, so it
+    // has to reach the reservation row; but the table is already seated, and a
+    // reservation the live board never learns from leaves the kitchen ticket
+    // and the floor pax reading 2 all night. One save, both surfaces.
+    seedLiveService();
+    render(<App />);
+    await enterService();
+
+    fireEvent.click(await screen.findByText("Details", {}, { timeout: 5000 }));
+    fireEvent.click(await screen.findByText("EDIT RESERVATION"));
+    fireEvent.click(screen.getByLabelText("One cover more"));
+    fireEvent.click(screen.getByLabelText("One cover more"));
+    fireEvent.click(screen.getByText("SAVE"));
+
+    await waitFor(() => {
+      const resv = remoteRows("reservations").find((r) => r.id === "res-anna");
+      expect(resv?.data?.guests).toBe(4);
+      const board = rowFor(remoteRows("service_tables"), 1)?.data;
+      expect(board?.guests).toBe(4);
+      // Seats resized with it — P1 and P2 keep their identity, P3/P4 arrive blank.
+      expect(board?.seats?.map((s) => Number(s.id))).toEqual([1, 2, 3, 4]);
+      // …and the rest of the booking survived a merged (not rebuilt) write.
+      expect(resv?.data?.resName).toBe("Anna Harness");
+      expect(resv?.data?.service_session).toBe("dinner");
+    }, { timeout: 5000 });
+  });
+
   it("stale service date over a LIVE board re-dates forward and keeps the board (04.07 incident)", async () => {
     // The board's activity is from TODAY, but the service's date lags two
     // days behind (a woken tablet / mislabeled service). Auto-end must heal
