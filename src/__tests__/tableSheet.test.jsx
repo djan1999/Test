@@ -66,6 +66,7 @@ const setup = (over = {}, props = {}) => {
     onSplitTable: vi.fn(async () => ({ ok: true })),
     onOpenTicket: vi.fn(),
     onClearTable: vi.fn(async () => ({ ok: true })),
+    onEditBooking: vi.fn(async () => ({ ok: true })),
   };
   const view = render(
     <TableSheet
@@ -226,39 +227,102 @@ describe("TableSheet — no Quick Access overlap", () => {
   });
 });
 
-describe("TableSheet — booking chips", () => {
-  it("writes a menu change straight back to the reservation", () => {
-    const { updBooking } = setup();
-    fireEvent.click(screen.getByText("SHORT"));
-    expect(updBooking).toHaveBeenCalledWith("menuType", "short");
-    expect(screen.getByText("MENU — SHORT")).toBeTruthy();
+describe("TableSheet — EDIT RESERVATION", () => {
+  // The booking chips that used to sit mid-sheet are gone: correcting a
+  // booking is one deliberate edit behind one button, not six taps scattered
+  // between the courses and the restrictions.
+  it("carries no loose booking chips — the booking lives behind one button", () => {
+    setup();
+    expect(screen.queryByText("[BOOKING]")).toBeNull();
+    expect(screen.queryByText("SHORT")).toBeNull();
+    expect(screen.queryByText("SLO")).toBeNull();
+    expect(screen.getByText("EDIT RESERVATION")).toBeTruthy();
   });
 
-  it("writes the language and the cake flag", () => {
-    const { updBooking } = setup();
-    fireEvent.click(screen.getByText("SLO"));
-    expect(updBooking).toHaveBeenCalledWith("lang", "si");
-    fireEvent.click(screen.getByText("[CAKE]"));
-    expect(updBooking).toHaveBeenCalledWith("birthday", true);
+  it("hides the button on a table with no booking to edit", () => {
+    setup({ active: false, arrivedAt: null, resName: "", resTime: "" });
+    expect(screen.queryByText("EDIT RESERVATION")).toBeNull();
   });
 
-  it("reveals the room field only for a hotel booking, and clears rooms leaving it", () => {
-    const { updBooking, rerender } = setup({ guestType: "hotel", rooms: ["214"] });
-    const room = screen.getByLabelText("Hotel room number");
-    fireEvent.blur(room, { target: { value: "301" } });
-    expect(updBooking).toHaveBeenCalledWith("rooms", ["301"]);
-    expect(updBooking).toHaveBeenCalledWith("room", "301");
+  it("opens on the current booking and writes the whole edit in one call", async () => {
+    const { onEditBooking } = setup();
+    fireEvent.click(screen.getByText("EDIT RESERVATION"));
 
-    rerender(
-      <TableSheet
-        table={baseTable()}
-        tables={OTHER_TABLES}
-        menuCourses={COURSES}
-        onClose={() => {}} upd={() => {}} updSeat={() => {}} updBooking={() => {}}
-        onFire={() => {}} onUnfire={() => {}}
-      />,
-    );
+    expect(screen.getByLabelText("Guest name").value).toBe("Weber");
+    expect(screen.getByLabelText("Booked time").value).toBe("20:00");
+    // The sheet is itself a dialog, so the booking editor is addressed by its
+    // own seam rather than by role.
+    const dialogEl = document.querySelector("[data-booking-edit]");
+    const dialog = within(dialogEl);
+    expect(dialogEl.querySelector("[data-covers]").textContent).toBe("2");
+
+    fireEvent.change(screen.getByLabelText("Guest name"), { target: { value: "Weber-Novak" } });
+    fireEvent.click(screen.getByLabelText("One cover more"));
+    fireEvent.click(screen.getByLabelText("One cover more"));
+    fireEvent.click(dialog.getByText("SHORT"));
+    fireEvent.click(dialog.getByText("SLO"));
+
+    // Nothing has been written yet — a half-applied booking correction is a
+    // worse state than the one it started from.
+    expect(onEditBooking).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("SAVE"));
+    expect(onEditBooking).toHaveBeenCalledTimes(1);
+    expect(onEditBooking).toHaveBeenCalledWith(expect.objectContaining({
+      resName: "Weber-Novak", resTime: "20:00", guests: 4, menuType: "short", lang: "si",
+    }));
+    expect(await screen.findByText("BOOKING SAVED")).toBeTruthy();
+  });
+
+  it("CANCEL leaves the booking untouched", () => {
+    const { onEditBooking } = setup();
+    fireEvent.click(screen.getByText("EDIT RESERVATION"));
+    fireEvent.change(screen.getByLabelText("Guest name"), { target: { value: "Nobody" } });
+    fireEvent.click(screen.getByText("CANCEL"));
+    expect(onEditBooking).not.toHaveBeenCalled();
+    expect(document.querySelector("[data-booking-edit]")).toBeNull();
+  });
+
+  it("says what a cover change will do to the live table before it does it", () => {
+    setup();
+    fireEvent.click(screen.getByText("EDIT RESERVATION"));
+    expect(screen.queryByText(/Saving resizes the table/)).toBeNull();
+    fireEvent.click(screen.getByLabelText("One cover more"));
+    expect(screen.getByText(/Saving resizes the table from 2 to 3/)).toBeTruthy();
+  });
+
+  it("takes the room only for a hotel booking, and drops it leaving hotel", () => {
+    const { onEditBooking } = setup({ guestType: "hotel", rooms: ["214"] });
+    fireEvent.click(screen.getByText("EDIT RESERVATION"));
+    expect(screen.getByLabelText("Hotel room number").value).toBe("214");
+
+    fireEvent.click(within(document.querySelector("[data-booking-edit]")).getByText("REGULAR"));
     expect(screen.queryByLabelText("Hotel room number")).toBeNull();
+    fireEvent.click(screen.getByText("SAVE"));
+    expect(onEditBooking).toHaveBeenCalledWith(expect.objectContaining({
+      guestType: "", room: "", rooms: [],
+    }));
+  });
+
+  it("keeps the panel open when the write is refused, edit intact", async () => {
+    const refuse = vi.fn(async () => ({ ok: false }));
+    setup({}, { onEditBooking: refuse });
+    fireEvent.click(screen.getByText("EDIT RESERVATION"));
+    fireEvent.change(screen.getByLabelText("Guest name"), { target: { value: "Retry" } });
+    fireEvent.click(screen.getByText("SAVE"));
+    expect(await screen.findByText("BOOKING SAVE REFUSED")).toBeTruthy();
+    expect(refuse).toHaveBeenCalled();
+    // Still open, still holding what was typed — the usual refusal is a bad
+    // connection and the next move is SAVE again, not retyping the booking.
+    expect(screen.getByLabelText("Guest name").value).toBe("Retry");
+  });
+
+  // The room number was readable on the sheet before the booking panel moved
+  // behind a button; losing it would have made the floor open an editor to
+  // answer "which room?".
+  it("still reads the hotel room back on the header meta line", () => {
+    setup({ guestType: "hotel", rooms: ["214", "216"] });
+    expect(screen.getByText(/HOTEL #214, 216/)).toBeTruthy();
   });
 });
 
@@ -284,6 +348,20 @@ describe("TableSheet — restrictions by seat", () => {
     expect(screen.getByText(/\[Vegan\] P1/)).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Remove Vegan from position 1"));
     expect(upd).toHaveBeenCalledWith("restrictions", [{ pos: 2, note: "nut" }]);
+  });
+
+  // Restrictions sit at the FOOT of the sheet, under the staff note: they are
+  // reference the operator reads once on the way to the table, not a control
+  // they reach for on every trip, and they used to push the courses and the
+  // drinks — the live work — down the scroll.
+  it("sits below the staff note, above the actions", () => {
+    const { container } = setup();
+    const order = [...container.querySelectorAll("[data-table-sheet] span")]
+      .map(el => el.textContent)
+      .filter(t => ["[COURSES]", "[BEVERAGES]", "[STAFF NOTE]", "[RESTRICTIONS — BY POSITION]", "[ACTIONS]"].includes(t));
+    expect(order).toEqual([
+      "[COURSES]", "[BEVERAGES]", "[STAFF NOTE]", "[RESTRICTIONS — BY POSITION]", "[ACTIONS]",
+    ]);
   });
 });
 

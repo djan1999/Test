@@ -16,6 +16,7 @@ import {
 import { searchBeverages } from "../../utils/beverageSearch.js";
 import TablePickerModal from "./TablePickerModal.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
+import BookingEditModal from "./BookingEditModal.jsx";
 
 const FONT = tokens.font;
 // Desktop width, and the breakpoint below which the sheet goes full-width.
@@ -141,11 +142,13 @@ export default function TableSheet({
   onSplitTable,
   onOpenTicket,
   onClearTable,
+  onEditBooking,
 }) {
   const isMobile = useIsMobile(TABLE_SHEET_BP);
   const [toast, setToast] = useState(null);
   const [picker, setPicker] = useState(null);        // "move" | "swap" | "join"
   const [confirmClear, setConfirmClear] = useState(false);
+  const [bookingOpen, setBookingOpen] = useState(false);
   const [addRestrSeat, setAddRestrSeat] = useState(null); // position while the add panel is open
   const [addRestrOpen, setAddRestrOpen] = useState(false);
   const [drinkQuery, setDrinkQuery] = useState("");
@@ -184,6 +187,7 @@ export default function TableSheet({
   useEffect(() => {
     setPicker(null);
     setConfirmClear(false);
+    setBookingOpen(false);
     setAddRestrOpen(false);
     setAddRestrSeat(null);
     setDrinkQuery("");
@@ -381,16 +385,24 @@ export default function TableSheet({
     cleared:  { bg: tokens.neutral[50],  border: tokens.ink[4],       color: tokens.ink[4] },
   }[badge.key] || { bg: tokens.neutral[50], border: tokens.ink[4], color: tokens.ink[3] };
 
-  const metaParts = [
-    `${covers} COVERS`,
-    `${table.resTime || "—"} → ${table.arrivedAt || "—"}`,
-    table.source || (table.guestType === "hotel" ? "HOTEL" : null),
-    table.reference || null,
-  ].filter(Boolean);
-
   const rooms = Array.isArray(table.rooms) && table.rooms.length
     ? table.rooms.filter(Boolean)
     : (table.room ? [table.room] : []);
+
+  // The room number used to be readable on the sheet's booking panel. That
+  // panel is now behind EDIT RESERVATION, so it rides the meta line instead —
+  // a hotel room is something the floor reads at a glance, not something they
+  // open an editor to check.
+  const hotelPart = table.guestType === "hotel"
+    ? `HOTEL${rooms.length ? ` #${rooms.join(", ")}` : ""}`
+    : null;
+
+  const metaParts = [
+    `${covers} COVERS`,
+    `${table.resTime || "—"} → ${table.arrivedAt || "—"}`,
+    table.source || hotelPart,
+    table.reference || null,
+  ].filter(Boolean);
 
   return (
     <>
@@ -618,136 +630,7 @@ export default function TableSheet({
           </div>
         </Section>
 
-        {/* ── 4. BOOKING CHIPS — written straight back to the reservation ── */}
-        <Section label="BOOKING">
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {[["long", "LONG"], ["short", "SHORT"]].map(([v, l]) => (
-              <button key={v} type="button" style={chip(table.menuType === v)}
-                onClick={() => writeBooking("menuType", table.menuType === v ? "" : v, `MENU — ${l}`)}
-              >{l}</button>
-            ))}
-            <span style={{ width: 1, background: tokens.ink[5], alignSelf: "stretch" }} />
-            {[["en", "EN"], ["si", "SLO"]].map(([v, l]) => (
-              <button key={v} type="button" style={chip((table.lang || "en") === v)}
-                onClick={() => writeBooking("lang", v, `LANGUAGE — ${l}`)}
-              >{l}</button>
-            ))}
-            <span style={{ width: 1, background: tokens.ink[5], alignSelf: "stretch" }} />
-            {[["", "REGULAR"], ["hotel", "HOTEL"]].map(([v, l]) => (
-              <button key={v || "regular"} type="button" style={chip((table.guestType || "") === v)}
-                onClick={() => {
-                  writeBooking("guestType", v, `GUEST — ${l}`);
-                  if (v !== "hotel") { updBooking("rooms", []); updBooking("room", ""); }
-                }}
-              >{l}</button>
-            ))}
-            <span style={{ width: 1, background: tokens.ink[5], alignSelf: "stretch" }} />
-            <button type="button" style={chip(!!table.birthday)}
-              onClick={() => writeBooking("birthday", !table.birthday, table.birthday ? "CAKE OFF" : "CAKE ON")}
-            >[CAKE]</button>
-          </div>
-
-          {table.guestType === "hotel" && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-              <span style={micro}>ROOM</span>
-              <input
-                defaultValue={rooms.join(", ")}
-                key={`rooms-${table.id}-${rooms.join(",")}`}
-                aria-label="Hotel room number"
-                placeholder="room no."
-                onBlur={e => {
-                  const next = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
-                  if (next.join(",") === rooms.join(",")) return;
-                  updBooking("rooms", next);
-                  updBooking("room", next[0] || "");
-                  flash(next.length ? `ROOM — ${next.join(", ")}` : "ROOM CLEARED");
-                }}
-                style={{
-                  fontFamily: FONT, fontSize: tokens.mobileInputSize, minHeight: TAP,
-                  padding: "8px 10px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0,
-                  background: tokens.neutral[0], color: tokens.ink[0], flex: 1, minWidth: 0,
-                  boxSizing: "border-box", WebkitAppearance: "none",
-                }}
-              />
-            </div>
-          )}
-        </Section>
-
-        {/* ── 5. RESTRICTIONS — BY POSITION ──────────────────────────────── */}
-        <Section
-          label="RESTRICTIONS — BY POSITION"
-          right={
-            <button
-              type="button"
-              onClick={() => { setAddRestrOpen(o => !o); setAddRestrSeat(null); }}
-              style={{ ...quietButton(), padding: "6px 12px" }}
-            >{addRestrOpen ? "CLOSE" : "+ ADD"}</button>
-          }
-        >
-          {(table.restrictions || []).length === 0 ? (
-            <div style={{ ...micro, letterSpacing: "0.10em" }}>NONE RECORDED</div>
-          ) : (
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {(table.restrictions || []).map((r, i) => (
-                <button
-                  key={`${r.note}-${r.pos ?? "x"}-${i}`}
-                  type="button"
-                  onClick={() => removeRestriction(i)}
-                  aria-label={`Remove ${restrCompact(r.note)}${r.pos ? ` from position ${r.pos}` : ""}`}
-                  style={{
-                    fontFamily: FONT, fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase",
-                    minHeight: TAP, padding: "6px 10px",
-                    border: `1px solid ${tokens.red.border}`, borderRadius: 0,
-                    background: tokens.red.bg, color: tokens.red.text, fontWeight: 600,
-                    cursor: "pointer", touchAction: "manipulation",
-                  }}
-                >
-                  [{restrCompact(r.note)}] {r.pos ? `P${r.pos}` : "TABLE"} ×
-                </button>
-              ))}
-            </div>
-          )}
-
-          {addRestrOpen && (
-            <div style={{ border: `1px solid ${tokens.ink[4]}`, marginTop: 10, background: tokens.neutral[50] }}>
-              <div style={{ padding: "10px 10px 0" }}>
-                <div style={{ ...micro, marginBottom: 6 }}>POSITION</div>
-                <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                  {(seats.length ? seats.map(s => Number(s.id)) : Array.from({ length: covers }, (_, i) => i + 1))
-                    .map(id => (
-                      <button key={id} type="button" style={chip(addRestrSeat === id)}
-                        aria-label={`Restriction for position ${id}`}
-                        onClick={() => setAddRestrSeat(id)}
-                      >P{id}</button>
-                    ))}
-                </div>
-              </div>
-              <div style={{ padding: 10, opacity: addRestrSeat == null ? 0.4 : 1, pointerEvents: addRestrSeat == null ? "none" : "auto" }}>
-                {Object.entries(RESTRICTION_GROUPS).map(([groupKey, groupLabel]) => {
-                  const items = RESTRICTIONS.filter(r => (r.group || "other") === groupKey);
-                  if (items.length === 0) return null;
-                  return (
-                    <div key={groupKey} style={{ marginBottom: 10 }}>
-                      <div style={{ ...micro, marginBottom: 5 }}>{groupLabel}</div>
-                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                        {items.map(r => (
-                          <button key={r.key} type="button" style={chip(false)}
-                            onClick={() => addRestriction(r.key)}
-                          >{r.label}</button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-                {addRestrSeat == null && (
-                  <div style={{ ...micro, letterSpacing: "0.10em" }}>PICK A POSITION FIRST</div>
-                )}
-              </div>
-            </div>
-          )}
-        </Section>
-
-        {/* ── 6. BEVERAGES ──────────────────────────────────────────────
+        {/* ── 4. BEVERAGES ──────────────────────────────────────────────
             Searches the WHOLE catalog, not just wine. The phase chip decides
             where a pick lands — as an aperitif, or with the menu — exactly as
             the old detail view did per position; here it can apply to the
@@ -882,7 +765,7 @@ export default function TableSheet({
           )}
         </Section>
 
-        {/* ── 7. NOTES ───────────────────────────────────────────────────── */}
+        {/* ── 5. NOTES ───────────────────────────────────────────────────── */}
         <Section label="STAFF NOTE">
           <BlurTextarea
             value={table.notes || ""}
@@ -892,8 +775,93 @@ export default function TableSheet({
           />
         </Section>
 
-        {/* ── 8. ACTION GRID ─────────────────────────────────────────────── */}
+        {/* ── 6. RESTRICTIONS — BY POSITION ──────────────────────────────── */}
+        <Section
+          label="RESTRICTIONS — BY POSITION"
+          right={
+            <button
+              type="button"
+              onClick={() => { setAddRestrOpen(o => !o); setAddRestrSeat(null); }}
+              style={{ ...quietButton(), padding: "6px 12px" }}
+            >{addRestrOpen ? "CLOSE" : "+ ADD"}</button>
+          }
+        >
+          {(table.restrictions || []).length === 0 ? (
+            <div style={{ ...micro, letterSpacing: "0.10em" }}>NONE RECORDED</div>
+          ) : (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {(table.restrictions || []).map((r, i) => (
+                <button
+                  key={`${r.note}-${r.pos ?? "x"}-${i}`}
+                  type="button"
+                  onClick={() => removeRestriction(i)}
+                  aria-label={`Remove ${restrCompact(r.note)}${r.pos ? ` from position ${r.pos}` : ""}`}
+                  style={{
+                    fontFamily: FONT, fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase",
+                    minHeight: TAP, padding: "6px 10px",
+                    border: `1px solid ${tokens.red.border}`, borderRadius: 0,
+                    background: tokens.red.bg, color: tokens.red.text, fontWeight: 600,
+                    cursor: "pointer", touchAction: "manipulation",
+                  }}
+                >
+                  [{restrCompact(r.note)}] {r.pos ? `P${r.pos}` : "TABLE"} ×
+                </button>
+              ))}
+            </div>
+          )}
+
+          {addRestrOpen && (
+            <div style={{ border: `1px solid ${tokens.ink[4]}`, marginTop: 10, background: tokens.neutral[50] }}>
+              <div style={{ padding: "10px 10px 0" }}>
+                <div style={{ ...micro, marginBottom: 6 }}>POSITION</div>
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                  {(seats.length ? seats.map(s => Number(s.id)) : Array.from({ length: covers }, (_, i) => i + 1))
+                    .map(id => (
+                      <button key={id} type="button" style={chip(addRestrSeat === id)}
+                        aria-label={`Restriction for position ${id}`}
+                        onClick={() => setAddRestrSeat(id)}
+                      >P{id}</button>
+                    ))}
+                </div>
+              </div>
+              <div style={{ padding: 10, opacity: addRestrSeat == null ? 0.4 : 1, pointerEvents: addRestrSeat == null ? "none" : "auto" }}>
+                {Object.entries(RESTRICTION_GROUPS).map(([groupKey, groupLabel]) => {
+                  const items = RESTRICTIONS.filter(r => (r.group || "other") === groupKey);
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={groupKey} style={{ marginBottom: 10 }}>
+                      <div style={{ ...micro, marginBottom: 5 }}>{groupLabel}</div>
+                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                        {items.map(r => (
+                          <button key={r.key} type="button" style={chip(false)}
+                            onClick={() => addRestriction(r.key)}
+                          >{r.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                {addRestrSeat == null && (
+                  <div style={{ ...micro, letterSpacing: "0.10em" }}>PICK A POSITION FIRST</div>
+                )}
+              </div>
+            </div>
+          )}
+        </Section>
+
+        {/* ── 7. ACTION GRID ─────────────────────────────────────────────── */}
         <Section label="ACTIONS">
+          {/* The booking itself — name, covers, sitting, menu, language, room,
+              cake — edited as a booking rather than tapped chip by chip. It sits
+              above the floor actions because it changes what the party IS, not
+              where it sits. */}
+          {can.editBooking && (
+            <button
+              type="button"
+              onClick={() => setBookingOpen(true)}
+              style={{ ...quietButton(), width: "100%", marginBottom: 8 }}
+            >EDIT RESERVATION</button>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {can.moveTable && (
               <button type="button" style={quietButton()} onClick={() => setPicker("move")}>MOVE TABLE</button>
@@ -947,6 +915,20 @@ export default function TableSheet({
           pickable={pickerPickable}
           onPick={onPickTable}
           onCancel={() => setPicker(null)}
+        />
+      )}
+
+      {bookingOpen && (
+        <BookingEditModal
+          table={table}
+          onCancel={() => setBookingOpen(false)}
+          onSave={async (patch) => {
+            const r = await onEditBooking?.(patch);
+            if (r?.ok === false) { flash("BOOKING SAVE REFUSED"); return r; }
+            setBookingOpen(false);
+            flash("BOOKING SAVED");
+            return r;
+          }}
         />
       )}
 

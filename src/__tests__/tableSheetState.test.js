@@ -135,4 +135,12 @@ describe("sheetActionAvailability", () => {
     expect(blank.ticket).toBe(false);
     expect(blank.markSeated).toBe(false);
   });
+
+  it("offers EDIT RESERVATION wherever there is a booking to correct", () => {
+    // A booking that has not arrived yet is exactly when covers get corrected.
+    expect(sheetActionAvailability({ resName: "Weber", resTime: "20:00" }).editBooking).toBe(true);
+    expect(sheetActionAvailability({ active: true }).editBooking).toBe(true);
+    // A blank table would open a form full of empty fields.
+    expect(sheetActionAvailability({}).editBooking).toBe(false);
+  });
 });
