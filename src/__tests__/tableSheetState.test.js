@@ -17,10 +17,9 @@ describe("tableBadgeState", () => {
   });
 
   it("prefers the transient party states over the settled ones", () => {
-    // A party walking in from the terrace is ARRIVING even though its table is
-    // also set and already active — that is the state the operator must act on.
+    // A party still outside is TERRACE even though its table is also set and
+    // already active — that is the state the operator must act on.
     const table = { active: true, courseReady: { at: "20:40" }, arrivedAt: "20:05" };
-    expect(tableBadgeState(table, { visit: { visit: "arriving" } }).label).toBe("ARRIVING");
     expect(tableBadgeState(table, { visit: { visit: "terrace", terraceLabel: "TR3" } }))
       .toEqual({ key: "terrace", label: "TERRACE", at: "TR3" });
     expect(tableBadgeState(table)).toEqual({ key: "set", label: "SET", at: "20:40" });
@@ -104,10 +103,10 @@ describe("sheetActionAvailability", () => {
     expect(sheetActionAvailability({ active: true }).markSeated).toBe(false);
   });
 
-  it("only offers MARK ARRIVING from the terrace, the one state the flow allows", () => {
-    expect(sheetActionAvailability({ resName: "W" }, { visit: { visit: "terrace" } }).markArriving).toBe(true);
-    expect(sheetActionAvailability({ active: true }).markArriving).toBe(false);
-    expect(sheetActionAvailability({ active: true }, { visit: { visit: "arriving" } }).markArriving).toBe(false);
+  it("offers MARK SEATED to a party out on the terrace, and knows no ARRIVING state", () => {
+    // MOVE seats them; there is no intermediate step to mark.
+    expect(sheetActionAvailability({ resName: "W" }, { visit: { visit: "terrace" } }).markSeated).toBe(true);
+    expect(sheetActionAvailability({ active: true }).markArriving).toBeUndefined();
   });
 
   it("says nothing about setting — that lives in the COURSES panel", () => {

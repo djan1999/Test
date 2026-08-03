@@ -132,7 +132,7 @@ export function buildDefaultFloorMaps() {
       },
     ],
     activeDiningMapId: "dining_a",
-    config: { moveSingleTap: false }, // MOVE_SINGLE_TAP: MOVE skips the arriving confirm
+    config: {},
   };
 }
 
@@ -152,7 +152,7 @@ export function sanitizeFloorMaps(state) {
     geometryVersion: Number.isInteger(state.geometryVersion) ? state.geometryVersion : 1,
     maps,
     activeDiningMapId,
-    config: { moveSingleTap: false, ...(state.config || {}) },
+    config: { ...(state.config || {}) },
   };
 }
 
@@ -1019,7 +1019,7 @@ export function mapTicker(entries) {
   for (const e of entries || []) {
     if (!e) continue;
     if (e.status === "occupied") { t.seated++; t.covers += Number(e.pax) || 0; }
-    if (e.status === "reserved" || e.status === "arriving") t.reserved++;
+    if (e.status === "reserved") t.reserved++;
     if (e.strip === "SET") t.set++;
   }
   return t;

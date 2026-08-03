@@ -168,7 +168,7 @@ export default function FloorMap({
   map,
   mode = "view",
   // per-label presentation: { name, pax, sub, badge: {text, tone}, status:
-  // 'free'|'occupied'|'arriving'|'reserved', strip: 'SET'|null (service),
+  // 'free'|'occupied'|'reserved', strip: 'SET'|null (service),
   // selectable: bool } — (allergy flags retired: the red chairs + codes ARE
   // the restriction signal; the label ▲ was noise on top)
   tableState = {},
@@ -468,13 +468,12 @@ export default function FloorMap({
         }
         const st = tableState[t.label] || {};
         const occupied = st.status === "occupied";
-        const arriving = st.status === "arriving";
         const reserved = st.status === "reserved";
         const strip = mode === "service" ? (st.strip || null) : null;
         // A SET table already announced to the kitchen — amber ring, so staff
         // see at a glance it's been sent and don't re-send the same course.
         const sent = mode === "service" && !!st.sent;
-        const pickable = mode === "picker" ? st.selectable !== false && !occupied && !arriving : false;
+        const pickable = mode === "picker" ? st.selectable !== false && !occupied : false;
         const seatEditing = mode === "seats" && seatsEditLabel === t.label;
         const selected = editing && selectedLabel === t.label;
         const dimmed = (mode === "picker" && !pickable) || (mode === "seats" && seatsEditLabel && !seatEditing);
@@ -486,7 +485,6 @@ export default function FloorMap({
         // green outline; no band inside the shape (it clipped the course
         // line and looked wrong inside circles).
         const stroke = strip === "SET" ? tokens.green.strong
-          : arriving ? tokens.ink[1]
           : occupied ? tokens.green.strong
           : reserved ? tokens.ink[3]
           : blueprint ? tokens.ink[1]
@@ -527,7 +525,7 @@ export default function FloorMap({
           >
             <TableShape t={t} fill={fill} stroke={stroke}
               strokeWidth={strip ? 0.7 : blueprint ? 0.45 : 0.35}
-              dash={arriving || reserved ? "1.4 1" : undefined} />
+              dash={reserved ? "1.4 1" : undefined} />
             {sent && (
               <TableShape t={{ ...t, x: t.x - 1.1, y: t.y - 1.1, w: t.w + 2.2, h: t.h + 2.2 }}
                 fill="none" stroke={tokens.signal.warn} strokeWidth={0.7} />
@@ -552,7 +550,7 @@ export default function FloorMap({
                 mode (FOH) a provided `sub` still renders — it carries the
                 party's DINING table on the terrace, their identity there. */}
             {(() => {
-              const busy = occupied || arriving || reserved;
+              const busy = occupied || reserved;
               const second = busy && (showPartyLines ? (nameLine.text || subLine.text) : subLine.text);
               return (
                 <>
@@ -560,7 +558,7 @@ export default function FloorMap({
                     y={t.y + (second ? 3.4 : t.h / 2 + 1)}
                     textAnchor="middle"
                     fontFamily={FONT} fontSize={2.8} fontWeight={700}
-                    fill={arriving ? tokens.ink[0] : occupied ? tokens.neutral[0] : tokens.ink[2]}>
+                    fill={occupied ? tokens.neutral[0] : tokens.ink[2]}>
                     {t.label}
                   </text>
                   {showPartyLines && busy && nameLine.text && (

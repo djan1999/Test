@@ -13,7 +13,6 @@ import { planLayoutSwitch } from "../../utils/floorMaps.js";
 //    remove, drag, tap-in-sequence renumber), merges, maps (duplicate =
 //    "LAYOUT C" nights), RESET TO DEFAULTS. Editing is an admin concern;
 //    the FOH floor view is service-only.
-//  · MOVE_SINGLE_TAP: MOVE skips the arriving confirm.
 export default function FloorPanel({
   floorMaps, tableIds = [], reservations = [], boardTables = [], onUpdateFloorMaps, onApplyLayoutSwitch, isMobile,
 }) {
@@ -140,18 +139,6 @@ export default function FloorPanel({
         isMobile={isMobile}
       />
 
-      <div style={label}>TERRACE FLOW</div>
-      <label style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2], display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-        <input
-          type="checkbox"
-          checked={!!floorMaps.config?.moveSingleTap}
-          onChange={(e) => onUpdateFloorMaps({
-            ...floorMaps,
-            config: { ...(floorMaps.config || {}), moveSingleTap: e.target.checked },
-          })}
-        />
-        MOVE_SINGLE_TAP — MOVE seats the party immediately, skipping the ARRIVING confirm
-      </label>
     </div>
   );
 }

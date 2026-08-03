@@ -22,12 +22,12 @@ describe("FloorMap renderer", () => {
   it("occupied tables show party name ×pax; a badge renders", () => {
     const { container } = render(
       <FloorMap map={terrace} mode="view" tableState={{
-        T23: { status: "occupied", name: "NOVAK", pax: 2, sub: "C4/12", badge: { text: "ARRIVING · KV" } },
+        T23: { status: "occupied", name: "NOVAK", pax: 2, sub: "C4/12", badge: { text: "VIP · VEG" } },
       }} />,
     );
     expect(container.textContent).toContain("NOVAK ×2");
     expect(container.textContent).toContain("C4/12");
-    expect(container.textContent).toContain("ARRIVING · KV");
+    expect(container.textContent).toContain("VIP · VEG");
   });
 
   it("picker mode: free tables tap through, occupied tables are inert + dimmed", () => {

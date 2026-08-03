@@ -48,15 +48,14 @@ export function arrivalDelayMinutes(table, nowMin = minutesOfDay()) {
  * The sheet's state badge.
  *
  * Precedence runs from the most transient, most actionable state down to the
- * most settled one: a party walking in from the terrace (ARRIVING) outranks
- * the fact that its table is also SET, which outranks the table merely being
- * LIVE. `visit` is App's terrace-flow decoration (`table._visit`).
+ * most settled one: a party still outside (TERRACE) outranks the fact that its
+ * table is also SET, which outranks the table merely being LIVE. `visit` is
+ * App's terrace-flow decoration (`table._visit`).
  *
  * @returns {{ key: string, label: string, at: string|null }}
  */
 export function tableBadgeState(table, { visit = null } = {}) {
   const v = visit?.visit || table?._visit?.visit || null;
-  if (v === "arriving") return { key: "arriving", label: "ARRIVING", at: null };
   if (v === "terrace") {
     return { key: "terrace", label: "TERRACE", at: visit?.terraceLabel || table?._visit?.terraceLabel || null };
   }
@@ -119,9 +118,7 @@ export function sheetActionAvailability(table, { visit = null, isGrouped = false
     // absent from the grid; it disappears the moment the party is seated.
     // SET / UNSET are likewise absent — they live in the COURSES panel, which
     // is where the operator is already looking at what would be set.
-    markSeated: !seated && (booked || v === "terrace" || v === "arriving"),
-    // The state machine only reaches 'arriving' from 'terrace'.
-    markArriving: v === "terrace",
+    markSeated: !seated && (booked || v === "terrace"),
     // A partial move of a combined booking desyncs the other members'
     // tableGroup and the party vanishes from the board (see App.moveTableState).
     moveTable: live && !isGrouped,

@@ -151,16 +151,9 @@ export default function KitchenFloorView({
       }
     }
   } else {
-    // dining tab — arriving parties visible (kitchen sees who is mid-visit)
-    const arrivingByTable = {};
-    for (const r of reservations) {
-      if (visitStateOf(r.data) !== "arriving") continue;
-      arrivingByTable[Number(r.table_id)] = r;
-    }
     for (const t of map.tables) {
       const boardId = boardIdsOf(t)[0];
       const bt = tables.find((x) => x.id === boardId) || null;
-      const arriving = arrivingByTable[boardId];
       const strip = floorStatusOf(floorStatus, map.id, t.label);
       const positionKey = floorPositionKey(map.id, t.label);
       const genders = seatGendersOf(bt, positionKey);
@@ -173,23 +166,14 @@ export default function KitchenFloorView({
           sub: progressOf(bt),
           strip,
         };
-      } else if (arriving) {
-        tableState[t.label] = {
-          status: "arriving",
-          pax: arriving.data?.guests || undefined,
-          badge: { text: "ARRIVING · KV" },
-          strip,
-        };
       } else {
         tableState[t.label] = { status: "free", strip };
       }
       const restr = restrictionsAtFloorPositions(bt?.seats || [], bt?.restrictions || [], positionKey)
         .filter((x) => x && x.note);
       if (restr.length) restrictionsByLabel[t.label] = restr;
-      if (bt?.active || arriving) {
-        popoverData[t.label] = {
-          rows: restrRows(bt?.active ? bt.restrictions : arriving?.data?.restrictions),
-        };
+      if (bt?.active) {
+        popoverData[t.label] = { rows: restrRows(bt.restrictions) };
       }
     }
   }

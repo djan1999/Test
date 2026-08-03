@@ -34,7 +34,7 @@ const reservations = [
   // waiting for a terrace assignment
   { id: "r2", table_id: 5, data: { resName: "MURN", guests: 2, visit_state: "booked", resTime: "20:00" } },
   // mid-move to the dining room
-  { id: "r3", table_id: 8, data: { resName: "HORVAT", guests: 2, visit_state: "arriving" } },
+  { id: "r3", table_id: 8, data: { resName: "HORVAT", guests: 2, visit_state: "terrace", terrace_table: "T24" } },
 ];
 
 const setup = (overrides = {}) => {
@@ -67,20 +67,19 @@ describe("FloorView (FOH FLOOR surface)", () => {
     const { container, getByText } = setup();
     getByText("LAYOUT A");
     getByText("TERRACE");
-    // T1 ×2 + T9 ×4 occupied; T4 reserved; r3 arriving on T8 → RES 2
+    // T1 ×2 + T9 ×4 occupied; T4 reserved → RES 1
     expect(container.textContent).toContain("COVERS 6");
     expect(container.textContent).toContain("SEATED 2");
-    expect(container.textContent).toContain("RES 2");
+    expect(container.textContent).toContain("RES 1");
     expect(container.textContent).toContain("SET 1");
     // FOH tables are label-only (per Djan): no names, no ×pax, no course on
-    // the shape — the ARRIVING badge stays; the label ▲ is retired and the
-    // restriction CODE at the red chair is the signal instead
+    // the shape — the label ▲ is retired and the restriction CODE at the red
+    // chair is the signal instead
     expect(container.textContent).not.toContain("×2");
     expect(container.textContent).not.toContain("NOVAK");
     expect(container.textContent).not.toContain("WEISS");
     expect(container.textContent).not.toContain("▲");
     expect(container.textContent).toContain("SHF"); // T1 P1 shellfish, at the chair
-    expect(container.textContent).toContain("ARRIVING · KV");
     // waters/pairings BY POSITION at T9's chairs — the HOUSE shortcuts as
     // stored, stacked water-over-pairing in the chair pill (Wine → WP)
     expect(container.textContent).toContain("XC");
@@ -96,11 +95,13 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(handlers.onCycleStatus).toHaveBeenCalledTimes(1);
   });
 
-  it("an arriving party's table sheet carries MARK SEATED", () => {
-    const { container, handlers, getByText } = setup();
+  it("every dining table is a SET toggle — none of them opens a sheet", () => {
+    // The one dining tap that used to open a sheet was an ARRIVING table's
+    // MARK SEATED. That state is gone, so the dining map has no sheet at all.
+    const { container, handlers } = setup();
     fireEvent.click(findTable(container, "T8"));
-    fireEvent.click(getByText(/MARK SEATED/));
-    expect(handlers.onMarkSeated).toHaveBeenCalledWith(reservations[2]);
+    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T8");
+    expect(container.textContent).not.toContain("MARK SEATED");
   });
 
   it("terrace tab: occupied sheet shows waters by position (no name) + MOVE; free table assigns", () => {

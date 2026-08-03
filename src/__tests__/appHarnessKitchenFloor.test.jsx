@@ -311,9 +311,10 @@ describe("app harness — kitchen board through the real App", () => {
     await screen.findByText(/Bruno Harness/, {}, { timeout: 5000 }); // terrace ticket
 
     fireEvent.click(await screen.findByText("Crayfish", {}, { timeout: 5000 }));
-    // The fire runs the MOVE: visit → arriving, terrace table freed.
+    // The fire runs the MOVE: the party is seated inside and the terrace
+    // table is freed. There is no intermediate state to stop at.
     await waitFor(() => {
-      expect(resRow("res-bruno")?.data?.visit_state).toBe("arriving");
+      expect(resRow("res-bruno")?.data?.visit_state).toBe("dining");
     }, { timeout: 5000 });
     // Firing the OTHER course must not have been required — and an unflagged
     // fire alone (Amuse) would not have moved anyone: the flag did it.
@@ -358,9 +359,8 @@ describe("app harness — kitchen board through the real App", () => {
       expect(rowFor(remoteRows("service_tables"), 2)?.data?.kitchenLog?.crayfish?.firedAt).toBeTruthy();
     }, { timeout: 5000 });
     // …and T23 is released. Terrace occupancy derives from visit_state, so
-    // leaving 'terrace' IS the table clearing; it goes straight to 'dining'
-    // (not 'arriving') because their dining table is already seated, and the
-    // arrival time is not re-stamped.
+    // leaving 'terrace' IS the table clearing. Their dining table is already
+    // seated, so the arrival time is not re-stamped.
     await waitFor(() => {
       expect(resRow("res-bruno")?.data?.visit_state).toBe("dining");
     }, { timeout: 5000 });

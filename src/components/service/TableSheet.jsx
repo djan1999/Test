@@ -134,7 +134,6 @@ export default function TableSheet({
   updSeat,
   updBooking,
   onMarkSeated,
-  onMarkArriving,
   onSetKitchen,
   onUnsetKitchen,
   onMoveTable,
@@ -376,7 +375,6 @@ export default function TableSheet({
   // ── chrome ────────────────────────────────────────────────────────────────
   const badgeTone = {
     live:     { bg: tokens.green.bg,     border: tokens.green.border, color: tokens.green.text },
-    arriving: { bg: tokens.ink[0],       border: tokens.ink[0],       color: tokens.neutral[0] },
     set:      { bg: tokens.tint.parchment, border: tokens.charcoal.default, color: tokens.ink[0] },
     terrace:  { bg: tokens.ink[5],       border: tokens.ink[4],       color: tokens.ink[2] },
     reserved: { bg: tokens.neutral[50],  border: tokens.ink[4],       color: tokens.ink[3] },
@@ -897,11 +895,6 @@ export default function TableSheet({
         {/* ── 8. ACTION GRID ─────────────────────────────────────────────── */}
         <Section label="ACTIONS">
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {can.markArriving && (
-              <button type="button" style={quietButton()}
-                onClick={() => { onMarkArriving(); flash("MARKED ARRIVING"); }}
-              >MARK ARRIVING</button>
-            )}
             {can.moveTable && (
               <button type="button" style={quietButton()} onClick={() => setPicker("move")}>MOVE TABLE</button>
             )}

@@ -20,10 +20,9 @@ const FONT = tokens.font;
 //
 // Tap model (per Djan): a DINING table is one big SET toggle. The board
 // stays the place for guest details; no quick-access sheet on the floor.
-// Exceptions that DO open a sheet, because they carry an action the tap
-// can't mean: an ARRIVING dining table (MARK SEATED) and every terrace
-// table (assign / MOVE / CHANGE / CLEAR, plus the party's waters by seat
-// position + pairings — the runner's crib sheet).
+// The exception that DOES open a sheet, because it carries actions the tap
+// can't mean: every terrace table (assign / MOVE / CHANGE / CLEAR, plus the
+// party's waters by seat position + pairings — the runner's crib sheet).
 //
 // STRICTLY service — geometry editing is an admin concern and lives in the
 // Floor & Terrace panel (FloorEditor), not here.
@@ -53,7 +52,7 @@ export default function FloorView({
   floorMaps, floorStatus, reservations = [], tables = [],
   menuCourses = [], profiles = [], assignments = {},
   onCycleStatus,
-  onAssign, onClear, onMove, onMarkSeated,
+  onAssign, onClear, onMove,
   onSendSetToKitchen,
   onSwapSeats,
   isMobile,
@@ -120,12 +119,6 @@ export default function FloorView({
       return tables.find((x) => x.id === primary) || bt;
     }
     return bt;
-  };
-
-  const arrivingOf = (mapTable) => {
-    const ids = boardIdsOf(mapTable);
-    return reservations.find((r) =>
-      visitStateOf(r.data) === "arriving" && ids.includes(Number(r.table_id))) || null;
   };
 
   // ── per-table presentation for the visible map ────────────────────────────
@@ -205,7 +198,6 @@ export default function FloorView({
       }
     } else {
       const bt = boardTableOf(t);
-      const arriving = arrivingOf(t);
       const restr = restrictionsAtFloorPositions(bt?.seats || [], bt?.restrictions || [], positionKey)
         .filter((x) => x && x.note);
       if (bt) {
@@ -224,13 +216,6 @@ export default function FloorView({
         };
         const notes = seatNotesOf(bt, positionKey);
         if (notes) seatNotesByLabel[t.label] = notes;
-      } else if (arriving) {
-        tableState[t.label] = {
-          status: "arriving",
-          pax: arriving.data?.guests || undefined,
-          badge: { text: "ARRIVING · KV" },
-          strip,
-        };
       } else if (bt && (bt.resName || bt.resTime)) {
         tableState[t.label] = {
           status: "reserved",
@@ -300,8 +285,8 @@ export default function FloorView({
   // yet. Seated-inside parties stay eligible — Djan seats the board table
   // first (courses start) while the party physically sits outside — and so
   // do 'dining' parties who already came IN from the terrace: they may go
-  // back out for the last course / dessert (per Djan, 15.07). Only the
-  // mid-transition states (terrace/arriving) and cleared rows are out.
+  // back out for the last course / dessert (per Djan, 15.07). Only parties
+  // already on the terrace, and cleared rows, are out.
   const bookedParties = reservations.filter((r) =>
     ["booked", "dining"].includes(visitStateOf(r.data)) && !r.data?.clearedFromBoard);
 
@@ -320,7 +305,6 @@ export default function FloorView({
   const sheetTable = sheetLabel ? (map.tables || []).find((t) => t.label === sheetLabel) : null;
   const sheetParty = sheetTable && map.kind === "terrace" ? occ[sheetLabel] : null;
   const sheetBoard = sheetTable && map.kind !== "terrace" ? boardTableOf(sheetTable) : null;
-  const sheetArriving = sheetTable && map.kind !== "terrace" ? arrivingOf(sheetTable) : null;
 
   const sheetBody = () => {
     if (map.kind === "terrace") {
@@ -429,13 +413,6 @@ export default function FloorView({
             ))}
           </div>
         </div>
-      );
-    }
-    if (sheetArriving && !sheetBoard?.active) {
-      return (
-        <button style={actionBtn(true)} onClick={() => { onMarkSeated(sheetArriving); setSheetLabel(null); }}>
-          MARK SEATED · {sheetLabel}
-        </button>
       );
     }
     return null; // dining taps cycle status instead — no sheet
@@ -565,9 +542,9 @@ export default function FloorView({
             setMovingParty(null);
             return;
           }
-          // terrace tables and ARRIVING dining tables carry actions → sheet;
-          // every other dining table is one big SET toggle.
-          if (map.kind === "terrace" || tableState[t.label]?.status === "arriving") setSheetLabel(t.label);
+          // Terrace tables carry actions → sheet; every dining table is one
+          // big SET toggle.
+          if (map.kind === "terrace") setSheetLabel(t.label);
           else onCycleStatus(map.id, t.label);
         }}
       />

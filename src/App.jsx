@@ -59,7 +59,7 @@ import {
 import {
   visitStateOf,
   assignTerrace as assignTerraceData, clearTerraceTable as clearTerraceData,
-  moveToDining as moveToDiningData, markSeated as markSeatedData,
+  moveToDining as moveToDiningData,
   closeVisit as closeVisitData,
 } from "./utils/terraceFlow.js";
 import { getVisibleCoursesForTable, getCourseProgressState, isStaleCourseReady } from "./utils/courseProgress.js";
@@ -1360,30 +1360,25 @@ export default function App() {
     setTables(p => p.map(t =>
       !ids.includes(t.id) ? t : { ...t, active: true, arrivedAt: now, seats: makeSeats(t.guests, t.seats) }
     ));
-    // Seating by hand completes a mid-terrace visit — SEAT is the universal
-    // escape hatch, so no party state may survive it as a dangling badge:
-    // - 'arriving' (MOVE tapped, MARK SEATED never was) → seated.
-    // - 'terrace' → the party is physically at its dining table now; complete
-    //   the move ourselves (single-tap semantics) and free + un-SET the
-    //   terrace tile. Without this a terrace party seated by hand stayed
-    //   "ON TERRACE" forever, ghost ticket on the kitchen board included.
+    // Seating by hand completes a terrace visit — SEAT is the universal escape
+    // hatch, so no party state may survive it as a dangling badge. The party is
+    // physically at its dining table now, so complete the move ourselves and
+    // free + un-SET the terrace tile. Without this a terrace party seated by
+    // hand stayed "ON TERRACE" forever, ghost ticket on the kitchen board
+    // included.
     for (const tid of ids) {
       const owner = serviceReservations.find(r =>
-        ["arriving", "terrace"].includes(visitStateOf(r.data)) &&
+        visitStateOf(r.data) === "terrace" &&
         reservationTableIds(r.data, r.table_id).includes(Number(tid)));
       if (!owner) continue;
-      if (visitStateOf(owner.data) === "arriving") {
-        persistVisitData(owner, markSeatedData(owner.data));
-      } else {
-        // Second terrace leg (back outside for the last course — moved_at
-        // from the first move-in marks it): re-seating the DINING table is a
-        // board correction (Unseat → Seat), not the party coming inside —
-        // their terrace leg ends only by explicit gestures.
-        if (owner.data?.moved_at) continue;
-        const label = owner.data?.terrace_table || null;
-        if (persistVisitData(owner, moveToDiningData(owner.data, new Date().toISOString(), { singleTap: true }))) {
-          clearTerraceStrip(label);
-        }
+      // Second terrace leg (back outside for the last course — moved_at from
+      // the first move-in marks it): re-seating the DINING table is a board
+      // correction (Unseat → Seat), not the party coming inside — their
+      // terrace leg ends only by explicit gestures.
+      if (owner.data?.moved_at) continue;
+      const label = owner.data?.terrace_table || null;
+      if (persistVisitData(owner, moveToDiningData(owner.data, new Date().toISOString()))) {
+        clearTerraceStrip(label);
       }
     }
   };
@@ -1509,32 +1504,24 @@ export default function App() {
     clearTerraceStrip(label);
   };
 
+  // MOVE the party in from the terrace. One gesture: the visit becomes
+  // 'dining' and the board table is seated with it.
   const moveTerracePartyIn = (resv) => {
     const label = resv.data?.terrace_table || null;
-    // A move-in whose dining table is ALREADY seated (the second terrace
-    // leg — dessert outside, courses running inside) must go straight to
-    // 'dining': 'arriving' dead-ends there, because every MARK SEATED
-    // surface gates on the table not being active. And it must not re-seat —
+    // A move-in whose dining table is ALREADY seated is the second terrace leg
+    // (dessert outside, courses running inside). It must not re-seat —
     // seatTable would stomp arrivedAt with the dessert hour.
     const ids = reservationTableIds(resv.data, resv.table_id).map(Number);
     const alreadySeated = ids.some(tid => tablesRef.current?.find(t => t.id === tid)?.active);
-    const next = moveToDiningData(resv.data, new Date().toISOString(), {
-      singleTap: alreadySeated || !!floorMapsState.config?.moveSingleTap,
-    });
-    if (!persistVisitData(resv, next)) return;
+    if (!persistVisitData(resv, moveToDiningData(resv.data, new Date().toISOString()))) return;
     // the terrace table frees the moment the write lands (occupancy derives
     // from visit_state) — and its bites-SET clears with the departure
-    if (next.visit_state === "dining" || next.visit_state === "arriving") clearTerraceStrip(label);
-    if (next.visit_state === "dining" && !alreadySeated) seatTable(Number(resv.table_id)); // MOVE_SINGLE_TAP path
-  };
-
-  const markTerracePartySeated = (resv) => {
-    if (!persistVisitData(resv, markSeatedData(resv.data))) return;
-    seatTable(Number(resv.table_id)); // full quick access lights up with the seat
+    clearTerraceStrip(label);
+    if (!alreadySeated) seatTable(Number(resv.table_id));
   };
 
   // The day's reservations for the active session — the input set for terrace
-  // occupancy, the ARRIVING board visuals, and layout re-resolution.
+  // occupancy, the terrace board visuals, and layout re-resolution.
   // Everything from the active service day forward (both sessions, future
   // dates) — the input set for layout-switch planning in Admin → Floor.
   const layoutPlanningReservations = useMemo(() => {
@@ -1549,16 +1536,14 @@ export default function App() {
   }, [reservations, serviceDate, activeServiceSession]);
 
   // Terrace-flow decoration: which board tables hold a party that is still
-  // outside (terrace) or mid kitchen-visit (arriving). Derived per render,
-  // never persisted — and shared, so the board card and the table sheet can
-  // never disagree about a party's state.
+  // outside. Derived per render, never persisted — and shared, so the board
+  // card and the table sheet can never disagree about a party's state.
   const visitByTable = useMemo(() => {
     const out = {};
     serviceReservations.forEach(r => {
-      const vs = visitStateOf(r.data);
-      if (vs !== "terrace" && vs !== "arriving") return;
+      if (visitStateOf(r.data) !== "terrace") return;
       reservationTableIds(r.data, r.table_id).forEach(id => {
-        out[id] = { visit: vs, terraceLabel: r.data?.terrace_table || null };
+        out[id] = { visit: "terrace", terraceLabel: r.data?.terrace_table || null };
       });
     });
     return out;
@@ -1569,16 +1554,9 @@ export default function App() {
     ? { ...selBoardTable, _visit: visitByTable[selBoardTable.id] }
     : selBoardTable;
 
-  // MARK SEATED reached from a dining-table card (the arriving party's table).
-  const markSeatedOnTable = (tableId) => {
-    const owner = serviceReservations.find(r =>
-      visitStateOf(r.data) === "arriving" && reservationTableIds(r.data, r.table_id).includes(Number(tableId)));
-    if (owner) markTerracePartySeated(owner);
-  };
-
   // ASSIGN TERRACE reached from a party's card → mini-map picker modal.
   // Booked parties (opening snacks) AND dining parties (dessert back out) —
-  // only mid-transition states (terrace/arriving) are excluded.
+  // only a party already on the terrace is excluded.
   const requestTerraceAssign = (tableId) => {
     const owner = serviceReservations.find(r =>
       ["booked", "dining"].includes(visitStateOf(r.data)) && !r.data?.clearedFromBoard &&
@@ -2942,18 +2920,6 @@ export default function App() {
     return { ...result, swapped: useSwap };
   };
 
-  // MARK ARRIVING — the terrace party is walking to its dining table. Only
-  // reachable from 'terrace' (see utils/terraceFlow), which is exactly what
-  // the sheet's action grid gates on.
-  const markArrivingOnTable = (tableId) => {
-    const owner = serviceReservations.find(r =>
-      visitStateOf(r.data) === "terrace" && reservationTableIds(r.data, r.table_id).includes(Number(tableId)));
-    if (!owner) return;
-    persistVisitData(owner, moveToDiningData(owner.data, new Date().toISOString(), { singleTap: false }));
-    const label = owner.data?.terrace_table || null;
-    if (label) clearTerraceStrip(label);
-  };
-
   // Mode is per-session only (never persisted): the next open starts at the
   // mode-selection screen.
   const enterMode = (nextMode) => {
@@ -3127,8 +3093,8 @@ export default function App() {
   // A course flagged is_last_bite ("clears terrace when fired", set per course
   // in Admin → Courses) going out of the kitchen means the terrace party is
   // walking in: the fire auto-runs the same MOVE the terrace sheet button does
-  // — visit → arriving, the terrace tile frees for the next seating, and its
-  // SET strip clears. Transition-detected (the FIRE event, not the state), so
+  // — the party is seated inside, the terrace tile frees for the next
+  // seating, and its SET strip clears. Transition-detected (the FIRE event, not the state), so
   // a dessert-outside party whose flagged course fired long ago is never
   // yanked back inside.
   const prevFlaggedFiredRef = useRef(null);
@@ -5154,7 +5120,7 @@ export default function App() {
           {serviceView === "terrace" || serviceView === "dining" ? (
             /* FLOOR view — the spatial projection of the same board state.
                A dining table is one big SET toggle (tap to flip);
-               terrace tables and ARRIVING tables open their action sheet.
+               terrace tables open their action sheet.
                The old TerracePanel's whole terrace leg lives in here. */
             <FloorView
               mapKind={serviceView}
@@ -5170,7 +5136,6 @@ export default function App() {
               onAssign={assignTerraceTable}
               onClear={clearTerracePartyTable}
               onMove={moveTerracePartyIn}
-              onMarkSeated={markTerracePartySeated}
               onSwapSeats={swapSeats}
               onSendSetToKitchen={sendSetToKitchen}
               isMobile={appIsMobile}
@@ -5179,7 +5144,7 @@ export default function App() {
             /* Combined Board + per-table Quick Access view */
             (() => {
               // Terrace-flow decoration: mark each board table whose party is
-              // still outside (terrace) or mid kitchen-visit (arriving) so the
+              // still outside (terrace) so the
               // room reads honestly. Derived per render, never persisted.
               const visibleTables = displayTables
                 .filter(t => t.active || t.resName || t.resTime)
@@ -5190,7 +5155,6 @@ export default function App() {
                 <DisplayBoard
                   tables={visibleTables}
                   sittingTimes={SITTING_TIMES}
-                  onMarkSeated={markSeatedOnTable}
                   onAssignTerrace={requestTerraceAssign}
                   optionalExtras={dishes}
                   optionalPairings={pairings}
@@ -5233,13 +5197,7 @@ export default function App() {
           upd={(f, v) => upd(sel, f, v)}
           updSeat={(sid, f, v) => updSeat(sel, sid, f, v)}
           updBooking={(f, v) => updBookingField(sel, f, v)}
-          // An ARRIVING party is seated through the terrace flow (which seats
-          // the board table itself); anything else is a plain board seat.
-          onMarkSeated={() => {
-            if (visitByTable[sel]?.visit === "arriving") markSeatedOnTable(sel);
-            else seatTable(sel);
-          }}
-          onMarkArriving={() => markArrivingOnTable(sel)}
+          onMarkSeated={() => seatTable(sel)}
           onSetKitchen={() => sendSetToKitchen([sel])}
           onUnsetKitchen={() => upd(sel, "courseReady", null)}
           onMoveTable={(toId, mvMode) => moveTableFromSheet(sel, toId, mvMode)}
