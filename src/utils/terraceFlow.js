@@ -5,9 +5,13 @@
 //
 //   booked ──assignTerrace──────────────▶ terrace
 //   booked ──(existing seat flow)───────▶ dining        (terrace skipped)
-//   terrace ──MOVE TO {dining_table}────▶ arriving      (or dining, single-tap)
-//   arriving ─MARK SEATED───────────────▶ dining
+//   terrace ──MOVE TO {dining_table}────▶ dining
 //   dining ──(existing clear flow)──────▶ done
+//
+// There is no intermediate ARRIVING state. It existed so a party walking in
+// from the terrace could be marked seated a second time on the dining table;
+// in practice MOVE and the seat were one gesture, and the extra step only
+// stranded parties that never got the second tap. MOVE seats them.
 //
 // The LAST BITE arming concept (kitchen fire → ARMED badge → move cue) was
 // removed 10.07 per Djan — too much signal for the efficiency it bought — and
@@ -19,7 +23,7 @@
 // drops naturally on the next reservation edit. All writers must persist the
 // returned data via App's persistReservationRow seam.
 
-export const VISIT_STATES = ["booked", "terrace", "arriving", "dining", "done"];
+export const VISIT_STATES = ["booked", "terrace", "dining", "done"];
 
 /** The reservation-data keys that carry the visit through the flow. Any code
  *  that REBUILDS a reservation's data blob (the edit form) must carry these,
@@ -34,6 +38,12 @@ export const pickFlowKeys = (data) =>
 
 export const visitStateOf = (data) => {
   const s = data?.visit_state;
+  // A row still carrying the retired 'arriving' state was mid-walk from the
+  // terrace to its table when that state was removed. Those guests had already
+  // LEFT the terrace, so reading them as 'booked' would put them back in the
+  // assign picker as a party still waiting outside — and free a tile they may
+  // physically be sitting on. 'dining' is where they actually were.
+  if (s === "arriving") return "dining";
   if (!VISIT_STATES.includes(s)) return "booked";
   // Self-heal the dead-end state: 'terrace' with NO table is a party the map
   // can't show — no tile, no sheet — and 'terrace' locks it out of every
@@ -47,7 +57,7 @@ export const visitStateOf = (data) => {
 // FOH assigns a terrace table (mini-map picker). Valid from 'booked'
 // (arrival snacks), from 'terrace' as a re-assign, and from 'dining' —
 // dessert/digestif back outside, and the recovery path for a party whose
-// visit was completed by hand. Mid-transition ('arriving') and 'done' → null.
+// visit was completed by hand. 'done' → null.
 export function assignTerrace(data, label, mapId) {
   const s = visitStateOf(data);
   if (s !== "booked" && s !== "terrace" && s !== "dining") return null;
@@ -78,23 +88,13 @@ export function clearTerraceTable(data, { seatedInside = false } = {}) {
 }
 
 // MOVE TO {dining_table}. Never blocked or warned by the dining table's
-// status (SET means set — no readiness handshake). With MOVE_SINGLE_TAP the
-// arriving confirm is skipped. terrace_table is kept as history; terrace
-// occupancy derives from visit_state === 'terrace', so the table frees (and
-// can be re-assigned) the moment this returns.
-export function moveToDining(data, nowIso, { singleTap = false } = {}) {
+// status (SET means set — no readiness handshake), and it seats the party
+// outright: one gesture, no confirm to chase. terrace_table is kept as
+// history; terrace occupancy derives from visit_state === 'terrace', so the
+// table frees (and can be re-assigned) the moment this returns.
+export function moveToDining(data, nowIso) {
   if (visitStateOf(data) !== "terrace") return null;
-  return {
-    ...(data || {}),
-    visit_state: singleTap ? "dining" : "arriving",
-    moved_at: nowIso,
-  };
-}
-
-// FOH taps SEATED on the dining table after the kitchen visit.
-export function markSeated(data) {
-  if (visitStateOf(data) !== "arriving") return null;
-  return { ...(data || {}), visit_state: "dining" };
+  return { ...(data || {}), visit_state: "dining", moved_at: nowIso };
 }
 
 // The existing clear-table flow closes the visit. Only meaningful for rows

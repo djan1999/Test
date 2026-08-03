@@ -1,5 +1,13 @@
 # Terrace Flow, Floor Assignment & Kitchen Floor View — Implementation Plan
 
+> **Superseded in part:** the intermediate `arriving` visit state described
+> below no longer exists. MOVE now takes a party straight from `terrace` to
+> `dining` and seats their table in the same gesture — the second MARK SEATED
+> tap it waited for was never made in practice, and parties stranded in
+> `arriving`. `markSeated()` and the `MOVE_SINGLE_TAP` config went with it.
+> Rows still carrying `arriving` are read as `dining`. The rest of the flow
+> (booked → terrace → dining → done) is as documented.
+
 Status: implementation in progress on `claude/new-session-z8j0hn`.
 Spec source: TERRACE_FLOW_PROMPT (terrace leg → last-bite arming → move to
 dining table → kitchen floor view with house seat numbering).

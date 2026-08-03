@@ -115,14 +115,14 @@ describe("sanitizeFloorMaps", () => {
   it("junk / empty → defaults", () => {
     expect(sanitizeFloorMaps(null).maps.length).toBe(3);
     expect(sanitizeFloorMaps({ maps: [] }).activeDiningMapId).toBe("dining_a");
-    expect(sanitizeFloorMaps("garbage").config.moveSingleTap).toBe(false);
+    expect(sanitizeFloorMaps("garbage").config).toEqual({});
   });
 
-  it("keeps a valid stored state and backfills config", () => {
+  it("keeps a valid stored state and always carries a config object", () => {
     const stored = { maps: state.maps, activeDiningMapId: "dining_b" };
     const s = sanitizeFloorMaps(stored);
     expect(s.activeDiningMapId).toBe("dining_b");
-    expect(s.config.moveSingleTap).toBe(false);
+    expect(s.config).toEqual({});
   });
 
   it("invalid activeDiningMapId falls back to a dining map", () => {
@@ -297,7 +297,7 @@ describe("terrace occupancy", () => {
   it("occupancy derives only from terrace-state reservations with a table", () => {
     const occ = terraceOccupancy([
       res("a", 4, { visit_state: "terrace", terrace_table: "T23", resName: "NOVAK" }),
-      res("b", 5, { visit_state: "arriving", terrace_table: "T24" }), // moved → freed
+      res("b", 5, { visit_state: "dining", terrace_table: "T24" }),   // moved in → freed
       res("c", 6, { visit_state: "terrace", terrace_table: null }),   // cleared
       res("d", 7, {}),                                                 // legacy row
     ]);
@@ -567,10 +567,9 @@ describe("mapTicker", () => {
       { status: "occupied", pax: 2, strip: "SET" },
       { status: "occupied", pax: 4 },
       { status: "reserved" },
-      { status: "arriving" },
       { status: "free", strip: "SET" },
       null,
-    ])).toEqual({ covers: 6, seated: 2, reserved: 2, set: 2 });
+    ])).toEqual({ covers: 6, seated: 2, reserved: 1, set: 2 });
     expect(mapTicker(undefined)).toEqual({ covers: 0, seated: 0, reserved: 0, set: 0 });
   });
 });

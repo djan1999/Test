@@ -518,7 +518,6 @@ describe("TableSheet — action grid", () => {
     expect(screen.getByText("SWAP TABLES")).toBeTruthy();
     expect(screen.getByText("JOIN TABLE +")).toBeTruthy();
     expect(screen.getByText("CLEAR TABLE")).toBeTruthy();
-    expect(screen.queryByText("MARK ARRIVING")).toBeNull();
   });
 
   it("leaves setting to the COURSES panel rather than duplicating it here", () => {
@@ -529,10 +528,12 @@ describe("TableSheet — action grid", () => {
     expect(screen.queryByText("UNSET")).toBeNull();
   });
 
-  it("offers MARK ARRIVING to a party still on the terrace", () => {
-    const { onMarkArriving } = setup({ _visit: { visit: "terrace", terraceLabel: "TR2" } });
-    fireEvent.click(screen.getByText("MARK ARRIVING"));
-    expect(onMarkArriving).toHaveBeenCalled();
+  it("offers MARK SEATED to a party still on the terrace — one gesture, no in-between", () => {
+    const { onMarkSeated } = setup(
+      { active: false, arrivedAt: null, _visit: { visit: "terrace", terraceLabel: "TR2" } });
+    fireEvent.click(screen.getByText(/^MARK SEATED — /));
+    expect(onMarkSeated).toHaveBeenCalled();
+    expect(screen.queryByText("MARK ARRIVING")).toBeNull();
   });
 
   it("offers SPLIT — never a partial move — on a combined booking", async () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   visitStateOf, assignTerrace, clearTerraceTable,
-  moveToDining, markSeated, closeVisit, FLOW_KEYS, pickFlowKeys,
+  moveToDining, closeVisit, FLOW_KEYS, pickFlowKeys, VISIT_STATES,
 } from "../utils/terraceFlow.js";
 
 const NOW = "2026-07-05T19:30:00.000Z";
@@ -36,7 +36,7 @@ describe("assignTerrace", () => {
   it("re-assign on terrace and dining→terrace (dessert outside) allowed; mid-transition is a no-op", () => {
     expect(assignTerrace({ visit_state: "terrace", terrace_table: "T21" }, "T23").terrace_table).toBe("T23");
     expect(assignTerrace({ visit_state: "dining" }, "T23")).toMatchObject({ visit_state: "terrace", terrace_table: "T23" });
-    expect(assignTerrace({ visit_state: "arriving" }, "T23")).toBeNull();
+    expect(assignTerrace({ visit_state: "done" }, "T23")).toBeNull();
     expect(assignTerrace({ visit_state: "done" }, "T23")).toBeNull();
     expect(assignTerrace({}, "")).toBeNull();
   });
@@ -75,28 +75,36 @@ describe("clearTerraceTable", () => {
   });
 });
 
-describe("MOVE / SEATED", () => {
+describe("legacy rows carrying the retired 'arriving' state", () => {
+  it("reads as dining — those guests had already left the terrace", () => {
+    // Reading them as 'booked' would put a party back in the assign picker as
+    // if they were still waiting outside, and free a terrace tile they may
+    // physically be sitting on.
+    expect(visitStateOf({ visit_state: "arriving" })).toBe("dining");
+    expect(visitStateOf({ visit_state: "arriving", terrace_table: "T23" })).toBe("dining");
+  });
+
+  it("is not a state anything can be moved INTO any more", () => {
+    expect(VISIT_STATES).not.toContain("arriving");
+    expect(moveToDining({ visit_state: "terrace", terrace_table: "T23" }, NOW).visit_state).toBe("dining");
+  });
+});
+
+describe("MOVE", () => {
   const onTerrace = { visit_state: "terrace", terrace_table: "T23" };
 
-  it("MOVE → arriving, stamps moved_at, keeps terrace_table as history", () => {
+  it("MOVE seats the party outright — there is no state in between", () => {
+    // The old flow stopped at 'arriving' and waited for a second MARK SEATED
+    // tap on the dining table. Nobody made that tap, so parties stranded there.
     const next = moveToDining(onTerrace, NOW);
-    expect(next).toMatchObject({ visit_state: "arriving", moved_at: NOW, terrace_table: "T23" });
+    expect(next).toMatchObject({ visit_state: "dining", moved_at: NOW, terrace_table: "T23" });
   });
 
-  it("MOVE is never blocked or gated: works from terrace only", () => {
-    expect(moveToDining({ visit_state: "terrace", terrace_table: "T21" }, NOW).visit_state).toBe("arriving");
+  it("works from terrace only", () => {
+    expect(moveToDining({ visit_state: "terrace", terrace_table: "T21" }, NOW).visit_state).toBe("dining");
     expect(moveToDining({ visit_state: "booked" }, NOW)).toBeNull();
-    expect(moveToDining({ visit_state: "arriving" }, NOW)).toBeNull();
-  });
-
-  it("MOVE_SINGLE_TAP skips the arriving confirm", () => {
-    expect(moveToDining(onTerrace, NOW, { singleTap: true }).visit_state).toBe("dining");
-  });
-
-  it("MARK SEATED: arriving → dining, nothing else", () => {
-    expect(markSeated({ visit_state: "arriving" }).visit_state).toBe("dining");
-    expect(markSeated({ visit_state: "terrace" })).toBeNull();
-    expect(markSeated({})).toBeNull();
+    expect(moveToDining({ visit_state: "dining" }, NOW)).toBeNull();
+    expect(moveToDining({}, NOW)).toBeNull();
   });
 });
 

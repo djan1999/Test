@@ -29,13 +29,11 @@ const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
 // cards on every DisplayBoard re-render (which caused the visual overlap animation glitch).
-export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onMarkSeated, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [] }) {
+export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [] }) {
     const isSeated = t.active;
     // Terrace-flow decoration (derived in App, never persisted on the row):
-    // 'terrace' = party outside on t._visit.terraceLabel; 'arriving' = mid
-    // kitchen-visit, walking to this table.
+    // 'terrace' = party outside on t._visit.terraceLabel.
     const visit = t._visit || null;
-    const isArriving = !isSeated && visit?.visit === "arriving";
     // The badge survives seating: courses often start while the party is
     // still outside, and the runner needs the terrace table number ON the
     // board card, not from memory.
@@ -80,10 +78,10 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
     return (
       <div style={{
         background: tokens.neutral[0],
-        borderTop:    `1px ${isArriving ? "dashed" : "solid"} ${isArriving ? tokens.ink[1] : tokens.ink[4]}`,
-        borderBottom: `1px ${isArriving ? "dashed" : "solid"} ${isArriving ? tokens.ink[1] : tokens.ink[4]}`,
-        borderLeft:   isArriving ? `3px dashed ${tokens.ink[1]}` : `3px solid ${isSeated ? tokens.green.border : tokens.ink[4]}`,
-        borderRight:  `1px ${isArriving ? "dashed" : "solid"} ${isArriving ? tokens.ink[1] : tokens.ink[4]}`,
+        borderTop:    `1px solid ${tokens.ink[4]}`,
+        borderBottom: `1px solid ${tokens.ink[4]}`,
+        borderLeft:   `3px solid ${isSeated ? tokens.green.border : tokens.ink[4]}`,
+        borderRight:  `1px solid ${tokens.ink[4]}`,
         borderRadius: 0,
         overflow: "hidden",
         transition: "border-color 0.12s",
@@ -126,11 +124,11 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
             <span style={{
               fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em",
               padding: "2px 7px", borderRadius: 0,
-              background: isArriving ? tokens.ink[0] : isSeated ? tokens.green.bg : tokens.neutral[50],
-              border: `1px ${isArriving ? "dashed" : "solid"} ${isArriving ? tokens.ink[0] : isSeated ? tokens.green.border : tokens.ink[4]}`,
-              color: isArriving ? tokens.neutral[0] : isSeated ? tokens.green.text : tokens.ink[3], fontWeight: 500,
+              background: isSeated ? tokens.green.bg : tokens.neutral[50],
+              border: `1px solid ${isSeated ? tokens.green.border : tokens.ink[4]}`,
+              color: isSeated ? tokens.green.text : tokens.ink[3], fontWeight: 500,
               textTransform: "uppercase",
-            }}>{isArriving ? "ARRIVING · KV" : isSeated ? "SEATED" : "RESERVED"}</span>
+            }}>{isSeated ? "SEATED" : "RESERVED"}</span>
             {onTerrace && (
               <span style={{
                 fontFamily: FONT, fontSize: "8px", letterSpacing: "0.08em",
@@ -139,21 +137,9 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                 background: tokens.ink[5], fontWeight: 600, textTransform: "uppercase",
               }}>ON TERRACE{visit.terraceLabel ? ` · ${visit.terraceLabel}` : ""}</span>
             )}
-            {isArriving && onMarkSeated && (
-              <button
-                onClick={e => { e.stopPropagation(); onMarkSeated(t.id); }}
-                style={{
-                  fontFamily: FONT, fontSize: "8px", letterSpacing: "0.12em",
-                  padding: "3px 8px", border: `1px solid ${tokens.green.border}`,
-                  background: tokens.green.bg, color: tokens.green.text,
-                  borderRadius: 0, cursor: "pointer", fontWeight: 700,
-                  textTransform: "uppercase", touchAction: "manipulation",
-                }}
-              >MARK SEATED</button>
-            )}
-            {/* arrival flow: any party WITHOUT a terrace leg can open the
-                terrace mini-map — seating the board table first (to start
-                courses) must not lock the party out of a terrace table */}
+            {/* Any party WITHOUT a terrace leg can open the terrace mini-map —
+                seating the board table first (to start courses) must not lock
+                the party out of a terrace table. */}
             {!visit && onAssignTerrace && (
               <button
                 onClick={e => { e.stopPropagation(); onAssignTerrace(t.id); }}
@@ -764,7 +750,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
     );
 }
 
-export function DisplayBoard({ tables, sittingTimes = [], optionalExtras = [], optionalPairings = [], upd, quickTableId = null, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onMarkSeated, onAssignTerrace, aperitifOptions = [], wines = [], cocktails = [], spirits = [], beers = [] }) {
+export function DisplayBoard({ tables, sittingTimes = [], optionalExtras = [], optionalPairings = [], upd, quickTableId = null, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, aperitifOptions = [], wines = [], cocktails = [], spirits = [], beers = [] }) {
   const isMobile = useIsMobile(BP.md);
 
   // Tables that belong to a combined booking are grouped solely by their
@@ -835,7 +821,6 @@ export function DisplayBoard({ tables, sittingTimes = [], optionalExtras = [], o
                   onOpenDetail={onOpenDetail}
                   onSeat={onSeat}
                   onUnseat={onUnseat}
-                  onMarkSeated={onMarkSeated}
                   onAssignTerrace={onAssignTerrace}
                   optionalExtras={optionalExtras}
                   optionalPairings={optionalPairings}
