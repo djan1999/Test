@@ -201,7 +201,9 @@ export function makeRow(left = null, right = null, widthPreset = "55/45", gap = 
  * Builds the initial default template from the current menuCourses.
  * Used for first-time setup and as an auto-migration fallback in generateMenuHTML.
  *
- * Inserts the pairing label before danube_salmon.
+ * The generic fallback deliberately omits section labels: their placement is
+ * a restaurant-specific layout decision that belongs in the saved workspace
+ * template (or one of the explicit rebuild skeletons below).
  */
 export function buildDefaultTemplate(menuCourses = []) {
   const sorted = [...menuCourses].sort((a, b) => (a.position || 0) - (b.position || 0));
@@ -230,18 +232,6 @@ export function buildDefaultTemplate(menuCourses = []) {
 
   sorted.forEach((course, idx) => {
     const ck = course.course_key || `course_${idx}`;
-    const nck = norm(ck);
-
-    // Pairing section label before danube_salmon
-    if (norm(ck) === "danube_salmon") {
-      rows.push({
-        id: "pairing_label_row",
-        left:  null,
-        right: makeBlock("pairing_label"),
-        widthPreset: "55/45",
-        gap: 0,
-      });
-    }
 
     const optionalPairingKey = norm(course.optional_pairing_flag || "");
     const rightBlock = optionalPairingKey
@@ -265,12 +255,10 @@ export function buildDefaultTemplate(menuCourses = []) {
 
 // ── Baked-in default layout skeletons ─────────────────────────────────────────
 //
-// These reproduce the hand-tuned house long/short menu layouts — header, the
-// aperitif/pairing/optional-pairing drink scaffolding, the pairing-section
-// label, and the section gaps that separate the courses — but leave every
-// course slot EMPTY (courseKey: ""). "Rebuild from courses" loads this structure
-// so the menu always starts from the same shaped layout instead of one row per
-// dish; the user then picks which dish goes in each empty course slot.
+// Neutral long/short layout skeletons: header, aperitif/pairing scaffolding,
+// one pairing label, course gaps, and footer. Every course slot is EMPTY
+// (courseKey: ""). Restaurant-specific optional-pairing keys live only in
+// workspace course/template data and are never baked into a new restaurant.
 //
 // Every call mints fresh row ids so repeated rebuilds never collide.
 
@@ -292,13 +280,13 @@ export function buildDefaultLongMenuTemplate() {
     row(emptyCourse(), drinks("aperitif")),
     row(emptyCourse(), drinks("aperitif")),
     row(emptyCourse(), drinks("pairing")),
-    row(emptyCourse(), drinks("optional_pairing", { pairingFlag: "crayfish" })),
+    row(emptyCourse(), drinks("pairing")),
     row(null, { ...makeBlock("pairing_label"), align: "left" }),
     row(emptyCourse(), drinks("pairing")),
-    row(emptyCourse(), drinks("optional_pairing", { pairingFlag: "n_a_champagne" })),
     row(emptyCourse(), drinks("pairing")),
     row(emptyCourse(), drinks("pairing")),
-    row(emptyCourse(), drinks("optional_pairing", { pairingFlag: "beer" })),
+    row(emptyCourse(), drinks("pairing")),
+    row(emptyCourse(), drinks("pairing")),
     row(emptyCourse(), drinks("pairing")),
     row(emptyCourse(), drinks("pairing")),
     row(null, null, "55/45", 15.5),              // section gap

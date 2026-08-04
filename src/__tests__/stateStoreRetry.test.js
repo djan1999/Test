@@ -56,6 +56,14 @@ describe("dropPendingStateKey (a retained settings value can be declared stale)"
     expect(() => dropPendingStateKey("never_written")).not.toThrow();
   });
 
+  it("reports a missing workspace instead of claiming the setting was saved", async () => {
+    h.ws = null;
+    const result = await saveStateKey("restaurant_config_v1", { name: "Unsaved" });
+    expect(result.ok).toBe(false);
+    expect(result.error.message).toMatch(/no active restaurant workspace/i);
+    expect(h.upsert).not.toHaveBeenCalled();
+  });
+
   it("a retained retry can never jump into the workspace selected later", async () => {
     const key = "workspace_retry_contract";
     const first = await saveStateKey(key, { from: "A" });

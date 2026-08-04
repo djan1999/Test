@@ -9,10 +9,12 @@ import {
 } from "../config/restaurantConfig.js";
 
 describe("restaurant configuration", () => {
-  it("keeps Milka's current ten-table behavior as the default", () => {
+  it("starts a new restaurant with a neutral ten-table setup", () => {
     const config = makeDefaultRestaurantConfig();
     expect(configuredTableIds(config)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(configuredTableLabel(config, 1)).toBe("T01");
+    expect(config.name).toBe("Restaurant");
+    expect(config.features).toEqual({ hotelGuests: false, roomOptions: [] });
   });
 
   it("accepts sparse and custom table ids/labels", () => {
@@ -41,5 +43,14 @@ describe("restaurant configuration", () => {
     const config = sanitizeRestaurantConfig({ tables: [1, 2] });
     expect(reconcileConfiguredTables([blankTable(1), blankTable(2), blankTable(10)], config)
       .map((table) => table.id)).toEqual([1, 2]);
+  });
+
+  it("sanitizes per-restaurant hotel options without enabling them implicitly", () => {
+    expect(sanitizeRestaurantConfig({
+      name: "Hotel Bistro",
+      features: { hotelGuests: true, roomOptions: [" 101 ", "101", "202"] },
+    }).features).toEqual({ hotelGuests: true, roomOptions: ["101", "202"] });
+    expect(sanitizeRestaurantConfig({ features: { roomOptions: ["101"] } }).features.hotelGuests)
+      .toBe(false);
   });
 });

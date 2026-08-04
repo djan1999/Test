@@ -3,10 +3,9 @@ import { tokens } from "../../styles/tokens.js";
 import { baseInput } from "../../styles/mixins.js";
 import { supabase, setRememberMe, getRememberMe } from "../../lib/supabaseClient.js";
 import GlobalStyle from "../ui/GlobalStyle.jsx";
+import { PRODUCT_NAME as APP_NAME, PRODUCT_SUBTITLE as APP_SUBTITLE } from "../../config/product.js";
 
 const FONT = tokens.font;
-const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
-const APP_SUBTITLE = String(import.meta.env.VITE_APP_SUBTITLE || "SERVICE BOARD").trim() || "SERVICE BOARD";
 
 // ── AuthScreen — email + password login (Supabase Auth) ───────────────────────
 // On success the session is picked up by App's onAuthStateChange listener, which

@@ -152,7 +152,12 @@ async function flushStateKey(id, workspaceId = getWorkspaceId()) {
 
 export async function saveStateKey(id, state, { ancestor = null } = {}) {
   const workspaceId = getWorkspaceId();
-  if (!supabase || !workspaceId) return { ok: true };
+  if (!supabase) return { ok: true };
+  if (!workspaceId) {
+    const error = new Error(`Cannot save ${id}: no active restaurant workspace.`);
+    recordClientDiagnostic("settings write without workspace", error);
+    return { ok: false, error };
+  }
   // Test service: never persist. The UI keeps its in-memory state; the store
   // (service_date, floor markers, kitchen order, logo, …) is left untouched.
   if (isSandbox()) return { ok: true };

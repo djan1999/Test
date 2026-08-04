@@ -19,14 +19,10 @@ const parseSittingTimes = () => {
   return raw.length ? raw : ["18:00", "18:30", "19:00", "19:15"];
 };
 const SITTING_TIMES = parseSittingTimes();
-const DEFAULT_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "01,11,12,21,22,23")
-  .split(",")
-  .map(v => v.trim())
-  .filter(Boolean);
-const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
-
-export default function ReservationModal({ table, tables = [], onSave, onClose }) {
+export default function ReservationModal({ table, tables = [], onSave, onClose, hotelGuestsEnabled = false, roomOptions = [] }) {
   const isMobile = useIsMobile(BP.md);
+  const showHotelGuests = hotelGuestsEnabled || table?.guestType === "hotel";
+  const safeRoomOptions = Array.isArray(roomOptions) ? roomOptions : [];
   const tableLabel = (tableId) => tables.find((entry) => Number(entry.id) === Number(tableId))?.displayLabel
     || `T${String(tableId).padStart(2, "0")}`;
   const [tableIds, setTableIds]   = useState(table.tableGroup?.length > 1 ? table.tableGroup : [table.id]);
@@ -211,7 +207,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
             <div style={{ flex: 1 }}>
               <div style={fieldLabel}>Guest Type</div>
               <div style={{ display: "flex", gap: 8 }}>
-                {["hotel"].map(type => (
+                {(showHotelGuests ? ["hotel"] : []).map(type => (
                   <button key={type} onClick={() => { setGuestType(t => t === type ? "" : type); setRooms([]); }} style={{
                     fontFamily: FONT, fontSize: 11, letterSpacing: 1,
                     padding: "12px 20px", minWidth: 120, border: "1px solid",
@@ -234,7 +230,7 @@ export default function ReservationModal({ table, tables = [], onSave, onClose }
                     )}
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {ROOM_OPTIONS.map(r => {
+                    {safeRoomOptions.map(r => {
                       const isSel = rooms.includes(r);
                       return (
                         <button key={r} onClick={() => setRooms(prev => prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r])} style={{

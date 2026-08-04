@@ -256,7 +256,7 @@ export default function ArchiveModal({
         )}
         {supabase && !loading && !loadError && entries.length === 0 && archivedTickets.length === 0 && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[400], padding: "60px 0", textAlign: "center" }}>No archived services yet</div>}
         {supabase && !loading && entries.length > 0 && <InsightsSection entries={entries} menuCourses={menuCourses} />}
-        {supabase && !loading && entries.length > 0 && (
+        {supabase && canClearAll && !loading && entries.length > 0 && (
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
             <button onClick={deleteAll} disabled={deleting === "all"} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "6px 14px",
@@ -305,11 +305,11 @@ export default function ArchiveModal({
                       textTransform: "uppercase", opacity: resuming === entry.id ? 0.5 : 1,
                     }}>{resuming === entry.id ? "…" : "RESUME"}</button>
                   )}
-                  <button onClick={() => deleteEntry(entry.id)} disabled={deleting === entry.id} style={{
+                  {canClearAll && <button onClick={() => deleteEntry(entry.id)} disabled={deleting === entry.id} style={{
                     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "4px 10px",
                     border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.red.text,
                     opacity: deleting === entry.id ? 0.5 : 1,
-                  }}>{deleting === entry.id ? "…" : "delete"}</button>
+                  }}>{deleting === entry.id ? "…" : "delete"}</button>}
                   <span onClick={() => setExpanded(isExp ? null : entry.id)} style={{ fontFamily: FONT, fontSize: 16, color: tokens.neutral[300], transform: isExp ? "rotate(180deg)" : "none", transition: "transform 0.18s", display: "inline-block", cursor: "pointer" }}>⌄</span>
                 </div>
               </div>
@@ -325,7 +325,7 @@ export default function ArchiveModal({
           );
         })}
 
-        {deleted.length > 0 && (
+        {canClearAll && deleted.length > 0 && (
           <div style={{ marginTop: 32 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <button

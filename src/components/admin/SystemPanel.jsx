@@ -56,6 +56,7 @@ export default function SystemPanel({
   }, []);
 
   const handleManualSync = async () => {
+    if (!onSyncWines) return;
     setSyncResult("syncing");
     setSyncMsg("");
     try {
@@ -231,16 +232,16 @@ export default function SystemPanel({
       <div>
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 14 }}>Manual Actions</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <button onClick={handleManualSync} disabled={syncResult === "syncing"} style={{
-            fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
-            border: `1px solid ${syncResult === "ok" ? tokens.green.border : syncResult === "err" ? tokens.red.border : tokens.charcoal.default}`,
-            borderRadius: 0, cursor: syncResult === "syncing" ? "not-allowed" : "pointer",
-            background: tokens.neutral[0],
-            color: syncResult === "ok" ? tokens.green.text : syncResult === "err" ? tokens.red.text : tokens.ink[0],
-          }}>
-            {syncResult === "syncing" ? "SYNCING..." : syncResult === "ok" ? "SYNCED" : syncResult === "err" ? "FAILED" : "RESYNC WINES"}
-          </button>
-          {syncMsg && (
+          {onSyncWines && <button onClick={handleManualSync} disabled={syncResult === "syncing"} style={{
+              fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
+              border: `1px solid ${syncResult === "ok" ? tokens.green.border : syncResult === "err" ? tokens.red.border : tokens.charcoal.default}`,
+              borderRadius: 0, cursor: syncResult === "syncing" ? "not-allowed" : "pointer",
+              background: tokens.neutral[0],
+              color: syncResult === "ok" ? tokens.green.text : syncResult === "err" ? tokens.red.text : tokens.ink[0],
+            }}>
+              {syncResult === "syncing" ? "SYNCING..." : syncResult === "ok" ? "SYNCED" : syncResult === "err" ? "FAILED" : "RESYNC CATALOGUE"}
+            </button>}
+          {onSyncWines && syncMsg && (
             <span
               title={syncMsg}
               style={{
@@ -353,11 +354,19 @@ export default function SystemPanel({
         </div>
       </div>
 
-      {/* Wine sync configuration */}
+      {/* External catalogue sync configuration */}
       <div>
-        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 14 }}>Wine Sync Configuration</div>
+        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 14 }}>Catalogue Sync</div>
         <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "16px 18px", background: tokens.ink.bg, display: "flex", flexDirection: "column", gap: 10 }}>
-          <label style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[2] }}>
+          {!safeWineSyncConfig.provider ? (
+            <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2], lineHeight: 1.6, maxWidth: 620 }}>
+              Automated catalogue sync is not configured for this restaurant. Wines and drinks remain restaurant-owned and can be managed manually. A platform operator must assign an approved external source before sync controls appear.
+            </div>
+          ) : <>
+            <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3] }}>
+              Provider: {safeWineSyncConfig.provider}
+            </div>
+            <label style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[2] }}>
             Countries (CSV: SI,AT,IT,FR,HR)
             <input
               value={(safeWineSyncConfig.wineCountries || []).join(",")}
@@ -367,8 +376,8 @@ export default function SystemPanel({
               })}
               style={{ marginTop: 4, width: "100%", fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0 }}
             />
-          </label>
-          <label style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[2] }}>
+            </label>
+            <label style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[2] }}>
             Beverage categories (one per line: label|url|category)
             <textarea
               value={(safeWineSyncConfig.beveragePages || []).map(p => `${p.label}|${p.url}|${p.category}`).join("\n")}
@@ -387,16 +396,17 @@ export default function SystemPanel({
               rows={6}
               style={{ marginTop: 4, width: "100%", fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, resize: "vertical" }}
             />
-          </label>
-          <div>
-            <button
-              onClick={async () => { setSyncConfigSaving(true); try { await onSaveWineSyncConfig?.(); } finally { setSyncConfigSaving(false); } }}
-              disabled={syncConfigSaving}
-              style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: syncConfigSaving ? "not-allowed" : "pointer", background: tokens.neutral[0], color: tokens.ink[0] }}
-            >
-              {syncConfigSaving ? "SAVING..." : "SAVE SYNC CONFIG"}
-            </button>
-          </div>
+            </label>
+            <div>
+              <button
+                onClick={async () => { setSyncConfigSaving(true); try { await onSaveWineSyncConfig?.(); } finally { setSyncConfigSaving(false); } }}
+                disabled={syncConfigSaving}
+                style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: syncConfigSaving ? "not-allowed" : "pointer", background: tokens.neutral[0], color: tokens.ink[0] }}
+              >
+                {syncConfigSaving ? "SAVING..." : "SAVE SYNC CONFIG"}
+              </button>
+            </div>
+          </>}
         </div>
       </div>
 

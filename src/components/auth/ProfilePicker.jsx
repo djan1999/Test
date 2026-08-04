@@ -1,10 +1,9 @@
 import { tokens } from "../../styles/tokens.js";
 import GlobalStyle from "../ui/GlobalStyle.jsx";
+import { PRODUCT_NAME as APP_NAME } from "../../config/product.js";
 
 const FONT = tokens.font;
 const { ink, rule, neutral } = tokens;
-
-const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
 
 const KIND_LABEL = {
   restaurant: "restaurant",

@@ -78,7 +78,7 @@ describe("powersync/writes — board rows (service-scoped)", () => {
     const updates = callsLike("UPDATE");
     expect(updates).toHaveLength(1);
     expect(updates[0].sql).toContain("UPDATE service_tables SET");
-    expect(updates[0].params).toEqual(["svc-1", 3, '{"resName":"Kovač"}', "t1", "ws-1|svc-1|3", "ws-1"]);
+    expect(updates[0].params).toEqual(["svc-1", 3, '{"resName":"Kovač"}', "t1", "ws-1", "ws-1|svc-1|3", "ws-1"]);
     expect(callsLike("INSERT")).toHaveLength(0);
   });
 
@@ -141,7 +141,7 @@ describe("powersync/writes — reservations", () => {
     expect(updates).toHaveLength(1);
     expect(updates[0].sql).toContain("UPDATE reservations SET date = COALESCE(?, date), table_id = COALESCE(?, table_id), data = ?");
     expect(updates[0].sql).not.toContain("created_at");
-    expect(updates[0].params).toEqual(["2026-06-06", 2, '{"resName":"Smith"}', "uuid-1", "ws-1"]);
+    expect(updates[0].params).toEqual(["2026-06-06", 2, '{"resName":"Smith"}', "ws-1", "uuid-1", "ws-1"]);
     expect(callsLike("INSERT")).toHaveLength(0);
   });
 
@@ -154,7 +154,7 @@ describe("powersync/writes — reservations", () => {
     const update = callsLike("UPDATE")[0];
     expect(update.sql).toContain("date = COALESCE(?, date)");
     expect(update.sql).toContain("table_id = COALESCE(?, table_id)");
-    expect(update.params).toEqual([null, null, '{"resName":"Smith"}', "uuid-1", "ws-1"]);
+    expect(update.params).toEqual([null, null, '{"resName":"Smith"}', "ws-1", "uuid-1", "ws-1"]);
   });
 
   it("REGRESSION (08.07): refuses to INSERT a reservation without a date", async () => {
@@ -262,8 +262,8 @@ describe("powersync/writes — service entity lifecycle", () => {
     });
     const updates = callsLike("UPDATE");
     expect(updates).toHaveLength(1);
-    expect(updates[0].sql).toBe("UPDATE services SET status = ?, ended_at = ?, end_reason = ?, updated_at = ? WHERE id = ? AND workspace_id = ?");
-    expect(updates[0].params).toEqual(["ended", "e1", "manual", "u2", "svc-9", "ws-1"]);
+    expect(updates[0].sql).toBe("UPDATE services SET status = ?, ended_at = ?, end_reason = ?, updated_at = ?, workspace_id = ? WHERE id = ? AND workspace_id = ?");
+    expect(updates[0].params).toEqual(["ended", "e1", "manual", "u2", "ws-1", "svc-9", "ws-1"]);
     // The wipe-impossibility pin: ending a service blanks NOTHING.
     expect(h.calls.some((c) => /service_tables/.test(c.sql))).toBe(false);
   });

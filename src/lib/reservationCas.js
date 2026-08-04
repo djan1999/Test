@@ -1,4 +1,5 @@
 import { foldReservationRow } from "../utils/foldReservation.js";
+import { casExhaustedError } from "./casErrors.js";
 
 const asObject = (value) => {
   if (value && typeof value === "object" && !Array.isArray(value)) return value;
@@ -78,5 +79,7 @@ export async function saveReservationWithCas({
     if (saveError) throw saveError;
     if (saved === true) return { row: folded.row, conflicts: folded.conflicts, deleted: false };
   }
-  throw new Error(`Reservation ${id} kept changing while saving; retrying later`);
+  throw casExhaustedError(
+    `Reservation ${id} kept changing while saving; the server's latest reservation was kept.`,
+  );
 }

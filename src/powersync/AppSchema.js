@@ -29,7 +29,15 @@ const services = new Table(
     updated_at: column.text,
     workspace_id: column.text,
   },
-  { indexes: {} },
+  // PATCH uploads need the row's original workspace when an older client did
+  // not stamp workspace_id; DELETE uploads contain only the id.
+  {
+    indexes: {
+      byWorkspaceStarted: ["workspace_id", "started_at"],
+      byWorkspaceStatusEnded: ["workspace_id", "status", "ended_at"],
+    },
+    trackPrevious: true,
+  },
 );
 
 const service_tables = new Table(
@@ -41,7 +49,7 @@ const service_tables = new Table(
     updated_at: column.text,
     workspace_id: column.text,
   },
-  { indexes: {}, trackPrevious: true },
+  { indexes: { byWorkspaceServiceTable: ["workspace_id", "service_id", "table_id"] }, trackPrevious: true },
 );
 
 const service_settings = new Table(
@@ -51,7 +59,7 @@ const service_settings = new Table(
     updated_at: column.text,
     workspace_id: column.text,
   },
-  { indexes: {}, trackPrevious: true },
+  { indexes: { byWorkspace: ["workspace_id"] }, trackPrevious: true },
 );
 
 const reservations = new Table(
@@ -66,7 +74,7 @@ const reservations = new Table(
   // Reservation data is a busy shared document (planner + terrace + service).
   // Its upload fold needs the device's pre-edit ancestor to preserve changes
   // made on another device while this op was offline.
-  { indexes: {}, trackPrevious: true },
+  { indexes: { byWorkspaceDateCreated: ["workspace_id", "date", "created_at"] }, trackPrevious: true },
 );
 
 const menu_courses = new Table(
@@ -127,7 +135,7 @@ const menu_courses = new Table(
     is_active: column.integer,
     workspace_id: column.text,
   },
-  { indexes: {}, trackPrevious: true },
+  { indexes: { byWorkspacePosition: ["workspace_id", "position"] }, trackPrevious: true },
 );
 
 const wines = new Table(
@@ -145,7 +153,7 @@ const wines = new Table(
     source: column.text,
     workspace_id: column.text,
   },
-  { indexes: {}, trackPrevious: true },
+  { indexes: { byWorkspaceName: ["workspace_id", "name"] }, trackPrevious: true },
 );
 
 const beverages = new Table(
@@ -159,7 +167,9 @@ const beverages = new Table(
     source: column.text,
     workspace_id: column.text,
   },
-  { indexes: {} },
+  // Deletes only contain PowerSync's id. Preserve workspace_id so an offline
+  // delete cannot be attributed to whichever restaurant is active later.
+  { indexes: { byWorkspaceCategoryPosition: ["workspace_id", "category", "position"] }, trackPrevious: true },
 );
 
 const service_archive = new Table(
@@ -172,7 +182,14 @@ const service_archive = new Table(
     deleted_at: column.text,
     workspace_id: column.text,
   },
-  { indexes: {} },
+  // Archive soft-delete/purge may upload after a workspace switch.
+  {
+    indexes: {
+      byWorkspaceCreated: ["workspace_id", "created_at"],
+      byWorkspaceDeleted: ["workspace_id", "deleted_at"],
+    },
+    trackPrevious: true,
+  },
 );
 
 export const AppSchema = new Schema({

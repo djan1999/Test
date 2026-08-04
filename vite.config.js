@@ -33,19 +33,32 @@ export default defineConfig({
 
       includeAssets: ['icon.svg', 'logo.svg'],
       manifest: {
-        name: 'Milka Service Board',
-        short_name: 'Milka Board',
+        name: 'Service Board',
+        short_name: 'Service Board',
         description: 'Restaurant service & kitchen management',
         start_url: '/',
         display: 'standalone',
         background_color: '#ffffff',
         theme_color: '#ffffff',
         orientation: 'any',
+        categories: ['productivity', 'food'],
         icons: [
           {
             src: '/icon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
+            purpose: 'any maskable',
+          },
+          {
+            src: '/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+          {
+            src: '/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
             purpose: 'any maskable',
           },
         ],

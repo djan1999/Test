@@ -98,6 +98,44 @@ export default function RestaurantConfigPanel({ config, onSave }) {
         </label>
       </div>
 
+      <div style={{ maxWidth: 760, border: `1px solid ${tokens.ink[4]}`, padding: 14 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={draft.features?.hotelGuests === true}
+            onChange={(event) => setDraft((previous) => ({
+              ...previous,
+              features: {
+                ...(previous.features || {}),
+                hotelGuests: event.target.checked,
+                roomOptions: previous.features?.roomOptions || [],
+              },
+            }))}
+          />
+          <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[1] }}>
+            Enable hotel-guest and room-number fields
+          </span>
+        </label>
+        {draft.features?.hotelGuests && (
+          <label style={{ display: "block", marginTop: 12 }}>
+            <div style={labelStyle}>Room options (comma-separated)</div>
+            <input
+              value={(draft.features?.roomOptions || []).join(",")}
+              onChange={(event) => setDraft((previous) => ({
+                ...previous,
+                features: {
+                  ...(previous.features || {}),
+                  hotelGuests: true,
+                  roomOptions: event.target.value.split(",").map((room) => room.trim()).filter(Boolean),
+                },
+              }))}
+              placeholder="101,102,201"
+              style={{ ...baseInput, width: "100%" }}
+            />
+          </label>
+        )}
+      </div>
+
       <div style={{ maxWidth: 760 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
           <div>

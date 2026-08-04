@@ -8,9 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "test:run": "vitest run",
+    "test:run": "vitest run --maxWorkers=4",
     "check": "npm run test:run && npm run build",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "onboard:restaurant": "node scripts/onboard-restaurant.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

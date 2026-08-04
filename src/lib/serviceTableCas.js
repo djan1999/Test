@@ -1,4 +1,5 @@
 import { foldTableWithMeta } from "../utils/foldTable.js";
+import { casExhaustedError } from "./casErrors.js";
 
 const asObject = (value) => {
   if (value && typeof value === "object") return value;
@@ -109,5 +110,7 @@ export async function saveServiceTableWithCas({
     if (saveError) throw saveError;
     if (saved === true) return { data: merged, conflict: null };
   }
-  throw new Error(`Service table ${id} kept changing while saving; retrying later`);
+  throw casExhaustedError(
+    `Service table ${id} kept changing while saving; the server's latest table was kept.`,
+  );
 }

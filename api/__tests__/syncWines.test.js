@@ -470,6 +470,18 @@ describe("sync-wines handler auth", () => {
     process.env.SUPABASE_SERVICE_KEY = "server-only-key";
     sb.reset({
       workspace_members: { data: { user_id: "user-1", role: "admin" }, error: null },
+      service_settings: {
+        data: {
+          state: {
+            provider: "milka",
+            winesEnabled: false,
+            beveragesEnabled: false,
+            wineCountries: [],
+            beveragePages: [],
+          },
+        },
+        error: null,
+      },
     });
     try {
       await handler(req, res);
@@ -477,6 +489,49 @@ describe("sync-wines handler auth", () => {
       expect(res.payload).toMatchObject({ ok: true, dry: true });
       expect(sb.forTable("workspaces")).toHaveLength(0);
       expect(sb.forTable("workspace_members")[0]._calls).toContainEqual(["eq", "workspace_id", "demo-ws"]);
+    } finally {
+      if (previous.url === undefined) delete process.env.SUPABASE_URL;
+      else process.env.SUPABASE_URL = previous.url;
+      if (previous.key === undefined) delete process.env.SUPABASE_SERVICE_KEY;
+      else process.env.SUPABASE_SERVICE_KEY = previous.key;
+    }
+  });
+
+  it("does not let an Admin nominate Milka's provider from the request body", async () => {
+    const req = {
+      method: "POST",
+      url: "http://localhost/api/sync-wines?dry=true",
+      headers: { authorization: "Bearer user-access-token" },
+      body: {
+        workspaceId: "new-restaurant",
+        config: {
+          provider: "milka",
+          winesEnabled: true,
+          beveragesEnabled: true,
+        },
+      },
+    };
+    const res = {
+      statusCode: 200,
+      payload: null,
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.payload = body; return this; },
+    };
+    const previous = {
+      url: process.env.SUPABASE_URL,
+      key: process.env.SUPABASE_SERVICE_KEY,
+    };
+    process.env.SUPABASE_URL = "https://fake.supabase.co";
+    process.env.SUPABASE_SERVICE_KEY = "server-only-key";
+    sb.reset({
+      workspace_members: { data: { user_id: "user-1", role: "admin" }, error: null },
+      service_settings: { data: null, error: null },
+    });
+    try {
+      await handler(req, res);
+      expect(res.statusCode).toBe(409);
+      expect(res.payload.error).toMatch(/not configured/i);
+      expect(sb.rpcCalls).toHaveLength(0);
     } finally {
       if (previous.url === undefined) delete process.env.SUPABASE_URL;
       else process.env.SUPABASE_URL = previous.url;

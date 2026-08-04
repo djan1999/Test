@@ -14,6 +14,7 @@ import CenteredModal from "../ui/CenteredModal.jsx";
 import { KitchenTicket } from "../kitchen/KitchenBoard.jsx";
 import ServiceBreakdown from "../ServiceBreakdown.jsx";
 import GlobalStyle from "../ui/GlobalStyle.jsx";
+import { PRODUCT_NAME as APP_NAME } from "../../config/product.js";
 import { useFocusChain } from "../../hooks/useFocusChain.js";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
 import "./ReservationManager.css";
@@ -46,7 +47,6 @@ function resolveShortCourseKeys(profiles, assignments) {
 const baseInp = { ...baseInput };
 const fieldLabel = { ...fieldLabelMixin };
 const circBtnSm = { ...circleButton };
-const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
 
 function getResvSession(r) {
   const sess = r.data?.service_session;
@@ -55,7 +55,6 @@ function getResvSession(r) {
   return t && t < "15:00" ? "lunch" : "dinner";
 }
 const SITTING_TIMES = String(import.meta.env.VITE_DEFAULT_SITTING_TIMES || "18:00,18:30,19:00,19:15").split(",").map(s => s.trim()).filter(Boolean);
-const ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "01,11,12,21,22,23").split(",").map(s => s.trim()).filter(Boolean);
 const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
@@ -245,7 +244,7 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Allergy Sheet</title>${ALLERGY_ROBOTO}<style>${css}</style></head><body>${body}</body></html>`;
 }
 
-export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onSwapReservations, onExit, serviceDate, activeServiceSession = "dinner", onSetServiceDate, onOpenArchive, courseQuickNotes = {}, profiles = [], assignments = {}, resolveTableFlag = null }) {
+export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onSwapReservations, onExit, serviceDate, activeServiceSession = "dinner", onSetServiceDate, onOpenArchive, courseQuickNotes = {}, profiles = [], assignments = {}, resolveTableFlag = null, hotelGuestsEnabled = false, roomOptions = [] }) {
   const tableLabel = (tableId) => (tables || []).find((table) => Number(table.id) === Number(tableId))?.displayLabel
     || `T${String(tableId).padStart(2, "0")}`;
   const [weekOffset,  setWeekOffset]  = useState(0);
@@ -448,6 +447,8 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 tables={tables}
                 reservations={reservations}
                 excludeId={null}
+                hotelGuestsEnabled={hotelGuestsEnabled}
+                roomOptions={roomOptions}
                 onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) { setEditingId(null); setDraftFromReservation(null); } }}
                 onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
                 onResolveConflict={async (resvId, newTableId) => {
@@ -565,6 +566,8 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       tables={tables}
                       reservations={reservations}
                       excludeId={r.id}
+                      hotelGuestsEnabled={hotelGuestsEnabled}
+                      roomOptions={roomOptions}
                       onSave={async (row) => { await onUpsert(row); setEditingId(null); setDraftFromReservation(null); }}
                       onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
                       onResolveConflict={async (resvId, newTableId) => {

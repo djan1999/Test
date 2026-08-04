@@ -10,7 +10,7 @@ const courseRows = (tpl) =>
 const gapRows = (tpl) => tpl.rows.filter(r => (r.gap || 0) > 0);
 
 describe("buildDefaultLongMenuTemplate", () => {
-  it("is a v2 template with the house long-menu row count", () => {
+  it("is a v2 template with the neutral long-menu row count", () => {
     const t = buildDefaultLongMenuTemplate();
     expect(t.version).toBe(2);
     expect(t.rows).toHaveLength(23);
@@ -25,17 +25,18 @@ describe("buildDefaultLongMenuTemplate", () => {
     expect(deriveCourseKeysFromTemplate(t)).toEqual([]);
   });
 
-  it("keeps the section gap from the house layout", () => {
+  it("keeps a neutral section gap", () => {
     const gaps = gapRows(buildDefaultLongMenuTemplate());
     expect(gaps).toHaveLength(1);
     expect(gaps[0].gap).toBe(15.5);
   });
 
-  it("preserves the aperitif / optional-pairing drink scaffolding", () => {
+  it("contains no restaurant-specific optional-pairing flags", () => {
     const t = buildDefaultLongMenuTemplate();
     const sources = t.rows.filter(r => r.right?.type === "drinks").map(r => r.right.drinkSource);
     expect(sources.filter(s => s === "aperitif")).toHaveLength(3);
-    expect(sources.filter(s => s === "optional_pairing")).toHaveLength(3);
+    expect(sources.filter(s => s === "optional_pairing")).toHaveLength(0);
+    expect(JSON.stringify(t)).not.toMatch(/crayfish|n_a_champagne|pairingFlag.*beer/i);
   });
 
   it("mints fresh row ids on each call (repeated rebuilds never collide)", () => {
@@ -47,7 +48,7 @@ describe("buildDefaultLongMenuTemplate", () => {
 });
 
 describe("buildDefaultShortMenuTemplate", () => {
-  it("is a v2 template with the house short-menu row count", () => {
+  it("is a v2 template with the neutral short-menu row count", () => {
     const t = buildDefaultShortMenuTemplate();
     expect(t.version).toBe(2);
     expect(t.rows).toHaveLength(18);
