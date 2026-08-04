@@ -409,6 +409,12 @@ select throws_ok(
 );
 
 select is(pg_temp.affected_rows(
+  $$update public.services
+       set status = 'ended', ended_at = now(), end_reason = 'manual', updated_at = now()
+     where id = '30000000-0000-0000-0000-000000000001'$$
+), 0, 'Kitchen cannot end a service');
+
+select is(pg_temp.affected_rows(
   $$update public.service_tables
        set data = '{"courseReady":{"main":true}}', updated_at = now()
      where workspace_id = '20000000-0000-0000-0000-000000000001'
@@ -472,6 +478,45 @@ select is(pg_temp.affected_rows(
        set data = '{"resName":"Cross-tenant"}'
      where id = '40000000-0000-0000-0000-000000000001'$$
 ), 0, 'restaurant B Service cannot mutate a known A reservation id');
+
+-- Admin A again: the purge lifecycle end-to-end. A purge must refuse an
+-- ended-but-untrashed service, and a real purge must cascade through the
+-- composite FK into the service's board rows.
+reset role;
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"10000000-0000-0000-0000-000000000001","role":"authenticated","email":"admin-a@test.invalid"}',
+  true
+);
+
+select is(pg_temp.affected_rows(
+  $$delete from public.services
+     where id = '30000000-0000-0000-0000-000000000004'$$
+), 0, 'Admin cannot purge an ended service that is not in the trash');
+
+select is((
+  select count(*)::integer
+    from public.service_tables
+   where service_id = '30000000-0000-0000-0000-000000000004'
+), 1, 'the ended service still owns a board row before its purge');
+
+select is(pg_temp.affected_rows(
+  $$update public.services
+       set deleted_at = now(), updated_at = now()
+     where id = '30000000-0000-0000-0000-000000000004'$$
+), 1, 'Admin can trash the ended service');
+
+select is(pg_temp.affected_rows(
+  $$delete from public.services
+     where id = '30000000-0000-0000-0000-000000000004'$$
+), 1, 'Admin can purge the trashed service');
+
+select is((
+  select count(*)::integer
+    from public.service_tables
+   where service_id = '30000000-0000-0000-0000-000000000004'
+), 0, 'the purge cascades through the composite FK to the board rows');
 
 reset role;
 select * from finish();

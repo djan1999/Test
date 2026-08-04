@@ -78,6 +78,12 @@ begin
 end;
 $$;
 
+-- On a replay the composite FK below already exists and depends on the UNIQUE
+-- constraint, which would make the next drop fail; release the FK first — it
+-- is recreated a few statements later, so the end state is unchanged.
+alter table public.service_tables
+  drop constraint if exists service_tables_workspace_service_fk;
+
 alter table public.services
   drop constraint if exists services_workspace_id_id_key;
 alter table public.services
