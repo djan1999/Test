@@ -19,15 +19,15 @@
 // scopedFrom() writes used (lib/scopedDb.js COMPOSITE_CONFLICT — verified
 // against the composite primary keys in schema.sql).
 
-import { supabase, getWorkspaceId } from "../lib/supabaseClient.js";
+import { supabase } from "../lib/supabaseClient.js";
 import { POWERSYNC_URL } from "./config.js";
 import { naturalKeyFromLocalId, tableKeyFromLocalId } from "./rowId.js";
-import { saveServiceTableWithCas } from "../lib/serviceTableCas.js";
+import { saveServiceTableWithCas, saveServiceTablesBatchWithCas } from "../lib/serviceTableCas.js";
 import { saveServiceSettingWithCas } from "../lib/serviceSettingCas.js";
 import { isMergeableSettingKey } from "../utils/foldSettingState.js";
 import { recordClientDiagnostic } from "../lib/clientDiagnostics.js";
-import { tableHasServiceContent } from "../utils/tableHelpers.js";
 import { saveReservationWithCas } from "../lib/reservationCas.js";
+import { CAS_EXHAUSTED_CODE } from "../lib/casErrors.js";
 
 // @powersync/common UpdateType values, inlined so this module stays importable
 // without the SDK (unit tests exercise uploadData with mock transactions).
@@ -85,23 +85,43 @@ const KNOWN_TABLES = new Set([
   ...Object.keys(NATURAL_KEY), ...UUID_ID_TABLES, "beverages",
 ]);
 
-// Operational writes are never disposable. A schema/permission error here is
-// an outage to surface and retry, not permission to tell PowerSync the tap was
-// uploaded and silently erase it from the queue.
-const NEVER_DROP_TABLES = new Set([
+// A coordinated deployment can make a missing column/RPC/schema-cache error
+// succeed later, so operational-table ops with those errors stay queued.
+// Deterministic authorization/data/constraint verdicts are diagnosed and
+// completed instead: retrying one forever wedges every later device write.
+const SCHEMA_RETRY_TABLES = new Set([
   "services", "service_tables", "service_settings", "reservations", "service_archive",
 ]);
 
 // Postgres error classes that will fail identically on every retry —
 // constraint violations, bad data, missing columns/permissions, and PostgREST
 // schema-cache errors. Retrying these would wedge the queue forever.
-const PERMANENT_ERROR_CODES = [/^22...$/, /^23...$/, /^42...$/, /^PGRST\d+$/];
+const PERMANENT_ERROR_CODES = [/^22...$/, /^23...$/, /^42...$/, /^PGRST\d+$/, /^MG001$/];
 const isPermanentError = (error) =>
   PERMANENT_ERROR_CODES.some((re) => re.test(String(error?.code || "")));
 
+// These errors cannot become successful by retrying the same local operation.
+// Retrying them behind PowerSync's head-of-line queue blocks both uploads and
+// incoming checkpoints on the device. Deployment/schema errors remain queued
+// so a coordinated backend rollout can still make them succeed later.
+const isSkippableOperationalError = (error) => {
+  const code = String(error?.code || "");
+  return code === "42501" // RLS / insufficient privilege
+    || code === "MG001" // erased guest replay blocked by the database tombstone
+    || /^22...$/.test(code) // invalid data
+    || /^23...$/.test(code); // constraint verdict
+};
+
 // Thrown for ops that can never succeed (unknown table, unusable key) so the
 // drain loop logs + skips them instead of retrying forever.
-class PermanentOpError extends Error {}
+class PermanentOpError extends Error {
+  constructor(message, code = "POWERSYNC_UNUPLOADABLE") {
+    super(message);
+    this.code = code;
+  }
+}
+
+const opIdentity = (op) => ({ table: op.table, op: op.op, id: String(op.id ?? "") });
 
 function convertValue(table, column, value) {
   if (value == null) return value;
@@ -154,16 +174,60 @@ function buildRow(op, workspaceId) {
   return row;
 }
 
-// Resolve which workspace an op belongs to. Rows written locally always carry
-// workspace_id (opData); deletes fall back to the tracked previous values,
-// then to the active workspace. An op with no resolvable workspace is
-// permanently skipped — uploading it unscoped could cross tenants.
-function workspaceForOp(op) {
-  const ws = op.opData?.workspace_id
+function workspaceFromAliasedId(op) {
+  if (!(op.table in NATURAL_KEY) && op.table !== "service_tables") return null;
+  const value = String(op.id ?? "");
+  const cut = value.indexOf("|");
+  return cut > 0 ? value.slice(0, cut) : null;
+}
+
+function boardBatchScope(op) {
+  const workspaceId = op.opData?.workspace_id
     ?? op.previousValues?.workspace_id
-    ?? getWorkspaceId();
-  if (!ws) throw new PermanentOpError("op has no resolvable workspace_id");
-  return ws;
+    ?? workspaceFromAliasedId(op);
+  if (!workspaceId) return null;
+  const parsed = tableKeyFromLocalId(op.id, String(workspaceId));
+  const serviceId = op.opData?.service_id
+    ?? op.previousValues?.service_id
+    ?? parsed.serviceId;
+  if (!serviceId) return null;
+  return `${workspaceId}|${serviceId}`;
+}
+
+// Resolve the workspace from immutable operation evidence only. The selected
+// workspace is deliberately NOT a fallback: it describes the UI now, not the
+// restaurant where an offline operation originated. The local-row lookup
+// preserves legacy PATCHes queued before write-time workspace stamping shipped.
+async function workspaceForOp(op, database) {
+  let ws = op.opData?.workspace_id
+    ?? op.previousValues?.workspace_id
+    ?? workspaceFromAliasedId(op);
+  if (!ws && op.op !== OP_DELETE && database?.getOptional) {
+    const local = await database.getOptional(
+      `SELECT workspace_id FROM ${op.table} WHERE id = ?`,
+      [String(op.id)],
+    );
+    ws = local?.workspace_id || null;
+  }
+  if (!ws) {
+    throw new PermanentOpError(
+      `${op.table} ${op.op} has no provable workspace_id; the operation was not uploaded.`,
+      "POWERSYNC_WORKSPACE_UNKNOWN",
+    );
+  }
+  return String(ws);
+}
+
+async function checkedMutation(query, op) {
+  const projection = NATURAL_KEY[op.table]?.column || "id";
+  const result = await query.select(projection);
+  if (!result?.error && Array.isArray(result?.data) && result.data.length === 0) {
+    throw new PermanentOpError(
+      `${op.table} ${op.op} matched no server row; server truth was kept.`,
+      "POWERSYNC_ZERO_MATCH",
+    );
+  }
+  return result;
 }
 
 // (The finishServicePayload transaction-collapse is GONE. Ending a service is
@@ -195,24 +259,36 @@ async function applyServiceTableWrite(op, ws, row) {
 }
 
 // A MOVE is stored locally as "destination receives the party" + "source is
-// blanked". Upload the claim first. If the destination became occupied on the
-// server, its CAS refuses and the WHOLE gesture is dropped (see uploadData) —
-// the source blank never uploads, so the party stays on its server table and
-// the next checkpoint restores it locally: a refused move simply didn't
-// happen. Stable ordering keeps unrelated operations in their original order.
-function serviceTableClaimsFirst(crud) {
-  const boardWrites = (crud || []).filter((op) => op.table === "service_tables" && op.op !== OP_DELETE);
-  const ids = boardWrites.map((op) => String(op.id));
-  if (new Set(ids).size !== ids.length) return crud; // preserve same-row operation order
-  const priority = (op) => {
-    if (op.table !== "service_tables" || op.op === OP_DELETE) return 1;
-    const data = convertValue("service_tables", "data", op.opData?.data);
-    const hasParty = Boolean(String(data?.resName || "").trim() || String(data?.resTime || "").trim());
-    return tableHasServiceContent(data) || hasParty ? 0 : 2;
-  };
-  return (crud || []).map((op, index) => ({ op, index, priority: priority(op) }))
-    .sort((a, b) => a.priority - b.priority || a.index - b.index)
-    .map(({ op }) => op);
+// blanked" in one SQLite transaction. Fold every distinct board row first,
+// then commit them through one Postgres RPC so a gesture can never be partly
+// acknowledged on the server.
+async function applyServiceTableBatch(ops, database) {
+  const writes = [];
+  let workspaceId = null;
+  let serviceId = null;
+  for (const op of ops) {
+    const ws = await workspaceForOp(op, database);
+    const row = buildRow(op, ws);
+    if (workspaceId && workspaceId !== ws) {
+      throw new PermanentOpError("one board transaction cannot span restaurant workspaces");
+    }
+    if (serviceId && serviceId !== row.service_id) {
+      throw new PermanentOpError("one board transaction cannot span service namespaces");
+    }
+    workspaceId = ws;
+    serviceId = row.service_id;
+    writes.push({
+      tableId: row.table_id,
+      data: row.data ?? {},
+      ancestor: convertValue("service_tables", "data", op.previousValues?.data),
+    });
+  }
+  try {
+    await saveServiceTablesBatchWithCas({ client: supabase, workspaceId, serviceId, writes });
+    return { error: null };
+  } catch (error) {
+    return { error };
+  }
 }
 
 async function applyMergeableSettingWrite(op, ws, row) {
@@ -265,17 +341,25 @@ async function applyReservationWrite(op, ws, row) {
       console.warn(error.message, result.conflicts);
       recordClientDiagnostic("reservation conflict", error);
     }
+    if (result.deleted) {
+      const error = new Error(
+        `Reservation ${op.id} was deleted on another device; the offline edit was not restored.`,
+      );
+      error.code = "POWERSYNC_ROW_GONE";
+      console.warn(error.message);
+      recordClientDiagnostic("reservation edit discarded (row deleted)", error);
+    }
     return { error: null };
   } catch (error) {
     return { error };
   }
 }
 
-async function applyOp(op) {
+async function applyOp(op, database) {
   if (!KNOWN_TABLES.has(op.table)) {
     throw new PermanentOpError(`unknown table: ${op.table}`);
   }
-  const ws = workspaceForOp(op);
+  const ws = await workspaceForOp(op, database);
   const from = supabase.from(op.table);
 
   if (op.op === OP_DELETE) {
@@ -284,7 +368,7 @@ async function applyOp(op) {
       // created locally and its DELETE never maps to a server row.
       const id = Number(op.id);
       if (!Number.isFinite(id)) throw new PermanentOpError(`beverages delete with local-only id: ${op.id}`);
-      return from.delete().match({ id, workspace_id: ws });
+      return checkedMutation(from.delete().match({ id, workspace_id: ws }), op);
     }
     if (op.table === "service_tables") {
       const parsed = tableKeyFromLocalId(op.id, ws);
@@ -293,7 +377,10 @@ async function applyOp(op) {
       if (!serviceId || !Number.isFinite(tableId)) {
         throw new PermanentOpError(`service_tables delete without a resolvable (service, table) key: ${op.id}`);
       }
-      return from.delete().match({ service_id: String(serviceId), table_id: tableId, workspace_id: ws });
+      return checkedMutation(
+        from.delete().match({ service_id: String(serviceId), table_id: tableId, workspace_id: ws }),
+        op,
+      );
     }
     const nat = NATURAL_KEY[op.table];
     if (nat) {
@@ -303,9 +390,12 @@ async function applyOp(op) {
       if (nat.int && !Number.isFinite(Number(key))) {
         throw new PermanentOpError(`non-numeric ${op.table}.${nat.column} key: ${op.id}`);
       }
-      return from.delete().match({ [nat.column]: nat.int ? Number(key) : key, workspace_id: ws });
+      return checkedMutation(
+        from.delete().match({ [nat.column]: nat.int ? Number(key) : key, workspace_id: ws }),
+        op,
+      );
     }
-    return from.delete().match({ id: op.id, workspace_id: ws });
+    return checkedMutation(from.delete().match({ id: op.id, workspace_id: ws }), op);
   }
 
   const row = buildRow(op, ws);
@@ -330,7 +420,7 @@ async function applyOp(op) {
     const numericId = Number(op.id);
     delete row.id;
     if (Number.isFinite(numericId)) {
-      return from.update(row).match({ id: numericId, workspace_id: ws });
+      return checkedMutation(from.update(row).match({ id: numericId, workspace_id: ws }), op);
     }
     return from.insert(row);
   }
@@ -351,10 +441,13 @@ async function applyOp(op) {
     if (nat) {
       const rawKey = row[nat.column] ?? naturalKeyFromLocalId(op.id, ws);
       const key = nat.int ? Number(rawKey) : rawKey;
-      return from.update(row).match({ [nat.column]: key, workspace_id: ws });
+      return checkedMutation(
+        from.update(row).match({ [nat.column]: key, workspace_id: ws }),
+        op,
+      );
     }
     const { id: _rowId, ...cols } = row;
-    return from.update(cols).match({ id: op.id, workspace_id: ws });
+    return checkedMutation(from.update(cols).match({ id: op.id, workspace_id: ws }), op);
   }
 
   // PUT carries the full row — the legacy scopedFrom(table).upsert() shape.
@@ -379,9 +472,26 @@ export class SupabaseConnector {
     const transaction = await database.getNextCrudTransaction();
     if (!transaction) return;
 
-    for (const op of serviceTableClaimsFirst(transaction.crud)) {
+    const crud = transaction.crud || [];
+    const boardWrites = crud.filter((op) => op.table === "service_tables" && op.op !== OP_DELETE);
+    const boardIds = boardWrites.map((op) => String(op.id));
+    const boardScopes = boardWrites.map(boardBatchScope);
+    const batchBoardWrites = boardWrites.length > 1
+      && new Set(boardIds).size === boardIds.length
+      && boardScopes.every(Boolean)
+      && new Set(boardScopes).size === 1;
+    let boardBatchHandled = false;
+
+    for (const op of crud) {
       try {
-        const result = await applyOp(op);
+        let result;
+        if (batchBoardWrites && op.table === "service_tables" && op.op !== OP_DELETE) {
+          if (boardBatchHandled) continue;
+          boardBatchHandled = true;
+          result = await applyServiceTableBatch(boardWrites, database);
+        } else {
+          result = await applyOp(op, database);
+        }
         if (result?.error) {
           if (result.error.code === "MILKA_TABLE_CONFLICT") {
             // The CAS refused this board write: the table changed or became
@@ -391,25 +501,36 @@ export class SupabaseConnector {
             // transient wedged the queue forever, and since checkpoints are
             // never applied over pending uploads, one refused write froze the
             // whole device in BOTH directions (23.07 Demo drill). Accept the
-            // verdict instead: surface it, drop the REST of this gesture
-            // (claims-first ordering puts a move's refused destination before
-            // its source blank, so nothing is ever erased by the drop), and
-            // let the next checkpoint restore server truth locally.
+            // verdict instead: surface it and drop the REST of this gesture.
+            // Multi-row board gestures use one atomic RPC, so a refusal cannot
+            // leave a destination claim or source clear partially applied.
             console.error("[PowerSync] CAS refused board write — dropping the rest of its transaction:", op, result.error.message);
             recordClientDiagnostic("board write refused (newer table kept)", result.error);
             break;
           }
-          if (isPermanentError(result.error) && !NEVER_DROP_TABLES.has(op.table)) {
-            // Will fail on every retry — log the full op and move on rather
+          if (result.error.code === CAS_EXHAUSTED_CODE) {
+            // Four immediate CAS misses indicate hot contention, not a final
+            // user-intent verdict. Keep the transaction pending so PowerSync
+            // retries it with transport-level backoff instead of losing it.
+            console.warn("[PowerSync] compare-and-swap exhausted — retaining transaction for retry:", opIdentity(op), result.error.message);
+            throw result.error;
+          }
+          if (isPermanentError(result.error)
+              && (!SCHEMA_RETRY_TABLES.has(op.table) || isSkippableOperationalError(result.error))) {
+            // Will fail on every retry — log the operation identity and move on rather
             // than wedging the whole queue behind it.
-            console.error("[PowerSync] permanent upload failure — skipping op:", op, result.error);
+            console.error("[PowerSync] permanent upload failure — skipping op:", opIdentity(op), result.error);
+            recordClientDiagnostic(`${op.table} upload rejected`, result.error);
+            if (op.table === "service_tables") break;
             continue;
           }
           throw result.error; // transient → engine retries with backoff
         }
       } catch (e) {
         if (e instanceof PermanentOpError) {
-          console.error("[PowerSync] unuploadable op — skipping:", op, e.message);
+          console.error("[PowerSync] unuploadable op — skipping:", opIdentity(op), e.message);
+          recordClientDiagnostic(`${op.table} operation skipped`, e);
+          if (op.table === "service_tables") break;
           continue;
         }
         // Network/transient failure: rethrow WITHOUT completing so PowerSync

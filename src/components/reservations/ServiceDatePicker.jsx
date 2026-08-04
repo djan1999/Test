@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
+import { PRODUCT_NAME } from "../../config/product.js";
 
 const FONT = tokens.font;
 const { ink, rule, neutral, green, charcoal, tint } = tokens;
@@ -8,7 +9,7 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const toLocalDateISO = (date = new Date()) =>
   `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
-export default function ServiceDatePicker({ defaultDate, defaultSession, onConfirm, onCancel, reservations = [], appName = "MILKA" }) {
+export default function ServiceDatePicker({ defaultDate, defaultSession, onConfirm, onCancel, reservations = [], appName = PRODUCT_NAME }) {
   const todayStr = toLocalDateISO();
   const [selected, setSelected] = useState(defaultDate || todayStr);
   const [session, setSession] = useState(defaultSession || "dinner");

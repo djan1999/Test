@@ -2,13 +2,14 @@ import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
 
-// ── InventoryPanel — Wine & beverage sync from hotel website ──
+// ── InventoryPanel — optional restaurant-scoped catalogue sync ──
 export default function InventoryPanel({ onSyncWines, wines = [] }) {
   const [status, setStatus] = useState(null);
   const [msg, setMsg] = useState("");
   const [lastSync, setLastSync] = useState(null);
 
   const handleSync = async () => {
+    if (!onSyncWines) return;
     setStatus("syncing"); setMsg("");
     try {
       const r = await onSyncWines();
@@ -37,14 +38,16 @@ export default function InventoryPanel({ onSyncWines, wines = [] }) {
 
       {/* Sync trigger */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
-        <button onClick={handleSync} disabled={status === "syncing"} style={{
+        {onSyncWines ? <button onClick={handleSync} disabled={status === "syncing"} style={{
           fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "10px 20px",
           border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0,
           cursor: status === "syncing" ? "not-allowed" : "pointer",
           background: tokens.neutral[0], color: tokens.ink[0],
         }}>
           {status === "syncing" ? "SYNCING..." : "SYNC WINES & BEVERAGES"}
-        </button>
+        </button> : <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2], lineHeight: 1.5 }}>
+          No automated source is configured. Manage this restaurant's catalogue manually.
+        </span>}
         {msg && <span style={{ fontFamily: FONT, fontSize: 10, color: status === "ok" ? tokens.green.text : tokens.red.text }}>{msg}</span>}
       </div>
 

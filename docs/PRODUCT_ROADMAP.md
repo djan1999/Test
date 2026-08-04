@@ -6,6 +6,21 @@
 > / POS. That decision keeps the work to "wrap the existing app as a product"
 > rather than a rewrite.
 
+## Pilot-hardening update (04.08.2026)
+
+The controlled-pilot foundation is now implemented on the readiness branch:
+neutral runtime restaurant identity and PWA metadata, opt-in catalogue sync,
+hotel fields behind workspace configuration, action-specific RLS roles, a
+tenant composite FK, PowerSync ownership/queue diagnostics, an idempotent
+operator onboarding command, local query indexes, and Admin workspace
+export/exact-name guest erasure.
+
+This does **not** make the product self-serve or automatically launch-ready.
+Billing, setup wizard, broader localization, legal terms/DPAs, approved
+retention periods, proven backup restoration, real-Postgres policy execution,
+and physical tablet drills remain open. `PILOT_ROLLOUT.md` is the authoritative
+gate; the phases below remain the longer-term product roadmap.
+
 ## Where we already are (the good news)
 
 The hard multi‑tenant plumbing exists and looks solid:
@@ -36,8 +51,8 @@ a second customer gets Milka's data and branding.
 
 | # | Task | Where | Effort |
 |---|------|-------|--------|
-| 0.1 | **Product name & branding off build‑time env.** `VITE_APP_NAME=MILKA`, `manifest.webmanifest`, `index.html`, README all bake "Milka". Pick a product name; make restaurant name/title/colors **per‑workspace runtime settings**, not env. | `env.example`, `public/manifest.webmanifest`, `index.html`, `src/styles/*` | M |
-| 0.2 | **Generic wine/beverage import.** `api/sync-wines.js` scrapes `vinska-karta.hotelmilka.si`, hardcodes countries, resolves `slug="milka"`, writes only Milka. Replace as the core path with **CSV/manual import** in the Drinks admin (the editor already supports manual rows). Keep the scrape as an optional per‑tenant "custom integration," not the default. | `api/sync-wines.js`, `src/components/admin/DrinksPanel.jsx` | L |
+| 0.1 | **Pilot baseline complete; product identity still needs approval.** Neutral shell fallbacks and one generated PWA manifest are in place; restaurant name/subtitle/logo are workspace data. Final product name/colors remain a commercial design decision. | `env.example`, `vite.config.js`, `index.html`, `src/config/product.js` | S remaining |
+| 0.2 | **Pilot safety complete; generic import remains later.** Manual catalogues are the default and automation is disabled unless an operator assigns a provider. The Milka scrape remains an explicit Milka-only integration; CSV import is still a product enhancement. | `api/sync-wines.js`, `src/components/admin/DrinksPanel.jsx` | M remaining |
 | 0.3 | **Neutral menu defaults.** "Rebuild from courses" now bakes in Milka's layout incl. Milka pairing flags (`crayfish`, `n_a_champagne`, `beer`) in `buildDefaultLong/ShortMenuTemplate`. Make the default a neutral N‑course skeleton (or a setup wizard that asks course count), with Milka's as a selectable template. | `src/utils/menuTemplateSchema.js` | M |
 | 0.4 | **Configurable floor plan.** DB hard‑caps tables: `service_tables.table_id CHECK (1..10)`. Make the table set per‑workspace (count + names/zones) stored in workspace settings; relax/replace the constraint. | `schema.sql`, board init in `src/App.jsx` | M |
 | 0.5 | **PowerSync instance config.** URL is baked in `config.js`. Confirm one shared instance is acceptable for early tenants (it is — sync rules isolate per workspace) and document capacity triggers for a second instance. | `src/powersync/config.js` | S |
@@ -90,7 +105,7 @@ this is sharper than typical SaaS compliance. Supabase is already EU (`eu‑cent
 | 3.1 | **Formal security review** | Run `/security-review`; audit RLS on every table for cross‑tenant leaks. | M |
 | 3.2 | **Remove client‑exposed secrets — COMPLETE** | Manual catalog sync now verifies the signed-in owner server-side; cron secrets never enter the browser bundle. | S |
 | 3.3 | **Legal docs** | Privacy Policy, Terms, and a **DPA** (you're a *processor*; the restaurant is *controller*). Needs a lawyer. | M (+legal) |
-| 3.4 | **Data lifecycle** | Per‑workspace **export & delete**, retention policy for reservations/allergy data, breach process. | M |
+| 3.4 | **Data lifecycle** | Admin workspace export and exact-name guest erasure are implemented for the pilot. Controller-approved retention periods, scheduled lifecycle, broader request workflow, and breach process remain. | M |
 | 3.5 | **Backups** | Supabase PITR (paid tier) + a tested restore runbook. | S |
 
 **Exit criteria:** RLS audited clean, no secrets in the bundle, legal pages live,
@@ -104,7 +119,7 @@ data export/delete works, backups verified.
 |---|------|-------|--------|
 | 4.1 | **Invite / remove staff** | Email invite → accept → membership; remove member; transfer ownership. | M |
 | 4.2 | **Password reset UI** | Wire Supabase reset flow. | S |
-| 4.3 | **Roles → permissions** | The schema reserves `owner`/`staff`, but polishing currently grants every explicit member full access. Later add manager/server/kitchen and gate menu editing vs service operation. | M |
+| 4.3 | **Roles → permissions — pilot complete** | `admin`, `service`, and `kitchen` are enforced in UI and Postgres RLS; executable pgTAP coverage is included. Future products may add manager/owner variants. | S future |
 
 ---
 
@@ -145,10 +160,10 @@ legal (3.3) is calendar‑bound on an external lawyer, so start it early.
 
 ## De‑Milka hardcoding checklist (quick reference)
 
-- [ ] `api/sync-wines.js` — Milka URL, countries, `slug="milka"`, single‑workspace cron
-- [ ] `src/utils/menuTemplateSchema.js` — Milka pairing flags in baked defaults
+- [x] `api/sync-wines.js` — Milka source is opt-in and cron-only; new tenants are inert
+- [x] `src/utils/menuTemplateSchema.js` — new/rebuilt defaults contain no Milka pairing flags
 - [ ] `src/powersync/config.js` — baked instance URL (acceptable, document it)
-- [ ] `env.example` — `VITE_APP_NAME=MILKA`, default titles, room/sitting options
-- [ ] `public/manifest.webmanifest`, `index.html` — name/branding
+- [x] `env.example` — neutral app defaults; hotel fields off unless configured
+- [x] `vite.config.js`, `index.html` — single neutral generated manifest and shell title
 - [ ] `schema.sql` — `service_tables.table_id` 1..10 constraint
-- [ ] `README.md` — "Milka", manual onboarding instructions
+- [x] `README.md` — controlled onboarding command and pilot gate documented

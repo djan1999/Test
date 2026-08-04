@@ -20,6 +20,10 @@ const settingCas = fs.readFileSync(
   path.join(ROOT, "supabase/migrations/20260720190556_service_settings_cas.sql"),
   "utf8",
 );
+const pilotHardening = fs.readFileSync(
+  path.join(ROOT, "supabase/migrations/20260804103132_pilot_role_hardening.sql"),
+  "utf8",
+);
 const schema = fs.readFileSync(path.join(ROOT, "schema.sql"), "utf8");
 const app = fs.readFileSync(path.join(ROOT, "src/App.jsx"), "utf8");
 const syncApi = fs.readFileSync(path.join(ROOT, "api/sync-wines.js"), "utf8");
@@ -48,6 +52,18 @@ describe("database migration contracts", () => {
       expect(source).toContain("reservation.data is not distinct from");
       expect(source).toContain("revoke all on function public.save_reservation_if_current");
       expect(source).toContain("to authenticated, service_role");
+    }
+  });
+
+  it("keeps atomic board gestures, erasure, tenant immutability, and fail-closed RLS in bootstrap parity", () => {
+    expect(schema.replace(/\r\n/g, "\n").endsWith(pilotHardening.replace(/\r\n/g, "\n"))).toBe(true);
+    for (const source of [pilotHardening, schema]) {
+      expect(source).toContain("save_service_tables_batch_if_current");
+      expect(source).toContain("using errcode = '40001'");
+      expect(source).toContain("guard_workspace_id_immutable");
+      expect(source).toContain("erase_workspace_guest");
+      expect(source).toContain("privacy_guest_erasures");
+      expect(source).not.toContain("raise log 'rls_auto_enable failed");
     }
   });
 

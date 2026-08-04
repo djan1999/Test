@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
+import { PRODUCT_NAME } from "../../config/product.js";
 
 const FONT = tokens.font;
 const { ink, rule, neutral, green, red, charcoal, tint } = tokens;
 
 export default function Header({
-  appName = "MILKA",
+  appName = PRODUCT_NAME,
   modeLabel,
   showAddRes = false,
   showSummary = false,

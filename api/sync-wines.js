@@ -13,6 +13,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit, safeSecretEqual, setPrivateResponseHeaders } from "./_security.js";
 
 // Vercel function timeout — the scrape can take 30-45 s for 15 pages.
 // Default is 10 s on Hobby/Pro, which is why the sync was timing out.
@@ -70,7 +71,9 @@ const BEVERAGE_PAGES = [
   { url: `${BASE}/category/likerji`,      category: "spirit",   label: "Liqueur"         },
 ];
 
-const DEFAULT_SYNC_CONFIG = {
+const MILKA_SYNC_PROVIDER = "milka";
+const MILKA_SYNC_CONFIG = {
+  provider: MILKA_SYNC_PROVIDER,
   winesEnabled: true,
   beveragesEnabled: true,
   wineCountries: ["SI", "AT", "IT", "FR", "HR"],
@@ -86,6 +89,16 @@ const DEFAULT_SYNC_CONFIG = {
     { category: "spirit", label: "Other", url: `${BASE}/category/other-ostalo` },
     { category: "spirit", label: "Liqueur", url: `${BASE}/category/likerji` },
   ],
+};
+
+// Missing configuration must be inert. Automated catalogue sources are
+// assigned deliberately per restaurant; they are never inherited from Milka.
+const DISABLED_SYNC_CONFIG = {
+  provider: null,
+  winesEnabled: false,
+  beveragesEnabled: false,
+  wineCountries: [],
+  beveragePages: [],
 };
 
 export function parseSyncConfigFromRequestUrl(reqUrl) {
@@ -106,19 +119,28 @@ export function isAuthorizedSyncSecret(provided) {
   const syncSecret = String(process.env.SYNC_SECRET || "").trim();
   if (!cronSecret && !syncSecret) return false;
   return Boolean(
-    (cronSecret.length > 0 && provided === cronSecret) ||
-      (syncSecret.length > 0 && provided === syncSecret)
+    safeSecretEqual(provided, cronSecret) || safeSecretEqual(provided, syncSecret)
   );
 }
 
 function normalizeSyncConfig(raw) {
   const cfg = raw && typeof raw === "object" ? raw : {};
+  const legacyMilkaSource = Array.isArray(cfg.beveragePages) && cfg.beveragePages.some((page) => {
+    try {
+      return /(^|\.)hotelmilka\.si$/i.test(new URL(String(page?.url || "")).hostname);
+    } catch {
+      return false;
+    }
+  });
+  const provider = cfg.provider === MILKA_SYNC_PROVIDER || legacyMilkaSource
+    ? MILKA_SYNC_PROVIDER
+    : null;
   const normalizeCountries = () => {
-    const source = Array.isArray(cfg.wineCountries) ? cfg.wineCountries : DEFAULT_SYNC_CONFIG.wineCountries;
+    const source = Array.isArray(cfg.wineCountries) ? cfg.wineCountries : [];
     return source.map(v => String(v || "").trim().toUpperCase()).filter(Boolean);
   };
   const normalizePages = () => {
-    const source = Array.isArray(cfg.beveragePages) ? cfg.beveragePages : DEFAULT_SYNC_CONFIG.beveragePages;
+    const source = Array.isArray(cfg.beveragePages) ? cfg.beveragePages : [];
     return source
       .map((p) => ({
         category: String(p?.category || "").trim().toLowerCase(),
@@ -128,8 +150,9 @@ function normalizeSyncConfig(raw) {
       .filter((p) => p.category && p.label && p.url);
   };
   return {
-    winesEnabled: cfg.winesEnabled !== false,
-    beveragesEnabled: cfg.beveragesEnabled !== false,
+    provider,
+    winesEnabled: provider === MILKA_SYNC_PROVIDER && cfg.winesEnabled === true,
+    beveragesEnabled: provider === MILKA_SYNC_PROVIDER && cfg.beveragesEnabled === true,
     wineCountries: normalizeCountries(),
     beveragePages: normalizePages(),
   };
@@ -273,6 +296,12 @@ async function fetchBeveragePage({ url, category, label }) {
 }
 
 export default async function handler(req, res) {
+  setPrivateResponseHeaders(res);
+  const rate = checkRateLimit(req, { scope: "catalog-sync", limit: 20, windowMs: 10 * 60 * 1000 });
+  if (!rate.allowed) {
+    res.setHeader?.("Retry-After", String(rate.retryAfterSeconds));
+    return res.status(429).json({ error: "Too many catalogue sync requests. Wait and retry." });
+  }
   const startedAt = Date.now();
   const requestId = req.headers["x-vercel-id"] || req.headers["x-request-id"] || null;
   const log = (level, event, details = {}) => {
@@ -378,17 +407,35 @@ export default async function handler(req, res) {
       WORKSPACE_ID = milkaWs.id;
     }
 
-    const { data: syncSettingsRow } = await supabase
+    const { data: syncSettingsRow, error: syncSettingsError } = await supabase
       .from("service_settings")
       .select("state")
       .eq("id", "wine_sync_config")
       .eq("workspace_id", WORKSPACE_ID)
       .maybeSingle();
-    let configFromRequest = parseSyncConfigFromRequestUrl(req.url);
-    if (requestBody.config && typeof requestBody.config === "object") configFromRequest = requestBody.config;
+    if (syncSettingsError) {
+      throw new Error(`Could not read catalogue sync configuration: ${syncSettingsError.message}`);
+    }
+    // Only a server-secret invocation may override persisted settings. A
+    // browser request is authorized by membership, but must not be able to
+    // nominate Milka's private source for an unconfigured restaurant.
+    let configFromRequest = serverAuthorized ? parseSyncConfigFromRequestUrl(req.url) : null;
+    if (serverAuthorized && requestBody.config && typeof requestBody.config === "object") {
+      configFromRequest = requestBody.config;
+    }
+    const fallbackConfig = requestingUserId ? DISABLED_SYNC_CONFIG : MILKA_SYNC_CONFIG;
     const syncConfig = normalizeSyncConfig(
-      configFromRequest !== null ? configFromRequest : (syncSettingsRow?.state || DEFAULT_SYNC_CONFIG)
+      configFromRequest !== null ? configFromRequest : (syncSettingsRow?.state || fallbackConfig)
     );
+    if (!syncConfig.provider) {
+      log("warn", "catalog_sync_denied", {
+        reason: "provider_not_configured",
+        workspaceId: WORKSPACE_ID,
+      });
+      return res.status(409).json({
+        error: "Automated catalogue sync is not configured for this restaurant.",
+      });
+    }
     const enabledWineCountries = WINE_COUNTRIES.filter((c) => syncConfig.wineCountries.includes(String(c.label || "").toUpperCase()));
     const enabledBeveragePages = BEVERAGE_PAGES.filter((page) => {
       const normalizedUrl = canonicalBeverageUrl(page.url);

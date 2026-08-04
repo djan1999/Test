@@ -143,6 +143,8 @@ export default function TableSheet({
   onOpenTicket,
   onClearTable,
   onEditBooking,
+  hotelGuestsEnabled = false,
+  roomOptions = [],
 }) {
   const isMobile = useIsMobile(TABLE_SHEET_BP);
   const [toast, setToast] = useState(null);
@@ -921,6 +923,8 @@ export default function TableSheet({
       {bookingOpen && (
         <BookingEditModal
           table={table}
+          hotelGuestsEnabled={hotelGuestsEnabled}
+          roomOptions={roomOptions}
           onCancel={() => setBookingOpen(false)}
           onSave={async (patch) => {
             const r = await onEditBooking?.(patch);

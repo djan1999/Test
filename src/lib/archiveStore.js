@@ -114,9 +114,10 @@ export function archiveSetAllDeleted(deletedAt) {
       const { setAllArchivesDeleted } = await import("../powersync/writes.js");
       await setAllArchivesDeleted(deletedAt);
       const { getPowerSync } = await import("../powersync/system.js");
+      const workspaceId = getWorkspaceId();
       await getPowerSync().execute(
-        "UPDATE services SET deleted_at = ?, updated_at = ? WHERE workspace_id = ? AND status = 'ended' AND deleted_at IS NULL",
-        [deletedAt, new Date().toISOString(), getWorkspaceId()],
+        "UPDATE services SET deleted_at = ?, updated_at = ?, workspace_id = ? WHERE workspace_id = ? AND status = 'ended' AND deleted_at IS NULL",
+        [deletedAt, new Date().toISOString(), workspaceId, workspaceId],
       );
     } else {
       const legacy = await scopedFrom(TABLES.SERVICE_ARCHIVE)

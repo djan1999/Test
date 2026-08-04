@@ -121,4 +121,19 @@ describe("createWriteQueue", () => {
     expect(localStorage.getItem(storageKey)).toBeNull();
     firstPage.drop("ws-a\u0000res-1");
   });
+
+  it("drops a database-rejected erased-guest replay instead of retrying forever", async () => {
+    const q = createWriteQueue(async () => {
+      const error = new Error("guest was erased");
+      error.code = "MG001";
+      throw error;
+    }, {
+      shouldRetainError: (error) => error.code !== "MG001",
+    });
+
+    const result = await q.save("reservation", { resName: "Erase Me" });
+
+    expect(result.ok).toBe(false);
+    expect(q.pending()).toEqual([]);
+  });
 });

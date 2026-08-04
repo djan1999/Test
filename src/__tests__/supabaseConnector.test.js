@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 const h = vi.hoisted(() => ({
   calls: [],
   errorFor: () => null,
+  affectedRowsFor: () => [{ id: "matched" }],
   workspaceId: "ws-active",
   session: { access_token: "tok-1" },
   remoteServiceTable: null,
@@ -13,6 +14,7 @@ const h = vi.hoisted(() => ({
   remoteServiceSetting: null,
   remoteReservation: null,
   rpcResponses: {},
+  localWorkspaceByKey: {},
 }));
 
 vi.mock("../lib/supabaseClient.js", () => ({
@@ -21,7 +23,14 @@ vi.mock("../lib/supabaseClient.js", () => ({
       const record = (op, extra) => {
         const call = { table, op, ...extra };
         h.calls.push(call);
-        return Promise.resolve({ error: h.errorFor(call) });
+        const response = () => Promise.resolve({
+          data: h.affectedRowsFor(call),
+          error: h.errorFor(call),
+        });
+        return {
+          select: (columns) => { call.select = columns; return response(); },
+          then: (resolve, reject) => response().then(resolve, reject),
+        };
       };
       const filters = {};
       const read = {
@@ -63,7 +72,14 @@ import { SupabaseConnector } from "../powersync/SupabaseConnector.js";
 import { recordClientDiagnostic } from "../lib/clientDiagnostics.js";
 
 const makeTx = (crud) => ({ crud, complete: vi.fn(async () => {}) });
-const makeDb = (tx) => ({ getNextCrudTransaction: async () => tx });
+const makeDb = (tx) => ({
+  getNextCrudTransaction: async () => tx,
+  getOptional: async (sql, params) => {
+    const table = /FROM\s+([a-z_]+)/i.exec(sql)?.[1] || "";
+    const workspace_id = h.localWorkspaceByKey[`${table}|${String(params?.[0] ?? "")}`];
+    return workspace_id ? { workspace_id } : null;
+  },
+});
 
 const put = (table, id, opData) => ({ op: "PUT", table, id, opData });
 const patch = (table, id, opData) => ({ op: "PATCH", table, id, opData });
@@ -72,6 +88,7 @@ const del = (table, id, previousValues) => ({ op: "DELETE", table, id, previousV
 beforeEach(() => {
   h.calls = [];
   h.errorFor = () => null;
+  h.affectedRowsFor = () => [{ id: "matched" }];
   h.workspaceId = "ws-active";
   h.session = { access_token: "tok-1" };
   h.remoteServiceTable = null;
@@ -79,6 +96,7 @@ beforeEach(() => {
   h.remoteServiceSetting = null;
   h.remoteReservation = null;
   h.rpcResponses = {};
+  h.localWorkspaceByKey = {};
   h.rpcData = null;
   vi.restoreAllMocks();
 });
@@ -88,9 +106,11 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     // Entity model: an offline device's late END is a single-row status flip
     // addressed by the OLD service's uuid. There is no transaction-collapse
     // RPC and no blanking op left; the newer live service cannot be touched.
+    h.workspaceId = "ws-b";
+    h.localWorkspaceByKey["services|svc-old"] = "ws-a";
     const tx = makeTx([patch("services", "svc-old", {
       status: "ended", ended_at: "2026-07-22T23:00:00Z", end_reason: "manual",
-      updated_at: "2026-07-22T23:00:00Z", workspace_id: "ws-a",
+      updated_at: "2026-07-22T23:00:00Z",
     })]);
     await new SupabaseConnector().uploadData(makeDb(tx));
 
@@ -191,7 +211,7 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     ]);
   });
 
-  it("uploads a MOVE destination first and keeps the source when that destination became occupied", async () => {
+  it("refuses an entire atomic MOVE when its destination became occupied", async () => {
     const blank = { id: 7, active: false, resName: "", resTime: "", seats: [] };
     const alphaAtSource = { id: 3, active: true, resName: "ALPHA", resTime: "19:00", seats: [] };
     const alphaAtDestination = { ...alphaAtSource, id: 7 };
@@ -212,7 +232,6 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
       }),
       previousValues: { workspace_id: "ws-a", data: JSON.stringify(blank) },
     };
-    // Deliberately source-first: the connector must reorder this safely.
     const tx = makeTx([sourceBlank, destinationClaim]);
 
     // REGRESSION (23.07): this refusal used to rethrow as transient, so the
@@ -223,10 +242,64 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     vi.mocked(recordClientDiagnostic).mockClear();
     await new SupabaseConnector().uploadData(makeDb(tx));
 
-    // Only the destination's CAS read ran — no overwrite, no source clear RPC.
+    // The fold refuses before the atomic batch RPC: neither row is changed.
     expect(h.calls.filter((c) => c.op === "rpc")).toHaveLength(0);
     expect(tx.complete).toHaveBeenCalledTimes(1);
     expect(recordClientDiagnostic).toHaveBeenCalledTimes(1);
+  });
+
+  it("commits both sides of a MOVE through one atomic batch RPC", async () => {
+    const source = { id: 3, active: true, resName: "ALPHA", resTime: "19:00", seats: [] };
+    const destination = { id: 7, active: false, resName: "", resTime: "", seats: [] };
+    const sourceBlank = { ...destination, id: 3 };
+    const destinationClaim = { ...source, id: 7 };
+    h.remoteServiceTables = {
+      3: { data: source, updated_at: "2026-07-20T18:00:00.000Z" },
+      7: { data: destination, updated_at: "2026-07-20T18:00:01.000Z" },
+    };
+    const tx = makeTx([
+      {
+        ...patch("service_tables", "ws-a|svc-1|3", {
+          service_id: "svc-1", table_id: 3, data: JSON.stringify(sourceBlank), workspace_id: "ws-a",
+        }),
+        previousValues: { workspace_id: "ws-a", data: JSON.stringify(source) },
+      },
+      {
+        ...patch("service_tables", "ws-a|svc-1|7", {
+          service_id: "svc-1", table_id: 7, data: JSON.stringify(destinationClaim), workspace_id: "ws-a",
+        }),
+        previousValues: { workspace_id: "ws-a", data: JSON.stringify(destination) },
+      },
+    ]);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    const calls = h.calls.filter((call) => call.name === "save_service_tables_batch_if_current");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].payload.p_rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ table_id: 3, data: expect.objectContaining({ resName: "" }) }),
+      expect.objectContaining({ table_id: 7, data: expect.objectContaining({ resName: "ALPHA" }) }),
+    ]));
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not batch unrelated board rows from different services", async () => {
+    const tx = makeTx([
+      patch("service_tables", "ws-a|svc-1|3", {
+        service_id: "svc-1", table_id: 3, data: "{}", workspace_id: "ws-a",
+      }),
+      patch("service_tables", "ws-a|svc-2|7", {
+        service_id: "svc-2", table_id: 7, data: "{}", workspace_id: "ws-a",
+      }),
+    ]);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls.filter((call) => call.name === "save_service_tables_batch_if_current"))
+      .toHaveLength(0);
+    expect(h.calls.filter((call) => call.name === "save_service_table_if_current"))
+      .toHaveLength(2);
+    expect(tx.complete).toHaveBeenCalledTimes(1);
   });
 
   it("REGRESSION (23.07): a concurrent-clear refusal completes the transaction instead of freezing the device", async () => {
@@ -478,12 +551,12 @@ describe("SupabaseConnector.uploadData — beverages (server-generated identity)
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const tx = makeTx([
       del("beverages", "local-uuid"),
-      del("beverages", "42"),
+      del("beverages", "42", { workspace_id: "ws-a" }),
     ]);
     await new SupabaseConnector().uploadData(makeDb(tx));
     expect(h.calls).toHaveLength(1);
     expect(h.calls[0].op).toBe("delete");
-    expect(h.calls[0].match).toEqual({ id: 42, workspace_id: "ws-active" });
+    expect(h.calls[0].match).toEqual({ id: 42, workspace_id: "ws-a" });
     expect(errSpy).toHaveBeenCalled();
     expect(tx.complete).toHaveBeenCalledTimes(1);
   });
@@ -496,18 +569,30 @@ describe("SupabaseConnector.uploadData — deletes", () => {
     await new SupabaseConnector().uploadData(makeDb(tx));
     expect(h.calls[0].op).toBe("delete");
     expect(h.calls[0].match).toEqual({ key: "old-key", workspace_id: "ws-previous" });
+    expect(h.calls[0].select).toBe("key");
   });
 
-  it("menu_courses DELETE without previousValues falls back to op id + active workspace", async () => {
-    const tx = makeTx([del("menu_courses", "9")]);
+  it("menu_courses DELETE derives workspace from its aliased local id, never the active workspace", async () => {
+    const tx = makeTx([del("menu_courses", "ws-origin|9")]);
     await new SupabaseConnector().uploadData(makeDb(tx));
-    expect(h.calls[0].match).toEqual({ position: 9, workspace_id: "ws-active" });
+    expect(h.calls[0].match).toEqual({ position: 9, workspace_id: "ws-origin" });
+    expect(h.calls[0].select).toBe("position");
   });
 
   it("reservations DELETE matches on uuid id + workspace", async () => {
     const tx = makeTx([del("reservations", "uuid-9", { workspace_id: "ws-a" })]);
     await new SupabaseConnector().uploadData(makeDb(tx));
     expect(h.calls[0].match).toEqual({ id: "uuid-9", workspace_id: "ws-a" });
+  });
+
+  it("a UUID DELETE without tracked workspace is skipped instead of using the active restaurant", async () => {
+    h.workspaceId = "ws-wrong";
+    vi.mocked(recordClientDiagnostic).mockClear();
+    const tx = makeTx([del("services", "svc-old")]);
+    await new SupabaseConnector().uploadData(makeDb(tx));
+    expect(h.calls).toHaveLength(0);
+    expect(recordClientDiagnostic).toHaveBeenCalledTimes(1);
+    expect(tx.complete).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -545,12 +630,51 @@ describe("SupabaseConnector.uploadData — error policy", () => {
     expect(tx.complete).not.toHaveBeenCalled();
   });
 
+  it("an RLS-denied operational write is surfaced and skipped instead of wedging the device", async () => {
+    h.errorFor = () => ({ code: "42501", message: "new row violates row-level security policy" });
+    vi.mocked(recordClientDiagnostic).mockClear();
+    const tx = makeTx([patch("services", "svc-old", {
+      status: "ended", workspace_id: "ws-a",
+    })]);
+    await new SupabaseConnector().uploadData(makeDb(tx));
+    expect(recordClientDiagnostic).toHaveBeenCalledTimes(1);
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("a zero-row PATCH is diagnosed and completed instead of silently vanishing", async () => {
+    h.affectedRowsFor = () => [];
+    vi.mocked(recordClientDiagnostic).mockClear();
+    const tx = makeTx([patch("services", "gone", {
+      status: "ended", workspace_id: "ws-a",
+    })]);
+    await new SupabaseConnector().uploadData(makeDb(tx));
+    expect(recordClientDiagnostic).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordClientDiagnostic).mock.calls[0][1]).toMatchObject({
+      code: "POWERSYNC_ZERO_MATCH",
+    });
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("CAS exhaustion retains the transaction for PowerSync backoff", async () => {
+    h.rpcResponses.save_service_setting_if_current = [false, false, false, false];
+    h.remoteServiceSetting = { state: {}, updated_at: "t" };
+    vi.mocked(recordClientDiagnostic).mockClear();
+    const tx = makeTx([patch("service_settings", "ws-a|floor_status_v1", {
+      id: "floor_status_v1", state: "{}", workspace_id: "ws-a",
+    })]);
+    await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toMatchObject({
+      code: "MILKA_CAS_EXHAUSTED",
+    });
+    expect(tx.complete).not.toHaveBeenCalled();
+  });
+
   it("unknown tables are skipped as permanent", async () => {
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const tx = makeTx([put("not_a_table", "1", { workspace_id: "ws-a" })]);
     await new SupabaseConnector().uploadData(makeDb(tx));
     expect(h.calls).toHaveLength(0);
     expect(errSpy).toHaveBeenCalled();
+    expect(recordClientDiagnostic).toHaveBeenCalled();
     expect(tx.complete).toHaveBeenCalledTimes(1);
   });
 

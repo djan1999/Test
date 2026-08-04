@@ -93,12 +93,18 @@ import {
 import {
   RESTAURANT_CONFIG_KEY,
   configuredTableIds,
+  fallbackFeaturesForWorkspace,
   makeDefaultRestaurantConfig,
   reconcileConfiguredTables,
   removedLiveTableIds,
   sanitizeRestaurantConfig,
 } from "./config/restaurantConfig.js";
-import { DEFAULT_SYNC_CONFIG, normalizeSyncConfig } from "./config/syncConfig.js";
+import { PRODUCT_NAME as APP_NAME, PRODUCT_SUBTITLE as APP_SUBTITLE } from "./config/product.js";
+import {
+  DEFAULT_SYNC_CONFIG,
+  hasCatalogSyncProvider,
+  normalizeSyncConfig,
+} from "./config/syncConfig.js";
 import { tokens } from "./styles/tokens.js";
 import ServiceDatePicker from "./components/reservations/ServiceDatePicker.jsx";
 import ResvForm from "./components/reservations/ResvForm.jsx";
@@ -136,16 +142,24 @@ const reservationWriteKey = (workspaceId, id) => `${workspaceId}\u0000${id}`;
 const toLocalDateISO = (date = new Date()) =>
   `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
-const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
-
 // localStorage cache keys for the service ENTITY identity (per workspace).
 const CHOSEN_ON_LS_KEY = "milka_service_chosen_on";
 // Floor SET strips are namespaced PER SERVICE: a stale device replaying its
 // old service's strips writes to that old key and can never touch the live
 // service's strips. (The shared legacy `floor_status_v1` key is retired.)
 const floorStatusKeyFor = (serviceId) => (serviceId ? `floor_status_v2:${serviceId}` : null);
-const APP_SUBTITLE = String(import.meta.env.VITE_APP_SUBTITLE || "SERVICE BOARD").trim() || "SERVICE BOARD";
-const DEFAULT_RESTAURANT_CONFIG = makeDefaultRestaurantConfig({ name: APP_NAME, subtitle: APP_SUBTITLE });
+const BUILD_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "")
+  .split(",")
+  .map((room) => room.trim())
+  .filter(Boolean);
+const DEFAULT_RESTAURANT_CONFIG = makeDefaultRestaurantConfig({
+  name: APP_NAME,
+  subtitle: APP_SUBTITLE,
+  features: {
+    hotelGuests: String(import.meta.env.VITE_ENABLE_HOTEL_GUESTS || "").toLowerCase() === "true",
+    roomOptions: BUILD_ROOM_OPTIONS,
+  },
+});
 
 // Board sync history follows a table's stable id, never its screen position.
 // An array baseline can silently assign T2's history to T12 when an admin
@@ -154,10 +168,6 @@ const makeTableJsonMap = (tables = []) => new Map(
   tables.map((table) => [Number(table.id), JSON.stringify(sanitizeTable(table))]),
 );
 
-const DEFAULT_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "01,11,12,21,22,23")
-  .split(",")
-  .map(s => s.trim())
-  .filter(Boolean);
 const parseSittingTimes = () => {
   const raw = String(import.meta.env.VITE_DEFAULT_SITTING_TIMES || "18:00,18:30,19:00,19:15")
     .split(",")
@@ -191,7 +201,6 @@ const parseDefaultQuickAccessItems = () => {
 const DEFAULT_QUICK_ACCESS_ITEMS = parseDefaultQuickAccessItems();
 
 const SITTING_TIMES = DEFAULT_SITTING_TIMES;
-const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
 // Unified profile payload key. `menu_layout_profiles_v1` and the legacy
 // single-layout pair (`menu_layout_global` + `menu_layout_v2`) are migrated
 // into v2 on first read. The flat `menu_layouts_v1` payload from a previous
@@ -407,14 +416,17 @@ export default function App() {
   );
   const canAdmin = canAdminister(currentRole);
   const effectiveAppName = restaurantConfig.name || currentWorkspace?.name || APP_NAME;
+  const hotelGuestsEnabled = restaurantConfig.features?.hotelGuests === true;
+  const roomOptions = restaurantConfig.features?.roomOptions || [];
 
   // Restaurant identity and table definitions are workspace data, not build
-  // constants. A missing setting deliberately falls back to Milka's current
-  // ten-table arrangement, so deploying this migration changes no live floor.
+  // constants. A missing setting uses a neutral ten-table setup; the rollout
+  // migration preserves Milka's hotel-room feature in its stored config.
   useEffect(() => {
     const fallback = makeDefaultRestaurantConfig({
       name: currentWorkspace?.name || APP_NAME,
       subtitle: APP_SUBTITLE,
+      features: fallbackFeaturesForWorkspace(currentWorkspace, DEFAULT_RESTAURANT_CONFIG.features),
     });
     if (!supabase) {
       setRestaurantConfig(fallback);
@@ -451,7 +463,7 @@ export default function App() {
         });
       });
     return () => { cancelled = true; };
-  }, [workspaceId, currentWorkspace?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workspaceId, currentWorkspace?.name, currentWorkspace?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The table whose side sheet is open. The board stays mounted behind it —
   // `sel` never swaps the view, it only raises the sheet.
@@ -520,6 +532,7 @@ export default function App() {
   });
   const syncConfigRef = useRef(wineSyncConfig);
   syncConfigRef.current = wineSyncConfig;
+  const canRunCatalogSync = hasCatalogSyncProvider(wineSyncConfig);
   // ── Unified Menu Layout Profiles (v2) ────────────────────────────────────
   // Single source of truth for all menu layouts. Each profile wraps the
   // existing row-based menuTemplate + layoutStyles with a name and target
@@ -872,17 +885,9 @@ export default function App() {
         const { writeServiceTables } = await import("./powersync/writes.js");
         await writeServiceTables(svcId, rows);
       } else {
-        const { saveServiceTableWithCas } = await import("./lib/serviceTableCas.js");
+        const { saveServiceTableWithCas, saveServiceTablesBatchWithCas } = await import("./lib/serviceTableCas.js");
         const ws = getWorkspaceId();
-        // A move is destination=party plus source=blank. Claim destinations
-        // first so a newly occupied destination refuses the batch before its
-        // source can be cleared. (SQLite applies the rows atomically already.)
-        const orderedRows = rows.map((row, index) => {
-          const data = row?.data || {};
-          const hasParty = Boolean(String(data.resName || "").trim() || String(data.resTime || "").trim());
-          return { row, index, priority: tableHasServiceContent(data) || hasParty ? 0 : 2 };
-        }).sort((a, b) => a.priority - b.priority || a.index - b.index);
-        for (const { row } of orderedRows) {
+        const writes = rows.map((row) => {
           const tableId = Number(row.table_id);
           let ancestor = null;
           try {
@@ -903,18 +908,38 @@ export default function App() {
               arrivedAt: unseatAncestor.arrivedAt,
             };
           }
-          const saved = await saveServiceTableWithCas({
+          return { tableId, data: row.data, ancestor };
+        });
+        const ids = writes.map(({ tableId }) => tableId);
+        if (writes.length > 1 && new Set(ids).size === ids.length) {
+          const saved = await saveServiceTablesBatchWithCas({
             client: supabase,
             workspaceId: ws,
             serviceId: svcId,
-            tableId: row.table_id,
-            data: row.data,
-            ancestor,
+            writes,
           });
-          persistedData.set(
-            tableId,
-            sanitizeTable({ id: tableId, ...(saved.data || {}) }),
-          );
+          for (const result of saved.rows) {
+            persistedData.set(
+              result.tableId,
+              sanitizeTable({ id: result.tableId, ...(result.data || {}) }),
+            );
+          }
+        } else {
+          for (const write of writes) {
+            const tableId = Number(write.tableId);
+            const saved = await saveServiceTableWithCas({
+              client: supabase,
+              workspaceId: ws,
+              serviceId: svcId,
+              tableId,
+              data: write.data,
+              ancestor: write.ancestor,
+            });
+            persistedData.set(
+              tableId,
+              sanitizeTable({ id: tableId, ...(saved.data || {}) }),
+            );
+          }
         }
       }
       // The store now holds exactly these rows — advance the CONFIRMED
@@ -1144,8 +1169,24 @@ export default function App() {
         ...next,
         ancestor: previous?.ancestor ?? next.ancestor,
       }),
+      shouldRetainError: (error) => String(error?.code || "") !== "MG001",
     });
   }
+
+  const closePrivacyErasureOnDevice = useCallback(async () => {
+    const queue = reservationQueueRef.current;
+    for (const key of queue?.pending?.() || []) queue.drop(key);
+    try { localStorage.removeItem("milka-reservation-write-queue-v1"); } catch { /* noop */ }
+    if (!psEnabled) return { ok: true, syncReset: false };
+    try {
+      const { clearLocalAndResync } = await import("./powersync/system.js");
+      await clearLocalAndResync();
+      return { ok: true, syncReset: true };
+    } catch (error) {
+      recordClientDiagnostic("privacy erasure local reset", error);
+      return { ok: false, error };
+    }
+  }, [psEnabled]);
 
   // Persist one reservation row (update-or-insert by id).
   const persistReservationRow = useCallback(async ({ id, date, table_id, data, created_at }) => {
@@ -1743,6 +1784,9 @@ export default function App() {
 
   const syncWines = async () => {
     if (sandboxRef.current) return { ok: false, error: new Error("Sync is disabled during a test service") };
+    if (!hasCatalogSyncProvider(syncConfigRef.current)) {
+      return { ok: false, error: "Automated catalogue sync is not configured for this restaurant." };
+    }
     // Client-side budget. Vercel function caps at 60 s (see sync-wines.js);
     // give it 30 s of slack for headers + DB writes + return trip then hard-abort
     // so the UI doesn't hang. Previously 70 s, which was too close to the 60 s
@@ -1755,14 +1799,13 @@ export default function App() {
       if (sessionError || !accessToken) {
         return { ok: false, error: "Your login expired. Sign in again and retry." };
       }
-      const cfg = normalizeSyncConfig(syncConfigRef.current);
       const r = await fetch("/api/sync-wines", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ workspaceId: getWorkspaceId(), config: cfg }),
+        body: JSON.stringify({ workspaceId: getWorkspaceId() }),
         signal: controller.signal,
       });
       const json = await r.json().catch(() => ({}));
@@ -4524,7 +4567,7 @@ export default function App() {
     onSummary: () => setSummaryOpen(true),
     onArchive: () => setArchiveOpen(true),
     onInventory: () => setInventoryOpen(true),
-    onSyncAll: canAdmin ? syncWines : undefined,
+    onSyncAll: canAdmin && canRunCatalogSync ? syncWines : undefined,
   };
 
   // Loud warning when the active service date is in the past — the silent
@@ -4566,7 +4609,7 @@ export default function App() {
   if (window.location.hash === "#preview") return (
     <div style={{ backgroundColor: tokens.ink.bg, minHeight: "100vh", padding: "48px 40px", fontFamily: tokens.font }}>
       <div style={{ marginBottom: "48px", borderBottom: `1px solid ${tokens.ink[4]}`, paddingBottom: "24px" }}>
-        <div style={{ fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: tokens.ink[3], marginBottom: "8px" }}>MILKA SERVICE BOARD</div>
+        <div style={{ fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: tokens.ink[3], marginBottom: "8px" }}>{effectiveAppName} · {restaurantConfig.subtitle || APP_SUBTITLE}</div>
         <div style={{ fontSize: "24px", letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 500, color: tokens.ink[0] }}>TABLECARD / VISUAL PREVIEW</div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "32px" }}>
@@ -4760,7 +4803,7 @@ export default function App() {
 
   if (!renderMode) return <>{serviceDatePickerEl}{sandboxBannerEl}<LoginScreen
       onEnter={m => { if (canAccessMode(currentRole, m)) { changeMode(m); setSel(null); } }}
-      onSyncAll={canAdmin ? syncWines : undefined}
+      onSyncAll={canAdmin && canRunCatalogSync ? syncWines : undefined}
       role={currentRole}
       canAdmin={canAdmin}
       appName={effectiveAppName}
@@ -4782,6 +4825,8 @@ export default function App() {
       onExit={() => changeMode(null)}
       serviceDate={serviceDate}
       activeServiceSession={activeServiceSession}
+      hotelGuestsEnabled={hotelGuestsEnabled}
+      roomOptions={roomOptions}
       onSetServiceDate={startService}
       onOpenArchive={() => setArchiveOpen(true)}
       courseQuickNotes={courseQuickNotes}
@@ -4951,6 +4996,7 @@ export default function App() {
         onSaveRestaurantConfig={saveRestaurantConfiguration}
         accessToken={session?.access_token || null}
         workspaceId={workspaceId}
+        onPrivacyErasureComplete={closePrivacyErasureOnDevice}
         currentUserId={session?.user?.id || null}
         menuCourses={menuCourses}
         onUpdateMenuCourses={(next) => { menuCoursesDirtyRef.current = true; setMenuCourses(next); }}
@@ -4973,7 +5019,7 @@ export default function App() {
         beers={beers}
         onUpdateWines={saveWines}
         onSaveBeverages={saveBeverages}
-        onSyncWines={syncWines}
+        onSyncWines={canRunCatalogSync ? syncWines : undefined}
         syncStatus={syncStatus}
         powerSync={powerSyncStatus}
         sqlitePrimary={sqlitePrimary}
@@ -5245,6 +5291,8 @@ export default function App() {
           onOpenTicket={() => setTicketTableId(sel)}
           onClearTable={() => clear(sel, { skipConfirm: true })}
           onEditBooking={patch => saveBookingEdit(sel, patch)}
+          hotelGuestsEnabled={hotelGuestsEnabled}
+          roomOptions={roomOptions}
         />
       )}
 
@@ -5343,6 +5391,8 @@ export default function App() {
             tables={displayTables}
             reservations={reservations}
             excludeId={null}
+            hotelGuestsEnabled={hotelGuestsEnabled}
+            roomOptions={roomOptions}
             onSave={async (row) => { const r = await upsertReservation(row); if (r?.ok) setAddResOpen(false); }}
             onCancel={() => setAddResOpen(false)}
           />

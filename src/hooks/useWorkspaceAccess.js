@@ -6,6 +6,7 @@ import {
 } from "../lib/supabaseClient.js";
 import { normalizeWorkspaceRole } from "../auth/roles.js";
 import { useRealtimeTable } from "./useRealtimeTable.js";
+import { isSqlitePrimary } from "../powersync/primary.js";
 
 const WORKSPACE_KEY = "milka_workspace";
 const WORKSPACE_MEMBERS_TABLE = TABLES.WORKSPACE_MEMBERS || "workspace_members";
@@ -64,10 +65,30 @@ export function useWorkspaceAccess({ onWorkspaceApply } = {}) {
   }, []);
 
   const signOut = useCallback(async () => {
+    if (isSqlitePrimary()) {
+      try {
+        const { getPowerSync } = await import("../powersync/system.js");
+        const pending = await getPowerSync().getUploadQueueStats(false);
+        if (pending?.count > 0) {
+          const proceed = window.confirm(
+            `${pending.count} local change${pending.count === 1 ? " is" : "s are"} still waiting to upload.\n\n`
+            + "Signing out now can strand those edits. If a different account signs in, they will be discarded when the device database is cleared. Sign out anyway?",
+          );
+          if (!proceed) return { ok: false, reason: "pending-uploads" };
+        }
+      } catch (error) {
+        console.warn("Could not inspect the local upload queue before sign-out:", error);
+        const proceed = window.confirm(
+          "The app could not verify whether local edits are still waiting to upload. Sign out anyway?",
+        );
+        if (!proceed) return { ok: false, reason: "queue-unknown" };
+      }
+    }
     try { await supabase?.auth.signOut({ scope: "local" }); } catch {}
     try { localStorage.removeItem(WORKSPACE_KEY); } catch {}
     setScopedWorkspaceId(null);
     window.location.reload();
+    return { ok: true };
   }, []);
 
   const completePasswordSetup = useCallback(() => {

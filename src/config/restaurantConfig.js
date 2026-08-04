@@ -5,26 +5,64 @@ export const MIN_TABLE_ID = 1;
 export const MAX_TABLE_ID = 999;
 export const MAX_CONFIGURED_TABLES = 60;
 
-export const DEFAULT_MILKA_TABLES = Object.freeze(
+export const DEFAULT_RESTAURANT_TABLES = Object.freeze(
   Array.from({ length: 10 }, (_, index) => Object.freeze({
     id: index + 1,
     label: `T${String(index + 1).padStart(2, "0")}`,
   })),
 );
 
+// Compatibility export for older imports; new code should use the neutral
+// name above. The data itself has always been generic T01-T10.
+export const DEFAULT_MILKA_TABLES = DEFAULT_RESTAURANT_TABLES;
+
+export const DEFAULT_RESTAURANT_FEATURES = Object.freeze({
+  hotelGuests: false,
+  roomOptions: Object.freeze([]),
+});
+
+export const LEGACY_MILKA_FEATURES = Object.freeze({
+  hotelGuests: true,
+  roomOptions: Object.freeze(["01", "11", "12", "21", "22", "23"]),
+});
+
+// Deployment compatibility: the generic client may reach tablets before the
+// migration has backfilled the workspace-owned feature block. Only the known
+// legacy Milka workspace receives its historic hotel-room behavior; every new
+// restaurant remains neutral.
+export function fallbackFeaturesForWorkspace(workspace, neutral = DEFAULT_RESTAURANT_FEATURES) {
+  return String(workspace?.slug || "").trim().toLowerCase() === "milka"
+    ? LEGACY_MILKA_FEATURES
+    : neutral;
+}
+
+function sanitizeFeatures(raw, fallback = DEFAULT_RESTAURANT_FEATURES) {
+  const source = raw && typeof raw === "object" ? raw : fallback;
+  const roomOptions = [...new Set(
+    (Array.isArray(source?.roomOptions) ? source.roomOptions : [])
+      .map((room) => String(room || "").trim())
+      .filter(Boolean),
+  )].slice(0, 100);
+  return {
+    hotelGuests: source?.hotelGuests === true,
+    roomOptions,
+  };
+}
+
 export function makeDefaultRestaurantConfig({
-  name = "MILKA",
+  name = "Restaurant",
   subtitle = "SERVICE BOARD",
-  tables = DEFAULT_MILKA_TABLES,
+  tables = DEFAULT_RESTAURANT_TABLES,
+  features = DEFAULT_RESTAURANT_FEATURES,
 } = {}) {
-  return sanitizeRestaurantConfig({ version: 1, name, subtitle, tables });
+  return sanitizeRestaurantConfig({ version: 1, name, subtitle, tables, features });
 }
 
 export function sanitizeRestaurantConfig(raw, fallback = {}) {
   const source = raw && typeof raw === "object" ? raw : {};
   const fallbackTables = Array.isArray(fallback.tables) && fallback.tables.length
     ? fallback.tables
-    : DEFAULT_MILKA_TABLES;
+    : DEFAULT_RESTAURANT_TABLES;
   const inputTables = Array.isArray(source.tables) && source.tables.length
     ? source.tables
     : fallbackTables;
@@ -41,13 +79,14 @@ export function sanitizeRestaurantConfig(raw, fallback = {}) {
     });
     if (tables.length >= MAX_CONFIGURED_TABLES) break;
   }
-  if (!tables.length) tables.push(...DEFAULT_MILKA_TABLES.map((entry) => ({ ...entry })));
+  if (!tables.length) tables.push(...DEFAULT_RESTAURANT_TABLES.map((entry) => ({ ...entry })));
   tables.sort((a, b) => a.id - b.id);
   return {
     version: 1,
-    name: String(source.name || fallback.name || "MILKA").trim().slice(0, 80) || "MILKA",
+    name: String(source.name || fallback.name || "Restaurant").trim().slice(0, 80) || "Restaurant",
     subtitle: String(source.subtitle || fallback.subtitle || "SERVICE BOARD").trim().slice(0, 80) || "SERVICE BOARD",
     tables,
+    features: sanitizeFeatures(source.features, fallback.features),
   };
 }
 

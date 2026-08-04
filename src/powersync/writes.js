@@ -45,16 +45,18 @@ function requireWorkspace() {
 // ("UNIQUE constraint failed: ps_data__service_tables.id"), which blocked ALL
 // saves the first time a real device went sqlite-primary (05.07 Demo test).
 async function upsertLocalRow(tx, table, ws, id, cols) {
-  const names = Object.keys(cols);
-  const values = names.map((n) => cols[n]);
+  const valuesWithoutTenant = { ...cols };
+  delete valuesWithoutTenant.workspace_id;
+  const names = Object.keys(valuesWithoutTenant);
+  const values = names.map((n) => valuesWithoutTenant[n]);
   const existing = await tx.getOptional(
     `SELECT id FROM ${table} WHERE id = ? AND workspace_id = ?`,
     [String(id), ws],
   );
   if (existing) {
     await tx.execute(
-      `UPDATE ${table} SET ${names.map((n) => `${n} = ?`).join(", ")} WHERE id = ? AND workspace_id = ?`,
-      [...values, String(id), ws],
+      `UPDATE ${table} SET ${names.map((n) => `${n} = ?`).join(", ")}, workspace_id = ? WHERE id = ? AND workspace_id = ?`,
+      [...values, ws, String(id), ws],
     );
   } else {
     await tx.execute(
@@ -111,9 +113,13 @@ export async function insertServiceLocally(entity) {
 // straight to columns; jsonb values stringified for SQLite.
 export async function updateServiceLocally(serviceId, patch) {
   const ws = requireWorkspace();
-  const names = Object.keys(patch);
+  // Put the immutable tenant key in the PATCH payload itself. PowerSync PATCH
+  // entries only carry changed columns; without this stamp an offline update
+  // could otherwise be attributed to a different active workspace later.
+  const stamped = { ...patch, workspace_id: ws };
+  const names = Object.keys(stamped);
   if (names.length === 0) return;
-  const values = names.map((n) => (n === "snapshot" ? sqlite(patch[n]) : patch[n]));
+  const values = names.map((n) => (n === "snapshot" ? sqlite(stamped[n]) : stamped[n]));
   await getPowerSync().execute(
     `UPDATE services SET ${names.map((n) => `${n} = ?`).join(", ")} WHERE id = ? AND workspace_id = ?`,
     [...values, String(serviceId), ws],
@@ -180,8 +186,8 @@ async function writeReservationInTransaction(tx, ws, { id, date, table_id, data,
       // upload died on Postgres NOT NULL — the 08.07 null-date incident.
       const tid = Number(table_id);
       await tx.execute(
-        "UPDATE reservations SET date = COALESCE(?, date), table_id = COALESCE(?, table_id), data = ? WHERE id = ? AND workspace_id = ?",
-        [date ?? null, Number.isFinite(tid) ? tid : null, sqlite(data ?? {}), String(id), ws],
+        "UPDATE reservations SET date = COALESCE(?, date), table_id = COALESCE(?, table_id), data = ?, workspace_id = ? WHERE id = ? AND workspace_id = ?",
+        [date ?? null, Number.isFinite(tid) ? tid : null, sqlite(data ?? {}), ws, String(id), ws],
       );
     } else {
       // A date-less INSERT can never render anywhere and Postgres rejects it —
@@ -309,8 +315,8 @@ export async function writeArchiveEntry(entry) {
 export async function setArchiveDeleted(id, deletedAt) {
   const ws = requireWorkspace();
   await getPowerSync().execute(
-    "UPDATE service_archive SET deleted_at = ? WHERE id = ? AND workspace_id = ?",
-    [deletedAt, String(id), ws],
+    "UPDATE service_archive SET deleted_at = ?, workspace_id = ? WHERE id = ? AND workspace_id = ?",
+    [deletedAt, ws, String(id), ws],
   );
 }
 
@@ -318,8 +324,8 @@ export async function setArchiveDeleted(id, deletedAt) {
 export async function setAllArchivesDeleted(deletedAt) {
   const ws = requireWorkspace();
   await getPowerSync().execute(
-    "UPDATE service_archive SET deleted_at = ? WHERE workspace_id = ? AND deleted_at IS NULL",
-    [deletedAt, ws],
+    "UPDATE service_archive SET deleted_at = ?, workspace_id = ? WHERE workspace_id = ? AND deleted_at IS NULL",
+    [deletedAt, ws, ws],
   );
 }
 

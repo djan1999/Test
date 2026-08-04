@@ -14,11 +14,6 @@ const baseInp = { ...baseInput };
 const fieldLabel = { ...mixinFieldLabel };
 const circBtnSm = { ...circleButton };
 
-const DEFAULT_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "01,11,12,21,22,23")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
-
 const parseSittingTimes = (envKey, fallback) => {
   const raw = String(import.meta.env[envKey] || fallback)
     .split(",")
@@ -31,10 +26,21 @@ const DINNER_TIMES = parseSittingTimes("VITE_DEFAULT_SITTING_TIMES", "18:00,18:3
 const LUNCH_TIMES  = parseSittingTimes("VITE_DEFAULT_LUNCH_TIMES",   "12:00,12:30,13:00");
 // Legacy alias — keeps any external references to SITTING_TIMES intact
 const SITTING_TIMES = DINNER_TIMES;
-const ROOM_OPTIONS = DEFAULT_ROOM_OPTIONS.length ? DEFAULT_ROOM_OPTIONS : ["01", "11", "12", "21", "22", "23"];
-
-export default function ResvForm({ initial, tables, reservations, excludeId, onSave, onCancel, onResolveConflict, onSwapReservations }) {
+export default function ResvForm({
+  initial,
+  tables,
+  reservations,
+  excludeId,
+  onSave,
+  onCancel,
+  onResolveConflict,
+  onSwapReservations,
+  hotelGuestsEnabled = false,
+  roomOptions = [],
+}) {
   const isMobile = useIsMobile(560);
+  const showHotelGuests = hotelGuestsEnabled || initial?.data?.guestType === "hotel";
+  const safeRoomOptions = Array.isArray(roomOptions) ? roomOptions : [];
   const availableTableIds = (tables || []).map((table) => Number(table.id)).sort((a, b) => a - b);
   const tableLabel = (tableId) => (tables || []).find((table) => Number(table.id) === Number(tableId))?.displayLabel
     || `T${String(tableId).padStart(2, "0")}`;
@@ -475,7 +481,7 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
         <div>
           <div style={fieldLabel}>Guest type</div>
           <div style={{ display: "flex", gap: 5 }}>
-            {[["", "Regular"], ["hotel", "Hotel"]].map(([v, l]) => (
+            {[["", "Regular"], ...(showHotelGuests ? [["hotel", "Hotel"]] : [])].map(([v, l]) => (
               <button key={v || "r"} onClick={() => { setGuestType(v); if (v !== "hotel") setRooms([]); }} style={{
                 fontFamily: FONT, fontSize: 9, letterSpacing: 0.5, padding: "8px 0", flex: 1,
                 border: "1px solid", borderColor: guestType === v ? tokens.charcoal.default : tokens.ink[4],
@@ -492,21 +498,31 @@ export default function ResvForm({ initial, tables, reservations, excludeId, onS
               Rooms
               {rooms.length > 0 && <span style={{ color: tokens.text.muted, fontWeight: 400, marginLeft: 6 }}>#{[...rooms].sort((a, b) => String(a).localeCompare(String(b))).join(", ")}</span>}
             </div>
-            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-              {ROOM_OPTIONS.map((r) => {
-                const isSel = rooms.includes(r);
-                return (
-                  <button key={r} onClick={() => setRooms((prev) => prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r])} style={{
-                    fontFamily: FONT, fontSize: 11, padding: "10px 10px", touchAction: "manipulation",
-                    border: "1px solid", borderColor: isSel ? tokens.charcoal.default : tokens.ink[4],
-                    borderRadius: 0, cursor: "pointer",
-                    background: isSel ? tokens.tint.parchment : tokens.neutral[0],
-                    color: tokens.ink[1],
-                    fontWeight: isSel ? 600 : 400,
-                  }}>{r}</button>
-                );
-              })}
-            </div>
+            {safeRoomOptions.length > 0 ? (
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                {safeRoomOptions.map((r) => {
+                  const isSel = rooms.includes(r);
+                  return (
+                    <button key={r} onClick={() => setRooms((prev) => prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r])} style={{
+                      fontFamily: FONT, fontSize: 11, padding: "10px 10px", touchAction: "manipulation",
+                      border: "1px solid", borderColor: isSel ? tokens.charcoal.default : tokens.ink[4],
+                      borderRadius: 0, cursor: "pointer",
+                      background: isSel ? tokens.tint.parchment : tokens.neutral[0],
+                      color: tokens.ink[1],
+                      fontWeight: isSel ? 600 : 400,
+                    }}>{r}</button>
+                  );
+                })}
+              </div>
+            ) : (
+              <input
+                value={rooms.join(", ")}
+                aria-label="Hotel room number"
+                placeholder="room no."
+                onChange={(event) => setRooms(event.target.value.split(",").map((room) => room.trim()))}
+                style={{ ...baseInp, width: "100%", fontSize: MOBILE_SAFE_INPUT_SIZE }}
+              />
+            )}
           </div>
         )}
       </div>

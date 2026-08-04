@@ -9,4 +9,5 @@ export { default as DrinksPanel } from "./DrinksPanel.jsx";
 export { default as InventoryPanel } from "./InventoryPanel.jsx";
 export { default as SystemPanel } from "./SystemPanel.jsx";
 export { default as ArchivePanel } from "./ArchivePanel.jsx";
+export { default as DataPrivacyPanel } from "./DataPrivacyPanel.jsx";
 export { default as QuickAccessPanel } from "./QuickAccessPanel.jsx";

@@ -3,8 +3,7 @@ import { supabase } from "../../lib/supabaseClient.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput } from "../../styles/mixins.js";
 import GlobalStyle from "../ui/GlobalStyle.jsx";
-
-const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
+import { PRODUCT_NAME as APP_NAME } from "../../config/product.js";
 
 export default function PasswordRecoveryScreen({ onComplete, appName = APP_NAME }) {
   const [password, setPassword] = useState("");

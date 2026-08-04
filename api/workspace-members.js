@@ -7,6 +7,7 @@
  * authoritative.
  */
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit, setPrivateResponseHeaders } from "./_security.js";
 
 export const WORKSPACE_ROLES = new Set(["admin", "service", "kitchen"]);
 
@@ -60,6 +61,12 @@ async function memberEmail(adminClient, userId) {
 }
 
 export default async function handler(req, res) {
+  setPrivateResponseHeaders(res);
+  const rate = checkRateLimit(req, { scope: "workspace-members", limit: 60, windowMs: 10 * 60 * 1000 });
+  if (!rate.allowed) {
+    res.setHeader?.("Retry-After", String(rate.retryAfterSeconds));
+    return res.status(429).json({ error: "Too many staff-management requests. Wait and retry." });
+  }
   const startedAt = Date.now();
   const requestId = req.headers?.["x-vercel-id"] || req.headers?.["x-request-id"] || null;
   const method = String(req.method || "GET").toUpperCase();

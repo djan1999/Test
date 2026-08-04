@@ -266,6 +266,38 @@ export const fakeSupabase = {
   from: (table) => makeBuilder(backend.remote, table),
   rpc: async (name, args) => {
     if (backend.failRemoteWrites) return { data: null, error: new Error("fake network: remote writes are failing") };
+    if (name === "save_service_tables_batch_if_current") {
+      if (!args.p_service_id || !Array.isArray(args.p_rows) || args.p_rows.length < 2) {
+        return { data: null, error: new Error("invalid service-table batch") };
+      }
+      const rows = tableOf(backend.remote, "service_tables");
+      const pending = [...args.p_rows]
+        .sort((a, b) => Number(a.table_id) - Number(b.table_id))
+        .map((item) => {
+          const hit = rows.find((row) => row.workspace_id === args.p_workspace_id
+            && asKey(row.service_id) === asKey(args.p_service_id)
+            && Number(row.table_id) === Number(item.table_id));
+          const expected = item.expected_updated_at ?? null;
+          const versionMatches = (!hit && expected == null)
+            || (hit && expected != null && hit.updated_at === expected);
+          return { item, versionMatches };
+        });
+      if (pending.some(({ versionMatches }) => !versionMatches)) {
+        const error = new Error("service-table batch version changed");
+        error.code = "40001";
+        return { data: null, error };
+      }
+      for (const { item } of pending) {
+        upsertInto(backend.remote, "service_tables", ["workspace_id", "service_id", "table_id"], {
+          workspace_id: args.p_workspace_id,
+          service_id: String(args.p_service_id),
+          table_id: Number(item.table_id),
+          data: clone(item.data || {}),
+          updated_at: args.p_updated_at || nowISO(),
+        });
+      }
+      return { data: true, error: null };
+    }
     if (name === "save_service_table_if_current") {
       // Entity model: board rows are keyed by (workspace, service, table).
       // A call without a service id mirrors production's legacy stub: loud

@@ -15,14 +15,15 @@ import FloorPanel from "./FloorPanel.jsx";
 import RestaurantConfigPanel from "./RestaurantConfigPanel.jsx";
 import MembersPanel from "./MembersPanel.jsx";
 import AuditLogPanel from "./AuditLogPanel.jsx";
+import DataPrivacyPanel from "./DataPrivacyPanel.jsx";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
-
-const APP_NAME = String(import.meta.env.VITE_APP_NAME || "MILKA").trim() || "MILKA";
+import { PRODUCT_NAME as APP_NAME } from "../../config/product.js";
 
 const SECTIONS = [
   { id: "restaurant",  label: "Restaurant Setup",       icon: "R" },
   { id: "staff",       label: "Staff & Roles",          icon: "S" },
   { id: "audit",       label: "Audit Trail",             icon: "A" },
+  { id: "privacy",     label: "Data & Privacy",          icon: "P" },
   { id: "menu",        label: "Menu Layout",           icon: "▨" },
   { id: "dishes",      label: "Dishes & Restrictions",  icon: "◈" },
   { id: "drinks",      label: "Drinks & Pairings",      icon: "◎" },
@@ -115,6 +116,7 @@ export default function AdminLayout({
   accessToken = null,
   workspaceId = null,
   currentUserId = null,
+  onPrivacyErasureComplete = null,
   // Navigation
   onExit,
 }) {
@@ -320,6 +322,15 @@ export default function AdminLayout({
           )}
 
           {activeSection === "audit" && <AuditLogPanel />}
+
+          {activeSection === "privacy" && (
+            <DataPrivacyPanel
+              accessToken={accessToken}
+              workspaceId={workspaceId}
+              appName={appName}
+              onErasureComplete={onPrivacyErasureComplete}
+            />
+          )}
 
           {activeSection === "menu" && (
             <div>

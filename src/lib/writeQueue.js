@@ -17,6 +17,7 @@ export function createWriteQueue(writeOnce, {
   storageKey = null,
   maxRetainedAgeMs = 24 * 60 * 60 * 1000,
   mergePending = (_previous, next) => next,
+  shouldRetainError = () => true,
 } = {}) {
   const queues = new Map(); // key → { latest, chain, attempts, retryTimer, retainedAt }
 
@@ -91,7 +92,14 @@ export function createWriteQueue(writeOnce, {
         }
         return { ok: true, value: written };
       } catch (error) {
-        scheduleRetry(key);
+        if (shouldRetainError(error)) {
+          scheduleRetry(key);
+        } else if (q.latest === value) {
+          q.latest = undefined;
+          q.attempts = 0;
+          q.retainedAt = null;
+          persist();
+        }
         return { ok: false, error };
       }
     });

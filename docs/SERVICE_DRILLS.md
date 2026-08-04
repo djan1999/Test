@@ -1,6 +1,6 @@
 # Service Drills — PowerSync-primary contract
 
-Manual acceptance drills for the sync architecture. Run all six core drills against the
+Manual acceptance drills for the sync architecture. Run all core drills against the
 Demo workspace before promoting any sync-layer change to production, and again
 after enabling it for a restaurant. Each drill states the exact steps and the
 observable result that counts as a pass.
@@ -106,26 +106,74 @@ restore available.
 - Both rows carry the correct `workspace_id` and survive on every device after
   the sync's realtime/watch refresh.
 
-## Drill F — Ending service is atomic and live
+## Drill F — Ending a service preserves its entity and board
 
 **Setup:** Two devices in the same live service, with several active tables.
 Keep device 2 on the Service board.
 
 1. On device 1 choose Archive & Clear and confirm.
 2. Observe device 2 without touching or refreshing it.
-3. Confirm the database has one archive row, ten blank `service_tables` rows,
-   and an empty `service_date` setting for the workspace.
+3. Confirm the database has exactly one newly ended `services` row and that
+   every `service_tables` row still belongs to that ended service id with its
+   original content. There is no blank-row clear and no shared `service_date`
+   pointer to reset.
 4. Start another Demo service, take device 1 offline, add one seat note, then
    Archive & Clear while still offline. Reconnect device 1.
 
 **Pass:**
 - Device 1 exits service immediately in both the online and offline cases.
-- Online, device 2 exits the service automatically and sees the cleared board
-  in under one second, without a refresh or a half-cleared intermediate state.
+- Online, device 2 exits the ended service automatically in under one second,
+  without a refresh or a half-cleared intermediate state.
 - Offline, device 2 keeps the old live service until device 1 reconnects; after
   reconnect it receives the archive/board/date transition together.
-- Each run creates exactly one archive entry. The offline seat note is present
-  in that archive, and no table or lifecycle write remains stuck in the queue.
+- Each run produces exactly one ended service entity. The offline seat note is
+  present in that entity's retained board rows, and no write remains stuck.
+
+## Drill G — Rejected operation cannot wedge the device
+
+Use a Kitchen account and a preview/staging database. Attempt an Admin-only
+mutation (for example archive destruction) while a second device observes.
+
+**Pass:** the server denies the operation, Admin → System records a diagnostic,
+the disallowed UI state is corrected by sync, and a later valid kitchen table
+update uploads successfully. The upload queue and download stream continue.
+
+## Drill H — Same-row concurrent edits have an explicit loser
+
+Take two devices offline after both have the same populated table. Change the
+same seat or whole-row field differently on each, then reconnect them in a
+recorded order.
+
+**Pass:** the documented CAS/fold rule chooses one outcome, a refused edit is
+visible in diagnostics where applicable, unrelated seats survive, and neither
+device wedges. Record which value lost; do not claim conflict-free editing.
+
+## Drill I — Account change with pending work
+
+On a staging tablet, create an offline edit, then attempt to sign out/change
+accounts before it uploads.
+
+**Pass:** the operator is warned that the account change clears the local sync
+database and can discard pending edits. After confirmation, no previous-user
+rows are visible to the new account.
+
+## Drill J — Stale PWA returns after a schema release
+
+Keep one installed tablet offline while deploying a preview client plus a
+compatible schema change. Bring it back days later without manually refreshing.
+
+**Pass:** the old build does not corrupt data or wedge; the update waits safely,
+Admin → System identifies the old build, and applying the update outside a
+service returns the tablet to a healthy complete sync.
+
+## Drill K — Recovery and lost-device procedure
+
+On staging, deliberately create a stuck/error state, capture the diagnostic,
+then use Admin → System → Reset Local Sync DB. Separately simulate a lost
+tablet by revoking its user session.
+
+**Pass:** the reset clearly warns about local loss, re-downloads only authorized
+workspace data, and valid writes resume. The revoked device can no longer sync.
 
 ---
 

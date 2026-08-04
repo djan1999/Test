@@ -59,7 +59,13 @@ const MAX_COVERS = 14;
  * seats, and doing it once — instead of once per keystroke — is what keeps a
  * party of 2 corrected to 4 from rebuilding its seats three times on the way.
  */
-export default function BookingEditModal({ table, onSave, onCancel }) {
+export default function BookingEditModal({
+  table,
+  onSave,
+  onCancel,
+  hotelGuestsEnabled = false,
+  roomOptions = [],
+}) {
   const [name, setName] = useState(table?.resName || "");
   const [time, setTime] = useState(table?.resTime || "");
   const [guests, setGuests] = useState(
@@ -75,6 +81,8 @@ export default function BookingEditModal({ table, onSave, onCancel }) {
       : (table?.room ? [table.room] : []),
   );
   const [saving, setSaving] = useState(false);
+  const showHotelGuests = hotelGuestsEnabled || table?.guestType === "hotel";
+  const safeRoomOptions = Array.isArray(roomOptions) ? roomOptions : [];
 
   useModalEscape(onCancel, true);
 
@@ -200,7 +208,7 @@ export default function BookingEditModal({ table, onSave, onCancel }) {
 
           <Field label="GUEST TYPE">
             <div style={{ display: "flex", gap: 6 }}>
-              {[["", "REGULAR"], ["hotel", "HOTEL"]].map(([v, l]) => (
+              {[["", "REGULAR"], ...(showHotelGuests ? [["hotel", "HOTEL"]] : [])].map(([v, l]) => (
                 <button key={v || "regular"} type="button" style={chip(guestType === v)}
                   onClick={() => { setGuestType(v); if (v !== "hotel") setRooms([]); }}
                 >{l}</button>
@@ -209,13 +217,29 @@ export default function BookingEditModal({ table, onSave, onCancel }) {
             {guestType === "hotel" && (
               <div style={{ marginTop: 10 }}>
                 <div style={{ ...micro, marginBottom: 7 }}>ROOM</div>
-                <input
-                  value={rooms.join(", ")}
-                  aria-label="Hotel room number"
-                  placeholder="room no."
-                  onChange={e => setRooms(e.target.value.split(",").map(s => s.trim()))}
-                  style={input}
-                />
+                {safeRoomOptions.length > 0 ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {safeRoomOptions.map((room) => (
+                      <button
+                        key={room}
+                        type="button"
+                        aria-label={`Hotel room ${room}`}
+                        style={chip(rooms.includes(room))}
+                        onClick={() => setRooms((current) => current.includes(room)
+                          ? current.filter((value) => value !== room)
+                          : [...current, room])}
+                      >{room}</button>
+                    ))}
+                  </div>
+                ) : (
+                  <input
+                    value={rooms.join(", ")}
+                    aria-label="Hotel room number"
+                    placeholder="room no."
+                    onChange={e => setRooms(e.target.value.split(",").map(s => s.trim()))}
+                    style={input}
+                  />
+                )}
               </div>
             )}
           </Field>

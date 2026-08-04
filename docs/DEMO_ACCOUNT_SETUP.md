@@ -14,7 +14,7 @@ under the Demo `workspace_id`; changing the login does not copy or delete it.
 
 ```sql
 insert into public.workspace_members (workspace_id, user_id, role)
-select id, 'DEMO_USER_UUID'::uuid, 'owner'
+select id, 'DEMO_USER_UUID'::uuid, 'admin'
 from public.workspaces
 where slug = 'demo'
 on conflict (workspace_id, user_id)
@@ -41,9 +41,10 @@ beside `milka`. Do not add either login to the other workspace.
 
 ## Testing
 
-Sign into Demo on both test devices and use only fake names/reservations. Manual
-catalog sync now targets the currently active workspace, so pressing Sync in
-Demo changes Demo only; scheduled cron sync remains fixed to Milka.
+Sign into Demo on both test devices and use only fake names/reservations. New
+workspaces have catalogue automation disabled; Demo therefore has no Sync
+control unless an operator deliberately assigns an approved provider. The
+scheduled Hotel Milka integration remains explicitly fixed to Milka.
 
 Run every drill in `docs/SERVICE_DRILLS.md` before deploying the same build to
 live service. Switching Supabase users automatically clears the previous

@@ -263,3 +263,15 @@ export function writeServiceBreakdownDoc(dateStr, doc, baseline) {
   if (!doc || typeof doc !== "object") return;
   writeKeyedEntry(SERVICE_BREAKDOWN_DOC_KEY, dateStr, { doc, baseline }, 21);
 }
+
+// A guest erasure changes server rows and must also remove browser-only copies
+// that cannot receive a sync tombstone (planner cache and editable print docs).
+// Clearing whole bounded caches is safer than recursively guessing every field
+// in user-edited documents; live data re-downloads from the authorized store.
+export function clearGuestDataCaches() {
+  if (typeof localStorage === "undefined") return;
+  for (const key of [RESERVATIONS_KEY, WEEKLY_SHEET_EDITS_KEY, SERVICE_BREAKDOWN_DOC_KEY]) {
+    try { localStorage.removeItem(wsKey(key)); } catch {}
+  }
+  try { localStorage.removeItem("milka-reservation-write-queue-v1"); } catch {}
+}

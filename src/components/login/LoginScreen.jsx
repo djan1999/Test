@@ -2,12 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { WORKSPACE_ROLES, normalizeWorkspaceRole, visibleEntryModes } from "../../auth/roles.js";
 import GlobalStyle from "../ui/GlobalStyle.jsx";
+import { PRODUCT_NAME as APP_NAME, PRODUCT_SUBTITLE as APP_SUBTITLE } from "../../config/product.js";
 
 const FONT = tokens.font;
 const { ink, rule, neutral, green, red, charcoal } = tokens;
 
-const APP_NAME     = String(import.meta.env.VITE_APP_NAME     || "MILKA").trim()         || "MILKA";
-const APP_SUBTITLE = String(import.meta.env.VITE_APP_SUBTITLE || "SERVICE BOARD").trim() || "SERVICE BOARD";
 const PINS = {
   admin: String(import.meta.env.VITE_PIN_ADMIN || "").trim(),
   menu:  String(import.meta.env.VITE_PIN_MENU  || "").trim(),
