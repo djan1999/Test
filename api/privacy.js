@@ -7,24 +7,27 @@
  * history; unrelated operational history remains intact.
  */
 import { createClient } from "@supabase/supabase-js";
+import { once } from "node:events";
 import {
   checkRateLimit,
   setPrivateResponseHeaders,
   stablePrivateToken,
 } from "./_security.js";
 
-const EXPORT_TABLES = [
-  "workspace_members",
-  "service_settings",
-  "services",
-  "service_tables",
-  "service_archive",
-  "reservations",
-  "menu_courses",
-  "wines",
-  "beverages",
-  "audit_log",
+const EXPORT_DATASETS = [
+  { table: "workspace_members", keys: ["user_id"] },
+  { table: "service_settings", keys: ["id"] },
+  { table: "services", keys: ["id"] },
+  { table: "service_tables", keys: ["service_id", "table_id"] },
+  { table: "service_archive", keys: ["id"] },
+  { table: "reservations", keys: ["id"] },
+  { table: "menu_courses", keys: ["position"] },
+  { table: "wines", keys: ["key"] },
+  { table: "beverages", keys: ["id"] },
+  { table: "audit_log", keys: ["id"] },
 ];
+
+const DATASET_KEYS = Object.fromEntries(EXPORT_DATASETS.map(({ table, keys }) => [table, keys]));
 
 const REDACTED_NAME = "[erased]";
 
@@ -112,26 +115,70 @@ function bearerFrom(req) {
   return header.startsWith("Bearer ") ? header.slice(7).trim() : null;
 }
 
-async function selectAll(client, table, workspaceId, columns = "*") {
-  const rows = [];
-  const pageSize = 1000;
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await client
-      .from(table)
-      .select(columns)
-      .eq("workspace_id", workspaceId)
-      .range(from, from + pageSize - 1);
-    if (error) throw error;
-    rows.push(...(data || []));
-    if (!data || data.length < pageSize) return rows;
+function afterCursor(query, keys, cursor) {
+  if (!cursor) return query;
+  if (keys.length === 1) return query.gt(keys[0], cursor[0]);
+  const [first, second] = keys;
+  return query.or(
+    `${first}.gt.${cursor[0]},and(${first}.eq.${cursor[0]},${second}.gt.${cursor[1]})`,
+  );
+}
+
+async function selectPage(client, table, workspaceId, columns, keys, cursor, pageSize) {
+  let query = client.from(table).select(columns).eq("workspace_id", workspaceId);
+  for (const key of keys) query = query.order(key, { ascending: true });
+  query = afterCursor(query, keys, cursor);
+  const { data, error } = await query.limit(pageSize);
+  if (error) throw error;
+  return data || [];
+}
+
+async function* selectPages(client, table, workspaceId, columns = "*", pageSize = 1000) {
+  const keys = DATASET_KEYS[table];
+  if (!keys) throw new Error(`No stable export cursor is configured for ${table}`);
+  let cursor = null;
+  for (;;) {
+    const data = await selectPage(client, table, workspaceId, columns, keys, cursor, pageSize);
+    if (data.length > 0) yield data;
+    if (data.length < pageSize) return;
+    const last = data[data.length - 1];
+    cursor = keys.map((key) => last[key]);
   }
 }
 
-async function updateRow(client, table, workspaceId, idFilters, patch) {
-  let query = client.from(table).update(patch).eq("workspace_id", workspaceId);
-  for (const [key, value] of Object.entries(idFilters)) query = query.eq(key, value);
-  const { error } = await query;
-  if (error) throw error;
+export async function selectAll(client, table, workspaceId, columns = "*") {
+  const rows = [];
+  for await (const page of selectPages(client, table, workspaceId, columns)) rows.push(...page);
+  return rows;
+}
+
+async function writeChunk(res, chunk) {
+  if (res.write(chunk) === false) await once(res, "drain");
+}
+
+export async function streamWorkspaceExport(res, client, workspace, generatedAt = new Date().toISOString()) {
+  const filename = `${String(workspace.slug || "restaurant").replace(/[^a-z0-9-]+/gi, "-")}-export-${generatedAt.slice(0, 10)}.json`;
+  res.setHeader?.("Content-Type", "application/json; charset=utf-8");
+  res.setHeader?.("Content-Disposition", `attachment; filename="${filename}"`);
+  res.status(200);
+  res.flushHeaders?.();
+  await writeChunk(res, `{"format":"service-board-workspace-export","version":1,"generatedAt":${JSON.stringify(generatedAt)},"workspace":${JSON.stringify(workspace)},"datasets":{`);
+  let firstDataset = true;
+  for (const { table } of EXPORT_DATASETS) {
+    await writeChunk(res, `${firstDataset ? "" : ","}${JSON.stringify(table)}:[`);
+    firstDataset = false;
+    let firstRow = true;
+    for await (const page of selectPages(client, table, workspace.id)) {
+      for (const row of page) {
+        await writeChunk(res, `${firstRow ? "" : ","}${JSON.stringify(row)}`);
+        firstRow = false;
+      }
+    }
+    await writeChunk(res, "]");
+  }
+  await writeChunk(res, "}}");
+  res.end();
+  return { streamed: true, filename };
 }
 
 function erasureMatches({ reservations, serviceTables, legacyArchives, auditRows }, normalizedName) {
@@ -223,17 +270,7 @@ export default async function handler(req, res) {
         .eq("id", workspaceId)
         .single();
       if (workspaceError) throw workspaceError;
-      const datasets = {};
-      for (const table of EXPORT_TABLES) datasets[table] = await selectAll(client, table, workspaceId);
-      const filename = `${String(workspace.slug || "restaurant").replace(/[^a-z0-9-]+/gi, "-")}-export-${new Date().toISOString().slice(0, 10)}.json`;
-      res.setHeader?.("Content-Disposition", `attachment; filename="${filename}"`);
-      return res.status(200).json({
-        format: "service-board-workspace-export",
-        version: 1,
-        generatedAt: new Date().toISOString(),
-        workspace,
-        datasets,
-      });
+      return await streamWorkspaceExport(res, client, workspace);
     }
 
     if (action !== "preview-erasure" && action !== "erase-guest") {
@@ -259,44 +296,16 @@ export default async function handler(req, res) {
     const counts = countsOf(matches);
     if (!destructive) return res.status(200).json({ ok: true, preview: true, counts });
 
-    const reservationIds = matches.reservationRows.map((row) => row.id);
-    for (let index = 0; index < reservationIds.length; index += 100) {
-      const { error } = await client
-        .from("reservations")
-        .delete()
-        .eq("workspace_id", workspaceId)
-        .in("id", reservationIds.slice(index, index + 100));
-      if (error) throw error;
-    }
-    for (const row of matches.boardRows) {
-      await updateRow(client, "service_tables", workspaceId, {
-        service_id: row.service_id,
-        table_id: row.table_id,
-      }, { data: redactPartyData(row.data), updated_at: new Date().toISOString() });
-    }
-    for (const entry of matches.archives) {
-      await updateRow(client, "service_archive", workspaceId, { id: entry.row.id }, { state: entry.redacted });
-    }
-    for (const entry of matches.audits) {
-      await updateRow(client, "audit_log", workspaceId, { id: entry.row.id }, {
-        before_data: entry.before,
-        after_data: entry.after,
-      });
-    }
-
-    const { error: auditError } = await client.from("audit_log").insert({
-      workspace_id: workspaceId,
-      actor_id: requester.id,
-      actor_email: requester.email || null,
-      action: "delete",
-      entity_type: "privacy_guest_erasure",
-      entity_key: stablePrivateToken(`${workspaceId}:${normalizedName}`),
-      before_data: { matched: counts },
-      after_data: { status: "erased" },
+    const { data: erased, error: eraseError } = await client.rpc("erase_workspace_guest", {
+      p_workspace_id: workspaceId,
+      p_actor_id: requester.id,
+      p_actor_email: requester.email || null,
+      p_normalized_name: normalizedName,
+      p_name_token: stablePrivateToken(`${workspaceId}:${normalizedName}`),
     });
-    if (auditError) throw auditError;
+    if (eraseError) throw eraseError;
 
-    return res.status(200).json({ ok: true, erased: true, counts });
+    return res.status(200).json({ ok: true, erased: true, counts: erased?.counts || counts });
   } catch (error) {
     console.error(JSON.stringify({
       level: "error",
@@ -305,6 +314,10 @@ export default async function handler(req, res) {
       action,
       error: String(error?.message || error).slice(0, 500),
     }));
+    if (res.headersSent) {
+      res.destroy?.(error);
+      return undefined;
+    }
     return res.status(500).json({
       error: "The data-management request did not complete. Re-run the preview before retrying; completed redactions are idempotent.",
     });

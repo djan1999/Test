@@ -498,21 +498,31 @@ export default function ResvForm({
               Rooms
               {rooms.length > 0 && <span style={{ color: tokens.text.muted, fontWeight: 400, marginLeft: 6 }}>#{[...rooms].sort((a, b) => String(a).localeCompare(String(b))).join(", ")}</span>}
             </div>
-            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-              {safeRoomOptions.map((r) => {
-                const isSel = rooms.includes(r);
-                return (
-                  <button key={r} onClick={() => setRooms((prev) => prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r])} style={{
-                    fontFamily: FONT, fontSize: 11, padding: "10px 10px", touchAction: "manipulation",
-                    border: "1px solid", borderColor: isSel ? tokens.charcoal.default : tokens.ink[4],
-                    borderRadius: 0, cursor: "pointer",
-                    background: isSel ? tokens.tint.parchment : tokens.neutral[0],
-                    color: tokens.ink[1],
-                    fontWeight: isSel ? 600 : 400,
-                  }}>{r}</button>
-                );
-              })}
-            </div>
+            {safeRoomOptions.length > 0 ? (
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                {safeRoomOptions.map((r) => {
+                  const isSel = rooms.includes(r);
+                  return (
+                    <button key={r} onClick={() => setRooms((prev) => prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r])} style={{
+                      fontFamily: FONT, fontSize: 11, padding: "10px 10px", touchAction: "manipulation",
+                      border: "1px solid", borderColor: isSel ? tokens.charcoal.default : tokens.ink[4],
+                      borderRadius: 0, cursor: "pointer",
+                      background: isSel ? tokens.tint.parchment : tokens.neutral[0],
+                      color: tokens.ink[1],
+                      fontWeight: isSel ? 600 : 400,
+                    }}>{r}</button>
+                  );
+                })}
+              </div>
+            ) : (
+              <input
+                value={rooms.join(", ")}
+                aria-label="Hotel room number"
+                placeholder="room no."
+                onChange={(event) => setRooms(event.target.value.split(",").map((room) => room.trim()))}
+                style={{ ...baseInp, width: "100%", fontSize: MOBILE_SAFE_INPUT_SIZE }}
+              />
+            )}
           </div>
         )}
       </div>

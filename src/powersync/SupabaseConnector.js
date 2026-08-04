@@ -22,11 +22,10 @@
 import { supabase } from "../lib/supabaseClient.js";
 import { POWERSYNC_URL } from "./config.js";
 import { naturalKeyFromLocalId, tableKeyFromLocalId } from "./rowId.js";
-import { saveServiceTableWithCas } from "../lib/serviceTableCas.js";
+import { saveServiceTableWithCas, saveServiceTablesBatchWithCas } from "../lib/serviceTableCas.js";
 import { saveServiceSettingWithCas } from "../lib/serviceSettingCas.js";
 import { isMergeableSettingKey } from "../utils/foldSettingState.js";
 import { recordClientDiagnostic } from "../lib/clientDiagnostics.js";
-import { tableHasServiceContent } from "../utils/tableHelpers.js";
 import { saveReservationWithCas } from "../lib/reservationCas.js";
 import { CAS_EXHAUSTED_CODE } from "../lib/casErrors.js";
 
@@ -97,7 +96,7 @@ const SCHEMA_RETRY_TABLES = new Set([
 // Postgres error classes that will fail identically on every retry —
 // constraint violations, bad data, missing columns/permissions, and PostgREST
 // schema-cache errors. Retrying these would wedge the queue forever.
-const PERMANENT_ERROR_CODES = [/^22...$/, /^23...$/, /^42...$/, /^PGRST\d+$/];
+const PERMANENT_ERROR_CODES = [/^22...$/, /^23...$/, /^42...$/, /^PGRST\d+$/, /^MG001$/];
 const isPermanentError = (error) =>
   PERMANENT_ERROR_CODES.some((re) => re.test(String(error?.code || "")));
 
@@ -108,6 +107,7 @@ const isPermanentError = (error) =>
 const isSkippableOperationalError = (error) => {
   const code = String(error?.code || "");
   return code === "42501" // RLS / insufficient privilege
+    || code === "MG001" // erased guest replay blocked by the database tombstone
     || /^22...$/.test(code) // invalid data
     || /^23...$/.test(code); // constraint verdict
 };
@@ -181,6 +181,19 @@ function workspaceFromAliasedId(op) {
   return cut > 0 ? value.slice(0, cut) : null;
 }
 
+function boardBatchScope(op) {
+  const workspaceId = op.opData?.workspace_id
+    ?? op.previousValues?.workspace_id
+    ?? workspaceFromAliasedId(op);
+  if (!workspaceId) return null;
+  const parsed = tableKeyFromLocalId(op.id, String(workspaceId));
+  const serviceId = op.opData?.service_id
+    ?? op.previousValues?.service_id
+    ?? parsed.serviceId;
+  if (!serviceId) return null;
+  return `${workspaceId}|${serviceId}`;
+}
+
 // Resolve the workspace from immutable operation evidence only. The selected
 // workspace is deliberately NOT a fallback: it describes the UI now, not the
 // restaurant where an offline operation originated. The local-row lookup
@@ -246,24 +259,36 @@ async function applyServiceTableWrite(op, ws, row) {
 }
 
 // A MOVE is stored locally as "destination receives the party" + "source is
-// blanked". Upload the claim first. If the destination became occupied on the
-// server, its CAS refuses and the WHOLE gesture is dropped (see uploadData) —
-// the source blank never uploads, so the party stays on its server table and
-// the next checkpoint restores it locally: a refused move simply didn't
-// happen. Stable ordering keeps unrelated operations in their original order.
-function serviceTableClaimsFirst(crud) {
-  const boardWrites = (crud || []).filter((op) => op.table === "service_tables" && op.op !== OP_DELETE);
-  const ids = boardWrites.map((op) => String(op.id));
-  if (new Set(ids).size !== ids.length) return crud; // preserve same-row operation order
-  const priority = (op) => {
-    if (op.table !== "service_tables" || op.op === OP_DELETE) return 1;
-    const data = convertValue("service_tables", "data", op.opData?.data);
-    const hasParty = Boolean(String(data?.resName || "").trim() || String(data?.resTime || "").trim());
-    return tableHasServiceContent(data) || hasParty ? 0 : 2;
-  };
-  return (crud || []).map((op, index) => ({ op, index, priority: priority(op) }))
-    .sort((a, b) => a.priority - b.priority || a.index - b.index)
-    .map(({ op }) => op);
+// blanked" in one SQLite transaction. Fold every distinct board row first,
+// then commit them through one Postgres RPC so a gesture can never be partly
+// acknowledged on the server.
+async function applyServiceTableBatch(ops, database) {
+  const writes = [];
+  let workspaceId = null;
+  let serviceId = null;
+  for (const op of ops) {
+    const ws = await workspaceForOp(op, database);
+    const row = buildRow(op, ws);
+    if (workspaceId && workspaceId !== ws) {
+      throw new PermanentOpError("one board transaction cannot span restaurant workspaces");
+    }
+    if (serviceId && serviceId !== row.service_id) {
+      throw new PermanentOpError("one board transaction cannot span service namespaces");
+    }
+    workspaceId = ws;
+    serviceId = row.service_id;
+    writes.push({
+      tableId: row.table_id,
+      data: row.data ?? {},
+      ancestor: convertValue("service_tables", "data", op.previousValues?.data),
+    });
+  }
+  try {
+    await saveServiceTablesBatchWithCas({ client: supabase, workspaceId, serviceId, writes });
+    return { error: null };
+  } catch (error) {
+    return { error };
+  }
 }
 
 async function applyMergeableSettingWrite(op, ws, row) {
@@ -447,9 +472,26 @@ export class SupabaseConnector {
     const transaction = await database.getNextCrudTransaction();
     if (!transaction) return;
 
-    for (const op of serviceTableClaimsFirst(transaction.crud)) {
+    const crud = transaction.crud || [];
+    const boardWrites = crud.filter((op) => op.table === "service_tables" && op.op !== OP_DELETE);
+    const boardIds = boardWrites.map((op) => String(op.id));
+    const boardScopes = boardWrites.map(boardBatchScope);
+    const batchBoardWrites = boardWrites.length > 1
+      && new Set(boardIds).size === boardIds.length
+      && boardScopes.every(Boolean)
+      && new Set(boardScopes).size === 1;
+    let boardBatchHandled = false;
+
+    for (const op of crud) {
       try {
-        const result = await applyOp(op, database);
+        let result;
+        if (batchBoardWrites && op.table === "service_tables" && op.op !== OP_DELETE) {
+          if (boardBatchHandled) continue;
+          boardBatchHandled = true;
+          result = await applyServiceTableBatch(boardWrites, database);
+        } else {
+          result = await applyOp(op, database);
+        }
         if (result?.error) {
           if (result.error.code === "MILKA_TABLE_CONFLICT") {
             // The CAS refused this board write: the table changed or became
@@ -459,19 +501,19 @@ export class SupabaseConnector {
             // transient wedged the queue forever, and since checkpoints are
             // never applied over pending uploads, one refused write froze the
             // whole device in BOTH directions (23.07 Demo drill). Accept the
-            // verdict instead: surface it, drop the REST of this gesture
-            // (claims-first ordering puts a move's refused destination before
-            // its source blank, so nothing is ever erased by the drop), and
-            // let the next checkpoint restore server truth locally.
+            // verdict instead: surface it and drop the REST of this gesture.
+            // Multi-row board gestures use one atomic RPC, so a refusal cannot
+            // leave a destination claim or source clear partially applied.
             console.error("[PowerSync] CAS refused board write — dropping the rest of its transaction:", op, result.error.message);
             recordClientDiagnostic("board write refused (newer table kept)", result.error);
             break;
           }
           if (result.error.code === CAS_EXHAUSTED_CODE) {
-            console.error("[PowerSync] compare-and-swap exhausted — server truth kept:", opIdentity(op), result.error.message);
-            recordClientDiagnostic(`${op.table} concurrent edit not applied`, result.error);
-            if (op.table === "service_tables") break;
-            continue;
+            // Four immediate CAS misses indicate hot contention, not a final
+            // user-intent verdict. Keep the transaction pending so PowerSync
+            // retries it with transport-level backoff instead of losing it.
+            console.warn("[PowerSync] compare-and-swap exhausted — retaining transaction for retry:", opIdentity(op), result.error.message);
+            throw result.error;
           }
           if (isPermanentError(result.error)
               && (!SCHEMA_RETRY_TABLES.has(op.table) || isSkippableOperationalError(result.error))) {

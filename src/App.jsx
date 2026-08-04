@@ -93,6 +93,7 @@ import {
 import {
   RESTAURANT_CONFIG_KEY,
   configuredTableIds,
+  fallbackFeaturesForWorkspace,
   makeDefaultRestaurantConfig,
   reconcileConfiguredTables,
   removedLiveTableIds,
@@ -425,7 +426,7 @@ export default function App() {
     const fallback = makeDefaultRestaurantConfig({
       name: currentWorkspace?.name || APP_NAME,
       subtitle: APP_SUBTITLE,
-      features: DEFAULT_RESTAURANT_CONFIG.features,
+      features: fallbackFeaturesForWorkspace(currentWorkspace, DEFAULT_RESTAURANT_CONFIG.features),
     });
     if (!supabase) {
       setRestaurantConfig(fallback);
@@ -462,7 +463,7 @@ export default function App() {
         });
       });
     return () => { cancelled = true; };
-  }, [workspaceId, currentWorkspace?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workspaceId, currentWorkspace?.name, currentWorkspace?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The table whose side sheet is open. The board stays mounted behind it —
   // `sel` never swaps the view, it only raises the sheet.
@@ -884,17 +885,9 @@ export default function App() {
         const { writeServiceTables } = await import("./powersync/writes.js");
         await writeServiceTables(svcId, rows);
       } else {
-        const { saveServiceTableWithCas } = await import("./lib/serviceTableCas.js");
+        const { saveServiceTableWithCas, saveServiceTablesBatchWithCas } = await import("./lib/serviceTableCas.js");
         const ws = getWorkspaceId();
-        // A move is destination=party plus source=blank. Claim destinations
-        // first so a newly occupied destination refuses the batch before its
-        // source can be cleared. (SQLite applies the rows atomically already.)
-        const orderedRows = rows.map((row, index) => {
-          const data = row?.data || {};
-          const hasParty = Boolean(String(data.resName || "").trim() || String(data.resTime || "").trim());
-          return { row, index, priority: tableHasServiceContent(data) || hasParty ? 0 : 2 };
-        }).sort((a, b) => a.priority - b.priority || a.index - b.index);
-        for (const { row } of orderedRows) {
+        const writes = rows.map((row) => {
           const tableId = Number(row.table_id);
           let ancestor = null;
           try {
@@ -915,18 +908,38 @@ export default function App() {
               arrivedAt: unseatAncestor.arrivedAt,
             };
           }
-          const saved = await saveServiceTableWithCas({
+          return { tableId, data: row.data, ancestor };
+        });
+        const ids = writes.map(({ tableId }) => tableId);
+        if (writes.length > 1 && new Set(ids).size === ids.length) {
+          const saved = await saveServiceTablesBatchWithCas({
             client: supabase,
             workspaceId: ws,
             serviceId: svcId,
-            tableId: row.table_id,
-            data: row.data,
-            ancestor,
+            writes,
           });
-          persistedData.set(
-            tableId,
-            sanitizeTable({ id: tableId, ...(saved.data || {}) }),
-          );
+          for (const result of saved.rows) {
+            persistedData.set(
+              result.tableId,
+              sanitizeTable({ id: result.tableId, ...(result.data || {}) }),
+            );
+          }
+        } else {
+          for (const write of writes) {
+            const tableId = Number(write.tableId);
+            const saved = await saveServiceTableWithCas({
+              client: supabase,
+              workspaceId: ws,
+              serviceId: svcId,
+              tableId,
+              data: write.data,
+              ancestor: write.ancestor,
+            });
+            persistedData.set(
+              tableId,
+              sanitizeTable({ id: tableId, ...(saved.data || {}) }),
+            );
+          }
         }
       }
       // The store now holds exactly these rows — advance the CONFIRMED
@@ -1156,8 +1169,24 @@ export default function App() {
         ...next,
         ancestor: previous?.ancestor ?? next.ancestor,
       }),
+      shouldRetainError: (error) => String(error?.code || "") !== "MG001",
     });
   }
+
+  const closePrivacyErasureOnDevice = useCallback(async () => {
+    const queue = reservationQueueRef.current;
+    for (const key of queue?.pending?.() || []) queue.drop(key);
+    try { localStorage.removeItem("milka-reservation-write-queue-v1"); } catch { /* noop */ }
+    if (!psEnabled) return { ok: true, syncReset: false };
+    try {
+      const { clearLocalAndResync } = await import("./powersync/system.js");
+      await clearLocalAndResync();
+      return { ok: true, syncReset: true };
+    } catch (error) {
+      recordClientDiagnostic("privacy erasure local reset", error);
+      return { ok: false, error };
+    }
+  }, [psEnabled]);
 
   // Persist one reservation row (update-or-insert by id).
   const persistReservationRow = useCallback(async ({ id, date, table_id, data, created_at }) => {
@@ -4967,6 +4996,7 @@ export default function App() {
         onSaveRestaurantConfig={saveRestaurantConfiguration}
         accessToken={session?.access_token || null}
         workspaceId={workspaceId}
+        onPrivacyErasureComplete={closePrivacyErasureOnDevice}
         currentUserId={session?.user?.id || null}
         menuCourses={menuCourses}
         onUpdateMenuCourses={(next) => { menuCoursesDirtyRef.current = true; setMenuCourses(next); }}

@@ -91,6 +91,33 @@ describe("ResvForm — flow-key carry-through", () => {
   });
 });
 
+describe("ResvForm — hotel room fallback", () => {
+  it("accepts free-text rooms when hotel mode has no configured room list", async () => {
+    const onSave = vi.fn(async () => {});
+    render(
+      <ResvForm
+        initial={makeInitial()}
+        tables={tables}
+        reservations={[]}
+        excludeId="res-1"
+        onSave={onSave}
+        onCancel={vi.fn()}
+        hotelGuestsEnabled
+        roomOptions={[]}
+      />
+    );
+    fireEvent.click(screen.getByText("Hotel"));
+    fireEvent.change(screen.getByLabelText("Hotel room number"), { target: { value: "204, 205" } });
+    fireEvent.click(screen.getByText("SAVE"));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0].data).toMatchObject({
+      guestType: "hotel",
+      room: "204",
+      rooms: ["204", "205"],
+    });
+  });
+});
+
 // ── ResvForm — restrictions belong to a GUEST ────────────────────────────────
 // A guest who is "no pork + no alcohol" is ONE cover. Entered as two loose
 // entries they printed two separate "1×" lines on the kitchen ticket, which

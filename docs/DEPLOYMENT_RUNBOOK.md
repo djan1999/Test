@@ -58,15 +58,19 @@ and pass 49/49 database assertions, so treat these as separate facts.
 
 ## Promotion order
 
-1. Deploy the client/server-function release containing workspace-stamped
-   PowerSync writes, zero-row diagnostics, and permanent-verdict handling.
-2. Confirm the deployment is READY, update every existing tablet outside a
-   live service, and verify each device has no upload/stream error. Drain all
-   pending queues before continuing.
-3. Reconfirm the restore evidence from the pre-deployment gate.
-4. Apply the reviewed Supabase migration.
-5. Execute the real-Postgres role matrix, cross-tenant checks, composite-FK
+1. Outside a live service, update every existing tablet to its current approved
+   build and drain all pending upload queues.
+2. Reconfirm the restore evidence from the pre-deployment gate, then apply the
+   reviewed Supabase migration. This must precede the new client/server release
+   because that release calls the atomic board-batch and privacy-erasure RPCs.
+3. Execute the real-Postgres role matrix, cross-tenant checks, composite-FK
    check, grant check, and advisors against the migrated database.
+4. Deploy the client/server-function release containing workspace-stamped
+   PowerSync writes, atomic board gestures, streaming exports, and permanent-
+   verdict handling. Confirm the deployment is READY before opening tablets.
+5. Update every existing tablet outside a live service and verify each device
+   has no upload/stream error. The client has a Milka-slug compatibility fallback
+   for hotel rooms, while the migration also upserts the durable feature block.
 6. Open the application as an Admin, Service account, and Kitchen account.
 7. Run the two-device smoke test. Create the first restricted-role pilot users
    only after both the resilient client and tightened RLS are live.

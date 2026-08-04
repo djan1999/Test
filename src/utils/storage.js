@@ -273,4 +273,5 @@ export function clearGuestDataCaches() {
   for (const key of [RESERVATIONS_KEY, WEEKLY_SHEET_EDITS_KEY, SERVICE_BREAKDOWN_DOC_KEY]) {
     try { localStorage.removeItem(wsKey(key)); } catch {}
   }
+  try { localStorage.removeItem("milka-reservation-write-queue-v1"); } catch {}
 }

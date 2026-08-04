@@ -54,8 +54,9 @@ actual Kitchen profile during the role drill.
   migration stack, including `supabase/tests/pilot_role_matrix.sql`.
 - [ ] A fresh Supabase branch completed its **automatic** migration replay; the
   repository migration files and production migration ledger were reconciled.
-- [ ] The resilient client release reached every existing tablet and all
-  upload queues were drained before the RLS migration.
+- [ ] Every existing tablet's old upload queue was drained, then the compatible
+  database migration was applied before deploying the client/server build that
+  depends on its new RPCs.
 - [ ] The composite workspace/service FK, exact grants, RLS matrix, audit
   redaction, and database advisors were verified after migration.
 - [ ] Supabase Auth leaked-password protection is enabled and its security

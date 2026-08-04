@@ -116,6 +116,7 @@ export default function AdminLayout({
   accessToken = null,
   workspaceId = null,
   currentUserId = null,
+  onPrivacyErasureComplete = null,
   // Navigation
   onExit,
 }) {
@@ -327,6 +328,7 @@ export default function AdminLayout({
               accessToken={accessToken}
               workspaceId={workspaceId}
               appName={appName}
+              onErasureComplete={onPrivacyErasureComplete}
             />
           )}
 

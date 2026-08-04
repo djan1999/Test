@@ -22,6 +22,13 @@ begin
 end;
 $$;
 
+create table public.pilot_rls_probe(id integer primary key);
+select ok(
+  (select relrowsecurity from pg_class where oid = 'public.pilot_rls_probe'::regclass),
+  'the DDL event trigger enables RLS on every new public table'
+);
+drop table public.pilot_rls_probe;
+
 -- Deterministic fixture identities; the transaction is rolled back at EOF.
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -52,21 +59,38 @@ insert into public.services (
   ('30000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000002', current_date, 'dinner', now() - interval '1 hour', 'live', null, null, null, now());
 
 insert into public.service_tables (workspace_id, service_id, table_id, data, updated_at)
-values (
+values
+(
   '20000000-0000-0000-0000-000000000001',
   '30000000-0000-0000-0000-000000000001',
   1,
   '{"active":true}',
   now()
+),
+(
+  '20000000-0000-0000-0000-000000000001',
+  '30000000-0000-0000-0000-000000000001',
+  9,
+  '{"active":true,"resName":"Erase Me","room":"204"}',
+  now()
 );
 
 insert into public.reservations (id, workspace_id, date, table_id, data, created_at)
-values (
+values
+(
   '40000000-0000-0000-0000-000000000001',
   '20000000-0000-0000-0000-000000000001',
   current_date,
   1,
   '{"resName":"Fixture"}',
+  now()
+),
+(
+  '40000000-0000-0000-0000-000000000009',
+  '20000000-0000-0000-0000-000000000001',
+  current_date,
+  9,
+  '{"resName":"Erase Me","room":"204"}',
   now()
 );
 
@@ -123,6 +147,71 @@ select ok(
   'the duplicate production wine index is absent'
 );
 
+select throws_ok(
+  $$select public.save_service_tables_batch_if_current(
+      '20000000-0000-0000-0000-000000000001',
+      '30000000-0000-0000-0000-000000000001',
+      jsonb_build_array(
+        jsonb_build_object(
+          'table_id', 1,
+          'expected_updated_at', (select updated_at from public.service_tables
+            where workspace_id = '20000000-0000-0000-0000-000000000001'
+              and service_id = '30000000-0000-0000-0000-000000000001'
+              and table_id = 1),
+          'data', '{"active":false}'::jsonb
+        ),
+        jsonb_build_object(
+          'table_id', 9,
+          'expected_updated_at', '2000-01-01T00:00:00Z',
+          'data', '{"active":false}'::jsonb
+        )
+      ),
+      clock_timestamp()
+    )$$,
+  '40001'::character(5),
+  null::text,
+  'a version miss aborts the whole multi-table board gesture'
+);
+select is(
+  (select data from public.service_tables
+    where workspace_id = '20000000-0000-0000-0000-000000000001'
+      and service_id = '30000000-0000-0000-0000-000000000001'
+      and table_id = 1),
+  '{"active":true}'::jsonb,
+  'the earlier row in a refused board batch was rolled back'
+);
+
+select lives_ok(
+  $$select public.erase_workspace_guest(
+      '20000000-0000-0000-0000-000000000001',
+      '10000000-0000-0000-0000-000000000001',
+      'admin-a@test.invalid',
+      private.privacy_normalize_guest_name('Erase Me'),
+      private.privacy_guest_token(
+        '20000000-0000-0000-0000-000000000001',
+        private.privacy_normalize_guest_name('Erase Me')
+      )
+    )$$,
+  'guest erasure completes as one database transaction'
+);
+select is(
+  (select count(*)::integer from public.reservations
+    where id = '40000000-0000-0000-0000-000000000009'),
+  0,
+  'guest erasure deletes the matching reservation'
+);
+select is(
+  (select data ->> 'resName' from public.service_tables where table_id = 9),
+  '[erased]',
+  'guest erasure redacts the current service row'
+);
+select is(
+  (select count(*)::integer from public.audit_log
+    where entity_type = 'privacy_guest_erasure'),
+  1,
+  'guest erasure and its audit record commit together'
+);
+
 -- Admin A is intentionally also Admin B: RLS permits both workspaces, so only
 -- the composite FK can reject a mixed A-row/B-service relationship.
 set local role authenticated;
@@ -158,6 +247,30 @@ select throws_ok(
   '42501'::character(5),
   null::text,
   'even an Admin cannot rewrite service start identity'
+);
+
+select throws_ok(
+  $$update public.reservations
+       set workspace_id = '20000000-0000-0000-0000-000000000002'
+     where id = '40000000-0000-0000-0000-000000000001'$$,
+  '42501'::character(5),
+  null::text,
+  'a dual-workspace Admin cannot move a reservation between restaurants'
+);
+
+select throws_ok(
+  $$insert into public.reservations(id, workspace_id, date, table_id, data, created_at)
+    values (
+      '40000000-0000-0000-0000-000000000008',
+      '20000000-0000-0000-0000-000000000001',
+      current_date,
+      8,
+      '{"resName":"Erase Me"}',
+      now()
+    )$$,
+  'MG001'::character(5),
+  null::text,
+  'a stale tablet cannot replay an erased guest into reservations'
 );
 
 select lives_ok(

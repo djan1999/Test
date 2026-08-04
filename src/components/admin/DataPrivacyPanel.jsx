@@ -1,12 +1,17 @@
 import { useState } from "react";
-import { downloadJsonExport, requestPrivacyAction } from "../../lib/privacy.js";
+import { downloadPrivacyExport, requestPrivacyAction } from "../../lib/privacy.js";
 import { clearGuestDataCaches } from "../../utils/storage.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInp, dangerBtn, primaryBtn, sectionHeader } from "./adminStyles.js";
 
 const totalMatches = (counts = {}) => Object.values(counts).reduce((sum, value) => sum + Number(value || 0), 0);
 
-export default function DataPrivacyPanel({ accessToken, workspaceId, appName = "Restaurant" }) {
+export default function DataPrivacyPanel({
+  accessToken,
+  workspaceId,
+  appName = "Restaurant",
+  onErasureComplete = null,
+}) {
   const [busy, setBusy] = useState(null);
   const [guestName, setGuestName] = useState("");
   const [preview, setPreview] = useState(null);
@@ -17,9 +22,7 @@ export default function DataPrivacyPanel({ accessToken, workspaceId, appName = "
     setBusy("export");
     setMessage(null);
     try {
-      const data = await requestPrivacyAction({ accessToken, workspaceId, action: "export" });
-      const slug = String(data?.workspace?.slug || "restaurant").replace(/[^a-z0-9-]+/gi, "-");
-      downloadJsonExport(data, `${slug}-export-${new Date().toISOString().slice(0, 10)}.json`);
+      await downloadPrivacyExport({ accessToken, workspaceId });
       setMessage({ type: "success", text: "Workspace export downloaded. Store it only in an approved secure location." });
     } catch (error) {
       setMessage({ type: "error", text: error.message });
@@ -68,11 +71,16 @@ export default function DataPrivacyPanel({ accessToken, workspaceId, appName = "
         payload: { guestName: preview.guestName, confirmation: typed },
       });
       clearGuestDataCaches();
+      const localReset = await onErasureComplete?.();
       setGuestName("");
       setPreview(null);
       setMessage({
         type: "success",
-        text: `Erasure completed (${totalMatches(data.counts)} matched records). Reset/re-sync every restaurant tablet before treating the request as closed.`,
+        text: localReset?.ok === false
+          ? `Erasure completed (${totalMatches(data.counts)} matched records), but this tablet could not reset its local sync database. Server replay protection remains active; reset this tablet from Admin → System before continuing.`
+          : localReset?.syncReset
+            ? `Erasure completed (${totalMatches(data.counts)} matched records). This tablet's pending writes were discarded and its local sync database was rebuilt; server replay protection blocks stale copies from other tablets.`
+            : `Erasure completed (${totalMatches(data.counts)} matched records). This tablet's pending fallback writes and cached guest data were cleared; server replay protection blocks stale copies from other tablets.`,
       });
     } catch (error) {
       setMessage({ type: "error", text: error.message });

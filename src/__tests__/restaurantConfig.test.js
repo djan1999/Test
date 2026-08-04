@@ -2,6 +2,7 @@ import { blankTable } from "../utils/tableHelpers.js";
 import {
   configuredTableIds,
   configuredTableLabel,
+  fallbackFeaturesForWorkspace,
   makeDefaultRestaurantConfig,
   reconcileConfiguredTables,
   removedLiveTableIds,
@@ -52,5 +53,16 @@ describe("restaurant configuration", () => {
     }).features).toEqual({ hotelGuests: true, roomOptions: ["101", "202"] });
     expect(sanitizeRestaurantConfig({ features: { roomOptions: ["101"] } }).features.hotelGuests)
       .toBe(false);
+  });
+
+  it("keeps Milka hotel rooms during a client-first compatibility window", () => {
+    expect(fallbackFeaturesForWorkspace({ slug: "milka" })).toEqual({
+      hotelGuests: true,
+      roomOptions: ["01", "11", "12", "21", "22", "23"],
+    });
+    expect(fallbackFeaturesForWorkspace({ slug: "pilot-bistro" })).toEqual({
+      hotelGuests: false,
+      roomOptions: [],
+    });
   });
 });

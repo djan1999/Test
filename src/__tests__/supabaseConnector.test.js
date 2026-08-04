@@ -211,7 +211,7 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     ]);
   });
 
-  it("uploads a MOVE destination first and keeps the source when that destination became occupied", async () => {
+  it("refuses an entire atomic MOVE when its destination became occupied", async () => {
     const blank = { id: 7, active: false, resName: "", resTime: "", seats: [] };
     const alphaAtSource = { id: 3, active: true, resName: "ALPHA", resTime: "19:00", seats: [] };
     const alphaAtDestination = { ...alphaAtSource, id: 7 };
@@ -232,7 +232,6 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
       }),
       previousValues: { workspace_id: "ws-a", data: JSON.stringify(blank) },
     };
-    // Deliberately source-first: the connector must reorder this safely.
     const tx = makeTx([sourceBlank, destinationClaim]);
 
     // REGRESSION (23.07): this refusal used to rethrow as transient, so the
@@ -243,10 +242,64 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     vi.mocked(recordClientDiagnostic).mockClear();
     await new SupabaseConnector().uploadData(makeDb(tx));
 
-    // Only the destination's CAS read ran — no overwrite, no source clear RPC.
+    // The fold refuses before the atomic batch RPC: neither row is changed.
     expect(h.calls.filter((c) => c.op === "rpc")).toHaveLength(0);
     expect(tx.complete).toHaveBeenCalledTimes(1);
     expect(recordClientDiagnostic).toHaveBeenCalledTimes(1);
+  });
+
+  it("commits both sides of a MOVE through one atomic batch RPC", async () => {
+    const source = { id: 3, active: true, resName: "ALPHA", resTime: "19:00", seats: [] };
+    const destination = { id: 7, active: false, resName: "", resTime: "", seats: [] };
+    const sourceBlank = { ...destination, id: 3 };
+    const destinationClaim = { ...source, id: 7 };
+    h.remoteServiceTables = {
+      3: { data: source, updated_at: "2026-07-20T18:00:00.000Z" },
+      7: { data: destination, updated_at: "2026-07-20T18:00:01.000Z" },
+    };
+    const tx = makeTx([
+      {
+        ...patch("service_tables", "ws-a|svc-1|3", {
+          service_id: "svc-1", table_id: 3, data: JSON.stringify(sourceBlank), workspace_id: "ws-a",
+        }),
+        previousValues: { workspace_id: "ws-a", data: JSON.stringify(source) },
+      },
+      {
+        ...patch("service_tables", "ws-a|svc-1|7", {
+          service_id: "svc-1", table_id: 7, data: JSON.stringify(destinationClaim), workspace_id: "ws-a",
+        }),
+        previousValues: { workspace_id: "ws-a", data: JSON.stringify(destination) },
+      },
+    ]);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    const calls = h.calls.filter((call) => call.name === "save_service_tables_batch_if_current");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].payload.p_rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ table_id: 3, data: expect.objectContaining({ resName: "" }) }),
+      expect.objectContaining({ table_id: 7, data: expect.objectContaining({ resName: "ALPHA" }) }),
+    ]));
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not batch unrelated board rows from different services", async () => {
+    const tx = makeTx([
+      patch("service_tables", "ws-a|svc-1|3", {
+        service_id: "svc-1", table_id: 3, data: "{}", workspace_id: "ws-a",
+      }),
+      patch("service_tables", "ws-a|svc-2|7", {
+        service_id: "svc-2", table_id: 7, data: "{}", workspace_id: "ws-a",
+      }),
+    ]);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls.filter((call) => call.name === "save_service_tables_batch_if_current"))
+      .toHaveLength(0);
+    expect(h.calls.filter((call) => call.name === "save_service_table_if_current"))
+      .toHaveLength(2);
+    expect(tx.complete).toHaveBeenCalledTimes(1);
   });
 
   it("REGRESSION (23.07): a concurrent-clear refusal completes the transaction instead of freezing the device", async () => {
@@ -602,19 +655,17 @@ describe("SupabaseConnector.uploadData — error policy", () => {
     expect(tx.complete).toHaveBeenCalledTimes(1);
   });
 
-  it("CAS exhaustion is a surfaced verdict, not an infinite retry", async () => {
+  it("CAS exhaustion retains the transaction for PowerSync backoff", async () => {
     h.rpcResponses.save_service_setting_if_current = [false, false, false, false];
     h.remoteServiceSetting = { state: {}, updated_at: "t" };
     vi.mocked(recordClientDiagnostic).mockClear();
     const tx = makeTx([patch("service_settings", "ws-a|floor_status_v1", {
       id: "floor_status_v1", state: "{}", workspace_id: "ws-a",
     })]);
-    await new SupabaseConnector().uploadData(makeDb(tx));
-    expect(recordClientDiagnostic).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(recordClientDiagnostic).mock.calls[0][1]).toMatchObject({
+    await expect(new SupabaseConnector().uploadData(makeDb(tx))).rejects.toMatchObject({
       code: "MILKA_CAS_EXHAUSTED",
     });
-    expect(tx.complete).toHaveBeenCalledTimes(1);
+    expect(tx.complete).not.toHaveBeenCalled();
   });
 
   it("unknown tables are skipped as permanent", async () => {

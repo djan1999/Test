@@ -21,6 +21,21 @@ export const DEFAULT_RESTAURANT_FEATURES = Object.freeze({
   roomOptions: Object.freeze([]),
 });
 
+export const LEGACY_MILKA_FEATURES = Object.freeze({
+  hotelGuests: true,
+  roomOptions: Object.freeze(["01", "11", "12", "21", "22", "23"]),
+});
+
+// Deployment compatibility: the generic client may reach tablets before the
+// migration has backfilled the workspace-owned feature block. Only the known
+// legacy Milka workspace receives its historic hotel-room behavior; every new
+// restaurant remains neutral.
+export function fallbackFeaturesForWorkspace(workspace, neutral = DEFAULT_RESTAURANT_FEATURES) {
+  return String(workspace?.slug || "").trim().toLowerCase() === "milka"
+    ? LEGACY_MILKA_FEATURES
+    : neutral;
+}
+
 function sanitizeFeatures(raw, fallback = DEFAULT_RESTAURANT_FEATURES) {
   const source = raw && typeof raw === "object" ? raw : fallback;
   const roomOptions = [...new Set(
