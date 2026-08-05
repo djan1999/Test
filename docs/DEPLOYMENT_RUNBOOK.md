@@ -56,6 +56,40 @@ and pass 49/49 database assertions, so treat these as separate facts.
 4. Create another fresh automatic branch and require a healthy replay before
    production promotion.
 
+**EXECUTED 2026-08-04/05.** The reconciliation above was carried out against
+production (`cvljktjmksfibuyphdln`):
+
+- Root cause confirmed: the production ledger held 28 entries, 18 with no
+  repository file and two (`20260713112749`, `20260713124500`) with **empty
+  statement arrays**, so automatic branch replay could never reproduce them.
+- Before any change, the full ledger, all `public` policies, and the
+  configuration-critical tables were copied server-side into the
+  `ops_snapshot_20260805` schema (not API-exposed; keep until the next
+  verified backup restore, then drop).
+- `supabase/migrations/20260804103132_pilot_role_hardening.sql` was applied to
+  production (ledger version `20260804231735`). Post-apply verification: 38
+  policies with the role-scoped `services` set, both tenant constraints,
+  lifecycle audit + immutability triggers, `ensure_rls` event trigger,
+  hardened `is_workspace_member`, backup table relocated to `private`, Milka
+  feature/provider stamps present, all row counts unchanged, security
+  advisors free of new findings.
+- The ledger was then squashed to two replayable entries: `20260804000000
+  baseline_squash_canonical_schema` (the canonical schema, pre-hardening
+  portion) and `20260804231735 pilot_role_hardening`. The prior 28 entries
+  remain in `ops_snapshot_20260805.schema_migrations`.
+- Proof: a fresh automatic branch (`replay-proof`) rebuilt the complete
+  schema from the new ledger alone (12 tables / 38 policies, matching
+  production exactly), and `supabase/tests/pilot_role_matrix.sql` passed
+  **64/64** assertions on that branch. The branch was deleted afterwards.
+- The next production service day (2026-08-05) completed normally on the
+  migrated database: board, reservation, and settings writes all day, and a
+  manual catalogue sync succeeded post-migration.
+
+Going forward, every schema change MUST be a repository migration applied
+through tooling that records the ledger entry — never an ad-hoc dashboard
+edit. The ledger and `supabase/migrations/` are now in lockstep; keep them
+that way.
+
 ## Promotion order
 
 1. Outside a live service, update every existing tablet to its current approved
