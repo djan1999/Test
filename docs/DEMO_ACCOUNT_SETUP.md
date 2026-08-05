@@ -24,12 +24,11 @@ do update set role = excluded.role;
 4. Verify the two accounts are isolated:
 
 ```sql
-select w.slug, u.email, m.user_id
+select w.slug, u.email, m.role, m.user_id
 from public.workspace_members m
 join public.workspaces w on w.id = m.workspace_id
 join auth.users u on u.id = m.user_id
-where w.slug in ('milka', 'demo')
-order by w.slug, u.email;
+order by w.slug, m.role, u.email;
 ```
 
 The Demo user must appear only beside `demo`; the Milka login must appear only

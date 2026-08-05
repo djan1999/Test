@@ -50,17 +50,26 @@ actual Kitchen profile during the role drill.
 
 - [ ] A current production backup was restored into an isolated project; date,
   project, verifier, and smoke-query evidence are recorded.
-- [ ] `supabase test db` passed against a disposable database after the full
+- [x] `supabase test db` passed against a disposable database after the full
   migration stack, including `supabase/tests/pilot_role_matrix.sql`.
-- [ ] A fresh Supabase branch completed its **automatic** migration replay; the
+  *(2026-08-05: 64/64 assertions on branch `replay-proof`, built from the
+  reconciled ledger — see the executed record in DEPLOYMENT_RUNBOOK.md.)*
+- [x] A fresh Supabase branch completed its **automatic** migration replay; the
   repository migration files and production migration ledger were reconciled.
-- [ ] Every existing tablet's old upload queue was drained, then the compatible
+  *(2026-08-05: ledger squashed to baseline + hardening; branch replay
+  reproduced production exactly.)*
+- [x] Every existing tablet's old upload queue was drained, then the compatible
   database migration was applied before deploying the client/server build that
-  depends on its new RPCs.
-- [ ] The composite workspace/service FK, exact grants, RLS matrix, audit
+  depends on its new RPCs. *(Executed in the reverse-safe order on
+  2026-08-04: resilient client deployed first, migration applied the same
+  night outside service; the following full service day ran normally on the
+  migrated database, including a successful post-migration catalogue sync.)*
+- [x] The composite workspace/service FK, exact grants, RLS matrix, audit
   redaction, and database advisors were verified after migration.
+  *(2026-08-04 post-apply verification — recorded in DEPLOYMENT_RUNBOOK.md.)*
 - [ ] Supabase Auth leaked-password protection is enabled and its security
-  advisor warning is cleared.
+  advisor warning is cleared. *(One-click toggle in the Supabase dashboard
+  under Authentication → Providers → Password; not reachable via SQL.)*
 - [ ] Admin, Service, and Kitchen accounts completed every service drill on the
   actual FOH/Kitchen devices, including offline, stale PWA, and reset recovery.
 - [ ] The controller approved retention periods for reservations/allergies,

@@ -24,8 +24,9 @@ Do these in one controlled release, preferably after service hours:
 
 1. Back up the Supabase database.
 2. Create/use separate Supabase Auth logins for Milka and Demo. Verify each is
-   linked only to its own `workspace_members` row. All current members have
-   full restaurant owner/admin access; roles are deferred until later.
+   linked only to its own `workspace_members` row. Membership roles (`admin`,
+   `service`, `kitchen`) are enforced in Postgres RLS — see
+   `supabase/tests/pilot_role_matrix.sql` for the executable contract.
 3. Apply every file in `supabase/migrations/` in filename order. The publication
    migration reconstructs PowerSync's source list; the final account migration
    removes the old cross-restaurant pathway.
@@ -40,12 +41,14 @@ Do these in one controlled release, preferably after service hours:
    `docs/SERVICE_DRILLS.md`: tap service → kitchen, kitchen → service, offline
    edits → reconnect, and archive/end service.
 
-The local database filename was bumped to v2, so installed tablets rebuild the
-corrected local database automatically after the new app loads.
+The local database filename is versioned (currently `milka-powersync-v3.db`),
+so installed tablets rebuild the corrected local database automatically after
+the new app loads.
 
 ## Verification completed
 
-- `npm run check`: 735 tests passed and the production PWA build completed.
+- `npm run check`: the full vitest suite passed (1,237 tests at the pilot
+  hardening release) and the production PWA build completed.
 - Production dependency audit: zero known vulnerabilities.
 - The generated bundle contains no browser sync secret and the service worker
   contains no Supabase/API response cache.
