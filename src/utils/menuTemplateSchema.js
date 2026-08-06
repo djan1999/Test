@@ -17,7 +17,7 @@
  * }
  * BlockDef: { type: string, ...typeSpecificFields }
  */
-import { optionalPairingDisabled } from "./menuUtils.js";
+import { optionalPairingEnabled } from "./menuUtils.js";
 
 // ── Column width presets ───────────────────────────────────────────────────────
 
@@ -234,9 +234,10 @@ export function buildDefaultTemplate(menuCourses = []) {
   sorted.forEach((course, idx) => {
     const ck = course.course_key || `course_${idx}`;
 
-    // A course with its optional pairing disabled keeps the key in its record,
-    // but its drinks block is an ordinary one — not an optional-pairing source.
-    const optionalPairingKey = optionalPairingDisabled(course) ? "" : norm(course.optional_pairing_flag || "");
+    // Only a course that sells an optional pairing gets an optional-pairing
+    // drinks block; the rest — including one holding a retired pairing key —
+    // get an ordinary one.
+    const optionalPairingKey = optionalPairingEnabled(course) ? norm(course.optional_pairing_flag || "") : "";
     const rightBlock = optionalPairingKey
       ? { ...makeBlock("drinks"), drinkSource: "optional_pairing", pairingFlag: optionalPairingKey }
       : makeBlock("drinks");

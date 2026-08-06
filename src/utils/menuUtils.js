@@ -44,20 +44,25 @@ const isPearOptionalKey = (key) => {
 };
 
 /**
- * A course only offers an optional pairing while the admin editor's "Enabled"
- * toggle is on. Unchecking it leaves optional_pairing_flag in place (so the key
- * and its drink text survive a later re-enable), which means the flag alone is
- * not enough to surface the pairing — without this check a disabled course keeps
- * its cycling button in the service UI and its drink on the generated menu.
- * Only an explicit false disables: courses from older imports and fixtures carry
- * no flag at all, and the mappers already normalize a missing value to true.
+ * An optional pairing — its own guest-facing drink, cycled from a button on the
+ * seat — belongs to the handful of courses the restaurant sells one for; today
+ * crayfish (Martini), beetroot and chicken gizzard (Beer). Every other course
+ * carries its drink through the ordinary pairing columns instead, so the
+ * pairing is opt-in: the admin editor's "Enabled" checkbox turns it on, and a
+ * course that never says so has none.
+ *
+ * The checkbox deliberately leaves optional_pairing_flag and the drink text on
+ * the record when it goes off, so re-enabling restores the whole setup. That
+ * makes the flag alone the wrong thing to read — a course retired from optional
+ * pairings keeps its key forever, and would otherwise keep its button in the
+ * service UI and its drink on the generated menu with it.
  */
-export const optionalPairingDisabled = (course) => course?.optional_pairing_enabled === false;
+export const optionalPairingEnabled = (course) => course?.optional_pairing_enabled === true;
 
 export const optionalPairingsFromCourses = (menuCourses = []) => {
   const byKey = new Map();
   (menuCourses || []).forEach((c) => {
-    if (optionalPairingDisabled(c)) return;
+    if (!optionalPairingEnabled(c)) return;
     const key = normalizeOptionalKey(c?.optional_pairing_flag);
     if (!key) return;
     const label = String(c?.optional_pairing_label || c?.menu?.name || key).trim() || key;
@@ -561,7 +566,9 @@ export function parseMenuRow(row) {
     optional_flag: String(firstFilled(row.optional_flag)).trim().toLowerCase(),
     optional_pairing_flag: String(firstFilled(row.optional_pairing_flag)).trim().toLowerCase(),
     optional_pairing_label: String(firstFilled(row.optional_pairing_label)).trim(),
-    optional_pairing_enabled: truthyCell(firstFilled(row.optional_pairing_enabled, true)),
+    // Opt-in, matching the column default: a sheet that says nothing about a
+    // course's optional pairing is not asking for one.
+    optional_pairing_enabled: truthyCell(row.optional_pairing_enabled),
     optional_pairing_default_on: truthyCell(firstFilled(row.optional_pairing_default_on, true)),
     ...(() => { const { en, si } = parseBilingual(row.optional_pairing_alco, row.optional_pairing_alco_sub); return { optional_pairing_alco: en, optional_pairing_alco_si: si }; })(),
     ...(() => { const { en, si } = parseBilingual(row.optional_pairing_na, row.optional_pairing_na_sub); return { optional_pairing_na: en, optional_pairing_na_si: si }; })(),

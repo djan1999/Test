@@ -2,13 +2,19 @@ import { describe, it, expect } from "vitest";
 import { optionalPairingsFromCourses } from "../utils/menuUtils.js";
 import { generateMenuHTML } from "../utils/menuGenerator.js";
 import { buildDefaultTemplate } from "../utils/menuTemplateSchema.js";
+import { supabaseRowToCourse } from "../utils/menuCourseMapper.js";
 
-// The admin course editor's "Enabled" checkbox is the switch for a course's
-// optional pairing. Unchecking it leaves optional_pairing_flag and the drink
-// text on the record — deliberately, so re-enabling restores the whole setup —
-// so every consumer has to read the toggle, not just the flag. Before this,
-// a course that had once been an optional pairing (SQUASH) kept its cycling
-// button in the service UI and its drink on the printed menu forever.
+// Only a handful of courses sell an optional pairing — a drink of their own,
+// cycled from a button on the seat. Today that's crayfish (Martini), beetroot
+// and chicken gizzard (Beer). Every other course carries its drink through the
+// ordinary pairing columns, so the pairing is opt-in: the admin editor's
+// "Enabled" checkbox turns it on and nothing else does.
+//
+// The checkbox leaves optional_pairing_flag and the drink text on the record
+// when it goes off, so a course retired from optional pairings keeps its key
+// forever. SQUASH is the live example — key "squash", label "SQUASH", checkbox
+// off — and it kept its button on the seat and its drink on the menu until
+// every consumer started reading the checkbox instead of the key.
 
 const squash = (opts = {}) => ({
   course_key: "squash",
@@ -16,34 +22,55 @@ const squash = (opts = {}) => ({
   position: 1,
   menu: { name: "SQUASH", sub: "cracklings, crayfish" },
   optional_flag: "",
-  optional_pairing_flag: "squash_pairing",
-  optional_pairing_label: "",
+  optional_pairing_flag: "squash",
+  optional_pairing_label: "SQUASH",
   optional_pairing_default_on: true,
-  optional_pairing_alco: { name: "Bramble Sour", sub: "" },
-  optional_pairing_na: { name: "Pumpkin Shrub", sub: "" },
+  wp: { name: "Nando, Sauvignon '08", sub: "" },
+  na: { name: "FIG LEAF", sub: "" },
   restrictions: {},
   ...opts,
 });
 
-describe("a course whose optional pairing is disabled", () => {
-  it("offers no pairing button in the service UI", () => {
+const crayfish = (opts = {}) => ({
+  course_key: "crayfish",
+  course_category: "main",
+  position: 2,
+  menu: { name: "CRAYFISH", sub: "" },
+  optional_flag: "",
+  optional_pairing_flag: "Crayfish",
+  optional_pairing_label: "Martini",
+  optional_pairing_enabled: true,
+  optional_pairing_default_on: true,
+  optional_pairing_alco: { name: "Kitchen Martini", sub: "" },
+  optional_pairing_na: { name: "Kitchen Martini", sub: "" },
+  restrictions: {},
+  ...opts,
+});
+
+describe("optional pairings are opt-in", () => {
+  it("keeps the courses that sell one, under their own drink label", () => {
+    const [opt] = optionalPairingsFromCourses([crayfish()]);
+    expect(opt).toMatchObject({ key: "crayfish", label: "Martini", hasAlco: true, hasNonAlco: true });
+  });
+
+  it("offers no button for a course holding a retired pairing key", () => {
     expect(optionalPairingsFromCourses([squash({ optional_pairing_enabled: false })]))
       .toEqual([]);
   });
 
-  it("still offers one while the toggle is on", () => {
-    const [opt] = optionalPairingsFromCourses([squash({ optional_pairing_enabled: true })]);
-    expect(opt).toMatchObject({ key: "squash_pairing", label: "SQUASH", hasAlco: true, hasNonAlco: true });
+  it("offers no button for a course that never enabled one", () => {
+    // The column defaults to false, so a record that says nothing isn't asking.
+    expect(optionalPairingsFromCourses([squash()])).toEqual([]);
+    expect(supabaseRowToCourse({ ...squash(), menu: { name: "SQUASH" } }).optional_pairing_enabled)
+      .toBe(false);
   });
 
-  it("counts a record that never stored the toggle as enabled", () => {
-    // Spreadsheet imports and older records omit the column; the mappers
-    // normalize a missing value to true, so only an explicit false disables.
-    expect(optionalPairingsFromCourses([squash()])).toHaveLength(1);
-  });
-
-  it("prints no pairing drink on the generated menu", () => {
-    const course = squash({ optional_pairing_enabled: false });
+  it("prints no optional-pairing drink for a retired pairing", () => {
+    // Live shape: the squash row is authored as a plain `pairing` source, which
+    // the resolver also accepts for optional-pairing courses. With the checkbox
+    // off the wine comes from the ordinary pairing column instead — so a guest
+    // on no pairing package gets no drink at all, where the retired optional
+    // pairing used to hand them one.
     const menuTemplate = {
       version: 2,
       rows: [
@@ -51,32 +78,36 @@ describe("a course whose optional pairing is disabled", () => {
         {
           id: "c1",
           left: { type: "course", courseKey: "squash" },
-          right: { type: "drinks", drinkSource: "optional_pairing" },
+          right: { type: "drinks", drinkSource: "pairing" },
           widthPreset: "55/45",
           gap: 0,
         },
       ],
     };
-    const html = generateMenuHTML({
-      seat: { id: 1, pairing: "Wine", extras: {}, glasses: [], cocktails: [], beers: [],
-              optionalPairings: { squash_pairing: { ordered: true, mode: "alco" } } },
+    const render = (pairing) => generateMenuHTML({
+      seat: { id: 1, pairing, extras: {}, glasses: [], cocktails: [], beers: [],
+              optionalPairings: { squash: { ordered: true, mode: "alco" } } },
       table: { menuType: "", restrictions: [], bottleWines: [] },
-      menuCourses: [course],
+      menuCourses: [squash({ optional_pairing_enabled: false })],
       menuTemplate,
     });
-    expect(html).toContain("SQUASH");
-    expect(html).not.toContain("Bramble Sour");
-    expect(html).not.toContain("Pumpkin Shrub");
+
+    const noPackage = render("—");
+    expect(noPackage).toContain("SQUASH");
+    expect(noPackage).not.toContain("Nando, Sauvignon '08");
+
+    // A guest who did buy the wine pairing still gets the course's wine.
+    expect(render("Wine")).toContain("Nando, Sauvignon '08");
   });
 
   it("gets an ordinary drinks block when a layout is built from the courses", () => {
-    const off = buildDefaultTemplate([squash({ optional_pairing_enabled: false })]);
-    const offRow = off.rows.find((r) => r.id === "course_squash");
-    expect(offRow.right.drinkSource).not.toBe("optional_pairing");
-    expect(offRow.right.pairingFlag).toBeUndefined();
+    const built = buildDefaultTemplate([squash({ optional_pairing_enabled: false }), crayfish()]);
 
-    const on = buildDefaultTemplate([squash({ optional_pairing_enabled: true })]);
-    const onRow = on.rows.find((r) => r.id === "course_squash");
-    expect(onRow.right).toMatchObject({ drinkSource: "optional_pairing", pairingFlag: "squash_pairing" });
+    const squashRow = built.rows.find((r) => r.id === "course_squash");
+    expect(squashRow.right.drinkSource).not.toBe("optional_pairing");
+    expect(squashRow.right.pairingFlag).toBeUndefined();
+
+    const crayfishRow = built.rows.find((r) => r.id === "course_crayfish");
+    expect(crayfishRow.right).toMatchObject({ drinkSource: "optional_pairing", pairingFlag: "crayfish" });
   });
 });
