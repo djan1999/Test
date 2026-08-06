@@ -21,6 +21,8 @@ function makeCourse(name, sub = "", opts = {}) {
     optional_flag: opts.optional_flag || "",
     optional_pairing_flag: opts.optional_pairing_flag || "",
     optional_pairing_label: opts.optional_pairing_label || "",
+    // Opt-in, as in production: a course sells an optional pairing only when
+    // its record says so, whatever key it happens to be carrying.
     optional_pairing_enabled: opts.optional_pairing_enabled ?? false,
     optional_pairing_default_on: opts.optional_pairing_default_on ?? true,
     optional_pairing_alco: opts.optional_pairing_alco || null,
@@ -417,6 +419,7 @@ describe("generateMenuHTML — pairing", () => {
     const crayfish = makeCourse("CRAYFISH", "", {
       position: 1,
       optional_pairing_flag: "crayfish_pairing",
+      optional_pairing_enabled: true,
       wp: { name: "Kitchen Martini", sub: "aquavit" },
       na: { name: "Garden Sour", sub: "apple" },
     });
@@ -443,6 +446,7 @@ describe("generateMenuHTML — pairing", () => {
     const course = makeCourse("CRAYFISH", "", {
       position: 1,
       optional_pairing_flag: "crayfish_pairing",
+      optional_pairing_enabled: true,
       wp: { name: "Kitchen Martini", sub: "aquavit" },
       na: { name: "Garden Sour", sub: "apple" },
     });
@@ -486,6 +490,7 @@ describe("generateMenuHTML — pairing", () => {
       course_category: "optional",
       optional_flag: "beetroot",
       optional_pairing_flag: "beet_pairing",
+      optional_pairing_enabled: true,
       optional_pairing_default_on: true,
       wp: { name: "Champagne Brut", sub: "" },
       na: { name: "Sea Buckthorn Soda", sub: "" },
@@ -522,6 +527,7 @@ describe("generateMenuHTML — pairing", () => {
       course_category: "optional",
       optional_flag: "beetroot",
       optional_pairing_flag: "beet_pairing",
+      optional_pairing_enabled: true,
       optional_pairing_default_on: true,
       wp: { name: "Champagne Brut", sub: "" },
     });
@@ -557,6 +563,7 @@ describe("generateMenuHTML — pairing", () => {
       course_category: "optional",
       optional_flag: "beetroot",
       optional_pairing_flag: "beet_pairing",
+      optional_pairing_enabled: true,
       optional_pairing_default_on: true,
       optional_pairing_alco: { name: "Champagne Brut", sub: "" },
       optional_pairing_na: { name: "Sea Buckthorn Soda", sub: "" },

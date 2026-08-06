@@ -57,7 +57,8 @@ export function supabaseRowToCourse(row) {
     optional_flag: row.optional_flag || "",
     optional_pairing_flag: row.optional_pairing_flag || "",
     optional_pairing_label: row.optional_pairing_label || "",
-    optional_pairing_enabled: row.optional_pairing_enabled !== false,
+    // Opt-in, matching the column default — see optionalPairingEnabled().
+    optional_pairing_enabled: row.optional_pairing_enabled === true,
     optional_pairing_default_on: row.optional_pairing_default_on !== false,
     optional_pairing_alco: row.optional_pairing_alco || null,
     optional_pairing_alco_si: row.optional_pairing_alco_si || null,
@@ -113,7 +114,7 @@ export function courseToSupabaseRow(course) {
     optional_flag: course.optional_flag,
     optional_pairing_flag: course.optional_pairing_flag || "",
     optional_pairing_label: course.optional_pairing_label || "",
-    optional_pairing_enabled: course.optional_pairing_enabled !== false,
+    optional_pairing_enabled: course.optional_pairing_enabled === true,
     optional_pairing_default_on: course.optional_pairing_default_on !== false,
     optional_pairing_alco: course.optional_pairing_alco || null,
     optional_pairing_alco_si: course.optional_pairing_alco_si || null,

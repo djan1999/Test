@@ -9,7 +9,7 @@
  * the menu_layout_v2 template structure.
  */
 
-import { applyCourseRestriction, resolveSeatRestrictionKeys } from "./menuUtils.js";
+import { applyCourseRestriction, resolveSeatRestrictionKeys, optionalPairingEnabled } from "./menuUtils.js";
 import { buildDefaultTemplate, parseWidthPreset } from "./menuTemplateSchema.js";
 
 export const DEFAULT_MENU_RULES = {
@@ -502,6 +502,10 @@ export function generateMenuHTML({
         // optional_pairing_flag fall through to null below, so normal pairing
         // courses are unaffected.
         if (rbSource !== "optional_pairing" && rbSource !== "pairing") return null;
+        // No optional pairing on this course — it keeps its key and drink text
+        // for a later re-enable, but its drink comes from the ordinary pairing
+        // columns below, which print nothing for a guest without a package.
+        if (!optionalPairingEnabled(course)) return null;
         const pairingFlag = normalizeCourseToken(course.optional_pairing_flag || "");
         if (!pairingFlag) return null;
         const pairingState = seat.optionalPairings?.[pairingFlag];

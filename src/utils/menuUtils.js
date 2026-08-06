@@ -43,9 +43,27 @@ const isPearOptionalKey = (key) => {
   return k === "pear" || k.startsWith("pear_") || k.endsWith("_pear") || k.includes("_pear_");
 };
 
+/**
+ * An optional pairing — its own guest-facing drink, cycled from a button on the
+ * seat — belongs to the handful of courses the restaurant sells one for. Today
+ * that's crayfish (the Martini), chicken gizzard (the Beer) and beetroot (the
+ * Champagne), each with an alco and a non-alco drink, so each button cycles
+ * off → ALCO → N/A. Every other course carries its drink through the ordinary
+ * pairing columns instead, so the pairing is opt-in: the admin editor's
+ * "Enabled" checkbox turns it on, and a course that never says so has none.
+ *
+ * The checkbox deliberately leaves optional_pairing_flag and the drink text on
+ * the record when it goes off, so re-enabling restores the whole setup. That
+ * makes the flag alone the wrong thing to read — a course retired from optional
+ * pairings keeps its key forever, and would otherwise keep its button in the
+ * service UI and its drink on the generated menu with it.
+ */
+export const optionalPairingEnabled = (course) => course?.optional_pairing_enabled === true;
+
 export const optionalPairingsFromCourses = (menuCourses = []) => {
   const byKey = new Map();
   (menuCourses || []).forEach((c) => {
+    if (!optionalPairingEnabled(c)) return;
     const key = normalizeOptionalKey(c?.optional_pairing_flag);
     if (!key) return;
     const label = String(c?.optional_pairing_label || c?.menu?.name || key).trim() || key;
@@ -549,7 +567,9 @@ export function parseMenuRow(row) {
     optional_flag: String(firstFilled(row.optional_flag)).trim().toLowerCase(),
     optional_pairing_flag: String(firstFilled(row.optional_pairing_flag)).trim().toLowerCase(),
     optional_pairing_label: String(firstFilled(row.optional_pairing_label)).trim(),
-    optional_pairing_enabled: truthyCell(firstFilled(row.optional_pairing_enabled, true)),
+    // Opt-in, matching the column default: a sheet that says nothing about a
+    // course's optional pairing is not asking for one.
+    optional_pairing_enabled: truthyCell(row.optional_pairing_enabled),
     optional_pairing_default_on: truthyCell(firstFilled(row.optional_pairing_default_on, true)),
     ...(() => { const { en, si } = parseBilingual(row.optional_pairing_alco, row.optional_pairing_alco_sub); return { optional_pairing_alco: en, optional_pairing_alco_si: si }; })(),
     ...(() => { const { en, si } = parseBilingual(row.optional_pairing_na, row.optional_pairing_na_sub); return { optional_pairing_na: en, optional_pairing_na_si: si }; })(),
