@@ -5,9 +5,10 @@ import { buildDefaultTemplate } from "../utils/menuTemplateSchema.js";
 import { supabaseRowToCourse } from "../utils/menuCourseMapper.js";
 
 // Only a handful of courses sell an optional pairing — a drink of their own,
-// cycled from a button on the seat. Today that's crayfish (Martini), beetroot
-// and chicken gizzard (Beer). Every other course carries its drink through the
-// ordinary pairing columns, so the pairing is opt-in: the admin editor's
+// cycled from a button on the seat. Today that's crayfish (the Martini),
+// chicken gizzard (the Beer) and beetroot (the Champagne), each carrying both
+// an alco and a non-alco drink. Every other course carries its drink through
+// the ordinary pairing columns, so the pairing is opt-in: the admin editor's
 // "Enabled" checkbox turns it on and nothing else does.
 //
 // The checkbox leaves optional_pairing_flag and the drink text on the record
