@@ -43,9 +43,21 @@ const isPearOptionalKey = (key) => {
   return k === "pear" || k.startsWith("pear_") || k.endsWith("_pear") || k.includes("_pear_");
 };
 
+/**
+ * A course only offers an optional pairing while the admin editor's "Enabled"
+ * toggle is on. Unchecking it leaves optional_pairing_flag in place (so the key
+ * and its drink text survive a later re-enable), which means the flag alone is
+ * not enough to surface the pairing — without this check a disabled course keeps
+ * its cycling button in the service UI and its drink on the generated menu.
+ * Only an explicit false disables: courses from older imports and fixtures carry
+ * no flag at all, and the mappers already normalize a missing value to true.
+ */
+export const optionalPairingDisabled = (course) => course?.optional_pairing_enabled === false;
+
 export const optionalPairingsFromCourses = (menuCourses = []) => {
   const byKey = new Map();
   (menuCourses || []).forEach((c) => {
+    if (optionalPairingDisabled(c)) return;
     const key = normalizeOptionalKey(c?.optional_pairing_flag);
     if (!key) return;
     const label = String(c?.optional_pairing_label || c?.menu?.name || key).trim() || key;

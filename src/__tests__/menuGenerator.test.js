@@ -21,7 +21,8 @@ function makeCourse(name, sub = "", opts = {}) {
     optional_flag: opts.optional_flag || "",
     optional_pairing_flag: opts.optional_pairing_flag || "",
     optional_pairing_label: opts.optional_pairing_label || "",
-    optional_pairing_enabled: opts.optional_pairing_enabled ?? false,
+    // Matches menuCourseMapper: a record that doesn't say otherwise is enabled.
+    optional_pairing_enabled: opts.optional_pairing_enabled ?? true,
     optional_pairing_default_on: opts.optional_pairing_default_on ?? true,
     optional_pairing_alco: opts.optional_pairing_alco || null,
     optional_pairing_alco_si: opts.optional_pairing_alco_si || null,
