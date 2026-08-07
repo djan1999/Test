@@ -505,6 +505,92 @@ describe("TableSheet — beverages", () => {
     setup();
     expect(screen.getByText("NONE ORDERED")).toBeTruthy();
   });
+
+  // ── the counter ─────────────────────────────────────────────────────────
+  // Multiple glasses of one wine are the normal order, not the exception.
+  // They collapse into ONE row with a quantity, stepped in place, so a second
+  // round never means going back through the search box.
+
+  it("collapses a repeated pour into one row carrying the count", () => {
+    const { container } = setup({
+      bottleWines: [
+        { name: "Rebula", producer: "Klinec", byGlass: false },
+        { name: "Rebula", producer: "Klinec", byGlass: false },
+      ],
+      seats: [
+        { ...seat(1), glasses: [{ name: "Rebula", producer: "Klinec", byGlass: true }, { name: "Rebula", producer: "Klinec", byGlass: true }] },
+        { ...seat(2) },
+      ],
+    });
+    const qty = (tag) => [...container.querySelectorAll(`[data-drink-row="${tag}"] [data-drink-qty]`)]
+      .map(el => el.getAttribute("data-drink-qty"));
+    expect(container.querySelectorAll('[data-drink-row="BOTTLE"]')).toHaveLength(1);
+    expect(qty("BOTTLE")).toEqual(["2"]);
+    // Both glasses are on one seat, so the party row reads 2 poured across
+    // 1 of the 2 guests — the count and the spread are different numbers.
+    expect(container.querySelectorAll('[data-drink-row="GLASS"]')).toHaveLength(1);
+    expect(qty("GLASS")).toEqual(["2"]);
+    expect(container.querySelector('[data-drink-row="GLASS"]').textContent).toContain("1/2");
+  });
+
+  it("keeps two wines of the same name apart when the producer differs", () => {
+    const { container } = setup({
+      bottleWines: [
+        { name: "Rebula", producer: "Klinec" },
+        { name: "Rebula", producer: "Movia" },
+      ],
+    });
+    expect(container.querySelectorAll('[data-drink-row="BOTTLE"]')).toHaveLength(2);
+  });
+
+  it("pours one more bottle from the row's +", () => {
+    const { upd } = setup({ bottleWines: [{ name: "Rebula", producer: "Klinec" }] });
+    fireEvent.click(screen.getByLabelText("One more Rebula"));
+    expect(upd).toHaveBeenCalledWith("bottleWines", [
+      expect.objectContaining({ name: "Rebula" }),
+      expect.objectContaining({ name: "Rebula" }),
+    ]);
+  });
+
+  it("takes back a single bottle from the row's −, leaving the rest", () => {
+    const { upd } = setup({
+      bottleWines: [{ name: "Rebula", producer: "Klinec" }, { name: "Rebula", producer: "Klinec" }],
+    });
+    fireEvent.click(screen.getByLabelText("One less Rebula"));
+    expect(upd).toHaveBeenCalledWith("bottleWines", [expect.objectContaining({ name: "Rebula" })]);
+  });
+
+  it("steps a party row on every seat, the way adding one does", () => {
+    const { updSeat } = setup({
+      seats: [
+        { ...seat(1), aperitifs: [{ name: "Negroni" }] },
+        { ...seat(2), aperitifs: [{ name: "Negroni" }] },
+      ],
+    });
+    fireEvent.click(screen.getByLabelText("One more Negroni"));
+    expect(updSeat).toHaveBeenCalledWith(1, "aperitifs", [{ name: "Negroni" }, { name: "Negroni" }]);
+    expect(updSeat).toHaveBeenCalledWith(2, "aperitifs", [{ name: "Negroni" }, { name: "Negroni" }]);
+  });
+
+  it("leaves a seat alone when a party − has nothing to take off it", () => {
+    const { updSeat } = setup({
+      seats: [
+        { ...seat(1), aperitifs: [{ name: "Negroni" }] },
+        { ...seat(2) },
+      ],
+    });
+    fireEvent.click(screen.getByLabelText("One less Negroni"));
+    expect(updSeat).toHaveBeenCalledTimes(1);
+    expect(updSeat).toHaveBeenCalledWith(1, "aperitifs", []);
+  });
+
+  it("still clears the whole row from ×, however many are on it", () => {
+    const { upd } = setup({
+      bottleWines: [{ name: "Rebula", producer: "Klinec" }, { name: "Rebula", producer: "Klinec" }],
+    });
+    fireEvent.click(screen.getByLabelText("Remove Rebula"));
+    expect(upd).toHaveBeenCalledWith("bottleWines", []);
+  });
 });
 
 describe("TableSheet — beverages, per seat", () => {
@@ -559,6 +645,19 @@ describe("TableSheet — beverages, per seat", () => {
     const { container } = setup({ bottleWines: [{ name: "Rebula", producer: "Klinec" }] });
     fireEvent.click(screen.getByLabelText("Drinks for position 1"));
     expect(container.querySelectorAll('[data-drink-row="BOTTLE"]')).toHaveLength(1);
+  });
+
+  it("steps that seat's count alone", () => {
+    const { updSeat } = setup({
+      seats: [
+        { ...seat(1), aperitifs: [{ name: "Negroni" }] },
+        { ...seat(2), aperitifs: [{ name: "Negroni" }] },
+      ],
+    });
+    fireEvent.click(screen.getByLabelText("Drinks for position 2"));
+    fireEvent.click(screen.getByLabelText("One more Negroni"));
+    expect(updSeat).toHaveBeenCalledTimes(1);
+    expect(updSeat).toHaveBeenCalledWith(2, "aperitifs", [{ name: "Negroni" }, { name: "Negroni" }]);
   });
 
   it("says which seat is empty rather than a generic nothing", () => {

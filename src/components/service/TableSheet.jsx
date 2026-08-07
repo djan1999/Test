@@ -14,6 +14,7 @@ import {
   tableBadgeState,
 } from "../../utils/tableSheetState.js";
 import { searchBeverages } from "../../utils/beverageSearch.js";
+import { addOne, groupDrinks, removeAll, removeOne } from "../../utils/drinkQuantities.js";
 import TablePickerModal from "./TablePickerModal.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 import BookingEditModal from "./BookingEditModal.jsx";
@@ -63,6 +64,15 @@ const quietButton = (danger = false) => ({
   color: danger ? tokens.red.text : tokens.ink[1],
   fontWeight: danger ? 700 : 500, touchAction: "manipulation",
 });
+
+// One side of the drink counter. Full-height so it stays a thumb target on a
+// tablet, but narrow: the row it sits on also has to fit a wine's name.
+const stepButton = {
+  fontFamily: FONT, fontSize: 15, lineHeight: 1, fontWeight: 700,
+  width: 34, height: TAP, flexShrink: 0, padding: 0,
+  border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
+  background: tokens.neutral[0], color: tokens.ink[1], touchAction: "manipulation",
+};
 
 const textareaStyle = (kitchen = false) => ({
   fontFamily: FONT, fontSize: tokens.mobileInputSize,
@@ -291,22 +301,37 @@ export default function TableSheet({
   /**
    * What the list reads back, scoped to whoever is selected.
    *
+   * A row is one DRINK, not one pour: three glasses of the same wine are a
+   * single row carrying 3, stepped with − and +. That is the whole point of
+   * the counter — a second round for the table is two taps on a row already on
+   * screen instead of three more trips through the search box. Storage is
+   * unchanged; the stepper appends and drops single entries (utils/
+   * drinkQuantities).
+   *
    * On the party view a drink can legitimately be on some seats and not
    * others — Quick Access edits one guest, and so does this panel — so party
-   * rows carry how many seats hold them instead of pretending the table is
-   * uniform. On a single seat there is nothing to count, and removing takes
-   * the drink off that seat alone.
+   * rows also carry how many SEATS hold them, which is a different number from
+   * the quantity as soon as anyone has two. Stepping a party row steps every
+   * seat, exactly as adding from the search box does. On a single seat there
+   * is no spread to report, and the row touches that seat alone.
    */
   const chosenDrinks = (() => {
     // The table's bottles are shared, so they show under every scope.
-    const out = (table.bottleWines || []).map((w, i) => ({
-      key: `bottle-${i}`,
-      tag: "BOTTLE",
-      name: w?.name || "—",
-      sub: w?.producer || "",
-      count: null,
-      onRemove: () => write("bottleWines", (table.bottleWines || []).filter((_, j) => j !== i), "DRINK REMOVED"),
-    }));
+    const bottles = () => table.bottleWines || [];
+    const out = groupDrinks(bottles()).map(g => {
+      const name = String(g.item?.name || "—").toUpperCase();
+      return {
+        key: `bottle-${g.key}`,
+        tag: "BOTTLE",
+        name: g.item?.name || "—",
+        sub: g.item?.producer || "",
+        qty: g.qty,
+        seatsWith: null,
+        onInc: () => write("bottleWines", addOne(bottles(), g.item), `BOTTLE +1 — ${name}`),
+        onDec: () => write("bottleWines", removeOne(bottles(), g.key), `BOTTLE −1 — ${name}`),
+        onRemove: () => write("bottleWines", removeAll(bottles(), g.key), "DRINK REMOVED"),
+      };
+    });
     const FIELDS = [
       ["aperitifs", "APERITIF"],
       ["glasses", "GLASS"],
@@ -317,37 +342,64 @@ export default function TableSheet({
     for (const [field, tag] of FIELDS) {
       if (drinkSeat != null) {
         const s = seats.find(x => x.id === drinkSeat);
-        (s?.[field] || []).forEach((x, i) => out.push({
-          key: `${field}-${drinkSeat}-${i}`,
+        groupDrinks(s?.[field]).forEach(g => out.push({
+          key: `${field}-${drinkSeat}-${g.key}`,
           tag,
-          name: x?.name || "—",
-          sub: x?.producer || x?.notes || "",
-          count: null,
+          name: g.item?.name || "—",
+          sub: g.item?.producer || g.item?.notes || "",
+          qty: g.qty,
+          seatsWith: null,
+          onInc: () => {
+            updSeat(drinkSeat, field, addOne(s[field] || [], g.item));
+            flash(`+1 · P${drinkSeat}`);
+          },
+          onDec: () => {
+            updSeat(drinkSeat, field, removeOne(s[field] || [], g.key));
+            flash(`−1 · P${drinkSeat}`);
+          },
           onRemove: () => {
-            updSeat(drinkSeat, field, (s[field] || []).filter((_, j) => j !== i));
+            updSeat(drinkSeat, field, removeAll(s[field] || [], g.key));
             flash(`REMOVED · P${drinkSeat}`);
           },
         }));
         continue;
       }
-      const byName = new Map();
-      seats.forEach(s => (s[field] || []).forEach(x => {
-        const name = x?.name || "—";
-        const e = byName.get(name) || { name, sub: x?.producer || x?.notes || "", count: 0 };
-        e.count += 1;
-        byName.set(name, e);
+      const byKey = new Map();
+      seats.forEach(s => groupDrinks(s[field]).forEach(g => {
+        const e = byKey.get(g.key) || { item: g.item, qty: 0, seatsWith: 0 };
+        e.qty += g.qty;
+        e.seatsWith += 1;
+        byKey.set(g.key, e);
       }));
-      byName.forEach(e => out.push({
-        key: `${field}-${e.name}`,
-        tag,
-        name: e.name,
-        sub: e.sub,
-        count: e.count,
-        onRemove: () => {
-          seats.forEach(s => updSeat(s.id, field, (s[field] || []).filter(x => (x?.name || "—") !== e.name)));
-          flash("DRINK REMOVED");
-        },
-      }));
+      byKey.forEach((e, key) => {
+        const name = String(e.item?.name || "—").toUpperCase();
+        out.push({
+          key: `${field}-${key}`,
+          tag,
+          name: e.item?.name || "—",
+          sub: e.item?.producer || e.item?.notes || "",
+          qty: e.qty,
+          seatsWith: e.seatsWith,
+          onInc: () => {
+            seats.forEach(s => updSeat(s.id, field, addOne(s[field] || [], e.item)));
+            flash(`+1 EACH — ${name}`);
+          },
+          // Only the seats that actually hold one change, so a round taken
+          // back off a party doesn't write every seat for nothing.
+          onDec: () => {
+            seats.forEach(s => {
+              const cur = s[field] || [];
+              const next = removeOne(cur, key);
+              if (next.length !== cur.length) updSeat(s.id, field, next);
+            });
+            flash(`−1 EACH — ${name}`);
+          },
+          onRemove: () => {
+            seats.forEach(s => updSeat(s.id, field, removeAll(s[field] || [], key)));
+            flash("DRINK REMOVED");
+          },
+        });
+      });
     }
     return out;
   })();
@@ -747,16 +799,39 @@ export default function TableSheet({
                   </span>
                   <span style={{ flex: 1, minWidth: 0, fontSize: 11, color: tokens.ink[0], overflowWrap: "anywhere" }}>
                     {d.name}{d.sub ? ` · ${d.sub}` : ""}
-                    {d.count != null && (
-                      <span style={{ color: tokens.ink[3] }}> · {d.count}/{seats.length}</span>
+                    {d.seatsWith != null && (
+                      <span style={{ color: tokens.ink[3] }}> · {d.seatsWith}/{seats.length}</span>
                     )}
                   </span>
+                  {/* The counter. Ordering a round is the common case, so it
+                      sits on the row itself rather than behind the search. */}
+                  <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      aria-label={`One less ${d.name}`}
+                      onClick={d.onDec}
+                      style={stepButton}
+                    >−</button>
+                    <span
+                      data-drink-qty={d.qty}
+                      style={{
+                        minWidth: 20, textAlign: "center", fontSize: 11, fontWeight: 700,
+                        color: tokens.ink[0], fontFamily: FONT, fontVariantNumeric: "tabular-nums",
+                      }}
+                    >{d.qty}</span>
+                    <button
+                      type="button"
+                      aria-label={`One more ${d.name}`}
+                      onClick={d.onInc}
+                      style={stepButton}
+                    >+</button>
+                  </div>
                   <button
                     type="button"
                     aria-label={`Remove ${d.name}`}
                     onClick={d.onRemove}
                     style={{
-                      width: TAP, height: TAP, flexShrink: 0, border: "none", background: "none",
+                      width: 34, height: TAP, flexShrink: 0, border: "none", background: "none",
                       color: tokens.ink[3], fontSize: 15, lineHeight: 1, cursor: "pointer",
                       fontFamily: FONT, touchAction: "manipulation",
                     }}

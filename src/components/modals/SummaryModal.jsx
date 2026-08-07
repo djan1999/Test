@@ -1,6 +1,7 @@
 import FullModal from "../ui/FullModal.jsx";
 import TableSummaryCard from "./TableSummaryCard.jsx";
 import { tokens } from "../../styles/tokens.js";
+import { groupDrinks, qtySuffix } from "../../utils/drinkQuantities.js";
 import { mergeTableGroups, tableGroupLabel } from "../../utils/tableHelpers.js";
 
 const FONT = tokens.font;
@@ -22,11 +23,16 @@ export default function SummaryModal({ tables, optionalExtras = [], optionalPair
         const parts = [`P${s.id}`];
         if (s.water && s.water !== "—") parts.push(`water:${s.water}`);
         if (s.pairing) parts.push(s.pairing);
-        const ap = (s.aperitifs || []).map((x) => x?.name).filter(Boolean);
-        const gs = (s.glasses || []).map((w) => w?.name).filter(Boolean);
-        const cs = (s.cocktails || []).map((c) => c?.name).filter(Boolean);
-        const sp = (s.spirits || []).map((x) => x?.name).filter(Boolean);
-        const bs = (s.beers || []).map((x) => x?.name).filter(Boolean);
+        // Same collapse as the card: "glass:Rebula ×3", not the name three
+        // times. The pasted text is what gets read out at the pass.
+        const names = (list) => groupDrinks(list)
+          .map((g) => (g.item.name ? `${g.item.name}${qtySuffix(g.qty)}` : ""))
+          .filter(Boolean);
+        const ap = names(s.aperitifs);
+        const gs = names(s.glasses);
+        const cs = names(s.cocktails);
+        const sp = names(s.spirits);
+        const bs = names(s.beers);
         if (ap.length) parts.push("aperitif:" + ap.join(","));
         if (gs.length) parts.push("glass:" + gs.join(","));
         if (cs.length) parts.push("cocktail:" + cs.join(","));

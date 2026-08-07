@@ -2,6 +2,7 @@ import { waterStyle, extraPairingForSeat } from "../../constants/pairings.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES, stripCountryFromRegion, inferCountryFromRegion } from "../../constants/countries.js";
 import { restrLabel } from "../../constants/dietary.js";
+import { groupDrinks, qtySuffix } from "../../utils/drinkQuantities.js";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 
@@ -28,12 +29,16 @@ export default function TableSummaryCard({ table: t, groupLabel, optionalExtras 
           const ws = waterStyle(s.water);
           const restr = (t.restrictions || []).filter((r) => r.pos === s.id);
           const extras = optionalExtras.filter((d) => (s.extras?.[d.key] || s.extras?.[d.id])?.ordered);
+          // One chip per drink with a ×N when the guest took a round of it —
+          // five identical "Negroni" chips said the same thing and pushed the
+          // rest of the seat's line off the card.
+          const bevChips = (list, ts) => groupDrinks(list).map((g) => ({ label: `${g.item.name}${qtySuffix(g.qty)}`, ts }));
           const allBevs = [
-            ...(s.aperitifs || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.aperitif })),
-            ...(s.glasses || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.wine })),
-            ...(s.cocktails || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.cocktail })),
-            ...(s.spirits || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.spirit })),
-            ...(s.beers || []).filter(Boolean).map((x) => ({ label: x.name, ts: BEV_TYPES.beer })),
+            ...bevChips(s.aperitifs, BEV_TYPES.aperitif),
+            ...bevChips(s.glasses, BEV_TYPES.wine),
+            ...bevChips(s.cocktails, BEV_TYPES.cocktail),
+            ...bevChips(s.spirits, BEV_TYPES.spirit),
+            ...bevChips(s.beers, BEV_TYPES.beer),
           ];
           return (
             <div key={s.id} style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", padding: "8px 4px", borderBottom: `1px solid ${tokens.neutral[100]}` }}>
@@ -70,7 +75,10 @@ export default function TableSummaryCard({ table: t, groupLabel, optionalExtras 
       {(t.bottleWines || []).length > 0 && (
         <div style={{ padding: "10px 16px 14px", borderTop: `1px solid ${tokens.neutral[100]}`, display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.neutral[400], textTransform: "uppercase", marginBottom: 2 }}>Bottles</div>
-          {(t.bottleWines || []).map((w, i) => {
+          {/* Two of the same wine is one line reading ×2 — the count is what
+              the pass and the bill are after, and it has to survive the trip
+              from the sheet's counter to here. */}
+          {groupDrinks(t.bottleWines).map(({ key, item: w, qty }) => {
             const rawVintage = String(w?.vintage || "").trim();
             const vintage = rawVintage.match(/^\d{4}$/) ? `'${rawVintage.slice(2)}` : rawVintage;
             const title = [w?.producer, w?.name, vintage].filter(Boolean).join(" ");
@@ -79,8 +87,8 @@ export default function TableSummaryCard({ table: t, groupLabel, optionalExtras 
             const region = stripCountryFromRegion(w?.region, rawCountry);
             const sub = [region, country].filter(Boolean).join(", ") || w?.notes || "";
             return (
-              <div key={i} style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: tokens.neutral[900], textTransform: "uppercase", letterSpacing: 0.3 }}>🍾 {title}</span>
+              <div key={key} style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: tokens.neutral[900], textTransform: "uppercase", letterSpacing: 0.3 }}>🍾 {title}{qtySuffix(qty)}</span>
                 {sub && <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.neutral[500] }}>{sub}</span>}
               </div>
             );
