@@ -3,8 +3,8 @@
 // places the count is actually read: the summary card the floor scans, and the
 // text it copies out to the pass.
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
 import TableSummaryCard from "../components/modals/TableSummaryCard.jsx";
 import SummaryModal from "../components/modals/SummaryModal.jsx";
 
@@ -49,24 +49,25 @@ describe("TableSummaryCard — drink counts", () => {
   });
 });
 
-describe("SummaryModal — copied text", () => {
-  let written;
-  beforeEach(() => {
-    written = null;
-    Object.defineProperty(navigator, "clipboard", {
-      value: { writeText: vi.fn(async (t) => { written = t; }) },
-      configurable: true,
-    });
+describe("SummaryModal", () => {
+  const open = () => render(
+    <SummaryModal
+      tables={[table({ seats: [seat(1, { glasses: [rebula(), rebula()] }), seat(2)] })]}
+      onClose={vi.fn()}
+    />,
+  );
+
+  // COPY TEXT was a second, separately-written rendering of every party that
+  // nobody pasted; the cards are the summary. Pinned so it doesn't come back
+  // as the one place a new field is forgotten.
+  it("offers no COPY TEXT — the cards on screen are the summary", () => {
+    open();
+    expect(screen.queryByText("COPY TEXT")).toBeNull();
   });
 
-  it("carries the count into the pasted line rather than repeating the name", () => {
-    render(
-      <SummaryModal
-        tables={[table({ seats: [seat(1, { glasses: [rebula(), rebula()] }), seat(2)] })]}
-        onClose={vi.fn()}
-      />,
-    );
-    fireEvent.click(screen.getByText("COPY TEXT"));
-    expect(written).toContain("glass:Rebula ×2");
+  it("still shows the party, counts and all", () => {
+    open();
+    expect(screen.getByText("Weber")).toBeTruthy();
+    expect(screen.getByText("Rebula ×2")).toBeTruthy();
   });
 });
