@@ -11,6 +11,7 @@ import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { PAIRINGS } from "../../constants/pairings.js";
 import BeverageSearch from "../service/BeverageSearch.jsx";
 import { resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
+import { addOne, groupDrinks, removeAll, removeOne } from "../../utils/drinkQuantities.js";
 import { combineMenuPages } from "../../utils/printAllPages.js";
 import {
   courseKeyOf,
@@ -64,6 +65,31 @@ const button = (strong = false) => ({
   background: strong ? tokens.charcoal.default : neutral[0],
   color: strong ? neutral[0] : ink[2],
 });
+
+/**
+ * One drink on the seat, with the count next to it.
+ *
+ * Duplicates collapse into a single pill: a guest on their third glass of the
+ * same wine used to be three identical pills, and a fourth meant going back
+ * through the search box. − and + step the stored list by one entry, which is
+ * the same edit the search box makes and the same one the table sheet's
+ * counter makes.
+ */
+function DrinkPill({ ts, label, qty, onDec, onInc, onRemove }) {
+  const step = {
+    fontFamily: FONT, fontSize: 13, lineHeight: 1, fontWeight: 700, padding: "0 4px",
+    background: "none", border: "none", color: ts.color, cursor: "pointer", opacity: 0.8,
+  };
+  return (
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: 0, background: ts.bg, border: `1px solid ${ts.border}` }}>
+      <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>{label}</span>
+      <button type="button" aria-label={`One less ${label}`} onClick={onDec} style={step}>−</button>
+      <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 700, fontVariantNumeric: "tabular-nums", minWidth: 8, textAlign: "center" }}>{qty}</span>
+      <button type="button" aria-label={`One more ${label}`} onClick={onInc} style={step}>+</button>
+      <button type="button" aria-label={`Remove ${label}`} onClick={onRemove} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
+    </div>
+  );
+}
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
@@ -760,15 +786,20 @@ export default function MenuWorkspace({
               />
               {seatAperitifs.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
-                  {seatAperitifs.map((x, i) => {
-                    const ts = BEV_TYPES.aperitif;
+                  {groupDrinks(seatAperitifs).map(({ key, item: x, qty }) => {
                     const label = x?.name || x?.producer || "?";
                     const sub = x?.producer && x?.name ? x.producer : (x?.notes || "");
+                    const set = (next) => updSeat(activeSeat.id, "aperitifs", next);
                     return (
-                      <div key={`ap${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: 0, background: ts.bg, border: `1px solid ${ts.border}` }}>
-                        <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>{label}{sub ? ` · ${sub}` : ""}</span>
-                        <button onClick={() => updSeat(activeSeat.id, "aperitifs", seatAperitifs.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
-                      </div>
+                      <DrinkPill
+                        key={key}
+                        ts={BEV_TYPES.aperitif}
+                        label={`${label}${sub ? ` · ${sub}` : ""}`}
+                        qty={qty}
+                        onDec={() => set(removeOne(seatAperitifs, key))}
+                        onInc={() => set(addOne(seatAperitifs, x))}
+                        onRemove={() => set(removeAll(seatAperitifs, key))}
+                      />
                     );
                   })}
                 </div>
@@ -788,24 +819,38 @@ export default function MenuWorkspace({
                 }}
               />
               {(() => {
+                // One pill per drink, whatever list it lives in, each carrying
+                // its own count and stepper.
+                const pillsFor = (field, list, typeOf, subOf) => groupDrinks(list).map(({ key, item: x, qty }) => ({
+                  key: `${field}-${key}`,
+                  type: typeOf(x),
+                  label: x?.name,
+                  sub: subOf(x),
+                  qty,
+                  onDec: () => updSeat(activeSeat.id, field, removeOne(list, key)),
+                  onInc: () => updSeat(activeSeat.id, field, addOne(list, x)),
+                  onRemove: () => updSeat(activeSeat.id, field, removeAll(list, key)),
+                }));
                 const allBevs = [
-                  ...seatGlasses.map((x, i)   => ({ key: `g${i}`,  type: x?.byGlass === false ? "bottle" : "wine", label: x?.name, sub: x?.producer, onRemove: () => updSeat(activeSeat.id, "glasses",   seatGlasses.filter((_, idx) => idx !== i)) })),
-                  ...seatCocktails.map((x, i) => ({ key: `c${i}`,  type: "cocktail", label: x?.name, sub: x?.notes, onRemove: () => updSeat(activeSeat.id, "cocktails", seatCocktails.filter((_, idx) => idx !== i)) })),
-                  ...seatSpirits.map((x, i)   => ({ key: `sp${i}`, type: "spirit",   label: x?.name, sub: x?.notes, onRemove: () => updSeat(activeSeat.id, "spirits",   seatSpirits.filter((_, idx) => idx !== i)) })),
-                  ...seatBeers.map((x, i)     => ({ key: `b${i}`,  type: "beer",     label: x?.name, sub: x?.notes, onRemove: () => updSeat(activeSeat.id, "beers",     seatBeers.filter((_, idx) => idx !== i)) })),
+                  ...pillsFor("glasses",   seatGlasses,   (x) => (x?.byGlass === false ? "bottle" : "wine"), (x) => x?.producer),
+                  ...pillsFor("cocktails", seatCocktails, () => "cocktail", (x) => x?.notes),
+                  ...pillsFor("spirits",   seatSpirits,   () => "spirit",   (x) => x?.notes),
+                  ...pillsFor("beers",     seatBeers,     () => "beer",     (x) => x?.notes),
                 ];
                 if (allBevs.length === 0) return null;
                 return (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
-                    {allBevs.map((bev) => {
-                      const ts = BEV_TYPES[bev.type];
-                      return (
-                        <div key={bev.key} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px 4px 10px", borderRadius: 0, background: ts.bg, border: `1px solid ${ts.border}` }}>
-                          <span style={{ fontFamily: FONT, fontSize: 11, color: ts.color, fontWeight: 500, whiteSpace: "nowrap" }}>{bev.label}{bev.sub ? ` · ${bev.sub}` : ""}</span>
-                          <button onClick={bev.onRemove} style={{ background: "none", border: "none", color: ts.color, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px", opacity: 0.7 }}>×</button>
-                        </div>
-                      );
-                    })}
+                    {allBevs.map((bev) => (
+                      <DrinkPill
+                        key={bev.key}
+                        ts={BEV_TYPES[bev.type]}
+                        label={`${bev.label}${bev.sub ? ` · ${bev.sub}` : ""}`}
+                        qty={bev.qty}
+                        onDec={bev.onDec}
+                        onInc={bev.onInc}
+                        onRemove={bev.onRemove}
+                      />
+                    ))}
                   </div>
                 );
               })()}

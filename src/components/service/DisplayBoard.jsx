@@ -4,6 +4,7 @@ import { tokens } from "../../styles/tokens.js";
 import { restrCompact, restrLabel } from "../../constants/dietary.js";
 import { PAIRINGS, waterStyle, extraPairingForSeat } from "../../constants/pairings.js";
 import { kitchenSnapshot, kitchenDelta } from "../../utils/kitchenAlerts.js";
+import { groupDrinks, qtySuffix } from "../../utils/drinkQuantities.js";
 import {
   resolveAperitifFromQuickAccessOption,
   aperitifMatchesQuickAccessOption,
@@ -634,11 +635,13 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                       </span>
                     );
                   })}
-                  {(s.aperitifs || []).map((ap, i) => {
+                  {/* Two of the same aperitif is one chip reading ×2, the same
+                      count the sheet's counter writes. */}
+                  {groupDrinks(s.aperitifs).map(({ key, item: ap, qty }) => {
                     const matchOpt = aperitifOptions?.find(opt => aperitifMatchesQuickAccessOption(ap, opt, { wines, cocktails, spirits, beers }));
-                    const label = matchOpt?.label || ap.name;
+                    const label = `${matchOpt?.label || ap.name}${qtySuffix(qty)}`;
                     return (
-                      <span key={i} style={{
+                      <span key={key} style={{
                         fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
                         border: `1px solid ${tokens.ink[4]}`, color: tokens.ink[2], background: tokens.tint.parchment,
                       }}>{label}</span>
