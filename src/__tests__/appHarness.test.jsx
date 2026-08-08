@@ -733,6 +733,76 @@ describe("app harness — stale END cannot touch a newer service (fallback)", ()
   }, 20000);
 });
 
+// ── Un-synced local mirror: joining must not write ───────────────────────────
+// The 08.08 incident: a device opened mid-service ("connecting for a while"),
+// the operator tapped SERVICE, and the whole service wiped clean. The device
+// joined the live service, but its board truth was still the pre-join read —
+// so the reconcile rebuilt every reserved table as a reservation template and
+// the autosave pushed the templates over the live rows. The pin: a device
+// whose local mirror has not synced the service it just joined must write
+// NOTHING until that service's own board read lands.
+describe("app harness — un-synced local mirror joins without writing (sqlite-primary)", () => {
+  beforeEach(() => {
+    resetBackend({ psMode: true });
+  });
+
+  it("joins the live service it cannot see locally and leaves the worked board untouched", async () => {
+    const stamp = new Date().toISOString();
+    const worked = {
+      ...blankTable(1), active: true, arrivedAt: "19:43", resName: "Anna Harness",
+      resTime: "19:30", guests: 2,
+      kitchenLog: { c1: { firedAt: "19:55" } },
+      seats: [
+        { id: 1, water: "STILL", pairing: "WINE PAIRING" },
+        { id: 2, water: "SPARKLING", pairing: "—" },
+      ],
+    };
+    // The SERVER knows the running dinner and its worked board. This device's
+    // mirror does NOT (remote-only seed) — it is the freshly opened third
+    // device whose checkpoint hasn't landed. Only the reservations are in
+    // both stores (they synced days ago, when they were made) — exactly the
+    // ingredient the reconcile used to rebuild templates from.
+    remoteRows("services").push({
+      workspace_id: WORKSPACE_ID, id: SVC, date: TODAY(), session: "dinner",
+      chosen_on: TODAY(), started_at: stamp, status: "live",
+      ended_at: null, end_reason: null, label: null, snapshot: null, deleted_at: null, updated_at: stamp,
+    });
+    remoteRows("service_tables").push({
+      workspace_id: WORKSPACE_ID, service_id: SVC, table_id: 1, data: worked, updated_at: stamp,
+    });
+    seed("reservations", [
+      { id: "res-anna", date: TODAY(), table_id: 1, created_at: stamp,
+        data: { resName: "Anna Harness", resTime: "19:30", guests: 2, tableGroup: [], service_session: "dinner" } },
+    ]);
+
+    render(<App />);
+    fireEvent.click(await screen.findByText("[Service]", {}, { timeout: 15000 }));
+
+    // The blind-start guard JOINS the server's live service — no start prompt,
+    // no new entity.
+    await waitFor(() => {
+      expect(localStorage.getItem(`milka_service_id:${WORKSPACE_ID}`)).toBe(SVC);
+    }, { timeout: 5000 });
+
+    // THE pin: the mirror doesn't know this service yet, so the board is not
+    // board-truth and nothing may be written — the worked row survives
+    // byte-for-byte and the service is still the only live one.
+    await new Promise((r) => setTimeout(r, 600)); // window for any wrongful autosave
+    const row = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
+    expect(row.data.seats.map((s) => s.water)).toEqual(["STILL", "SPARKLING"]);
+    expect(row.data.kitchenLog.c1.firedAt).toBe("19:55");
+    expect(row.data.active).toBe(true);
+    expect(remoteRows("services").filter((r) => r.status === "live")).toHaveLength(1);
+
+    // The checkpoint lands → the board paints the REAL table, still unharmed.
+    await act(async () => { await syncDown(); });
+    await screen.findByText(/Anna Harness/, {}, { timeout: 5000 });
+    const after = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
+    expect(after.data.seats.map((s) => s.water)).toEqual(["STILL", "SPARKLING"]);
+    expect(after.data.kitchenLog.c1.firedAt).toBe("19:55");
+  }, 30000);
+});
+
 // ── Floor SET markers sync live ───────────────────────────────────────────────
 // The strips were boot-read only until 11.07: a SET marker tapped on one
 // tablet reached the store but no other device until a full reload. They now

@@ -645,6 +645,18 @@ export default function App() {
   // the wipe to the server.
   const [remoteBoardLoaded, setRemoteBoardLoaded] = useState(!supabase);
   const [boardSyncTick, setBoardSyncTick] = useState(0);
+  // WHICH service namespace the last completed board read served ("" = the
+  // no-service board, null = none yet). remoteBoardLoaded alone says "some
+  // read finished" — but a read for the previous namespace, or for no
+  // namespace on a device that adopted a service moments later, is not board
+  // truth for THIS one. The reconcile and the autosave only act when this
+  // matches the current namespace: acting on a mismatched read is how a
+  // joining device rebuilt reservation templates over the live board and
+  // wiped the service clean (the 08.08 incident).
+  const boardLoadedForRef = useRef(null);
+  const boardScopeKey = () => (serviceIdRef.current == null ? "" : String(serviceIdRef.current));
+  const boardTruthReady = () =>
+    !supabase || sandboxRef.current || boardLoadedForRef.current === boardScopeKey();
   // Boot splash: hold "CONNECTING…" until the device is genuinely set up —
   // the board truth AND the reservations have loaded (local SQLite when
   // primary, Supabase on the fallback) — so nobody can act on a half-synced
@@ -2093,6 +2105,9 @@ export default function App() {
   const resetBoardLocal = () => {
     const blank = configuredTableIds(restaurantConfigRef.current).map(blankTable);
     intentionalBoardClearRef.current = true;
+    // The new namespace has no completed board read yet — the reconcile and
+    // the autosave stay locked until one lands (see boardLoadedForRef).
+    boardLoadedForRef.current = null;
     pendingBoardWritesRef.current = new Set();
     prevTablesJsonRef.current = makeTableJsonMap(blank);
     confirmedTablesJsonRef.current = makeTableJsonMap(blank);
@@ -2125,11 +2140,25 @@ export default function App() {
   // adopted instead of trusting the watch to notice.
   const reloadPrimaryBoard = () => {
     if (!sqlitePrimaryRef.current) return;
+    const forServiceId = serviceIdRef.current ?? null;
     loadPsReads()
-      .then(({ readServiceTables }) => readServiceTables(serviceIdRef.current))
-      .then((rows) => {
+      .then(async ({ readServiceTables, readServices }) => {
+        const rows = await readServiceTables(forServiceId);
+        // An empty read only counts as board truth when the mirror KNOWS the
+        // service (checkpoints apply atomically: a mirror holding the
+        // services row holds its board rows too). A mirror without the row
+        // hasn't synced this far — its emptiness is "not yet synced".
+        const serviceKnown = forServiceId == null
+          || (await readServices()).some((svc) => String(svc.id) === String(forServiceId));
+        return { rows, serviceKnown };
+      })
+      .then(({ rows, serviceKnown }) => {
+        if (String(forServiceId ?? "") !== String(serviceIdRef.current ?? "")) return; // raced a switch
         adoptRemoteTables(rows);
-        setRemoteBoardLoaded(true);
+        if (serviceKnown) {
+          boardLoadedForRef.current = boardScopeKey();
+          setRemoteBoardLoaded(true);
+        }
         setBoardSyncTick((t) => t + 1);
       })
       .catch(() => {});
@@ -3126,6 +3155,12 @@ export default function App() {
     // hasn't seen the store's state treats every live table as "not started"
     // and rebuilds/blanks it — then the autosave broadcasts the wipe.
     if (!reservationsLoaded || !remoteBoardLoaded) return;
+    // And the loaded flag must describe THIS namespace: a device that just
+    // joined a service still carries the pre-join read (loaded-for-nothing),
+    // and reconciling on it rebuilds reservation templates the autosave then
+    // pushes over the live rows (the 08.08 wipe). The gate re-opens when the
+    // namespace's own read lands (boardSyncTick bumps this effect).
+    if (!boardTruthReady()) return;
     if ((mode !== "service" && mode !== "display") || !serviceDate) return;
     reconcileBoardWithReservations(reservations.filter(r => {
       if (r.date !== serviceDate) return false;
@@ -3277,8 +3312,10 @@ export default function App() {
     // Demo mode: the device-local snapshot IS the persistence.
     if (!supabase) { writeLocalDemoBoard(tables); return; }
     // Never push table rows before the board truth has loaded: the diff would
-    // run against the blank boot state and overwrite a live service.
-    if (!remoteBoardLoaded) return;
+    // run against the blank boot state and overwrite a live service. "Loaded"
+    // must mean loaded FOR THIS NAMESPACE (see boardLoadedForRef) — a stale
+    // loaded flag from before a join let exactly that overwrite through.
+    if (!remoteBoardLoaded || !boardTruthReady()) return;
 
     const prevJson = tables.map((table) => prevTablesJsonRef.current.get(Number(table.id)));
     const nextJson = tables.map(t => JSON.stringify(sanitizeTable(t)));
@@ -3320,7 +3357,9 @@ export default function App() {
     saveTimerRef.current = setTimeout(flushBoardWrites, 50);
 
     return () => clearTimeout(saveTimerRef.current);
-  }, [tablesJson, remoteBoardLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+    // boardSyncTick: a namespace's board read landing re-opens the gate above,
+    // so edits made while it was closed queue without waiting for another tap.
+  }, [tablesJson, remoteBoardLoaded, boardSyncTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Drain: retry unconfirmed board writes without needing another edit ──────
   // Failed flushes leave their table_ids in pendingBoardWritesRef; before this
@@ -3968,12 +4007,18 @@ export default function App() {
         data = result.data || [];
       }
       if (!isMounted) return;
+      // The service switched while this read was in flight — the effect's
+      // re-run (serviceId is a dep) owns the new namespace's load.
+      if (String(svcId ?? "") !== String(serviceIdRef.current ?? "")) return;
 
       if (Array.isArray(data) && data.length > 0) adoptRemoteTables(data);
 
       setSyncStatus("live");
       // Board truth is in: unlock the reconciliation effect and table saves,
-      // and signal the reconcile effect to run against the fresh data.
+      // and signal the reconcile effect to run against the fresh data. This
+      // read came from the SERVER, so it is authoritative for its namespace —
+      // stamp WHICH one it served (the reconcile/autosave gate compares it).
+      boardLoadedForRef.current = boardScopeKey();
       setRemoteBoardLoaded(true);
       setBoardSyncTick(t => t + 1);
     };
@@ -4135,11 +4180,23 @@ export default function App() {
         const hi = new Date(); hi.setDate(hi.getDate() + 30);
         const range = { from: toLocalDateISO(lo), to: toLocalDateISO(hi) };
         dispose = startWatches({
-          onServiceTables: (rows) => {
+          onServiceTables: ({ rows, forServiceId, serviceKnown }) => {
             if (cancelled) return;
+            // A read scoped to a service this device is no longer on (the
+            // reader raced a namespace switch) describes nothing here —
+            // discard it; the switch's own explicit re-read serves the new
+            // namespace.
+            if (String(forServiceId ?? "") !== String(serviceIdRef.current ?? "")) return;
             adoptRemoteTables(rows);
-            // Board truth is in: unlock the reconcile effect and table saves.
-            setRemoteBoardLoaded(true);
+            // Board truth is in: unlock the reconcile effect and table saves —
+            // but ONLY when the mirror actually knows this service. An empty
+            // read for a service it hasn't synced yet means "not yet synced",
+            // never "the board is empty"; unlocking on it let the reconcile
+            // manufacture reservation templates over the live rows.
+            if (serviceKnown) {
+              boardLoadedForRef.current = boardScopeKey();
+              setRemoteBoardLoaded(true);
+            }
             setBoardSyncTick(t => t + 1);
           },
           onReservations: (rows) => {

@@ -48,7 +48,20 @@ const foldServiceTable = ({ tableId, data, ancestor, current }) => {
   const mine = asObject(data);
   const base = ancestor == null ? null : asObject(ancestor);
 
-  if (base == null && current && hasWorkedContent(asObject(current.data)) && !hasWorkedContent(mine)) {
+  // A device whose before-picture holds no worked content is not entitled to
+  // replace a server table that does with a write that has none either.
+  // `base == null` is the 24.07 resume-overwrite class (no ancestor at all);
+  // a NON-null ancestor without worked content proves just as little — the
+  // fallback path seeds every table's baseline with the blank boot scaffold,
+  // so a joining device's manufactured reservation-template writes carried
+  // blank-but-not-null ancestors, sailed past the null check, and the seat
+  // fold (no per-seat ancestor) replaced the worked seats with template
+  // seats (the 08.08 wipe). Real gestures survive this rule: an edit on a
+  // worked table carries the worked content forward (mine has it), and a
+  // CLEAR of a table another device is working is already refused by the
+  // concurrent-clear conflict below.
+  if ((base == null || !hasWorkedContent(base))
+      && current && hasWorkedContent(asObject(current.data)) && !hasWorkedContent(mine)) {
     const error = new Error(
       `Service table ${tableId} holds worked content this device never synced; the un-synced overwrite was refused and the server's table was kept.`,
     );

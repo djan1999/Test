@@ -486,7 +486,13 @@ export async function fireWatches() {
   const { handlers, range, lifecycle } = w;
   if (handlers.onServices) handlers.onServices(await fakeReads.readServices());
   if (handlers.onServiceTables) {
-    handlers.onServiceTables(await fakeReads.readServiceTables(lifecycle?.getServiceId?.()));
+    // Mirrors watch.js: the payload names the service the read was scoped to
+    // and whether the local mirror knows that service at all.
+    const forServiceId = lifecycle?.getServiceId?.() ?? null;
+    const rows = await fakeReads.readServiceTables(forServiceId);
+    const serviceKnown = forServiceId == null
+      || wsRows("services").some((r) => asKey(r.id) === asKey(forServiceId));
+    handlers.onServiceTables({ rows, forServiceId, serviceKnown });
   }
   if (handlers.onReservations) handlers.onReservations(await fakeReads.readReservations(range.from, range.to));
   if (handlers.onWines) handlers.onWines(await fakeReads.readWines());

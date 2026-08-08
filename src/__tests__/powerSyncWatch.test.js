@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   watches: [],
   reads: {
-    reservations: vi.fn(), serviceTables: vi.fn(), wines: vi.fn(),
+    reservations: vi.fn(), serviceTables: vi.fn(), services: vi.fn(), wines: vi.fn(),
     beverages: vi.fn(), menuCourses: vi.fn(), liveSettings: vi.fn(),
   },
 }));
@@ -20,6 +20,7 @@ vi.mock("../powersync/system.js", () => ({
 vi.mock("../powersync/reads.js", () => ({
   readReservations: h.reads.reservations,
   readServiceTables: h.reads.serviceTables,
+  readServices: h.reads.services,
   readWines: h.reads.wines,
   readBeverages: h.reads.beverages,
   readMenuCourses: h.reads.menuCourses,
@@ -64,6 +65,32 @@ describe("PowerSync watches", () => {
     await tick();
     expect(onReady).toHaveBeenCalledTimes(1);
     expect(onReady.mock.calls[0][0].sources).toEqual(expect.arrayContaining(["reservations", "service_tables"]));
+  });
+
+  it("scopes the board payload: names the read's service and whether the mirror knows it", async () => {
+    // The adopter needs BOTH facts: forServiceId to discard a read that raced
+    // a namespace switch, and serviceKnown so an empty read for a service the
+    // mirror hasn't synced yet is never mistaken for "the board is empty".
+    const onServiceTables = vi.fn();
+    let svcId = null;
+    h.reads.serviceTables.mockResolvedValue([]);
+    h.reads.services.mockResolvedValue([{ id: "svc-known" }]);
+    startWatches({ onServiceTables }, { from: "2026-01-01", to: "2026-01-02" }, { getServiceId: () => svcId });
+    const fire = h.watches.find((w) => w.sql.includes("service_tables")).callbacks.onResult;
+
+    fire(); // no service adopted: the empty board IS the truth
+    await tick();
+    expect(onServiceTables).toHaveBeenLastCalledWith({ rows: [], forServiceId: null, serviceKnown: true });
+
+    svcId = "svc-known"; // adopted, and the mirror holds its services row
+    fire();
+    await tick();
+    expect(onServiceTables).toHaveBeenLastCalledWith({ rows: [], forServiceId: "svc-known", serviceKnown: true });
+
+    svcId = "svc-behind"; // adopted from the SERVER — the mirror has no trace
+    fire();
+    await tick();
+    expect(onServiceTables).toHaveBeenLastCalledWith({ rows: [], forServiceId: "svc-behind", serviceKnown: false });
   });
 
   it("aborts and disposes every subscription", () => {
