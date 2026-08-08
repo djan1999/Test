@@ -657,21 +657,26 @@ export default function App() {
   const boardScopeKey = () => (serviceIdRef.current == null ? "" : String(serviceIdRef.current));
   const boardTruthReady = () =>
     !supabase || sandboxRef.current || boardLoadedForRef.current === boardScopeKey();
-  // Boot splash: hold "CONNECTING…" until the device is genuinely set up —
-  // the board truth AND the reservations have loaded (local SQLite when
-  // primary, Supabase on the fallback) — so nobody can act on a half-synced
-  // view (per Djan, 23.07). A previously-synced device that is OFFLINE still
-  // gets through fast: its local DB serves both reads immediately. The long
-  // escape hatch only exists for the degraded case (fallback path with no
-  // network) so a device with cached lists is not bricked — it opens with a
-  // sync-error chip instead of an eternal splash.
+  // TRUE once the boot lifecycle check has delivered a verdict on what is
+  // happening RIGHT NOW: the live service adopted (server-confirmed when the
+  // local store shows nothing live — a freshly opened device's mirror can
+  // predate today), or a confirmed "nothing is live". Until then the boot
+  // splash below must hold: opening the mode screen on a half-synced view is
+  // how every "tapped SERVICE and it wiped" incident started.
+  const [serviceTruthReady, setServiceTruthReady] = useState(!supabase);
+  // Boot splash: hold "CONNECTING…" until the device is genuinely synced to
+  // the present — the reservations have loaded, the live-service verdict is
+  // in (serviceTruthReady), and the BOARD OF THAT SERVICE has actually been
+  // read (boardTruthReady — never a stale or pre-join read). Nothing is
+  // tappable before that (per Djan, 23.07 and 08.08). A previously-synced
+  // device that is OFFLINE still gets through fast: its local DB serves the
+  // reads immediately. The long escape hatch only exists for the degraded
+  // case (no network, nothing cached to trust) so the device is not bricked —
+  // it opens with a sync-error chip instead of an eternal splash, and even
+  // then the board write gates keep a blind entry non-destructive.
   const [bootGateDone, setBootGateDone] = useState(!supabase);
-  useEffect(() => {
-    if (bootGateDone) return undefined;
-    if (remoteBoardLoaded && reservationsLoaded) { setBootGateDone(true); return undefined; }
-    const t = setTimeout(() => setBootGateDone(true), 12000);
-    return () => clearTimeout(t);
-  }, [remoteBoardLoaded, reservationsLoaded, bootGateDone]);
+  // (The gate effect itself lives below the service-identity block: its
+  // re-evaluation deps include the adopted serviceId.)
   // ── Service ENTITY identity ─────────────────────────────────────────────
   // The lifecycle is a row in the `services` table; serviceId names which one
   // this device is on. serviceDate / chosenOn / session / startedAt below are
@@ -783,6 +788,19 @@ export default function App() {
       } catch {}
     }
   };
+  // Boot-gate verdict (see the splash state above): everything loaded AND the
+  // loaded board belongs to the CURRENT namespace. Re-runs when reads land
+  // (boardSyncTick) and when an adoption changes the namespace (serviceId).
+  useEffect(() => {
+    if (bootGateDone) return undefined;
+    if (remoteBoardLoaded && reservationsLoaded && serviceTruthReady && boardTruthReady()) {
+      setBootGateDone(true);
+      return undefined;
+    }
+    const t = setTimeout(() => setBootGateDone(true), 12000);
+    return () => clearTimeout(t);
+  }, [remoteBoardLoaded, reservationsLoaded, serviceTruthReady, boardSyncTick, serviceId, bootGateDone]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const saveTimerRef       = useRef(null);
   /** Sanitized-table JSON of the last state written to (or adopted from) the
    *  store, by index. Diffing against it keeps board writes to just the rows
@@ -4367,27 +4385,46 @@ export default function App() {
     // it is current; FILE it (one idempotent status flip, nothing destroyed)
     // if it rolled past the service-day cutoff. Either verdict is safe — a
     // wrong stale call parks the service intact in the Archive, it does not
-    // wipe anything (the 22.07 class is structurally gone).
-    fetchServicesStore(20)
-      .then(async (rows) => {
-        if (!mounted) return;
-        const live = currentServiceFrom(rows);
-        if (!live) return; // nothing live; ended services are already filed
-        if (isStaleServiceDate(live.date) && !isActivePastReview(live.date, live.chosenOn)) {
-          await autoEndStaleService(live);
-          return;
-        }
-        // Local state wins if this device already holds a service (it may
-        // have just started one); otherwise adopt the store's live service —
-        // identity, session and all — so a fresh boot lands on the board.
-        if (!serviceIdRef.current) {
-          applyServiceEntity(live);
-          // The board watch may have already fired for the pre-adoption (null)
-          // service id — re-read the adopted namespace explicitly.
-          reloadPrimaryBoard();
-        }
-      })
-      .catch(() => {}); // keep whatever local service identity we already have
+    // wipe anything (the 22.07 class is structurally gone). The check ends by
+    // confirming the live picture with the SERVER when the local store shows
+    // nothing — and only then does serviceTruthReady release the boot splash.
+    setServiceTruthReady(false);
+    (async () => {
+      let live = null;
+      try {
+        const rows = await fetchServicesStore(20);
+        live = currentServiceFrom(rows);
+      } catch { /* keep whatever local service identity we already have */ }
+      if (!mounted) return;
+      if (live && isStaleServiceDate(live.date) && !isActivePastReview(live.date, live.chosenOn)) {
+        await autoEndStaleService(live);
+        live = null; // filed (or healed under this device's id) — not a boot adoption
+      }
+      // Local state wins if this device already holds a service (it may
+      // have just started one); otherwise adopt the store's live service —
+      // identity, session and all — so a fresh boot lands on the board.
+      if (mounted && live && !serviceIdRef.current) {
+        applyServiceEntity(live);
+        // The board watch may have already fired for the pre-adoption (null)
+        // service id — re-read the adopted namespace explicitly.
+        reloadPrimaryBoard();
+      }
+      if (mounted && !serviceIdRef.current) {
+        // The store shows nothing live — but on a freshly opened device that
+        // read serves a mirror that can predate today entirely. What is
+        // happening RIGHT NOW is the server's call: confirm before the boot
+        // gate may open, and adopt the running service so its board is
+        // already loading before anyone can tap SERVICE.
+        try {
+          const remote = await confirmJoinableLiveService();
+          if (mounted && remote && !serviceIdRef.current) {
+            applyServiceEntity(remote);
+            reloadPrimaryBoard();
+          }
+        } catch { /* offline/unreachable — local truth is all there is */ }
+      }
+      if (mounted) setServiceTruthReady(true);
+    })();
 
     // Fallback planner load (-7…+30 days). When the local DB is primary the
     // reservations watch seeds + refreshes the planner instead. Kept callable

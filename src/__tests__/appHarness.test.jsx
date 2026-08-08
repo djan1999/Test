@@ -746,7 +746,7 @@ describe("app harness — un-synced local mirror joins without writing (sqlite-p
     resetBackend({ psMode: true });
   });
 
-  it("joins the live service it cannot see locally and leaves the worked board untouched", async () => {
+  it("holds the CONNECTING splash and writes NOTHING until the joined service's board syncs", async () => {
     const stamp = new Date().toISOString();
     const worked = {
       ...blankTable(1), active: true, arrivedAt: "19:43", resName: "Anna Harness",
@@ -776,26 +776,30 @@ describe("app harness — un-synced local mirror joins without writing (sqlite-p
     ]);
 
     render(<App />);
-    fireEvent.click(await screen.findByText("[Service]", {}, { timeout: 15000 }));
 
-    // The blind-start guard JOINS the server's live service — no start prompt,
-    // no new entity.
+    // The boot check confirms the live service with the SERVER and adopts it
+    // silently — no start prompt, no new services row.
     await waitFor(() => {
       expect(localStorage.getItem(`milka_service_id:${WORKSPACE_ID}`)).toBe(SVC);
     }, { timeout: 5000 });
+    expect(remoteRows("services")).toHaveLength(1);
 
-    // THE pin: the mirror doesn't know this service yet, so the board is not
-    // board-truth and nothing may be written — the worked row survives
-    // byte-for-byte and the service is still the only live one.
-    await new Promise((r) => setTimeout(r, 600)); // window for any wrongful autosave
+    // THE pins: the mirror hasn't synced that service yet, so the device is
+    // NOT open for business — the CONNECTING splash still covers the mode
+    // screen (nothing is tappable) and nothing may be written: the worked row
+    // survives byte-for-byte and the service is still the only live one.
+    await new Promise((r) => setTimeout(r, 800)); // window for any wrongful autosave
+    expect(screen.queryByText("[Service]")).toBeNull();
     const row = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
     expect(row.data.seats.map((s) => s.water)).toEqual(["STILL", "SPARKLING"]);
     expect(row.data.kitchenLog.c1.firedAt).toBe("19:55");
     expect(row.data.active).toBe(true);
     expect(remoteRows("services").filter((r) => r.status === "live")).toHaveLength(1);
 
-    // The checkpoint lands → the board paints the REAL table, still unharmed.
+    // The checkpoint lands → board truth is in → the gate opens and the REAL
+    // table paints, still unharmed.
     await act(async () => { await syncDown(); });
+    fireEvent.click(await screen.findByText("[Service]", {}, { timeout: 5000 }));
     await screen.findByText(/Anna Harness/, {}, { timeout: 5000 });
     const after = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
     expect(after.data.seats.map((s) => s.water)).toEqual(["STILL", "SPARKLING"]);
@@ -817,12 +821,15 @@ describe("app harness — fresh device joins silently without writing (fallback)
     resetBackend({ psMode: false });
   });
 
-  it("tapping SERVICE joins the live service directly and the worked board survives in place", async () => {
+  it("holds the CONNECTING splash while the joined service's board read fails — and writes nothing", async () => {
     // The link is SLOW ("connecting for a while"): every server read takes
     // 150ms. That latency is the incident's trigger — it let the reconcile
     // and its 50ms autosave run against the pre-join board before the joined
-    // service's own board read could land.
+    // service's own board read could land. And it is still flaky: the board's
+    // post-adoption list read fails once (single-row reads still succeed —
+    // the asymmetry that let the incident's CAS write reach the server).
     backend.remoteSelectDelayMs = 150;
+    backend.failNextBoardListReads = 1;
     const stamp = new Date().toISOString();
     // A party of FOUR: seats 3 and 4 have no counterpart in the blank boot
     // scaffold (2 seats), so they carry no per-seat ancestor — exactly the
@@ -852,25 +859,21 @@ describe("app harness — fresh device joins silently without writing (fallback)
     ]);
 
     render(<App />);
-    const serviceButton = await screen.findByText("[Service]", {}, { timeout: 15000 });
-    // The link just came back but is still flaky: the board's post-join list
-    // read fails once (single-row reads still succeed — which is what let the
-    // autosave's CAS read-fold-write reach the server in the incident).
-    backend.failNextBoardListReads = 1;
-    fireEvent.click(serviceButton);
 
-    // Thrown straight in: the device adopts the live service — no start
-    // prompt, no new services row.
+    // Boot confirms the live service with the server and adopts it silently —
+    // no start prompt, no new services row.
     await waitFor(() => {
       expect(localStorage.getItem(`milka_service_id:${WORKSPACE_ID}`)).toBe(SVC);
     }, { timeout: 10000 });
     expect(remoteRows("services")).toHaveLength(1);
 
-    // THE pin. The joined namespace's board read has NOT landed (it failed),
-    // so nothing may be written: after every autosave window has passed, the
-    // worked row is intact in place — all four seats, waters, pairings,
-    // kitchen log — and no reservation template was pushed over it.
+    // THE pins. The joined namespace's board read has NOT landed (it failed),
+    // so the device is NOT open: the CONNECTING splash holds — nothing is
+    // tappable — and after every autosave window has passed nothing was
+    // written: the worked row is intact in place — all four seats, waters,
+    // pairings, kitchen log — with no reservation template pushed over it.
     await new Promise((r) => setTimeout(r, 900));
+    expect(screen.queryByText("[Service]")).toBeNull();
     const row = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
     expect(row.data.seats.map((s) => s.water)).toEqual(["STILL", "SPARKLING", "STILL", "SPARKLING"]);
     expect(row.data.seats.map((s) => s.pairing)).toEqual(["WINE PAIRING", "—", "NA PAIRING", "WINE PAIRING"]);
@@ -878,9 +881,10 @@ describe("app harness — fresh device joins silently without writing (fallback)
     expect(row.data.active).toBe(true);
     expect(remoteRows("services").filter((r) => r.status === "live")).toHaveLength(1);
 
-    // The link steadies (browser 'online' signal) → the board read retries,
-    // lands, and the REAL table paints — still unharmed.
+    // The link steadies (browser 'online' signal) → the board read retries and
+    // lands → the gate opens → SERVICE shows the REAL table, still unharmed.
     await act(async () => { window.dispatchEvent(new Event("online")); });
+    fireEvent.click(await screen.findByText("[Service]", {}, { timeout: 5000 }));
     await screen.findByText(/Anna Harness/, {}, { timeout: 5000 });
     const after = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
     expect(after.data.seats.map((s) => s.water)).toEqual(["STILL", "SPARKLING", "STILL", "SPARKLING"]);
