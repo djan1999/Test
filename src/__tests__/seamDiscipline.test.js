@@ -69,7 +69,11 @@ const ALLOWLIST = {
     // IS the service lifecycle seam — its fallback branch talks to Supabase
     // directly. Every write is single-row by id; nothing here can touch
     // service_tables (see serviceLifecycle.test.js pins).
-    "TABLES.SERVICES.select": 2,         // services list + same-day label dedup
+    // The third SELECT is fetchLiveServiceFromServer: the blind-start guard's
+    // SERVER-TRUTH read, which must bypass the local mirror by design — a
+    // freshly opened sqlite-primary device's mirror can predate today's
+    // service, and trusting it is how a start superseded the running board.
+    "TABLES.SERVICES.select": 3,         // services list + same-day label dedup + server-truth live read
     "TABLES.SERVICE_ARCHIVE.select": 1,  // same-day legacy labels for dedup
     "TABLES.SERVICES.insert": 1,         // START — one new entity row
     "TABLES.SERVICES.update": 3,         // END + RESUME (status flips) + field heal

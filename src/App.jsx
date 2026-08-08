@@ -77,6 +77,7 @@ import { recordClientDiagnostic } from "./lib/clientDiagnostics.js";
 import {
   startServiceStore, endServiceStore, resumeServiceStore, updateServiceStore,
   fetchServicesStore, readLiveServiceStore, fetchSameDayLabelsStore,
+  confirmJoinableLiveService,
 } from "./lib/serviceLifecycle.js";
 import { currentServiceFrom, nextServiceLabel, serviceLabelBase } from "./lib/serviceEntity.js";
 import { isPowerSyncEnabled } from "./powersync/config.js";
@@ -136,6 +137,12 @@ const InventoryModal = lazy(() => import("./components/modals/InventoryModal.jsx
 const KitchenFloorView = lazy(() => import("./components/kitchen/KitchenFloorView.jsx"));
 const MenuWorkspace = lazy(() => import("./components/menu/MenuWorkspace.jsx"));
 const FullModal = lazy(() => import("./components/ui/FullModal.jsx"));
+
+// Single shared load of the (heavy, lazily-imported) local-DB reads module.
+// Every dynamic call site funnels through this one promise so two callers can
+// never start concurrent first-imports of the same module.
+let _psReadsPromise = null;
+const loadPsReads = () => (_psReadsPromise ||= import("./powersync/reads.js"));
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const reservationWriteKey = (workspaceId, id) => `${workspaceId}\u0000${id}`;
@@ -638,21 +645,38 @@ export default function App() {
   // the wipe to the server.
   const [remoteBoardLoaded, setRemoteBoardLoaded] = useState(!supabase);
   const [boardSyncTick, setBoardSyncTick] = useState(0);
-  // Boot splash: hold "CONNECTING…" until the device is genuinely set up —
-  // the board truth AND the reservations have loaded (local SQLite when
-  // primary, Supabase on the fallback) — so nobody can act on a half-synced
-  // view (per Djan, 23.07). A previously-synced device that is OFFLINE still
-  // gets through fast: its local DB serves both reads immediately. The long
-  // escape hatch only exists for the degraded case (fallback path with no
-  // network) so a device with cached lists is not bricked — it opens with a
-  // sync-error chip instead of an eternal splash.
+  // WHICH service namespace the last completed board read served ("" = the
+  // no-service board, null = none yet). remoteBoardLoaded alone says "some
+  // read finished" — but a read for the previous namespace, or for no
+  // namespace on a device that adopted a service moments later, is not board
+  // truth for THIS one. The reconcile and the autosave only act when this
+  // matches the current namespace: acting on a mismatched read is how a
+  // joining device rebuilt reservation templates over the live board and
+  // wiped the service clean (the 08.08 incident).
+  const boardLoadedForRef = useRef(null);
+  const boardScopeKey = () => (serviceIdRef.current == null ? "" : String(serviceIdRef.current));
+  const boardTruthReady = () =>
+    !supabase || sandboxRef.current || boardLoadedForRef.current === boardScopeKey();
+  // TRUE once the boot lifecycle check has delivered a verdict on what is
+  // happening RIGHT NOW: the live service adopted (server-confirmed when the
+  // local store shows nothing live — a freshly opened device's mirror can
+  // predate today), or a confirmed "nothing is live". Until then the boot
+  // splash below must hold: opening the mode screen on a half-synced view is
+  // how every "tapped SERVICE and it wiped" incident started.
+  const [serviceTruthReady, setServiceTruthReady] = useState(!supabase);
+  // Boot splash: hold "CONNECTING…" until the device is genuinely synced to
+  // the present — the reservations have loaded, the live-service verdict is
+  // in (serviceTruthReady), and the BOARD OF THAT SERVICE has actually been
+  // read (boardTruthReady — never a stale or pre-join read). Nothing is
+  // tappable before that (per Djan, 23.07 and 08.08). A previously-synced
+  // device that is OFFLINE still gets through fast: its local DB serves the
+  // reads immediately. The long escape hatch only exists for the degraded
+  // case (no network, nothing cached to trust) so the device is not bricked —
+  // it opens with a sync-error chip instead of an eternal splash, and even
+  // then the board write gates keep a blind entry non-destructive.
   const [bootGateDone, setBootGateDone] = useState(!supabase);
-  useEffect(() => {
-    if (bootGateDone) return undefined;
-    if (remoteBoardLoaded && reservationsLoaded) { setBootGateDone(true); return undefined; }
-    const t = setTimeout(() => setBootGateDone(true), 12000);
-    return () => clearTimeout(t);
-  }, [remoteBoardLoaded, reservationsLoaded, bootGateDone]);
+  // (The gate effect itself lives below the service-identity block: its
+  // re-evaluation deps include the adopted serviceId.)
   // ── Service ENTITY identity ─────────────────────────────────────────────
   // The lifecycle is a row in the `services` table; serviceId names which one
   // this device is on. serviceDate / chosenOn / session / startedAt below are
@@ -764,6 +788,19 @@ export default function App() {
       } catch {}
     }
   };
+  // Boot-gate verdict (see the splash state above): everything loaded AND the
+  // loaded board belongs to the CURRENT namespace. Re-runs when reads land
+  // (boardSyncTick) and when an adoption changes the namespace (serviceId).
+  useEffect(() => {
+    if (bootGateDone) return undefined;
+    if (remoteBoardLoaded && reservationsLoaded && serviceTruthReady && boardTruthReady()) {
+      setBootGateDone(true);
+      return undefined;
+    }
+    const t = setTimeout(() => setBootGateDone(true), 12000);
+    return () => clearTimeout(t);
+  }, [remoteBoardLoaded, reservationsLoaded, serviceTruthReady, boardSyncTick, serviceId, bootGateDone]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const saveTimerRef       = useRef(null);
   /** Sanitized-table JSON of the last state written to (or adopted from) the
    *  store, by index. Diffing against it keeps board writes to just the rows
@@ -1121,7 +1158,7 @@ export default function App() {
     const svcId = serviceIdRef.current;
     if (!svcId) return [];
     if (sqlitePrimaryRef.current) {
-      const { readServiceTables } = await import("./powersync/reads.js");
+      const { readServiceTables } = await loadPsReads();
       return readServiceTables(svcId);
     }
     const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
@@ -1866,7 +1903,7 @@ export default function App() {
     let prevJsonByPos = null;
     try {
       if (sqlitePrimaryRef.current) {
-        const { readMenuCourses } = await import("./powersync/reads.js");
+        const { readMenuCourses } = await loadPsReads();
         const raw = await readMenuCourses();
         prevJsonByPos = new Map(raw.map(r => {
           const row = courseToSupabaseRow(supabaseRowToCourse(r));
@@ -2086,6 +2123,9 @@ export default function App() {
   const resetBoardLocal = () => {
     const blank = configuredTableIds(restaurantConfigRef.current).map(blankTable);
     intentionalBoardClearRef.current = true;
+    // The new namespace has no completed board read yet — the reconcile and
+    // the autosave stay locked until one lands (see boardLoadedForRef).
+    boardLoadedForRef.current = null;
     pendingBoardWritesRef.current = new Set();
     prevTablesJsonRef.current = makeTableJsonMap(blank);
     confirmedTablesJsonRef.current = makeTableJsonMap(blank);
@@ -2106,6 +2146,40 @@ export default function App() {
     applyServiceEntity(null);
     // The blank baselines are in place — board flushes are safe again.
     endingServiceRef.current = false;
+  };
+
+  // The primary path's board reader is service-scoped through a REF at read
+  // time (watch.js getServiceId) — and adopting a service is a React-state
+  // change, not a database change, so the watch has nothing to re-fire on. A
+  // device whose reader ran before the adoption would otherwise sit on the
+  // empty pre-adoption read: its board stays blank, the reconcile rebuilds
+  // reservation templates, and the autosave pushes those over the live rows.
+  // Every namespace switch re-reads the board explicitly for the id just
+  // adopted instead of trusting the watch to notice.
+  const reloadPrimaryBoard = () => {
+    if (!sqlitePrimaryRef.current) return;
+    const forServiceId = serviceIdRef.current ?? null;
+    loadPsReads()
+      .then(async ({ readServiceTables, readServices }) => {
+        const rows = await readServiceTables(forServiceId);
+        // An empty read only counts as board truth when the mirror KNOWS the
+        // service (checkpoints apply atomically: a mirror holding the
+        // services row holds its board rows too). A mirror without the row
+        // hasn't synced this far — its emptiness is "not yet synced".
+        const serviceKnown = forServiceId == null
+          || (await readServices()).some((svc) => String(svc.id) === String(forServiceId));
+        return { rows, serviceKnown };
+      })
+      .then(({ rows, serviceKnown }) => {
+        if (String(forServiceId ?? "") !== String(serviceIdRef.current ?? "")) return; // raced a switch
+        adoptRemoteTables(rows);
+        if (serviceKnown) {
+          boardLoadedForRef.current = boardScopeKey();
+          setRemoteBoardLoaded(true);
+        }
+        setBoardSyncTick((t) => t + 1);
+      })
+      .catch(() => {});
   };
 
   // Guards a manual end in flight so a double-tap can't race itself. (Ending
@@ -2339,7 +2413,7 @@ export default function App() {
       try {
         let rows;
         if (sqlitePrimaryRef.current) {
-          const { readServiceTables } = await import("./powersync/reads.js");
+          const { readServiceTables } = await loadPsReads();
           rows = await readServiceTables(svc.id);
         } else {
           const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
@@ -2389,7 +2463,7 @@ export default function App() {
         // cache: read the menu from the store rather than file the night blind.
         try {
           if (sqlitePrimaryRef.current) {
-            const { readMenuCourses } = await import("./powersync/reads.js");
+            const { readMenuCourses } = await loadPsReads();
             snapCourses = ((await readMenuCourses()) || []).map(supabaseRowToCourse);
           } else {
             snapCourses = (await fetchMenuCourses()) || [];
@@ -2494,6 +2568,12 @@ export default function App() {
       date,
       session: nextSession,
       chosenOn: currentServiceDay(),
+      // The live service THIS DEVICE can see — the only one its start may
+      // supersede. When the store finds a live service this device couldn't
+      // see (an un-synced mirror at boot), it returns it as a JOIN instead of
+      // inserting: the adoption below then lands this device on the running
+      // board rather than resetting the whole restaurant to an empty one.
+      knownLiveId: serviceIdRef.current,
     });
     if (!result.ok) return result;
     // The new service can itself be auto-ended once it rolls past the cutoff.
@@ -2512,6 +2592,7 @@ export default function App() {
     // Fresh namespace: locally blank. (Its rows — if any — sync in on top.)
     resetBoardLocal();
     if (!sqlitePrimaryRef.current) fallbackBoardReloadRef.current?.();
+    else reloadPrimaryBoard();
     return { ok: true, service: winner };
   };
 
@@ -2561,9 +2642,13 @@ export default function App() {
       applyServiceEntity(next);
       resetBoardLocal();
       setShowServiceDatePicker(false); // a start prompt waiting here is moot now
-      // Fallback path: pull the new namespace's rows now (the primary path's
-      // service-scoped watch re-reads on its own).
+      // Pull the new namespace's rows now. The primary path must do this
+      // EXPLICITLY: the service-scoped watch keys on serviceIdRef at read
+      // time and this adoption is not a database change, so it re-fires only
+      // when some later row happens to sync — which can be after the
+      // reconcile has already rebuilt (and queued) reservation templates.
       if (!sqlitePrimaryRef.current) fallbackBoardReloadRef.current?.();
+      else reloadPrimaryBoard();
       return;
     }
     if (next && next.id === curId) {
@@ -3013,12 +3098,29 @@ export default function App() {
     if (supabase && getWorkspaceId()) {
       joiningServiceRef.current = true;
       setSyncStatus("connecting");
+      const joinable = (svc) =>
+        Boolean(svc && (!isStaleServiceDate(svc.date) || isActivePastReview(svc.date, svc.chosenOn)));
       try {
-        const live = await readLiveServiceStore();
-        if (live && (!isStaleServiceDate(live.date) || isActivePastReview(live.date, live.chosenOn))) {
+        let live = null;
+        try { live = await readLiveServiceStore(); } catch { /* store unreadable — ask the server below */ }
+        if (!joinable(live)) {
+          // The read above serves the LOCAL mirror when SQLite is primary —
+          // and on a freshly opened device that mirror can predate today's
+          // service entirely (the persisted first-sync flag flips it primary
+          // before this session's first checkpoint lands). "Nothing live"
+          // from a stale mirror used to fall through to the START prompt,
+          // where one tap superseded the running service and reset every
+          // board mid-service. Confirm with the SERVER before offering it.
+          try {
+            const remote = await confirmJoinableLiveService();
+            if (joinable(remote)) live = remote;
+          } catch { /* offline/unreachable — the start prompt stays available */ }
+        }
+        if (joinable(live)) {
           // JOIN the live service: adopt its whole identity exactly. Never a
           // write, never a clear — the board rows stream in on their own.
           applyServiceEntity(live);
+          reloadPrimaryBoard();
           enterMode("service");
           joiningServiceRef.current = false;
           return;
@@ -3046,7 +3148,7 @@ export default function App() {
       // Re-pull the store's list so the abandoned draft stops painting — the
       // watches only fire on DATA changes, not on this flag clearing.
       if (sqlitePrimaryRef.current) {
-        import("./powersync/reads.js")
+        loadPsReads()
           .then(({ readMenuCourses }) => readMenuCourses())
           .then(raw => { if (raw?.length) setMenuCourses(raw.map(supabaseRowToCourse)); })
           .catch(() => {});
@@ -3071,6 +3173,12 @@ export default function App() {
     // hasn't seen the store's state treats every live table as "not started"
     // and rebuilds/blanks it — then the autosave broadcasts the wipe.
     if (!reservationsLoaded || !remoteBoardLoaded) return;
+    // And the loaded flag must describe THIS namespace: a device that just
+    // joined a service still carries the pre-join read (loaded-for-nothing),
+    // and reconciling on it rebuilds reservation templates the autosave then
+    // pushes over the live rows (the 08.08 wipe). The gate re-opens when the
+    // namespace's own read lands (boardSyncTick bumps this effect).
+    if (!boardTruthReady()) return;
     if ((mode !== "service" && mode !== "display") || !serviceDate) return;
     reconcileBoardWithReservations(reservations.filter(r => {
       if (r.date !== serviceDate) return false;
@@ -3222,8 +3330,10 @@ export default function App() {
     // Demo mode: the device-local snapshot IS the persistence.
     if (!supabase) { writeLocalDemoBoard(tables); return; }
     // Never push table rows before the board truth has loaded: the diff would
-    // run against the blank boot state and overwrite a live service.
-    if (!remoteBoardLoaded) return;
+    // run against the blank boot state and overwrite a live service. "Loaded"
+    // must mean loaded FOR THIS NAMESPACE (see boardLoadedForRef) — a stale
+    // loaded flag from before a join let exactly that overwrite through.
+    if (!remoteBoardLoaded || !boardTruthReady()) return;
 
     const prevJson = tables.map((table) => prevTablesJsonRef.current.get(Number(table.id)));
     const nextJson = tables.map(t => JSON.stringify(sanitizeTable(t)));
@@ -3265,7 +3375,9 @@ export default function App() {
     saveTimerRef.current = setTimeout(flushBoardWrites, 50);
 
     return () => clearTimeout(saveTimerRef.current);
-  }, [tablesJson, remoteBoardLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+    // boardSyncTick: a namespace's board read landing re-opens the gate above,
+    // so edits made while it was closed queue without waiting for another tap.
+  }, [tablesJson, remoteBoardLoaded, boardSyncTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Drain: retry unconfirmed board writes without needing another edit ──────
   // Failed flushes leave their table_ids in pendingBoardWritesRef; before this
@@ -3913,12 +4025,18 @@ export default function App() {
         data = result.data || [];
       }
       if (!isMounted) return;
+      // The service switched while this read was in flight — the effect's
+      // re-run (serviceId is a dep) owns the new namespace's load.
+      if (String(svcId ?? "") !== String(serviceIdRef.current ?? "")) return;
 
       if (Array.isArray(data) && data.length > 0) adoptRemoteTables(data);
 
       setSyncStatus("live");
       // Board truth is in: unlock the reconciliation effect and table saves,
-      // and signal the reconcile effect to run against the fresh data.
+      // and signal the reconcile effect to run against the fresh data. This
+      // read came from the SERVER, so it is authoritative for its namespace —
+      // stamp WHICH one it served (the reconcile/autosave gate compares it).
+      boardLoadedForRef.current = boardScopeKey();
       setRemoteBoardLoaded(true);
       setBoardSyncTick(t => t + 1);
     };
@@ -4080,11 +4198,23 @@ export default function App() {
         const hi = new Date(); hi.setDate(hi.getDate() + 30);
         const range = { from: toLocalDateISO(lo), to: toLocalDateISO(hi) };
         dispose = startWatches({
-          onServiceTables: (rows) => {
+          onServiceTables: ({ rows, forServiceId, serviceKnown }) => {
             if (cancelled) return;
+            // A read scoped to a service this device is no longer on (the
+            // reader raced a namespace switch) describes nothing here —
+            // discard it; the switch's own explicit re-read serves the new
+            // namespace.
+            if (String(forServiceId ?? "") !== String(serviceIdRef.current ?? "")) return;
             adoptRemoteTables(rows);
-            // Board truth is in: unlock the reconcile effect and table saves.
-            setRemoteBoardLoaded(true);
+            // Board truth is in: unlock the reconcile effect and table saves —
+            // but ONLY when the mirror actually knows this service. An empty
+            // read for a service it hasn't synced yet means "not yet synced",
+            // never "the board is empty"; unlocking on it let the reconcile
+            // manufacture reservation templates over the live rows.
+            if (serviceKnown) {
+              boardLoadedForRef.current = boardScopeKey();
+              setRemoteBoardLoaded(true);
+            }
             setBoardSyncTick(t => t + 1);
           },
           onReservations: (rows) => {
@@ -4255,22 +4385,46 @@ export default function App() {
     // it is current; FILE it (one idempotent status flip, nothing destroyed)
     // if it rolled past the service-day cutoff. Either verdict is safe — a
     // wrong stale call parks the service intact in the Archive, it does not
-    // wipe anything (the 22.07 class is structurally gone).
-    fetchServicesStore(20)
-      .then(async (rows) => {
-        if (!mounted) return;
-        const live = currentServiceFrom(rows);
-        if (!live) return; // nothing live; ended services are already filed
-        if (isStaleServiceDate(live.date) && !isActivePastReview(live.date, live.chosenOn)) {
-          await autoEndStaleService(live);
-          return;
-        }
-        // Local state wins if this device already holds a service (it may
-        // have just started one); otherwise adopt the store's live service —
-        // identity, session and all — so a fresh boot lands on the board.
-        if (!serviceIdRef.current) applyServiceEntity(live);
-      })
-      .catch(() => {}); // keep whatever local service identity we already have
+    // wipe anything (the 22.07 class is structurally gone). The check ends by
+    // confirming the live picture with the SERVER when the local store shows
+    // nothing — and only then does serviceTruthReady release the boot splash.
+    setServiceTruthReady(false);
+    (async () => {
+      let live = null;
+      try {
+        const rows = await fetchServicesStore(20);
+        live = currentServiceFrom(rows);
+      } catch { /* keep whatever local service identity we already have */ }
+      if (!mounted) return;
+      if (live && isStaleServiceDate(live.date) && !isActivePastReview(live.date, live.chosenOn)) {
+        await autoEndStaleService(live);
+        live = null; // filed (or healed under this device's id) — not a boot adoption
+      }
+      // Local state wins if this device already holds a service (it may
+      // have just started one); otherwise adopt the store's live service —
+      // identity, session and all — so a fresh boot lands on the board.
+      if (mounted && live && !serviceIdRef.current) {
+        applyServiceEntity(live);
+        // The board watch may have already fired for the pre-adoption (null)
+        // service id — re-read the adopted namespace explicitly.
+        reloadPrimaryBoard();
+      }
+      if (mounted && !serviceIdRef.current) {
+        // The store shows nothing live — but on a freshly opened device that
+        // read serves a mirror that can predate today entirely. What is
+        // happening RIGHT NOW is the server's call: confirm before the boot
+        // gate may open, and adopt the running service so its board is
+        // already loading before anyone can tap SERVICE.
+        try {
+          const remote = await confirmJoinableLiveService();
+          if (mounted && remote && !serviceIdRef.current) {
+            applyServiceEntity(remote);
+            reloadPrimaryBoard();
+          }
+        } catch { /* offline/unreachable — local truth is all there is */ }
+      }
+      if (mounted) setServiceTruthReady(true);
+    })();
 
     // Fallback planner load (-7…+30 days). When the local DB is primary the
     // reservations watch seeds + refreshes the planner instead. Kept callable

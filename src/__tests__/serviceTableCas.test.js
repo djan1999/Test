@@ -86,3 +86,43 @@ describe("saveServiceTableWithCas — un-synced overwrite guard (24.07 incident)
     expect(client.rpc).toHaveBeenCalledTimes(1);
   });
 });
+
+// The blank boot scaffold every device seeds its baselines with — a real
+// (non-null) ancestor that nevertheless proves the device never saw the row.
+const blankBootTable = {
+  id: 9, active: false, resName: "", resTime: "", guests: 2,
+  kitchenLog: {}, bottleWines: [], restrictions: [], seats: [],
+};
+
+describe("saveServiceTableWithCas — content-less ancestor guard (08.08 incident)", () => {
+  it("REGRESSION: a template write with a BLANK (non-null) ancestor may NOT replace a worked server table", async () => {
+    // The 08.08 wipe: a joining device's reconcile rebuilt reservation
+    // templates and its autosave sent them with the blank boot scaffold as
+    // ancestor. Non-null, so the 24.07 null check passed — and the seat fold
+    // (no per-seat ancestor) replaced the worked seats with template seats.
+    const client = makeClient({ data: workedTable, updated_at: "2026-08-08T20:00:00Z" });
+    await expect(saveServiceTableWithCas(args(client, skeletonTable, blankBootTable))).rejects.toMatchObject({
+      code: "MILKA_TABLE_CONFLICT",
+      conflict: "unsynced-overwrite",
+    });
+    expect(client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("a blank-ancestor write that itself carries worked content still folds through", async () => {
+    const client = makeClient({ data: workedTable, updated_at: "2026-08-08T20:00:00Z" });
+    const mine = JSON.parse(JSON.stringify(workedTable));
+    mine.seats[0].aperitifs.push({ name: "Dry Martini" });
+    const result = await saveServiceTableWithCas(args(client, mine, blankBootTable));
+    expect(result.conflict).toBeNull();
+    expect(client.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("a blank-ancestor skeleton write onto a party-only server row (no worked content) still saves", async () => {
+    // Seating a walk-in on a genuinely quiet table keeps working — the guard
+    // only defends WORKED content.
+    const client = makeClient({ data: skeletonTable, updated_at: "2026-08-08T20:00:00Z" });
+    const result = await saveServiceTableWithCas(args(client, { ...skeletonTable, notes: "arrived" }, blankBootTable));
+    expect(result.conflict).toBeNull();
+    expect(client.rpc).toHaveBeenCalledTimes(1);
+  });
+});

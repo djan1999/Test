@@ -688,7 +688,7 @@ describe("app harness — stale END cannot touch a newer service (fallback)", ()
     expect(oldRow?.data?.resName).toBe("Anna Harness");
   }, 20000);
 
-  it("a Lunch started against a NEWER Dinner elsewhere loses the arbitration — the Dinner survives", async () => {
+  it("a Lunch started against a NEWER Dinner elsewhere JOINS the Dinner — the blind start never inserts", async () => {
     seedLiveService();
     render(<App />);
     await enterService();
@@ -715,13 +715,12 @@ describe("app harness — stale END cannot touch a newer service (fallback)", ()
     fireEvent.click(await screen.findByText("LUNCH", { selector: "button" }));
     fireEvent.click(screen.getByText(/^START LUNCH/));
 
-    // The store trigger arbitrates: newest started_at wins, so the stale
-    // device's Lunch is immediately superseded — NON-destructively — and the
-    // device adopts the real live Dinner instead of believing its Lunch won.
+    // The blind-start guard resolves this BEFORE the trigger ever has to
+    // arbitrate: the device cannot see the newer Dinner, so its Lunch start
+    // is answered with the Dinner to JOIN — no Lunch row is inserted at all,
+    // and the device adopts the real live service instead of displacing it.
     await waitFor(() => {
-      const lunch = remoteRows("services").find((r) => r.session === "lunch");
-      expect(lunch?.status).toBe("ended");
-      expect(lunch?.end_reason).toBe("superseded");
+      expect(remoteRows("services").find((r) => r.session === "lunch")).toBeUndefined();
       expect(remoteRows("services").find((r) => r.id === "svc-newer-dinner")?.status).toBe("live");
       expect(localStorage.getItem(`milka_service_id:${WORKSPACE_ID}`)).toBe("svc-newer-dinner");
     }, { timeout: 5000 });
@@ -732,6 +731,165 @@ describe("app harness — stale END cannot touch a newer service (fallback)", ()
     expect(freshRow.data.resName).toBe("Fresh Service Guest");
     expect(freshRow.data.active).toBe(true);
   }, 20000);
+});
+
+// ── Un-synced local mirror: joining must not write ───────────────────────────
+// The 08.08 incident: a device opened mid-service ("connecting for a while"),
+// the operator tapped SERVICE, and the whole service wiped clean. The device
+// joined the live service, but its board truth was still the pre-join read —
+// so the reconcile rebuilt every reserved table as a reservation template and
+// the autosave pushed the templates over the live rows. The pin: a device
+// whose local mirror has not synced the service it just joined must write
+// NOTHING until that service's own board read lands.
+describe("app harness — un-synced local mirror joins without writing (sqlite-primary)", () => {
+  beforeEach(() => {
+    resetBackend({ psMode: true });
+  });
+
+  it("holds the CONNECTING splash and writes NOTHING until the joined service's board syncs", async () => {
+    const stamp = new Date().toISOString();
+    const worked = {
+      ...blankTable(1), active: true, arrivedAt: "19:43", resName: "Anna Harness",
+      resTime: "19:30", guests: 2,
+      kitchenLog: { c1: { firedAt: "19:55" } },
+      seats: [
+        { id: 1, water: "STILL", pairing: "WINE PAIRING" },
+        { id: 2, water: "SPARKLING", pairing: "—" },
+      ],
+    };
+    // The SERVER knows the running dinner and its worked board. This device's
+    // mirror does NOT (remote-only seed) — it is the freshly opened third
+    // device whose checkpoint hasn't landed. Only the reservations are in
+    // both stores (they synced days ago, when they were made) — exactly the
+    // ingredient the reconcile used to rebuild templates from.
+    remoteRows("services").push({
+      workspace_id: WORKSPACE_ID, id: SVC, date: TODAY(), session: "dinner",
+      chosen_on: TODAY(), started_at: stamp, status: "live",
+      ended_at: null, end_reason: null, label: null, snapshot: null, deleted_at: null, updated_at: stamp,
+    });
+    remoteRows("service_tables").push({
+      workspace_id: WORKSPACE_ID, service_id: SVC, table_id: 1, data: worked, updated_at: stamp,
+    });
+    seed("reservations", [
+      { id: "res-anna", date: TODAY(), table_id: 1, created_at: stamp,
+        data: { resName: "Anna Harness", resTime: "19:30", guests: 2, tableGroup: [], service_session: "dinner" } },
+    ]);
+
+    render(<App />);
+
+    // The boot check confirms the live service with the SERVER and adopts it
+    // silently — no start prompt, no new services row.
+    await waitFor(() => {
+      expect(localStorage.getItem(`milka_service_id:${WORKSPACE_ID}`)).toBe(SVC);
+    }, { timeout: 5000 });
+    expect(remoteRows("services")).toHaveLength(1);
+
+    // THE pins: the mirror hasn't synced that service yet, so the device is
+    // NOT open for business — the CONNECTING splash still covers the mode
+    // screen (nothing is tappable) and nothing may be written: the worked row
+    // survives byte-for-byte and the service is still the only live one.
+    await new Promise((r) => setTimeout(r, 800)); // window for any wrongful autosave
+    expect(screen.queryByText("[Service]")).toBeNull();
+    const row = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
+    expect(row.data.seats.map((s) => s.water)).toEqual(["STILL", "SPARKLING"]);
+    expect(row.data.kitchenLog.c1.firedAt).toBe("19:55");
+    expect(row.data.active).toBe(true);
+    expect(remoteRows("services").filter((r) => r.status === "live")).toHaveLength(1);
+
+    // The checkpoint lands → board truth is in → the gate opens and the REAL
+    // table paints, still unharmed.
+    await act(async () => { await syncDown(); });
+    fireEvent.click(await screen.findByText("[Service]", {}, { timeout: 5000 }));
+    await screen.findByText(/Anna Harness/, {}, { timeout: 5000 });
+    const after = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
+    expect(after.data.seats.map((s) => s.water)).toEqual(["STILL", "SPARKLING"]);
+    expect(after.data.kitchenLog.c1.firedAt).toBe("19:55");
+  }, 30000);
+});
+
+// The same incident on the FALLBACK path — the shape the 08.08 report
+// describes exactly: PowerSync unavailable ("connecting for a while"), a
+// fresh device taps SERVICE, is thrown straight into the live service (JOIN —
+// correctly, no start prompt), and before this fix the reconcile fired
+// against the pre-join "loaded" empty board, rebuilt reservation templates,
+// and the autosave pushed them over the live rows THROUGH the CAS (blank
+// ancestors passed its null-only check). Nothing was ever filed to the
+// archive because the service never ended — its live rows were overwritten
+// in place. The pin: joined silently, wrote nothing, worked rows intact.
+describe("app harness — fresh device joins silently without writing (fallback)", () => {
+  beforeEach(() => {
+    resetBackend({ psMode: false });
+  });
+
+  it("holds the CONNECTING splash while the joined service's board read fails — and writes nothing", async () => {
+    // The link is SLOW ("connecting for a while"): every server read takes
+    // 150ms. That latency is the incident's trigger — it let the reconcile
+    // and its 50ms autosave run against the pre-join board before the joined
+    // service's own board read could land. And it is still flaky: the board's
+    // post-adoption list read fails once (single-row reads still succeed —
+    // the asymmetry that let the incident's CAS write reach the server).
+    backend.remoteSelectDelayMs = 150;
+    backend.failNextBoardListReads = 1;
+    const stamp = new Date().toISOString();
+    // A party of FOUR: seats 3 and 4 have no counterpart in the blank boot
+    // scaffold (2 seats), so they carry no per-seat ancestor — exactly the
+    // seats the incident's template fold silently replaced.
+    const worked = {
+      ...blankTable(1), active: true, arrivedAt: "19:43", resName: "Anna Harness",
+      resTime: "19:30", guests: 4, tableGroup: [1],
+      kitchenLog: { c1: { firedAt: "19:55" } },
+      seats: [
+        { id: 1, water: "STILL", pairing: "WINE PAIRING" },
+        { id: 2, water: "SPARKLING", pairing: "—" },
+        { id: 3, water: "STILL", pairing: "NA PAIRING" },
+        { id: 4, water: "SPARKLING", pairing: "WINE PAIRING" },
+      ],
+    };
+    remoteRows("services").push({
+      workspace_id: WORKSPACE_ID, id: SVC, date: TODAY(), session: "dinner",
+      chosen_on: TODAY(), started_at: stamp, status: "live",
+      ended_at: null, end_reason: null, label: null, snapshot: null, deleted_at: null, updated_at: stamp,
+    });
+    remoteRows("service_tables").push({
+      workspace_id: WORKSPACE_ID, service_id: SVC, table_id: 1, data: worked, updated_at: stamp,
+    });
+    seed("reservations", [
+      { id: "res-anna", date: TODAY(), table_id: 1, created_at: stamp,
+        data: { resName: "Anna Harness", resTime: "19:30", guests: 4, tableGroup: [], service_session: "dinner" } },
+    ]);
+
+    render(<App />);
+
+    // Boot confirms the live service with the server and adopts it silently —
+    // no start prompt, no new services row.
+    await waitFor(() => {
+      expect(localStorage.getItem(`milka_service_id:${WORKSPACE_ID}`)).toBe(SVC);
+    }, { timeout: 10000 });
+    expect(remoteRows("services")).toHaveLength(1);
+
+    // THE pins. The joined namespace's board read has NOT landed (it failed),
+    // so the device is NOT open: the CONNECTING splash holds — nothing is
+    // tappable — and after every autosave window has passed nothing was
+    // written: the worked row is intact in place — all four seats, waters,
+    // pairings, kitchen log — with no reservation template pushed over it.
+    await new Promise((r) => setTimeout(r, 900));
+    expect(screen.queryByText("[Service]")).toBeNull();
+    const row = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
+    expect(row.data.seats.map((s) => s.water)).toEqual(["STILL", "SPARKLING", "STILL", "SPARKLING"]);
+    expect(row.data.seats.map((s) => s.pairing)).toEqual(["WINE PAIRING", "—", "NA PAIRING", "WINE PAIRING"]);
+    expect(row.data.kitchenLog.c1.firedAt).toBe("19:55");
+    expect(row.data.active).toBe(true);
+    expect(remoteRows("services").filter((r) => r.status === "live")).toHaveLength(1);
+
+    // The link steadies (browser 'online' signal) → the board read retries and
+    // lands → the gate opens → SERVICE shows the REAL table, still unharmed.
+    await act(async () => { window.dispatchEvent(new Event("online")); });
+    fireEvent.click(await screen.findByText("[Service]", {}, { timeout: 5000 }));
+    await screen.findByText(/Anna Harness/, {}, { timeout: 5000 });
+    const after = remoteRows("service_tables").find((r) => Number(r.table_id) === 1);
+    expect(after.data.seats.map((s) => s.water)).toEqual(["STILL", "SPARKLING", "STILL", "SPARKLING"]);
+    expect(after.data.kitchenLog.c1.firedAt).toBe("19:55");
+  }, 30000);
 });
 
 // ── Floor SET markers sync live ───────────────────────────────────────────────

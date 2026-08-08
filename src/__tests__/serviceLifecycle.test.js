@@ -12,9 +12,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const h = vi.hoisted(() => ({
-  rows: [], // fake `services` rows behind the scoped builder
+  rows: [], // fake SERVER `services` rows behind the scoped builder
   tableWrites: [], // every service_tables mutation attempted (must stay EMPTY)
   sqlitePrimary: false,
+  serverDown: false, // scoped SELECTs reject (device cannot reach Supabase)
+  localServiceRows: [], // the on-device mirror's `services` rows (primary path)
+  localServiceWrites: [], // lifecycle writes routed to the local SQLite path
 }));
 
 vi.mock("../lib/supabaseClient.js", () => ({
@@ -23,6 +26,16 @@ vi.mock("../lib/supabaseClient.js", () => ({
   TABLES: { SERVICES: "services", SERVICE_TABLES: "service_tables", SERVICE_ARCHIVE: "service_archive" },
 }));
 vi.mock("../powersync/primary.js", () => ({ isSqlitePrimary: () => h.sqlitePrimary }));
+// Primary-path stores: the local mirror (reads) and local write path — kept
+// SEPARATE from h.rows so the guard tests can model a device whose mirror is
+// behind the server (the exact state the blind-start guard exists for).
+vi.mock("../powersync/reads.js", () => ({
+  readServices: async (limit = 120) => h.localServiceRows.slice(0, limit),
+}));
+vi.mock("../powersync/writes.js", () => ({
+  insertServiceLocally: async (entity) => { h.localServiceWrites.push({ op: "insert", ...entity }); },
+  updateServiceLocally: async (id, patch) => { h.localServiceWrites.push({ op: "update", id, ...patch }); },
+}));
 vi.mock("../lib/scopedDb.js", () => ({
   scopedFrom: (table) => {
     if (table === "service_tables") {
@@ -55,8 +68,12 @@ vi.mock("../lib/scopedDb.js", () => ({
       is: (col, val) => { state.filters.push((r) => (val === null ? r[col] == null : r[col] === val)); return b; },
       not: (col, op, val) => { state.filters.push((r) => !(val === null ? r[col] == null : r[col] === val)); return b; },
       order: () => b,
-      limit: () => Promise.resolve({ data: list().filter(matches), error: null }),
-      then: (res, rej) => Promise.resolve({ data: list().filter(matches), error: null }).then(res, rej),
+      limit: () => (h.serverDown
+        ? Promise.reject(new Error("network down"))
+        : Promise.resolve({ data: list().filter(matches), error: null })),
+      then: (res, rej) => (h.serverDown
+        ? Promise.reject(new Error("network down"))
+        : Promise.resolve({ data: list().filter(matches), error: null })).then(res, rej),
     };
     return b;
   },
@@ -64,13 +81,18 @@ vi.mock("../lib/scopedDb.js", () => ({
 
 import {
   startServiceStore, endServiceStore, resumeServiceStore, updateServiceStore, readLiveServiceStore,
+  confirmJoinableLiveService,
 } from "../lib/serviceLifecycle.js";
 import { currentServiceFrom, sanitizeService, archiveEntryFromService, mergeArchiveEntries } from "../lib/serviceEntity.js";
+import { currentServiceDay } from "../utils/serviceDay.js";
 
 beforeEach(() => {
   h.rows.length = 0;
   h.tableWrites.length = 0;
   h.sqlitePrimary = false;
+  h.serverDown = false;
+  h.localServiceRows.length = 0;
+  h.localServiceWrites.length = 0;
 });
 
 describe("startServiceStore", () => {
@@ -88,6 +110,108 @@ describe("startServiceStore", () => {
     const res = await startServiceStore({ date: null });
     expect(res.ok).toBe(false);
     expect(h.rows).toHaveLength(0);
+  });
+});
+
+// A start is the ONLY lifecycle write that displaces the running service (the
+// single-live trigger supersedes it and every device adopts the new empty
+// namespace). These pins hold the blind-start guard: a device that cannot SEE
+// the live service — the freshly opened third device whose local mirror
+// predates this session's first checkpoint — must JOIN it, never displace it.
+describe("startServiceStore — blind-start guard (the third-device reset class)", () => {
+  const TODAY = currentServiceDay();
+  const liveRow = (over = {}) => ({
+    id: "live-1", workspace_id: "ws-1", date: TODAY, session: "dinner",
+    started_at: "2026-08-08T16:00:00Z", status: "live",
+    updated_at: "2026-08-08T16:00:00Z", ...over,
+  });
+
+  it("JOINS the server's live service when this device didn't name it — no insert, nothing superseded", async () => {
+    h.rows.push(liveRow());
+    const res = await startServiceStore({ date: TODAY, session: "dinner" });
+    expect(res.ok).toBe(true);
+    expect(res.joined).toBe(true);
+    expect(res.persisted).toBe(false);
+    expect(res.service.id).toBe("live-1");
+    expect(h.rows).toHaveLength(1); // the running service was never displaced
+    expect(h.tableWrites).toHaveLength(0);
+  });
+
+  it("still supersedes DELIBERATELY when the caller names the live service it replaces", async () => {
+    h.rows.push(liveRow());
+    const res = await startServiceStore({ date: TODAY, session: "dinner", knownLiveId: "live-1" });
+    expect(res.ok).toBe(true);
+    expect(res.joined).toBeUndefined();
+    expect(h.rows).toHaveLength(2); // the confirmed day-switch/session-flip inserted as designed
+  });
+
+  it("does not join a stale-dated live service — an abandoned night is filed, not dropped into", async () => {
+    h.rows.push(liveRow({ id: "stale", date: "2026-07-01", chosen_on: "2026-07-01", started_at: "2026-07-01T16:00:00Z" }));
+    const res = await startServiceStore({ date: TODAY, session: "dinner" });
+    expect(res.ok).toBe(true);
+    expect(res.joined).toBeUndefined();
+    expect(h.rows).toHaveLength(2);
+  });
+
+  it("proceeds with the start when neither the server nor the local store is reachable (offline day-open)", async () => {
+    h.serverDown = true;
+    const res = await startServiceStore({ date: TODAY, session: "dinner" });
+    expect(res.ok).toBe(true);
+    expect(res.joined).toBeUndefined();
+    expect(h.rows).toHaveLength(1);
+  });
+
+  it("sqlite-primary: joins when the local mirror simply hasn't synced the live service yet", async () => {
+    h.sqlitePrimary = true;
+    h.rows.push(liveRow()); // the server knows the running service…
+    h.localServiceRows.length = 0; // …this device's mirror does not (yet)
+    const res = await startServiceStore({ date: TODAY, session: "dinner" });
+    expect(res.joined).toBe(true);
+    expect(res.service.id).toBe("live-1");
+    expect(h.rows).toHaveLength(1);
+    expect(h.localServiceWrites).toHaveLength(0); // no local insert either
+  });
+
+  it("sqlite-primary: an end still uploading is NOT rejoined — the local verdict is newer", async () => {
+    h.sqlitePrimary = true;
+    h.rows.push(liveRow({ id: "old" })); // the server hasn't seen this device's end yet
+    h.localServiceRows.push({
+      ...liveRow({ id: "old" }),
+      status: "ended", ended_at: "2026-08-08T22:00:00Z", end_reason: "manual",
+      updated_at: "2026-08-08T22:00:00Z", // newer than the server's copy
+    });
+    const res = await startServiceStore({ date: TODAY, session: "dinner" });
+    expect(res.ok).toBe(true);
+    expect(res.joined).toBeUndefined();
+    expect(h.localServiceWrites).toHaveLength(1); // the next service was minted
+  });
+
+  it("sqlite-primary: a service RESUMED elsewhere is rejoined — the server verdict is newer", async () => {
+    h.sqlitePrimary = true;
+    h.rows.push(liveRow({ id: "old", updated_at: "2026-08-08T22:30:00Z" })); // resumed after our stale end
+    h.localServiceRows.push({
+      ...liveRow({ id: "old" }),
+      status: "ended", ended_at: "2026-08-08T21:00:00Z",
+      updated_at: "2026-08-08T22:00:00Z", // older than the server's resume
+    });
+    const res = await startServiceStore({ date: TODAY, session: "dinner" });
+    expect(res.joined).toBe(true);
+    expect(res.service.id).toBe("old");
+    expect(h.localServiceWrites).toHaveLength(0);
+  });
+});
+
+describe("confirmJoinableLiveService", () => {
+  const TODAY = currentServiceDay();
+
+  it("returns null when the server confirms nothing is live", async () => {
+    h.rows.push({ id: "done", workspace_id: "ws-1", date: TODAY, started_at: "A", status: "ended" });
+    expect(await confirmJoinableLiveService()).toBe(null);
+  });
+
+  it("throws when the server is unreachable — callers keep their local knowledge", async () => {
+    h.serverDown = true;
+    await expect(confirmJoinableLiveService()).rejects.toThrow();
   });
 });
 

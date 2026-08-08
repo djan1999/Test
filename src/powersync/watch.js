@@ -70,10 +70,23 @@ export function startWatches(handlers, range, lifecycle = {}) {
     () => readServices(), handlers.onServices);
   // The board is service-scoped: read the CURRENT service's rows. Triggered by
   // service_tables changes AND by services changes (a start/adopt switches
-  // which namespace the reader should return).
+  // which namespace the reader should return). The payload names the service
+  // the read was scoped to (forServiceId — the adopter must discard a read
+  // that raced a namespace switch) and whether the local mirror KNOWS that
+  // service at all (serviceKnown). Checkpoints apply atomically, so a mirror
+  // that holds the services row also holds its board rows — while a mirror
+  // that lacks it simply hasn't synced that far, and its empty read means
+  // "not yet synced", never "the board is empty".
   bind("service_tables",
     "SELECT (SELECT count(*) FROM service_tables) AS n, (SELECT count(*) || '|' || coalesce(max(updated_at), '') FROM services) AS s",
-    () => readServiceTables(lifecycle.getServiceId?.()), handlers.onServiceTables);
+    async () => {
+      const forServiceId = lifecycle.getServiceId?.() ?? null;
+      const rows = await readServiceTables(forServiceId);
+      const serviceKnown = forServiceId == null
+        || (await readServices()).some((svc) => String(svc.id) === String(forServiceId));
+      return { rows, forServiceId, serviceKnown };
+    },
+    handlers.onServiceTables);
   bind("wines", "SELECT count(*) AS n FROM wines", readWines, handlers.onWines);
   bind("beverages", "SELECT count(*) AS n FROM beverages", readBeverages, handlers.onBeverages);
   bind("menu_courses", "SELECT count(*) AS n FROM menu_courses", readMenuCourses, handlers.onMenuCourses);
