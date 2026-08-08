@@ -126,7 +126,11 @@ language sql
 immutable
 set search_path = ''
 as $$
-  select d is not null and (
+  -- The OR chain must be wrapped in coalesce: an absent key makes
+  -- jsonb_typeof() return SQL NULL, and an all-false-or-null OR chain yields
+  -- NULL — which an IF treats as false, silently disarming the shield for
+  -- exactly the skeleton shapes it exists to catch (found probing production).
+  select d is not null and coalesce((
     (jsonb_typeof(d -> 'kitchenLog') = 'object' and d -> 'kitchenLog' <> '{}'::jsonb)
     or (jsonb_typeof(d -> 'bottleWines') = 'array' and jsonb_array_length(d -> 'bottleWines') > 0)
     or (d ? 'kitchenSent' and d -> 'kitchenSent' not in ('null'::jsonb, 'false'::jsonb, '""'::jsonb, '0'::jsonb))
@@ -154,7 +158,7 @@ as $$
             ) op(k, v) where v -> 'ordered' = 'true'::jsonb
           )
     )
-  );
+  ), false);
 $$;
 
 revoke all on function private.board_row_has_worked_content(jsonb) from public, anon;
