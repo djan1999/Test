@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { saveServiceTableWithCas } from "../lib/serviceTableCas.js";
+import { saveServiceTableWithCas, saveServiceTablesBatchWithCas, hasWorkedContent } from "../lib/serviceTableCas.js";
 
 // Minimal supabase-client stand-in: one readable server row + a recording RPC.
 function makeClient(serverRow, rpcResult = true) {
@@ -124,5 +124,56 @@ describe("saveServiceTableWithCas — content-less ancestor guard (08.08 inciden
     const result = await saveServiceTableWithCas(args(client, { ...skeletonTable, notes: "arrived" }, blankBootTable));
     expect(result.conflict).toBeNull();
     expect(client.rpc).toHaveBeenCalledTimes(1);
+  });
+});
+
+// The database now carries the same refusal (private.assert_worked_content_shield,
+// migration 20260808230000). The client attests allow_clear ONLY when its
+// synced ancestor held the worked content it may be clearing — a device
+// without a real before-picture can never attest, so even a future client bug
+// that bypasses every JS guard is refused by Postgres itself.
+describe("server shield attestation (p_allow_clear)", () => {
+  it("a device whose ancestor HELD worked content attests — its deliberate clears stay possible", async () => {
+    const client = makeClient({ data: workedTable, updated_at: "T" });
+    const mine = JSON.parse(JSON.stringify(workedTable));
+    mine.notes = "dessert wave";
+    await saveServiceTableWithCas(args(client, mine, workedTable));
+    expect(client.rpc.mock.calls[0][1].p_allow_clear).toBe(true);
+  });
+
+  it("a blank or missing ancestor can never attest", async () => {
+    const client = makeClient({ data: skeletonTable, updated_at: "T" });
+    await saveServiceTableWithCas(args(client, { ...skeletonTable, notes: "arrived" }, blankBootTable));
+    expect(client.rpc.mock.calls[0][1].p_allow_clear).toBe(false);
+
+    const client2 = makeClient(null);
+    await saveServiceTableWithCas(args(client2, skeletonTable, null));
+    expect(client2.rpc.mock.calls[0][1].p_allow_clear).toBe(false);
+  });
+
+  it("batch rows carry their own attestations — a MOVE's seen-source clears, its blind rows do not", async () => {
+    const client = makeClient(null); // per-row reads resolve no current row
+    await saveServiceTablesBatchWithCas({
+      client, workspaceId: "ws-a", serviceId: "svc-1",
+      writes: [
+        { tableId: 9, data: { ...skeletonTable, resName: "" }, ancestor: workedTable }, // MOVE source: the device saw the party
+        { tableId: 11, data: workedTable, ancestor: null },                             // MOVE destination claim
+      ],
+    });
+    const rows = client.rpc.mock.calls[0][1].p_rows;
+    expect(rows.find((r) => r.table_id === 9).allow_clear).toBe(true);
+    expect(rows.find((r) => r.table_id === 11).allow_clear).toBe(false);
+  });
+
+  it("hasWorkedContent stays in lockstep with the SQL predicate's fixtures", () => {
+    // The migration's pgTAP suite (supabase/tests/board_history.sql) asserts
+    // the same verdicts against private.board_row_has_worked_content.
+    expect(hasWorkedContent(workedTable)).toBe(true);
+    expect(hasWorkedContent(skeletonTable)).toBe(false);
+    expect(hasWorkedContent(blankBootTable)).toBe(false);
+    expect(hasWorkedContent(null)).toBe(false);
+    expect(hasWorkedContent({ kitchenLog: { c1: { firedAt: "19:55" } } })).toBe(true);
+    expect(hasWorkedContent({ seats: [{ id: 1, water: "STILL" }] })).toBe(true);
+    expect(hasWorkedContent({ seats: [{ id: 1, water: "—" }] })).toBe(false);
   });
 });

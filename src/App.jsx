@@ -83,6 +83,7 @@ import { currentServiceFrom, nextServiceLabel, serviceLabelBase } from "./lib/se
 import { isPowerSyncEnabled } from "./powersync/config.js";
 import { setSqlitePrimaryFlag } from "./powersync/primary.js";
 import { setSandbox, isSandbox } from "./lib/sandbox.js";
+import { forceBootUpdateIfAvailable } from "./lib/swUpdate.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useWorkspaceAccess } from "./hooks/useWorkspaceAccess.js";
 import {
@@ -677,6 +678,21 @@ export default function App() {
   const [bootGateDone, setBootGateDone] = useState(!supabase);
   // (The gate effect itself lives below the service-identity block: its
   // re-evaluation deps include the adopted serviceId.)
+  // Boot UPDATE gate: an ONLINE device may not open on an outdated build —
+  // an old build is old bugs, including every wipe this codebase has ever
+  // fixed. While the splash is up, any deployed build is applied and the
+  // page reloads (the splash reads UPDATING…). Offline devices proceed on
+  // their cached build; every wait inside is bounded (see lib/swUpdate.js),
+  // so a wedged worker can never brick a boot.
+  const [updateGateDone, setUpdateGateDone] = useState(false);
+  const [bootUpdating, setBootUpdating] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    forceBootUpdateIfAvailable({ onApplying: () => { if (mounted) setBootUpdating(true); } })
+      .then(() => { if (mounted) setUpdateGateDone(true); })
+      .catch(() => { if (mounted) setUpdateGateDone(true); });
+    return () => { mounted = false; };
+  }, []);
   // ── Service ENTITY identity ─────────────────────────────────────────────
   // The lifecycle is a row in the `services` table; serviceId names which one
   // this device is on. serviceDate / chosenOn / session / startedAt below are
@@ -788,18 +804,22 @@ export default function App() {
       } catch {}
     }
   };
-  // Boot-gate verdict (see the splash state above): everything loaded AND the
-  // loaded board belongs to the CURRENT namespace. Re-runs when reads land
-  // (boardSyncTick) and when an adoption changes the namespace (serviceId).
+  // Boot-gate verdict (see the splash state above): the update gate has
+  // resolved, everything loaded AND the loaded board belongs to the CURRENT
+  // namespace. Re-runs when reads land (boardSyncTick) and when an adoption
+  // changes the namespace (serviceId). The 12s escape hatch covers the DATA
+  // gates only — the update gate is self-bounded and must not be escapable,
+  // or a slow update download would drop the device onto the outdated build
+  // it exists to replace.
   useEffect(() => {
-    if (bootGateDone) return undefined;
+    if (bootGateDone || !updateGateDone) return undefined;
     if (remoteBoardLoaded && reservationsLoaded && serviceTruthReady && boardTruthReady()) {
       setBootGateDone(true);
       return undefined;
     }
     const t = setTimeout(() => setBootGateDone(true), 12000);
     return () => clearTimeout(t);
-  }, [remoteBoardLoaded, reservationsLoaded, serviceTruthReady, boardSyncTick, serviceId, bootGateDone]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [updateGateDone, remoteBoardLoaded, reservationsLoaded, serviceTruthReady, boardSyncTick, serviceId, bootGateDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveTimerRef       = useRef(null);
   /** Sanitized-table JSON of the last state written to (or adopted from) the
@@ -2691,6 +2711,36 @@ export default function App() {
       adoptServiceRowsRef.current?.(rows);
     } catch { /* the watch/realtime feed will deliver the adoption instead */ }
     return result;
+  };
+
+  // ── BOARD TIME MACHINE (SYSTEM panel) ─────────────────────────────────────
+  // Restore the live service's board to its server-recorded state N minutes
+  // ago. The DATABASE does the rewrite (restore_service_board: admin-checked,
+  // backed by the history the recorder trigger keeps outside any client's
+  // reach, and itself recorded — a restore can be restored away). The devices
+  // adopt the rewritten rows like any other remote edit.
+  const restoreBoardToMinutesAgo = async (minutes) => {
+    const svcId = serviceIdRef.current;
+    const mins = Number(minutes);
+    if (sandboxRef.current) return { ok: false, error: new Error("the test service keeps no history") };
+    if (!supabase || !getWorkspaceId()) return { ok: false, error: new Error("no connected workspace") };
+    if (!svcId) return { ok: false, error: new Error("no live service to restore") };
+    if (!Number.isFinite(mins) || mins <= 0) return { ok: false, error: new Error("enter how many minutes to rewind") };
+    try {
+      const { data, error } = await supabase.rpc("restore_service_board", {
+        p_workspace_id: getWorkspaceId(),
+        p_service_id: svcId,
+        p_at: new Date(Date.now() - mins * 60000).toISOString(),
+      });
+      if (error) throw error;
+      // Repaint from the restored truth without waiting for a poll/checkpoint.
+      if (!sqlitePrimaryRef.current) fallbackBoardReloadRef.current?.();
+      else reloadPrimaryBoard();
+      return { ok: true, restored: Number(data) || 0 };
+    } catch (error) {
+      recordClientDiagnostic("board time machine restore", error);
+      return { ok: false, error };
+    }
   };
 
   // (Session changes ride startService / updateServiceStore as single writes
@@ -4831,7 +4881,7 @@ export default function App() {
       <GlobalStyle />
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: 6, color: tokens.text.primary, marginBottom: 6 }}>{effectiveAppName}</div>
-        <div style={{ fontSize: 9, letterSpacing: 4, color: tokens.text.disabled }}>CONNECTING…</div>
+        <div style={{ fontSize: 9, letterSpacing: 4, color: tokens.text.disabled }}>{bootUpdating ? "UPDATING…" : "CONNECTING…"}</div>
       </div>
       <div style={{ display: "flex", gap: 6 }}>
         {[0,1,2].map(i => (
@@ -5219,6 +5269,7 @@ export default function App() {
         courseQuickNotes={courseQuickNotes}
         onSaveCourseQuickNotes={saveCourseQuickNotes}
         onStartTestService={startTestService}
+        onRestoreBoard={restoreBoardToMinutesAgo}
         onExit={() => changeMode(null)}
       /></Suspense>
     </div>

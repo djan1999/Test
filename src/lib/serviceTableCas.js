@@ -14,8 +14,11 @@ const asObject = (value) => {
 // the reservation skeleton an un-synced device rebuilds (party name + active
 // flag + blank seats) must NOT count, or the guard below can't tell it apart
 // from the real table it would replace (24.07 incident: six skeletons with
-// active:true overwrote six fully-worked tables).
-const hasWorkedContent = (t) => {
+// active:true overwrote six fully-worked tables). Exported: the database
+// enforces the same predicate server-side (private.board_row_has_worked_content
+// — keep the two in lockstep), and the harness emulates the server shield
+// with this exact function.
+export const hasWorkedContent = (t) => {
   if (!t || typeof t !== "object") return false;
   if (t.kitchenLog && Object.keys(t.kitchenLog).length > 0) return true;
   if (Array.isArray(t.bottleWines) && t.bottleWines.length > 0) return true;
@@ -127,6 +130,12 @@ export async function saveServiceTableWithCas({
         p_expected_updated_at: current?.updated_at ?? null,
         p_data: merged,
         p_updated_at: new Date().toISOString(),
+        // The server-side worked-content shield's attestation: this device's
+        // synced ancestor HELD the worked content it may be clearing (a
+        // deliberate CLEAR/MOVE by a device that saw the table). Derived
+        // mechanically from the ancestor — never a user choice, and a device
+        // without a real before-picture can never attest.
+        p_allow_clear: hasWorkedContent(ancestor == null ? null : asObject(ancestor)),
       },
     );
     if (saveError) throw saveError;
@@ -167,6 +176,10 @@ export async function saveServiceTablesBatchWithCas({
       tableId: write.tableId,
       data: foldServiceTable({ ...write, current: currentRows[index] }),
       expectedUpdatedAt: currentRows[index]?.updated_at ?? null,
+      // Per-row shield attestation (see saveServiceTableWithCas): a MOVE's
+      // source-clear carries allow_clear because the device saw the party it
+      // is moving out; a blind writer's ancestor holds nothing and cannot.
+      allowClear: hasWorkedContent(write.ancestor),
     }));
     const { data: saved, error } = await client.rpc(
       "save_service_tables_batch_if_current",
@@ -177,6 +190,7 @@ export async function saveServiceTablesBatchWithCas({
           table_id: row.tableId,
           expected_updated_at: row.expectedUpdatedAt,
           data: row.data,
+          allow_clear: row.allowClear,
         })),
         p_updated_at: new Date().toISOString(),
       },

@@ -8,7 +8,7 @@ import App from './App.jsx';
 import { ErrorBoundary } from './components/ui/ErrorBoundary.jsx';
 import './styles.css';
 import { registerSW } from 'virtual:pwa-register';
-import { setUpdateReady } from './lib/swUpdate.js';
+import { setUpdateReady, setSwRegistration } from './lib/swUpdate.js';
 import { installGlobalDiagnostics, recordClientDiagnostic } from './lib/clientDiagnostics.js';
 
 installGlobalDiagnostics();
@@ -32,17 +32,19 @@ window.addEventListener('vite:preloadError', (event) => {
 // Register the service worker (registerType:'prompt' in vite.config.js). A
 // new build downloads in the background and WAITS — applying it immediately
 // (the old updateSW(true) here) reloaded every device the moment a deploy
-// landed, mid-service included. The waiting build activates when the app is
-// next fully closed and reopened, or on demand from the admin SYSTEM panel
-// (the kitchen display never closes by itself). While it waits, the running
-// service worker keeps serving the CURRENT build's precache, so lazy chunks
-// stay loadable and offline behavior is unchanged.
+// landed, mid-service included. The waiting build activates at boot (the
+// CONNECTING splash's forced update gate — see lib/swUpdate.js), or on
+// demand from the admin SYSTEM panel (the kitchen display never closes by
+// itself). While it waits, the running service worker keeps serving the
+// CURRENT build's precache, so lazy chunks stay loadable and offline
+// behavior is unchanged.
 const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
     setUpdateReady(() => updateSW(true));
   },
   onRegistered(registration) {
+    setSwRegistration(registration || null);
     if (registration) {
       // Poll every 60 s so a fresh deploy starts downloading in the
       // background right away (it still only ACTIVATES per the rule above).
