@@ -31,6 +31,7 @@ export default function SystemPanel({
   onUpdateWineSyncConfig,
   onSaveWineSyncConfig,
   onStartTestService,
+  onRestoreBoard,
 }) {
   const safeProfiles = Array.isArray(layoutProfiles) ? layoutProfiles : [];
   const safeWineSyncConfig = wineSyncConfig || { wineCountries: [], beveragePages: [] };
@@ -45,6 +46,35 @@ export default function SystemPanel({
   // only update path). Applying reloads THIS device deliberately.
   const [updateReady, setUpdateReady] = useState(isUpdateReady());
   useEffect(() => onUpdateReady(() => setUpdateReady(true)), []);
+  // Board time machine (see the block below): rewind the live board to its
+  // recorded state N minutes ago. Destructive-looking but fully reversible —
+  // the restore writes through the normal row path and is itself recorded.
+  const [restoreMinutes, setRestoreMinutes] = useState("10");
+  const [restoreState, setRestoreState] = useState(null);
+  const [restoreMsg, setRestoreMsg] = useState("");
+  const handleRestoreBoard = async () => {
+    const minutes = Number(restoreMinutes);
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      setRestoreState("error");
+      setRestoreMsg("Enter how many minutes to rewind.");
+      return;
+    }
+    if (typeof window !== "undefined" && !window.confirm(
+      `Rewind the LIVE board to its state ${minutes} minute(s) ago?\n\n`
+      + "Every device follows within seconds. The restore is itself recorded, "
+      + "so it can be undone by restoring again.",
+    )) return;
+    setRestoreState("running");
+    setRestoreMsg("");
+    const result = await onRestoreBoard(minutes);
+    if (result?.ok) {
+      setRestoreState("done");
+      setRestoreMsg(`Restored ${result.restored} table(s) to ${minutes} min ago.`);
+    } else {
+      setRestoreState("error");
+      setRestoreMsg(String(result?.error?.message || result?.error || "The restore did not complete."));
+    }
+  };
   useEffect(() => {
     const refresh = () => setDiagnostics(readClientDiagnostics());
     window.addEventListener("milka:diagnostic", refresh);
@@ -108,6 +138,50 @@ export default function SystemPanel({
           >
             ▶ Start Test Service
           </button>
+        </div>
+      )}
+
+      {onRestoreBoard && (
+        <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "14px 16px", background: tokens.neutral[0] }}>
+          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 8 }}>Board Time Machine</div>
+          <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[2], lineHeight: 1.5, marginBottom: 12, maxWidth: 520 }}>
+            The database records every version of every table on the live board.
+            If something ever wipes or corrupts the service, rewind the whole board
+            to how it was N minutes ago — every device follows within seconds, and
+            the restore is itself recorded, so it can be rewound again.
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <input
+              type="number"
+              min="1"
+              max="720"
+              value={restoreMinutes}
+              onChange={(e) => setRestoreMinutes(e.target.value)}
+              aria-label="Minutes to rewind"
+              style={{
+                fontFamily: FONT, fontSize: 12, width: 80, padding: "9px 10px",
+                border: `1px solid ${tokens.ink[3]}`, borderRadius: 0, background: tokens.neutral[0],
+              }}
+            />
+            <span style={{ fontFamily: FONT, fontSize: 10, letterSpacing: 1, color: tokens.ink[3], textTransform: "uppercase" }}>minutes ago</span>
+            <button
+              onClick={handleRestoreBoard}
+              disabled={restoreState === "running"}
+              style={{
+                fontFamily: FONT, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase",
+                fontWeight: 700, padding: "10px 18px", border: `1px solid ${tokens.ink[0]}`,
+                background: tokens.neutral[0], color: tokens.ink[0], borderRadius: 0,
+                cursor: restoreState === "running" ? "wait" : "pointer", touchAction: "manipulation",
+              }}
+            >
+              {restoreState === "running" ? "RESTORING…" : "⟲ Restore Board"}
+            </button>
+            {restoreMsg && (
+              <span style={{ fontFamily: FONT, fontSize: 11, color: restoreState === "error" ? tokens.red.text : tokens.green.text }}>
+                {restoreMsg}
+              </span>
+            )}
+          </div>
         </div>
       )}
 

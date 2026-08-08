@@ -2713,6 +2713,36 @@ export default function App() {
     return result;
   };
 
+  // ── BOARD TIME MACHINE (SYSTEM panel) ─────────────────────────────────────
+  // Restore the live service's board to its server-recorded state N minutes
+  // ago. The DATABASE does the rewrite (restore_service_board: admin-checked,
+  // backed by the history the recorder trigger keeps outside any client's
+  // reach, and itself recorded — a restore can be restored away). The devices
+  // adopt the rewritten rows like any other remote edit.
+  const restoreBoardToMinutesAgo = async (minutes) => {
+    const svcId = serviceIdRef.current;
+    const mins = Number(minutes);
+    if (sandboxRef.current) return { ok: false, error: new Error("the test service keeps no history") };
+    if (!supabase || !getWorkspaceId()) return { ok: false, error: new Error("no connected workspace") };
+    if (!svcId) return { ok: false, error: new Error("no live service to restore") };
+    if (!Number.isFinite(mins) || mins <= 0) return { ok: false, error: new Error("enter how many minutes to rewind") };
+    try {
+      const { data, error } = await supabase.rpc("restore_service_board", {
+        p_workspace_id: getWorkspaceId(),
+        p_service_id: svcId,
+        p_at: new Date(Date.now() - mins * 60000).toISOString(),
+      });
+      if (error) throw error;
+      // Repaint from the restored truth without waiting for a poll/checkpoint.
+      if (!sqlitePrimaryRef.current) fallbackBoardReloadRef.current?.();
+      else reloadPrimaryBoard();
+      return { ok: true, restored: Number(data) || 0 };
+    } catch (error) {
+      recordClientDiagnostic("board time machine restore", error);
+      return { ok: false, error };
+    }
+  };
+
   // (Session changes ride startService / updateServiceStore as single writes
   // on the service entity — there is no shared settings blob left to race.)
 
@@ -5239,6 +5269,7 @@ export default function App() {
         courseQuickNotes={courseQuickNotes}
         onSaveCourseQuickNotes={saveCourseQuickNotes}
         onStartTestService={startTestService}
+        onRestoreBoard={restoreBoardToMinutesAgo}
         onExit={() => changeMode(null)}
       /></Suspense>
     </div>

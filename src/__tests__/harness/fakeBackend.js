@@ -19,6 +19,8 @@
 // factories, so the whole app import graph — App, scopedDb, stateStore,
 // archiveStore, dynamic import()s — lands here.
 
+import { hasWorkedContent } from "../../lib/serviceTableCas.js";
+
 const nowISO = () => new Date().toISOString();
 const clone = (v) => (v == null ? v : structuredClone(v));
 
@@ -300,8 +302,14 @@ export const fakeSupabase = {
           const expected = item.expected_updated_at ?? null;
           const versionMatches = (!hit && expected == null)
             || (hit && expected != null && hit.updated_at === expected);
-          return { item, versionMatches };
+          const shielded = Boolean(hit && expected != null && !item.allow_clear
+            && hasWorkedContent(hit.data) && !hasWorkedContent(item.data));
+          return { item, versionMatches, shielded };
         });
+      const blocked = pending.find(({ shielded }) => shielded);
+      if (blocked) {
+        return { data: null, error: { code: "23514", message: `fake shield: table ${blocked.item.table_id} worked content may not be replaced by a skeleton` } };
+      }
       if (pending.some(({ versionMatches }) => !versionMatches)) {
         const error = new Error("service-table batch version changed");
         error.code = "40001";
@@ -330,6 +338,13 @@ export const fakeSupabase = {
         && asKey(r.service_id) === asKey(args.p_service_id)
         && Number(r.table_id) === Number(args.p_table_id));
       const expected = args.p_expected_updated_at ?? null;
+      // Worked-content shield (mirrors private.assert_worked_content_shield):
+      // the whole suite running green against this emulation proves no
+      // legitimate flow ever trips the database's refusal.
+      if (hit && expected != null && !args.p_allow_clear
+          && hasWorkedContent(hit.data) && !hasWorkedContent(args.p_data)) {
+        return { data: null, error: { code: "23514", message: "fake shield: worked content may not be replaced by a skeleton" } };
+      }
       if ((!hit && expected != null) || (hit && expected == null) || (hit && hit.updated_at !== expected)) {
         return { data: false, error: null };
       }
