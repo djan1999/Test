@@ -59,6 +59,8 @@ export const backend = {
   psMode: false,          // drives isPowerSyncEnabled
   failRemoteWrites: false, // fallback-path offline: remote mutations error
   connectorDown: false,    // sqlite-path offline: uploads queue instead of mirroring
+  remoteSelectDelayMs: 0,  // slow-link latency applied to remote SELECTs
+  failNextBoardListReads: 0, // one-shot failures for multi-row service_tables SELECTs
   uploadQueue: [],
   watch: null,             // { handlers, range } once App registers
   clearResyncs: 0,         // clearLocalAndResync invocations (contaminated-DB heal)
@@ -76,6 +78,8 @@ export function resetBackend({ psMode = false } = {}) {
   backend.psMode = psMode;
   backend.failRemoteWrites = false;
   backend.connectorDown = false;
+  backend.remoteSelectDelayMs = 0;
+  backend.failNextBoardListReads = 0;
   backend.uploadQueue = [];
   backend.watch = null;
   backend.clearResyncs = 0;
@@ -172,9 +176,25 @@ function makeBuilder(store, table) {
   const matches = (r) => state.filters.every((f) => f(r));
 
   const exec = async () => {
+    // Model a slow link to the server: remote SELECTs resolve only after the
+    // configured latency, and read the store's state AS OF completion — the
+    // timing that lets an autosave win the race against a board load (the
+    // 08.08 "connecting for a while" incident shape).
+    if ((state.op === "select" || state.op === null) && store === backend.remote && backend.remoteSelectDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, backend.remoteSelectDelayMs));
+    }
     const rows = tableOf(store, table);
     if (state.op !== "select" && store === backend.remote && backend.failRemoteWrites) {
       return { data: null, error: new Error("fake network: remote writes are failing") };
+    }
+    // A flaky just-reconnected link: the board's multi-row list read fails
+    // while single-row reads (the CAS read-fold-write) still get through —
+    // the exact asymmetry behind the 08.08 wipe.
+    if (table === "service_tables" && (state.op === "select" || state.op === null)
+        && !state.maybe && !state.single && store === backend.remote
+        && backend.failNextBoardListReads > 0) {
+      backend.failNextBoardListReads -= 1;
+      return { data: null, error: new Error("fake network: board list read failed") };
     }
     let data = null;
     let touched = [];
