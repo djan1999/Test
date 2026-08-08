@@ -77,6 +77,7 @@ import { recordClientDiagnostic } from "./lib/clientDiagnostics.js";
 import {
   startServiceStore, endServiceStore, resumeServiceStore, updateServiceStore,
   fetchServicesStore, readLiveServiceStore, fetchSameDayLabelsStore,
+  confirmJoinableLiveService,
 } from "./lib/serviceLifecycle.js";
 import { currentServiceFrom, nextServiceLabel, serviceLabelBase } from "./lib/serviceEntity.js";
 import { isPowerSyncEnabled } from "./powersync/config.js";
@@ -136,6 +137,12 @@ const InventoryModal = lazy(() => import("./components/modals/InventoryModal.jsx
 const KitchenFloorView = lazy(() => import("./components/kitchen/KitchenFloorView.jsx"));
 const MenuWorkspace = lazy(() => import("./components/menu/MenuWorkspace.jsx"));
 const FullModal = lazy(() => import("./components/ui/FullModal.jsx"));
+
+// Single shared load of the (heavy, lazily-imported) local-DB reads module.
+// Every dynamic call site funnels through this one promise so two callers can
+// never start concurrent first-imports of the same module.
+let _psReadsPromise = null;
+const loadPsReads = () => (_psReadsPromise ||= import("./powersync/reads.js"));
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const reservationWriteKey = (workspaceId, id) => `${workspaceId}\u0000${id}`;
@@ -1121,7 +1128,7 @@ export default function App() {
     const svcId = serviceIdRef.current;
     if (!svcId) return [];
     if (sqlitePrimaryRef.current) {
-      const { readServiceTables } = await import("./powersync/reads.js");
+      const { readServiceTables } = await loadPsReads();
       return readServiceTables(svcId);
     }
     const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
@@ -1866,7 +1873,7 @@ export default function App() {
     let prevJsonByPos = null;
     try {
       if (sqlitePrimaryRef.current) {
-        const { readMenuCourses } = await import("./powersync/reads.js");
+        const { readMenuCourses } = await loadPsReads();
         const raw = await readMenuCourses();
         prevJsonByPos = new Map(raw.map(r => {
           const row = courseToSupabaseRow(supabaseRowToCourse(r));
@@ -2108,6 +2115,26 @@ export default function App() {
     endingServiceRef.current = false;
   };
 
+  // The primary path's board reader is service-scoped through a REF at read
+  // time (watch.js getServiceId) — and adopting a service is a React-state
+  // change, not a database change, so the watch has nothing to re-fire on. A
+  // device whose reader ran before the adoption would otherwise sit on the
+  // empty pre-adoption read: its board stays blank, the reconcile rebuilds
+  // reservation templates, and the autosave pushes those over the live rows.
+  // Every namespace switch re-reads the board explicitly for the id just
+  // adopted instead of trusting the watch to notice.
+  const reloadPrimaryBoard = () => {
+    if (!sqlitePrimaryRef.current) return;
+    loadPsReads()
+      .then(({ readServiceTables }) => readServiceTables(serviceIdRef.current))
+      .then((rows) => {
+        adoptRemoteTables(rows);
+        setRemoteBoardLoaded(true);
+        setBoardSyncTick((t) => t + 1);
+      })
+      .catch(() => {});
+  };
+
   // Guards a manual end in flight so a double-tap can't race itself. (Ending
   // is idempotent in the entity model — this only prevents duplicate UI work.)
   const archivingRef = useRef(false);
@@ -2339,7 +2366,7 @@ export default function App() {
       try {
         let rows;
         if (sqlitePrimaryRef.current) {
-          const { readServiceTables } = await import("./powersync/reads.js");
+          const { readServiceTables } = await loadPsReads();
           rows = await readServiceTables(svc.id);
         } else {
           const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
@@ -2389,7 +2416,7 @@ export default function App() {
         // cache: read the menu from the store rather than file the night blind.
         try {
           if (sqlitePrimaryRef.current) {
-            const { readMenuCourses } = await import("./powersync/reads.js");
+            const { readMenuCourses } = await loadPsReads();
             snapCourses = ((await readMenuCourses()) || []).map(supabaseRowToCourse);
           } else {
             snapCourses = (await fetchMenuCourses()) || [];
@@ -2494,6 +2521,12 @@ export default function App() {
       date,
       session: nextSession,
       chosenOn: currentServiceDay(),
+      // The live service THIS DEVICE can see — the only one its start may
+      // supersede. When the store finds a live service this device couldn't
+      // see (an un-synced mirror at boot), it returns it as a JOIN instead of
+      // inserting: the adoption below then lands this device on the running
+      // board rather than resetting the whole restaurant to an empty one.
+      knownLiveId: serviceIdRef.current,
     });
     if (!result.ok) return result;
     // The new service can itself be auto-ended once it rolls past the cutoff.
@@ -2512,6 +2545,7 @@ export default function App() {
     // Fresh namespace: locally blank. (Its rows — if any — sync in on top.)
     resetBoardLocal();
     if (!sqlitePrimaryRef.current) fallbackBoardReloadRef.current?.();
+    else reloadPrimaryBoard();
     return { ok: true, service: winner };
   };
 
@@ -2561,9 +2595,13 @@ export default function App() {
       applyServiceEntity(next);
       resetBoardLocal();
       setShowServiceDatePicker(false); // a start prompt waiting here is moot now
-      // Fallback path: pull the new namespace's rows now (the primary path's
-      // service-scoped watch re-reads on its own).
+      // Pull the new namespace's rows now. The primary path must do this
+      // EXPLICITLY: the service-scoped watch keys on serviceIdRef at read
+      // time and this adoption is not a database change, so it re-fires only
+      // when some later row happens to sync — which can be after the
+      // reconcile has already rebuilt (and queued) reservation templates.
       if (!sqlitePrimaryRef.current) fallbackBoardReloadRef.current?.();
+      else reloadPrimaryBoard();
       return;
     }
     if (next && next.id === curId) {
@@ -3013,12 +3051,29 @@ export default function App() {
     if (supabase && getWorkspaceId()) {
       joiningServiceRef.current = true;
       setSyncStatus("connecting");
+      const joinable = (svc) =>
+        Boolean(svc && (!isStaleServiceDate(svc.date) || isActivePastReview(svc.date, svc.chosenOn)));
       try {
-        const live = await readLiveServiceStore();
-        if (live && (!isStaleServiceDate(live.date) || isActivePastReview(live.date, live.chosenOn))) {
+        let live = null;
+        try { live = await readLiveServiceStore(); } catch { /* store unreadable — ask the server below */ }
+        if (!joinable(live)) {
+          // The read above serves the LOCAL mirror when SQLite is primary —
+          // and on a freshly opened device that mirror can predate today's
+          // service entirely (the persisted first-sync flag flips it primary
+          // before this session's first checkpoint lands). "Nothing live"
+          // from a stale mirror used to fall through to the START prompt,
+          // where one tap superseded the running service and reset every
+          // board mid-service. Confirm with the SERVER before offering it.
+          try {
+            const remote = await confirmJoinableLiveService();
+            if (joinable(remote)) live = remote;
+          } catch { /* offline/unreachable — the start prompt stays available */ }
+        }
+        if (joinable(live)) {
           // JOIN the live service: adopt its whole identity exactly. Never a
           // write, never a clear — the board rows stream in on their own.
           applyServiceEntity(live);
+          reloadPrimaryBoard();
           enterMode("service");
           joiningServiceRef.current = false;
           return;
@@ -3046,7 +3101,7 @@ export default function App() {
       // Re-pull the store's list so the abandoned draft stops painting — the
       // watches only fire on DATA changes, not on this flag clearing.
       if (sqlitePrimaryRef.current) {
-        import("./powersync/reads.js")
+        loadPsReads()
           .then(({ readMenuCourses }) => readMenuCourses())
           .then(raw => { if (raw?.length) setMenuCourses(raw.map(supabaseRowToCourse)); })
           .catch(() => {});
@@ -4268,7 +4323,12 @@ export default function App() {
         // Local state wins if this device already holds a service (it may
         // have just started one); otherwise adopt the store's live service —
         // identity, session and all — so a fresh boot lands on the board.
-        if (!serviceIdRef.current) applyServiceEntity(live);
+        if (!serviceIdRef.current) {
+          applyServiceEntity(live);
+          // The board watch may have already fired for the pre-adoption (null)
+          // service id — re-read the adopted namespace explicitly.
+          reloadPrimaryBoard();
+        }
       })
       .catch(() => {}); // keep whatever local service identity we already have
 

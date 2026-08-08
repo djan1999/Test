@@ -688,7 +688,7 @@ describe("app harness — stale END cannot touch a newer service (fallback)", ()
     expect(oldRow?.data?.resName).toBe("Anna Harness");
   }, 20000);
 
-  it("a Lunch started against a NEWER Dinner elsewhere loses the arbitration — the Dinner survives", async () => {
+  it("a Lunch started against a NEWER Dinner elsewhere JOINS the Dinner — the blind start never inserts", async () => {
     seedLiveService();
     render(<App />);
     await enterService();
@@ -715,13 +715,12 @@ describe("app harness — stale END cannot touch a newer service (fallback)", ()
     fireEvent.click(await screen.findByText("LUNCH", { selector: "button" }));
     fireEvent.click(screen.getByText(/^START LUNCH/));
 
-    // The store trigger arbitrates: newest started_at wins, so the stale
-    // device's Lunch is immediately superseded — NON-destructively — and the
-    // device adopts the real live Dinner instead of believing its Lunch won.
+    // The blind-start guard resolves this BEFORE the trigger ever has to
+    // arbitrate: the device cannot see the newer Dinner, so its Lunch start
+    // is answered with the Dinner to JOIN — no Lunch row is inserted at all,
+    // and the device adopts the real live service instead of displacing it.
     await waitFor(() => {
-      const lunch = remoteRows("services").find((r) => r.session === "lunch");
-      expect(lunch?.status).toBe("ended");
-      expect(lunch?.end_reason).toBe("superseded");
+      expect(remoteRows("services").find((r) => r.session === "lunch")).toBeUndefined();
       expect(remoteRows("services").find((r) => r.id === "svc-newer-dinner")?.status).toBe("live");
       expect(localStorage.getItem(`milka_service_id:${WORKSPACE_ID}`)).toBe("svc-newer-dinner");
     }, { timeout: 5000 });
