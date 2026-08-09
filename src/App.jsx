@@ -85,7 +85,7 @@ import { setSqlitePrimaryFlag } from "./powersync/primary.js";
 import { setSandbox, isSandbox } from "./lib/sandbox.js";
 import { forceBootUpdateIfAvailable } from "./lib/swUpdate.js";
 import { appendServiceEvent, drainServiceEvents, pendingServiceEventCount, countServiceEvents } from "./lib/eventLog.js";
-import { kitchenFactsFromDiff, kitchenFactKey } from "./utils/kitchenFacts.js";
+import { boardFactsFromDiff, createFactDeduper } from "./utils/boardFacts.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useWorkspaceAccess } from "./hooks/useWorkspaceAccess.js";
 import {
@@ -824,9 +824,10 @@ export default function App() {
   }, [updateGateDone, remoteBoardLoaded, reservationsLoaded, serviceTruthReady, boardSyncTick, serviceId, bootGateDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveTimerRef       = useRef(null);
-  // Kitchen facts this session already appended to the logbook (see the
-  // autosave dual-write): one fact per transition, adopt-fold re-diffs absorbed.
-  const emittedKitchenFactsRef = useRef(new Set());
+  // The logbook's session deduper (see the autosave dual-write): an
+  // adopt-fold re-diff of a transition this device just recorded is absorbed
+  // inside the window; a genuine later repeat records again.
+  const factDeduperRef = useRef(createFactDeduper());
   /** Sanitized-table JSON of the last state written to (or adopted from) the
    *  store, by index. Diffing against it keeps board writes to just the rows
    *  that actually changed, and tells the watch handler which tables carry
@@ -3436,20 +3437,19 @@ export default function App() {
     tables.forEach((table, idx) => {
       if (nextJson[idx] === prevJson[idx]) return; // untouched
       pendingBoardWritesRef.current.add(table.id);
-      // THE LOGBOOK (Phase 1, docs/EVENT_LOG_PLAN.md): the same local diff
-      // that queues the card write also appends kitchen FACTS to the
-      // append-only event log — fire-and-forget, dual-write only; the card
-      // system remains the source of truth. Adoptions advance the baselines
-      // directly and never reach this diff, so only this device's gestures
-      // emit; the session dedup absorbs adopt-fold re-diffs of a transition
-      // this device already recorded.
+      // THE LOGBOOK (docs/EVENT_LOG_PLAN.md — Phase 1 + Phase 3's write side):
+      // the same local diff that queues the card write also appends the
+      // night's FACTS — kitchen fires, seatings, waters, pairings, drinks,
+      // bottles, extras — to the append-only event log. Fire-and-forget,
+      // dual-write only; the card system remains the source of truth.
+      // Adoptions advance the baselines directly and never reach this diff,
+      // so only this device's gestures emit; the windowed deduper absorbs
+      // adopt-fold re-diffs of a transition this device just recorded.
       if (!sandboxRef.current && serviceIdRef.current) {
         let prevTable = null;
         try { prevTable = prevJson[idx] ? JSON.parse(prevJson[idx]) : null; } catch { prevTable = null; }
-        for (const fact of kitchenFactsFromDiff(prevTable, sanitizeTable(table))) {
-          const key = kitchenFactKey(serviceIdRef.current, fact);
-          if (emittedKitchenFactsRef.current.has(key)) continue;
-          emittedKitchenFactsRef.current.add(key);
+        for (const fact of boardFactsFromDiff(prevTable, sanitizeTable(table))) {
+          if (!factDeduperRef.current(serviceIdRef.current, fact)) continue;
           appendServiceEvent({
             serviceId: serviceIdRef.current,
             type: fact.type,
