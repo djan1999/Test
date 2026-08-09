@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { boardFactsFromDiff, createFactDeduper } from "../utils/boardFacts.js";
 import {
-  foldServiceEvents, boardProjection, compareFoldToBoard, describeServiceEvent,
+  foldServiceEvents, boardProjection, compareFoldToBoard, describeServiceEvent, serviceNightReport,
 } from "../utils/eventFold.js";
 
 // Deterministic LCG so a failure names its seed and replays exactly.
@@ -209,6 +209,37 @@ describe("foldServiceEvents resilience", () => {
       { type: "bottle_removed", table_id: 1, payload: { name: "Rebula 2019" } },
     ];
     expect(compareFoldToBoard(foldServiceEvents(events), [card]).divergent).toEqual([]);
+  });
+});
+
+describe("serviceNightReport — the archived night from the log", () => {
+  it("tells the story and grades the night against the archived board", () => {
+    const events = [
+      { id: 11, device_id: "device-aa-bb", type: "party_seated", table_id: 1, client_ts: "2026-08-09T19:00:00", payload: { resName: "Anna", guests: 2, arrivedAt: "19:00" } },
+      { id: 12, device_id: "device-aa-bb", type: "course_fired", table_id: 1, payload: { courseKey: "c1", firedAt: "19:20" } },
+    ];
+    const board = [{
+      ...blankCard(1), active: true, resName: "Anna", guests: 2, arrivedAt: "19:00",
+      kitchenLog: { c1: { firedAt: "19:20" } },
+    }];
+    const report = serviceNightReport(events, board);
+    expect(report.story).toHaveLength(2);
+    expect(report.story[0]).toMatchObject({ id: 11, device: "device-a" });
+    expect(report.story[0].line).toContain("Anna, party of 2 seated");
+    expect(report.parity).toEqual({ events: 2, compared: 1, matches: 1, divergentTables: [] });
+  });
+
+  it("a night the logbook did not record is NOT graded (parity null, never falsely red)", () => {
+    const board = [{ ...blankCard(1), active: true, resName: "Anna", guests: 4, seats: [] }];
+    expect(serviceNightReport([], board)).toEqual({ story: [], parity: null });
+  });
+
+  it("a divergent night names its tables", () => {
+    const events = [
+      { id: 1, type: "party_seated", table_id: 2, payload: { resName: "Bruno", guests: 3 } },
+    ];
+    const board = [{ ...blankCard(2), active: true, resName: "Bruno", guests: 5, seats: [] }];
+    expect(serviceNightReport(events, board).parity.divergentTables).toEqual([2]);
   });
 });
 

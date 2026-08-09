@@ -256,6 +256,27 @@ const hhmm = (ts) => {
     : "--:--";
 };
 
+/**
+ * The archived night, reported from the log: the story in sentences plus the
+ * fold's parity against the archived board rows. `parity` is null when the
+ * log holds no facts for the night (the logbook was not running — the night
+ * is not graded, never falsely red).
+ */
+export function serviceNightReport(events, cardTables) {
+  const list = Array.isArray(events) ? events : [];
+  const story = list.map((event, index) => ({
+    id: event?.id ?? index,
+    device: String(event?.device_id || "").slice(0, 8),
+    line: describeServiceEvent(event),
+  }));
+  if (list.length === 0) return { story, parity: null };
+  const { compared, matches, divergent } = compareFoldToBoard(foldServiceEvents(list), cardTables);
+  return {
+    story,
+    parity: { events: list.length, compared, matches, divergentTables: divergent.map((d) => d.tableId) },
+  };
+}
+
 export function describeServiceEvent(event) {
   const payload = event?.payload || {};
   const table = event?.table_id != null ? `T${String(event.table_id).padStart(2, "0")}` : "?";

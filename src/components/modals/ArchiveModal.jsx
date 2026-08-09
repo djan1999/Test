@@ -25,6 +25,9 @@ export default function ArchiveModal({
   // the CURRENT service day offer it — resuming a past night makes no sense.
   onResumeService,
   resumableDate = null,
+  // The logbook's read side (docs/EVENT_LOG_PLAN.md Phase 2): an ended
+  // service's full story + the fold's parity against the archived board.
+  onReadServiceStory = null,
   menuCourses,
 }) {
   const isMobile = useIsMobile(640);
@@ -316,6 +319,9 @@ export default function ArchiveModal({
               {isExp && (
                 <div style={{ borderTop: `1px solid ${tokens.neutral[200]}`, padding: "12px 16px", background: tokens.neutral[0] }}>
                   <ArchiveSummary tableCount={entryTables.length} totalGuests={totalGuests} drinks={drinks} />
+                  {entry._kind === "service" && onReadServiceStory && (
+                    <NightStorySection serviceId={entry.id} entryTables={rawTables} onReadServiceStory={onReadServiceStory} />
+                  )}
                   {entryTables.map((t) => (
                     <ArchivedTableRow key={t.id} table={t} optionalExtras={optionalExtras} optionalPairings={entryOptionalPairings} menuCourses={entryMenuCourses} />
                   ))}
@@ -368,6 +374,79 @@ export default function ArchiveModal({
         )}
       </div>
     </FullModal>
+  );
+}
+
+// ── The night, as written — the logbook's story of an ended service ──────────
+// Loaded lazily on expand. The parity badge grades the fold of the night's
+// facts against the archived board rows: green means the log alone could
+// rebuild this night; a night from before the logbook is "not recorded",
+// never falsely red.
+function NightStorySection({ serviceId, entryTables, onReadServiceStory }) {
+  const [open, setOpen] = useState(false);
+  const [report, setReport] = useState(null);
+  useEffect(() => {
+    if (!open || report != null) return undefined;
+    let mounted = true;
+    onReadServiceStory(serviceId, entryTables)
+      .then((result) => { if (mounted) setReport(result || { story: [], parity: null }); })
+      .catch(() => { if (mounted) setReport({ story: [], parity: null, error: "The logbook could not be read." }); });
+    return () => { mounted = false; };
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const parity = report?.parity;
+  const green = parity && parity.divergentTables.length === 0;
+  return (
+    <div style={{ border: `1px solid ${tokens.neutral[200]}`, marginBottom: 14 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: "100%", textAlign: "left", padding: "10px 14px", cursor: "pointer",
+          background: open ? tokens.neutral[50] : tokens.neutral[0], border: "none",
+          fontFamily: FONT, fontSize: 9, letterSpacing: 3, color: tokens.neutral[700],
+          textTransform: "uppercase", display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}
+      >
+        <span>The night, as written · logbook</span>
+        <span style={{ fontSize: 14, color: tokens.neutral[300], transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>⌄</span>
+      </button>
+      {open && (
+        <div style={{ borderTop: `1px solid ${tokens.neutral[200]}`, padding: "12px 14px" }}>
+          {report == null && (
+            <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[400] }}>Reading the logbook…</div>
+          )}
+          {report != null && report.error && (
+            <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text }}>{report.error}</div>
+          )}
+          {report != null && !report.error && report.story.length === 0 && (
+            <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[400], fontStyle: "italic" }}>
+              The logbook was not recording for this night.
+            </div>
+          )}
+          {report != null && !report.error && report.story.length > 0 && (
+            <>
+              {parity && (
+                <div style={{
+                  fontFamily: FONT, fontSize: 10, marginBottom: 10, fontWeight: 600,
+                  color: green ? tokens.green.text : tokens.red.text,
+                }}>
+                  {green
+                    ? `● The log rebuilds this night exactly — ${parity.matches}/${parity.compared} table(s), ${parity.events} fact(s).`
+                    : `● Log and archive disagree at T${parity.divergentTables.join(", T")} — ${parity.matches}/${parity.compared} match (${parity.events} facts).`}
+                </div>
+              )}
+              <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                {report.story.map((row) => (
+                  <div key={row.id} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "2px 0" }}>
+                    <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.neutral[700], flex: 1, minWidth: 0 }}>{row.line}</span>
+                    <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.neutral[300], letterSpacing: 1, flexShrink: 0 }}>{row.device}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

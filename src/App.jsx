@@ -85,7 +85,7 @@ import { setSqlitePrimaryFlag } from "./powersync/primary.js";
 import { setSandbox, isSandbox } from "./lib/sandbox.js";
 import { forceBootUpdateIfAvailable } from "./lib/swUpdate.js";
 import { appendServiceEvent, drainServiceEvents, pendingServiceEventCount, countServiceEvents, readServiceEvents, readAllServiceEvents } from "./lib/eventLog.js";
-import { foldServiceEvents, compareFoldToBoard, describeServiceEvent } from "./utils/eventFold.js";
+import { foldServiceEvents, compareFoldToBoard, describeServiceEvent, serviceNightReport } from "./utils/eventFold.js";
 import { readParityRecord, recordEndOfServiceParity, fileParityVerdict } from "./lib/parityRecord.js";
 import { boardFactsFromDiff, createFactDeduper } from "./utils/boardFacts.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
@@ -2821,6 +2821,19 @@ export default function App() {
     }
   };
 
+  // The archived night from the log (ArchiveModal → "The night, as written"):
+  // full story + the fold's parity against the archived board rows. A night
+  // the logbook did not record returns parity null — shown as "not recording",
+  // never a false red.
+  const readServiceStory = async (serviceId, entryTables) => {
+    try {
+      const events = await readAllServiceEvents(serviceId);
+      return serviceNightReport(events, (entryTables || []).map((row) => sanitizeTable({ id: Number(row.table_id ?? row.id), ...(row.data || row) })));
+    } catch (error) {
+      return { story: [], parity: null, error: String(error?.message || error) };
+    }
+  };
+
   // Restore to just BEFORE a recorded fact (the Time Machine's moment picker).
   const restoreBoardToMoment = async (recordedAt) => {
     const at = Date.parse(recordedAt || "");
@@ -5225,6 +5238,7 @@ export default function App() {
         onClose={() => setArchiveOpen(false)}
         onRestoreTicket={id => upd(id, "kitchenArchived", false)}
         onResumeService={resumeServiceFromArchive}
+            onReadServiceStory={readServiceStory}
         resumableDate={currentServiceDay()}
         menuCourses={menuCourses}
       />
@@ -5334,6 +5348,7 @@ export default function App() {
             onClose={() => setArchiveOpen(false)}
             onRestoreTicket={id => upd(id, "kitchenArchived", false)}
             onResumeService={resumeServiceFromArchive}
+            onReadServiceStory={readServiceStory}
             resumableDate={currentServiceDay()}
             menuCourses={menuCourses}
           />
@@ -5724,6 +5739,7 @@ export default function App() {
             onClose={() => setArchiveOpen(false)}
             onRestoreTicket={id => upd(id, "kitchenArchived", false)}
             onResumeService={resumeServiceFromArchive}
+            onReadServiceStory={readServiceStory}
             resumableDate={currentServiceDay()}
             menuCourses={menuCourses}
           />
