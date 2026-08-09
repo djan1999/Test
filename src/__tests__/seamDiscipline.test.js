@@ -78,6 +78,13 @@ const ALLOWLIST = {
     "TABLES.SERVICES.insert": 1,         // START — one new entity row
     "TABLES.SERVICES.update": 3,         // END + RESUME (status flips) + field heal
   },
+  "lib/eventLog.js": {
+    // IS the logbook seam (docs/EVENT_LOG_PLAN.md): append-only event
+    // inserts (batch drain + single-event isolation) and the head-only count
+    // for the SYSTEM panel. Nothing here can update or delete — the database
+    // refuses those verbs for clients outright.
+    "supabase.from": 3,
+  },
   "lib/auditStore.js": {
     // Audit history stays on the server and is not synchronized into each
     // operational tablet's local PowerSync database.

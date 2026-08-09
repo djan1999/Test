@@ -112,6 +112,7 @@ export default function AdminLayout({
   onSaveCourseQuickNotes,
   onStartTestService,
   onRestoreBoard,
+  onReadEventLog,
   restaurantConfig = null,
   onSaveRestaurantConfig = null,
   accessToken = null,
@@ -556,6 +557,7 @@ export default function AdminLayout({
               onSaveWineSyncConfig={onSaveWineSyncConfig}
               onStartTestService={onStartTestService}
               onRestoreBoard={onRestoreBoard}
+              onReadEventLog={onReadEventLog}
             />
           )}
 

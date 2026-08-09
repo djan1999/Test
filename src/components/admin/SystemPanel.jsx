@@ -32,6 +32,7 @@ export default function SystemPanel({
   onSaveWineSyncConfig,
   onStartTestService,
   onRestoreBoard,
+  onReadEventLog,
 }) {
   const safeProfiles = Array.isArray(layoutProfiles) ? layoutProfiles : [];
   const safeWineSyncConfig = wineSyncConfig || { wineCountries: [], beveragePages: [] };
@@ -50,6 +51,16 @@ export default function SystemPanel({
   // recorded state N minutes ago. Destructive-looking but fully reversible —
   // the restore writes through the normal row path and is itself recorded.
   const [restoreMinutes, setRestoreMinutes] = useState("10");
+  // The logbook's proof of life (facts recorded server-side for the live
+  // service + facts still queued on this device). Loaded when the panel
+  // mounts and on demand.
+  const [eventLog, setEventLog] = useState(null);
+  useEffect(() => {
+    if (!onReadEventLog) return;
+    let mounted = true;
+    onReadEventLog().then((status) => { if (mounted) setEventLog(status); }).catch(() => {});
+    return () => { mounted = false; };
+  }, [onReadEventLog]);
   const [restoreState, setRestoreState] = useState(null);
   const [restoreMsg, setRestoreMsg] = useState("");
   const handleRestoreBoard = async () => {
@@ -180,6 +191,24 @@ export default function SystemPanel({
               <span style={{ fontFamily: FONT, fontSize: 11, color: restoreState === "error" ? tokens.red.text : tokens.green.text }}>
                 {restoreMsg}
               </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {onReadEventLog && (
+        <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "14px 16px", background: tokens.neutral[0] }}>
+          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 8 }}>Logbook</div>
+          <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[2], lineHeight: 1.5, maxWidth: 520 }}>
+            {eventLog == null && "Reading the event log…"}
+            {eventLog != null && !eventLog.live && "No live service — the logbook records during service."}
+            {eventLog != null && eventLog.live && (
+              <>
+                <strong style={{ color: tokens.ink[0] }}>
+                  {eventLog.recorded == null ? "?" : eventLog.recorded}
+                </strong> fact(s) recorded for the live service
+                {eventLog.pending > 0 ? ` · ${eventLog.pending} queued on this device` : " · nothing queued"}
+              </>
             )}
           </div>
         </div>

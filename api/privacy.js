@@ -20,6 +20,7 @@ const EXPORT_DATASETS = [
   { table: "services", keys: ["id"] },
   { table: "service_tables", keys: ["service_id", "table_id"] },
   { table: "service_archive", keys: ["id"] },
+  { table: "service_events", keys: ["id"] },
   { table: "reservations", keys: ["id"] },
   { table: "menu_courses", keys: ["position"] },
   { table: "wines", keys: ["key"] },

@@ -145,7 +145,8 @@ describe("privacy export transport", () => {
       version: 1,
       workspace: { id: "ws-a" },
     });
-    expect(Object.keys(payload.datasets)).toHaveLength(10);
+    expect(Object.keys(payload.datasets)).toHaveLength(11); // + service_events (the logbook)
+    expect(Object.keys(payload.datasets)).toContain("service_events");
     expect(res.end).toHaveBeenCalledTimes(1);
   });
 });
