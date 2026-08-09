@@ -3595,6 +3595,10 @@ export default function App() {
         // would be a guaranteed false red, so this one abstains.
         if (pendingServiceEventCount() > 0) { watchdogPrevDivergentRef.current = null; return; }
         const events = await readAllServiceEvents(svcId);
+        // No facts at all: the logbook is not active for this service (it
+        // predates the log or no updated device touched it) — abstain. The
+        // watchdog engages by itself the moment the first fact lands.
+        if (events.length === 0) { watchdogPrevDivergentRef.current = null; return; }
         const cards = (tablesRef.current || []).map((table) => sanitizeTable(table));
         const { compared, matches, divergent } = compareFoldToBoard(foldServiceEvents(events), cards);
         const signature = divergent.length > 0

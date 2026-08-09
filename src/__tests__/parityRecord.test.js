@@ -78,10 +78,27 @@ describe("recordEndOfServiceParity", () => {
     expect(saveStateKey).toHaveBeenCalled();
   });
 
+  it("abstains entirely when the log holds ZERO facts (a pre-logbook service is not graded)", async () => {
+    readAllServiceEvents.mockResolvedValue([]);
+    const entry = await recordEndOfServiceParity({
+      serviceId: "svc-old",
+      cards: [card(1, { active: true, guests: 4, seats: [seat(1, { water: "STILL" })] })],
+    });
+    expect(entry).toBeNull();
+    expect(saveStateKey).not.toHaveBeenCalled();
+    expect(recordClientDiagnostic).not.toHaveBeenCalled(); // no noise-red either
+  });
+
   it("prepends to the existing record and caps it", async () => {
     const old = Array.from({ length: 30 }, (_, i) => ({ serviceId: `old-${i}` }));
     readStateKey.mockResolvedValue({ entries: old });
-    await recordEndOfServiceParity({ serviceId: "svc-new", cards: [] });
+    readAllServiceEvents.mockResolvedValue([
+      { type: "course_fired", table_id: 1, payload: { courseKey: "c1", firedAt: "20:00" } },
+    ]);
+    await recordEndOfServiceParity({
+      serviceId: "svc-new",
+      cards: [card(1, { kitchenLog: { c1: { firedAt: "20:00" } } })],
+    });
     const saved = saveStateKey.mock.calls[0][1].entries;
     expect(saved).toHaveLength(24);
     expect(saved[0].serviceId).toBe("svc-new");
@@ -89,11 +106,12 @@ describe("recordEndOfServiceParity", () => {
   });
 
   it("never throws: read failure, drain failure, refused save, missing service", async () => {
+    const oneFact = [{ type: "course_fired", table_id: 1, payload: { courseKey: "c1", firedAt: "20:00" } }];
     readAllServiceEvents.mockRejectedValue(new Error("log unreachable"));
     expect(await recordEndOfServiceParity({ serviceId: "svc-9", cards: [] })).toBeNull();
     expect(saveStateKey).not.toHaveBeenCalled();
 
-    readAllServiceEvents.mockResolvedValue([]);
+    readAllServiceEvents.mockResolvedValue(oneFact);
     drainServiceEvents.mockRejectedValue(new Error("offline"));
     expect(await recordEndOfServiceParity({ serviceId: "svc-9", cards: [] })).not.toBeNull();
 
