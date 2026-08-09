@@ -69,6 +69,12 @@ export function foldServiceEvents(events) {
       case "party_resized":
         table.guests = Number(payload.to) || 0;
         break;
+      case "party_renamed":
+        table.resName = String(payload.resName || "");
+        break;
+      case "party_arrival_set":
+        table.arrivedAt = payload.to ?? null;
+        break;
       case "seat_water_set":
         seatOf(table, payload.seatId).water = payload.to ?? "—";
         break;
@@ -117,9 +123,9 @@ export function foldServiceEvents(events) {
 }
 
 // ── the comparable projection of a CARD table ────────────────────────────────
-// The subset of board state the log carries today. Descriptive fields that
-// ride reservations (resName edits, arrivedAt heals) are NOT compared — they
-// join the log with the Phase-3 gesture seams.
+// The full board state the log carries — including the descriptive fields
+// (resName, arrivedAt), which joined the log on 09.08 via party_renamed /
+// party_arrival_set. Parity is full-fidelity: a wiped name is divergence.
 
 const seatHasContent = (seat) =>
   (seat.water && seat.water !== "—")
@@ -136,7 +142,9 @@ export function boardProjection(table) {
   const projection = blankProjection(Number(table?.id));
   if (!table || typeof table !== "object") return projection;
   projection.active = !!table.active;
+  projection.resName = String(table.resName || "");
   projection.guests = Number(table.guests) || 0;
+  projection.arrivedAt = table.arrivedAt ?? null;
   const log = table.kitchenLog && typeof table.kitchenLog === "object" ? table.kitchenLog : {};
   for (const [courseKey, entry] of Object.entries(log)) {
     if ((entry?.firedAt ?? null) != null) projection.fires[courseKey] = entry.firedAt;
@@ -159,12 +167,14 @@ export function boardProjection(table) {
   return projection;
 }
 
-// Canonical comparable form: content-bearing seats only, sorted keys, no
-// descriptive fields — so scaffold differences (empty seats, blank tables)
-// can never read as divergence.
+// Canonical comparable form: content-bearing seats only, sorted keys, and
+// party fields zeroed when inactive — so scaffold differences (empty seats,
+// blank tables) can never read as divergence.
 const canonical = (projection) => ({
   active: projection.active,
+  resName: projection.active ? String(projection.resName || "") : "",
   guests: projection.active ? projection.guests : 0,
+  arrivedAt: projection.active ? (projection.arrivedAt ?? null) : null,
   fires: Object.fromEntries(Object.entries(projection.fires).sort()),
   bottles: Object.fromEntries(Object.entries(projection.bottles).sort()),
   seats: Object.fromEntries(
@@ -234,6 +244,8 @@ export function describeServiceEvent(event) {
     case "party_seated": return line(`${payload.resName || "walk-in"}, party of ${payload.guests ?? "?"} seated`);
     case "party_unseated": return line(`${payload.resName || "party"} left`);
     case "party_resized": return line(`party resized ${payload.from ?? "?"} → ${payload.to ?? "?"}`);
+    case "party_renamed": return line(`renamed to ${payload.resName || "walk-in"}`);
+    case "party_arrival_set": return line(`arrival ${payload.from ?? "—"} → ${payload.to ?? "—"}`);
     case "seat_water_set": return line(`water ${payload.to ?? "—"}${seatBit}`);
     case "seat_pairing_set": return line(`pairing ${payload.to || "cleared"}${seatBit}`);
     case "drink_added": return line(`+ ${payload.name}${seatBit}`);

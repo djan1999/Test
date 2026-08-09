@@ -35,6 +35,41 @@ describe("boardFactsFromDiff — seating", () => {
       table({ active: true, guests: 4 }),
     ))).toEqual(["party_resized"]);
   });
+
+  it("a rename mid-service carries ONLY the new name, under the erasure-covered key", () => {
+    expect(boardFactsFromDiff(
+      table({ active: true, resName: "Anna" }),
+      table({ active: true, resName: "Bruno" }),
+    )).toEqual([
+      { type: "party_renamed", tableId: 3, payload: { resName: "Bruno" } },
+    ]);
+  });
+
+  it("an arrival-time change is a fact; seating and unseating never double-emit them", () => {
+    expect(boardFactsFromDiff(
+      table({ active: true, arrivedAt: "19:00" }),
+      table({ active: true, arrivedAt: "19:30" }),
+    )).toEqual([
+      { type: "party_arrival_set", tableId: 3, payload: { from: "19:00", to: "19:30" } },
+    ]);
+    // Seating carries name+arrival inside party_seated — no separate facts.
+    expect(types(boardFactsFromDiff(
+      table(),
+      table({ active: true, resName: "Anna", arrivedAt: "19:00" }),
+    ))).toEqual(["party_seated"]);
+    // Unseating blanks name+arrival as part of party_unseated — no separate facts.
+    expect(types(boardFactsFromDiff(
+      table({ active: true, resName: "Anna", arrivedAt: "19:00" }),
+      table(),
+    ))).toEqual(["party_unseated"]);
+  });
+
+  it("resize + rename + re-time in one diff are three independent facts", () => {
+    expect(types(boardFactsFromDiff(
+      table({ active: true, resName: "Anna", guests: 2, arrivedAt: "19:00" }),
+      table({ active: true, resName: "Bruno", guests: 4, arrivedAt: "19:30" }),
+    )).sort()).toEqual(["party_arrival_set", "party_renamed", "party_resized"]);
+  });
 });
 
 describe("boardFactsFromDiff — seats and drinks", () => {

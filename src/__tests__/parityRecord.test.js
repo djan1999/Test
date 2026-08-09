@@ -47,7 +47,10 @@ describe("recordEndOfServiceParity", () => {
     ]);
     const entry = await recordEndOfServiceParity({
       serviceId: "svc-9", label: "09.08. VEČERJA", reason: "manual",
-      cards: [card(1, { active: true, guests: 2, seats: [seat(1, { water: "STILL" }), seat(2)] })],
+      cards: [card(1, {
+        active: true, resName: "Anna", guests: 2, arrivedAt: "19:00",
+        seats: [seat(1, { water: "STILL" }), seat(2)],
+      })],
     });
     expect(entry).toMatchObject({
       serviceId: "svc-9", label: "09.08. VEČERJA", reason: "manual",
