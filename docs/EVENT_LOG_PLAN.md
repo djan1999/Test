@@ -60,10 +60,16 @@ over until the log has proven itself carrying the same facts in production.
   the SYSTEM panel's story view (`describeServiceEvent`) shows the night's
   last moments in sentences, each with a "⟲ TO BEFORE" restore that rewinds
   the whole board to just before that fact (delivered 09.08).
-- Archive kitchen timings & cadence insights read from `course_fired` events
-  (today they re-derive from kitchenLog snapshots) — waits for real-service
-  event data to exist.
-- No writes change. Exit: insights parity for three services.
+- ✅ The Archive reads the log: every ended service-entity entry offers
+  "The night, as written" — the full story in sentences, device-attributed,
+  with a parity badge grading the fold against the archived board rows
+  (`serviceNightReport`). A pre-logbook night reads "was not recording",
+  never falsely red (delivered 09.08). This is the insights-parity
+  measure: three green archived nights = the Phase-2/3 read-side exit.
+- Archive kitchen timings & cadence aggregation stays snapshot-derived for
+  now — switching its source to `course_fired` events is gated on the
+  parity badges above running green on real nights.
+- No writes change.
 
 ### Phase 3 — seats and drinks become events
 - Gesture seams (seat/water/pairing/drink add+remove) emit domain events
