@@ -70,6 +70,10 @@ export async function recordEndOfServiceParity({ serviceId, label = "", reason =
     // not "data lost" (the facts land when those devices drain).
     await drainServiceEvents().catch(() => {});
     const events = await readAllServiceEvents(serviceId);
+    // Zero facts means the logbook was not running for this service (it
+    // predates the log, or no updated device touched it) — nothing was
+    // measured, so nothing is graded. A red here would be pure noise.
+    if (events.length === 0) return null;
     const { compared, matches, divergent } = compareFoldToBoard(foldServiceEvents(events), cards);
     if (divergent.length > 0) {
       recordClientDiagnostic("logbook parity divergence (end of night)", new Error(
