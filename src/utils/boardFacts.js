@@ -70,12 +70,28 @@ export function boardFactsFromDiff(prevTable, nextTable) {
       type: "party_unseated", tableId,
       payload: { resName: before.resName || "", guests: Number(before.guests) || 0 },
     });
-  } else if (before.active && after.active
-      && (Number(before.guests) || 0) !== (Number(after.guests) || 0)) {
-    facts.push({
-      type: "party_resized", tableId,
-      payload: { from: Number(before.guests) || 0, to: Number(after.guests) || 0 },
-    });
+  } else if (before.active && after.active) {
+    if ((Number(before.guests) || 0) !== (Number(after.guests) || 0)) {
+      facts.push({
+        type: "party_resized", tableId,
+        payload: { from: Number(before.guests) || 0, to: Number(after.guests) || 0 },
+      });
+    }
+    if ((before.resName || "") !== (after.resName || "")) {
+      // Only the NEW name travels, under the erasure-covered `resName` key —
+      // the previous name already lives in the earlier party_seated (or
+      // party_renamed) fact, each covered by the same erasure match.
+      facts.push({
+        type: "party_renamed", tableId,
+        payload: { resName: after.resName || "" },
+      });
+    }
+    if ((before.arrivedAt ?? null) !== (after.arrivedAt ?? null)) {
+      facts.push({
+        type: "party_arrival_set", tableId,
+        payload: { from: before.arrivedAt ?? null, to: after.arrivedAt ?? null },
+      });
+    }
   }
 
   // ── per-seat: waters, pairings, drinks, extras, options ────────────────────

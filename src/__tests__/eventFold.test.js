@@ -47,7 +47,7 @@ function applyRandomGesture(random, card) {
   const next = clone(card);
   const gestures = [];
   if (!next.active) gestures.push("seat");
-  if (next.active) gestures.push("unseat", "resize", "water", "pairing", "drinkAdd", "fire", "extra", "option", "bottleAdd");
+  if (next.active) gestures.push("unseat", "resize", "rename", "retime", "water", "pairing", "drinkAdd", "fire", "extra", "option", "bottleAdd");
   if (next.active && next.seats.some((seat) => CATEGORIES.some((category) => seat[category].length))) gestures.push("drinkRemove");
   if (Object.keys(next.kitchenLog).length) gestures.push("unfire");
   if (next.bottleWines.length) gestures.push("bottleRemove");
@@ -71,6 +71,8 @@ function applyRandomGesture(random, card) {
       next.seats = Array.from({ length: guests }, (_, i) => next.seats[i] || blankSeat(i + 1));
       break;
     }
+    case "rename": next.resName = pick(random, NAMES); break;
+    case "retime": next.arrivedAt = `20:${String(Math.floor(random() * 60)).padStart(2, "0")}`; break;
     case "water": seat().water = pick(random, WATERS); break;
     case "pairing": seat().pairing = pick(random, PAIRINGS); break;
     case "drinkAdd": seat()[pick(random, CATEGORIES)].push({ name: pick(random, DRINKS) }); break;
@@ -146,12 +148,18 @@ describe("compareFoldToBoard", () => {
     expect(result).toEqual({ compared: 0, matches: 0, divergent: [] });
   });
 
-  it("descriptive fields (resName, arrivedAt) are deliberately not compared yet", () => {
+  it("descriptive fields are full-fidelity: a rename that never reached the log is divergence", () => {
     const card = { ...blankCard(3), active: true, guests: 2, resName: "Renamed Later", arrivedAt: "21:00", seats: [] };
-    const events = [
+    const seatedOnly = [
       { type: "party_seated", table_id: 3, payload: { resName: "Anna", guests: 2, arrivedAt: "19:00" } },
     ];
-    expect(compareFoldToBoard(foldServiceEvents(events), [card]).divergent).toEqual([]);
+    expect(compareFoldToBoard(foldServiceEvents(seatedOnly), [card]).divergent.map((d) => d.tableId)).toEqual([3]);
+    const withFacts = [
+      ...seatedOnly,
+      { type: "party_renamed", table_id: 3, payload: { resName: "Renamed Later" } },
+      { type: "party_arrival_set", table_id: 3, payload: { from: "19:00", to: "21:00" } },
+    ];
+    expect(compareFoldToBoard(foldServiceEvents(withFacts), [card]).divergent).toEqual([]);
   });
 });
 
