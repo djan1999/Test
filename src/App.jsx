@@ -84,6 +84,8 @@ import { isPowerSyncEnabled } from "./powersync/config.js";
 import { setSqlitePrimaryFlag } from "./powersync/primary.js";
 import { setSandbox, isSandbox } from "./lib/sandbox.js";
 import { forceBootUpdateIfAvailable } from "./lib/swUpdate.js";
+import { appendServiceEvent, drainServiceEvents, pendingServiceEventCount, countServiceEvents } from "./lib/eventLog.js";
+import { kitchenFactsFromDiff, kitchenFactKey } from "./utils/kitchenFacts.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useWorkspaceAccess } from "./hooks/useWorkspaceAccess.js";
 import {
@@ -822,6 +824,9 @@ export default function App() {
   }, [updateGateDone, remoteBoardLoaded, reservationsLoaded, serviceTruthReady, boardSyncTick, serviceId, bootGateDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveTimerRef       = useRef(null);
+  // Kitchen facts this session already appended to the logbook (see the
+  // autosave dual-write): one fact per transition, adopt-fold re-diffs absorbed.
+  const emittedKitchenFactsRef = useRef(new Set());
   /** Sanitized-table JSON of the last state written to (or adopted from) the
    *  store, by index. Diffing against it keeps board writes to just the rows
    *  that actually changed, and tells the watch handler which tables carry
@@ -2743,6 +2748,20 @@ export default function App() {
     }
   };
 
+  // LOGBOOK readout (SYSTEM panel): proof the event log is recording — how
+  // many facts the server holds for the live service, and how many are still
+  // queued on this device.
+  const readEventLogStatus = async () => {
+    const svcId = serviceIdRef.current;
+    const pending = pendingServiceEventCount();
+    if (!svcId || sandboxRef.current) return { recorded: 0, pending, live: false };
+    try {
+      return { recorded: await countServiceEvents(svcId), pending, live: true };
+    } catch {
+      return { recorded: null, pending, live: true };
+    }
+  };
+
   // (Session changes ride startService / updateServiceStore as single writes
   // on the service entity — there is no shared settings blob left to race.)
 
@@ -3417,6 +3436,28 @@ export default function App() {
     tables.forEach((table, idx) => {
       if (nextJson[idx] === prevJson[idx]) return; // untouched
       pendingBoardWritesRef.current.add(table.id);
+      // THE LOGBOOK (Phase 1, docs/EVENT_LOG_PLAN.md): the same local diff
+      // that queues the card write also appends kitchen FACTS to the
+      // append-only event log — fire-and-forget, dual-write only; the card
+      // system remains the source of truth. Adoptions advance the baselines
+      // directly and never reach this diff, so only this device's gestures
+      // emit; the session dedup absorbs adopt-fold re-diffs of a transition
+      // this device already recorded.
+      if (!sandboxRef.current && serviceIdRef.current) {
+        let prevTable = null;
+        try { prevTable = prevJson[idx] ? JSON.parse(prevJson[idx]) : null; } catch { prevTable = null; }
+        for (const fact of kitchenFactsFromDiff(prevTable, sanitizeTable(table))) {
+          const key = kitchenFactKey(serviceIdRef.current, fact);
+          if (emittedKitchenFactsRef.current.has(key)) continue;
+          emittedKitchenFactsRef.current.add(key);
+          appendServiceEvent({
+            serviceId: serviceIdRef.current,
+            type: fact.type,
+            tableId: fact.tableId,
+            payload: fact.payload,
+          });
+        }
+      }
     });
     prevTablesJsonRef.current = makeTableJsonMap(tables);
     if (pendingBoardWritesRef.current.size === 0) return;
@@ -3437,7 +3478,11 @@ export default function App() {
   // signal re-drains the set as soon as writes can land again.
   useEffect(() => {
     if (!supabase || !remoteBoardLoaded) return undefined;
-    const drain = () => { if (pendingBoardWritesRef.current.size > 0) flushBoardWrites(); };
+    const drain = () => {
+      if (pendingBoardWritesRef.current.size > 0) flushBoardWrites();
+      // The logbook's queued facts ride the same heartbeat/online signal.
+      void drainServiceEvents();
+    };
     const heartbeat = setInterval(drain, 15000);
     window.addEventListener("online", drain);
     return () => {
@@ -5270,6 +5315,7 @@ export default function App() {
         onSaveCourseQuickNotes={saveCourseQuickNotes}
         onStartTestService={startTestService}
         onRestoreBoard={restoreBoardToMinutesAgo}
+        onReadEventLog={readEventLogStatus}
         onExit={() => changeMode(null)}
       /></Suspense>
     </div>
