@@ -101,6 +101,11 @@ select t.table_id, k.key as course, k.value->>'firedAt' as fired_at
 | domain | events |
 |---|---|
 | kitchen | **course_fired**, **course_unfired** |
-| seating (P3) | party_seated, party_unseated, party_moved, table_cleared |
-| drinks (P3) | seat_water_set, seat_pairing_set, drink_added, drink_removed, bottle_added |
+| seating | **party_seated**, **party_unseated**, **party_resized** (a move surfaces as unseated+seated until gesture seams carry `party_moved` intent) |
+| drinks | **seat_water_set**, **seat_pairing_set**, **drink_added**, **drink_removed**, **bottle_added**, **bottle_removed**, **extra_ordered/unordered**, **option_ordered/unordered** |
 | lifecycle (P3) | already event-shaped in `services`; folded into the same stream at P4 |
+
+Phase 3's WRITE side was pulled forward on 09.08 (bold above): dual-writing
+more domains carries the same zero-risk profile as Phase 1 — fire-and-forget,
+nothing reads the log — and the fold flip needs full-night coverage anyway.
+Phase 2/3 READ cutovers remain gated on the exit criteria.

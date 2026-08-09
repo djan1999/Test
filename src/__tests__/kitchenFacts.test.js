@@ -2,7 +2,7 @@
 // derived from the autosave's before/after diff. Pure-function pins.
 
 import { describe, it, expect } from "vitest";
-import { kitchenFactsFromDiff, kitchenFactKey } from "../utils/kitchenFacts.js";
+import { kitchenFactsFromDiff } from "../utils/kitchenFacts.js";
 
 const table = (id, kitchenLog) => ({ id, kitchenLog });
 
@@ -61,21 +61,5 @@ describe("kitchenFactsFromDiff", () => {
   it("malformed logs are treated as empty, never thrown on", () => {
     expect(kitchenFactsFromDiff({ id: 3, kitchenLog: "garbage" }, table(3, {}))).toEqual([]);
     expect(kitchenFactsFromDiff(undefined, { id: "x" })).toEqual([]);
-  });
-});
-
-describe("kitchenFactKey", () => {
-  it("one key per transition — an adopt-fold re-diff of the same fire dedupes", () => {
-    const fire = { type: "course_fired", tableId: 3, payload: { courseKey: "c2", firedAt: "19:55" } };
-    expect(kitchenFactKey("svc-1", fire)).toBe(kitchenFactKey("svc-1", { ...fire }));
-    // …but a re-fire at a new time, an un-fire, another table, or another
-    // service are all DIFFERENT facts.
-    expect(kitchenFactKey("svc-1", fire)).not.toBe(
-      kitchenFactKey("svc-1", { ...fire, payload: { courseKey: "c2", firedAt: "20:10" } }),
-    );
-    expect(kitchenFactKey("svc-1", fire)).not.toBe(
-      kitchenFactKey("svc-1", { type: "course_unfired", tableId: 3, payload: { courseKey: "c2", wasFiredAt: "19:55" } }),
-    );
-    expect(kitchenFactKey("svc-1", fire)).not.toBe(kitchenFactKey("svc-2", fire));
   });
 });

@@ -40,13 +40,3 @@ export function kitchenFactsFromDiff(prevTable, nextTable) {
   }
   return facts;
 }
-
-/**
- * Session-level dedup key: an adopt-fold can re-diff a fire this device
- * already recorded (the fold keeps the local edit and the baseline moves, so
- * the same transition can surface twice). One fact per transition.
- */
-export function kitchenFactKey(serviceId, fact) {
-  const at = fact.type === "course_fired" ? fact.payload.firedAt : fact.payload.wasFiredAt;
-  return `${serviceId}|${fact.tableId}|${fact.type}|${fact.payload.courseKey}|${at}`;
-}
