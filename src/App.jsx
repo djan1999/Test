@@ -84,9 +84,9 @@ import { isPowerSyncEnabled } from "./powersync/config.js";
 import { setSqlitePrimaryFlag } from "./powersync/primary.js";
 import { setSandbox, isSandbox } from "./lib/sandbox.js";
 import { forceBootUpdateIfAvailable } from "./lib/swUpdate.js";
-import { appendServiceEvent, drainServiceEvents, pendingServiceEventCount, countServiceEvents, readServiceEvents } from "./lib/eventLog.js";
+import { appendServiceEvent, drainServiceEvents, pendingServiceEventCount, countServiceEvents, readServiceEvents, readAllServiceEvents } from "./lib/eventLog.js";
 import { foldServiceEvents, compareFoldToBoard, describeServiceEvent } from "./utils/eventFold.js";
-import { readParityRecord, recordEndOfServiceParity } from "./lib/parityRecord.js";
+import { readParityRecord, recordEndOfServiceParity, fileParityVerdict } from "./lib/parityRecord.js";
 import { boardFactsFromDiff, createFactDeduper } from "./utils/boardFacts.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useWorkspaceAccess } from "./hooks/useWorkspaceAccess.js";
@@ -2806,7 +2806,7 @@ export default function App() {
       // Flush this device's queued facts first so the fold sees them (other
       // devices' queues can still lag — a divergence says "look", not "lost").
       await drainServiceEvents().catch(() => {});
-      const events = await readServiceEvents(svcId, { limit: 5000, ascending: true });
+      const events = await readAllServiceEvents(svcId);
       const folded = foldServiceEvents(events);
       const cards = (tablesRef.current || []).map((table) => sanitizeTable(table));
       const { compared, matches, divergent } = compareFoldToBoard(folded, cards);
@@ -3572,6 +3572,51 @@ export default function App() {
       window.removeEventListener("online", drain);
     };
   }, [remoteBoardLoaded, flushBoardWrites]);
+
+  // ── THE PARITY WATCHDOG — divergence detection with no human in the loop ────
+  // Every few minutes during live service, silently fold the night's whole log
+  // and compare it with the board. One transient mismatch is expected noise
+  // (another device's facts still uploading); the SAME tables divergent on two
+  // CONSECUTIVE sweeps is a confirmed incident: it is filed in the parity
+  // record (reason "watchdog") and in device diagnostics, at most once per
+  // divergence signature. Detection only — recovery stays a deliberate human
+  // act through the Time Machine, because auto-restoring on a false positive
+  // would itself be a wipe vector.
+  const watchdogPrevDivergentRef = useRef(null); // JSON of last sweep's divergent tables
+  const watchdogFiledRef = useRef(null);         // signature already filed this service
+  useEffect(() => {
+    if (!supabase || !remoteBoardLoaded) return undefined;
+    const sweep = async () => {
+      const svcId = serviceIdRef.current;
+      if (!svcId || sandboxRef.current) { watchdogPrevDivergentRef.current = null; return; }
+      try {
+        await drainServiceEvents().catch(() => {});
+        // Facts still queued after a drain mean we're offline — every sweep
+        // would be a guaranteed false red, so this one abstains.
+        if (pendingServiceEventCount() > 0) { watchdogPrevDivergentRef.current = null; return; }
+        const events = await readAllServiceEvents(svcId);
+        const cards = (tablesRef.current || []).map((table) => sanitizeTable(table));
+        const { compared, matches, divergent } = compareFoldToBoard(foldServiceEvents(events), cards);
+        const signature = divergent.length > 0
+          ? `${svcId}:${divergent.map((d) => d.tableId).join(",")}`
+          : null;
+        const confirmed = signature != null && watchdogPrevDivergentRef.current === signature;
+        watchdogPrevDivergentRef.current = signature;
+        if (!confirmed || watchdogFiledRef.current === signature) return;
+        watchdogFiledRef.current = signature;
+        recordClientDiagnostic("logbook parity divergence (watchdog)", new Error(
+          `tables ${divergent.map((d) => d.tableId).join(", ")}: ${JSON.stringify(divergent).slice(0, 2000)}`,
+        ));
+        void fileParityVerdict({
+          serviceId: svcId, label: "mid-service watchdog", reason: "watchdog",
+          events: events.length, compared, matches,
+          divergentTables: divergent.map((d) => d.tableId),
+        });
+      } catch { /* unreadable log this sweep — the next sweep tries again */ }
+    };
+    const interval = setInterval(() => { void sweep(); }, 6 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [remoteBoardLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   // ── Load logo (cached device copy paints instantly; Supabase refreshes) ─────

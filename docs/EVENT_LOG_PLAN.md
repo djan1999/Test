@@ -30,6 +30,14 @@ over until the log has proven itself carrying the same facts in production.
 6. **Retention rides the service.** A service's events cascade away with a
    deliberate archive purge, and guest erasure covers event payloads —
    the privacy contract holds in the log exactly as it does in history.
+7. **Every fact is an idempotent aspect-level set.** A fact carries the full
+   new state of the one aspect it touches (a seat's drink multiset, a
+   water choice, a party), never a bare delta — so replaying a fact twice,
+   or absorbing a duplicated one, is provably a no-op. Dedup can therefore
+   only ever absorb a byte-identical repeat of an aspect's LATEST fact
+   (the adopt-fold re-diff signature); any genuine state change differs
+   from the latest by definition and always records. Correctness never
+   depends on dedup being right.
 
 ## Phases
 
@@ -76,6 +84,21 @@ over until the log has proven itself carrying the same facts in production.
   to press the button (delivered 09.08). A red entry means "investigate",
   not "data lost" — another device's undrained fact queue reads as
   divergence until it uploads.
+- ✅ THE WATCHDOG: during live service every device silently re-folds the
+  whole log every ~6 minutes and compares it with its board. It abstains
+  while offline (queued facts would guarantee a false red) and requires
+  the SAME tables divergent on two consecutive sweeps before filing a
+  "watchdog" entry + diagnostic — once per divergence signature. Detection
+  is fully automatic; RECOVERY stays a deliberate human act through the
+  Time Machine, because auto-restoring on a false positive would itself
+  be a wipe vector (delivered 09.08).
+- ✅ Bulletproofing the pipeline (09.08): parity reads paginate to
+  exhaustion (a long night can never be silently truncated; a safety-cap
+  hit is a recorded diagnostic), the offline queue holds several full
+  nights (2000) and records a diagnostic if it ever overflows, and the
+  replay-parity property in CI now runs the FULL pipeline — deriver ∘
+  deduper (with simulated adopt-fold re-diff noise and a jittered clock)
+  ∘ reducer.
 - Exit: replaying a service's events through the reducer reproduces the final
   board byte-for-byte — the CI property test PLUS three consecutive green
   end-of-night parity entries from real services, and drills D1–D3 on real
@@ -122,7 +145,7 @@ select t.table_id, k.key as course, k.value->>'firedAt' as fired_at
 |---|---|
 | kitchen | **course_fired**, **course_unfired** |
 | seating | **party_seated**, **party_unseated**, **party_resized**, **party_renamed**, **party_arrival_set** (a move surfaces as unseated+seated until gesture seams carry `party_moved` intent; a rename carries ONLY the new name, under the erasure-covered `resName` key — the old name lives in the prior seated/renamed fact) |
-| drinks | **seat_water_set**, **seat_pairing_set**, **drink_added**, **drink_removed**, **bottle_added**, **bottle_removed**, **extra_ordered/unordered**, **option_ordered/unordered** |
+| drinks | **seat_water_set**, **seat_pairing_set**, **seat_drinks_set** (snapshot: the seat's full per-category multiset; `added`/`removed` decorate the story), **table_bottles_set** (same, table-level), **extra_ordered/unordered**, **option_ordered/unordered**. Legacy delta facts `drink_added/removed`, `bottle_added/removed` (recorded 08–09.08) still fold. |
 | lifecycle (P3) | already event-shaped in `services`; folded into the same stream at P4 |
 
 Phase 3's WRITE side was pulled forward on 09.08 (bold above): dual-writing
