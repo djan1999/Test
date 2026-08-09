@@ -69,9 +69,16 @@ over until the log has proven itself carrying the same facts in production.
   CHECK PARITY folds the live service's whole log and compares it with the
   live board, recording any divergence in device diagnostics (delivered
   09.08).
+- ✅ The evidence collects itself: every service end (manual AND rollover
+  auto-end) files an end-of-night parity verdict automatically
+  (`lib/parityRecord.js` → settings store, newest-first, capped), shown in
+  SYSTEM → Logbook → "End-of-night parity record". Nobody has to remember
+  to press the button (delivered 09.08). A red entry means "investigate",
+  not "data lost" — another device's undrained fact queue reads as
+  divergence until it uploads.
 - Exit: replaying a service's events through the reducer reproduces the final
-  board byte-for-byte — the CI property test PLUS green CHECK PARITY runs on
-  real services (three consecutive, end-of-night), and drills D1–D3 on real
+  board byte-for-byte — the CI property test PLUS three consecutive green
+  end-of-night parity entries from real services, and drills D1–D3 on real
   tablets in the Demo workspace.
 
 ### Phase 4 — the fold flips
