@@ -48,18 +48,31 @@ over until the log has proven itself carrying the same facts in production.
   match the night's kitchenLog exactly (SQL check in this doc, below).
 
 ### Phase 2 — read paths consume the log where it is already better
+- ✅ The Time Machine picker lists moments by events, not by row versions:
+  the SYSTEM panel's story view (`describeServiceEvent`) shows the night's
+  last moments in sentences, each with a "⟲ TO BEFORE" restore that rewinds
+  the whole board to just before that fact (delivered 09.08).
 - Archive kitchen timings & cadence insights read from `course_fired` events
-  (today they re-derive from kitchenLog snapshots).
-- The Time Machine picker lists moments by events, not by row versions.
+  (today they re-derive from kitchenLog snapshots) — waits for real-service
+  event data to exist.
 - No writes change. Exit: insights parity for three services.
 
 ### Phase 3 — seats and drinks become events
 - Gesture seams (seat/water/pairing/drink add+remove) emit domain events
   alongside card writes. The dual-write diff shrinks as gesture seams take
   over intent capture.
+- ✅ The reducer exists and is pinned in CI: `utils/eventFold.js`
+  (`foldServiceEvents` + `compareFoldToBoard`) with the REPLAY PARITY
+  property test — 150 seeded random nights, production deriver ∘ production
+  reducer == final board (delivered 09.08).
+- ✅ The same reducer is measurable against reality: the SYSTEM panel's
+  CHECK PARITY folds the live service's whole log and compares it with the
+  live board, recording any divergence in device diagnostics (delivered
+  09.08).
 - Exit: replaying a service's events through the reducer reproduces the final
-  board byte-for-byte (automated nightly comparison, and drills D1–D3 on real
-  tablets in the Demo workspace).
+  board byte-for-byte — the CI property test PLUS green CHECK PARITY runs on
+  real services (three consecutive, end-of-night), and drills D1–D3 on real
+  tablets in the Demo workspace.
 
 ### Phase 4 — the fold flips
 - Board state on every device = reducer(events), materialized locally;

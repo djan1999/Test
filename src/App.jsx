@@ -84,7 +84,8 @@ import { isPowerSyncEnabled } from "./powersync/config.js";
 import { setSqlitePrimaryFlag } from "./powersync/primary.js";
 import { setSandbox, isSandbox } from "./lib/sandbox.js";
 import { forceBootUpdateIfAvailable } from "./lib/swUpdate.js";
-import { appendServiceEvent, drainServiceEvents, pendingServiceEventCount, countServiceEvents } from "./lib/eventLog.js";
+import { appendServiceEvent, drainServiceEvents, pendingServiceEventCount, countServiceEvents, readServiceEvents } from "./lib/eventLog.js";
+import { foldServiceEvents, compareFoldToBoard, describeServiceEvent } from "./utils/eventFold.js";
 import { boardFactsFromDiff, createFactDeduper } from "./utils/boardFacts.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useWorkspaceAccess } from "./hooks/useWorkspaceAccess.js";
@@ -2755,11 +2756,68 @@ export default function App() {
   const readEventLogStatus = async () => {
     const svcId = serviceIdRef.current;
     const pending = pendingServiceEventCount();
-    if (!svcId || sandboxRef.current) return { recorded: 0, pending, live: false };
+    if (!svcId || sandboxRef.current) return { recorded: 0, pending, live: false, story: [] };
     try {
-      return { recorded: await countServiceEvents(svcId), pending, live: true };
+      const [recorded, tail] = await Promise.all([
+        countServiceEvents(svcId),
+        readServiceEvents(svcId, { limit: 12, ascending: false }),
+      ]);
+      const story = tail.reverse().map((event) => ({
+        id: event.id,
+        recordedAt: event.recorded_at,
+        device: String(event.device_id || "").slice(0, 8),
+        line: describeServiceEvent(event),
+      }));
+      return { recorded, pending, live: true, story };
     } catch {
-      return { recorded: null, pending, live: true };
+      return { recorded: null, pending, live: true, story: [] };
+    }
+  };
+
+  // PARITY CHECKER (SYSTEM panel): fold the live service's whole log and
+  // compare it with the card board — the same reducer the Phase-4 flip will
+  // run, measured against reality on every real service. Divergence names its
+  // tables; the raw projections land in diagnostics for me to read.
+  const checkLogParity = async () => {
+    const svcId = serviceIdRef.current;
+    if (!svcId || sandboxRef.current) return { ok: false, error: new Error("no live service to check") };
+    try {
+      const events = await readServiceEvents(svcId, { limit: 5000, ascending: true });
+      const folded = foldServiceEvents(events);
+      const cards = (tablesRef.current || []).map((table) => sanitizeTable(table));
+      const { compared, matches, divergent } = compareFoldToBoard(folded, cards);
+      if (divergent.length > 0) {
+        recordClientDiagnostic("logbook parity divergence", new Error(
+          `tables ${divergent.map((d) => d.tableId).join(", ")}: ${JSON.stringify(divergent).slice(0, 2000)}`,
+        ));
+      }
+      return { ok: true, events: events.length, compared, matches, divergentTables: divergent.map((d) => d.tableId) };
+    } catch (error) {
+      return { ok: false, error };
+    }
+  };
+
+  // Restore to just BEFORE a recorded fact (the Time Machine's moment picker).
+  const restoreBoardToMoment = async (recordedAt) => {
+    const at = Date.parse(recordedAt || "");
+    if (!Number.isFinite(at)) return { ok: false, error: new Error("that moment has no timestamp") };
+    const svcId = serviceIdRef.current;
+    if (sandboxRef.current || !supabase || !getWorkspaceId() || !svcId) {
+      return { ok: false, error: new Error("no live service to restore") };
+    }
+    try {
+      const { data, error } = await supabase.rpc("restore_service_board", {
+        p_workspace_id: getWorkspaceId(),
+        p_service_id: svcId,
+        p_at: new Date(at - 1).toISOString(),
+      });
+      if (error) throw error;
+      if (!sqlitePrimaryRef.current) fallbackBoardReloadRef.current?.();
+      else reloadPrimaryBoard();
+      return { ok: true, restored: Number(data) || 0 };
+    } catch (error) {
+      recordClientDiagnostic("board time machine restore (moment)", error);
+      return { ok: false, error };
     }
   };
 
@@ -5316,6 +5374,8 @@ export default function App() {
         onStartTestService={startTestService}
         onRestoreBoard={restoreBoardToMinutesAgo}
         onReadEventLog={readEventLogStatus}
+        onCheckLogParity={checkLogParity}
+        onRestoreToMoment={restoreBoardToMoment}
         onExit={() => changeMode(null)}
       /></Suspense>
     </div>

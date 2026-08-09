@@ -113,6 +113,8 @@ export default function AdminLayout({
   onStartTestService,
   onRestoreBoard,
   onReadEventLog,
+  onCheckLogParity,
+  onRestoreToMoment,
   restaurantConfig = null,
   onSaveRestaurantConfig = null,
   accessToken = null,
@@ -558,6 +560,8 @@ export default function AdminLayout({
               onStartTestService={onStartTestService}
               onRestoreBoard={onRestoreBoard}
               onReadEventLog={onReadEventLog}
+              onCheckLogParity={onCheckLogParity}
+              onRestoreToMoment={onRestoreToMoment}
             />
           )}
 

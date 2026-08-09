@@ -33,6 +33,8 @@ export default function SystemPanel({
   onStartTestService,
   onRestoreBoard,
   onReadEventLog,
+  onCheckLogParity,
+  onRestoreToMoment,
 }) {
   const safeProfiles = Array.isArray(layoutProfiles) ? layoutProfiles : [];
   const safeWineSyncConfig = wineSyncConfig || { wineCountries: [], beveragePages: [] };
@@ -52,8 +54,8 @@ export default function SystemPanel({
   // the restore writes through the normal row path and is itself recorded.
   const [restoreMinutes, setRestoreMinutes] = useState("10");
   // The logbook's proof of life (facts recorded server-side for the live
-  // service + facts still queued on this device). Loaded when the panel
-  // mounts and on demand.
+  // service + facts still queued on this device), plus the story tail —
+  // the night's last moves in sentences. Loaded on mount and on demand.
   const [eventLog, setEventLog] = useState(null);
   useEffect(() => {
     if (!onReadEventLog) return;
@@ -61,6 +63,62 @@ export default function SystemPanel({
     onReadEventLog().then((status) => { if (mounted) setEventLog(status); }).catch(() => {});
     return () => { mounted = false; };
   }, [onReadEventLog]);
+  const refreshEventLog = () => {
+    if (!onReadEventLog) return;
+    onReadEventLog().then(setEventLog).catch(() => {});
+  };
+  // Parity: fold the whole log with the Phase-4 reducer and compare it with
+  // the live board. Green means the logbook alone could rebuild tonight.
+  const [parityState, setParityState] = useState(null);
+  const [parityMsg, setParityMsg] = useState("");
+  const handleCheckParity = async () => {
+    if (!onCheckLogParity || parityState === "running") return;
+    setParityState("running");
+    setParityMsg("");
+    const result = await onCheckLogParity().catch((error) => ({ ok: false, error }));
+    if (!result?.ok) {
+      setParityState("error");
+      setParityMsg(String(result?.error?.message || result?.error || "The parity check did not complete."));
+    } else if (result.divergentTables?.length) {
+      setParityState("divergent");
+      setParityMsg(
+        `DIVERGENCE at table(s) ${result.divergentTables.join(", ")} — `
+        + `${result.matches}/${result.compared} match across ${result.events} fact(s). `
+        + "Details recorded in Device Diagnostics.",
+      );
+    } else {
+      setParityState("ok");
+      setParityMsg(
+        result.compared === 0
+          ? `Log and board agree (nothing worked yet — ${result.events} fact(s)).`
+          : `${result.events} fact(s) replay into the live board exactly — ${result.matches}/${result.compared} table(s) match.`,
+      );
+    }
+  };
+  // Moment restore: rewind the whole board to just BEFORE a story line.
+  const [momentBusyId, setMomentBusyId] = useState(null);
+  const [momentState, setMomentState] = useState(null);
+  const [momentMsg, setMomentMsg] = useState("");
+  const handleRestoreToMoment = async (row) => {
+    if (!onRestoreToMoment || !row?.recordedAt || momentBusyId != null) return;
+    if (typeof window !== "undefined" && !window.confirm(
+      `Rewind the LIVE board to just BEFORE this moment?\n\n${row.line}\n\n`
+      + "Every device follows within seconds. The restore is itself recorded, "
+      + "so it can be undone by restoring again.",
+    )) return;
+    setMomentBusyId(row.id);
+    setMomentState("running");
+    setMomentMsg("");
+    const result = await onRestoreToMoment(row.recordedAt);
+    setMomentBusyId(null);
+    if (result?.ok) {
+      setMomentState("done");
+      setMomentMsg(`Restored ${result.restored} table(s) to just before that moment.`);
+    } else {
+      setMomentState("error");
+      setMomentMsg(String(result?.error?.message || result?.error || "The restore did not complete."));
+    }
+  };
   const [restoreState, setRestoreState] = useState(null);
   const [restoreMsg, setRestoreMsg] = useState("");
   const handleRestoreBoard = async () => {
@@ -211,6 +269,76 @@ export default function SystemPanel({
               </>
             )}
           </div>
+          {eventLog?.live && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+              {onCheckLogParity && (
+                <button
+                  onClick={handleCheckParity}
+                  disabled={parityState === "running"}
+                  title="Replay every recorded fact and compare the result with the live board"
+                  style={{
+                    fontFamily: FONT, fontSize: 9, letterSpacing: 2, textTransform: "uppercase",
+                    fontWeight: 700, padding: "8px 16px",
+                    border: `1px solid ${parityState === "ok" ? tokens.green.border : parityState === "divergent" || parityState === "error" ? tokens.red.border : tokens.ink[0]}`,
+                    background: tokens.neutral[0],
+                    color: parityState === "ok" ? tokens.green.text : parityState === "divergent" || parityState === "error" ? tokens.red.text : tokens.ink[0],
+                    borderRadius: 0, cursor: parityState === "running" ? "wait" : "pointer", touchAction: "manipulation",
+                  }}
+                >
+                  {parityState === "running" ? "CHECKING…" : "CHECK PARITY"}
+                </button>
+              )}
+              <button
+                onClick={refreshEventLog}
+                style={{
+                  fontFamily: FONT, fontSize: 9, letterSpacing: 2, textTransform: "uppercase",
+                  padding: "8px 16px", border: `1px solid ${tokens.ink[3]}`, background: tokens.neutral[0],
+                  color: tokens.ink[1], borderRadius: 0, cursor: "pointer", touchAction: "manipulation",
+                }}
+              >
+                Refresh
+              </button>
+              {parityMsg && (
+                <span style={{ fontFamily: FONT, fontSize: 11, maxWidth: 520, color: parityState === "ok" ? tokens.green.text : tokens.red.text }}>
+                  {parityMsg}
+                </span>
+              )}
+            </div>
+          )}
+          {eventLog?.live && eventLog.story?.length > 0 && (
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${tokens.ink[4]}` }}>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 8 }}>
+                The night so far — last {eventLog.story.length} moment(s)
+              </div>
+              {eventLog.story.map((row) => (
+                <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0" }}>
+                  <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[1], flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {row.line}
+                  </span>
+                  <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[4], letterSpacing: 1, flexShrink: 0 }}>{row.device}</span>
+                  {onRestoreToMoment && row.recordedAt && (
+                    <button
+                      onClick={() => handleRestoreToMoment(row)}
+                      disabled={momentBusyId != null}
+                      title="Rewind the whole board to just before this moment"
+                      style={{
+                        fontFamily: FONT, fontSize: 8, letterSpacing: 1, padding: "3px 8px", flexShrink: 0,
+                        border: `1px solid ${tokens.ink[3]}`, background: tokens.neutral[0], color: tokens.ink[1],
+                        borderRadius: 0, cursor: momentBusyId != null ? "wait" : "pointer", touchAction: "manipulation",
+                      }}
+                    >
+                      {momentBusyId === row.id ? "…" : "⟲ TO BEFORE"}
+                    </button>
+                  )}
+                </div>
+              ))}
+              {momentMsg && (
+                <div style={{ fontFamily: FONT, fontSize: 11, marginTop: 6, color: momentState === "error" ? tokens.red.text : tokens.green.text }}>
+                  {momentMsg}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
