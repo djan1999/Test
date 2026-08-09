@@ -25,7 +25,7 @@ import { recordClientDiagnostic } from "./clientDiagnostics.js";
 
 const QUEUE_KEY_PREFIX = "milka_event_queue:";
 const DEVICE_ID_KEY = "milka_device_id";
-const QUEUE_CAP = 500; // drop-oldest beyond this — the log is additive telemetry in Phase 1
+const QUEUE_CAP = 2000; // several full nights of facts; overflow is a recorded incident, never silent
 const UPLOAD_CHUNK = 50;
 
 // Errors that will refuse this exact event forever — retrying wedges the
@@ -92,6 +92,9 @@ export function appendServiceEvent({ serviceId, type, tableId = null, payload = 
   if (queue.length > QUEUE_CAP) {
     const dropped = queue.length - QUEUE_CAP;
     queue.splice(0, dropped);
+    recordClientDiagnostic("event log queue overflow", new Error(
+      `queue over cap — dropped ${dropped} oldest fact(s); this night's log is incomplete`,
+    ));
     console.warn(`[eventLog] queue over cap — dropped ${dropped} oldest fact(s)`);
   }
   writeQueue(workspaceId, queue);
@@ -113,18 +116,41 @@ export async function countServiceEvents(serviceId, workspaceId = getWorkspaceId
 }
 
 // A service's facts, server-ordered. `ascending` false reads the tail (the
-// story view); the parity checker reads the whole log ascending.
-export async function readServiceEvents(serviceId, { limit = 5000, ascending = true } = {}, workspaceId = getWorkspaceId()) {
+// story view); `afterId` is the pagination cursor for full-log reads.
+export async function readServiceEvents(serviceId, { limit = 1000, ascending = true, afterId = null } = {}, workspaceId = getWorkspaceId()) {
   if (!supabase || !workspaceId || !serviceId) return [];
-  const { data, error } = await supabase
+  let query = supabase
     .from("service_events")
     .select("id, device_id, type, table_id, payload, client_ts, recorded_at")
     .eq("workspace_id", workspaceId)
-    .eq("service_id", String(serviceId))
-    .order("id", { ascending })
-    .limit(limit);
+    .eq("service_id", String(serviceId));
+  if (afterId != null) query = query.gt("id", afterId);
+  const { data, error } = await query.order("id", { ascending }).limit(limit);
   if (error) throw error;
   return data || [];
+}
+
+// The WHOLE log for a service, ascending, paginated to exhaustion — the
+// parity fold must never run on a silently truncated night. The safety cap is
+// far beyond any real service (a busy night is a few hundred facts); hitting
+// it records a diagnostic instead of pretending the fold was complete.
+const READ_ALL_PAGE = 1000;
+const READ_ALL_CAP = 50000;
+export async function readAllServiceEvents(serviceId, workspaceId = getWorkspaceId()) {
+  const all = [];
+  let cursor = null;
+  for (;;) {
+    const page = await readServiceEvents(serviceId, { limit: READ_ALL_PAGE, ascending: true, afterId: cursor }, workspaceId);
+    all.push(...page);
+    if (page.length < READ_ALL_PAGE) return all;
+    if (all.length >= READ_ALL_CAP) {
+      recordClientDiagnostic("event log read hit safety cap", new Error(
+        `service ${serviceId}: ${all.length} events read, more exist — fold would be incomplete`,
+      ));
+      return all;
+    }
+    cursor = page[page.length - 1].id;
+  }
 }
 
 // Single-flight drain per workspace.

@@ -10,7 +10,7 @@
 // service. Every failure path returns null; nothing here throws.
 
 import { readStateKey, saveStateKey } from "./stateStore.js";
-import { drainServiceEvents, readServiceEvents } from "./eventLog.js";
+import { drainServiceEvents, readAllServiceEvents } from "./eventLog.js";
 import { foldServiceEvents, compareFoldToBoard } from "../utils/eventFold.js";
 import { recordClientDiagnostic } from "./clientDiagnostics.js";
 
@@ -29,6 +29,34 @@ export async function readParityRecord() {
 }
 
 /**
+ * File one already-measured verdict into the record (newest first, capped).
+ * Shared by the end-of-service recorder below and the mid-service watchdog —
+ * whatever was measured is exactly what lands. Never throws; null on failure.
+ */
+export async function fileParityVerdict({ serviceId, label = "", reason = "manual", events = 0, compared = 0, matches = 0, divergentTables = [] }) {
+  if (!serviceId) return null;
+  try {
+    const entry = {
+      serviceId: String(serviceId),
+      label: String(label || ""),
+      reason,
+      endedAt: new Date().toISOString(),
+      events,
+      compared,
+      matches,
+      divergentTables,
+    };
+    const record = await readParityRecord();
+    const result = await saveStateKey(PARITY_RECORD_KEY, {
+      entries: [entry, ...record].slice(0, RECORD_CAP),
+    });
+    return result?.ok === false ? null : entry;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fold the ended service's log against its final board and file the verdict.
  * `cards` is the board snapshot captured by the end path BEFORE local release
  * (already sanitized). Returns the recorded entry, or null when there was
@@ -41,29 +69,19 @@ export async function recordEndOfServiceParity({ serviceId, label = "", reason =
     // devices' queues can still lag — a red entry here says "investigate",
     // not "data lost" (the facts land when those devices drain).
     await drainServiceEvents().catch(() => {});
-    const events = await readServiceEvents(serviceId, { limit: 5000, ascending: true });
+    const events = await readAllServiceEvents(serviceId);
     const { compared, matches, divergent } = compareFoldToBoard(foldServiceEvents(events), cards);
-    const entry = {
-      serviceId: String(serviceId),
-      label: String(label || ""),
-      reason,
-      endedAt: new Date().toISOString(),
-      events: events.length,
-      compared,
-      matches,
-      divergentTables: divergent.map((d) => d.tableId),
-    };
     if (divergent.length > 0) {
       recordClientDiagnostic("logbook parity divergence (end of night)", new Error(
-        `service ${serviceId} tables ${entry.divergentTables.join(", ")}: `
+        `service ${serviceId} tables ${divergent.map((d) => d.tableId).join(", ")}: `
         + JSON.stringify(divergent).slice(0, 2000),
       ));
     }
-    const record = await readParityRecord();
-    const result = await saveStateKey(PARITY_RECORD_KEY, {
-      entries: [entry, ...record].slice(0, RECORD_CAP),
+    return await fileParityVerdict({
+      serviceId, label, reason,
+      events: events.length, compared, matches,
+      divergentTables: divergent.map((d) => d.tableId),
     });
-    return result?.ok === false ? null : entry;
   } catch {
     return null; // the record must never affect ending a service
   }

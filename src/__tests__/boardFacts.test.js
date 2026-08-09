@@ -84,20 +84,39 @@ describe("boardFactsFromDiff — seats and drinks", () => {
     ]);
   });
 
-  it("drinks are a multiset: a second Negroni is a second fact, removals are facts too", () => {
+  it("drinks are SNAPSHOT facts: the full multiset travels, deltas only decorate the story", () => {
     const facts = boardFactsFromDiff(
       table({ seats: [seat(2, { cocktails: [{ name: "Negroni" }] })] }),
       table({ seats: [seat(2, { cocktails: [{ name: "Negroni" }, { name: "Negroni" }], spirits: [] })] }),
     );
     expect(facts).toEqual([
-      { type: "drink_added", tableId: 3, payload: { seatId: 2, category: "cocktails", name: "Negroni" } },
+      {
+        type: "seat_drinks_set", tableId: 3,
+        payload: { seatId: 2, category: "cocktails", drinks: { Negroni: 2 }, added: ["Negroni"], removed: [] },
+      },
     ]);
     const removals = boardFactsFromDiff(
       table({ seats: [seat(2, { beers: [{ name: "Union" }] })] }),
       table({ seats: [seat(2)] }),
     );
     expect(removals).toEqual([
-      { type: "drink_removed", tableId: 3, payload: { seatId: 2, category: "beers", name: "Union" } },
+      {
+        type: "seat_drinks_set", tableId: 3,
+        payload: { seatId: 2, category: "beers", drinks: {}, added: [], removed: ["Union"] },
+      },
+    ]);
+  });
+
+  it("two of the same drink in ONE gesture is one snapshot carrying both — nothing to undercount", () => {
+    const facts = boardFactsFromDiff(
+      table({ seats: [seat(1)] }),
+      table({ seats: [seat(1, { cocktails: [{ name: "Negroni" }, { name: "Negroni" }] })] }),
+    );
+    expect(facts).toEqual([
+      {
+        type: "seat_drinks_set", tableId: 3,
+        payload: { seatId: 1, category: "cocktails", drinks: { Negroni: 2 }, added: ["Negroni", "Negroni"], removed: [] },
+      },
     ]);
   });
 
@@ -112,12 +131,15 @@ describe("boardFactsFromDiff — seats and drinks", () => {
     ]);
   });
 
-  it("bottles are table-level facts", () => {
+  it("bottles are a table-level snapshot fact", () => {
     expect(boardFactsFromDiff(
       table({ bottleWines: [] }),
       table({ bottleWines: [{ name: "Rebula 2019" }] }),
     )).toEqual([
-      { type: "bottle_added", tableId: 3, payload: { name: "Rebula 2019" } },
+      {
+        type: "table_bottles_set", tableId: 3,
+        payload: { bottles: { "Rebula 2019": 1 }, added: ["Rebula 2019"], removed: [] },
+      },
     ]);
   });
 
@@ -135,7 +157,7 @@ describe("boardFactsFromDiff — seats and drinks", () => {
   });
 });
 
-describe("createFactDeduper", () => {
+describe("createFactDeduper (aspect-keyed)", () => {
   const fact = { type: "seat_water_set", tableId: 3, payload: { seatId: 1, from: "—", to: "STILL" } };
 
   it("absorbs an identical fact inside the window (the adopt-fold re-diff)", () => {
@@ -146,7 +168,24 @@ describe("createFactDeduper", () => {
     expect(shouldEmit("svc", fact)).toBe(false);
   });
 
-  it("a genuine later repeat records again, and different facts never collide", () => {
+  it("a genuine repeat INSIDE the window records when state changed in between (A→B→A→B)", () => {
+    // The old identity+window design absorbed the fourth fact here — the log
+    // silently ended on the wrong water. Aspect-keyed dedup compares against
+    // the aspect's LAST fact, so any real state change always records.
+    let clock = 1000;
+    const shouldEmit = createFactDeduper({ windowMs: 60000, now: () => clock });
+    const toSparkling = { type: "seat_water_set", tableId: 3, payload: { seatId: 1, from: "STILL", to: "SPARKLING" } };
+    const toStill = { type: "seat_water_set", tableId: 3, payload: { seatId: 1, from: "SPARKLING", to: "STILL" } };
+    expect(shouldEmit("svc", toSparkling)).toBe(true);
+    clock += 5000;
+    expect(shouldEmit("svc", toStill)).toBe(true);
+    clock += 5000;
+    expect(shouldEmit("svc", toSparkling)).toBe(true); // inside the window, but the aspect moved on
+    clock += 500;
+    expect(shouldEmit("svc", toSparkling)).toBe(false); // the re-diff of it still absorbs
+  });
+
+  it("a genuine later repeat records again, and different aspects never collide", () => {
     let clock = 1000;
     const shouldEmit = createFactDeduper({ windowMs: 60000, now: () => clock });
     expect(shouldEmit("svc", fact)).toBe(true);
@@ -154,6 +193,18 @@ describe("createFactDeduper", () => {
     expect(shouldEmit("svc", fact)).toBe(true);
     expect(shouldEmit("svc", { ...fact, payload: { ...fact.payload, seatId: 2 } })).toBe(true);
     expect(shouldEmit("other-svc", fact)).toBe(true);
+  });
+
+  it("seat/unseat/re-seat of the same party all record (one shared party aspect)", () => {
+    let clock = 1000;
+    const shouldEmit = createFactDeduper({ windowMs: 60000, now: () => clock });
+    const seated = { type: "party_seated", tableId: 3, payload: { resName: "Anna", guests: 2, arrivedAt: "19:00" } };
+    const unseated = { type: "party_unseated", tableId: 3, payload: { resName: "Anna", guests: 2 } };
+    expect(shouldEmit("svc", seated)).toBe(true);
+    clock += 3000;
+    expect(shouldEmit("svc", unseated)).toBe(true);
+    clock += 3000;
+    expect(shouldEmit("svc", seated)).toBe(true); // identical to the FIRST fact, but the aspect moved on
   });
 
   it("prunes expired keys so a long service cannot grow it unbounded", () => {

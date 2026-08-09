@@ -7,7 +7,7 @@
 // This is the property the Phase-4 flip stands on.
 
 import { describe, it, expect } from "vitest";
-import { boardFactsFromDiff } from "../utils/boardFacts.js";
+import { boardFactsFromDiff, createFactDeduper } from "../utils/boardFacts.js";
 import {
   foldServiceEvents, boardProjection, compareFoldToBoard, describeServiceEvent,
 } from "../utils/eventFold.js";
@@ -103,22 +103,39 @@ function applyRandomGesture(random, card) {
   return next;
 }
 
-describe("REPLAY PARITY — fold(facts(night)) === board(night)", () => {
-  it("holds across 150 random nights (deriver and reducer are the production ones)", () => {
+describe("REPLAY PARITY — fold(dedup(facts(night))) === board(night)", () => {
+  it("holds across 150 random nights through the FULL pipeline: deriver, deduper (with adopt-fold re-diff noise), reducer", () => {
     for (let seedIndex = 0; seedIndex < 150; seedIndex += 1) {
       const random = rng(1000 + seedIndex * 7919);
       const tableIds = [1, 2, 3];
       const cards = new Map(tableIds.map((id) => [id, blankCard(id)]));
       const events = [];
+      // The production deduper runs in the loop, on a jittered clock, so
+      // genuine repeats land INSIDE its window all the time — exactly the
+      // regime where the old identity+window design silently lost facts.
+      let clockMs = 0;
+      const shouldEmit = createFactDeduper({ now: () => clockMs });
+      const emit = (before, after) => {
+        for (const fact of boardFactsFromDiff(before, after)) {
+          if (!shouldEmit("svc", fact)) continue;
+          events.push({ type: fact.type, table_id: fact.tableId, payload: fact.payload });
+        }
+      };
       const steps = 10 + Math.floor(random() * 40);
       for (let step = 0; step < steps; step += 1) {
+        clockMs += Math.floor(random() * 30000);
         const tableId = pick(random, tableIds);
         const before = cards.get(tableId);
         const after = applyRandomGesture(random, before);
-        for (const fact of boardFactsFromDiff(before, after)) {
-          events.push({ type: fact.type, table_id: fact.tableId, payload: fact.payload });
-        }
+        emit(before, after);
         cards.set(tableId, after);
+        // Adopt-fold re-diff: the same transition re-surfaces moments later.
+        // The deduper must absorb it — and even if it ever did not, snapshot
+        // facts make the replay harmless. Either way parity must hold.
+        if (random() < 0.35) {
+          clockMs += 1 + Math.floor(random() * 3000);
+          emit(before, after);
+        }
       }
       const folded = foldServiceEvents(events);
       const { compared, divergent } = compareFoldToBoard(folded, [...cards.values()]);
@@ -170,10 +187,28 @@ describe("foldServiceEvents resilience", () => {
       { type: "drink_removed", table_id: 1, payload: { seatId: 9, category: "cocktails", name: "Ghost" } },
       { type: "course_unfired", table_id: 2, payload: { courseKey: "never-fired" } },
       { type: "drink_added", table_id: 1, payload: { seatId: 1, category: "not-a-category", name: "X" } },
+      { type: "seat_drinks_set", table_id: 1, payload: { seatId: 1, category: "cocktails", drinks: { Bad: "NaN", Neg: -3 } } },
+      { type: "table_bottles_set", table_id: 2, payload: { bottles: "junk" } },
       null,
       { type: "party_seated", payload: {} }, // no table
     ]);
     expect(compareFoldToBoard(folded, []).divergent).toEqual([]);
+  });
+
+  it("legacy delta facts recorded before snapshots (09.08) still fold correctly", () => {
+    const card = {
+      ...blankCard(1), active: true, resName: "Anna", guests: 2,
+      seats: [{ ...blankSeat(1), cocktails: [{ name: "Negroni" }] }],
+    };
+    const events = [
+      { type: "party_seated", table_id: 1, payload: { resName: "Anna", guests: 2, arrivedAt: null } },
+      { type: "drink_added", table_id: 1, payload: { seatId: 1, category: "cocktails", name: "Negroni" } },
+      { type: "drink_added", table_id: 1, payload: { seatId: 1, category: "cocktails", name: "Union" } },
+      { type: "drink_removed", table_id: 1, payload: { seatId: 1, category: "cocktails", name: "Union" } },
+      { type: "bottle_added", table_id: 1, payload: { name: "Rebula 2019" } },
+      { type: "bottle_removed", table_id: 1, payload: { name: "Rebula 2019" } },
+    ];
+    expect(compareFoldToBoard(foldServiceEvents(events), [card]).divergent).toEqual([]);
   });
 });
 

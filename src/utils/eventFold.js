@@ -39,6 +39,17 @@ const bump = (counts, name, delta) => {
   else delete counts[name];
 };
 
+// A snapshot payload's {name: count} map, coerced defensively (junk counts
+// never crash the fold; only positive integers survive).
+const countsFrom = (raw) => {
+  const counts = {};
+  for (const [name, n] of Object.entries(raw && typeof raw === "object" ? raw : {})) {
+    const count = Math.floor(Number(n));
+    if (count > 0) counts[name] = count;
+  }
+  return counts;
+};
+
 const addKey = (list, key) => { if (!list.includes(key)) list.push(key); };
 const dropKey = (list, key) => {
   const at = list.indexOf(key);
@@ -81,6 +92,17 @@ export function foldServiceEvents(events) {
       case "seat_pairing_set":
         seatOf(table, payload.seatId).pairing = payload.to ?? "";
         break;
+      case "seat_drinks_set":
+        // Snapshot fact: the seat's full multiset for one category. Applying
+        // it twice is a no-op — dedup absorption can never corrupt it.
+        if (DRINK_CATEGORIES.includes(payload.category)) {
+          seatOf(table, payload.seatId).drinks[payload.category] = countsFrom(payload.drinks);
+        }
+        break;
+      case "table_bottles_set":
+        table.bottles = countsFrom(payload.bottles);
+        break;
+      // Legacy delta facts (recorded before snapshots, 09.08) still fold:
       case "drink_added":
         if (DRINK_CATEGORIES.includes(payload.category)) {
           bump(seatOf(table, payload.seatId).drinks[payload.category], String(payload.name), +1);
@@ -248,6 +270,20 @@ export function describeServiceEvent(event) {
     case "party_arrival_set": return line(`arrival ${payload.from ?? "—"} → ${payload.to ?? "—"}`);
     case "seat_water_set": return line(`water ${payload.to ?? "—"}${seatBit}`);
     case "seat_pairing_set": return line(`pairing ${payload.to || "cleared"}${seatBit}`);
+    case "seat_drinks_set": {
+      const bits = [
+        ...(Array.isArray(payload.added) ? payload.added : []).map((name) => `+ ${name}`),
+        ...(Array.isArray(payload.removed) ? payload.removed : []).map((name) => `− ${name}`),
+      ];
+      return line(`${bits.join(", ") || "drinks set"}${seatBit}`);
+    }
+    case "table_bottles_set": {
+      const bits = [
+        ...(Array.isArray(payload.added) ? payload.added : []).map((name) => `+ ${name}`),
+        ...(Array.isArray(payload.removed) ? payload.removed : []).map((name) => `− ${name}`),
+      ];
+      return line(`bottles: ${bits.join(", ") || "set"}`);
+    }
     case "drink_added": return line(`+ ${payload.name}${seatBit}`);
     case "drink_removed": return line(`− ${payload.name}${seatBit}`);
     case "bottle_added": return line(`bottle: ${payload.name}`);

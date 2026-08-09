@@ -113,12 +113,19 @@ export function boardFactsFromDiff(prevTable, nextTable) {
     }
     for (const category of DRINK_CATEGORIES) {
       const { added, removed } = multisetDelta(b[category], a[category]);
-      for (const name of added) {
-        facts.push({ type: "drink_added", tableId, payload: { seatId, category, name } });
-      }
-      for (const name of removed) {
-        facts.push({ type: "drink_removed", tableId, payload: { seatId, category, name } });
-      }
+      if (added.length === 0 && removed.length === 0) continue;
+      // SNAPSHOT fact, not a delta: `drinks` is the seat's full multiset for
+      // this category after the gesture. Idempotent by construction — folding
+      // it twice, or replaying it after an absorbed duplicate, lands on the
+      // same state. `added`/`removed` ride along purely for the story view.
+      facts.push({
+        type: "seat_drinks_set", tableId,
+        payload: {
+          seatId, category,
+          drinks: Object.fromEntries(countByName(a[category])),
+          added, removed,
+        },
+      });
     }
     const bExtras = orderedKeys(b.extras);
     const aExtras = orderedKeys(a.extras);
@@ -138,36 +145,73 @@ export function boardFactsFromDiff(prevTable, nextTable) {
     }
   }
 
-  // ── bottles (table-level) ──────────────────────────────────────────────────
+  // ── bottles (table-level) — same snapshot semantics as seat drinks ─────────
   const bottles = multisetDelta(before.bottleWines, after.bottleWines);
-  for (const name of bottles.added) {
-    facts.push({ type: "bottle_added", tableId, payload: { name } });
-  }
-  for (const name of bottles.removed) {
-    facts.push({ type: "bottle_removed", tableId, payload: { name } });
+  if (bottles.added.length > 0 || bottles.removed.length > 0) {
+    facts.push({
+      type: "table_bottles_set", tableId,
+      payload: {
+        bottles: Object.fromEntries(countByName(after.bottleWines)),
+        added: bottles.added, removed: bottles.removed,
+      },
+    });
   }
 
   return facts;
 }
 
+// Which ASPECT of board state a fact mutates. The deduper compares each fact
+// against the LAST fact emitted for its aspect: identical means "the adopt-
+// fold re-diff re-surfaced a transition already recorded" (absorb), different
+// means genuine state change (always emit). Because every fact is an
+// idempotent aspect-level set, this cannot lose state in either direction:
+// an absorbed fact is byte-identical to the aspect's latest — a no-op under
+// the fold — and any real change differs from the latest by definition.
+// (The previous identity+window design could silently suppress a genuine
+// A→B→A→B repeat and undercount a two-of-the-same-drink gesture.)
+const aspectKeyOf = (serviceId, fact) => {
+  const p = fact.payload || {};
+  const base = `${serviceId}|${fact.tableId}`;
+  switch (fact.type) {
+    case "party_seated": case "party_unseated": case "party_resized":
+    case "party_renamed": case "party_arrival_set":
+      return `${base}|party`;
+    case "seat_water_set": return `${base}|water|${p.seatId}`;
+    case "seat_pairing_set": return `${base}|pairing|${p.seatId}`;
+    case "seat_drinks_set": return `${base}|drinks|${p.seatId}|${p.category}`;
+    case "table_bottles_set": return `${base}|bottles`;
+    case "extra_ordered": case "extra_unordered":
+      return `${base}|extra|${p.seatId}|${p.key}`;
+    case "option_ordered": case "option_unordered":
+      return `${base}|option|${p.seatId}|${p.key}`;
+    case "course_fired": case "course_unfired":
+      return `${base}|course|${p.courseKey}`;
+    default: // unknown future types: identity semantics (safe, never colliding)
+      return `${base}|raw|${fact.type}|${JSON.stringify(p)}`;
+  }
+};
+
 /**
- * Windowed dedup for adopt-fold re-diffs: a fold can re-surface a transition
- * this device already recorded moments earlier, so an IDENTICAL fact within
- * the window is absorbed. A genuine later repeat (STILL → SPARKLING → STILL
- * again next round) is outside the window and records again.
+ * Aspect-keyed dedup for adopt-fold re-diffs. Absorbs a fact only when it is
+ * byte-identical to the LAST fact emitted for the same aspect within the
+ * window — the re-diff signature. A genuine repeat with any intervening
+ * change (STILL → SPARKLING → STILL → SPARKLING inside a minute) always
+ * differs from its aspect's latest fact and always records.
  */
 export function createFactDeduper({ windowMs = 60000, now = () => Date.now() } = {}) {
-  const seen = new Map(); // key → last emit ms, insertion-ordered oldest-first
+  const seen = new Map(); // aspect key → { value, at }, insertion-ordered oldest-first
   return function shouldEmit(serviceId, fact) {
-    const key = `${serviceId}|${fact.tableId}|${fact.type}|${JSON.stringify(fact.payload)}`;
+    const key = aspectKeyOf(serviceId, fact);
+    const value = `${fact.type}|${JSON.stringify(fact.payload)}`;
     const at = now();
-    for (const [oldKey, ts] of seen) {
-      if (at - ts > windowMs) seen.delete(oldKey);
+    for (const [oldKey, entry] of seen) {
+      if (at - entry.at > windowMs) seen.delete(oldKey);
       else break; // everything after is newer
     }
-    if (seen.has(key) && at - seen.get(key) <= windowMs) return false;
+    const last = seen.get(key);
+    if (last && last.value === value && at - last.at <= windowMs) return false;
     seen.delete(key); // re-insert at the tail so pruning stays oldest-first
-    seen.set(key, at);
+    seen.set(key, { value, at });
     return true;
   };
 }

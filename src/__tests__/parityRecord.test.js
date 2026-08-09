@@ -11,14 +11,14 @@ vi.mock("../lib/stateStore.js", () => ({
 }));
 vi.mock("../lib/eventLog.js", () => ({
   drainServiceEvents: vi.fn(async () => ({ ok: true, uploaded: 0 })),
-  readServiceEvents: vi.fn(async () => []),
+  readAllServiceEvents: vi.fn(async () => []),
 }));
 vi.mock("../lib/clientDiagnostics.js", () => ({
   recordClientDiagnostic: vi.fn(),
 }));
 
 import { readStateKey, saveStateKey } from "../lib/stateStore.js";
-import { drainServiceEvents, readServiceEvents } from "../lib/eventLog.js";
+import { drainServiceEvents, readAllServiceEvents } from "../lib/eventLog.js";
 import { recordClientDiagnostic } from "../lib/clientDiagnostics.js";
 import { readParityRecord, recordEndOfServiceParity, PARITY_RECORD_KEY } from "../lib/parityRecord.js";
 
@@ -36,12 +36,12 @@ beforeEach(() => {
   readStateKey.mockResolvedValue(null);
   saveStateKey.mockResolvedValue({ ok: true });
   drainServiceEvents.mockResolvedValue({ ok: true, uploaded: 0 });
-  readServiceEvents.mockResolvedValue([]);
+  readAllServiceEvents.mockResolvedValue([]);
 });
 
 describe("recordEndOfServiceParity", () => {
   it("files a green verdict when the fold matches the final board", async () => {
-    readServiceEvents.mockResolvedValue([
+    readAllServiceEvents.mockResolvedValue([
       { type: "party_seated", table_id: 1, payload: { resName: "Anna", guests: 2, arrivedAt: "19:00" } },
       { type: "seat_water_set", table_id: 1, payload: { seatId: 1, to: "STILL" } },
     ]);
@@ -62,7 +62,7 @@ describe("recordEndOfServiceParity", () => {
   });
 
   it("files a red verdict naming the tables and records a diagnostic", async () => {
-    readServiceEvents.mockResolvedValue([
+    readAllServiceEvents.mockResolvedValue([
       { type: "party_seated", table_id: 3, payload: { guests: 2 } },
       { type: "seat_water_set", table_id: 3, payload: { seatId: 1, to: "SPARKLING" } },
     ]);
@@ -89,11 +89,11 @@ describe("recordEndOfServiceParity", () => {
   });
 
   it("never throws: read failure, drain failure, refused save, missing service", async () => {
-    readServiceEvents.mockRejectedValue(new Error("log unreachable"));
+    readAllServiceEvents.mockRejectedValue(new Error("log unreachable"));
     expect(await recordEndOfServiceParity({ serviceId: "svc-9", cards: [] })).toBeNull();
     expect(saveStateKey).not.toHaveBeenCalled();
 
-    readServiceEvents.mockResolvedValue([]);
+    readAllServiceEvents.mockResolvedValue([]);
     drainServiceEvents.mockRejectedValue(new Error("offline"));
     expect(await recordEndOfServiceParity({ serviceId: "svc-9", cards: [] })).not.toBeNull();
 
