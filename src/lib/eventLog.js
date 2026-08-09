@@ -112,6 +112,21 @@ export async function countServiceEvents(serviceId, workspaceId = getWorkspaceId
   return count || 0;
 }
 
+// A service's facts, server-ordered. `ascending` false reads the tail (the
+// story view); the parity checker reads the whole log ascending.
+export async function readServiceEvents(serviceId, { limit = 5000, ascending = true } = {}, workspaceId = getWorkspaceId()) {
+  if (!supabase || !workspaceId || !serviceId) return [];
+  const { data, error } = await supabase
+    .from("service_events")
+    .select("id, device_id, type, table_id, payload, client_ts, recorded_at")
+    .eq("workspace_id", workspaceId)
+    .eq("service_id", String(serviceId))
+    .order("id", { ascending })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
 // Single-flight drain per workspace.
 const drainingFor = new Set();
 

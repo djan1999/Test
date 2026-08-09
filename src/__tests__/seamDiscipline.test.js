@@ -80,10 +80,10 @@ const ALLOWLIST = {
   },
   "lib/eventLog.js": {
     // IS the logbook seam (docs/EVENT_LOG_PLAN.md): append-only event
-    // inserts (batch drain + single-event isolation) and the head-only count
-    // for the SYSTEM panel. Nothing here can update or delete — the database
-    // refuses those verbs for clients outright.
-    "supabase.from": 3,
+    // inserts (batch drain + single-event isolation), the head-only count and
+    // the server-ordered read (story + parity checker). Nothing here can
+    // update or delete — the database refuses those verbs for clients.
+    "supabase.from": 4,
   },
   "lib/auditStore.js": {
     // Audit history stays on the server and is not synchronized into each
