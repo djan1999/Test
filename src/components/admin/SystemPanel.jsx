@@ -339,6 +339,31 @@ export default function SystemPanel({
               )}
             </div>
           )}
+          {eventLog?.record?.length > 0 && (
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${tokens.ink[4]}` }}>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 8 }}>
+                End-of-night parity record
+              </div>
+              {eventLog.record.slice(0, 6).map((entry) => {
+                const green = (entry.divergentTables || []).length === 0;
+                return (
+                  <div key={`${entry.serviceId}-${entry.endedAt}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0" }}>
+                    <span style={{ fontFamily: FONT, fontSize: 10, color: green ? tokens.green.text : tokens.red.text, flexShrink: 0 }}>●</span>
+                    <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[1], flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {entry.label || entry.serviceId}
+                      {" — "}
+                      {green
+                        ? `MATCH · ${entry.matches}/${entry.compared} table(s), ${entry.events} fact(s)`
+                        : `DIVERGED at T${(entry.divergentTables || []).join(", T")} · ${entry.matches}/${entry.compared} match`}
+                    </span>
+                    <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[4], letterSpacing: 1, flexShrink: 0 }}>
+                      {entry.endedAt ? new Date(entry.endedAt).toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit" }) : ""}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

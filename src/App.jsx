@@ -86,6 +86,7 @@ import { setSandbox, isSandbox } from "./lib/sandbox.js";
 import { forceBootUpdateIfAvailable } from "./lib/swUpdate.js";
 import { appendServiceEvent, drainServiceEvents, pendingServiceEventCount, countServiceEvents, readServiceEvents } from "./lib/eventLog.js";
 import { foldServiceEvents, compareFoldToBoard, describeServiceEvent } from "./utils/eventFold.js";
+import { readParityRecord, recordEndOfServiceParity } from "./lib/parityRecord.js";
 import { boardFactsFromDiff, createFactDeduper } from "./utils/boardFacts.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useWorkspaceAccess } from "./hooks/useWorkspaceAccess.js";
@@ -2258,6 +2259,13 @@ export default function App() {
         }
         return { ok: false, reason: "persist-failed", error: result.error };
       }
+      // End-of-night parity verdict — the Phase-4 flip's evidence, filed
+      // automatically (lib/parityRecord.js). Board snapshot taken before the
+      // local release below; fire-and-forget, can never affect the end.
+      void recordEndOfServiceParity({
+        serviceId: svcId, label, reason: "manual",
+        cards: (tablesRef.current || []).map((table) => sanitizeTable(table)),
+      });
       releaseServiceLocally();
       setSel(null);
       setArchiveOpen(false);
@@ -2437,6 +2445,7 @@ export default function App() {
       // date forward and keep going.
       let latestMs = -Infinity;
       let hasContent = false;
+      let judgedRows = null; // kept for the end-of-night parity verdict below
       try {
         let rows;
         if (sqlitePrimaryRef.current) {
@@ -2449,6 +2458,7 @@ export default function App() {
           if (error) throw error;
           rows = data || [];
         }
+        judgedRows = rows || [];
         const contentRows = (rows || []).filter((r) =>
           tableHasServiceContent(sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) })));
         hasContent = contentRows.length > 0;
@@ -2508,6 +2518,16 @@ export default function App() {
       if (!result.ok) {
         console.error("Auto-end failed; leaving service visible:", result.error);
         return;
+      }
+      // End-of-night parity verdict for the rolled-over night, from the
+      // judged service's OWN rows (never this device's namespace). An
+      // unreadable board (judgedRows null) records nothing — comparing the
+      // log against a board we couldn't read would file a false red.
+      if (judgedRows) {
+        void recordEndOfServiceParity({
+          serviceId: svc.id, label, reason: "rollover",
+          cards: judgedRows.map((r) => sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) })),
+        });
       }
       if (serviceIdRef.current === svc.id) {
         releaseServiceLocally();
@@ -2756,7 +2776,8 @@ export default function App() {
   const readEventLogStatus = async () => {
     const svcId = serviceIdRef.current;
     const pending = pendingServiceEventCount();
-    if (!svcId || sandboxRef.current) return { recorded: 0, pending, live: false, story: [] };
+    const record = await readParityRecord(); // shows even between services
+    if (!svcId || sandboxRef.current) return { recorded: 0, pending, live: false, story: [], record };
     try {
       const [recorded, tail] = await Promise.all([
         countServiceEvents(svcId),
@@ -2768,9 +2789,9 @@ export default function App() {
         device: String(event.device_id || "").slice(0, 8),
         line: describeServiceEvent(event),
       }));
-      return { recorded, pending, live: true, story };
+      return { recorded, pending, live: true, story, record };
     } catch {
-      return { recorded: null, pending, live: true, story: [] };
+      return { recorded: null, pending, live: true, story: [], record };
     }
   };
 
@@ -2782,6 +2803,9 @@ export default function App() {
     const svcId = serviceIdRef.current;
     if (!svcId || sandboxRef.current) return { ok: false, error: new Error("no live service to check") };
     try {
+      // Flush this device's queued facts first so the fold sees them (other
+      // devices' queues can still lag — a divergence says "look", not "lost").
+      await drainServiceEvents().catch(() => {});
       const events = await readServiceEvents(svcId, { limit: 5000, ascending: true });
       const folded = foldServiceEvents(events);
       const cards = (tablesRef.current || []).map((table) => sanitizeTable(table));
