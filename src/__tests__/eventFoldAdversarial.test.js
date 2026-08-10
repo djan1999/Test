@@ -182,18 +182,23 @@ describe("ADVERSARIAL — multi-device interleaved nights, 200 seeds × 3 device
       const steps = 15 + Math.floor(random() * 60);
       const lastDeviceOnTable = new Map();
       for (let step = 0; step < steps; step += 1) {
-        clockMs += Math.floor(random() * 15000);
+        // Realistic timing only — NO artificial handoff delay. The old
+        // version added 11s whenever a device changed to keep the race
+        // outside the window; adoption-aware clearing removes that need, so
+        // this now proves parity under back-to-back cross-device handoffs.
+        clockMs += Math.floor(random() * 8000);
         const device = pick(random, devices);
         const tableId = pick(random, tableIds);
-        // A different device taking over a table is a human handoff plus a
-        // sync round-trip — beyond the (10s) dedup window by construction.
-        // This encodes the system's stated guarantee; the fingerprint pin
-        // below covers the inside-the-window rename inversion exactly.
-        if (lastDeviceOnTable.get(tableId) !== device) clockMs += 11000;
-        lastDeviceOnTable.set(tableId, device);
         // Causality: everything already recorded about this table (by anyone)
         // reached the server before this device acts on the state it adopted.
         for (const other of devices) flushDeviceTable(other, tableId);
+        // Adoption-aware dedup: taking over a table another device last
+        // touched clears this device's echo-memory for it (as adoptRemoteTables
+        // does in production).
+        if (lastDeviceOnTable.get(tableId) && lastDeviceOnTable.get(tableId) !== device) {
+          device.shouldEmit.forgetTable("svc", tableId);
+        }
+        lastDeviceOnTable.set(tableId, device);
         const before = cards.get(tableId);
         const after = applyRandomGesture(random, before);
         for (const fact of boardFactsFromDiff(before, after)) {
@@ -234,6 +239,45 @@ describe("ADVERSARIAL — multi-device interleaved nights, 200 seeds × 3 device
     emit(dedupA, card("Ema"), card("Cilka"));   // A renames back → Cilka, inside the window
     const { divergent } = compareFoldToBoard(foldServiceEvents(server), [card("Cilka")]);
     expect(divergent).toEqual([]);
+  });
+
+  it("ADOPTION-AWARE dedup closes the cross-device race with ZERO elapsed time", () => {
+    // The residual limit made structural: even with the clock frozen (window
+    // gives no protection at all), a device that ADOPTS a remote change to a
+    // table forgets its echo-memory for it — so re-performing a value it
+    // itself last emitted still records. This is the invert-and-redo bug with
+    // the window removed as a defense; only forgetTable can save it.
+    const clock = 0; // frozen — the window can never help here
+    const dedupA = createFactDeduper({ now: () => clock });
+    const dedupB = createFactDeduper({ now: () => clock });
+    const server = [];
+    const card = (resName) => ({ ...blankCard(1), active: true, resName, guests: 2, arrivedAt: "19:00", seats: [] });
+    const emit = (dedup, before, after) => {
+      for (const fact of boardFactsFromDiff(before, after)) {
+        if (dedup("svc", fact)) server.push(asEvent(fact));
+      }
+    };
+    emit(dedupA, blankCard(1), card("Anna"));   // A seats Anna
+    emit(dedupA, card("Anna"), card("Cilka"));  // A → Cilka
+    emit(dedupB, card("Cilka"), card("Ema"));   // B → Ema
+    dedupA.forgetTable("svc", 1);               // A ADOPTS B's change (the new step)
+    emit(dedupA, card("Ema"), card("Cilka"));   // A → Cilka again, clock still 0
+    const { divergent } = compareFoldToBoard(foldServiceEvents(server), [card("Cilka")]);
+    expect(divergent).toEqual([]);
+  });
+
+  it("forgetTable is surgical: only the adopted table's aspects are cleared", () => {
+    const clock = 0;
+    const dedup = createFactDeduper({ now: () => clock });
+    const waterFact = (tableId, seatId) => ({ type: "seat_water_set", tableId, payload: { seatId, from: "—", to: "STILL" } });
+    expect(dedup("svc", waterFact(1, 1))).toBe(true);
+    expect(dedup("svc", waterFact(2, 1))).toBe(true);
+    expect(dedup("svc", waterFact(1, 1))).toBe(false); // echo of T1 absorbed
+    dedup.forgetTable("svc", 1);
+    expect(dedup("svc", waterFact(1, 1))).toBe(true);  // T1 memory cleared → records
+    expect(dedup("svc", waterFact(2, 1))).toBe(false); // T2 memory intact → still absorbed
+    dedup.forgetTable("other-svc", 1);                 // wrong service is a no-op
+    expect(dedup("svc", waterFact(2, 1))).toBe(false);
   });
 
   it("a causality-VIOLATING late drain is detected as divergence, never silent", () => {
