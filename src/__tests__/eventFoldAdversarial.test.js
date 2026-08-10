@@ -280,6 +280,63 @@ describe("ADVERSARIAL — multi-device interleaved nights, 200 seeds × 3 device
     expect(dedup("svc", waterFact(2, 1))).toBe(false);
   });
 
+  it("RECONCILIATION closes the real seat-1 tiebreak: the log converges on the board", () => {
+    // The 10.08 Demo divergence, reproduced exactly. Device B's board write
+    // lands LAST (board settles on XC) but device A's fact reaches the log last
+    // (log tail says XW) — the fact queue is decoupled from the board write, so
+    // the two orderings invert. Before reconciliation the fold ends on XW while
+    // the board holds XC: a concurrent-tiebreak. Now, when A adopts the board's
+    // XC and that CONTRADICTS the fact A itself recorded, A appends the
+    // correction — and the log's last word becomes the board's answer.
+    const clock = 0; // frozen: no timing help whatsoever
+    const dedupA = createFactDeduper({ now: () => clock });
+    const server = [];
+    const seatCard = (water) => ({
+      ...blankCard(7), active: true, resName: "gay", guests: 2,
+      seats: [{ ...blankSeat(1), water }, blankSeat(2)],
+    });
+    const emit = (dedup, before, after) => {
+      for (const fact of boardFactsFromDiff(before, after)) {
+        if (dedup("svc", fact)) server.push(asEvent(fact));
+      }
+    };
+    // A works the seat: seats the party, sets water XW. Its facts reach the log.
+    emit(dedupA, blankCard(7), seatCard("—"));
+    emit(dedupA, seatCard("—"), seatCard("XW"));
+    // Meanwhile B set XC; B's board write won the store. A now ADOPTS XC.
+    const adopted = seatCard("XC");
+    const priorBaseline = seatCard("XW"); // A's baseline before the adoption
+    const reconciliations = boardFactsFromDiff(priorBaseline, adopted)
+      .filter((fact) => dedupA.contradicts("svc", fact));
+    // A had logged water XW for this aspect; the adopted truth is XC → correct it.
+    expect(reconciliations.map((f) => f.type)).toEqual(["seat_water_set"]);
+    for (const fact of reconciliations) {
+      if (dedupA("svc", fact)) server.push(asEvent(fact));
+    }
+    const result = compareFoldToBoard(foldServiceEvents(server), [adopted]);
+    expect(result.contentLoss).toEqual([]);
+    expect(result.tiebreaks).toEqual([]);   // the tiebreak is GONE
+    expect(result.divergent).toEqual([]);   // full parity on a contested seat
+  });
+
+  it("reconciliation stays quiet for aspects this device never touched (no duplicate noise)", () => {
+    // A never set seat 2's water; B did. When A adopts B's change there is
+    // nothing to correct — B's own fact already tells that story.
+    const clock = 0;
+    const dedupA = createFactDeduper({ now: () => clock });
+    const card = (w1, w2) => ({
+      ...blankCard(7), active: true, resName: "gay", guests: 2,
+      seats: [{ ...blankSeat(1), water: w1 }, { ...blankSeat(2), water: w2 }],
+    });
+    // A only ever touches seat 1.
+    for (const fact of boardFactsFromDiff(blankCard(7), card("XW", "—"))) dedupA("svc", fact);
+    // The store arrives with B's seat-2 water AND A's own seat-1 value intact.
+    const adopted = card("XW", "OC");
+    const reconciliations = boardFactsFromDiff(card("XW", "—"), adopted)
+      .filter((fact) => dedupA.contradicts("svc", fact));
+    expect(reconciliations).toEqual([]); // silent — B owns seat 2's story
+  });
+
   it("a causality-VIOLATING late drain is detected as divergence, never silent", () => {
     // Device 1 unseats Anna but its upload wedges; device 2 then seats Bruno
     // at the same table. Device 1's stale unseat drains LAST. The fold blanks

@@ -1369,6 +1369,18 @@ export default function App() {
     const nextPrev = new Map(prevTablesJsonRef.current);
     const confirmed = confirmedTablesJsonRef.current;
     let changed = false;
+    // RECONCILIATION FACTS (docs/EVENT_LOG_PLAN.md — write-path unification).
+    // An adoption moves this device's baseline straight to the store's truth,
+    // so the transition never reaches the autosave diff and was never logged.
+    // That is how the board and the log came to crown different winners of a
+    // concurrent same-field edit (real case: 10.08 table 7 seat 1 — this
+    // device's losing value stayed at the tail of the log while the board had
+    // already settled elsewhere). Whenever the adopted truth CONTRADICTS a
+    // fact this device itself recorded, we append the correction, so the log's
+    // last word on every aspect is the board's converged answer. Facts for
+    // aspects this device never touched are NOT re-emitted — their author
+    // already logged them, and duplicating them would only add noise.
+    const reconciliations = [];
     const nextTables = boardBases.map((base) => {
       const mine = cur.find(t => t.id === base.id) || base;
       const row = rawById.get(base.id);
@@ -1387,6 +1399,19 @@ export default function App() {
       const theirs = sanitizeTable({ id: base.id, ...(row.data || {}) });
       const theirsJson = JSON.stringify(theirs);
       const mineJson = JSON.stringify(sanitizeTable(mine));
+      // Queue the corrections for anything the store's truth overrides that
+      // THIS device had logged. Collected here (before the baselines move) and
+      // emitted after the pass, so the log converges on the board's answer.
+      const noteReconciliation = () => {
+        if (sandboxRef.current || !serviceIdRef.current) return;
+        const priorJson = prevTablesJsonRef.current.get(base.id);
+        if (!priorJson || priorJson === theirsJson) return;
+        let priorTable = null;
+        try { priorTable = JSON.parse(priorJson); } catch { return; }
+        for (const fact of boardFactsFromDiff(priorTable, theirs)) {
+          if (factDeduperRef.current.contradicts?.(serviceIdRef.current, fact)) reconciliations.push(fact);
+        }
+      };
       // Unsaved-edit detection keys off the CONFIRMED baseline — advanced only
       // when a write actually lands, unlike the queue-time diff baseline. A
       // failed or still-in-flight write therefore still counts as unsaved, so
@@ -1403,6 +1428,7 @@ export default function App() {
         const folded = sanitizeTable(foldTable(ancestor, sanitizeTable(mine), theirs));
         const foldedJson = JSON.stringify(folded);
         // theirs is the store truth we folded onto — both baselines move to it.
+        noteReconciliation();
         nextPrev.set(base.id, theirsJson);
         confirmed.set(base.id, theirsJson);
         // Adopting another device's change to this table makes our echo-memory
@@ -1416,6 +1442,7 @@ export default function App() {
         if (foldedJson !== mineJson) changed = true;
         return folded;
       }
+      if (mineJson !== theirsJson) noteReconciliation();
       nextPrev.set(base.id, theirsJson);
       confirmed.set(base.id, theirsJson);
       if (mineJson !== theirsJson) {
@@ -1425,6 +1452,18 @@ export default function App() {
       return theirs;
     });
     prevTablesJsonRef.current = nextPrev;
+    // Append the corrections. Fire-and-forget like every other fact: a dead
+    // log can never affect service. These run through the deduper so the
+    // memory advances to the adopted value and a repeat adoption stays quiet.
+    for (const fact of reconciliations) {
+      if (!factDeduperRef.current(serviceIdRef.current, fact)) continue;
+      appendServiceEvent({
+        serviceId: serviceIdRef.current,
+        type: fact.type,
+        tableId: fact.tableId,
+        payload: fact.payload,
+      });
+    }
     if (changed) setTables(() => nextTables); // skip the re-render when nothing moved
   };
 
