@@ -2804,8 +2804,10 @@ export default function App() {
 
   // PARITY CHECKER (SYSTEM panel): fold the live service's whole log and
   // compare it with the card board — the same reducer the Phase-4 flip will
-  // run, measured against reality on every real service. Divergence names its
-  // tables; the raw projections land in diagnostics for me to read.
+  // run, measured against reality on every real service. CONTENT-LOSS (a wipe:
+  // a party/seat present on one side, gone on the other) is the alarm and lands
+  // in diagnostics; a CONCURRENT-TIEBREAK (both sides keep a worked seat, only
+  // a contended value differs) is expected pre-flip and reported, not alarmed.
   const checkLogParity = async () => {
     const svcId = serviceIdRef.current;
     if (!svcId || sandboxRef.current) return { ok: false, error: new Error("no live service to check") };
@@ -2816,13 +2818,17 @@ export default function App() {
       const events = await readAllServiceEvents(svcId);
       const folded = foldServiceEvents(events);
       const cards = (tablesRef.current || []).map((table) => sanitizeTable(table));
-      const { compared, matches, divergent } = compareFoldToBoard(folded, cards);
-      if (divergent.length > 0) {
-        recordClientDiagnostic("logbook parity divergence", new Error(
-          `tables ${divergent.map((d) => d.tableId).join(", ")}: ${JSON.stringify(divergent).slice(0, 2000)}`,
+      const { compared, matches, divergent, contentLoss, tiebreaks } = compareFoldToBoard(folded, cards);
+      if (contentLoss.length > 0) {
+        recordClientDiagnostic("logbook parity CONTENT LOSS", new Error(
+          `tables ${contentLoss.join(", ")}: ${JSON.stringify(divergent.filter((d) => d.kind === "content-loss")).slice(0, 2000)}`,
         ));
       }
-      return { ok: true, events: events.length, compared, matches, divergentTables: divergent.map((d) => d.tableId) };
+      return {
+        ok: true, events: events.length, compared, matches,
+        contentLossTables: contentLoss, tiebreakTables: tiebreaks,
+        divergentTables: divergent.map((d) => d.tableId),
+      };
     } catch (error) {
       return { ok: false, error };
     }
@@ -3593,48 +3599,49 @@ export default function App() {
     };
   }, [remoteBoardLoaded, flushBoardWrites]);
 
-  // ── THE PARITY WATCHDOG — divergence detection with no human in the loop ────
+  // ── THE PARITY WATCHDOG — WIPE detection with no human in the loop ──────────
   // Every few minutes during live service, silently fold the night's whole log
-  // and compare it with the board. One transient mismatch is expected noise
-  // (another device's facts still uploading); the SAME tables divergent on two
-  // CONSECUTIVE sweeps is a confirmed incident: it is filed in the parity
-  // record (reason "watchdog") and in device diagnostics, at most once per
-  // divergence signature. Detection only — recovery stays a deliberate human
-  // act through the Time Machine, because auto-restoring on a false positive
-  // would itself be a wipe vector.
-  const watchdogPrevDivergentRef = useRef(null); // JSON of last sweep's divergent tables
-  const watchdogFiledRef = useRef(null);         // signature already filed this service
+  // and compare it with the board. The watchdog watches for CONTENT-LOSS only —
+  // a party or a worked seat present on one side and gone on the other, the
+  // wipe signature. A concurrent-tiebreak (two devices set the same field, the
+  // board's CAS and the log's fold crowned different winners; both keep a
+  // coherent seat) is expected pre-flip and is NOT an incident. The SAME
+  // content-loss tables on two CONSECUTIVE sweeps is a confirmed incident:
+  // filed in the parity record and diagnostics, once per signature. Detection
+  // only — recovery stays a deliberate human act through the Time Machine,
+  // because auto-restoring on a false positive would itself be a wipe vector.
+  const watchdogPrevLossRef = useRef(null); // JSON of last sweep's content-loss tables
+  const watchdogFiledRef = useRef(null);    // signature already filed this service
   useEffect(() => {
     if (!supabase || !remoteBoardLoaded) return undefined;
     const sweep = async () => {
       const svcId = serviceIdRef.current;
-      if (!svcId || sandboxRef.current) { watchdogPrevDivergentRef.current = null; return; }
+      if (!svcId || sandboxRef.current) { watchdogPrevLossRef.current = null; return; }
       try {
         await drainServiceEvents().catch(() => {});
         // Facts still queued after a drain mean we're offline — every sweep
         // would be a guaranteed false red, so this one abstains.
-        if (pendingServiceEventCount() > 0) { watchdogPrevDivergentRef.current = null; return; }
+        if (pendingServiceEventCount() > 0) { watchdogPrevLossRef.current = null; return; }
         const events = await readAllServiceEvents(svcId);
         // No facts at all: the logbook is not active for this service (it
         // predates the log or no updated device touched it) — abstain. The
         // watchdog engages by itself the moment the first fact lands.
-        if (events.length === 0) { watchdogPrevDivergentRef.current = null; return; }
+        if (events.length === 0) { watchdogPrevLossRef.current = null; return; }
         const cards = (tablesRef.current || []).map((table) => sanitizeTable(table));
-        const { compared, matches, divergent } = compareFoldToBoard(foldServiceEvents(events), cards);
-        const signature = divergent.length > 0
-          ? `${svcId}:${divergent.map((d) => d.tableId).join(",")}`
-          : null;
-        const confirmed = signature != null && watchdogPrevDivergentRef.current === signature;
-        watchdogPrevDivergentRef.current = signature;
+        const { compared, matches, divergent, contentLoss, tiebreaks } = compareFoldToBoard(foldServiceEvents(events), cards);
+        const signature = contentLoss.length > 0 ? `${svcId}:${contentLoss.join(",")}` : null;
+        const confirmed = signature != null && watchdogPrevLossRef.current === signature;
+        watchdogPrevLossRef.current = signature;
         if (!confirmed || watchdogFiledRef.current === signature) return;
         watchdogFiledRef.current = signature;
-        recordClientDiagnostic("logbook parity divergence (watchdog)", new Error(
-          `tables ${divergent.map((d) => d.tableId).join(", ")}: ${JSON.stringify(divergent).slice(0, 2000)}`,
+        recordClientDiagnostic("logbook parity CONTENT LOSS (watchdog)", new Error(
+          `tables ${contentLoss.join(", ")}: ${JSON.stringify(divergent.filter((d) => d.kind === "content-loss")).slice(0, 2000)}`,
         ));
         void fileParityVerdict({
           serviceId: svcId, label: "mid-service watchdog", reason: "watchdog",
           events: events.length, compared, matches,
           divergentTables: divergent.map((d) => d.tableId),
+          contentLossTables: contentLoss, tiebreakTables: tiebreaks,
         });
       } catch { /* unreadable log this sweep — the next sweep tries again */ }
     };

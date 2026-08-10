@@ -221,10 +221,53 @@ const isBlank = (projection) => {
     && Object.keys(c.bottles).length === 0 && Object.keys(c.seats).length === 0;
 };
 
+// ── the two KINDS of divergence ──────────────────────────────────────────────
+// The whole point of parity is to catch a WIPE — a service losing content. But
+// two devices editing the SAME field of the SAME seat while one is offline is
+// not a wipe: the board's compare-and-swap and the log's server-order fold pick
+// different winners of a genuine tie, and BOTH sides keep a coherent, worked
+// seat. Calling that "divergence" cries wolf on every busy night. So we split:
+//
+//   • "content-loss"      — a whole active party, or a content-bearing seat,
+//                           exists on ONE side and is entirely GONE on the
+//                           other. THIS is the wipe signature. It must never
+//                           happen, and it is the real Phase-4 gate.
+//   • "concurrent-tiebreak" — same party state, same set of worked seats on
+//                           both sides; only field VALUES differ (which water,
+//                           which drink won the tie). Benign, expected until
+//                           the write paths unify (docs/EVENT_LOG_PLAN.md).
+const contentSeatKeys = (c) => new Set(Object.keys(c.seats));
+export function classifyTableDivergence(fromLog, fromBoard) {
+  const a = canonical(fromLog);
+  const b = canonical(fromBoard);
+  // A whole party present on one side and gone on the other — the wipe.
+  if (a.active !== b.active) return "content-loss";
+  // A worked seat on one side entirely absent on the other — also the wipe.
+  const sa = contentSeatKeys(a);
+  const sb = contentSeatKeys(b);
+  for (const k of sa) if (!sb.has(k)) return "content-loss";
+  for (const k of sb) if (!sa.has(k)) return "content-loss";
+  // A whole fired course or a bottle present on one side, gone on the other:
+  // treat wholesale kitchen/cellar loss as content-loss too, value diffs as tie.
+  const firesA = new Set(Object.keys(a.fires));
+  const firesB = new Set(Object.keys(b.fires));
+  for (const k of firesA) if (!firesB.has(k)) return "content-loss";
+  for (const k of firesB) if (!firesA.has(k)) return "content-loss";
+  const bottlesA = new Set(Object.keys(a.bottles));
+  const bottlesB = new Set(Object.keys(b.bottles));
+  for (const k of bottlesA) if (!bottlesB.has(k)) return "content-loss";
+  for (const k of bottlesB) if (!bottlesA.has(k)) return "content-loss";
+  // Same structure on both sides — only which value won a tie differs.
+  return "concurrent-tiebreak";
+}
+
 /**
  * Compare the fold of a service's events against its card board. Returns
- * { compared, matches, divergent: [{ tableId, fromLog, fromBoard }] } over
- * every table either side knows about (blank == absent).
+ * { compared, matches, divergent, contentLoss, tiebreaks } over every table
+ * either side knows about (blank == absent). Each `divergent` entry carries a
+ * `kind` ("content-loss" | "concurrent-tiebreak"); `contentLoss` and
+ * `tiebreaks` are the table-id lists split by that kind. Content-loss is the
+ * wipe alarm; a tiebreak means both sides kept a coherent worked seat.
  */
 export function compareFoldToBoard(foldedTables, cardTables) {
   const board = new Map(
@@ -242,9 +285,18 @@ export function compareFoldToBoard(foldedTables, cardTables) {
     compared += 1;
     const logJson = JSON.stringify(canonical(fromLog));
     const boardJson = JSON.stringify(canonical(fromBoard));
-    if (logJson !== boardJson) divergent.push({ tableId, fromLog: logJson, fromBoard: boardJson });
+    if (logJson !== boardJson) {
+      const kind = classifyTableDivergence(fromLog, fromBoard);
+      divergent.push({ tableId, kind, fromLog: logJson, fromBoard: boardJson });
+    }
   }
-  return { compared, matches: compared - divergent.length, divergent };
+  return {
+    compared,
+    matches: compared - divergent.length,
+    divergent,
+    contentLoss: divergent.filter((d) => d.kind === "content-loss").map((d) => d.tableId),
+    tiebreaks: divergent.filter((d) => d.kind === "concurrent-tiebreak").map((d) => d.tableId),
+  };
 }
 
 // ── the story ────────────────────────────────────────────────────────────────
@@ -271,10 +323,14 @@ export function serviceNightReport(events, cardTables) {
     line: describeServiceEvent(event),
   }));
   if (list.length === 0) return { story, parity: null };
-  const { compared, matches, divergent } = compareFoldToBoard(foldServiceEvents(list), cardTables);
+  const { compared, matches, divergent, contentLoss, tiebreaks } = compareFoldToBoard(foldServiceEvents(list), cardTables);
   return {
     story,
-    parity: { events: list.length, compared, matches, divergentTables: divergent.map((d) => d.tableId) },
+    parity: {
+      events: list.length, compared, matches,
+      divergentTables: divergent.map((d) => d.tableId),
+      contentLoss, tiebreaks,
+    },
   };
 }
 

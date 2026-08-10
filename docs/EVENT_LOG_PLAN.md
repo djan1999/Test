@@ -95,6 +95,15 @@ over until the log has proven itself carrying the same facts in production.
   CHECK PARITY folds the live service's whole log and compares it with the
   live board, recording any divergence in device diagnostics (delivered
   09.08).
+- ✅ Parity distinguishes a WIPE from a SCRIBBLE-FIGHT (10.08): a
+  CONTENT-LOSS (a party or worked seat present on one side and gone on the
+  other) is the wipe alarm and the real Phase-4 gate; a CONCURRENT-TIEBREAK
+  (both sides keep a coherent worked seat, only a contended field value
+  differs) is expected until the write paths unify and is reported, not
+  alarmed. `compareFoldToBoard` returns `{contentLoss, tiebreaks}`; the
+  watchdog, the end-of-night recorder, CHECK PARITY, and the archived-night
+  badge all alarm on content-loss only. "Green night" now means "no data
+  lost", which is the property the flip actually needs.
 - ✅ The evidence collects itself: every service end (manual AND rollover
   auto-end) files an end-of-night parity verdict automatically
   (`lib/parityRecord.js` → settings store, newest-first, capped), shown in
@@ -126,11 +135,20 @@ over until the log has proven itself carrying the same facts in production.
 - Board state on every device = reducer(events), materialized locally;
   service_tables becomes a *derived snapshot* the server maintains for
   export/legacy readers.
-- HARD PREREQUISITE still open, surfaced by the adversarial suites (10.08),
-  beyond the parity evidence: causal ordering — a stale fact draining late
-  (an unseat landing after another device's re-seat) must not rewrite
-  adopted state when the fold IS the board; today it is detected as
-  divergence, which is sufficient only while the card system holds truth.
+- HARD PREREQUISITE still open, surfaced by the adversarial suites (10.08)
+  and CONFIRMED in real 3-device data (Demo, 10.08): write-path unification.
+  When two devices edit the SAME field of the same seat while one is offline,
+  the board's compare-and-swap and the log's server-order fold crown
+  DIFFERENT winners of the tie (real case: table 7 seat 1 — board kept water
+  XC + aperitif "Le Terroir", the fold crowns XW + "So Fresh"). Both keep a
+  coherent worked seat — no content is lost — but the two source-of-truth
+  candidates disagree, so the fold cannot BE the board until they resolve
+  ties identically. This is now measured, not feared: parity splits a
+  CONTENT-LOSS (a party/seat that vanished — the wipe, must be zero) from a
+  CONCURRENT-TIEBREAK (this case — benign pre-flip). The Phase-4 gate is
+  **zero content-loss** across three real nights; tiebreaks are expected and
+  will be driven to zero by unifying the write paths (making the board adopt
+  the log's canonical server order, or vice versa).
   (Adoption-aware dedup, the other prerequisite this list once named, was
   delivered 10.08 — see principle 7.)
 - The CAS, foldTable, echo suppression, mass-blank guard, and the shield

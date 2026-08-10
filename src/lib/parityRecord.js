@@ -33,7 +33,10 @@ export async function readParityRecord() {
  * Shared by the end-of-service recorder below and the mid-service watchdog —
  * whatever was measured is exactly what lands. Never throws; null on failure.
  */
-export async function fileParityVerdict({ serviceId, label = "", reason = "manual", events = 0, compared = 0, matches = 0, divergentTables = [] }) {
+export async function fileParityVerdict({
+  serviceId, label = "", reason = "manual", events = 0, compared = 0, matches = 0,
+  divergentTables = [], contentLossTables = [], tiebreakTables = [],
+}) {
   if (!serviceId) return null;
   try {
     const entry = {
@@ -45,6 +48,11 @@ export async function fileParityVerdict({ serviceId, label = "", reason = "manua
       compared,
       matches,
       divergentTables,
+      // The verdict that actually gates Phase 4: did any content vanish (a
+      // wipe), or did the divergence come only from concurrent same-field
+      // edits the two write paths tie-broke differently (benign pre-flip)?
+      contentLossTables,
+      tiebreakTables,
     };
     const record = await readParityRecord();
     const result = await saveStateKey(PARITY_RECORD_KEY, {
@@ -74,17 +82,20 @@ export async function recordEndOfServiceParity({ serviceId, label = "", reason =
     // predates the log, or no updated device touched it) — nothing was
     // measured, so nothing is graded. A red here would be pure noise.
     if (events.length === 0) return null;
-    const { compared, matches, divergent } = compareFoldToBoard(foldServiceEvents(events), cards);
-    if (divergent.length > 0) {
-      recordClientDiagnostic("logbook parity divergence (end of night)", new Error(
-        `service ${serviceId} tables ${divergent.map((d) => d.tableId).join(", ")}: `
-        + JSON.stringify(divergent).slice(0, 2000),
+    const { compared, matches, divergent, contentLoss, tiebreaks } = compareFoldToBoard(foldServiceEvents(events), cards);
+    // Only CONTENT LOSS (the wipe signature) is an alarm; a concurrent
+    // tiebreak is expected until the write paths unify and is not a red night.
+    if (contentLoss.length > 0) {
+      recordClientDiagnostic("logbook parity CONTENT LOSS (end of night)", new Error(
+        `service ${serviceId} tables ${contentLoss.join(", ")}: `
+        + JSON.stringify(divergent.filter((d) => d.kind === "content-loss")).slice(0, 2000),
       ));
     }
     return await fileParityVerdict({
       serviceId, label, reason,
       events: events.length, compared, matches,
       divergentTables: divergent.map((d) => d.tableId),
+      contentLossTables: contentLoss, tiebreakTables: tiebreaks,
     });
   } catch {
     return null; // the record must never affect ending a service

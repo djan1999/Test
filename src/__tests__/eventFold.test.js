@@ -169,7 +169,7 @@ describe("compareFoldToBoard", () => {
 
   it("blank tables and empty scaffolds are never divergence", () => {
     const result = compareFoldToBoard(foldServiceEvents([]), [blankCard(1), blankCard(2)]);
-    expect(result).toEqual({ compared: 0, matches: 0, divergent: [] });
+    expect(result).toEqual({ compared: 0, matches: 0, divergent: [], contentLoss: [], tiebreaks: [] });
   });
 
   it("descriptive fields are full-fidelity: a rename that never reached the log is divergence", () => {
@@ -184,6 +184,57 @@ describe("compareFoldToBoard", () => {
       { type: "party_arrival_set", table_id: 3, payload: { from: "19:00", to: "21:00" } },
     ];
     expect(compareFoldToBoard(foldServiceEvents(withFacts), [card]).divergent).toEqual([]);
+  });
+});
+
+describe("content-loss vs concurrent-tiebreak — the wipe/scribble distinction", () => {
+  // The real 09/10.08 three-device conflict on table 7 seat 1: the board's
+  // compare-and-swap crowned water XC + aperitif "Le Terroir"; the log's
+  // server-order fold crowns water XW + aperitif "So Fresh". BOTH sides keep a
+  // coherent, worked seat 1 — nobody lost a table. That is a TIEBREAK.
+  it("classifies the real seat-1 conflict as a concurrent-tiebreak, never content-loss", () => {
+    const board = {
+      ...blankCard(7), active: true, resName: "gay", guests: 2,
+      seats: [{ ...blankSeat(1), water: "XC", pairing: "Wine", aperitifs: [{ name: "Le Terroir" }] }, blankSeat(2)],
+    };
+    const events = [
+      { type: "party_seated", table_id: 7, payload: { resName: "gay", guests: 2, arrivedAt: "12:08" } },
+      { type: "seat_water_set", table_id: 7, payload: { seatId: 1, to: "XW" } },
+      { type: "seat_pairing_set", table_id: 7, payload: { seatId: 1, to: "Wine" } },
+      { type: "seat_drinks_set", table_id: 7, payload: { seatId: 1, category: "aperitifs", drinks: { "So Fresh": 1 } } },
+    ];
+    const result = compareFoldToBoard(foldServiceEvents(events), [board]);
+    expect(result.contentLoss).toEqual([]);      // NOTHING lost
+    expect(result.tiebreaks).toEqual([7]);        // just a contested value
+    expect(result.divergent[0].kind).toBe("concurrent-tiebreak");
+  });
+
+  it("classifies a wiped table (worked in log, blank on board) as CONTENT LOSS", () => {
+    const events = [
+      { type: "party_seated", table_id: 5, payload: { resName: "Anna", guests: 2, arrivedAt: "19:00" } },
+      { type: "seat_water_set", table_id: 5, payload: { seatId: 1, to: "STILL" } },
+    ];
+    const board = [blankCard(5)]; // the board lost the party entirely — the wipe
+    const result = compareFoldToBoard(foldServiceEvents(events), board);
+    expect(result.contentLoss).toEqual([5]);
+    expect(result.tiebreaks).toEqual([]);
+    expect(result.divergent[0].kind).toBe("content-loss");
+  });
+
+  it("a worked seat vanishing while the party stays is still CONTENT LOSS", () => {
+    // Same active party on both sides, but the board dropped seat 2's content.
+    const board = {
+      ...blankCard(4), active: true, resName: "Bruno", guests: 2,
+      seats: [{ ...blankSeat(1), water: "STILL" }, blankSeat(2)],
+    };
+    const events = [
+      { type: "party_seated", table_id: 4, payload: { resName: "Bruno", guests: 2 } },
+      { type: "seat_water_set", table_id: 4, payload: { seatId: 1, to: "STILL" } },
+      { type: "seat_drinks_set", table_id: 4, payload: { seatId: 2, category: "beers", drinks: { Union: 1 } } },
+    ];
+    const result = compareFoldToBoard(foldServiceEvents(events), [board]);
+    expect(result.contentLoss).toEqual([4]); // seat 2 worked in log, absent on board
+    expect(result.tiebreaks).toEqual([]);
   });
 });
 
@@ -233,7 +284,7 @@ describe("serviceNightReport — the archived night from the log", () => {
     expect(report.story).toHaveLength(2);
     expect(report.story[0]).toMatchObject({ id: 11, device: "device-a" });
     expect(report.story[0].line).toContain("Anna, party of 2 seated");
-    expect(report.parity).toEqual({ events: 2, compared: 1, matches: 1, divergentTables: [] });
+    expect(report.parity).toEqual({ events: 2, compared: 1, matches: 1, divergentTables: [], contentLoss: [], tiebreaks: [] });
   });
 
   it("a night the logbook did not record is NOT graded (parity null, never falsely red)", () => {
