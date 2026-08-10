@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { DndContext, DragOverlay, PointerSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, DragOverlay, MouseSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
 import { optionalPairingsFromCourses, courseRestrictionModCounts, overrideModCounts } from "../../utils/menuUtils.js";
@@ -1384,6 +1384,12 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
       style={{
         // Fill the grid cell so ticket width tracks the column count.
         width: "100%", minWidth: 0,
+        // The hole the lifted ticket left, drawn as an outline rather than a
+        // border so marking it costs the slot no height.
+        ...(isDragging ? {
+          outline: `2px dashed ${tokens.green.border}`, outlineOffset: "-2px",
+          background: tokens.green.bg,
+        } : null),
         // Only apply transform while a drag is active — prevents stale transforms
         // from persisting after drag ends and causing cards to appear displaced.
         transform: anyDragging && transform ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : undefined,
@@ -1392,14 +1398,16 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
         touchAction: "pan-y",
       }}
     >
-      {isDragging ? (
-        // Ghost placeholder — dashed outline so the layout slot stays visible
-        <div style={{
-          width: "100%", height: "100%", minHeight: 120,
-          border: `2px dashed ${tokens.green.border}`, borderRadius: 0,
-          background: tokens.green.bg,
-        }} />
-      ) : (
+      {/* Lifting a ticket used to swap it for a 120px ghost, so its slot
+          collapsed and the whole grid reflowed UNDER the finger the instant
+          the drag began — the tickets you were aiming at moved away as you
+          reached them. The ticket stays mounted and merely goes invisible:
+          the slot keeps its exact size and nothing below it shifts. */}
+      <div style={{
+        visibility: isDragging ? "hidden" : undefined,
+        // Never zero: a ticket lifted out of an empty board still needs a slot.
+        minHeight: isDragging ? 120 : undefined,
+      }}>
         <KitchenTicket
           table={table}
           menuCourses={menuCourses}
@@ -1415,7 +1423,7 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
           roomGaps={roomGaps}
           historyGaps={historyGaps}
         />
-      )}
+      </div>
     </div>
   );
 }
@@ -1457,18 +1465,16 @@ export function SortableBanner({ table, isDragging, anyDragging, compact = false
         transition: isDragging ? 'none' : (anyDragging ? transition : undefined),
         userSelect: "none", WebkitUserSelect: "none",
         touchAction: "pan-y", cursor: "grab",
+        // The hole the lifted banner left — same treatment as a ticket's.
+        ...(isDragging ? {
+          outline: `2px dashed ${tokens.green.border}`, outlineOffset: "-2px",
+          background: tokens.green.bg,
+        } : null),
       }}
     >
-      {isDragging ? (
-        // Ghost placeholder — banner-sized, so the slot stays visible
-        <div style={{
-          width: "100%", height: "100%", minHeight: 48,
-          border: `2px dashed ${tokens.green.border}`, borderRadius: 0,
-          background: tokens.green.bg,
-        }} />
-      ) : (
+      <div style={{ visibility: isDragging ? "hidden" : undefined, minHeight: isDragging ? 48 : undefined }}>
         <UpcomingBanner table={table} compact={compact} />
-      )}
+      </div>
     </div>
   );
 }
@@ -1773,9 +1779,24 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     });
   }, [persistedOrderJson, displayIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // MOUSE + TOUCH, not PointerSensor. PointerSensor handles both, and on a
+  // touchscreen it won the race every time (its 200ms delay beat the touch
+  // sensor's 250ms) — but it cannot stop the browser from scrolling, it can
+  // only ask for it with `touch-action: none`. The cards allow `pan-y` so the
+  // board can be scrolled, so the moment a drag moved ACROSS rows the browser
+  // claimed the gesture as a scroll and sent pointercancel: the drag died
+  // mid-air. Sideways drags worked, vertical ones did not, which is why this
+  // read as "sometimes". TouchSensor preventDefaults touchmove once the drag
+  // is live, so the drag keeps the gesture and the board still scrolls from
+  // an ordinary swipe.
+  //
+  // The tolerance is what a FINGER can hold, not a mouse: 8px on a 32" panel
+  // is under 2mm, so a hand resting against the screen cancelled the press
+  // before the hold elapsed. A real scroll swipe travels far more than 20px
+  // inside 250ms, so it still wins the gesture it should win.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
-    useSensor(TouchSensor,   { activationConstraint: { delay: 250, tolerance: 8 } }),
+    useSensor(MouseSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 20 } }),
   );
 
   const pendingAlerts = tables
