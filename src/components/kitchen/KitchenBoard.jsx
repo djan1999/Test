@@ -21,6 +21,67 @@ const KitchenMinimap = lazy(() => import("./KitchenMinimap.jsx"));
 // tablets and phones stay on the roomy layout.
 const LARGE_BOARD_BP = 1100;
 
+// ── Two rows, no scroll ───────────────────────────────────────
+// A wall panel is read from across the kitchen, not scrolled: whatever is on
+// it has to BE on it. The tickets used to be sized by their own content, and
+// on a real menu two rows came out just past the bottom of the screen — the
+// second row's FIRE bar had to be scrolled to, on a screen nobody is standing
+// close enough to scroll.
+//
+// So a ticket is capped at half the space between the board's top edge and the
+// bottom of the screen. Under the cap nothing changes (a short ticket stays
+// short); over it, the course list — the one elastic part — gives way and
+// scrolls inside the ticket instead of pushing the row down. Two rows then fit
+// by construction, on a 1280×720 panel or one mounted portrait.
+//
+// Below these floors the cap is dropped rather than forced: a short window or a
+// phone gets naturally-sized tickets and a page scroll, which beats a ticket
+// squeezed too small to read across a kitchen.
+const FIT_ROWS_MIN_W = 700;   // narrower than this is a phone, one column
+const FIT_ROWS_MIN_H = 300;   // a ticket shorter than this is not worth capping
+// Space under the last row: the board's own bottom padding plus a little air
+// so a capped row never sits flush against the screen edge.
+const BOARD_BOTTOM_GUTTER = 18;
+
+// The cap: half of what's below the grid's top edge. Measured rather than
+// assumed, because everything above it — header, a past-date warning, a
+// sandbox banner — comes and goes.
+function useTicketRowHeight(gridRef, enabled, gap) {
+  const [rowH, setRowH] = useState(null);
+
+  useEffect(() => {
+    if (!enabled) { setRowH(null); return; }
+
+    const measure = () => {
+      const el = gridRef.current;
+      if (!el) return;
+      // Document-relative, not viewport-relative: measured while the board is
+      // scrolled down (which is exactly the state this fix exists to end) a
+      // raw rect.top is negative and would hand every row a screen and a half.
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      const h = Math.floor((window.innerHeight - top - BOARD_BOTTOM_GUTTER - gap) / 2);
+      const next = h >= FIT_ROWS_MIN_H ? h : null;
+      // Settles in one pass: capping the tickets changes the board's height,
+      // not the grid's top, so the re-measure this triggers computes the same
+      // number and React bails out of the render.
+      setRowH(prev => (prev === next ? prev : next));
+    };
+
+    measure();
+    window.addEventListener("resize", measure);
+    // The chrome above the grid can grow or shrink without the window
+    // changing size (a warning banner appearing, the header wrapping a row).
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(document.body);
+    return () => {
+      window.removeEventListener("resize", measure);
+      ro?.disconnect();
+    };
+  }, [enabled, gap, gridRef]);
+
+  return rowH;
+}
+
 // In-ticket dividers. Deliberately softer than the grammar hairline (ink[4]):
 // 17 course rows × 5 tickets reads as a glowing grid otherwise. Crucially the
 // dividers are NOT borders — sections/rows are solid blocks separated by 1px
@@ -46,7 +107,7 @@ function resolveGuestTemplate(table, profiles, assignments) {
   return isShort ? (p.shortMenuTemplate || p.menuTemplate) : p.menuTemplate;
 }
 
-export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, inlineMods = false, quickAccess = false, roomGaps = [], historyGaps = [] }) {
+export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, inlineMods = false, quickAccess = false, heightCap = null, roomGaps = [], historyGaps = [] }) {
   // Density. Compact keeps two full rows of tickets on a 720px-tall kitchen
   // display (32" 1280×720 → 5 columns × 2 rows = 10 tickets). Gated to large
   // boards by the caller.
@@ -56,6 +117,13 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   // exactly as much wall as a 6-course short one. That fixed budget is what
   // pays for the type here being a real size instead of the 9px it had to be
   // when every course had to fit on screen at once.
+  //
+  // courseListMax is the budget wherever a ticket sizes itself alone — the
+  // reservation preview, the drag overlay, a phone. On the wall the board also
+  // hands down a heightCap (half the screen); the list then stops being a fixed
+  // 208px and becomes whatever that cap leaves after this ticket's own chrome,
+  // so a ticket carrying an unassigned-restriction row and a SET banner takes
+  // it out of its course list rather than out of the row below it.
   const dz = compact ? {
     headerPad: "5px 9px", tNum: "19px", tNumGroup: "15px", nameFont: "11.5px", nameWrap: "nowrap",
     counterFont: "15px", badgePad: "0 4px", showGrip: false,
@@ -525,7 +593,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   });
 
   return (
-    <div style={{ border: `1px solid ${CARD_BORDER}`, borderRadius: 0, overflow: "hidden", background: RULE_SOFT, display: "flex", flexDirection: "column", gap: 1 }}>
+    <div style={{ border: `1px solid ${CARD_BORDER}`, borderRadius: 0, overflow: "hidden", background: RULE_SOFT, display: "flex", flexDirection: "column", gap: 1, maxHeight: heightCap || undefined }}>
 
       {/* ── Header (drag handle) ── */}
       <div
@@ -535,7 +603,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         onClick={onHeaderClick}
         role={dragListeners ? "button" : undefined}
         aria-label={dragListeners ? "Drag to reorder ticket — tap for quick access" : undefined}
-        style={{ background: showQuick ? tokens.neutral[50] : tokens.neutral[0], padding: dz.headerPad, display: "flex", alignItems: "flex-start", gap: 8, cursor: quickAccess ? "pointer" : dragListeners ? "grab" : undefined, touchAction: "none" }}
+        style={{ background: showQuick ? tokens.neutral[50] : tokens.neutral[0], padding: dz.headerPad, display: "flex", alignItems: "flex-start", gap: 8, flexShrink: 0, cursor: quickAccess ? "pointer" : dragListeners ? "grab" : undefined, touchAction: "none" }}
       >
         {dragListeners && dz.showGrip && (
           <span aria-hidden="true" title="Drag to reorder" style={{
@@ -613,7 +681,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         });
         const allOrdered = (key) => seats.length > 0 && seats.every(s => !!s.extras?.[key]?.ordered);
         return (
-          <div style={{ background: tokens.neutral[50], padding: "5px 8px 6px", display: "flex", flexDirection: "column", gap: 5 }}>
+          <div style={{ background: tokens.neutral[50], padding: "5px 8px 6px", display: "flex", flexDirection: "column", gap: 5, flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <span style={qLabel}>PACE</span>
               {paceButtons}
@@ -682,7 +750,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
       {/* ── Notes banner ── */}
       {table.notes && (
-        <div style={{ background: tokens.tint.parchment, padding: dz.rowPad, display: "flex", gap: 6, alignItems: "flex-start" }}>
+        <div style={{ background: tokens.tint.parchment, padding: dz.rowPad, display: "flex", gap: 6, alignItems: "flex-start", flexShrink: 0 }}>
           <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], flexShrink: 0, lineHeight: 1.4 }}>📋</span>
           <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[2], lineHeight: 1.35, fontStyle: "italic" }}>{table.notes}</span>
         </div>
@@ -690,7 +758,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
       {/* ── Ad-hoc restriction editor (ticket-preview only) ── */}
       {editable && showEdit && (
-        <div style={{ padding: "8px 10px", background: tokens.neutral[0] }}>
+        <div style={{ padding: "8px 10px", background: tokens.neutral[0], flexShrink: 0 }}>
           {restrictions.map((r, i) => r.kitchenAdded ? (
             <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
               <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.red.text, fontWeight: 600 }}>
@@ -766,7 +834,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       )}
 
       {/* ── Seats ── */}
-      <div style={{ background: tokens.neutral[0], padding: dz.rowPad }}>
+      <div style={{ background: tokens.neutral[0], padding: dz.rowPad, flexShrink: 0 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 6px" }}>
         {seats.map(s => {
             const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
@@ -855,7 +923,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
              this course fires (clearing the overlay alert does NOT clear it). */}
       {table.courseReady && !log[table.courseReady.key]?.firedAt && (
         <div style={{
-          display: "flex", alignItems: "center", gap: 8, padding: dz.rowPad,
+          display: "flex", alignItems: "center", gap: 8, padding: dz.rowPad, flexShrink: 0,
           background: tokens.tint.parchment, borderTop: `1px solid ${tokens.signal.active}`,
           borderBottom: `1px solid ${tokens.signal.active}`,
         }}>
@@ -886,7 +954,19 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         style={{
           display: "flex", flexDirection: "column", gap: 1,
           ...(showActionBar
-            ? { maxHeight: dz.courseListMax, overflowY: "auto", overscrollBehavior: "contain", touchAction: "pan-y" }
+            ? {
+                // The one elastic section of the ticket: under a heightCap it
+                // is the only sibling that may shrink (the rest are
+                // flexShrink: 0), so the header, the banners and the FIRE bar
+                // keep their size and the courses absorb the whole difference.
+                // The floor keeps a few rows readable if a ticket's chrome ever
+                // eats the cap; past that the ticket outgrows the cap and the
+                // board scrolls — the honest failure, not a clipped FIRE.
+                ...(heightCap
+                  ? { flex: "1 1 auto", minHeight: 96 }
+                  : { maxHeight: dz.courseListMax }),
+                overflowY: "auto", overscrollBehavior: "contain", touchAction: "pan-y",
+              }
             : {}),
         }}
       >
@@ -1162,7 +1242,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
       {showActionBar && !allDone && (
         <div
           onPointerDown={e => e.stopPropagation()}
-          style={{ display: "flex", gap: 1, background: RULE_SOFT }}
+          style={{ display: "flex", gap: 1, background: RULE_SOFT, flexShrink: 0 }}
         >
           {/* Two lines, not "FIRE — Sour Soup" on one: at five columns the
               single line ellipsized into "FIRE — SOUR SO…", which hides the
@@ -1223,7 +1303,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
       {/* ── Save / cancel bar (ticket-preview only) ── */}
       {editable && showEdit && (
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, padding: "10px 10px 12px", background: tokens.neutral[0] }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, padding: "10px 10px 12px", background: tokens.neutral[0], flexShrink: 0 }}>
           <button
             onPointerDown={e => e.stopPropagation()}
             onClick={e => { e.stopPropagation(); cancelDraftNotes(); }}
@@ -1245,7 +1325,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         const timeRange = table.arrivedAt && lastFiredAt ? `${table.arrivedAt}–${lastFiredAt}` : null;
         const durLabel  = fmtDuration(durationMins);
         return (
-          <div style={{ background: tokens.green.bg, borderTop: `2px solid ${tokens.green.border}`, padding: dz.footerPad, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ background: tokens.green.bg, borderTop: `2px solid ${tokens.green.border}`, padding: dz.footerPad, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontFamily: FONT, fontSize: 13, color: tokens.green.border }}>✓</span>
               <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -1286,7 +1366,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   );
 }
 
-export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, inlineMods = false, quickAccess = false, roomGaps = [], historyGaps = [], onFocus = null }) {
+export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, inlineMods = false, quickAccess = false, heightCap = null, roomGaps = [], historyGaps = [], onFocus = null }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
@@ -1331,6 +1411,7 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
           compact={compact}
           inlineMods={inlineMods}
           quickAccess={quickAccess}
+          heightCap={heightCap}
           roomGaps={roomGaps}
           historyGaps={historyGaps}
         />
@@ -1646,6 +1727,15 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
   const largeBoard = !useIsMobile(LARGE_BOARD_BP);
   const compact = largeBoard;
 
+  // Pin two rows to the screen (see useTicketRowHeight). Keyed off width only —
+  // the height floor is applied on the measurement itself, so a panel mounted
+  // portrait (tall and narrow, below the 5-up largeBoard width) gets the fit
+  // too. It is the wall panels that must not scroll, not the phone.
+  const gridRef = useRef(null);
+  const gridGap = compact ? 8 : 12;
+  const fitRows = !useIsMobile(FIT_ROWS_MIN_W);
+  const rowHeight = useTicketRowHeight(gridRef, fitRows, gridGap);
+
   // The ticket the chef is currently touching/hovering — drives the minimap
   // highlight. Kept even after the pointer leaves (the last-touched table
   // stays lit) so the map is a stable plating reference, not a flicker.
@@ -1786,13 +1876,13 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
               and a sparse board keeps the same ticket size. Narrower screens
               auto-fill. Upcoming banners share the grid: each one holds the
               cell its ticket expands into on seating. */}
-          <div style={{
+          <div ref={gridRef} style={{
             display: "grid",
             gridTemplateColumns: largeBoard
               ? "repeat(5, minmax(0, 1fr))"
               : "repeat(auto-fill, minmax(210px, 1fr))",
             alignItems: "start",
-            gap: compact ? 8 : 12,
+            gap: gridGap,
           }}>
             {orderedTables.map(t => upcomingIds.has(t.id) ? (
               <SortableBanner
@@ -1816,6 +1906,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 compact={compact}
                 inlineMods={largeBoard}
                 quickAccess={!!upd}
+                heightCap={rowHeight}
                 roomGaps={roomGaps}
                 historyGaps={gapsForMenuType(historyGapsByMenu, t.menuType)}
                 onFocus={showMinimap ? setFocusedTableId : null}
@@ -1843,6 +1934,9 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 assignments={assignments}
                 compact={compact}
                 inlineMods={largeBoard}
+                // Same cap as the grid, so a lifted ticket is the size of the
+                // hole it left rather than growing under the chef's finger.
+                heightCap={rowHeight}
               />
             )}
           </div>
