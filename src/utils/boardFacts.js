@@ -165,6 +165,24 @@ export function boardFactsFromDiff(prevTable, nextTable) {
   return facts;
 }
 
+/**
+ * THE BOOTSTRAP (docs/EVENT_LOG_PLAN.md — Phase 4 prerequisite): the facts
+ * that build this table FROM NOTHING. A service that started before the
+ * logbook existed — or on a device running an older build — has board rows
+ * but no history, so folding it returns an EMPTY board. Measured on real data
+ * (10.08): Hotel Milka's services carry 8, 4 and 4 seated tables against ZERO
+ * facts. Flipping the source of truth without seeding those services would
+ * itself be the wipe the whole migration exists to abolish.
+ *
+ * Seeding is the ordinary deriver run against a blank predecessor, so a seeded
+ * service is indistinguishable from one logged all along — and because every
+ * fact is an idempotent aspect-level SET, two devices seeding concurrently
+ * converge on the same result instead of corrupting each other.
+ */
+export function seedFactsFromBoard(table) {
+  return boardFactsFromDiff(null, table);
+}
+
 // Which ASPECT of board state a fact mutates. The deduper compares each fact
 // against the LAST fact emitted for its aspect: identical means "the adopt-
 // fold re-diff re-surfaced a transition already recorded" (absorb), different
@@ -197,7 +215,8 @@ const aspectKeyOf = (serviceId, fact) => {
 };
 
 /**
- * Aspect-keyed dedup for adopt-fold re-diffs. Absorbs a fact only when it is
+ * Aspect-keyed dedup for adopt-fold re-diffs (see THE BOOTSTRAP above for the
+ * seeding path). Absorbs a fact only when it is
  * byte-identical (type + payload + transition fingerprint) to the LAST fact
  * emitted for the same aspect within the window — the re-diff signature. A
  * genuine repeat with any intervening change on THIS device always differs

@@ -87,7 +87,7 @@ import { forceBootUpdateIfAvailable } from "./lib/swUpdate.js";
 import { appendServiceEvent, drainServiceEvents, pendingServiceEventCount, countServiceEvents, readServiceEvents, readAllServiceEvents } from "./lib/eventLog.js";
 import { foldServiceEvents, compareFoldToBoard, describeServiceEvent, serviceNightReport } from "./utils/eventFold.js";
 import { readParityRecord, recordEndOfServiceParity, fileParityVerdict } from "./lib/parityRecord.js";
-import { boardFactsFromDiff, createFactDeduper } from "./utils/boardFacts.js";
+import { boardFactsFromDiff, createFactDeduper, seedFactsFromBoard } from "./utils/boardFacts.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useWorkspaceAccess } from "./hooks/useWorkspaceAccess.js";
 import {
@@ -3637,6 +3637,47 @@ export default function App() {
       window.removeEventListener("online", drain);
     };
   }, [remoteBoardLoaded, flushBoardWrites]);
+
+  // ── THE BOOTSTRAP — give a pre-logbook service a history it can be folded ──
+  // from (docs/EVENT_LOG_PLAN.md, Phase 4 prerequisite). A service that began
+  // before the logbook, or on a device running an older build, has board rows
+  // and NO facts: folding it returns an empty board, so flipping the source of
+  // truth would blank it. Once per service, the first up-to-date device that
+  // sees an empty log for a worked board seeds the log with the facts that
+  // rebuild exactly what is on the board right now. Idempotent snapshot facts
+  // mean a concurrent seed from a second device converges rather than
+  // corrupts; the server-side zero-fact check keeps it to one pass in practice.
+  const seededServicesRef = useRef(new Set());
+  useEffect(() => {
+    if (!supabase || !remoteBoardLoaded || !boardTruthReady()) return;
+    const svcId = serviceIdRef.current;
+    if (!svcId || sandboxRef.current || seededServicesRef.current.has(svcId)) return;
+    const worked = (tablesRef.current || [])
+      .map((table) => sanitizeTable(table))
+      .filter((table) => tableHasServiceContent(table));
+    if (worked.length === 0) return; // nothing to preserve yet
+    seededServicesRef.current.add(svcId); // claim it before any await
+    void (async () => {
+      try {
+        if ((await countServiceEvents(svcId)) > 0) return; // already has a history
+        let seeded = 0;
+        for (const table of worked) {
+          for (const fact of seedFactsFromBoard(table)) {
+            factDeduperRef.current(svcId, fact); // prime the aspect memory
+            appendServiceEvent({
+              serviceId: svcId, type: fact.type, tableId: fact.tableId, payload: fact.payload,
+            });
+            seeded += 1;
+          }
+        }
+        if (seeded > 0) {
+          console.info(`[logbook] seeded ${seeded} fact(s) for a service that predates the log`);
+        }
+      } catch {
+        seededServicesRef.current.delete(svcId); // unreachable log — retry later
+      }
+    })();
+  }, [remoteBoardLoaded, boardSyncTick, serviceId, tablesJson]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── THE PARITY WATCHDOG — WIPE detection with no human in the loop ──────────
   // Every few minutes during live service, silently fold the night's whole log

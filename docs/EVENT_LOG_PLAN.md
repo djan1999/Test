@@ -169,9 +169,23 @@ over until the log has proven itself carrying the same facts in production.
   state that replaced it. The board already trusts client-stamped
   `updated_at` for its own convergence, so the fold now trusts the same
   authority — which is what makes the two agree.
-- Remaining before the flip: the three real green nights (zero
-  content-loss), and the two-week soak in Phase 4's own exit criteria.
-  Original diagnosis follows.
+- ✅ THE BOOTSTRAP (10.08) — the prerequisite the data made undeniable. A
+  service that began before the logbook (or on an older build) has board
+  rows and NO facts, so the fold returns an EMPTY board: measured on real
+  data, Hotel Milka's services carry 8, 4 and 4 seated tables against zero
+  facts, meaning a flip would itself have wiped them. The first up-to-date
+  device that sees a worked board with an empty server-side log now seeds
+  the log with the facts that rebuild exactly what is on the board
+  (`seedFactsFromBoard`, once per service, skipped when any history
+  exists). Pinned over 100 random worked boards — a seeded log folds back
+  to its board exactly — plus a concurrent double-seed converging and an
+  untouched board seeding nothing.
+- Remaining before the flip: EVIDENCE ONLY — three real green nights (zero
+  content-loss) and the two-week soak in Phase 4's own exit criteria. As of
+  10.08 the Demo record holds three green verdicts, but all are small
+  (3, 3, 19 facts) and none is a full service; the 104-fact three-device
+  night ended without filing (ended from a stale tab). Original diagnosis
+  follows.
   When two devices edit the SAME field of the same seat while one is offline,
   the board's compare-and-swap and the log's server-order fold crown
   DIFFERENT winners of the tie (real case: table 7 seat 1 — board kept water
