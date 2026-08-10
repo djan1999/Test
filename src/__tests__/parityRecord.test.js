@@ -61,19 +61,37 @@ describe("recordEndOfServiceParity", () => {
     expect(recordClientDiagnostic).not.toHaveBeenCalled();
   });
 
-  it("files a red verdict naming the tables and records a diagnostic", async () => {
+  it("a concurrent tiebreak is filed but does NOT alarm (both sides keep the seat)", async () => {
+    // party seated on both sides, seat 1 present on both — only the water value
+    // was tie-broke differently. Nothing lost, so no content-loss diagnostic.
     readAllServiceEvents.mockResolvedValue([
-      { type: "party_seated", table_id: 3, payload: { guests: 2 } },
+      { type: "party_seated", table_id: 3, payload: { resName: "Anna", guests: 2 } },
       { type: "seat_water_set", table_id: 3, payload: { seatId: 1, to: "SPARKLING" } },
     ]);
     const entry = await recordEndOfServiceParity({
       serviceId: "svc-9", reason: "rollover",
-      cards: [card(3, { active: true, guests: 2, seats: [seat(1, { water: "STILL" })] })],
+      cards: [card(3, { active: true, resName: "Anna", guests: 2, seats: [seat(1, { water: "STILL" })] })],
     });
     expect(entry.divergentTables).toEqual([3]);
+    expect(entry.contentLossTables).toEqual([]);
+    expect(entry.tiebreakTables).toEqual([3]);
+    expect(recordClientDiagnostic).not.toHaveBeenCalled();
+    expect(saveStateKey).toHaveBeenCalled();
+  });
+
+  it("a real content loss (a wiped party) IS filed and alarms", async () => {
+    readAllServiceEvents.mockResolvedValue([
+      { type: "party_seated", table_id: 3, payload: { resName: "Anna", guests: 2 } },
+      { type: "seat_water_set", table_id: 3, payload: { seatId: 1, to: "SPARKLING" } },
+    ]);
+    const entry = await recordEndOfServiceParity({
+      serviceId: "svc-9", reason: "rollover",
+      cards: [card(3)], // board blank — the party vanished
+    });
+    expect(entry.contentLossTables).toEqual([3]);
     expect(entry.matches).toBe(0);
     expect(recordClientDiagnostic).toHaveBeenCalledWith(
-      "logbook parity divergence (end of night)", expect.any(Error),
+      "logbook parity CONTENT LOSS (end of night)", expect.any(Error),
     );
     expect(saveStateKey).toHaveBeenCalled();
   });

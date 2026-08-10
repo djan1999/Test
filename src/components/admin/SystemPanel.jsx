@@ -76,15 +76,26 @@ export default function SystemPanel({
     setParityState("running");
     setParityMsg("");
     const result = await onCheckLogParity().catch((error) => ({ ok: false, error }));
+    const loss = result?.contentLossTables || [];
+    const ties = result?.tiebreakTables || [];
     if (!result?.ok) {
       setParityState("error");
       setParityMsg(String(result?.error?.message || result?.error || "The parity check did not complete."));
-    } else if (result.divergentTables?.length) {
+    } else if (loss.length) {
+      // The only real alarm: a party or worked seat present on one side, gone
+      // on the other — a wipe. This must never happen.
       setParityState("divergent");
       setParityMsg(
-        `DIVERGENCE at table(s) ${result.divergentTables.join(", ")} — `
-        + `${result.matches}/${result.compared} match across ${result.events} fact(s). `
-        + "Details recorded in Device Diagnostics.",
+        `CONTENT LOSS at table(s) ${loss.join(", ")} — the log and board disagree on `
+        + "whether a party/seat exists. Details in Device Diagnostics.",
+      );
+    } else if (ties.length) {
+      // Both sides kept a coherent worked seat; only a contended value differs.
+      setParityState("ok");
+      setParityMsg(
+        `No data lost — ${result.matches}/${result.compared} table(s) match exactly. `
+        + `Table(s) ${ties.join(", ")} had a concurrent edit the board and log tie-broke `
+        + "differently (expected until the source-of-truth flip; nothing was lost).",
       );
     } else {
       setParityState("ok");
@@ -345,16 +356,23 @@ export default function SystemPanel({
                 End-of-night parity record
               </div>
               {eventLog.record.slice(0, 6).map((entry) => {
-                const green = (entry.divergentTables || []).length === 0;
+                // Green = no CONTENT LOST. Older entries predate the split and
+                // only carry divergentTables — fall back to that. A tiebreak-
+                // only night is still green (nothing lost), with a soft note.
+                const loss = entry.contentLossTables || (entry.divergentTables || []);
+                const ties = entry.tiebreakTables || [];
+                const green = loss.length === 0;
                 return (
                   <div key={`${entry.serviceId}-${entry.endedAt}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0" }}>
                     <span style={{ fontFamily: FONT, fontSize: 10, color: green ? tokens.green.text : tokens.red.text, flexShrink: 0 }}>●</span>
                     <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[1], flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {entry.label || entry.serviceId}
                       {" — "}
-                      {green
-                        ? `MATCH · ${entry.matches}/${entry.compared} table(s), ${entry.events} fact(s)`
-                        : `DIVERGED at T${(entry.divergentTables || []).join(", T")} · ${entry.matches}/${entry.compared} match`}
+                      {!green
+                        ? `CONTENT LOSS at T${loss.join(", T")} · ${entry.matches}/${entry.compared} match`
+                        : ties.length
+                          ? `NO DATA LOST · ${entry.matches}/${entry.compared} exact, T${ties.join(", T")} tie-broke`
+                          : `MATCH · ${entry.matches}/${entry.compared} table(s), ${entry.events} fact(s)`}
                     </span>
                     <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[4], letterSpacing: 1, flexShrink: 0 }}>
                       {entry.endedAt ? new Date(entry.endedAt).toLocaleDateString("sl-SI", { day: "2-digit", month: "2-digit" }) : ""}
