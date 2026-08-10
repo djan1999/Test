@@ -73,7 +73,8 @@ import { supabase, hasSupabaseConfig, supabaseUrl, TABLES, getWorkspaceId } from
 import { scopedFrom } from "./lib/scopedDb.js";
 import { readStateKey, saveStateKey, dropPendingStateKey, pendingStateKeys } from "./lib/stateStore.js";
 import { createWriteQueue } from "./lib/writeQueue.js";
-import { recordClientDiagnostic } from "./lib/clientDiagnostics.js";
+import { readClientDiagnostics, recordClientDiagnostic } from "./lib/clientDiagnostics.js";
+import DeviceHealthCard from "./components/ui/DeviceHealthCard.jsx";
 import {
   startServiceStore, endServiceStore, resumeServiceStore, updateServiceStore,
   fetchServicesStore, readLiveServiceStore, fetchSameDayLabelsStore,
@@ -4399,6 +4400,9 @@ export default function App() {
   // of the initial bundle. onStatus drives the header sync chip and the
   // sqlite-primary probe; the watches below drive every read once primary.
   const [powerSyncStatus, setPowerSyncStatus] = useState(null);
+  // The device-health readout (Gate D). Open from the "?" beside the status
+  // chip on any operating screen.
+  const [healthOpen, setHealthOpen] = useState(false);
   // Init retry counter: bumping it re-runs the connect effect. A failed init
   // (the SDK chunk not fetching over a dying link at boot — the wifi-extender
   // incident) used to pin the session to the fragile direct-Supabase fallback
@@ -5049,6 +5053,7 @@ export default function App() {
   const hProps = {
     appName: effectiveAppName,
     syncLabel, syncLive,
+    onOpenHealth: () => setHealthOpen(true),
     activeCount: active.length, reserved, seated,
     onExit: switchMode,
     onSummary: () => setSummaryOpen(true),
@@ -5286,6 +5291,50 @@ export default function App() {
     </div>
   ) : null;
 
+  // Device health — the answer to the mid-service phone call, reachable from
+  // every operating screen via the "?" beside the status chip. It has to work
+  // for the Kitchen role, which cannot open Admin at all, and it must never
+  // depend on the network to render: everything it reads is already local.
+  const deviceHealthEl = healthOpen ? (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Device health"
+      onClick={() => setHealthOpen(false)}
+      style={{
+        position: "fixed", inset: 0, zIndex: 400, background: "rgba(0,0,0,0.45)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+        paddingTop: "max(16px, env(safe-area-inset-top))",
+        paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+      }}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        style={{ width: "min(560px, 100%)", maxHeight: "100%", overflowY: "auto", background: tokens.neutral[0] }}
+      >
+        <DeviceHealthCard
+          powerSyncStatus={powerSyncStatus}
+          syncStatus={syncStatus}
+          serviceActive={Boolean(serviceDate)}
+          diagnostics={readClientDiagnostics()}
+          buildId={typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "dev"}
+          role={currentRole || ""}
+          workspaceSlug={currentWorkspace?.slug || ""}
+        />
+        <button
+          onClick={() => setHealthOpen(false)}
+          style={{
+            width: "100%", fontFamily: FONT, fontSize: "10px", letterSpacing: "0.14em",
+            textTransform: "uppercase", fontWeight: 700, padding: "14px 18px",
+            border: `1px solid ${tokens.ink[4]}`, borderTop: "none", borderRadius: 0,
+            background: tokens.neutral[0], color: tokens.ink[0], cursor: "pointer",
+            touchAction: "manipulation", minHeight: 48,
+          }}
+        >CLOSE</button>
+      </div>
+    </div>
+  ) : null;
+
   const renderMode = mode && canAccessMode(currentRole, mode) ? mode : null;
 
   if (!renderMode) return <>{serviceDatePickerEl}{sandboxBannerEl}<LoginScreen
@@ -5344,7 +5393,7 @@ export default function App() {
   // staff need to fire/unfire and edit notes here, so this is NOT read-only.
   // The FLOOR sibling view (mode "kitchen_floor") is strictly read-only.
   if (renderMode === "display" || renderMode === "kitchen_floor") return (<>
-    {serviceDatePickerEl}{sandboxBannerEl}
+    {serviceDatePickerEl}{sandboxBannerEl}{deviceHealthEl}
     <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
       <Header
@@ -5558,6 +5607,9 @@ export default function App() {
         onReadEventLog={readEventLogStatus}
         onCheckLogParity={checkLogParity}
         onRestoreToMoment={restoreBoardToMoment}
+        serviceActive={Boolean(serviceDate)}
+        role={currentRole || ""}
+        workspaceSlug={currentWorkspace?.slug || ""}
         onExit={() => changeMode(null)}
       /></Suspense>
     </div>
@@ -5565,7 +5617,7 @@ export default function App() {
 
   // Service mode only
   return (<>
-    {serviceDatePickerEl}{sandboxBannerEl}
+    {serviceDatePickerEl}{sandboxBannerEl}{deviceHealthEl}
     {/* The sheet is a LAYER over this column, not a column beside it — the
         board must not move when a table is opened. Reserving the sheet's
         width reflowed the whole room sideways on every open and close, which

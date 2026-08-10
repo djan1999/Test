@@ -16,10 +16,12 @@ import RestaurantConfigPanel from "./RestaurantConfigPanel.jsx";
 import MembersPanel from "./MembersPanel.jsx";
 import AuditLogPanel from "./AuditLogPanel.jsx";
 import DataPrivacyPanel from "./DataPrivacyPanel.jsx";
+import SetupChecklistPanel from "./SetupChecklistPanel.jsx";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
 import { PRODUCT_NAME as APP_NAME } from "../../config/product.js";
 
 const SECTIONS = [
+  { id: "setup",       label: "Setup Checklist",         icon: "✓" },
   { id: "restaurant",  label: "Restaurant Setup",       icon: "R" },
   { id: "staff",       label: "Staff & Roles",          icon: "S" },
   { id: "audit",       label: "Audit Trail",             icon: "A" },
@@ -117,6 +119,11 @@ export default function AdminLayout({
   onRestoreToMoment,
   restaurantConfig = null,
   onSaveRestaurantConfig = null,
+  // Device-health context: whether a service is running on this device, and
+  // who/where this device is — the identifying line support reads back.
+  serviceActive = true,
+  role = "",
+  workspaceSlug = "",
   accessToken = null,
   workspaceId = null,
   currentUserId = null,
@@ -124,7 +131,10 @@ export default function AdminLayout({
   // Navigation
   onExit,
 }) {
-  const [activeSection, setActiveSection] = useState("restaurant");
+  // Admin opens on the checklist, not on a form. For a restaurant still being
+  // set up it is the map; for one already trading it is a one-line health
+  // statement ("Ready to run a service.") and a click to anywhere else.
+  const [activeSection, setActiveSection] = useState("setup");
   const [dishesCoursesOpen, setDishesCoursesOpen] = useState(true);
   const [dishesRestrictionsOpen, setDishesRestrictionsOpen] = useState(false);
   const [dishesQuickNotesOpen, setDishesQuickNotesOpen] = useState(false);
@@ -310,6 +320,18 @@ export default function AdminLayout({
           overflowY: "auto",
           overflowX: "hidden",
         }}>
+          {activeSection === "setup" && (
+            <SetupChecklistPanel
+              restaurantConfig={restaurantConfig}
+              floorMaps={floorMaps}
+              menuCourses={menuCourses}
+              restrictionsList={restrictionsList}
+              accessToken={accessToken}
+              workspaceId={workspaceId}
+              onNavigate={setActiveSection}
+            />
+          )}
+
           {activeSection === "restaurant" && restaurantConfig && (
             <RestaurantConfigPanel
               config={restaurantConfig}
@@ -562,6 +584,9 @@ export default function AdminLayout({
               onReadEventLog={onReadEventLog}
               onCheckLogParity={onCheckLogParity}
               onRestoreToMoment={onRestoreToMoment}
+              serviceActive={serviceActive}
+              role={role}
+              workspaceSlug={workspaceSlug}
             />
           )}
 
