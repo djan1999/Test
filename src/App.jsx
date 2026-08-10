@@ -1405,6 +1405,10 @@ export default function App() {
         // theirs is the store truth we folded onto — both baselines move to it.
         nextPrev.set(base.id, theirsJson);
         confirmed.set(base.id, theirsJson);
+        // Adopting another device's change to this table makes our echo-memory
+        // for it stale — forget it so the next local gesture always records
+        // (adoption-aware dedup, closes the cross-device race structurally).
+        factDeduperRef.current.forgetTable?.(serviceIdRef.current, base.id);
         // A fold result the store doesn't hold yet must be (re-)queued here:
         // when it equals local state there is no re-render, so the autosave
         // effect never ticks and only the drain heartbeat re-persists it.
@@ -1414,7 +1418,10 @@ export default function App() {
       }
       nextPrev.set(base.id, theirsJson);
       confirmed.set(base.id, theirsJson);
-      if (mineJson !== theirsJson) changed = true;
+      if (mineJson !== theirsJson) {
+        changed = true;
+        factDeduperRef.current.forgetTable?.(serviceIdRef.current, base.id);
+      }
       return theirs;
     });
     prevTablesJsonRef.current = nextPrev;

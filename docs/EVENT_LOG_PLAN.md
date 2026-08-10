@@ -38,16 +38,18 @@ over until the log has proven itself carrying the same facts in production.
    (the adopt-fold re-diff signature); any genuine state change on the
    emitting device differs from the latest by definition and always
    records. Correctness never depends on dedup being right.
-   KNOWN RESIDUAL LIMIT (found by the multi-device property, 10.08): a
-   device's deduper never sees OTHER devices' facts, so a transition it
-   re-performs identically after a remote inversion can be absorbed. The
-   bound is the dedup window — deliberately 10 seconds (echoes arrive in
-   1–3s; a two-device invert-and-redo inside 10s is not a realistic human
-   sequence). Renames additionally carry a transition fingerprint (never
-   uploaded) that makes the invert-and-redo case distinct outright. If the
-   residual ever fires: the board is untouched (the log is not the source
-   of truth), the watchdog reports the divergence, and any later fact on
-   the aspect heals the log.
+   The cross-device race this once had (a device re-performing a transition
+   identically after ANOTHER device inverted it, found by the multi-device
+   property on 10.08) is now closed STRUCTURALLY: on adopting a remote
+   change to a table, a device forgets its echo-memory for that table
+   (`forgetTable`, called from `adoptRemoteTables`), so the next local
+   gesture always records — proven with the clock frozen, where the window
+   offers zero protection. Two independent backstops remain by design: the
+   10s window absorbs same-device echoes (they arrive in 1–3s), and rename
+   facts carry a transition fingerprint (deduper-local, never uploaded).
+   Even in the impossible event all three failed, absorption is log-only:
+   the board is untouched (the log is not yet the source of truth), the
+   watchdog reports it, and any later fact on the aspect heals the log.
 
 ## Phases
 
@@ -124,14 +126,13 @@ over until the log has proven itself carrying the same facts in production.
 - Board state on every device = reducer(events), materialized locally;
   service_tables becomes a *derived snapshot* the server maintains for
   export/legacy readers.
-- HARD PREREQUISITES surfaced by the adversarial suites (10.08), beyond
-  the parity evidence: (a) causal ordering — a stale fact draining late
+- HARD PREREQUISITE still open, surfaced by the adversarial suites (10.08),
+  beyond the parity evidence: causal ordering — a stale fact draining late
   (an unseat landing after another device's re-seat) must not rewrite
   adopted state when the fold IS the board; today it is detected as
-  divergence, which is sufficient only while the card system holds truth;
-  (b) adoption-aware dedup — clear a device's aspect memory for a table
-  when it adopts a remote change to it, closing principle 7's residual
-  limit outright.
+  divergence, which is sufficient only while the card system holds truth.
+  (Adoption-aware dedup, the other prerequisite this list once named, was
+  delivered 10.08 — see principle 7.)
 - The CAS, foldTable, echo suppression, mass-blank guard, and the shield
   become dead code and are deleted — each deletion is its own PR with the
   invariant list updated.

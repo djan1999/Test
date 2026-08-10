@@ -214,7 +214,7 @@ const aspectKeyOf = (serviceId, fact) => {
  */
 export function createFactDeduper({ windowMs = 10000, now = () => Date.now() } = {}) {
   const seen = new Map(); // aspect key → { value, at }, insertion-ordered oldest-first
-  return function shouldEmit(serviceId, fact) {
+  const shouldEmit = function shouldEmit(serviceId, fact) {
     const key = aspectKeyOf(serviceId, fact);
     const value = `${fact.type}|${fact.dedupe ?? ""}|${JSON.stringify(fact.payload)}`;
     const at = now();
@@ -228,4 +228,16 @@ export function createFactDeduper({ windowMs = 10000, now = () => Date.now() } =
     seen.set(key, { value, at });
     return true;
   };
+  // ADOPTION-AWARE CLEARING: when this device adopts ANOTHER device's change
+  // to a table, its own echo-memory for that table is stale — the next local
+  // gesture is a genuine change even if it re-performs a value this device
+  // itself last emitted. Forgetting the table's aspects on adoption closes
+  // principle 7's residual cross-device race structurally, with no reliance
+  // on the window (docs/EVENT_LOG_PLAN.md). Aspect keys are
+  // `${serviceId}|${tableId}|…` — drop every key for the (service, table).
+  shouldEmit.forgetTable = (serviceId, tableId) => {
+    const prefix = `${serviceId}|${Number(tableId)}|`;
+    for (const key of seen.keys()) if (key.startsWith(prefix)) seen.delete(key);
+  };
+  return shouldEmit;
 }
