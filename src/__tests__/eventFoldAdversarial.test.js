@@ -167,16 +167,26 @@ describe("ADVERSARIAL — multi-device interleaved nights, 200 seeds × 3 device
         buffer: [], // [{tableId, event}]
       }));
       const server = [];
+      // Facts land with the SERVER's arrival stamp — which, for a device that
+      // buffered while offline, is far later than the gesture. This is what
+      // makes arrival order lie, and what causal ordering has to survive.
+      const land = (item) => {
+        server.push({
+          ...item.event,
+          id: server.length + 1,
+          recorded_at: new Date(clockMs).toISOString(),
+        });
+      };
       const flushDeviceTable = (device, tableId) => {
         const keep = [];
         for (const item of device.buffer) {
-          if (item.tableId === tableId) server.push(item.event);
+          if (item.tableId === tableId) land(item);
           else keep.push(item);
         }
         device.buffer = keep;
       };
       const flushDevice = (device) => {
-        for (const item of device.buffer) server.push(item.event);
+        for (const item of device.buffer) land(item);
         device.buffer = [];
       };
       const steps = 15 + Math.floor(random() * 60);
@@ -201,8 +211,13 @@ describe("ADVERSARIAL — multi-device interleaved nights, 200 seeds × 3 device
         lastDeviceOnTable.set(tableId, device);
         const before = cards.get(tableId);
         const after = applyRandomGesture(random, before);
+        // The gesture's own moment — the causal truth the fold must order by,
+        // regardless of how much later the fact reaches the server.
+        const gestureTs = new Date(clockMs).toISOString();
         for (const fact of boardFactsFromDiff(before, after)) {
-          if (device.shouldEmit("svc", fact)) device.buffer.push({ tableId, event: asEvent(fact) });
+          if (device.shouldEmit("svc", fact)) {
+            device.buffer.push({ tableId, event: { ...asEvent(fact), client_ts: gestureTs } });
+          }
         }
         cards.set(tableId, after);
         // Random unrelated flushes — cross-table interleaving is unconstrained.
@@ -337,20 +352,52 @@ describe("ADVERSARIAL — multi-device interleaved nights, 200 seeds × 3 device
     expect(reconciliations).toEqual([]); // silent — B owns seat 2's story
   });
 
-  it("a causality-VIOLATING late drain is detected as divergence, never silent", () => {
-    // Device 1 unseats Anna but its upload wedges; device 2 then seats Bruno
-    // at the same table. Device 1's stale unseat drains LAST. The fold blanks
-    // the table while the board holds Bruno — the exact wound the parity
-    // checker and watchdog exist to expose. This pins DETECTION; Phase 4's
-    // fold-as-truth needs causal ordering before this can ever be the board.
+  it("CAUSAL ORDERING: a stale late drain sorts into history and can no longer clobber", () => {
+    // Device 1 unseats Anna at 19:30 but its upload wedges; device 2 seats
+    // Bruno at 21:00. Device 1's stale unseat DRAINS LAST (highest id) — under
+    // arrival order the fold blanked a live table, which is the Phase-4 wipe.
+    // Ordered causally by gesture time it sorts back to 19:30, before Bruno,
+    // and the fold reproduces the board exactly. This is the blocker closing.
     const events = [
-      { type: "party_seated", table_id: 7, payload: { resName: "Anna", guests: 2, arrivedAt: "19:00" } },
-      { type: "party_seated", table_id: 7, payload: { resName: "Bruno", guests: 4, arrivedAt: "21:00" } },
-      { type: "party_unseated", table_id: 7, payload: { resName: "Anna", guests: 2 } }, // stale, drained late
+      { id: 1, client_ts: "2026-08-10T19:00:00Z", recorded_at: "2026-08-10T19:00:01Z",
+        type: "party_seated", table_id: 7, payload: { resName: "Anna", guests: 2, arrivedAt: "19:00" } },
+      { id: 2, client_ts: "2026-08-10T21:00:00Z", recorded_at: "2026-08-10T21:00:01Z",
+        type: "party_seated", table_id: 7, payload: { resName: "Bruno", guests: 4, arrivedAt: "21:00" } },
+      { id: 3, client_ts: "2026-08-10T19:30:00Z", recorded_at: "2026-08-10T21:05:00Z", // gestured 19:30, landed 21:05
+        type: "party_unseated", table_id: 7, payload: { resName: "Anna", guests: 2 } },
     ];
     const board = [{ ...blankCard(7), active: true, resName: "Bruno", guests: 4, arrivedAt: "21:00", seats: [] }];
-    const { divergent } = compareFoldToBoard(foldServiceEvents(events), board);
-    expect(divergent.map((d) => d.tableId)).toEqual([7]);
+    const { divergent, contentLoss } = compareFoldToBoard(foldServiceEvents(events), board);
+    expect(contentLoss).toEqual([]); // the live table is NOT blanked by the stale fact
+    expect(divergent).toEqual([]);
+  });
+
+  it("a clock running fast cannot jump the queue (client_ts clamped to recorded_at)", () => {
+    // A tablet whose clock is an hour ahead claims its unseat happened at
+    // 23:00. Clamping to when the server actually recorded it (19:05) keeps it
+    // in its true position, so it cannot outrank the 21:00 re-seat.
+    const events = [
+      { id: 1, client_ts: "2026-08-10T19:00:00Z", recorded_at: "2026-08-10T19:00:01Z",
+        type: "party_seated", table_id: 7, payload: { resName: "Anna", guests: 2 } },
+      { id: 2, client_ts: "2026-08-10T23:00:00Z", recorded_at: "2026-08-10T19:05:00Z", // skewed clock
+        type: "party_unseated", table_id: 7, payload: { resName: "Anna", guests: 2 } },
+      { id: 3, client_ts: "2026-08-10T21:00:00Z", recorded_at: "2026-08-10T21:00:01Z",
+        type: "party_seated", table_id: 7, payload: { resName: "Bruno", guests: 4, arrivedAt: "21:00" } },
+    ];
+    const board = [{ ...blankCard(7), active: true, resName: "Bruno", guests: 4, arrivedAt: "21:00", seats: [] }];
+    expect(compareFoldToBoard(foldServiceEvents(events), board).divergent).toEqual([]);
+  });
+
+  it("ordering is total and stable: unstamped facts keep arrival order", () => {
+    // Every property test in the suite folds unstamped events — ordering must
+    // degrade exactly to today's behaviour rather than shuffling them.
+    const events = [
+      { type: "party_seated", table_id: 1, payload: { resName: "Anna", guests: 2 } },
+      { type: "seat_water_set", table_id: 1, payload: { seatId: 1, to: "STILL" } },
+      { type: "seat_water_set", table_id: 1, payload: { seatId: 1, to: "SPARKLING" } },
+    ];
+    const folded = foldServiceEvents(events);
+    expect(folded.get(1).seats["1"].water).toBe("SPARKLING"); // last still wins
   });
 });
 

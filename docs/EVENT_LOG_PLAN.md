@@ -149,15 +149,29 @@ over until the log has proven itself carrying the same facts in production.
   numbers: the tiebreak goes to zero. This also heals the stale-drain case
   (an offline device's late `party_unseated` is corrected once that device
   adopts the re-seated board).
-- HARD PREREQUISITE still open — the remaining half: DETERMINISTIC ordering.
-  Reconciliation converges the log *after* an adoption, but the fold still
-  orders by fact-arrival (`id`), not by the board write a fact accompanies.
-  Under a drain/adopt race (a queue draining a stale fact AFTER the adoption
-  that would have corrected it) the tail can still momentarily disagree —
-  today that is caught by the watchdog and healed by the next adoption, which
-  is sufficient only while the card system holds truth. The fold cannot BE
-  the board until fact order is derived from board-write authority (or the
-  board adopts the log's order outright). Original diagnosis follows.
+- ✅ CAUSAL ORDERING (10.08) — the second half. Arrival order (`id`) is not
+  the order things happened: measured on the real 3-device night, 3 of 104
+  facts arrived out of order, worst queue lag 107s. Folded by arrival, an
+  hour-old gesture from a reconnecting tablet outranks the state that
+  superseded it — the Phase-4 wipe. `orderServiceEvents` now sorts by
+  gesture time (`client_ts`), CLAMPED to `recorded_at` so a fast clock
+  cannot jump the queue, with arrival order as a stable tiebreak and a
+  carry-forward key so unstamped facts keep their position (ordering is
+  total and degrades exactly to the old behaviour). Verified against
+  PRODUCTION data: table 7 seat 1 — board `XC`, old arrival-order fold
+  `XW`, causal-order fold `XC` ✅. The stale-late-drain case flips from
+  "detected as divergence" to "ordered correctly, no divergence"; the
+  multi-device property (200 nights × 3 devices) now buffers facts and
+  lands them with real server-arrival stamps, so arrival order is genuinely
+  scrambled and parity still holds.
+  This deliberately revises principle 4 FOR THE FOLD: the server still
+  assigns identity and breaks ties, but a stale drain must not outrank the
+  state that replaced it. The board already trusts client-stamped
+  `updated_at` for its own convergence, so the fold now trusts the same
+  authority — which is what makes the two agree.
+- Remaining before the flip: the three real green nights (zero
+  content-loss), and the two-week soak in Phase 4's own exit criteria.
+  Original diagnosis follows.
   When two devices edit the SAME field of the same seat while one is offline,
   the board's compare-and-swap and the log's server-order fold crown
   DIFFERENT winners of the tie (real case: table 7 seat 1 — board kept water
