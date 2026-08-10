@@ -1,10 +1,40 @@
 import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
+import { useClock, formatClock } from "../../hooks/useClock.js";
 import { PRODUCT_NAME } from "../../config/product.js";
 
 const FONT = tokens.font;
 const { ink, rule, neutral, green, red, charcoal, tint } = tokens;
+
+// The clock is its own component so its per-minute tick re-renders four
+// characters instead of the whole bar (and so headers without a clock run no
+// timer at all — the hook only mounts where it is asked for).
+function Clock({ isMobile }) {
+  const now = useClock();
+  const time = formatClock(now);
+
+  return (
+    <time
+      dateTime={time}
+      aria-label={`Time ${time}`}
+      style={{
+        fontFamily:        FONT,
+        fontSize:          isMobile ? "15px" : "16px",
+        fontWeight:        500,
+        letterSpacing:     "0.06em",
+        fontVariantNumeric: "tabular-nums",
+        color:             ink[0],
+        whiteSpace:        "nowrap",
+        flexShrink:        0,
+        // Reads as a value, not a control: no border, no fill, and out of the
+        // tap targets it sits beside.
+        padding:           isMobile ? "0 2px" : "0 4px",
+        pointerEvents:     "none",
+      }}
+    >{time}</time>
+  );
+}
 
 export default function Header({
   appName = PRODUCT_NAME,
@@ -16,6 +46,10 @@ export default function Header({
   showInventory = false,
   showSync = false,
   showEndService = false,
+  // Live wall clock in the bar (kitchen). The pass has no other clock in
+  // view once a panel is running full-screen, and every timing call — how
+  // long a ticket has been up, when the next party lands — is made against it.
+  showClock = false,
   syncLabel,
   syncLive,
   activeCount,
@@ -154,8 +188,10 @@ export default function Header({
           )}
         </div>
 
-        {/* Right — action buttons */}
+        {/* Right — clock, then action buttons */}
         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 5 : 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+
+          {showClock && <Clock isMobile={isMobile} />}
 
           {showAddRes && (
             <button onClick={onAddRes} style={{ ...btn, border: `${rule.hairline} solid ${ink[0]}`, fontWeight: 600 }}>
