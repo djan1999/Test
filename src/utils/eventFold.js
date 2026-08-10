@@ -56,10 +56,51 @@ const dropKey = (list, key) => {
   if (at >= 0) list.splice(at, 1);
 };
 
-/** Fold a service's events (server order) into per-table projections. */
+/**
+ * CAUSAL ORDER (docs/EVENT_LOG_PLAN.md — write-path unification, second half).
+ *
+ * Arrival order (the log's `id`) is NOT the order things happened: a device
+ * that was offline drains its queue late, so an hour-old gesture lands with the
+ * newest ids and — folded naively — clobbers state that superseded it. Measured
+ * on real 3-device data (10.08): 3 of 104 facts arrived out of order, worst
+ * queue lag 107s. Folding by arrival is therefore wrong for exactly the case
+ * Phase 4 must survive.
+ *
+ * So order by WHEN THE GESTURE HAPPENED (`client_ts`), which is the same
+ * authority the board itself already trusts (its rows converge by client-
+ * stamped `updated_at`), with two safeguards:
+ *   • clamped to `recorded_at` — a fact cannot have happened after the server
+ *     wrote it, so a device whose clock runs fast cannot jump the queue;
+ *   • ties, and facts with no usable stamp, fall back to arrival order (the
+ *     preceding fact's key is carried forward), so ordering is total, stable,
+ *     and degrades exactly to today's behaviour.
+ *
+ * This revises principle 4 ("the server orders") for the FOLD specifically:
+ * the server still assigns identity and breaks ties, but a stale drain must
+ * not outrank the state that replaced it.
+ */
+export function orderServiceEvents(events) {
+  const list = Array.isArray(events) ? events : [];
+  let carry = -Infinity;
+  return list
+    .map((event, index) => {
+      const gesture = Date.parse(event?.client_ts || "");
+      const recorded = Date.parse(event?.recorded_at || "");
+      let key = carry;
+      if (Number.isFinite(gesture)) {
+        key = Number.isFinite(recorded) ? Math.min(gesture, recorded) : gesture;
+        carry = key;
+      }
+      return { event, index, key };
+    })
+    .sort((a, b) => (a.key - b.key) || (a.index - b.index))
+    .map((entry) => entry.event);
+}
+
+/** Fold a service's events into per-table projections, in CAUSAL order. */
 export function foldServiceEvents(events) {
   const tables = new Map();
-  for (const event of Array.isArray(events) ? events : []) {
+  for (const event of orderServiceEvents(events)) {
     const tableId = Number(event?.table_id);
     const payload = event?.payload && typeof event.payload === "object" ? event.payload : {};
     if (!Number.isFinite(tableId)) continue;
