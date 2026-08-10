@@ -4,7 +4,7 @@
 // junk-input fuzzing. Every suite here simulates hundreds of hostile nights.
 
 import { describe, it, expect } from "vitest";
-import { boardFactsFromDiff, createFactDeduper } from "../utils/boardFacts.js";
+import { boardFactsFromDiff, createFactDeduper, seedFactsFromBoard } from "../utils/boardFacts.js";
 import { foldServiceEvents, compareFoldToBoard } from "../utils/eventFold.js";
 
 const rng = (seed) => {
@@ -398,6 +398,45 @@ describe("ADVERSARIAL — multi-device interleaved nights, 200 seeds × 3 device
     ];
     const folded = foldServiceEvents(events);
     expect(folded.get(1).seats["1"].water).toBe("SPARKLING"); // last still wins
+  });
+});
+
+// ── THE BOOTSTRAP ────────────────────────────────────────────────────────────
+// A service that predates the logbook has board rows and no facts. Folding it
+// returns an empty board — so flipping the source of truth would blank it.
+// Seeding must reproduce the board EXACTLY, for arbitrary worked boards.
+describe("THE BOOTSTRAP — seeding a pre-logbook service, 100 random boards", () => {
+  it("a seeded log folds back to exactly the board it was seeded from", () => {
+    for (let seedIndex = 0; seedIndex < 100; seedIndex += 1) {
+      const random = rng(31337 + seedIndex * 7919);
+      // Build an arbitrary worked board with no history whatsoever.
+      const cards = [1, 2, 3, 4].map((id) => {
+        let card = blankCard(id);
+        const steps = 1 + Math.floor(random() * 12);
+        for (let step = 0; step < steps; step += 1) card = applyRandomGesture(random, card);
+        return card;
+      });
+      const events = cards.flatMap((card) => seedFactsFromBoard(card).map(asEvent));
+      const { divergent, contentLoss } = compareFoldToBoard(foldServiceEvents(events), cards);
+      expect(contentLoss, `seed ${31337 + seedIndex * 7919}`).toEqual([]);
+      expect(divergent, `seed ${31337 + seedIndex * 7919}`).toEqual([]);
+    }
+  });
+
+  it("seeding twice (two devices racing) converges instead of corrupting", () => {
+    const card = {
+      ...blankCard(3), active: true, resName: "Anna", guests: 2, arrivedAt: "19:00",
+      kitchenLog: { c1: { firedAt: "19:20" } },
+      bottleWines: [{ name: "Rebula 2019" }],
+      seats: [{ ...blankSeat(1), water: "STILL", pairing: "Wine", cocktails: [{ name: "Negroni" }, { name: "Negroni" }] }, blankSeat(2)],
+    };
+    const once = seedFactsFromBoard(card).map(asEvent);
+    const twice = [...once, ...once]; // both devices seeded the same board
+    expect(compareFoldToBoard(foldServiceEvents(twice), [card]).divergent).toEqual([]);
+  });
+
+  it("an untouched board seeds nothing (no phantom parties for empty tables)", () => {
+    expect(seedFactsFromBoard(blankCard(5))).toEqual([]);
   });
 });
 
