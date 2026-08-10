@@ -5350,6 +5350,9 @@ export default function App() {
       <Header
         modeLabel="KITCHEN"
         showSummary={false} showMenu={false} showArchive={renderMode === "display" && canAdmin} showInventory={false}
+        // The pass runs full-screen with no OS chrome in view — the bar is the
+        // only clock the kitchen has to time a fire against.
+        showClock={true}
         // The view switch lives IN the header next to the logo — a separate
         // toggle row cost a full row of tickets on the 720px panel.
         viewSwitch={serviceDate ? {
