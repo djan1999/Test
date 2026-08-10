@@ -80,10 +80,15 @@ export function boardFactsFromDiff(prevTable, nextTable) {
     if ((before.resName || "") !== (after.resName || "")) {
       // Only the NEW name travels, under the erasure-covered `resName` key —
       // the previous name already lives in the earlier party_seated (or
-      // party_renamed) fact, each covered by the same erasure match.
+      // party_renamed) fact, each covered by the same erasure match. The
+      // `dedupe` fingerprint carries the full transition for the deduper
+      // ONLY (never uploaded): without it, rename→remote-rename→rename-back
+      // produced a payload identical to this device's last party fact and a
+      // real change was absorbed (caught by the multi-device property).
       facts.push({
         type: "party_renamed", tableId,
         payload: { resName: after.resName || "" },
+        dedupe: `${before.resName || ""}→${after.resName || ""}`,
       });
     }
     if ((before.arrivedAt ?? null) !== (after.arrivedAt ?? null)) {
@@ -193,16 +198,25 @@ const aspectKeyOf = (serviceId, fact) => {
 
 /**
  * Aspect-keyed dedup for adopt-fold re-diffs. Absorbs a fact only when it is
- * byte-identical to the LAST fact emitted for the same aspect within the
- * window — the re-diff signature. A genuine repeat with any intervening
- * change (STILL → SPARKLING → STILL → SPARKLING inside a minute) always
- * differs from its aspect's latest fact and always records.
+ * byte-identical (type + payload + transition fingerprint) to the LAST fact
+ * emitted for the same aspect within the window — the re-diff signature. A
+ * genuine repeat with any intervening change on THIS device always differs
+ * from its aspect's latest fact and always records.
+ *
+ * The window is deliberately SHORT: echoes re-surface within seconds, and a
+ * narrow window is what bounds the one residual blind spot — a transition
+ * this device re-performs identically after ANOTHER device inverted it (its
+ * own deduper never saw the remote fact). Inside the window that retrace is
+ * absorbed; the board is untouched (the log is not the source of truth), the
+ * watchdog reports the divergence, and any later fact on the aspect heals
+ * the log. Phase 4's flip requires adoption-aware clearing before the fold
+ * can BE the board (docs/EVENT_LOG_PLAN.md).
  */
-export function createFactDeduper({ windowMs = 60000, now = () => Date.now() } = {}) {
+export function createFactDeduper({ windowMs = 10000, now = () => Date.now() } = {}) {
   const seen = new Map(); // aspect key → { value, at }, insertion-ordered oldest-first
   return function shouldEmit(serviceId, fact) {
     const key = aspectKeyOf(serviceId, fact);
-    const value = `${fact.type}|${JSON.stringify(fact.payload)}`;
+    const value = `${fact.type}|${fact.dedupe ?? ""}|${JSON.stringify(fact.payload)}`;
     const at = now();
     for (const [oldKey, entry] of seen) {
       if (at - entry.at > windowMs) seen.delete(oldKey);

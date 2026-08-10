@@ -229,6 +229,7 @@ const isBlank = (projection) => {
 export function compareFoldToBoard(foldedTables, cardTables) {
   const board = new Map(
     (Array.isArray(cardTables) ? cardTables : [])
+      .filter((table) => table && typeof table === "object" && Number.isFinite(Number(table.id)))
       .map((table) => [Number(table.id), boardProjection(table)]),
   );
   const ids = [...new Set([...foldedTables.keys(), ...board.keys()])].sort((a, b) => a - b);

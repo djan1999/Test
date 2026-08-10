@@ -47,7 +47,7 @@ function applyRandomGesture(random, card) {
   const next = clone(card);
   const gestures = [];
   if (!next.active) gestures.push("seat");
-  if (next.active) gestures.push("unseat", "resize", "rename", "retime", "water", "pairing", "drinkAdd", "fire", "extra", "option", "bottleAdd");
+  if (next.active) gestures.push("unseat", "resize", "rename", "retime", "water", "pairing", "drinkAdd", "drinkAddDouble", "fire", "extra", "option", "bottleAdd");
   if (next.active && next.seats.some((seat) => CATEGORIES.some((category) => seat[category].length))) gestures.push("drinkRemove");
   if (Object.keys(next.kitchenLog).length) gestures.push("unfire");
   if (next.bottleWines.length) gestures.push("bottleRemove");
@@ -76,6 +76,13 @@ function applyRandomGesture(random, card) {
     case "water": seat().water = pick(random, WATERS); break;
     case "pairing": seat().pairing = pick(random, PAIRINGS); break;
     case "drinkAdd": seat()[pick(random, CATEGORIES)].push({ name: pick(random, DRINKS) }); break;
+    case "drinkAddDouble": {
+      const s = seat();
+      const category = pick(random, CATEGORIES);
+      const name = pick(random, DRINKS);
+      s[category].push({ name }, { name });
+      break;
+    }
     case "drinkRemove": {
       const candidates = next.seats.flatMap((s) =>
         CATEGORIES.filter((category) => s[category].length).map((category) => ({ s, category })));
@@ -104,8 +111,8 @@ function applyRandomGesture(random, card) {
 }
 
 describe("REPLAY PARITY — fold(dedup(facts(night))) === board(night)", () => {
-  it("holds across 150 random nights through the FULL pipeline: deriver, deduper (with adopt-fold re-diff noise), reducer", () => {
-    for (let seedIndex = 0; seedIndex < 150; seedIndex += 1) {
+  it("holds across 300 random nights through the FULL pipeline: deriver, deduper (with adopt-fold re-diff noise), reducer", () => {
+    for (let seedIndex = 0; seedIndex < 300; seedIndex += 1) {
       const random = rng(1000 + seedIndex * 7919);
       const tableIds = [1, 2, 3];
       const cards = new Map(tableIds.map((id) => [id, blankCard(id)]));
