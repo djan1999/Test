@@ -35,9 +35,19 @@ over until the log has proven itself carrying the same facts in production.
    water choice, a party), never a bare delta — so replaying a fact twice,
    or absorbing a duplicated one, is provably a no-op. Dedup can therefore
    only ever absorb a byte-identical repeat of an aspect's LATEST fact
-   (the adopt-fold re-diff signature); any genuine state change differs
-   from the latest by definition and always records. Correctness never
-   depends on dedup being right.
+   (the adopt-fold re-diff signature); any genuine state change on the
+   emitting device differs from the latest by definition and always
+   records. Correctness never depends on dedup being right.
+   KNOWN RESIDUAL LIMIT (found by the multi-device property, 10.08): a
+   device's deduper never sees OTHER devices' facts, so a transition it
+   re-performs identically after a remote inversion can be absorbed. The
+   bound is the dedup window — deliberately 10 seconds (echoes arrive in
+   1–3s; a two-device invert-and-redo inside 10s is not a realistic human
+   sequence). Renames additionally carry a transition fingerprint (never
+   uploaded) that makes the invert-and-redo case distinct outright. If the
+   residual ever fires: the board is untouched (the log is not the source
+   of truth), the watchdog reports the divergence, and any later fact on
+   the aspect heals the log.
 
 ## Phases
 
@@ -114,6 +124,14 @@ over until the log has proven itself carrying the same facts in production.
 - Board state on every device = reducer(events), materialized locally;
   service_tables becomes a *derived snapshot* the server maintains for
   export/legacy readers.
+- HARD PREREQUISITES surfaced by the adversarial suites (10.08), beyond
+  the parity evidence: (a) causal ordering — a stale fact draining late
+  (an unseat landing after another device's re-seat) must not rewrite
+  adopted state when the fold IS the board; today it is detected as
+  divergence, which is sufficient only while the card system holds truth;
+  (b) adoption-aware dedup — clear a device's aspect memory for a table
+  when it adopts a remote change to it, closing principle 7's residual
+  limit outright.
 - The CAS, foldTable, echo suppression, mass-blank guard, and the shield
   become dead code and are deleted — each deletion is its own PR with the
   invariant list updated.

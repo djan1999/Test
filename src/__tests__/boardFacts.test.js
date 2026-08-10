@@ -41,7 +41,9 @@ describe("boardFactsFromDiff — seating", () => {
       table({ active: true, resName: "Anna" }),
       table({ active: true, resName: "Bruno" }),
     )).toEqual([
-      { type: "party_renamed", tableId: 3, payload: { resName: "Bruno" } },
+      // `dedupe` is deduper-local transition identity — it is NOT part of the
+      // payload and never uploads, so erasure coverage stays exactly resName.
+      { type: "party_renamed", tableId: 3, payload: { resName: "Bruno" }, dedupe: "Anna→Bruno" },
     ]);
   });
 
