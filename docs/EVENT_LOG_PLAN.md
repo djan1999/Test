@@ -135,8 +135,29 @@ over until the log has proven itself carrying the same facts in production.
 - Board state on every device = reducer(events), materialized locally;
   service_tables becomes a *derived snapshot* the server maintains for
   export/legacy readers.
-- HARD PREREQUISITE still open, surfaced by the adversarial suites (10.08)
-  and CONFIRMED in real 3-device data (Demo, 10.08): write-path unification.
+- ✅ RECONCILIATION FACTS (10.08) — the first half of write-path
+  unification. Root cause of the real divergence: an adoption moves a
+  device's baseline straight to the store's truth, so that transition never
+  reaches the autosave diff and was never logged ("adoptions advance the
+  baselines directly and never reach this diff"). The device's own losing
+  value therefore stayed at the tail of the log while the board had already
+  settled elsewhere. Now, whenever adopted truth CONTRADICTS a fact this
+  device itself recorded (`deduper.contradicts`), the device appends the
+  correction — so the log's last word on an aspect is the board's converged
+  answer. Aspects this device never touched stay silent (their author owns
+  those facts; re-logging them would be noise). Pinned with the real seat-1
+  numbers: the tiebreak goes to zero. This also heals the stale-drain case
+  (an offline device's late `party_unseated` is corrected once that device
+  adopts the re-seated board).
+- HARD PREREQUISITE still open — the remaining half: DETERMINISTIC ordering.
+  Reconciliation converges the log *after* an adoption, but the fold still
+  orders by fact-arrival (`id`), not by the board write a fact accompanies.
+  Under a drain/adopt race (a queue draining a stale fact AFTER the adoption
+  that would have corrected it) the tail can still momentarily disagree —
+  today that is caught by the watchdog and healed by the next adoption, which
+  is sufficient only while the card system holds truth. The fold cannot BE
+  the board until fact order is derived from board-write authority (or the
+  board adopts the log's order outright). Original diagnosis follows.
   When two devices edit the SAME field of the same seat while one is offline,
   the board's compare-and-swap and the log's server-order fold crown
   DIFFERENT winners of the tie (real case: table 7 seat 1 — board kept water

@@ -239,5 +239,17 @@ export function createFactDeduper({ windowMs = 10000, now = () => Date.now() } =
     const prefix = `${serviceId}|${Number(tableId)}|`;
     for (const key of seen.keys()) if (key.startsWith(prefix)) seen.delete(key);
   };
+  // Does this fact CONTRADICT something this device already recorded for the
+  // same aspect? True only when we hold a memory for the aspect AND its value
+  // differs. This is the RECONCILIATION test: it means our own earlier fact is
+  // now stale — the store settled on something else — so the correction must
+  // be recorded or the log's tail keeps a value the board already discarded.
+  // Aspects we never touched return false: the device that DID touch them owns
+  // their facts, and re-logging them would just be noise.
+  shouldEmit.contradicts = (serviceId, fact) => {
+    const last = seen.get(aspectKeyOf(serviceId, fact));
+    if (!last) return false;
+    return last.value !== `${fact.type}|${fact.dedupe ?? ""}|${JSON.stringify(fact.payload)}`;
+  };
   return shouldEmit;
 }
