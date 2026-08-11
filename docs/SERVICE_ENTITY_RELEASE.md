@@ -1,5 +1,11 @@
 # Service Entity Lifecycle — release runbook
 
+> **HISTORICAL — SHIPPED AND STILL IN FORCE.** This runbook records the
+> 2026-07-22 release that made services permanent entities and ending one
+> non-destructive. The model it describes is the model running today, so read
+> it as background, not as pending work; the release steps themselves are
+> done. The current statement of the model lives in `docs/ARCHITECTURE.md`.
+
 **What this release is:** the complete rework of how services start and end,
 built after the 22.07 incident (the fourth mid-service board wipe). It makes
 the wipe class **structurally impossible** instead of guarded-against.
@@ -16,6 +22,19 @@ device replaying an END can only flip the old row it knows about — a no-op —
 and has no way to address a newer service's data. The operation "blank the
 board" no longer exists anywhere in the system: not in the app, not in the
 database functions.
+
+> **Correction (2026-08-11) — read the last sentence as being about the
+> LIFECYCLE.** What this release removed is every *implicit* blank: no START,
+> END, RESUME or supersede clears a row, and no stale replay can. That is the
+> claim the incident record supports, and it still holds.
+>
+> It is not true that the app contains no whole-board blank at all. Admin →
+> **CLEAR ALL** blanks every configured table on the live board, and CLEAR
+> TABLE does the same for one table. Both are deliberate, confirmed operator
+> actions outside the lifecycle, and both go through the normal write path
+> (compare-and-swap, worked-content shield, board-history recorder). Anyone
+> auditing the wipe class must include them; anyone deleting "dead" blanking
+> code on the strength of the sentence above would remove a live feature.
 
 What died with the old model: `archive_and_finish_service`'s unconditional
 `service_tables` blank (now a neutered stub), `finishServiceLocally`, the

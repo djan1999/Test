@@ -1,5 +1,22 @@
 # The Logbook — event-log migration charter
 
+> ## STATUS (verified against the code on 2026-08-11)
+>
+> | | |
+> |---|---|
+> | Live board source of truth | **`service_tables` — the card engine.** Unchanged. |
+> | `service_events` | **Dual-written.** Append-only; nothing on a user path awaits it. |
+> | Fold (`foldServiceEvents`) | **Diagnostics only** — parity checks, watchdog, Time Machine story view, archived-night reports. It does not render, seed or repair the board. |
+> | Phase 4 (the flip) | **NOT DONE.** No cutover has occurred. |
+> | Phase-4 deletions (CAS, `foldTable`, echo suppression, mass-blank guard, worked-content shield) | **NOT STARTED — all still live and load-bearing.** |
+>
+> The ✅ marks below record *delivered pieces of the migration*, not a
+> completed migration. Phase 4's own list is explicit that what remains is
+> EVIDENCE: three real green nights (zero content-loss) plus the two-week
+> soak. Until those land and are recorded here, treat every card-path defence
+> as required, and read a green parity badge as "the log agrees", never as
+> "the log is now the board".
+
 Decision (Djan, 09.08.2026, after the 08.08 wipe): the target architecture is
 an **append-only event log**. Every gesture in the restaurant becomes one
 small immutable fact; every screen derives its state by folding the facts.

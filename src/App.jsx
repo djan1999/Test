@@ -105,6 +105,11 @@ import {
   removedLiveTableIds,
   sanitizeRestaurantConfig,
 } from "./config/restaurantConfig.js";
+import {
+  DEFAULT_QUICK_ACCESS_ITEMS,
+  DEFAULT_RESTAURANT_CONFIG,
+  DEFAULT_SITTING_TIMES,
+} from "./config/buildDefaults.js";
 import { PRODUCT_NAME as APP_NAME, PRODUCT_SUBTITLE as APP_SUBTITLE } from "./config/product.js";
 import {
   DEFAULT_SYNC_CONFIG,
@@ -160,18 +165,6 @@ const CHOSEN_ON_LS_KEY = "milka_service_chosen_on";
 // old service's strips writes to that old key and can never touch the live
 // service's strips. (The shared legacy `floor_status_v1` key is retired.)
 const floorStatusKeyFor = (serviceId) => (serviceId ? `floor_status_v2:${serviceId}` : null);
-const BUILD_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "")
-  .split(",")
-  .map((room) => room.trim())
-  .filter(Boolean);
-const DEFAULT_RESTAURANT_CONFIG = makeDefaultRestaurantConfig({
-  name: APP_NAME,
-  subtitle: APP_SUBTITLE,
-  features: {
-    hotelGuests: String(import.meta.env.VITE_ENABLE_HOTEL_GUESTS || "").toLowerCase() === "true",
-    roomOptions: BUILD_ROOM_OPTIONS,
-  },
-});
 
 // Board sync history follows a table's stable id, never its screen position.
 // An array baseline can silently assign T2's history to T12 when an admin
@@ -179,38 +172,6 @@ const DEFAULT_RESTAURANT_CONFIG = makeDefaultRestaurantConfig({
 const makeTableJsonMap = (tables = []) => new Map(
   tables.map((table) => [Number(table.id), JSON.stringify(sanitizeTable(table))]),
 );
-
-const parseSittingTimes = () => {
-  const raw = String(import.meta.env.VITE_DEFAULT_SITTING_TIMES || "18:00,18:30,19:00,19:15")
-    .split(",")
-    .map(s => s.trim())
-    .filter(Boolean);
-  return raw.length > 0 ? raw : ["18:00", "18:30", "19:00", "19:15"];
-};
-const DEFAULT_SITTING_TIMES = parseSittingTimes();
-
-const parseDefaultQuickAccessItems = () => {
-  const raw = String(import.meta.env.VITE_DEFAULT_QUICK_ACCESS || "").trim();
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((item, idx) => ({
-        id: Number(item?.id) || idx + 1,
-        label: String(item?.label || "").trim(),
-        searchKey: String(item?.searchKey || item?.label || "").trim(),
-        linkedKey: item?.linkedKey != null && String(item.linkedKey).trim() !== "" ? String(item.linkedKey).trim() : undefined,
-        type: String(item?.type || "wine").trim() || "wine",
-        enabled: item?.enabled !== false,
-      }))
-      .filter(item => item.label);
-  } catch {
-    return [];
-  }
-};
-
-const DEFAULT_QUICK_ACCESS_ITEMS = parseDefaultQuickAccessItems();
 
 const SITTING_TIMES = DEFAULT_SITTING_TIMES;
 // Unified profile payload key. `menu_layout_profiles_v1` and the legacy
