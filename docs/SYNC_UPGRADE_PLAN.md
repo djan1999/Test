@@ -1,5 +1,11 @@
 # Sync & Data-Storage Upgrade Plan
 
+> **HISTORICAL — DELIVERED.** This plan's outcome (PowerSync + local SQLite as
+> the primary store, Supabase realtime as the fallback) is the architecture
+> running today. It is kept as the reasoning record; "Status: proposal" below
+> refers to when it was written, not to now. For the current picture see
+> `docs/ARCHITECTURE.md`.
+
 Status: proposal · Owner: engineering · Context: the live service board is a
 multi-device, realtime, offline-tolerant app whose sync was hand-rolled inside
 `src/App.jsx`. A run of production incidents (board wipe on a joining device,

@@ -34,10 +34,21 @@ Never place a service-role key in a `VITE_*` variable. Vite variables are compil
 6. Link the intended Supabase project and review pending migrations without
    applying them. Compare the production migration ledger with the checked-in
    files; missing migrations or timestamp/name variants are a stop condition.
+   Check the **latest** files, not the last recorded proof — every migration
+   added since the previous promotion has to appear on both sides.
 7. Create a fresh disposable Supabase branch and require its automatic
    migration replay to complete. Then execute `supabase test db` against the
-   full stack. A manual canonical-schema bootstrap is useful migration proof,
-   but it does not prove that the recorded migration history is reproducible.
+   full stack — currently `pilot_role_matrix.sql`, `board_history.sql` and
+   `service_events.sql`. A manual canonical-schema bootstrap is useful
+   migration proof, but it does not prove that the recorded migration history
+   is reproducible.
+
+> **What GitHub CI does and does not cover.** `.github/workflows/ci.yml` runs
+> `npm ci`, `npm run check` (Vitest + the production Vite/PWA build) and
+> `npm audit`. It does **not** provision Postgres, does **not** run anything
+> under `supabase/`, and therefore never evaluates a single RLS policy or
+> pgTAP assertion. Steps 2, 6, 7, 8 and 9 above are manual gates with no
+> automated backstop; a green PR badge is not evidence for any of them.
 8. Run Supabase database lint/advisors and resolve or record every finding.
 9. Perform `docs/SERVICE_DRILLS.md` on the actual FOH and Kitchen hardware.
 
@@ -87,8 +98,19 @@ production (`cvljktjmksfibuyphdln`):
 
 Going forward, every schema change MUST be a repository migration applied
 through tooling that records the ledger entry — never an ad-hoc dashboard
-edit. The ledger and `supabase/migrations/` are now in lockstep; keep them
-that way.
+edit.
+
+> **Do not carry the lockstep claim forward unchecked.** The statement "the
+> ledger and `supabase/migrations/` are in lockstep" was true of the tree as
+> it stood on 2026-08-05. Two migrations have been added since:
+>
+> - `20260808230000_board_history_and_worked_content_shield.sql`
+> - `20260809010000_service_events_append_only_log.sql`
+>
+> Before any promotion, re-export the production ledger and diff it against
+> `supabase/migrations/`, then re-prove a fresh automatic branch replay. Treat
+> the last recorded proof as expired the moment a new migration file lands —
+> nothing in CI re-checks it (see below).
 
 ## Promotion order
 
@@ -122,8 +144,12 @@ that way.
 - A table move updates both board and reservation ownership.
 - A stale device is refused when attempting to end a newer service.
 - Ending a test service writes nothing.
-- Ending a real service creates one archive and clears existing configured rows.
-- Admin System shows the correct build and a healthy sync stream.
+- Ending a real service flips exactly one `services` row to `ended` and
+  **removes no board rows** — the ended service, with all its `service_tables`,
+  is the archive entry, and resuming it brings the same board back on every
+  device.
+- Admin System shows the correct build, a healthy sync stream, and a Logbook
+  event count that advances during the smoke test.
 
 ## Early production monitoring
 
@@ -141,7 +167,7 @@ Frontend deployments can be rolled back through Vercel, but database migrations 
 - Do not manually reverse a migration during service.
 - Do not restore legacy role strings after accounts have migrated.
 - If a database change fails, stop the promotion and create a corrective forward migration.
-- Preserve `service_tables`, `service_settings.service_date`, reservations, and archives before any emergency data repair.
+- Preserve `services`, `service_tables`, `service_tables_history`, `service_events`, reservations, and archives before any emergency data repair. (The shared `service_settings.service_date` pointer is retired — the live service is the `services` row with `status='live'`.)
 - Keep active tablets on their current waiting PWA build until the corrective deployment is ready.
 
 ### After a database point-in-time restore

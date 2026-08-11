@@ -1,5 +1,11 @@
 # Service Entity Lifecycle — release runbook
 
+> **HISTORICAL — SHIPPED AND STILL IN FORCE.** This runbook records the
+> 2026-07-22 release that made services permanent entities and ending one
+> non-destructive. The model it describes is the model running today, so read
+> it as background, not as pending work; the release steps themselves are
+> done. The current statement of the model lives in `docs/ARCHITECTURE.md`.
+
 **What this release is:** the complete rework of how services start and end,
 built after the 22.07 incident (the fourth mid-service board wipe). It makes
 the wipe class **structurally impossible** instead of guarded-against.

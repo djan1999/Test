@@ -11,19 +11,51 @@ neutral seed, and controlled onboarding workflow. The remaining gates require
 real infrastructure or physical devices and cannot be truthfully replaced by a
 unit test.
 
-### 2026-08-04 database proof
+A `[~]` box below means *proven once, then expired* — the evidence was real but
+no longer covers the current tree, so it must be re-executed rather than
+re-read.
 
-- The canonical pre-hardening `schema.sql` bootstrap and
-  `20260804103132_pilot_role_hardening.sql` both applied cleanly to an isolated
-  Supabase branch.
-- `supabase/tests/pilot_role_matrix.sql` passed **49/49** assertions there, and
-  the post-migration Supabase security advisor returned no findings.
-- Supabase's automatic branch migration replay failed before the new migration
-  ran. The production migration ledger contains older migrations and timestamp
-  variants that are absent from this checkout. That history mismatch is a
-  rollout blocker even though the canonical-schema proof is green: reconcile
-  or squash the migration history, then prove a fresh automatic branch replay
-  before checking the full-stack migration gate below.
+**What the pilot foundation does cover.** Restaurant name, subtitle, table set
+and hotel features are workspace-owned; new workspaces start neutral with
+catalogue sync disabled and no provider; Admin has a workspace data export and
+exact-name guest erasure; custom dietary restrictions reach menu substitution;
+and the board carries server-side history, a worked-content shield and a Time
+Machine. The live board remains the `service_tables` card engine — the
+append-only Logbook is dual-written for diagnostics only and its Phase-4
+cutover has not happened (`docs/EVENT_LOG_PLAN.md`).
+
+### Database proof — what was executed, and what has expired
+
+**2026-08-04 (superseded, kept for the record).** The canonical pre-hardening
+`schema.sql` bootstrap and `20260804103132_pilot_role_hardening.sql` both
+applied cleanly to an isolated Supabase branch; `pilot_role_matrix.sql` passed
+**49/49** assertions there and the security advisor returned no findings. But
+Supabase's *automatic* branch migration replay failed before the new migration
+ran, because the production ledger held older migrations and timestamp
+variants absent from the checkout.
+
+**2026-08-05 (the executed proof).** After the ledger was reconciled and
+squashed, a fresh automatic branch (`replay-proof`) rebuilt the whole schema
+from the ledger alone and `pilot_role_matrix.sql` passed **64/64** assertions
+on it. The full record is in `DEPLOYMENT_RUNBOOK.md`. The 49/49 figure above
+is the *earlier, partial* run — do not quote it as the current result.
+
+> **This proof has partially expired and must be re-run before promotion.**
+>
+> - **The 64/64 run is a one-off on a branch that was deleted. GitHub CI does
+>   not repeat it.** `.github/workflows/ci.yml` runs `npm run check` and
+>   `npm audit` only; the pgTAP suites under `supabase/tests/` never execute
+>   in CI, so no automated signal will tell you when a change breaks the role
+>   matrix. Re-running it is a manual pre-deployment step, not something the
+>   green PR badge covers.
+> - **Two migrations have landed since the 2026-08-05 squash** —
+>   `20260808230000_board_history_and_worked_content_shield.sql` and
+>   `20260809010000_service_events_append_only_log.sql` — and they bring their
+>   own pgTAP suites (`supabase/tests/board_history.sql`,
+>   `supabase/tests/service_events.sql`). **Do not claim migration lockstep
+>   from the 2026-08-05 record.** Re-export the production ledger, diff it
+>   against `supabase/migrations/`, and re-prove a fresh automatic branch
+>   replay plus `supabase test db` (all three suites) before promotion.
 
 ## Authorization matrix
 
@@ -50,14 +82,20 @@ actual Kitchen profile during the role drill.
 
 - [ ] A current production backup was restored into an isolated project; date,
   project, verifier, and smoke-query evidence are recorded.
-- [x] `supabase test db` passed against a disposable database after the full
+- [~] `supabase test db` passed against a disposable database after the full
   migration stack, including `supabase/tests/pilot_role_matrix.sql`.
   *(2026-08-05: 64/64 assertions on branch `replay-proof`, built from the
-  reconciled ledger — see the executed record in DEPLOYMENT_RUNBOOK.md.)*
-- [x] A fresh Supabase branch completed its **automatic** migration replay; the
+  reconciled ledger — see the executed record in DEPLOYMENT_RUNBOOK.md.
+  **Re-run required:** that branch is deleted, GitHub CI does not repeat the
+  matrix, and two migrations have landed since — with two further pgTAP
+  suites, `board_history.sql` and `service_events.sql`, that this run never
+  covered.)*
+- [~] A fresh Supabase branch completed its **automatic** migration replay; the
   repository migration files and production migration ledger were reconciled.
   *(2026-08-05: ledger squashed to baseline + hardening; branch replay
-  reproduced production exactly.)*
+  reproduced production exactly. **Re-verify:** the two post-August migrations
+  must be present in both the ledger and `supabase/migrations/` and must
+  replay automatically before lockstep can be claimed again.)*
 - [x] Every existing tablet's old upload queue was drained, then the compatible
   database migration was applied before deploying the client/server build that
   depends on its new RPCs. *(Executed in the reverse-safe order on
@@ -80,7 +118,13 @@ actual Kitchen profile during the role drill.
   privacy notice were reviewed for the restaurant's jurisdiction.
 - [ ] Product name/logo and the neutral first-login experience were approved.
 - [ ] Hotel mode, EN/SI language, Europe/Ljubljana timezone, table count, and
-  service-day rollover match this specific restaurant.
+  service-day rollover match this specific restaurant. *(Partially satisfiable
+  today: restaurant name, table set and hotel features ARE workspace-owned and
+  can be set per restaurant. Timezone is **not** — rollover runs on each
+  device's clock against a build-time hour — and sitting times and languages
+  are **not** generalized either: sittings come from a build-time variable and
+  EN/SI is structural in the schema. A restaurant outside Europe/Ljubljana, or
+  needing other sittings or a third language, cannot be served by this build.)*
 - [ ] Milka passed the same build in Demo and one controlled live-service
   regression before the pilot workspace was created.
 
