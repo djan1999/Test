@@ -115,13 +115,25 @@ RPC. On top of it:
 
 - **Board history** — an `AFTER` trigger records each new version of a board
   row into `service_tables_history`. No client can write to it or skip it.
-  **It is a bounded window, not an archive:** the same trigger prunes each
-  `(workspace, service, table)` key to its **newest 48 versions** on every
-  write, so a busy table's older versions are gone. History is also removed
-  deliberately by **guest erasure** (which deletes the versions still carrying
-  the erased party's name) and by an **Admin service purge** (the `service_id`
-  FK cascades that service's whole history away). Read the guarantee as
-  "recent board state is recoverable", never as "nothing can ever be lost".
+  **It is capped by version count, not by age**, and the two are easy to
+  confuse:
+
+  - The same trigger prunes each `(workspace, service, table)` key to its
+    **newest 48 versions**, but only *on a write to that key*. A busy table's
+    older versions are therefore gone — while a table that has stopped being
+    written to keeps whatever it last held, **indefinitely**. Nothing ages out
+    on its own; there is no scheduled job.
+  - So an ended service's history does not shrink over time. It goes away only
+    with **guest erasure** (which deletes the versions still carrying the
+    erased party's name) or an **Admin service purge** (the `service_id` FK
+    cascades that service's whole history away) — the latter being a manual
+    action today.
+
+  Read the guarantee as "recent board state on a live table is recoverable",
+  never as "nothing can ever be lost" and never as "old history cleans itself
+  up". Both halves matter: the first is why the Time Machine is not a backup,
+  the second is why this table is in scope for a retention decision (see Data
+  lifecycle).
 - **The worked-content shield** — a write may not replace a row holding worked
   content (kitchen activity, drinks, seat data) with one holding none, unless
   the writer attests it saw that content.
@@ -215,7 +227,7 @@ reaches menus and kitchen tickets like any built-in.
 - Audit records have no browser-side delete path.
 - Admin → Data & Privacy provides a **workspace data export** and **exact-name guest erasure** (the typed name must match; erasure covers reservations, service history, board-row history versions and event payloads).
 - No automatic retention deletion is enabled **for reservations, services, archives or audit records**. This is the conservative choice until the restaurant selects a legal/operational retention period.
-- One exception, by design: `service_tables_history` is self-pruning. Each write drops that table's versions beyond the newest 48, so the board's undo window is bounded without an external job. It is an operational safety net, not a retained record — do not count it as service history for a retention decision.
+- `service_tables_history` is **capped by version count, not by age** — and that is not an exception to the line above. Each write drops that table's versions beyond the newest 48, so a *live* table's undo window stays bounded without an external job. But the cap is enforced *by writes*: once a service ends and its rows go quiet, its remaining versions stop being pruned and persist indefinitely. Those rows carry guest names and allergy data, so `service_tables_history` **is** in scope for a retention decision — it should follow the parent service's approved period, which the `service_id` FK cascade already applies whenever a service is purged. That purge is a manual Admin action today, and the period is still unapproved.
 - Operational high-frequency taps are excluded from the administrative audit trail.
 
 ## Current intentional limitations
