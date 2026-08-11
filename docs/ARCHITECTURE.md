@@ -53,7 +53,7 @@ When PowerSync is unavailable or disabled, the app uses a direct Supabase fallba
 | Courses and menu variants | `menu_courses` |
 | Wines and beverages | `wines`, `beverages` |
 | Completed services | ended `services` rows (with their `service_tables`); `service_archive` holds pre-entity legacy snapshots only |
-| Every prior version of every board row | `service_tables_history` (server-written, client-readable by Admin) |
+| Recent prior versions of a board row (newest 48 per table, server-written, Admin-readable) | `service_tables_history` |
 | Recorded gestures (diagnostics, not board truth) | `service_events` |
 | Staff access | `workspace_members` |
 | Human administrative history | `audit_log` |
@@ -79,29 +79,69 @@ Each service is one row in `services` (`id`, `date`, `session`, `started_at`,
   still arbitrates, so a resume can never displace a newer running service.
 
 Because a stale or offline device can only ever address the old service row it
-already knows about, "blank the board" is not an operation the system has —
-the mid-service wipe class is structurally impossible rather than
-guarded-against. The legacy `archive_and_finish_service` RPC, whose
-transaction did clear rows, is a neutered stub with no client caller; the
-pre-entity behaviour it implemented is history, not current design.
+already knows about, **no lifecycle transition can blank the board**. That is
+the property that makes the mid-service wipe class structurally impossible
+rather than guarded-against: the wipes all came from a lifecycle step that
+also cleared rows, and no lifecycle step clears rows any more. The legacy
+`archive_and_finish_service` RPC, whose transaction did clear rows, is a
+neutered stub with no client caller; the pre-entity behaviour it implemented
+is history, not current design.
 
-Deletion is still possible, but only as a deliberate Admin act: soft-delete to
-trash, then an explicit purge that cascades a service's rows and history away.
+### Blanking the board is still possible — deliberately
+
+The lifecycle cannot do it. Two explicit operator actions still can, and both
+are outside the lifecycle:
+
+- **Admin → CLEAR ALL** blanks every configured table on the live board. It is
+  Admin-only, confirmed, and names its consequence in the prompt; it discards
+  without archiving, which is why the prompt points at Archive & Clear
+  instead. This is a real whole-board blank — do not read "a service is never
+  blanked" as covering it.
+- **CLEAR TABLE** does the same for one table.
+
+Both go through the normal write path, so the compare-and-swap, the
+worked-content shield and the board-history recorder all apply: the blanking
+writes are recorded like any other edit, and the operator's device must have
+seen the content it is replacing.
+
+Deletion of a whole service is also possible, but only as a deliberate Admin
+act: soft-delete to trash, then an explicit purge that cascades that service's
+rows *and its history* away.
 
 ### Board write safety
 
 Board writes go through `save_service_table_if_current`, a compare-and-swap
 RPC. On top of it:
 
-- **Board history** — an `AFTER` trigger records every version of every board
-  row into `service_tables_history`. No client can skip or delete it, so board
-  data can be superseded but not lost.
+- **Board history** — an `AFTER` trigger records each new version of a board
+  row into `service_tables_history`. No client can write to it or skip it.
+  **It is a bounded window, not an archive:** the same trigger prunes each
+  `(workspace, service, table)` key to its **newest 48 versions** on every
+  write, so a busy table's older versions are gone. History is also removed
+  deliberately by **guest erasure** (which deletes the versions still carrying
+  the erased party's name) and by an **Admin service purge** (the `service_id`
+  FK cascades that service's whole history away). Read the guarantee as
+  "recent board state is recoverable", never as "nothing can ever be lost".
 - **The worked-content shield** — a write may not replace a row holding worked
   content (kitchen activity, drinks, seat data) with one holding none, unless
   the writer attests it saw that content.
 - **The Time Machine** — `restore_service_board` puts a service's board back to
-  any recorded moment, writing through the normal row path so the restore is
-  itself recorded and undoable.
+  any moment **still inside the retained window**, writing through the normal
+  row path so the restore is itself recorded and undoable. A moment older than
+  a table's 48 retained versions, or one belonging to a purged service or an
+  erased guest, cannot be restored.
+
+> **Known inconsistency — behaviour deliberately unchanged here.** The CLEAR
+> ALL prompt says the discard "cannot be undone". In practice the Time Machine
+> often *can* undo it: the blanking write is itself a recorded version, so the
+> pre-clear state is restorable while it remains within that table's 48
+> retained versions. The prompt is therefore more absolute than the system.
+> Both readings are defensible — the prompt is a safe over-warning, and
+> recovery is genuinely not guaranteed — but they disagree, and an operator
+> may abandon a recoverable night because the dialog told them it was gone.
+> Resolving it (softening the wording, or surfacing "restore the last moment
+> before this clear") is a UI change on a destructive path and needs its own
+> tested PR; it is out of scope for a documentation cleanup.
 
 ## Merge rules that must remain true
 
@@ -174,7 +214,8 @@ reaches menus and kitchen tickets like any built-in.
 - Service archives use soft delete first. Permanent purge is an explicit Admin action.
 - Audit records have no browser-side delete path.
 - Admin → Data & Privacy provides a **workspace data export** and **exact-name guest erasure** (the typed name must match; erasure covers reservations, service history, board-row history versions and event payloads).
-- No automatic retention deletion is enabled. This is the conservative choice until the restaurant selects a legal/operational retention period.
+- No automatic retention deletion is enabled **for reservations, services, archives or audit records**. This is the conservative choice until the restaurant selects a legal/operational retention period.
+- One exception, by design: `service_tables_history` is self-pruning. Each write drops that table's versions beyond the newest 48, so the board's undo window is bounded without an external job. It is an operational safety net, not a retained record — do not count it as service history for a retention decision.
 - Operational high-frequency taps are excluded from the administrative audit trail.
 
 ## Current intentional limitations

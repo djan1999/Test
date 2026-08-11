@@ -24,6 +24,7 @@ special-category data**. Treat every table above accordingly.
 |---|---|---|
 | Reservations (past dates) | 24 months, then delete | Year-over-year planning needs one full season of comparison |
 | Ended services + board rows | 24 months, then purge (admin trash → purge flow) | Same operational history window |
+| `service_tables_history` (board undo window) | **No decision needed — already self-limiting.** Newest 48 versions per workspace/service/table, pruned on every write; cascades away with a purged service and is deleted for an erased guest | An operational undo window, not a retained record. Note it holds guest names for as long as a version survives, so it is in scope for erasure (it is already covered) even though it needs no retention period |
 | Legacy `service_archive` | 24 months from `created_at`, then purge | Superseded by the service-entity model |
 | `audit_log` | 36 months, then delete | Accountability window longer than data window |
 | Guest erasure register (`privacy_guest_erasures`) | Indefinite | Tokens only (no names); required to keep erasure effective against stale devices |
