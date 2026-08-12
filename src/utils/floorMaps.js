@@ -152,7 +152,53 @@ export function sanitizeFloorMaps(state) {
     geometryVersion: Number.isInteger(state.geometryVersion) ? state.geometryVersion : 1,
     maps,
     activeDiningMapId,
+    activeDiningByDate: sanitizeDayBindings(state.activeDiningByDate, maps),
     config: { ...(state.config || {}) },
+  };
+}
+
+// ── per-DAY active layout ───────────────────────────────────────────────────
+// `activeDiningMapId` is the house default. `activeDiningByDate` overrides it
+// for one service day, so a Tuesday that needs the 6-top room does not drag
+// Wednesday with it (reported 12.08: "the floor editor doesn't let me use a
+// different layout for today's service because it wouldn't function on
+// tomorrow's"). Bindings for maps that no longer exist are dropped, and the
+// window is bounded so the settings blob cannot grow without limit.
+const DAY_BINDING_KEEP = 120; // most recent days retained
+
+export function sanitizeDayBindings(raw, maps) {
+  const known = new Set((maps || []).filter((m) => m.kind === "dining").map((m) => m.id));
+  const entries = Object.entries(raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {})
+    .filter(([day, id]) => /^\d{4}-\d{2}-\d{2}$/.test(day) && known.has(id))
+    .sort(([a], [b]) => (a < b ? 1 : -1)) // newest first
+    .slice(0, DAY_BINDING_KEEP);
+  return Object.fromEntries(entries);
+}
+
+/** The dining map in force for `day` — the day's binding, else the default. */
+export const activeDiningMapIdForDay = (state, day) =>
+  (day && state?.activeDiningByDate?.[day]) || state?.activeDiningMapId || null;
+
+/**
+ * A floorMaps view whose `activeDiningMapId` IS the given day's layout. Every
+ * existing consumer calls `getActiveDiningMap(floorMaps)`, so resolving the
+ * day once at the top means the whole app — floor view, kitchen view, minimap,
+ * seat caps, NEEDS TABLE — follows the day's room with no further wiring.
+ */
+export function resolveFloorMapsForDay(state, day) {
+  const id = activeDiningMapIdForDay(state, day);
+  return id && id !== state?.activeDiningMapId ? { ...state, activeDiningMapId: id } : state;
+}
+
+/** Bind `mapId` to `day` (the activation), leaving other days untouched. */
+export function setActiveDiningForDay(state, day, mapId) {
+  if (!day || !mapId) return state;
+  return {
+    ...state,
+    activeDiningByDate: sanitizeDayBindings(
+      { ...(state.activeDiningByDate || {}), [day]: mapId },
+      state.maps,
+    ),
   };
 }
 

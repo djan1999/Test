@@ -51,6 +51,7 @@ import {
 import {
   FLOOR_MAPS_KEY, sanitizeFloorMaps,
   getActiveDiningMap, getTerraceMap, mapSeatCountForBoardTable,
+  resolveFloorMapsForDay, setActiveDiningForDay,
   terraceOccupancy, applyLayoutSwitchRow, resolveReservationTable,
   layoutSwitchBlockers, isCurrentServiceRow,
   sanitizeFloorStatus, setFloorStatus, cycleFloorStatus, pruneFloorStatus,
@@ -1638,6 +1639,19 @@ export default function App() {
   // occupancy, the terrace board visuals, and layout re-resolution.
   // Everything from the active service day forward (both sessions, future
   // dates) — the input set for layout-switch planning in Admin → Floor.
+  // THE DAY'S ROOM (docs: per-day active layout). `floorMapsState` holds the
+  // house default plus per-day bindings; this resolves the one in force for
+  // the service being worked. Every view calls getActiveDiningMap(floorMaps),
+  // so resolving here means the floor view, the kitchen view, the minimap,
+  // seat caps and NEEDS TABLE all follow the day's room with no extra wiring —
+  // and tomorrow keeps its own. The ADMIN floor editor deliberately gets the
+  // RAW state: it edits maps and writes the bindings.
+  const layoutServiceDay = serviceDate || currentServiceDay();
+  const floorMapsForDay = useMemo(
+    () => resolveFloorMapsForDay(floorMapsState, layoutServiceDay),
+    [floorMapsState, layoutServiceDay],
+  );
+
   const layoutPlanningReservations = useMemo(() => {
     const from = serviceDate || currentServiceDay();
     return (reservations || []).filter(r => r.date && String(r.date) >= String(from));
@@ -5307,7 +5321,7 @@ export default function App() {
       profiles={profilesState.profiles}
       assignments={profilesState.assignments}
       resolveTableFlag={(r) => ({
-        needsTable: !resolveReservationTable(getActiveDiningMap(floorMapsState), r.table_id).table,
+        needsTable: !resolveReservationTable(getActiveDiningMap(floorMapsForDay), r.table_id).table,
       })}
     />
     {archiveOpen && (
@@ -5371,7 +5385,7 @@ export default function App() {
           {mode === "kitchen_floor" ? (
             <KitchenFloorView
               mapKind={kitchenFloorMap}
-              floorMaps={floorMapsState}
+              floorMaps={floorMapsForDay}
               floorStatus={floorStatus}
               reservations={serviceReservations}
               tables={displayTables}
@@ -5405,7 +5419,7 @@ export default function App() {
             // handlers the kitchen floor view gets make it interactive — seat
             // swaps, terrace assign / change / SET — with the same local-first
             // writes (works with the Wi-Fi down, per Djan).
-            floorMaps={floorMapsState}
+            floorMaps={floorMapsForDay}
             floorStatus={floorStatus}
             reservations={serviceReservations}
             onAssignTerrace={assignTerraceTable}
@@ -5693,7 +5707,7 @@ export default function App() {
                The old TerracePanel's whole terrace leg lives in here. */
             <FloorView
               mapKind={serviceView}
-              floorMaps={floorMapsState}
+              floorMaps={floorMapsForDay}
               floorStatus={floorStatus}
               reservations={serviceReservations}
               tables={displayTables}
@@ -5761,7 +5775,7 @@ export default function App() {
           spirits={spirits}
           beers={beers}
           reservationOnTable={reservationOnTable}
-          seatCapOf={id => mapSeatCountForBoardTable(getActiveDiningMap(floorMapsState), id)}
+          seatCapOf={id => mapSeatCountForBoardTable(getActiveDiningMap(floorMapsForDay), id)}
           onClose={() => setSel(null)}
           upd={(f, v) => upd(sel, f, v)}
           updSeat={(sid, f, v) => updSeat(sel, sid, f, v)}

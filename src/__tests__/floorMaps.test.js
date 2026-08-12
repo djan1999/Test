@@ -3,6 +3,7 @@ import {
   buildDefaultFloorMaps, sanitizeFloorMaps, getActiveDiningMap, getTerraceMap,
   findMapTable, resolveReservationTable, boardIdsOf, mapSeatCountForBoardTable,
   planLayoutSwitch, applyLayoutSwitchRow, layoutSwitchBlockers, isCurrentServiceRow,
+  activeDiningMapIdForDay, setActiveDiningForDay, resolveFloorMapsForDay,
   seatDisplayPoints, assignSeatNumbers,
   terraceOccupancy,
   GEOMETRY_VERSION, MAP_W, MAP_H,
@@ -220,6 +221,49 @@ describe("planLayoutSwitch (acceptance 12)", () => {
     expect(next.data.tableGroup).toEqual([2, 3]);
     expect(applyLayoutSwitchRow({ status: "conflict" }, res("a", 2))).toBeNull();
     expect(applyLayoutSwitchRow({ status: "needs_table" }, res("a", 2))).toBeNull();
+  });
+});
+
+describe("per-day active layout — Tuesday's room does not drag Wednesday", () => {
+  // Reported 12.08: "the floor editor doesn't let me use a different layout
+  // for today's service because it wouldn't function on tomorrow's".
+  const base = buildDefaultFloorMaps();
+
+  it("a day with no binding falls back to the house default", () => {
+    expect(activeDiningMapIdForDay(base, "2026-08-12")).toBe(base.activeDiningMapId);
+    expect(resolveFloorMapsForDay(base, "2026-08-12")).toBe(base); // no needless copy
+  });
+
+  it("binding a day changes THAT day only", () => {
+    const next = setActiveDiningForDay(base, "2026-08-12", "dining_b");
+    expect(activeDiningMapIdForDay(next, "2026-08-12")).toBe("dining_b");
+    expect(activeDiningMapIdForDay(next, "2026-08-13")).toBe(base.activeDiningMapId);
+    // and the house default is untouched, so unbound days are unaffected
+    expect(next.activeDiningMapId).toBe(base.activeDiningMapId);
+  });
+
+  it("resolveFloorMapsForDay hands every consumer the day's room", () => {
+    const next = setActiveDiningForDay(base, "2026-08-12", "dining_b");
+    expect(getActiveDiningMap(resolveFloorMapsForDay(next, "2026-08-12")).id).toBe("dining_b");
+    expect(getActiveDiningMap(resolveFloorMapsForDay(next, "2026-08-13")).id).toBe(base.activeDiningMapId);
+  });
+
+  it("bindings to deleted maps and junk dates are dropped by the sanitizer", () => {
+    const dirty = { ...base, activeDiningByDate: {
+      "2026-08-12": "dining_b",
+      "2026-08-13": "map-that-was-deleted",
+      "not-a-date": "dining_b",
+      "2026-08-14": base.maps.find((m) => m.kind === "terrace").id, // not a dining map
+    } };
+    const clean = sanitizeFloorMaps(dirty);
+    expect(clean.activeDiningByDate).toEqual({ "2026-08-12": "dining_b" });
+  });
+
+  it("the binding window is bounded so the settings blob cannot grow forever", () => {
+    const many = {};
+    for (let d = 1; d <= 200; d += 1) many[`2026-01-${String(d).padStart(2, "0")}`] = "dining_b";
+    const clean = sanitizeFloorMaps({ ...base, activeDiningByDate: many });
+    expect(Object.keys(clean.activeDiningByDate).length).toBeLessThanOrEqual(120);
   });
 });
 

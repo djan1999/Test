@@ -2,7 +2,10 @@ import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
 import FloorEditor from "../floor/FloorEditor.jsx";
-import { planLayoutSwitch, layoutSwitchBlockers, isCurrentServiceRow } from "../../utils/floorMaps.js";
+import {
+  planLayoutSwitch, layoutSwitchBlockers, isCurrentServiceRow,
+  activeDiningMapIdForDay, setActiveDiningForDay,
+} from "../../utils/floorMaps.js";
 
 // ── FloorPanel — floor layouts, geometry editor, terrace flow config ─────────
 // Three seams, all persisting through onUpdateFloorMaps → the stateStore seam:
@@ -23,6 +26,10 @@ export default function FloorPanel({
   // A future date's needs_table is a warning (that day resolves against its
   // own layout), so tonight's room is never held hostage by next week's book.
   const blockedBy = (rows) => layoutSwitchBlockers(rows, serviceDay);
+  // Which room is in force for the service being set up — the day's binding
+  // if it has one, otherwise the house default. Activating writes the binding
+  // for THIS day only, so tomorrow keeps whatever it already had.
+  const activeForDay = activeDiningMapIdForDay(floorMaps, serviceDay);
 
   const diningMaps = floorMaps.maps.filter((m) => m.kind === "dining");
 
@@ -36,7 +43,7 @@ export default function FloorPanel({
   });
 
   const requestSwitch = (mapId) => {
-    if (mapId === floorMaps.activeDiningMapId) return;
+    if (mapId === activeForDay) return;
     const nextMap = floorMaps.maps.find((m) => m.id === mapId);
     setSwitchError("");
     setPendingSwitch({ mapId, rows: planLayoutSwitch(nextMap, reservations, boardTables) });
@@ -63,7 +70,11 @@ export default function FloorPanel({
         setSwitchError(result.error?.message || result.error || "The layout switch could not be saved.");
         return;
       }
-      onUpdateFloorMaps({ ...floorMaps, activeDiningMapId: pendingSwitch.mapId });
+      onUpdateFloorMaps(serviceDay
+        ? setActiveDiningForDay(floorMaps, serviceDay, pendingSwitch.mapId)
+        // No service day in context (shouldn't happen in the admin panel) —
+        // fall back to the house default so activation is never a no-op.
+        : { ...floorMaps, activeDiningMapId: pendingSwitch.mapId });
       setPendingSwitch(null);
     } catch (error) {
       setSwitchError(error?.message || "The layout switch could not be saved.");
@@ -76,10 +87,17 @@ export default function FloorPanel({
 
   return (
     <div>
-      <div style={label}>ACTIVE DINING LAYOUT (one per service)</div>
+      <div style={label}>
+        ACTIVE DINING LAYOUT{serviceDay ? ` — FOR ${serviceDay}` : ""}
+      </div>
+      {serviceDay && (
+        <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], margin: "-4px 0 8px" }}>
+          Applies to this service day only — other days keep their own layout.
+        </div>
+      )}
       <div style={{ display: "flex", flexWrap: "wrap" }}>
         {diningMaps.map((m) => (
-          <button key={m.id} style={btn(m.id === floorMaps.activeDiningMapId)} onClick={() => requestSwitch(m.id)}>
+          <button key={m.id} style={btn(m.id === activeForDay)} onClick={() => requestSwitch(m.id)}>
             {m.name}
           </button>
         ))}
