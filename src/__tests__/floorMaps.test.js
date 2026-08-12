@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   buildDefaultFloorMaps, sanitizeFloorMaps, getActiveDiningMap, getTerraceMap,
   findMapTable, resolveReservationTable, boardIdsOf, mapSeatCountForBoardTable,
-  planLayoutSwitch, applyLayoutSwitchRow, seatDisplayPoints, assignSeatNumbers,
+  planLayoutSwitch, applyLayoutSwitchRow, layoutSwitchBlockers, isCurrentServiceRow,
+  seatDisplayPoints, assignSeatNumbers,
   terraceOccupancy,
   GEOMETRY_VERSION, MAP_W, MAP_H,
   moveTable, resizeTable, rotateTable, setTableShape, renameTable,
@@ -219,6 +220,55 @@ describe("planLayoutSwitch (acceptance 12)", () => {
     expect(next.data.tableGroup).toEqual([2, 3]);
     expect(applyLayoutSwitchRow({ status: "conflict" }, res("a", 2))).toBeNull();
     expect(applyLayoutSwitchRow({ status: "needs_table" }, res("a", 2))).toBeNull();
+  });
+});
+
+describe("layoutSwitchBlockers — a switch is FOR today's service", () => {
+  const row = (status, date) => ({ id: `${status}-${date}`, status, date });
+
+  it("only TODAY's unresolved rows block; future needs_table/conflict are warnings", () => {
+    const today = "2026-08-12";
+    const rows = [
+      row("unchanged", today),
+      row("move", today),
+      row("needs_table", "2026-08-13"), // future — warning, not a wall
+      row("conflict", "2026-08-15"),    // future — warning, not a wall
+    ];
+    expect(layoutSwitchBlockers(rows, today)).toEqual([]);
+  });
+
+  it("a needs_table on TODAY still blocks", () => {
+    const today = "2026-08-12";
+    const rows = [row("needs_table", today), row("needs_table", "2026-08-20")];
+    expect(layoutSwitchBlockers(rows, today).map((r) => r.date)).toEqual([today]);
+  });
+
+  it("an undated unresolved row is treated as current and blocks", () => {
+    expect(layoutSwitchBlockers([row("needs_table", null)], "2026-08-12")).toHaveLength(1);
+    expect(isCurrentServiceRow({ date: null }, "2026-08-12")).toBe(true);
+    expect(isCurrentServiceRow({ date: "2026-08-13" }, "2026-08-12")).toBe(false);
+  });
+
+  it("Hotel Milka's real 12.08 case: switching to DINNING ROOM #3 is NOT blocked", () => {
+    // #3 drops T4/T5/T6-solo. Tonight's book is on T1/T6/T9/T10 (all resolve:
+    // T6 → the T6-7 merge). The T4 bookings that DO strand are on 13.08/15.08 —
+    // future, so they warn, they don't wall. This is the exact fix.
+    const map3 = { id: "dining_c", kind: "dining", tables: [
+      { label: "T1" }, { label: "T2-3", members: ["T2", "T3"] }, { label: "T7" },
+      { label: "T6-7", members: ["T6", "T7"] }, { label: "T8" }, { label: "T9" }, { label: "T10" },
+    ] };
+    const tonight = "2026-08-12";
+    const rows = planLayoutSwitch(map3, [
+      { id: "inge", date: tonight, table_id: 1, data: { resName: "Inge" } },
+      { id: "seanna", date: tonight, table_id: 6, data: { resName: "Seanna" } },
+      { id: "philippe", date: tonight, table_id: 9, data: { resName: "Philippe" } },
+      { id: "sarah", date: tonight, table_id: 10, data: { resName: "Sarah" } },
+      { id: "benedikt", date: "2026-08-13", table_id: 4, data: { resName: "Benedikt" } }, // strands under #3
+      { id: "stacy", date: "2026-08-15", table_id: 4, data: { resName: "Stacy" } },       // strands under #3
+    ]);
+    // Benedikt & Stacy are needs_table, but they are future → not blockers.
+    expect(rows.filter((r) => r.status === "needs_table").map((r) => r.id).sort()).toEqual(["benedikt", "stacy"]);
+    expect(layoutSwitchBlockers(rows, tonight)).toEqual([]); // tonight can switch to #3
   });
 });
 

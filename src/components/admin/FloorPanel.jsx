@@ -2,7 +2,7 @@ import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
 import FloorEditor from "../floor/FloorEditor.jsx";
-import { planLayoutSwitch } from "../../utils/floorMaps.js";
+import { planLayoutSwitch, layoutSwitchBlockers, isCurrentServiceRow } from "../../utils/floorMaps.js";
 
 // ── FloorPanel — floor layouts, geometry editor, terrace flow config ─────────
 // Three seams, all persisting through onUpdateFloorMaps → the stateStore seam:
@@ -14,11 +14,15 @@ import { planLayoutSwitch } from "../../utils/floorMaps.js";
 //    "LAYOUT C" nights), RESET TO DEFAULTS. Editing is an admin concern;
 //    the FOH floor view is service-only.
 export default function FloorPanel({
-  floorMaps, tableIds = [], reservations = [], boardTables = [], onUpdateFloorMaps, onApplyLayoutSwitch, isMobile,
+  floorMaps, tableIds = [], reservations = [], serviceDay = null, boardTables = [], onUpdateFloorMaps, onApplyLayoutSwitch, isMobile,
 }) {
   const [pendingSwitch, setPendingSwitch] = useState(null); // { mapId, rows }
   const [savingSwitch, setSavingSwitch] = useState(false);
   const [switchError, setSwitchError] = useState("");
+  // The switch is FOR today's service: only TODAY's unresolved rows block it.
+  // A future date's needs_table is a warning (that day resolves against its
+  // own layout), so tonight's room is never held hostage by next week's book.
+  const blockedBy = (rows) => layoutSwitchBlockers(rows, serviceDay);
 
   const diningMaps = floorMaps.maps.filter((m) => m.kind === "dining");
 
@@ -46,9 +50,9 @@ export default function FloorPanel({
     // repaint the dialog if the confirm is refused below.
     const nextMap = floorMaps.maps.find((m) => m.id === pendingSwitch.mapId);
     const rows = nextMap ? planLayoutSwitch(nextMap, reservations, boardTables) : pendingSwitch.rows;
-    if (rows.some((row) => row.status === "conflict" || row.status === "needs_table")) {
+    if (blockedBy(rows).length) {
       setPendingSwitch({ mapId: pendingSwitch.mapId, rows });
-      setSwitchError("Resolve every conflict and NEEDS TABLE assignment before activating this layout.");
+      setSwitchError("Resolve today's conflicts and NEEDS TABLE assignments before activating this layout.");
       return;
     }
     setSavingSwitch(true);
@@ -89,10 +93,15 @@ export default function FloorPanel({
           {pendingSwitch.rows.length === 0 && (
             <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginBottom: 8 }}>no reservations for this service</div>
           )}
-          {pendingSwitch.rows.filter((r) => r.status !== "unchanged").map((r) => (
+          {pendingSwitch.rows.filter((r) => r.status !== "unchanged").map((r) => {
+            // A future date's unresolved row is a warning, not a blocker — it
+            // reads amber and says which night to sort it before, so tonight's
+            // switch is never mistaken for breaking next week.
+            const future = (r.status === "conflict" || r.status === "needs_table") && !isCurrentServiceRow(r, serviceDay);
+            return (
             <div key={r.id} style={{ display: "flex", gap: 10, alignItems: "baseline", padding: "3px 0", borderBottom: `1px solid ${tokens.ink[5]}` }}>
-              <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.1em", fontWeight: 700, minWidth: 84, textTransform: "uppercase", color: statusColor[r.status] }}>
-                {r.status === "needs_table" ? "NEEDS TABLE" : r.status}
+              <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.1em", fontWeight: 700, minWidth: 84, textTransform: "uppercase", color: future ? tokens.signal.warn : statusColor[r.status] }}>
+                {future ? "LATER — REASSIGN" : r.status === "needs_table" ? "NEEDS TABLE" : r.status}
               </span>
               {r.date && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3] }}>{r.date}</span>}
               <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[1], fontWeight: 600 }}>{r.name || "—"}</span>
@@ -109,20 +118,33 @@ export default function FloorPanel({
                 </span>
               )}
             </div>
-          ))}
+          );})}
           {pendingSwitch.rows.every((r) => r.status === "unchanged") && pendingSwitch.rows.length > 0 && (
             <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginBottom: 4 }}>all assignments resolve unchanged</div>
           )}
-          {(switchError || pendingSwitch.rows.some((row) => row.status === "conflict" || row.status === "needs_table")) && (
-            <div role="alert" aria-live="assertive" style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text, marginTop: 10 }}>
-              {switchError || "Resolve every conflict and NEEDS TABLE assignment before activating this layout."}
-            </div>
-          )}
+          {(() => {
+            const blockers = blockedBy(pendingSwitch.rows);
+            const laterCount = pendingSwitch.rows.filter((r) => (r.status === "conflict" || r.status === "needs_table") && !isCurrentServiceRow(r, serviceDay)).length;
+            return (
+              <>
+                {(switchError || blockers.length > 0) && (
+                  <div role="alert" aria-live="assertive" style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text, marginTop: 10 }}>
+                    {switchError || "Resolve today's conflicts and NEEDS TABLE assignments before activating this layout."}
+                  </div>
+                )}
+                {blockers.length === 0 && laterCount > 0 && (
+                  <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.signal.warn, marginTop: 10 }}>
+                    {laterCount} upcoming booking{laterCount === 1 ? "" : "s"} won&apos;t have a table under this layout — they keep their current assignment and stay put; reassign or set that night&apos;s layout before its service.
+                  </div>
+                )}
+              </>
+            );
+          })()}
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <button
-              style={{ ...btn(true), opacity: savingSwitch || pendingSwitch.rows.some((row) => row.status === "conflict" || row.status === "needs_table") ? 0.5 : 1 }}
+              style={{ ...btn(true), opacity: savingSwitch || blockedBy(pendingSwitch.rows).length > 0 ? 0.5 : 1 }}
               onClick={confirmSwitch}
-              disabled={savingSwitch || pendingSwitch.rows.some((row) => row.status === "conflict" || row.status === "needs_table")}
+              disabled={savingSwitch || blockedBy(pendingSwitch.rows).length > 0}
             >{savingSwitch ? "SAVING…" : "CONFIRM SWITCH"}</button>
             <button style={btn(false)} onClick={() => { setPendingSwitch(null); setSwitchError(""); }} disabled={savingSwitch}>CANCEL</button>
           </div>
