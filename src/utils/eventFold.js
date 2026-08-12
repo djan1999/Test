@@ -20,6 +20,26 @@ const blankProjection = (tableId) => ({
   seats: {},          // seatId → { water, pairing, drinks: {category: {name: n}}, extras: [], options: [] }
   bottles: {},        // name → count
   restrictions: [],   // [{ note, pos, detail, kitchenAdded }] — ALLERGY data
+  serviceState: blankServiceState(),  // the kitchen's operational flags
+  notes: blankNotes(),                // staff-entered prose
+});
+
+const blankServiceState = () => ({
+  courseReady: null, kitchenSent: null, kitchenAlert: null,
+  kitchenArchived: false, pace: null,
+});
+const serviceStateFrom = (raw) => ({
+  courseReady: raw?.courseReady ?? null,
+  kitchenSent: raw?.kitchenSent ?? null,
+  kitchenAlert: raw?.kitchenAlert ?? null,
+  kitchenArchived: !!raw?.kitchenArchived,
+  pace: raw?.pace ?? null,
+});
+const blankNotes = () => ({ notes: "", kitchenCourseNotes: {} });
+const notesFrom = (raw) => ({
+  notes: raw?.notes == null ? "" : String(raw.notes),
+  kitchenCourseNotes: raw?.kitchenCourseNotes && typeof raw.kitchenCourseNotes === "object"
+    ? raw.kitchenCourseNotes : {},
 });
 
 // Restrictions, normalised identically on both sides of the comparison. This
@@ -44,7 +64,7 @@ const seatOf = (table, seatId) => {
     table.seats[key] = {
       water: "—", pairing: "",
       drinks: Object.fromEntries(DRINK_CATEGORIES.map((category) => [category, {}])),
-      extras: [], options: [],
+      extras: [], options: [], gender: null,
     };
   }
   return table.seats[key];
@@ -163,6 +183,15 @@ export function foldServiceEvents(events) {
       case "table_restrictions_set":
         table.restrictions = restrictionsFrom(payload.restrictions);
         break;
+      case "table_service_state_set":
+        table.serviceState = serviceStateFrom(payload);
+        break;
+      case "table_notes_set":
+        table.notes = notesFrom(payload);
+        break;
+      case "seat_gender_set":
+        seatOf(table, payload.seatId).gender = payload.to ?? null;
+        break;
       // Legacy delta facts (recorded before snapshots, 09.08) still fold:
       case "drink_added":
         if (DRINK_CATEGORIES.includes(payload.category)) {
@@ -215,7 +244,8 @@ const seatHasContent = (seat) =>
   || (seat.pairing && seat.pairing !== "")
   || DRINK_CATEGORIES.some((category) => Object.keys(seat.drinks[category]).length > 0)
   || seat.extras.length > 0
-  || seat.options.length > 0;
+  || seat.options.length > 0
+  || seat.gender != null;
 
 const namesOf = (list) => (Array.isArray(list) ? list : [])
   .map((entry) => (typeof entry === "string" ? entry : entry?.name ?? JSON.stringify(entry)));
@@ -236,6 +266,7 @@ export function boardProjection(table) {
     const folded = seatOf(projection, seat.id);
     folded.water = seat.water ?? "—";
     folded.pairing = seat.pairing ?? "";
+    folded.gender = seat.gender ?? null;
     for (const category of DRINK_CATEGORIES) {
       for (const name of namesOf(seat[category])) bump(folded.drinks[category], name, +1);
     }
@@ -248,6 +279,8 @@ export function boardProjection(table) {
   }
   for (const name of namesOf(table.bottleWines)) bump(projection.bottles, name, +1);
   projection.restrictions = restrictionsFrom(table.restrictions);
+  projection.serviceState = serviceStateFrom(table);
+  projection.notes = notesFrom(table);
   return projection;
 }
 
@@ -262,12 +295,14 @@ const canonical = (projection) => ({
   fires: Object.fromEntries(Object.entries(projection.fires).sort()),
   bottles: Object.fromEntries(Object.entries(projection.bottles).sort()),
   restrictions: restrictionsFrom(projection.restrictions),
+  serviceState: serviceStateFrom(projection.serviceState),
+  notes: notesFrom(projection.notes),
   seats: Object.fromEntries(
     Object.entries(projection.seats)
       .filter(([, seat]) => seatHasContent(seat))
       .sort(([a], [b]) => Number(a) - Number(b))
       .map(([seatId, seat]) => [seatId, {
-        water: seat.water, pairing: seat.pairing,
+        water: seat.water, pairing: seat.pairing, gender: seat.gender ?? null,
         drinks: Object.fromEntries(
           DRINK_CATEGORIES.filter((category) => Object.keys(seat.drinks[category]).length > 0)
             .map((category) => [category, Object.fromEntries(Object.entries(seat.drinks[category]).sort())]),
@@ -282,7 +317,8 @@ const isBlank = (projection) => {
   const c = canonical(projection);
   return !c.active && Object.keys(c.fires).length === 0
     && Object.keys(c.bottles).length === 0 && Object.keys(c.seats).length === 0
-    && c.restrictions.length === 0;
+    && c.restrictions.length === 0
+    && c.notes.notes === "" && Object.keys(c.notes.kitchenCourseNotes).length === 0;
 };
 
 // ── the two KINDS of divergence ──────────────────────────────────────────────
@@ -328,6 +364,13 @@ export function classifyTableDivergence(fromLog, fromBoard) {
   const notesB = new Set(b.restrictions.map((r) => `${r.note}#${r.pos}`));
   for (const k of notesA) if (!notesB.has(k)) return "content-loss";
   for (const k of notesB) if (!notesA.has(k)) return "content-loss";
+  // Staff-typed prose is work: a note on one side and gone on the other is
+  // content-loss. Differing TEXT of a note both sides hold is a tiebreak.
+  if ((a.notes.notes === "") !== (b.notes.notes === "")) return "content-loss";
+  const ckA = Object.keys(a.notes.kitchenCourseNotes);
+  const ckB = Object.keys(b.notes.kitchenCourseNotes);
+  for (const k of ckA) if (!ckB.includes(k)) return "content-loss";
+  for (const k of ckB) if (!ckA.includes(k)) return "content-loss";
   // Same structure on both sides — only which value won a tie differs.
   return "concurrent-tiebreak";
 }

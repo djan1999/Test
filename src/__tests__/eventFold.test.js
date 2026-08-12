@@ -244,6 +244,65 @@ describe("restrictions — the ALLERGY data the fold must carry", () => {
   });
 });
 
+describe("kitchen state, staff notes and seat genders — the rest of the coverage gap", () => {
+  const asEvents = (facts) => facts.map((f) => ({ type: f.type, table_id: f.tableId, payload: f.payload }));
+
+  it("the SET banner, sent/alert/archived flags and pace round-trip through the log", () => {
+    const before = { ...blankCard(4), active: true, guests: 2 };
+    const after = {
+      ...before,
+      courseReady: { key: "c2", index: 2, name: "Kaviar" },
+      kitchenSent: true, kitchenAlert: "late", kitchenArchived: true, pace: "slow",
+    };
+    const facts = boardFactsFromDiff(before, after);
+    expect(facts.map((f) => f.type)).toEqual(["table_service_state_set"]);
+    const folded = foldServiceEvents(asEvents(facts));
+    expect(folded.get(4).serviceState).toEqual({
+      courseReady: { key: "c2", index: 2, name: "Kaviar" },
+      kitchenSent: true, kitchenAlert: "late", kitchenArchived: true, pace: "slow",
+    });
+    // Folded from the table's WHOLE history (seating included), the log
+    // rebuilds the board exactly — that is what parity has to mean.
+    const whole = asEvents(boardFactsFromDiff(blankCard(4), after));
+    expect(compareFoldToBoard(foldServiceEvents(whole), [after]).divergent).toEqual([]);
+  });
+
+  it("staff notes round-trip, and a note the log never saw is CONTENT LOSS", () => {
+    const board = {
+      ...blankCard(5), active: true, guests: 2, seats: [blankSeat(1)],
+      notes: "birthday cake at dessert",
+      kitchenCourseNotes: { c3: "no butter" },
+    };
+    const bare = [{ type: "party_seated", table_id: 5, payload: { resName: "", guests: 2 } }];
+    const missed = compareFoldToBoard(foldServiceEvents(bare), [board]);
+    expect(missed.contentLoss).toEqual([5]);   // typed work is never a tiebreak
+    expect(missed.tiebreaks).toEqual([]);
+
+    const withNotes = [...bare, ...asEvents(boardFactsFromDiff({ ...board, notes: "", kitchenCourseNotes: {} }, board))];
+    expect(compareFoldToBoard(foldServiceEvents(withNotes), [board]).divergent).toEqual([]);
+  });
+
+  it("seat gender is recorded per seat and rebuilt", () => {
+    const before = { ...blankCard(6), active: true, guests: 2, seats: [blankSeat(1), blankSeat(2)] };
+    const after = { ...before, seats: [{ ...blankSeat(1), gender: "Mrs" }, blankSeat(2)] };
+    const facts = boardFactsFromDiff(before, after);
+    expect(facts).toEqual([{ type: "seat_gender_set", tableId: 6, payload: { seatId: 1, to: "Mrs" } }]);
+    const folded = foldServiceEvents(asEvents(facts));
+    expect(folded.get(6).seats["1"].gender).toBe("Mrs");
+    const whole = asEvents(boardFactsFromDiff(blankCard(6), after));
+    expect(compareFoldToBoard(foldServiceEvents(whole), [after]).divergent).toEqual([]);
+  });
+
+  it("no change in any of them emits nothing (no fact churn on every autosave)", () => {
+    const t = {
+      ...blankCard(7), active: true, guests: 2, notes: "x",
+      kitchenCourseNotes: { c1: "y" }, pace: "fast", kitchenArchived: true,
+      seats: [{ ...blankSeat(1), gender: "Mr" }],
+    };
+    expect(boardFactsFromDiff(t, { ...t })).toEqual([]);
+  });
+});
+
 describe("content-loss vs concurrent-tiebreak — the wipe/scribble distinction", () => {
   // The real 09/10.08 three-device conflict on table 7 seat 1: the board's
   // compare-and-swap crowned water XC + aperitif "Le Terroir"; the log's
