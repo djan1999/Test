@@ -197,7 +197,21 @@ over until the log has proven itself carrying the same facts in production.
   exists). Pinned over 100 random worked boards — a seeded log folds back
   to its board exactly — plus a concurrent double-seed converging and an
   untouched board seeding nothing.
-- Remaining before the flip: EVIDENCE ONLY — three real green nights (zero
+- ❌ NOT EVIDENCE ONLY — corrected 12.08. Measured against the first real
+  full service (183 facts, 5 tables, 3 devices, 7h): the fold rebuilds only
+  the fields the taxonomy carries, and a live table row also holds
+  `restrictions` (ALLERGIES), `kitchenCourseNotes`, `notes`, `cakeNote`,
+  `birthday`, `guestType`, `room`/`rooms`, `lang`, `menuType`, `pace`,
+  `resTime`, `tableGroup`, `kitchenSent`, `kitchenAlert`, `kitchenArchived`,
+  `courseReady`, `reference`, `source`, and per seat `gender`,
+  `floorPositions`, `pairingSharedWith`. Flipping the source of truth in
+  that state would DELETE them from a live board — a worse incident than
+  the one this migration exists to abolish. A green parity verdict means
+  "every field the log carries matches", NOT "the log can rebuild the
+  board"; that limit must be stated wherever a green badge is shown.
+  THE REAL REMAINING WORK is taxonomy coverage, and it is Phase 3, not
+  Phase 4. Started 12.08 with `table_restrictions_set` (allergies first).
+- Remaining before the flip, AFTER coverage is complete: three real green nights (zero
   content-loss) and the two-week soak in Phase 4's own exit criteria. As of
   10.08 the Demo record holds three green verdicts, but all are small
   (3, 3, 19 facts) and none is a full service; the 104-fact three-device
@@ -254,6 +268,7 @@ select t.table_id, k.key as course, k.value->>'firedAt' as fired_at
 |---|---|
 | kitchen | **course_fired**, **course_unfired** |
 | seating | **party_seated**, **party_unseated**, **party_resized**, **party_renamed**, **party_arrival_set** (a move surfaces as unseated+seated until gesture seams carry `party_moved` intent; a rename carries ONLY the new name, under the erasure-covered `resName` key — the old name lives in the prior seated/renamed fact) |
+| dietary | **table_restrictions_set** (snapshot of the table's restrictions; carries `resName` so the existing guest erasure — which matches `payload->>'resName'` and blanks `restrictions` in the same pass — covers it with no new erasure path). A restriction present on one side and gone on the other is classified CONTENT-LOSS, never a tiebreak: it is an allergy that stopped being visible. |
 | drinks | **seat_water_set**, **seat_pairing_set**, **seat_drinks_set** (snapshot: the seat's full per-category multiset; `added`/`removed` decorate the story), **table_bottles_set** (same, table-level), **extra_ordered/unordered**, **option_ordered/unordered**. Legacy delta facts `drink_added/removed`, `bottle_added/removed` (recorded 08–09.08) still fold. |
 | lifecycle (P3) | already event-shaped in `services`; folded into the same stream at P4 |
 

@@ -19,7 +19,24 @@ const blankProjection = (tableId) => ({
   fires: {},          // courseKey → firedAt
   seats: {},          // seatId → { water, pairing, drinks: {category: {name: n}}, extras: [], options: [] }
   bottles: {},        // name → count
+  restrictions: [],   // [{ note, pos, detail, kitchenAdded }] — ALLERGY data
 });
+
+// Restrictions, normalised identically on both sides of the comparison. This
+// is safety data: a fold that silently dropped it would take a nut allergy off
+// a live table, which is why it had to join the taxonomy before Phase 4.
+const restrictionsFrom = (raw) =>
+  (Array.isArray(raw) ? raw : [])
+    .filter((r) => r && r.note)
+    .map((r) => ({
+      note: String(r.note),
+      pos: r.pos == null ? null : Number(r.pos),
+      detail: r.detail == null ? "" : String(r.detail),
+      kitchenAdded: !!r.kitchenAdded,
+    }))
+    .sort((a, b) => String(a.note).localeCompare(String(b.note))
+      || (a.pos ?? -1) - (b.pos ?? -1)
+      || String(a.detail).localeCompare(String(b.detail)));
 
 const seatOf = (table, seatId) => {
   const key = String(seatId);
@@ -143,6 +160,9 @@ export function foldServiceEvents(events) {
       case "table_bottles_set":
         table.bottles = countsFrom(payload.bottles);
         break;
+      case "table_restrictions_set":
+        table.restrictions = restrictionsFrom(payload.restrictions);
+        break;
       // Legacy delta facts (recorded before snapshots, 09.08) still fold:
       case "drink_added":
         if (DRINK_CATEGORIES.includes(payload.category)) {
@@ -227,6 +247,7 @@ export function boardProjection(table) {
     }
   }
   for (const name of namesOf(table.bottleWines)) bump(projection.bottles, name, +1);
+  projection.restrictions = restrictionsFrom(table.restrictions);
   return projection;
 }
 
@@ -240,6 +261,7 @@ const canonical = (projection) => ({
   arrivedAt: projection.active ? (projection.arrivedAt ?? null) : null,
   fires: Object.fromEntries(Object.entries(projection.fires).sort()),
   bottles: Object.fromEntries(Object.entries(projection.bottles).sort()),
+  restrictions: restrictionsFrom(projection.restrictions),
   seats: Object.fromEntries(
     Object.entries(projection.seats)
       .filter(([, seat]) => seatHasContent(seat))
@@ -259,7 +281,8 @@ const canonical = (projection) => ({
 const isBlank = (projection) => {
   const c = canonical(projection);
   return !c.active && Object.keys(c.fires).length === 0
-    && Object.keys(c.bottles).length === 0 && Object.keys(c.seats).length === 0;
+    && Object.keys(c.bottles).length === 0 && Object.keys(c.seats).length === 0
+    && c.restrictions.length === 0;
 };
 
 // ── the two KINDS of divergence ──────────────────────────────────────────────
@@ -298,6 +321,13 @@ export function classifyTableDivergence(fromLog, fromBoard) {
   const bottlesB = new Set(Object.keys(b.bottles));
   for (const k of bottlesA) if (!bottlesB.has(k)) return "content-loss";
   for (const k of bottlesB) if (!bottlesA.has(k)) return "content-loss";
+  // A dietary restriction present on one side and GONE on the other is the
+  // wipe signature at its most dangerous — an allergy that stopped being
+  // visible. Never a tiebreak, whatever else agrees.
+  const notesA = new Set(a.restrictions.map((r) => `${r.note}#${r.pos}`));
+  const notesB = new Set(b.restrictions.map((r) => `${r.note}#${r.pos}`));
+  for (const k of notesA) if (!notesB.has(k)) return "content-loss";
+  for (const k of notesB) if (!notesA.has(k)) return "content-loss";
   // Same structure on both sides — only which value won a tie differs.
   return "concurrent-tiebreak";
 }
@@ -411,6 +441,12 @@ export function describeServiceEvent(event) {
     case "extra_unordered": return line(`extra ${payload.key} cancelled${seatBit}`);
     case "option_ordered": return line(`optional ${payload.key}${seatBit}`);
     case "option_unordered": return line(`optional ${payload.key} cancelled${seatBit}`);
+    case "table_restrictions_set": {
+      const list = Array.isArray(payload.restrictions) ? payload.restrictions : [];
+      return line(list.length
+        ? `restrictions: ${list.map((r) => `${r.note}${r.pos != null ? ` (P${r.pos})` : ""}`).join(", ")}`
+        : "restrictions cleared");
+    }
     case "course_fired": return line(`FIRE ${payload.courseKey} (${payload.firedAt ?? "?"})`);
     case "course_unfired": return line(`un-fire ${payload.courseKey}`);
     default: return line(String(event?.type || "event"));
