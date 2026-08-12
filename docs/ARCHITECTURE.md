@@ -8,9 +8,10 @@ This document describes the application as an operating restaurant system, not j
 > Logbook (`service_events`, `docs/EVENT_LOG_PLAN.md`) is **dual-written
 > alongside it and read only for diagnostics** (Time Machine story view,
 > parity checks, archived-night reports). The Phase-4 cutover that would make
-> the folded log the board has **not** happened. Nothing in this document
-> describes the log as a source of truth, and no defence listed here may be
-> removed on the assumption that it has.
+> the folded log the board was **cancelled by owner decision on 12.08.2026**
+> (`docs/EVENT_LOG_PLAN.md`, STATUS close-out) — the log is frozen as a
+> diagnostics-only observer. Nothing in this document describes the log as a
+> source of truth, and the card-path defences listed here are permanent.
 
 ## What the application is
 
