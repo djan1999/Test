@@ -21,12 +21,13 @@ retention periods, proven backup restoration, repeatable real-Postgres policy
 execution, and physical tablet drills remain open. `PILOT_ROLLOUT.md` is the
 authoritative gate; the phases below remain the longer-term product roadmap.
 
-## Where the board's truth lives (11.08.2026)
+## Where the board's truth lives (12.08.2026)
 
-`service_tables` is the live board source. The append-only Logbook
-(`service_events`) is **dual-written and read for diagnostics only**; its
-Phase-4 cutover has not happened, and none of the card-path defences may be
-removed on the assumption that it has. See `docs/EVENT_LOG_PLAN.md`.
+`service_tables` is the live board source — **permanently**. The
+append-only Logbook (`service_events`) is **dual-written and read for
+diagnostics only**; its Phase-4 cutover was **cancelled by owner decision
+on 12.08.2026**, and the card-path defences are permanent. See
+`docs/EVENT_LOG_PLAN.md`, STATUS close-out.
 
 ## Still open, stated plainly (verified 11.08.2026)
 

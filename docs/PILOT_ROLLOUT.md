@@ -21,8 +21,9 @@ catalogue sync disabled and no provider; Admin has a workspace data export and
 exact-name guest erasure; custom dietary restrictions reach menu substitution;
 and the board carries server-side history, a worked-content shield and a Time
 Machine. The live board remains the `service_tables` card engine — the
-append-only Logbook is dual-written for diagnostics only and its Phase-4
-cutover has not happened (`docs/EVENT_LOG_PLAN.md`).
+append-only Logbook is dual-written for diagnostics only; its Phase-4
+cutover was cancelled by owner decision on 12.08.2026
+(`docs/EVENT_LOG_PLAN.md`, STATUS close-out).
 
 ### Database proof — what was executed, and what has expired
 
