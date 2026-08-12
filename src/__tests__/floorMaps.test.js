@@ -272,6 +272,33 @@ describe("layoutSwitchBlockers — a switch is FOR today's service", () => {
   });
 });
 
+describe("seatDisplayPoints — ring snapping is numerically stable", () => {
+  // The ring rotation snaps to the nearest 15°. When the stored angles average
+  // to an EXACT half-step the tie must resolve deterministically: T9's real
+  // angles (0, 165) mean -7.5°, which atan2 returns as -7.499999999999998, and
+  // the whole ring used to tip 15° off-axis. The kitchen minimap draws chair
+  // BARS, so the tilt showed there while the editor's numbered DOTS hid it
+  // (reported 12.08). Every one of these is a real Hotel Milka round table.
+  const ringAngles = (seats) =>
+    seatDisplayPoints({ x: 0, y: 0, w: 10, h: 10, seats })
+      .map((p) => Math.round(Math.atan2(p.out.y, p.out.x) * 180 / Math.PI))
+      .map((deg) => (deg === 0 ? 0 : deg)); // normalise -0 so the pin reads plainly
+
+  it("T9 (0, 165) — the exact-tie case — lands square, not 15° off", () => {
+    expect(ringAngles([{ no: 1, angle: 0 }, { no: 2, angle: 165 }])).toEqual([-90, 90]);
+  });
+
+  it("T7 (285, 75) and T10 (0, 177) keep landing square", () => {
+    expect(ringAngles([{ no: 1, angle: 285 }, { no: 2, angle: 75 }])).toEqual([180, 0]);
+    expect(ringAngles([{ no: 1, angle: 0 }, { no: 2, angle: 177 }])).toEqual([-90, 90]);
+  });
+
+  it("a deliberately diagonal ring still reads diagonal (snapping, not flattening)", () => {
+    // 45°/225° is a real arrangement, not a tie — it must be preserved.
+    expect(ringAngles([{ no: 1, angle: 45 }, { no: 2, angle: 225 }])).toEqual([-45, 135]);
+  });
+});
+
 describe("seatDisplayPoints", () => {
   it("rect seats land on the named edge with an outward normal", () => {
     const pts = seatDisplayPoints({ x: 10, y: 20, w: 10, h: 6, seats: [{ no: 1, side: "W", offset: 0.5 }, { no: 2, side: "E", offset: 0.5 }] });
