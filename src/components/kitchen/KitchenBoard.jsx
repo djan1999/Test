@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { DndContext, DragOverlay, MouseSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, DragOverlay, MouseSensor, TouchSensor, MeasuringStrategy, closestCenter, pointerWithin, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
 import { optionalPairingsFromCourses, courseRestrictionModCounts, overrideModCounts } from "../../utils/menuUtils.js";
@@ -80,6 +80,23 @@ function useTicketRowHeight(gridRef, enabled, gap) {
   }, [enabled, gap, gridRef]);
 
   return rowH;
+}
+
+// ── Where a dragged card lands ────────────────────────────────
+// WHERE THE FINGER IS, not what the card overlaps. dnd-kit's rectIntersection
+// scores each cell by how much of the DRAGGED CARD covers it, and a ticket is
+// ten times the height of an unseated banner: dragged one row straight up, a
+// ticket still overlapped the hole it came from far more than the banner it
+// was sitting on, so the board kept answering "you are over yourself" and
+// nothing swapped. Dragging up AND sideways cleared its own column and worked,
+// which is why this read as "I have to bring it in from the side".
+//
+// pointerWithin asks the only question the chef is asking: what is under my
+// finger? closestCenter covers the rest — a finger over a gap between cards,
+// or out past the last one — so a drop always lands somewhere sensible.
+export function ticketCollisions(args) {
+  const under = pointerWithin(args);
+  return under.length > 0 ? under : closestCenter(args);
 }
 
 // In-ticket dividers. Deliberately softer than the grammar hairline (ink[4]):
@@ -1868,7 +1885,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     <KitchenAlertOverlay alerts={pendingAlerts} onConfirm={confirmAlert} />
     <DndContext
       sensors={sensors}
-      collisionDetection={rectIntersection}
+      collisionDetection={ticketCollisions}
       measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
       onDragStart={({ active }) => {
         setActiveId(active.id);
