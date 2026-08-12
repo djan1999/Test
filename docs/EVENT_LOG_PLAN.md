@@ -210,7 +210,18 @@ over until the log has proven itself carrying the same facts in production.
   "every field the log carries matches", NOT "the log can rebuild the
   board"; that limit must be stated wherever a green badge is shown.
   THE REAL REMAINING WORK is taxonomy coverage, and it is Phase 3, not
-  Phase 4. Started 12.08 with `table_restrictions_set` (allergies first).
+  Phase 4. Delivered 12.08: `table_restrictions_set` (ALLERGIES),
+  `table_service_state_set` (courseReady/kitchenSent/kitchenAlert/
+  kitchenArchived/pace), `table_notes_set` (notes + kitchenCourseNotes),
+  `seat_gender_set`. Parity compares all of them, and a missing
+  restriction OR a missing note is CONTENT-LOSS, never a tiebreak —
+  staff-typed work and allergy data are exactly what a wipe destroys.
+  STILL UNCOVERED, and therefore still blocking the flip: seat
+  `floorPositions` and `pairingSharedWith`; and the reservation-derived
+  metadata (`resTime`, `guestType`, `room`, `rooms`, `lang`, `menuType`,
+  `birthday`, `cakeNote`, `reference`, `source`, `tableGroup`) — for which
+  the open design question is whether the fold should carry them at all or
+  re-derive them from the reservation row, which is not being replaced.
 - Remaining before the flip, AFTER coverage is complete: three real green nights (zero
   content-loss) and the two-week soak in Phase 4's own exit criteria. As of
   10.08 the Demo record holds three green verdicts, but all are small
