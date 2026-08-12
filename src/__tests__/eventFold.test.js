@@ -187,6 +187,63 @@ describe("compareFoldToBoard", () => {
   });
 });
 
+describe("restrictions — the ALLERGY data the fold must carry", () => {
+  // Measured against the real 12.08 service: every table carried
+  // `restrictions` (Seanna Markham's "pescetarian" at P1), and the log had
+  // never recorded them. A flip in that state would have taken allergies off
+  // a live board — which is why they had to join the taxonomy first.
+  const seanna = { pos: 1, note: "pescetarian", kitchenAdded: true };
+
+  it("a restriction appearing is a fact, and the fold rebuilds it", () => {
+    const before = { ...blankCard(6), active: true, resName: "Seanna Markham", guests: 2 };
+    const after = { ...before, restrictions: [seanna] };
+    const facts = boardFactsFromDiff(before, after);
+    expect(facts).toEqual([{
+      type: "table_restrictions_set", tableId: 6,
+      // resName rides along so the DB's guest erasure (which matches
+      // payload->>'resName' and blanks restrictions in the same pass) covers it.
+      payload: {
+        resName: "Seanna Markham",
+        restrictions: [{ note: "pescetarian", pos: 1, detail: "", kitchenAdded: true }],
+      },
+    }]);
+    const folded = foldServiceEvents(facts.map((f) => ({ type: f.type, table_id: f.tableId, payload: f.payload })));
+    expect(folded.get(6).restrictions).toEqual([{ note: "pescetarian", pos: 1, detail: "", kitchenAdded: true }]);
+  });
+
+  it("PARITY now compares restrictions — a board allergy missing from the log is CONTENT LOSS", () => {
+    const board = {
+      ...blankCard(6), active: true, resName: "Seanna Markham", guests: 2,
+      seats: [blankSeat(1), blankSeat(2)], restrictions: [seanna],
+    };
+    const logWithout = [
+      { type: "party_seated", table_id: 6, payload: { resName: "Seanna Markham", guests: 2 } },
+    ];
+    const missed = compareFoldToBoard(foldServiceEvents(logWithout), [board]);
+    expect(missed.contentLoss).toEqual([6]);   // an allergy is never a tiebreak
+    expect(missed.tiebreaks).toEqual([]);
+
+    const logWith = [
+      ...logWithout,
+      { type: "table_restrictions_set", table_id: 6, payload: { resName: "Seanna Markham", restrictions: [seanna] } },
+    ];
+    expect(compareFoldToBoard(foldServiceEvents(logWith), [board]).divergent).toEqual([]);
+  });
+
+  it("re-ordering the same restrictions is not a change (no fact churn)", () => {
+    const a = { ...blankCard(2), active: true, restrictions: [{ note: "nuts", pos: 1 }, { note: "gluten", pos: 2 }] };
+    const b = { ...a, restrictions: [{ note: "gluten", pos: 2 }, { note: "nuts", pos: 1 }] };
+    expect(boardFactsFromDiff(a, b)).toEqual([]);
+  });
+
+  it("clearing a restriction records it, and the fold clears too", () => {
+    const withR = { ...blankCard(6), active: true, restrictions: [seanna] };
+    const without = { ...withR, restrictions: [] };
+    const facts = boardFactsFromDiff(withR, without);
+    expect(facts[0]).toMatchObject({ type: "table_restrictions_set", payload: { restrictions: [] } });
+  });
+});
+
 describe("content-loss vs concurrent-tiebreak — the wipe/scribble distinction", () => {
   // The real 09/10.08 three-device conflict on table 7 seat 1: the board's
   // compare-and-swap crowned water XC + aperitif "Le Terroir"; the log's
