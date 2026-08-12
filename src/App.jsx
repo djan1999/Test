@@ -4360,6 +4360,16 @@ export default function App() {
   // of the initial bundle. onStatus drives the header sync chip and the
   // sqlite-primary probe; the watches below drive every read once primary.
   const [powerSyncStatus, setPowerSyncStatus] = useState(null);
+  // Planner truth, the empty case: the reservations watch (below) refuses to
+  // mark the planner loaded off an empty PRE-SYNC read — but a workspace with
+  // genuinely no reservations in the window would then never re-fire the
+  // watch. Once the first sync completes, an empty mirror IS the truth, so
+  // unlock here. (Lives after the powerSyncStatus declaration — TDZ.)
+  // Scoped to the sqlite-primary path only: on the direct fallback the
+  // planner's truth is the server read, which sets the flag itself.
+  useEffect(() => {
+    if (sqlitePrimary && !reservationsLoaded && powerSyncStatus?.hasSynced) setReservationsLoaded(true);
+  }, [sqlitePrimary, powerSyncStatus?.hasSynced, reservationsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
   // Init retry counter: bumping it re-runs the connect effect. A failed init
   // (the SDK chunk not fetching over a dying link at boot — the wifi-extender
   // incident) used to pin the session to the fragile direct-Supabase fallback
@@ -4514,6 +4524,15 @@ export default function App() {
           onReservations: (rows) => {
             if (cancelled) return;
             if (sandboxRef.current) { setReservationsLoaded(true); return; } // test service: keep the in-memory planner
+            // An empty read from a mirror that has not completed its first
+            // sync means "not yet synced", never "no reservations" — the same
+            // rule board truth applies above (serviceKnown) and wines/
+            // beverages apply below. Marking the planner loaded on that tick
+            // opened the CONNECTING gate onto an empty reservations list
+            // (reported 12.08: "opened reservations, they weren't loaded in
+            // yet"). The hasSynced flip is caught by the effect by the boot
+            // gate, so a genuinely empty planner still unlocks.
+            if (!rows.length && !powerSyncStatus?.hasSynced) return;
             setReservations(rows);
             setReservationsLoaded(true);
           },
