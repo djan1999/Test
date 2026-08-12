@@ -328,7 +328,16 @@ export function seatDisplayPoints(table) {
       const off = (((e.s.angle ?? 0) - rank * step) * Math.PI) / 180;
       vx += Math.cos(off); vy += Math.sin(off);
     });
-    const base = Math.round((Math.atan2(vy, vx) * 180 / Math.PI) / 15) * 15;
+    // Snap the ring to the nearest 15°. The mean direction is rounded to 6dp
+    // FIRST because a tie lands on an exact half-step and floating point
+    // decides it at random: T9's stored angles (0, 165) average to -7.5°,
+    // which atan2 returns as -7.499999999999998, so Math.round tipped the
+    // whole ring to -15° and drew both chairs 15° off-axis. Visible on the
+    // kitchen minimap (chair BARS carry the tilt) and invisible in the floor
+    // editor (numbered DOTS look the same at any angle) — reported 12.08.
+    // Quantising first makes an exact tie resolve consistently (half up).
+    const meanDeg = Number((Math.atan2(vy, vx) * 180 / Math.PI).toFixed(6));
+    const base = Math.round(meanDeg / 15) * 15;
     ring.forEach((e, rank) => evenAngle.set(e.i, (((base + rank * step) % 360) + 360) % 360));
   }
 
