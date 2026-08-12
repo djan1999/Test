@@ -52,6 +52,7 @@ import {
   FLOOR_MAPS_KEY, sanitizeFloorMaps,
   getActiveDiningMap, getTerraceMap, mapSeatCountForBoardTable,
   terraceOccupancy, applyLayoutSwitchRow, resolveReservationTable,
+  layoutSwitchBlockers, isCurrentServiceRow,
   sanitizeFloorStatus, setFloorStatus, cycleFloorStatus, pruneFloorStatus,
   renameFloorStatusLabel,
   clearStripsForBoardGroup,
@@ -1687,10 +1688,16 @@ export default function App() {
   // content (a walk-in the plan can't see) is blocked entirely — neither
   // its board state nor its reservation move, so the two never disagree.
   const applyLayoutSwitchRows = async (rows) => {
-    if ((rows || []).some(r => r.status === "conflict" || r.status === "needs_table")) {
-      return { ok: false, error: new Error("Resolve every conflict and NEEDS TABLE row before switching layouts.") };
+    // The switch is FOR today's service: block only on TODAY's unresolved rows
+    // (a future date's needs_table is a warning, not a wall), and move only
+    // TODAY's reservations — future assignments keep their own layout, so
+    // activating tonight's room never rewrites next week's bookings. Different
+    // rooms on different nights work per-service until per-day binding lands.
+    const switchDay = serviceDate || currentServiceDay();
+    if (layoutSwitchBlockers(rows, switchDay).length) {
+      return { ok: false, error: new Error("Resolve today's conflicts and NEEDS TABLE rows before switching layouts.") };
     }
-    const moveRows = (rows || []).filter(r => r.status === "move");
+    const moveRows = (rows || []).filter(r => r.status === "move" && isCurrentServiceRow(r, switchDay));
     if (!moveRows.length) return { ok: true };
     const { blocked } = applyLayoutSwitchToTables(tablesRef.current || [], moveRows);
     const blockedIds = new Set(blocked.map(b => b.id));
@@ -5529,6 +5536,7 @@ export default function App() {
         // to prevent. planLayoutSwitch keys conflicts per date+session, so
         // the multi-date set never cross-flags different nights.
         floorReservations={layoutPlanningReservations}
+        layoutServiceDay={serviceDate || currentServiceDay()}
         boardTables={displayTables}
         onUpdateFloorMaps={updateFloorMaps}
         onApplyLayoutSwitch={applyLayoutSwitchRows}

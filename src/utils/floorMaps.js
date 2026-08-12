@@ -258,6 +258,27 @@ export function planLayoutSwitch(nextMap, reservations, tables = null) {
   return rows;
 }
 
+// A layout switch is activated FOR ONE service — today's. It re-plans every
+// upcoming reservation only so the operator can SEE the downstream effect, but
+// the switch belongs to today: it may be blocked, and it may move rows, only
+// for the CURRENT service day. A future date's needs_table/conflict is a
+// warning to resolve before that service runs (against whatever layout is
+// active then), never a wall in front of tonight's room — and a future row is
+// never rewritten, so tomorrow keeps its own assignments. An undated row is
+// treated as current, so a genuinely unresolved row still blocks.
+// A row belongs to the service being activated when its date is today's — or
+// when the day is UNKNOWN (no serviceDay), in which case every row is treated
+// as current so the block stays fully strict rather than silently disarming.
+export const isCurrentServiceRow = (row, serviceDay) =>
+  !serviceDay || !row?.date || String(row.date) === String(serviceDay);
+
+// The unresolved rows that may actually stop this switch: today's only.
+export function layoutSwitchBlockers(rows, serviceDay) {
+  return (Array.isArray(rows) ? rows : []).filter(
+    (r) => (r.status === "conflict" || r.status === "needs_table") && isCurrentServiceRow(r, serviceDay),
+  );
+}
+
 // One planned row → the next { table_id, data } for that reservation.
 // Only 'move' rows are applied; conflicts/needs_table stay untouched.
 export function applyLayoutSwitchRow(row, reservation) {
