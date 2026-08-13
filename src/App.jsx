@@ -5057,15 +5057,15 @@ export default function App() {
   const hProps = {
     appName: effectiveAppName,
     syncLabel, syncLive,
-    // Device-health "?" beside the chip: OFF for now by owner choice (14.08).
-    // The readout, its verdicts and tests stay live — re-enable by passing
-    // onOpenHealth: () => setHealthOpen(true) here again.
+    // The status chip IS the device-health entry (owner choice, 14.08): the
+    // separate "?" button is gone, and the chip no longer runs the catalogue
+    // sync — that stays on the admin's login screen.
+    onOpenHealth: () => setHealthOpen(true),
     activeCount: active.length, reserved, seated,
     onExit: switchMode,
     onSummary: () => setSummaryOpen(true),
     onArchive: () => setArchiveOpen(true),
     onInventory: () => setInventoryOpen(true),
-    onSyncAll: canAdmin && canRunCatalogSync ? syncWines : undefined,
   };
 
   // Loud warning when the active service date is in the past — the silent
