@@ -26,15 +26,12 @@
 # one workspace.
 
 streams:
-  # THE LOGBOOK (Phase 2+, docs/EVENT_LOG_PLAN.md): defined now so the
-  # dashboard deploy that enables down-sync is a one-line auto_subscribe flip;
-  # Phase 1 only APPENDS (direct insert via lib/eventLog.js) and reads nothing.
-  service_events:
-    priority: 3
-    query: >-
-      SELECT * FROM service_events
-      WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = auth.user_id())
-    auto_subscribe: false
+  # THE LOGBOOK has no stream ON PURPOSE (13.08.2026): the log appends and
+  # reads over REST only, and the Phase-4 down-sync this stream was parked
+  # for was cancelled by owner decision (docs/EVENT_LOG_PLAN.md, STATUS
+  # close-out). The dormant (auto_subscribe: false) stream still cost sync
+  # bucket maintenance for data no device ever read. If the flip is ever
+  # un-cancelled, restore it from this file's git history.
   services:
     priority: 1
     query: >-
