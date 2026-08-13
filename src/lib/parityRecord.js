@@ -16,6 +16,7 @@ import { recordClientDiagnostic } from "./clientDiagnostics.js";
 
 export const PARITY_RECORD_KEY = "logbook_parity_record";
 const RECORD_CAP = 24; // a month of nights — enough evidence, bounded blob
+const END_REASONS = new Set(["manual", "rollover"]); // the one-per-service lane
 
 // → newest-first list of end-of-night verdicts; [] when unreadable (boot,
 // no workspace, storage failure — the panel just shows nothing).
@@ -55,6 +56,16 @@ export async function fileParityVerdict({
       tiebreakTables,
     };
     const record = await readParityRecord();
+    // ONE end-of-night verdict per service — first filed wins. The verdict
+    // from the real end is the night's truth; any later end-filing for the
+    // same service comes from a straggler path re-ending an already-closed
+    // night (13.08: a slept phone's morning rollover graded the board from
+    // its stale mirror and filed a false CONTENT LOSS over the real green).
+    // Watchdog notes are a different lane: they neither block nor are blocked.
+    if (END_REASONS.has(reason)
+        && record.some((e) => e?.serviceId === String(serviceId) && END_REASONS.has(e?.reason))) {
+      return null;
+    }
     const result = await saveStateKey(PARITY_RECORD_KEY, {
       entries: [entry, ...record].slice(0, RECORD_CAP),
     });
@@ -77,6 +88,19 @@ export async function recordEndOfServiceParity({ serviceId, label = "", reason =
     // devices' queues can still lag — a red entry here says "investigate",
     // not "data lost" (the facts land when those devices drain).
     await drainServiceEvents().catch(() => {});
+    // A night that already has its end verdict is CLOSED. A second end-path
+    // run for the same service is always a straggler (a slept device's
+    // morning rollover, a double-tap race) grading a board it may never have
+    // seen — so it neither compares, nor alarms, nor files. Checked before
+    // the compare so the false CONTENT-LOSS diagnostic can't fire either
+    // (13.08: the real green verdict existed; the straggler's blind compare
+    // painted a red error box over a perfectly safe night).
+    if (END_REASONS.has(reason)) {
+      const record = await readParityRecord();
+      if (record.some((e) => e?.serviceId === String(serviceId) && END_REASONS.has(e?.reason))) {
+        return null;
+      }
+    }
     const events = await readAllServiceEvents(serviceId);
     // Zero facts means the logbook was not running for this service (it
     // predates the log, or no updated device touched it) — nothing was

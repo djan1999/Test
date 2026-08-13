@@ -20,7 +20,7 @@ vi.mock("../lib/clientDiagnostics.js", () => ({
 import { readStateKey, saveStateKey } from "../lib/stateStore.js";
 import { drainServiceEvents, readAllServiceEvents } from "../lib/eventLog.js";
 import { recordClientDiagnostic } from "../lib/clientDiagnostics.js";
-import { readParityRecord, recordEndOfServiceParity, PARITY_RECORD_KEY } from "../lib/parityRecord.js";
+import { readParityRecord, recordEndOfServiceParity, fileParityVerdict, PARITY_RECORD_KEY } from "../lib/parityRecord.js";
 
 const card = (id, over = {}) => ({
   id, active: false, resName: "", guests: 2, arrivedAt: null,
@@ -137,6 +137,83 @@ describe("recordEndOfServiceParity", () => {
     expect(await recordEndOfServiceParity({ serviceId: "svc-9", cards: [] })).toBeNull();
 
     expect(await recordEndOfServiceParity({ serviceId: null, cards: [] })).toBeNull();
+  });
+});
+
+describe("one end-of-night verdict per service — first filed wins (13.08)", () => {
+  const oneFact = [{ type: "party_seated", table_id: 3, payload: { resName: "Anna", guests: 2 } }];
+
+  it("REGRESSION: a straggler rollover cannot re-grade a closed night — no verdict, no alarm", async () => {
+    // The 13.08 shape: the real manual end filed MATCH 5/5 the night before;
+    // a slept phone's morning rollover then compared the log against a board
+    // it never saw and would have filed CONTENT LOSS over the real green.
+    readStateKey.mockResolvedValue({
+      entries: [{ serviceId: "svc-9", reason: "manual", matches: 5, compared: 5 }],
+    });
+    readAllServiceEvents.mockResolvedValue(oneFact);
+    const entry = await recordEndOfServiceParity({
+      serviceId: "svc-9", reason: "rollover",
+      cards: [card(3)], // blind board — the party is missing on this device
+    });
+    expect(entry).toBeNull();
+    expect(saveStateKey).not.toHaveBeenCalled();
+    expect(recordClientDiagnostic).not.toHaveBeenCalled(); // no false red box
+  });
+
+  it("a double manual end files exactly once", async () => {
+    readStateKey.mockResolvedValue({
+      entries: [{ serviceId: "svc-9", reason: "manual", matches: 5 }],
+    });
+    readAllServiceEvents.mockResolvedValue(oneFact);
+    expect(await recordEndOfServiceParity({ serviceId: "svc-9", reason: "manual", cards: [] })).toBeNull();
+    expect(saveStateKey).not.toHaveBeenCalled();
+  });
+
+  it("a different service is unaffected by another night's verdict", async () => {
+    readStateKey.mockResolvedValue({
+      entries: [{ serviceId: "svc-8", reason: "manual" }],
+    });
+    readAllServiceEvents.mockResolvedValue(oneFact);
+    const entry = await recordEndOfServiceParity({
+      serviceId: "svc-9", reason: "rollover",
+      cards: [card(3, { active: true, resName: "Anna", guests: 2 })],
+    });
+    expect(entry).not.toBeNull();
+    expect(saveStateKey).toHaveBeenCalled();
+  });
+
+  it("watchdog notes are a different lane: they neither block the end verdict nor are blocked", async () => {
+    // A mid-service watchdog filing must not stop the real end-of-night
+    // verdict; and an existing end verdict must not silence the watchdog.
+    readStateKey.mockResolvedValue({
+      entries: [{ serviceId: "svc-9", reason: "watchdog", contentLossTables: [3] }],
+    });
+    readAllServiceEvents.mockResolvedValue(oneFact);
+    const endEntry = await recordEndOfServiceParity({
+      serviceId: "svc-9", reason: "manual",
+      cards: [card(3, { active: true, resName: "Anna", guests: 2 })],
+    });
+    expect(endEntry).not.toBeNull();
+
+    vi.clearAllMocks();
+    saveStateKey.mockResolvedValue({ ok: true });
+    readStateKey.mockResolvedValue({
+      entries: [{ serviceId: "svc-9", reason: "manual", matches: 5 }],
+    });
+    const watchdogEntry = await fileParityVerdict({
+      serviceId: "svc-9", reason: "watchdog", compared: 5, matches: 4,
+      contentLossTables: [3],
+    });
+    expect(watchdogEntry).not.toBeNull();
+    expect(saveStateKey).toHaveBeenCalled();
+  });
+
+  it("fileParityVerdict itself enforces the rule for any caller", async () => {
+    readStateKey.mockResolvedValue({
+      entries: [{ serviceId: "svc-9", reason: "rollover" }],
+    });
+    expect(await fileParityVerdict({ serviceId: "svc-9", reason: "manual" })).toBeNull();
+    expect(saveStateKey).not.toHaveBeenCalled();
   });
 });
 

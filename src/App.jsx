@@ -2475,26 +2475,28 @@ export default function App() {
       let hasContent = false;
       let judgedRows = null; // kept for the end-of-night parity verdict below
       try {
-        let rows;
-        if (sqlitePrimaryRef.current) {
-          const { readServiceTables } = await loadPsReads();
-          rows = await readServiceTables(svc.id);
-        } else {
-          const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
-            .select("service_id, table_id, data, updated_at")
-            .eq("service_id", svc.id);
-          if (error) throw error;
-          rows = data || [];
-        }
-        judgedRows = rows || [];
-        const contentRows = (rows || []).filter((r) =>
+        // The SERVER's rows, always — never this device's local mirror. A
+        // slept device boots with a stale mirror: judging liveness from it
+        // can end a service other devices are still working (the 22.07
+        // class), and grading parity from it filed a false CONTENT LOSS for
+        // a night this device never saw (13.08). If the server board is
+        // unreachable, the stale row costs nothing by waiting — the next
+        // online boot ends it with the truth in hand.
+        const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
+          .select("service_id, table_id, data, updated_at")
+          .eq("service_id", svc.id);
+        if (error) throw error;
+        judgedRows = data || [];
+        const contentRows = judgedRows.filter((r) =>
           tableHasServiceContent(sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) })));
         hasContent = contentRows.length > 0;
         latestMs = contentRows
           .map((r) => new Date(r.updated_at).getTime())
           .filter(Number.isFinite)
           .reduce((a, b) => Math.max(a, b), -Infinity);
-      } catch { /* unreadable board — the flip below is safe regardless */ }
+      } catch {
+        return; // server board unreadable — do not end and do not grade
+      }
       if (hasContent && isLiveServiceActivity(latestMs)) {
         const healDay = currentServiceDay();
         console.warn(
@@ -2548,9 +2550,10 @@ export default function App() {
         return;
       }
       // End-of-night parity verdict for the rolled-over night, from the
-      // judged service's OWN rows (never this device's namespace). An
-      // unreadable board (judgedRows null) records nothing — comparing the
-      // log against a board we couldn't read would file a false red.
+      // SERVER rows read above — the same picture the end decision used,
+      // never this device's mirror. (Belt: an unreadable board records
+      // nothing — comparing the log against a board we couldn't read files
+      // a false red; the early return above already guarantees this.)
       if (judgedRows) {
         void recordEndOfServiceParity({
           serviceId: svc.id, label, reason: "rollover",
