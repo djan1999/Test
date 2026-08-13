@@ -61,10 +61,12 @@ export default function Header({
   onArchive,
   onAddRes,
   onInventory,
-  onSyncAll,
   onEndService,
-  // Opens the device-health readout (the support answer). Optional: when
-  // absent the chip behaves exactly as it always has.
+  // Opens the device-health readout (the support answer). The STATUS CHIP is
+  // its entry point (owner choice, 14.08): tapping the chip asks "is this
+  // device okay?" — the one question everyone actually has when they look at
+  // it. The chip no longer runs the wine-catalogue sync; that lives on the
+  // admin's login screen. Optional: when absent the chip has no tap at all.
   onOpenHealth = null,
   // Compact in-header view switch, rendered next to the logo. On the 720px
   // kitchen panel a separate toggle row cost a whole row of ticket space —
@@ -72,35 +74,6 @@ export default function Header({
   viewSwitch = null,
 }) {
   const isMobile = useIsMobile(BP.sm);
-  const [sSt, setSSt] = useState(null);
-  const [sMsg, setSMsg] = useState("");
-
-  const handleSyncAll = async () => {
-    if (!onSyncAll || sSt === "syncing") return;
-    setSSt("syncing");
-    setSMsg("");
-    try {
-      const r = await onSyncAll();
-      console.log("[Sync]", r);
-      if (r?.ok && r.partial) {
-        const parts = [];
-        if (r.failedCountries?.length) parts.push(`wines: ${r.failedCountries.join(", ")}`);
-        if (r.failedBeveragePages?.length) parts.push(`pages: ${r.failedBeveragePages.join(", ")}`);
-        setSMsg(parts.join(" • "));
-        setSSt("partial");
-      } else if (r?.ok) {
-        setSSt("ok");
-      } else {
-        setSMsg(r?.error || "Unknown error");
-        setSSt("err");
-      }
-    } catch (e) {
-      console.error("[Sync] threw:", e);
-      setSMsg(e?.message || "Request failed");
-      setSSt("err");
-    }
-    setTimeout(() => { setSSt(null); setSMsg(""); }, 6000);
-  };
 
   // Base action button — editorial, no-radius, mono 9px
   const btn = {
@@ -122,10 +95,10 @@ export default function Header({
   };
 
   // Sync status chip
-  const syncBorder = sSt === "ok" ? green.border : sSt === "err" || sSt === "partial" ? red.border : syncLive ? green.border : ink[4];
-  const syncBg     = sSt === "ok" ? green.bg    : sSt === "err" || sSt === "partial" ? red.bg    : syncLive ? green.bg    : neutral[50];
-  const syncColor  = sSt === "ok" ? green.text  : sSt === "err" || sSt === "partial" ? red.text  : syncLive ? green.text  : ink[3];
-  const syncText   = sSt === "syncing" ? "SYNCING…" : sSt === "ok" ? "✓ SYNCED" : sSt === "partial" ? "⚠ PARTIAL" : sSt === "err" ? "✗ FAILED" : syncLabel;
+  const syncBorder = syncLive ? green.border : ink[4];
+  const syncBg     = syncLive ? green.bg     : neutral[50];
+  const syncColor  = syncLive ? green.text   : ink[3];
+  const syncText   = syncLabel;
 
   return (
     <div style={{
@@ -218,46 +191,31 @@ export default function Header({
             <button onClick={onArchive} style={btn}>{isMobile ? "ARCH" : "ARCHIVE"}</button>
           )}
 
-          {/* Sync status chip */}
-          <span style={{
-            fontFamily:    FONT,
-            fontSize:      isMobile ? "10px" : "9px",
-            letterSpacing: "0.12em",
-            padding:       isMobile ? "12px 12px" : "7px 10px",
-            border:        `${rule.hairline} solid ${syncBorder}`,
-            borderRadius:  0,
-            background:    syncBg,
-            color:         syncColor,
-            fontWeight:    500,
-            whiteSpace:    "nowrap",
-            minHeight:     isMobile ? 44 : undefined,
-            display:       "inline-flex",
-            alignItems:    "center",
-            cursor:        onSyncAll ? "pointer" : "default",
-          }}
-            onClick={onSyncAll ? handleSyncAll : undefined}
+          {/* Sync status chip — tapping it opens the device-health readout
+              (the support answer), on every role including Kitchen. */}
+          <span
+            role={onOpenHealth ? "button" : undefined}
+            aria-label={onOpenHealth ? "Device health" : undefined}
+            title={onOpenHealth ? "Device health" : undefined}
+            style={{
+              fontFamily:    FONT,
+              fontSize:      isMobile ? "10px" : "9px",
+              letterSpacing: "0.12em",
+              padding:       isMobile ? "12px 12px" : "7px 10px",
+              border:        `${rule.hairline} solid ${syncBorder}`,
+              borderRadius:  0,
+              background:    syncBg,
+              color:         syncColor,
+              fontWeight:    500,
+              whiteSpace:    "nowrap",
+              minHeight:     isMobile ? 44 : undefined,
+              display:       "inline-flex",
+              alignItems:    "center",
+              cursor:        onOpenHealth ? "pointer" : "default",
+              touchAction:   "manipulation",
+            }}
+            onClick={onOpenHealth || undefined}
           >{syncText}</span>
-
-          {/* Health readout. Deliberately its own button rather than a second
-              meaning for the chip: on a Kitchen device the chip has no tap at
-              all, and this is the only route to the answer during service —
-              the Kitchen role cannot open Admin. */}
-          {onOpenHealth && (
-            <button
-              type="button"
-              onClick={onOpenHealth}
-              aria-label="Device health"
-              title="Device health"
-              style={{
-                fontFamily: FONT, fontSize: isMobile ? "10px" : "9px", letterSpacing: "0.12em",
-                padding: isMobile ? "12px 12px" : "7px 10px",
-                border: `${rule.hairline} solid ${ink[4]}`, borderRadius: 0,
-                background: neutral[0], color: ink[3], fontWeight: 500,
-                minHeight: isMobile ? 44 : undefined, cursor: "pointer",
-                touchAction: "manipulation",
-              }}
-            >?</button>
-          )}
 
           {showEndService && (
             <button onClick={onEndService} style={{
@@ -272,18 +230,6 @@ export default function Header({
           <button onClick={onExit} style={btn}>EXIT</button>
         </div>
       </div>
-
-      {/* Partial sync message */}
-      {sMsg && (
-        <div style={{
-          fontFamily:  FONT,
-          fontSize:    "8px",
-          letterSpacing: "0.08em",
-          color:       sSt === "partial" ? tokens.red.text : ink[3],
-          paddingLeft: 2,
-          lineHeight:  1.4,
-        }}>{sMsg}</div>
-      )}
     </div>
   );
 }

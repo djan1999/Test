@@ -9,11 +9,14 @@ const connected = {
 };
 
 describe("device health is reachable from the pass", () => {
-  it("offers the readout beside the status chip", () => {
+  it("the status chip IS the readout's entry point (owner choice, 14.08)", () => {
     const onOpenHealth = vi.fn();
     render(<Header modeLabel="KITCHEN" syncLabel="SYNC" syncLive onOpenHealth={onOpenHealth} />);
     fireEvent.click(screen.getByRole("button", { name: "Device health" }));
     expect(onOpenHealth).toHaveBeenCalledTimes(1);
+    // The chip still reads as the sync chip — no separate "?" button exists.
+    expect(screen.getByRole("button", { name: "Device health" })).toHaveTextContent("SYNC");
+    expect(screen.queryByText("?")).toBeNull();
   });
 
   it("leaves the header exactly as it was when no readout is wired", () => {
@@ -21,11 +24,15 @@ describe("device health is reachable from the pass", () => {
     expect(screen.queryByRole("button", { name: "Device health" })).toBeNull();
   });
 
-  it("does not steal the catalogue-sync tap on the chip", () => {
+  it("REGRESSION: the chip never runs the catalogue sync (that lives on the login screen)", () => {
+    // The owner's exact request: tapping SYNC opens the health readout and
+    // does NOT sync wines. A stray onSyncAll prop must be ignored entirely.
     const onSyncAll = vi.fn(async () => ({ ok: true }));
-    render(<Header modeLabel="ADMIN" syncLabel="SYNC" syncLive onSyncAll={onSyncAll} onOpenHealth={vi.fn()} />);
+    const onOpenHealth = vi.fn();
+    render(<Header modeLabel="ADMIN" syncLabel="SYNC" syncLive onSyncAll={onSyncAll} onOpenHealth={onOpenHealth} />);
     fireEvent.click(screen.getByText("SYNC"));
-    expect(onSyncAll).toHaveBeenCalledTimes(1);
+    expect(onOpenHealth).toHaveBeenCalledTimes(1);
+    expect(onSyncAll).not.toHaveBeenCalled();
   });
 });
 
