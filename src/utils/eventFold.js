@@ -151,9 +151,17 @@ export function foldServiceEvents(events) {
         table.arrivedAt = payload.arrivedAt ?? null;
         break;
       case "party_unseated":
-        // The card system blanks an unseated table; later removal facts from
-        // the same gesture then no-op harmlessly against the fresh blank.
-        tables.set(tableId, blankProjection(tableId));
+        // The card system's unseat is SURGICAL: it flips active + arrivedAt
+        // and the card keeps its worked content (App unseatTable — drinks,
+        // restrictions, notes, fires all survive, ready for a re-seat). A
+        // CLEAR TABLE is the destructive gesture, and it emits its own
+        // aspect-clear facts because the diff sees every field change — so
+        // blanking here double-counted the wipe and destroyed log state the
+        // board kept. Found in production 13.08: T3 kept its pescetarian
+        // restriction through an unseat→re-seat while the fold wiped it,
+        // grading a COMPLETE board as content-loss all night.
+        table.active = false;
+        table.arrivedAt = null;
         break;
       case "party_resized":
         table.guests = Number(payload.to) || 0;
