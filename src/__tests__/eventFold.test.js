@@ -242,6 +242,33 @@ describe("restrictions — the ALLERGY data the fold must carry", () => {
     const facts = boardFactsFromDiff(withR, without);
     expect(facts[0]).toMatchObject({ type: "table_restrictions_set", payload: { restrictions: [] } });
   });
+
+  it("REGRESSION (13.08 T3): unseat is surgical — retained restrictions survive unseat→re-seat", () => {
+    // The real production night: pescetarian set at prep, party seated,
+    // unseated eight minutes later, re-seated at 18:03. The board's unseat
+    // flips active + arrivedAt ONLY (App unseatTable) — the card keeps its
+    // content, so the diff emits no restriction fact at unseat or re-seat.
+    // The fold used to blank the whole table on party_unseated and graded
+    // the COMPLETE board as CONTENT LOSS for the rest of the night.
+    const kruts = { note: "pescetarian", detail: "", pos: null, kitchenAdded: false };
+    const start = { ...blankCard(3), resName: "Taras Kruts", guests: 3, seats: [blankSeat(1), blankSeat(2), blankSeat(3)] };
+    const prep = { ...start, restrictions: [kruts] };
+    const seated = { ...prep, active: true };
+    const unseated = { ...seated, active: false, arrivedAt: null }; // the REAL unseat gesture
+    const reseated = { ...seated, active: true, arrivedAt: "18:03" };
+
+    const events = [];
+    let before = start;
+    for (const after of [prep, seated, unseated, reseated]) {
+      events.push(...boardFactsFromDiff(before, after).map((f) => ({ type: f.type, table_id: f.tableId, payload: f.payload })));
+      before = after;
+    }
+    // Exactly one restriction fact ever derives (nothing changed at unseat).
+    expect(events.filter((e) => e.type === "table_restrictions_set")).toHaveLength(1);
+    const verdict = compareFoldToBoard(foldServiceEvents(events), [reseated]);
+    expect(verdict.contentLoss).toEqual([]);
+    expect(verdict.divergent).toEqual([]);
+  });
 });
 
 describe("kitchen state, staff notes and seat genders — the rest of the coverage gap", () => {

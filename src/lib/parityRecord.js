@@ -66,6 +66,20 @@ export async function fileParityVerdict({
         && record.some((e) => e?.serviceId === String(serviceId) && END_REASONS.has(e?.reason))) {
       return null;
     }
+    // Watchdog lane: several devices sweep the same service and would each
+    // file the same picture seconds apart (13.08: eight near-identical
+    // watchdog entries in one night, crowding a 24-entry record). If the
+    // newest watchdog entry for this service already says exactly this —
+    // same tables lost, same tiebreaks, same breadth — there is no news.
+    if (reason === "watchdog") {
+      const newest = record.find((e) => e?.serviceId === String(serviceId) && e?.reason === "watchdog");
+      if (newest
+          && JSON.stringify(newest.contentLossTables ?? []) === JSON.stringify(contentLossTables)
+          && JSON.stringify(newest.tiebreakTables ?? []) === JSON.stringify(tiebreakTables)
+          && Number(newest.compared) === Number(compared)) {
+        return null;
+      }
+    }
     const result = await saveStateKey(PARITY_RECORD_KEY, {
       entries: [entry, ...record].slice(0, RECORD_CAP),
     });
