@@ -48,6 +48,11 @@ export default function SystemPanel({
   const [syncMsg, setSyncMsg] = useState("");
   const [syncConfigSaving, setSyncConfigSaving] = useState(false);
   const [diagnostics, setDiagnostics] = useState(() => readClientDiagnostics());
+  // A defence that fired is the system working; an error is something broken.
+  // They get separate boxes so a busy night's blocked overwrites never train
+  // the owner to ignore a red panel (see lib/clientDiagnostics.js).
+  const errorDiagnostics = diagnostics.filter((entry) => entry.kind !== "defence");
+  const defenceDiagnostics = diagnostics.filter((entry) => entry.kind === "defence");
   // A deployed build waiting for activation (PWA updates never force-reload
   // mid-service; the kitchen display never closes, so this button is its
   // only update path). Applying reloads THIS device deliberately.
@@ -465,12 +470,13 @@ export default function SystemPanel({
               </div>
             </div>
           )}
-          <div style={{ border: `1px solid ${diagnostics.length ? tokens.red.border : tokens.ink[4]}`, background: diagnostics.length ? tokens.red.bg : tokens.neutral[0], borderRadius: 0, padding: "12px 16px", minWidth: 220, maxWidth: 420 }}>
-            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: diagnostics.length ? tokens.red.text : tokens.ink[4], textTransform: "uppercase", marginBottom: 6 }}>Device Diagnostics</div>
-            {diagnostics.length ? (
+          {/* Errors — something actually broke. Kept red and loud. */}
+          <div style={{ border: `1px solid ${errorDiagnostics.length ? tokens.red.border : tokens.ink[4]}`, background: errorDiagnostics.length ? tokens.red.bg : tokens.neutral[0], borderRadius: 0, padding: "12px 16px", minWidth: 220, maxWidth: 420 }}>
+            <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: errorDiagnostics.length ? tokens.red.text : tokens.ink[4], textTransform: "uppercase", marginBottom: 6 }}>Device Diagnostics</div>
+            {errorDiagnostics.length ? (
               <>
                 <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, wordBreak: "break-word", marginBottom: 8 }}>
-                  {diagnostics.length} recorded issue{diagnostics.length === 1 ? "" : "s"}. Latest: {diagnostics[0].message}
+                  {errorDiagnostics.length} recorded issue{errorDiagnostics.length === 1 ? "" : "s"}. Latest: {errorDiagnostics[0].message}
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button
@@ -489,6 +495,26 @@ export default function SystemPanel({
               <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.green.text }}>No browser crashes recorded on this device.</div>
             )}
           </div>
+          {/* Defences that HELD — the system working, not failing. A stale
+              device tried to overwrite live work and was refused; nothing was
+              lost. These used to sit in the red box above, which made a
+              successful save look like a malfunction. */}
+          {defenceDiagnostics.length > 0 && (
+            <div style={{ border: `1px solid ${tokens.green.border}`, background: tokens.green.bg, borderRadius: 0, padding: "12px 16px", minWidth: 220, maxWidth: 420 }}>
+              <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 2, color: tokens.green.text, textTransform: "uppercase", marginBottom: 6 }}>Defences That Held</div>
+              <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.green.text, marginBottom: 6 }}>
+                {defenceDiagnostics.length} attempted overwrite{defenceDiagnostics.length === 1 ? " was" : "s were"} blocked. <strong>No data was lost</strong> — nothing to do.
+              </div>
+              {defenceDiagnostics.slice(0, 3).map((entry) => (
+                <div key={entry.id} style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[2], wordBreak: "break-word", padding: "2px 0" }}>
+                  <span style={{ color: tokens.ink[4] }}>
+                    [{new Date(entry.at).toLocaleTimeString("sl-SI", { hour: "2-digit", minute: "2-digit" })}]{" "}
+                  </span>
+                  {entry.message}
+                </div>
+              ))}
+            </div>
+          )}
           {/* Sync engine (PowerSync) — the STREAM's own state and, crucially,
               its last error string, so a device stuck on LINK/ERROR tells us
               WHY from this panel alone (no DevTools needed on a phone). */}

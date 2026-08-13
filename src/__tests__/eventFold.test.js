@@ -187,6 +187,149 @@ describe("compareFoldToBoard", () => {
   });
 });
 
+describe("restrictions — the ALLERGY data the fold must carry", () => {
+  // Measured against the real 12.08 service: every table carried
+  // `restrictions` (Seanna Markham's "pescetarian" at P1), and the log had
+  // never recorded them. A flip in that state would have taken allergies off
+  // a live board — which is why they had to join the taxonomy first.
+  const seanna = { pos: 1, note: "pescetarian", kitchenAdded: true };
+
+  it("a restriction appearing is a fact, and the fold rebuilds it", () => {
+    const before = { ...blankCard(6), active: true, resName: "Seanna Markham", guests: 2 };
+    const after = { ...before, restrictions: [seanna] };
+    const facts = boardFactsFromDiff(before, after);
+    expect(facts).toEqual([{
+      type: "table_restrictions_set", tableId: 6,
+      // resName rides along so the DB's guest erasure (which matches
+      // payload->>'resName' and blanks restrictions in the same pass) covers it.
+      payload: {
+        resName: "Seanna Markham",
+        restrictions: [{ note: "pescetarian", pos: 1, detail: "", kitchenAdded: true }],
+      },
+    }]);
+    const folded = foldServiceEvents(facts.map((f) => ({ type: f.type, table_id: f.tableId, payload: f.payload })));
+    expect(folded.get(6).restrictions).toEqual([{ note: "pescetarian", pos: 1, detail: "", kitchenAdded: true }]);
+  });
+
+  it("PARITY now compares restrictions — a board allergy missing from the log is CONTENT LOSS", () => {
+    const board = {
+      ...blankCard(6), active: true, resName: "Seanna Markham", guests: 2,
+      seats: [blankSeat(1), blankSeat(2)], restrictions: [seanna],
+    };
+    const logWithout = [
+      { type: "party_seated", table_id: 6, payload: { resName: "Seanna Markham", guests: 2 } },
+    ];
+    const missed = compareFoldToBoard(foldServiceEvents(logWithout), [board]);
+    expect(missed.contentLoss).toEqual([6]);   // an allergy is never a tiebreak
+    expect(missed.tiebreaks).toEqual([]);
+
+    const logWith = [
+      ...logWithout,
+      { type: "table_restrictions_set", table_id: 6, payload: { resName: "Seanna Markham", restrictions: [seanna] } },
+    ];
+    expect(compareFoldToBoard(foldServiceEvents(logWith), [board]).divergent).toEqual([]);
+  });
+
+  it("re-ordering the same restrictions is not a change (no fact churn)", () => {
+    const a = { ...blankCard(2), active: true, restrictions: [{ note: "nuts", pos: 1 }, { note: "gluten", pos: 2 }] };
+    const b = { ...a, restrictions: [{ note: "gluten", pos: 2 }, { note: "nuts", pos: 1 }] };
+    expect(boardFactsFromDiff(a, b)).toEqual([]);
+  });
+
+  it("clearing a restriction records it, and the fold clears too", () => {
+    const withR = { ...blankCard(6), active: true, restrictions: [seanna] };
+    const without = { ...withR, restrictions: [] };
+    const facts = boardFactsFromDiff(withR, without);
+    expect(facts[0]).toMatchObject({ type: "table_restrictions_set", payload: { restrictions: [] } });
+  });
+
+  it("REGRESSION (13.08 T3): unseat is surgical — retained restrictions survive unseat→re-seat", () => {
+    // The real production night: pescetarian set at prep, party seated,
+    // unseated eight minutes later, re-seated at 18:03. The board's unseat
+    // flips active + arrivedAt ONLY (App unseatTable) — the card keeps its
+    // content, so the diff emits no restriction fact at unseat or re-seat.
+    // The fold used to blank the whole table on party_unseated and graded
+    // the COMPLETE board as CONTENT LOSS for the rest of the night.
+    const kruts = { note: "pescetarian", detail: "", pos: null, kitchenAdded: false };
+    const start = { ...blankCard(3), resName: "Taras Kruts", guests: 3, seats: [blankSeat(1), blankSeat(2), blankSeat(3)] };
+    const prep = { ...start, restrictions: [kruts] };
+    const seated = { ...prep, active: true };
+    const unseated = { ...seated, active: false, arrivedAt: null }; // the REAL unseat gesture
+    const reseated = { ...seated, active: true, arrivedAt: "18:03" };
+
+    const events = [];
+    let before = start;
+    for (const after of [prep, seated, unseated, reseated]) {
+      events.push(...boardFactsFromDiff(before, after).map((f) => ({ type: f.type, table_id: f.tableId, payload: f.payload })));
+      before = after;
+    }
+    // Exactly one restriction fact ever derives (nothing changed at unseat).
+    expect(events.filter((e) => e.type === "table_restrictions_set")).toHaveLength(1);
+    const verdict = compareFoldToBoard(foldServiceEvents(events), [reseated]);
+    expect(verdict.contentLoss).toEqual([]);
+    expect(verdict.divergent).toEqual([]);
+  });
+});
+
+describe("kitchen state, staff notes and seat genders — the rest of the coverage gap", () => {
+  const asEvents = (facts) => facts.map((f) => ({ type: f.type, table_id: f.tableId, payload: f.payload }));
+
+  it("the SET banner, sent/alert/archived flags and pace round-trip through the log", () => {
+    const before = { ...blankCard(4), active: true, guests: 2 };
+    const after = {
+      ...before,
+      courseReady: { key: "c2", index: 2, name: "Kaviar" },
+      kitchenSent: true, kitchenAlert: "late", kitchenArchived: true, pace: "slow",
+    };
+    const facts = boardFactsFromDiff(before, after);
+    expect(facts.map((f) => f.type)).toEqual(["table_service_state_set"]);
+    const folded = foldServiceEvents(asEvents(facts));
+    expect(folded.get(4).serviceState).toEqual({
+      courseReady: { key: "c2", index: 2, name: "Kaviar" },
+      kitchenSent: true, kitchenAlert: "late", kitchenArchived: true, pace: "slow",
+    });
+    // Folded from the table's WHOLE history (seating included), the log
+    // rebuilds the board exactly — that is what parity has to mean.
+    const whole = asEvents(boardFactsFromDiff(blankCard(4), after));
+    expect(compareFoldToBoard(foldServiceEvents(whole), [after]).divergent).toEqual([]);
+  });
+
+  it("staff notes round-trip, and a note the log never saw is CONTENT LOSS", () => {
+    const board = {
+      ...blankCard(5), active: true, guests: 2, seats: [blankSeat(1)],
+      notes: "birthday cake at dessert",
+      kitchenCourseNotes: { c3: "no butter" },
+    };
+    const bare = [{ type: "party_seated", table_id: 5, payload: { resName: "", guests: 2 } }];
+    const missed = compareFoldToBoard(foldServiceEvents(bare), [board]);
+    expect(missed.contentLoss).toEqual([5]);   // typed work is never a tiebreak
+    expect(missed.tiebreaks).toEqual([]);
+
+    const withNotes = [...bare, ...asEvents(boardFactsFromDiff({ ...board, notes: "", kitchenCourseNotes: {} }, board))];
+    expect(compareFoldToBoard(foldServiceEvents(withNotes), [board]).divergent).toEqual([]);
+  });
+
+  it("seat gender is recorded per seat and rebuilt", () => {
+    const before = { ...blankCard(6), active: true, guests: 2, seats: [blankSeat(1), blankSeat(2)] };
+    const after = { ...before, seats: [{ ...blankSeat(1), gender: "Mrs" }, blankSeat(2)] };
+    const facts = boardFactsFromDiff(before, after);
+    expect(facts).toEqual([{ type: "seat_gender_set", tableId: 6, payload: { seatId: 1, to: "Mrs" } }]);
+    const folded = foldServiceEvents(asEvents(facts));
+    expect(folded.get(6).seats["1"].gender).toBe("Mrs");
+    const whole = asEvents(boardFactsFromDiff(blankCard(6), after));
+    expect(compareFoldToBoard(foldServiceEvents(whole), [after]).divergent).toEqual([]);
+  });
+
+  it("no change in any of them emits nothing (no fact churn on every autosave)", () => {
+    const t = {
+      ...blankCard(7), active: true, guests: 2, notes: "x",
+      kitchenCourseNotes: { c1: "y" }, pace: "fast", kitchenArchived: true,
+      seats: [{ ...blankSeat(1), gender: "Mr" }],
+    };
+    expect(boardFactsFromDiff(t, { ...t })).toEqual([]);
+  });
+});
+
 describe("content-loss vs concurrent-tiebreak — the wipe/scribble distinction", () => {
   // The real 09/10.08 three-device conflict on table 7 seat 1: the board's
   // compare-and-swap crowned water XC + aperitif "Le Terroir"; the log's

@@ -57,7 +57,7 @@ async function writeStateKeyOnce(id, state, ancestor = null, workspaceId = getWo
         `${id} had concurrent edits; both floor designs were preserved (local edit saved as RECOVERED COPY).`,
       );
       console.warn(error.message, result.conflicts);
-      recordClientDiagnostic("floor settings conflict", error);
+      recordClientDiagnostic("floor settings conflict", error, { kind: "defence" });
     }
     return result;
   }

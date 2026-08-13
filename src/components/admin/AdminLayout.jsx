@@ -104,6 +104,7 @@ export default function AdminLayout({
   // Floor maps + terrace flow
   floorMaps = null,
   floorReservations = [],
+  layoutServiceDay = null,
   boardTables = [],
   onUpdateFloorMaps = null,
   onApplyLayoutSwitch = null,
@@ -543,6 +544,7 @@ export default function AdminLayout({
               floorMaps={floorMaps}
               tableIds={(restaurantConfig?.tables || []).map((table) => Number(table.id))}
               reservations={floorReservations}
+              serviceDay={layoutServiceDay}
               boardTables={boardTables}
               onUpdateFloorMaps={onUpdateFloorMaps}
               onApplyLayoutSwitch={onApplyLayoutSwitch}

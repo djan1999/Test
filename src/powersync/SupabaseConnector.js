@@ -306,7 +306,7 @@ async function applyMergeableSettingWrite(op, ws, row) {
         `${id} had concurrent edits; both floor designs were preserved (local edit saved as RECOVERED COPY).`,
       );
       console.warn(error.message, result.conflicts);
-      recordClientDiagnostic("floor settings conflict", error);
+      recordClientDiagnostic("floor settings conflict", error, { kind: "defence" });
     }
     return { error: null };
   } catch (error) {
@@ -347,7 +347,7 @@ async function applyReservationWrite(op, ws, row) {
       );
       error.code = "POWERSYNC_ROW_GONE";
       console.warn(error.message);
-      recordClientDiagnostic("reservation edit discarded (row deleted)", error);
+      recordClientDiagnostic("reservation edit discarded (row deleted)", error, { kind: "defence" });
     }
     return { error: null };
   } catch (error) {
@@ -505,7 +505,7 @@ export class SupabaseConnector {
             // Multi-row board gestures use one atomic RPC, so a refusal cannot
             // leave a destination claim or source clear partially applied.
             console.error("[PowerSync] CAS refused board write — dropping the rest of its transaction:", op, result.error.message);
-            recordClientDiagnostic("board write refused (newer table kept)", result.error);
+            recordClientDiagnostic("board write refused (newer table kept)", result.error, { kind: "defence" });
             break;
           }
           if (result.error.code === CAS_EXHAUSTED_CODE) {

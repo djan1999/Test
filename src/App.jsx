@@ -51,7 +51,9 @@ import {
 import {
   FLOOR_MAPS_KEY, sanitizeFloorMaps,
   getActiveDiningMap, getTerraceMap, mapSeatCountForBoardTable,
+  resolveFloorMapsForDay, setActiveDiningForDay,
   terraceOccupancy, applyLayoutSwitchRow, resolveReservationTable,
+  layoutSwitchBlockers, isCurrentServiceRow,
   sanitizeFloorStatus, setFloorStatus, cycleFloorStatus, pruneFloorStatus,
   renameFloorStatusLabel,
   clearStripsForBoardGroup,
@@ -106,6 +108,11 @@ import {
   removedLiveTableIds,
   sanitizeRestaurantConfig,
 } from "./config/restaurantConfig.js";
+import {
+  DEFAULT_QUICK_ACCESS_ITEMS,
+  DEFAULT_RESTAURANT_CONFIG,
+  DEFAULT_SITTING_TIMES,
+} from "./config/buildDefaults.js";
 import { PRODUCT_NAME as APP_NAME, PRODUCT_SUBTITLE as APP_SUBTITLE } from "./config/product.js";
 import {
   DEFAULT_SYNC_CONFIG,
@@ -161,18 +168,6 @@ const CHOSEN_ON_LS_KEY = "milka_service_chosen_on";
 // old service's strips writes to that old key and can never touch the live
 // service's strips. (The shared legacy `floor_status_v1` key is retired.)
 const floorStatusKeyFor = (serviceId) => (serviceId ? `floor_status_v2:${serviceId}` : null);
-const BUILD_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "")
-  .split(",")
-  .map((room) => room.trim())
-  .filter(Boolean);
-const DEFAULT_RESTAURANT_CONFIG = makeDefaultRestaurantConfig({
-  name: APP_NAME,
-  subtitle: APP_SUBTITLE,
-  features: {
-    hotelGuests: String(import.meta.env.VITE_ENABLE_HOTEL_GUESTS || "").toLowerCase() === "true",
-    roomOptions: BUILD_ROOM_OPTIONS,
-  },
-});
 
 // Board sync history follows a table's stable id, never its screen position.
 // An array baseline can silently assign T2's history to T12 when an admin
@@ -180,38 +175,6 @@ const DEFAULT_RESTAURANT_CONFIG = makeDefaultRestaurantConfig({
 const makeTableJsonMap = (tables = []) => new Map(
   tables.map((table) => [Number(table.id), JSON.stringify(sanitizeTable(table))]),
 );
-
-const parseSittingTimes = () => {
-  const raw = String(import.meta.env.VITE_DEFAULT_SITTING_TIMES || "18:00,18:30,19:00,19:15")
-    .split(",")
-    .map(s => s.trim())
-    .filter(Boolean);
-  return raw.length > 0 ? raw : ["18:00", "18:30", "19:00", "19:15"];
-};
-const DEFAULT_SITTING_TIMES = parseSittingTimes();
-
-const parseDefaultQuickAccessItems = () => {
-  const raw = String(import.meta.env.VITE_DEFAULT_QUICK_ACCESS || "").trim();
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((item, idx) => ({
-        id: Number(item?.id) || idx + 1,
-        label: String(item?.label || "").trim(),
-        searchKey: String(item?.searchKey || item?.label || "").trim(),
-        linkedKey: item?.linkedKey != null && String(item.linkedKey).trim() !== "" ? String(item.linkedKey).trim() : undefined,
-        type: String(item?.type || "wine").trim() || "wine",
-        enabled: item?.enabled !== false,
-      }))
-      .filter(item => item.label);
-  } catch {
-    return [];
-  }
-};
-
-const DEFAULT_QUICK_ACCESS_ITEMS = parseDefaultQuickAccessItems();
 
 const SITTING_TIMES = DEFAULT_SITTING_TIMES;
 // Unified profile payload key. `menu_layout_profiles_v1` and the legacy
@@ -1677,6 +1640,19 @@ export default function App() {
   // occupancy, the terrace board visuals, and layout re-resolution.
   // Everything from the active service day forward (both sessions, future
   // dates) — the input set for layout-switch planning in Admin → Floor.
+  // THE DAY'S ROOM (docs: per-day active layout). `floorMapsState` holds the
+  // house default plus per-day bindings; this resolves the one in force for
+  // the service being worked. Every view calls getActiveDiningMap(floorMaps),
+  // so resolving here means the floor view, the kitchen view, the minimap,
+  // seat caps and NEEDS TABLE all follow the day's room with no extra wiring —
+  // and tomorrow keeps its own. The ADMIN floor editor deliberately gets the
+  // RAW state: it edits maps and writes the bindings.
+  const layoutServiceDay = serviceDate || currentServiceDay();
+  const floorMapsForDay = useMemo(
+    () => resolveFloorMapsForDay(floorMapsState, layoutServiceDay),
+    [floorMapsState, layoutServiceDay],
+  );
+
   const layoutPlanningReservations = useMemo(() => {
     const from = serviceDate || currentServiceDay();
     return (reservations || []).filter(r => r.date && String(r.date) >= String(from));
@@ -1727,10 +1703,16 @@ export default function App() {
   // content (a walk-in the plan can't see) is blocked entirely — neither
   // its board state nor its reservation move, so the two never disagree.
   const applyLayoutSwitchRows = async (rows) => {
-    if ((rows || []).some(r => r.status === "conflict" || r.status === "needs_table")) {
-      return { ok: false, error: new Error("Resolve every conflict and NEEDS TABLE row before switching layouts.") };
+    // The switch is FOR today's service: block only on TODAY's unresolved rows
+    // (a future date's needs_table is a warning, not a wall), and move only
+    // TODAY's reservations — future assignments keep their own layout, so
+    // activating tonight's room never rewrites next week's bookings. Different
+    // rooms on different nights work per-service until per-day binding lands.
+    const switchDay = serviceDate || currentServiceDay();
+    if (layoutSwitchBlockers(rows, switchDay).length) {
+      return { ok: false, error: new Error("Resolve today's conflicts and NEEDS TABLE rows before switching layouts.") };
     }
-    const moveRows = (rows || []).filter(r => r.status === "move");
+    const moveRows = (rows || []).filter(r => r.status === "move" && isCurrentServiceRow(r, switchDay));
     if (!moveRows.length) return { ok: true };
     const { blocked } = applyLayoutSwitchToTables(tablesRef.current || [], moveRows);
     const blockedIds = new Set(blocked.map(b => b.id));
@@ -2494,26 +2476,28 @@ export default function App() {
       let hasContent = false;
       let judgedRows = null; // kept for the end-of-night parity verdict below
       try {
-        let rows;
-        if (sqlitePrimaryRef.current) {
-          const { readServiceTables } = await loadPsReads();
-          rows = await readServiceTables(svc.id);
-        } else {
-          const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
-            .select("service_id, table_id, data, updated_at")
-            .eq("service_id", svc.id);
-          if (error) throw error;
-          rows = data || [];
-        }
-        judgedRows = rows || [];
-        const contentRows = (rows || []).filter((r) =>
+        // The SERVER's rows, always — never this device's local mirror. A
+        // slept device boots with a stale mirror: judging liveness from it
+        // can end a service other devices are still working (the 22.07
+        // class), and grading parity from it filed a false CONTENT LOSS for
+        // a night this device never saw (13.08). If the server board is
+        // unreachable, the stale row costs nothing by waiting — the next
+        // online boot ends it with the truth in hand.
+        const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
+          .select("service_id, table_id, data, updated_at")
+          .eq("service_id", svc.id);
+        if (error) throw error;
+        judgedRows = data || [];
+        const contentRows = judgedRows.filter((r) =>
           tableHasServiceContent(sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) })));
         hasContent = contentRows.length > 0;
         latestMs = contentRows
           .map((r) => new Date(r.updated_at).getTime())
           .filter(Number.isFinite)
           .reduce((a, b) => Math.max(a, b), -Infinity);
-      } catch { /* unreadable board — the flip below is safe regardless */ }
+      } catch {
+        return; // server board unreadable — do not end and do not grade
+      }
       if (hasContent && isLiveServiceActivity(latestMs)) {
         const healDay = currentServiceDay();
         console.warn(
@@ -2567,9 +2551,10 @@ export default function App() {
         return;
       }
       // End-of-night parity verdict for the rolled-over night, from the
-      // judged service's OWN rows (never this device's namespace). An
-      // unreadable board (judgedRows null) records nothing — comparing the
-      // log against a board we couldn't read would file a false red.
+      // SERVER rows read above — the same picture the end decision used,
+      // never this device's mirror. (Belt: an unreadable board records
+      // nothing — comparing the log against a board we couldn't read files
+      // a false red; the early return above already guarantees this.)
       if (judgedRows) {
         void recordEndOfServiceParity({
           serviceId: svc.id, label, reason: "rollover",
@@ -4403,6 +4388,16 @@ export default function App() {
   // The device-health readout (Gate D). Open from the "?" beside the status
   // chip on any operating screen.
   const [healthOpen, setHealthOpen] = useState(false);
+  // Planner truth, the empty case: the reservations watch (below) refuses to
+  // mark the planner loaded off an empty PRE-SYNC read — but a workspace with
+  // genuinely no reservations in the window would then never re-fire the
+  // watch. Once the first sync completes, an empty mirror IS the truth, so
+  // unlock here. (Lives after the powerSyncStatus declaration — TDZ.)
+  // Scoped to the sqlite-primary path only: on the direct fallback the
+  // planner's truth is the server read, which sets the flag itself.
+  useEffect(() => {
+    if (sqlitePrimary && !reservationsLoaded && powerSyncStatus?.hasSynced) setReservationsLoaded(true);
+  }, [sqlitePrimary, powerSyncStatus?.hasSynced, reservationsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
   // Init retry counter: bumping it re-runs the connect effect. A failed init
   // (the SDK chunk not fetching over a dying link at boot — the wifi-extender
   // incident) used to pin the session to the fragile direct-Supabase fallback
@@ -4557,6 +4552,15 @@ export default function App() {
           onReservations: (rows) => {
             if (cancelled) return;
             if (sandboxRef.current) { setReservationsLoaded(true); return; } // test service: keep the in-memory planner
+            // An empty read from a mirror that has not completed its first
+            // sync means "not yet synced", never "no reservations" — the same
+            // rule board truth applies above (serviceKnown) and wines/
+            // beverages apply below. Marking the planner loaded on that tick
+            // opened the CONNECTING gate onto an empty reservations list
+            // (reported 12.08: "opened reservations, they weren't loaded in
+            // yet"). The hasSynced flip is caught by the effect by the boot
+            // gate, so a genuinely empty planner still unlocks.
+            if (!rows.length && !powerSyncStatus?.hasSynced) return;
             setReservations(rows);
             setReservationsLoaded(true);
           },
@@ -5369,7 +5373,7 @@ export default function App() {
       profiles={profilesState.profiles}
       assignments={profilesState.assignments}
       resolveTableFlag={(r) => ({
-        needsTable: !resolveReservationTable(getActiveDiningMap(floorMapsState), r.table_id).table,
+        needsTable: !resolveReservationTable(getActiveDiningMap(floorMapsForDay), r.table_id).table,
       })}
     />
     {archiveOpen && (
@@ -5399,6 +5403,9 @@ export default function App() {
       <Header
         modeLabel="KITCHEN"
         showSummary={false} showMenu={false} showArchive={renderMode === "display" && canAdmin} showInventory={false}
+        // The pass runs full-screen with no OS chrome in view — the bar is the
+        // only clock the kitchen has to time a fire against.
+        showClock={true}
         // The view switch lives IN the header next to the logo — a separate
         // toggle row cost a full row of tickets on the 720px panel.
         viewSwitch={serviceDate ? {
@@ -5430,7 +5437,7 @@ export default function App() {
           {mode === "kitchen_floor" ? (
             <KitchenFloorView
               mapKind={kitchenFloorMap}
-              floorMaps={floorMapsState}
+              floorMaps={floorMapsForDay}
               floorStatus={floorStatus}
               reservations={serviceReservations}
               tables={displayTables}
@@ -5464,7 +5471,7 @@ export default function App() {
             // handlers the kitchen floor view gets make it interactive — seat
             // swaps, terrace assign / change / SET — with the same local-first
             // writes (works with the Wi-Fi down, per Djan).
-            floorMaps={floorMapsState}
+            floorMaps={floorMapsForDay}
             floorStatus={floorStatus}
             reservations={serviceReservations}
             onAssignTerrace={assignTerraceTable}
@@ -5595,6 +5602,7 @@ export default function App() {
         // to prevent. planLayoutSwitch keys conflicts per date+session, so
         // the multi-date set never cross-flags different nights.
         floorReservations={layoutPlanningReservations}
+        layoutServiceDay={serviceDate || currentServiceDay()}
         boardTables={displayTables}
         onUpdateFloorMaps={updateFloorMaps}
         onApplyLayoutSwitch={applyLayoutSwitchRows}
@@ -5754,7 +5762,7 @@ export default function App() {
                The old TerracePanel's whole terrace leg lives in here. */
             <FloorView
               mapKind={serviceView}
-              floorMaps={floorMapsState}
+              floorMaps={floorMapsForDay}
               floorStatus={floorStatus}
               reservations={serviceReservations}
               tables={displayTables}
@@ -5822,7 +5830,7 @@ export default function App() {
           spirits={spirits}
           beers={beers}
           reservationOnTable={reservationOnTable}
-          seatCapOf={id => mapSeatCountForBoardTable(getActiveDiningMap(floorMapsState), id)}
+          seatCapOf={id => mapSeatCountForBoardTable(getActiveDiningMap(floorMapsForDay), id)}
           onClose={() => setSel(null)}
           upd={(f, v) => upd(sel, f, v)}
           updSeat={(sid, f, v) => updSeat(sel, sid, f, v)}

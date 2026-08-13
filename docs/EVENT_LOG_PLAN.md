@@ -1,5 +1,55 @@
 # The Logbook — event-log migration charter
 
+> ## STATUS — FROZEN AT PHASE 3 (owner decision, 12.08.2026)
+>
+> | | |
+> |---|---|
+> | Live board source of truth | **`service_tables` — the card engine.** Permanent. |
+> | `service_events` | **Dual-written.** Append-only; nothing on a user path awaits it. |
+> | Fold (`foldServiceEvents`) | **Diagnostics only — permanently.** Parity checks, watchdog, Time Machine story view, archived-night reports. It does not render, seed or repair the board, and it never will. |
+> | Phase 4 (the flip) | **CANCELLED 12.08.2026 by owner decision.** See close-out below. |
+> | Card-path defences (CAS, `foldTable`, echo suppression, mass-blank guard, worked-content shield) | **PERMANENT — never delete.** These ARE the data-loss protection. |
+>
+> ### Close-out (12.08.2026)
+>
+> Djan: *"I just want a system in place that will prevent data to be lost
+> ever again but I don't want to change or add [thousands of] lines of code
+> to do that, overly complicated system just seems like a call for bugs."*
+>
+> He is right, and the numbers agree. The loss-prevention guarantee is the
+> SMALL system, and it is already in and battle-tested:
+>
+> - the worked-content shield + board history + append-only grants —
+>   **553 lines of write-once SQL, enforced by Postgres itself**, out of
+>   reach of any app bug — plus the CAS client seam (**205 lines**). The
+>   shield fired during real service on 10.08 and 12.08 ("board write
+>   refused") and both nights ended with zero loss and zero staff impact.
+> - the logbook (1,213 lines + 1,519 test lines) has never protected
+>   anything — it is an observer, pinned to never affect service. Its value
+>   is the independent end-of-night verdict, and that it keeps.
+>
+> Phase 4 would have moved the board's source of truth INTO the largest,
+> youngest body of code in the app — the opposite of the owner's
+> requirement, and this very migration kept finding bugs in its own
+> machinery (dedup races, comparator crashes, encoding corruption) that
+> only observation-only status made harmless. Therefore:
+>
+> - **Phases 1–3 stay as delivered.** The log records, and the parity
+>   badge / watchdog / Time Machine story keep grading every night.
+>   Diagnostics only, forever.
+> - **Phase 4 is cancelled.** Do not resurrect it, do not extend the fact
+>   taxonomy for coverage's sake, and the booking-metadata design question
+>   (fold-carried vs reservation-derived) is WITHDRAWN — it existed only to
+>   serve the flip. None of this restarts unless the OWNER, in his own
+>   words, asks for the flip again.
+> - **The card-path defences are permanent**, not "still live pending
+>   deletion". Any PR that deletes or weakens them is wrong by definition.
+>
+> The ✅ marks below record *delivered pieces of a migration that was then
+> deliberately stopped at its safe waypoint*. Read a green parity badge as
+> "the log agrees on every field it carries", never as "the log is the
+> board".
+
 Decision (Djan, 09.08.2026, after the 08.08 wipe): the target architecture is
 an **append-only event log**. Every gesture in the restaurant becomes one
 small immutable fact; every screen derives its state by folding the facts.
@@ -131,7 +181,11 @@ over until the log has proven itself carrying the same facts in production.
   end-of-night parity entries from real services, and drills D1–D3 on real
   tablets in the Demo workspace.
 
-### Phase 4 — the fold flips
+### Phase 4 — the fold flips — **CANCELLED 12.08.2026 (owner decision — see STATUS close-out)**
+
+Kept below for the record: what the flip would have required and what its
+own measurements kept proving. Nothing in this section is to be built.
+
 - Board state on every device = reducer(events), materialized locally;
   service_tables becomes a *derived snapshot* the server maintains for
   export/legacy readers.
@@ -180,7 +234,35 @@ over until the log has proven itself carrying the same facts in production.
   exists). Pinned over 100 random worked boards — a seeded log folds back
   to its board exactly — plus a concurrent double-seed converging and an
   untouched board seeding nothing.
-- Remaining before the flip: EVIDENCE ONLY — three real green nights (zero
+- ❌ NOT EVIDENCE ONLY — corrected 12.08. Measured against the first real
+  full service (183 facts, 5 tables, 3 devices, 7h): the fold rebuilds only
+  the fields the taxonomy carries, and a live table row also holds
+  `restrictions` (ALLERGIES), `kitchenCourseNotes`, `notes`, `cakeNote`,
+  `birthday`, `guestType`, `room`/`rooms`, `lang`, `menuType`, `pace`,
+  `resTime`, `tableGroup`, `kitchenSent`, `kitchenAlert`, `kitchenArchived`,
+  `courseReady`, `reference`, `source`, and per seat `gender`,
+  `floorPositions`, `pairingSharedWith`. Flipping the source of truth in
+  that state would DELETE them from a live board — a worse incident than
+  the one this migration exists to abolish. A green parity verdict means
+  "every field the log carries matches", NOT "the log can rebuild the
+  board"; that limit must be stated wherever a green badge is shown.
+  THE REAL REMAINING WORK is taxonomy coverage, and it is Phase 3, not
+  Phase 4. Delivered 12.08: `table_restrictions_set` (ALLERGIES),
+  `table_service_state_set` (courseReady/kitchenSent/kitchenAlert/
+  kitchenArchived/pace), `table_notes_set` (notes + kitchenCourseNotes),
+  `seat_gender_set`. Parity compares all of them, and a missing
+  restriction OR a missing note is CONTENT-LOSS, never a tiebreak —
+  staff-typed work and allergy data are exactly what a wipe destroys.
+  STILL UNCOVERED at cancellation: seat `floorPositions` and
+  `pairingSharedWith`; and the reservation-derived metadata (`resTime`,
+  `guestType`, `room`, `rooms`, `lang`, `menuType`, `birthday`, `cakeNote`,
+  `reference`, `source`, `tableGroup`). The open design question this
+  raised (fold-carried vs reservation-derived) is WITHDRAWN with the
+  cancellation — it only ever existed to serve the flip. The gap is
+  harmless while the fold is diagnostics-only: parity simply does not
+  grade those fields, which is exactly the green-badge limitation the
+  STATUS banner states.
+- Remaining before the flip, AFTER coverage is complete: three real green nights (zero
   content-loss) and the two-week soak in Phase 4's own exit criteria. As of
   10.08 the Demo record holds three green verdicts, but all are small
   (3, 3, 19 facts) and none is a full service; the 104-fact three-device
@@ -200,11 +282,12 @@ over until the log has proven itself carrying the same facts in production.
   the log's canonical server order, or vice versa).
   (Adoption-aware dedup, the other prerequisite this list once named, was
   delivered 10.08 — see principle 7.)
-- The CAS, foldTable, echo suppression, mass-blank guard, and the shield
-  become dead code and are deleted — each deletion is its own PR with the
-  invariant list updated.
-- Exit: two full weeks of production on the log with zero shield firings and
-  zero divergence reports; then the card write path is removed.
+- ~~The CAS, foldTable, echo suppression, mass-blank guard, and the shield
+  become dead code and are deleted~~ — **VOID.** Per the cancellation these
+  defences are permanent; see the STATUS close-out.
+- ~~Exit: two full weeks of production on the log with zero shield firings
+  and zero divergence reports; then the card write path is removed.~~ —
+  **VOID** for the same reason.
 
 ### Phase gates
 No phase starts until the previous phase's exit criteria are met **on real
@@ -237,6 +320,7 @@ select t.table_id, k.key as course, k.value->>'firedAt' as fired_at
 |---|---|
 | kitchen | **course_fired**, **course_unfired** |
 | seating | **party_seated**, **party_unseated**, **party_resized**, **party_renamed**, **party_arrival_set** (a move surfaces as unseated+seated until gesture seams carry `party_moved` intent; a rename carries ONLY the new name, under the erasure-covered `resName` key — the old name lives in the prior seated/renamed fact) |
+| dietary | **table_restrictions_set** (snapshot of the table's restrictions; carries `resName` so the existing guest erasure — which matches `payload->>'resName'` and blanks `restrictions` in the same pass — covers it with no new erasure path). A restriction present on one side and gone on the other is classified CONTENT-LOSS, never a tiebreak: it is an allergy that stopped being visible. |
 | drinks | **seat_water_set**, **seat_pairing_set**, **seat_drinks_set** (snapshot: the seat's full per-category multiset; `added`/`removed` decorate the story), **table_bottles_set** (same, table-level), **extra_ordered/unordered**, **option_ordered/unordered**. Legacy delta facts `drink_added/removed`, `bottle_added/removed` (recorded 08–09.08) still fold. |
 | lifecycle (P3) | already event-shaped in `services`; folded into the same stream at P4 |
 
