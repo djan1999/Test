@@ -1,5 +1,6 @@
 -- Executable contract for the board history recorder, the worked-content
--- shield, and the time machine (migration 20260808230000).
+-- shield, and the time machine (migrations 20260808230000 and
+-- 20260813080000 — the latter moves the shield onto the table itself).
 -- Run with: supabase test db
 
 create extension if not exists pgtap with schema extensions;
@@ -177,6 +178,44 @@ select is(
 );
 
 reset role;
+
+-- ── the shield on the table itself (13.08 — no path around it) ───────────────
+-- A direct UPDATE that skeletons a worked row — no RPC, no attestation, and
+-- superuser privileges — is refused by the table trigger.
+select throws_ok(
+  $$update public.service_tables
+       set data = '{"active":false,"resName":"","seats":[]}'::jsonb, updated_at = now()
+     where service_id = '31000000-0000-0000-0000-000000000001' and table_id = 1$$,
+  '23514'::character(5),
+  null::text,
+  'a direct skeleton-over-worked UPDATE is refused by the table itself'
+);
+
+-- A worked-to-worked direct edit is not the wipe shape and passes.
+update public.service_tables
+   set data = jsonb_set(data, '{notes}', '"direct edit"'), updated_at = now()
+ where service_id = '31000000-0000-0000-0000-000000000001' and table_id = 1;
+select is(
+  (select data ->> 'notes' from public.service_tables
+    where service_id = '31000000-0000-0000-0000-000000000001' and table_id = 1),
+  'direct edit',
+  'a worked-to-worked direct update passes the table shield'
+);
+
+-- The voucher is single-use: arm one through the assert, spend it on a
+-- harmless write, and the very next wipe-shaped write is refused again.
+select private.assert_worked_content_shield(null, '{}'::jsonb, true, 1);
+update public.service_tables
+   set data = jsonb_set(data, '{notes}', '"vouched edit"'), updated_at = now()
+ where service_id = '31000000-0000-0000-0000-000000000001' and table_id = 1;
+select throws_ok(
+  $$update public.service_tables
+       set data = '{"active":false,"resName":"","seats":[]}'::jsonb, updated_at = now()
+     where service_id = '31000000-0000-0000-0000-000000000001' and table_id = 1$$,
+  '23514'::character(5),
+  null::text,
+  'the voucher is consumed by the write it examined — the next wipe-shaped write is refused'
+);
 
 -- A non-admin may not restore.
 set local role authenticated;
