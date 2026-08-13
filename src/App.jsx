@@ -5057,7 +5057,9 @@ export default function App() {
   const hProps = {
     appName: effectiveAppName,
     syncLabel, syncLive,
-    onOpenHealth: () => setHealthOpen(true),
+    // Device-health "?" beside the chip: OFF for now by owner choice (14.08).
+    // The readout, its verdicts and tests stay live — re-enable by passing
+    // onOpenHealth: () => setHealthOpen(true) here again.
     activeCount: active.length, reserved, seated,
     onExit: switchMode,
     onSummary: () => setSummaryOpen(true),
