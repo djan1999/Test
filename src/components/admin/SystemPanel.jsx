@@ -3,6 +3,7 @@ import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
 import { isUpdateReady, onUpdateReady, applyUpdate } from "../../lib/swUpdate.js";
 import { clearClientDiagnostics, readClientDiagnostics } from "../../lib/clientDiagnostics.js";
+import DeviceHealthCard from "../ui/DeviceHealthCard.jsx";
 
 // Baked in at build time (vite define) — "which version is this tablet
 // actually running" must be answerable from a phone screenshot.
@@ -35,6 +36,9 @@ export default function SystemPanel({
   onReadEventLog,
   onCheckLogParity,
   onRestoreToMoment,
+  serviceActive = true,
+  role = "",
+  workspaceSlug = "",
 }) {
   const safeProfiles = Array.isArray(layoutProfiles) ? layoutProfiles : [];
   const safeWineSyncConfig = wineSyncConfig || { wineCountries: [], beveragePages: [] };
@@ -203,6 +207,18 @@ export default function SystemPanel({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      {/* The support answer, first thing on the panel: what to say when the
+          restaurant phones mid-service. Everything below it is detail. */}
+      <DeviceHealthCard
+        powerSyncStatus={powerSync}
+        syncStatus={syncStatus}
+        serviceActive={serviceActive}
+        diagnostics={diagnostics}
+        buildId={BUILD_ID}
+        role={role}
+        workspaceSlug={workspaceSlug}
+      />
+
       {/* Test service — a full, live-feeling service that persists NOTHING */}
       {onStartTestService && (
         <div style={{ border: `1px solid ${tokens.signal.warn}`, borderRadius: 0, padding: "14px 16px", background: tokens.neutral[0] }}>

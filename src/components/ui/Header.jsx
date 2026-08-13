@@ -63,6 +63,9 @@ export default function Header({
   onInventory,
   onSyncAll,
   onEndService,
+  // Opens the device-health readout (the support answer). Optional: when
+  // absent the chip behaves exactly as it always has.
+  onOpenHealth = null,
   // Compact in-header view switch, rendered next to the logo. On the 720px
   // kitchen panel a separate toggle row cost a whole row of ticket space —
   // { options: [[key, label], …], active, onChange }.
@@ -234,6 +237,27 @@ export default function Header({
           }}
             onClick={onSyncAll ? handleSyncAll : undefined}
           >{syncText}</span>
+
+          {/* Health readout. Deliberately its own button rather than a second
+              meaning for the chip: on a Kitchen device the chip has no tap at
+              all, and this is the only route to the answer during service —
+              the Kitchen role cannot open Admin. */}
+          {onOpenHealth && (
+            <button
+              type="button"
+              onClick={onOpenHealth}
+              aria-label="Device health"
+              title="Device health"
+              style={{
+                fontFamily: FONT, fontSize: isMobile ? "10px" : "9px", letterSpacing: "0.12em",
+                padding: isMobile ? "12px 12px" : "7px 10px",
+                border: `${rule.hairline} solid ${ink[4]}`, borderRadius: 0,
+                background: neutral[0], color: ink[3], fontWeight: 500,
+                minHeight: isMobile ? 44 : undefined, cursor: "pointer",
+                touchAction: "manipulation",
+              }}
+            >?</button>
+          )}
 
           {showEndService && (
             <button onClick={onEndService} style={{
