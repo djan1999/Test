@@ -3054,7 +3054,22 @@ export default function App() {
   // service content; only templates blank/reserved tables and ghost-clears
   // departed reservations.
   const reconcileBoardWithReservations = (rows) => {
-    setTables(prev => reconcileTables(prev, rows, celebrationKeys));
+    // A table can look blank in THIS device's memory while the restaurant is
+    // mid-meal on it — a stale view waking up, a fresh join racing adoption
+    // (the 19.08 T8 wipe: the reconcile rebuilt a booking template over four
+    // hours of fires because its own view hadn't caught up). The last
+    // SERVER-CONFIRMED baseline knows better: any table whose confirmed row
+    // holds service content is off-limits to the reconcile, whatever the
+    // in-memory view says.
+    const protectedIds = new Set();
+    for (const [id, json] of confirmedTablesJsonRef.current || []) {
+      try {
+        if (json && tableHasServiceContent(JSON.parse(json), celebrationKeys)) {
+          protectedIds.add(Number(id));
+        }
+      } catch { /* unparseable baseline — it makes no claim */ }
+    }
+    setTables(prev => reconcileTables(prev, rows, celebrationKeys, protectedIds));
   };
 
   // Update a field in a reservation's data AND sync to service_tables so
