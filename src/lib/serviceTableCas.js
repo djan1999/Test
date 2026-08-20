@@ -35,6 +35,29 @@ export const hasWorkedContent = (t) => {
   });
 };
 
+// STAFF-entered work only — hasWorkedContent minus the `extras` branch. A
+// birthday booking's template seeds a celebration extra with ordered:true
+// straight from the reservation, so to hasWorkedContent a birthday TEMPLATE
+// already looks "worked" — which is exactly how the 19.08 T8 rebuild slipped
+// every guard: the shield never even classified it as a clear. Extras are the
+// only field the template can fake; everything here can only come from staff
+// gestures during service. Mirrored server-side as
+// private.board_row_has_staff_work — keep the two in lockstep.
+export const hasStaffEnteredWork = (t) => {
+  if (!t || typeof t !== "object") return false;
+  if (t.kitchenLog && Object.keys(t.kitchenLog).length > 0) return true;
+  if (Array.isArray(t.bottleWines) && t.bottleWines.length > 0) return true;
+  if (t.kitchenSent || t.courseReady) return true;
+  return (t.seats || []).some((s) => {
+    if (!s || typeof s !== "object") return false;
+    if (s.water && s.water !== "—") return true;
+    if (s.pairing && s.pairing !== "—") return true;
+    if ((s.aperitifs || []).length || (s.glasses || []).length || (s.cocktails || []).length
+        || (s.spirits || []).length || (s.beers || []).length) return true;
+    return Object.values(s.optionalPairings || {}).some((p) => p?.ordered);
+  });
+};
+
 const readServiceTable = async (client, workspaceId, serviceId, tableId) => {
   const { data, error } = await client
     .from("service_tables")
@@ -71,6 +94,33 @@ const foldServiceTable = ({ tableId, data, ancestor, current }) => {
     error.code = "MILKA_TABLE_CONFLICT";
     error.conflict = "unsynced-overwrite";
     throw error;
+  }
+
+  // 19.08 T8: a booking template rebuilt over a live worked table. The shape
+  // is unforgeable — the SAME party kept, flipped inactive, with all of its
+  // STAFF work stripped in one write. No real gesture produces it: the
+  // surgical unseat keeps the work, CLEAR TABLE removes the party, un-fires
+  // are incremental and leave the party seated. Only a stale device's
+  // reconcile racing adoption builds this row — and because that device's
+  // synced baseline held the work, the ancestor attests and every older
+  // guard passes. Judged with hasStaffEnteredWork on BOTH sides: a birthday
+  // booking's template seeds a celebration extra (ordered:true) straight
+  // from the reservation, so to hasWorkedContent that template already
+  // looks "worked" and the wipe never even reads as a clear — the exact
+  // disguise the 19.08 row wore. Refused OUTRIGHT, ancestor notwithstanding.
+  // (The Time Machine legitimately writes pre-arrival templates over worked
+  // rows; it does not travel through this fold.)
+  if (current && hasStaffEnteredWork(asObject(current.data)) && !hasStaffEnteredWork(mine)) {
+    const currName = String(asObject(current.data).resName || "").trim();
+    const mineName = String(mine.resName || "").trim();
+    if (mineName !== "" && mineName === currName && mine.active !== true) {
+      const error = new Error(
+        `Service table ${tableId} holds worked content for this same party; a rebuild that keeps the party but drops its work was refused and the server's table was kept.`,
+      );
+      error.code = "MILKA_TABLE_CONFLICT";
+      error.conflict = "template-over-worked";
+      throw error;
+    }
   }
 
   const folded = current

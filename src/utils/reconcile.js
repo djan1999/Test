@@ -17,9 +17,15 @@ const eq = (a, b) => JSON.stringify(sanitizeTable(a)) === JSON.stringify(sanitiz
  * @param {object[]} prevTables   current board tables
  * @param {object[]} reservationRows reservation rows ({ table_id, data }) for the active date+session
  * @param {string[]} celebrationKeys optional-extra keys seeded from the birthday flag
+ * @param {Set<number>|null} protectedIds tables whose SERVER-CONFIRMED baseline
+ *   holds service content. A table can look blank on THIS device while the
+ *   restaurant is mid-meal on it (a stale view waking up, a join racing
+ *   adoption — the 19.08 T8 wipe): the in-memory content check below cannot
+ *   see that, so the caller passes what the last synced baseline knew, and
+ *   those ids are never rebuilt or blanked here.
  * @returns the next tables array, or `prevTables` unchanged when nothing moved
  */
-export function reconcileTables(prevTables, reservationRows, celebrationKeys = []) {
+export function reconcileTables(prevTables, reservationRows, celebrationKeys = [], protectedIds = null) {
   // table id → the reservation that owns it (first claim wins)
   const byTable = new Map();
   for (const row of reservationRows || []) {
@@ -51,6 +57,7 @@ export function reconcileTables(prevTables, reservationRows, celebrationKeys = [
   let changed = false;
   const next = (prevTables || []).map((t) => {
     if (tableHasServiceContent(t, celebrationKeys)) return t; // live STAFF work is sacrosanct
+    if (protectedIds && protectedIds.has(Number(t.id))) return t; // the BASELINE knows work this view can't see
 
     const owner = byTable.get(t.id);
     if (owner && owner.group.length <= 1 && seatedGuests.has(resvKey(owner.d.resName, owner.d.resTime))) {
