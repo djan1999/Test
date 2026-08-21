@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import FloorMap from "./FloorMap.jsx";
+import FloorDock from "./FloorDock.jsx";
 import {
   getActiveDiningMap, getTerraceMap, terraceOccupancy, boardIdsOf,
   resolveReservationTable, floorStatusOf, mapTicker,
@@ -51,10 +52,13 @@ export default function FloorView({
   mapKind = null,
   floorMaps, floorStatus, reservations = [], tables = [],
   menuCourses = [], profiles = [], assignments = {},
+  optionalExtras = [], optionalPairings = [],
   onCycleStatus,
   onAssign, onClear, onMove,
   onSendSetToKitchen,
   onSwapSeats,
+  onOpenDetail,             // (boardId) → App raises the board's table sheet
+  upd,                      // (boardId, field, value|fn) — the dock's extras/alert writes
   isMobile,
 }) {
   const diningMap = getActiveDiningMap(floorMaps);
@@ -63,6 +67,7 @@ export default function FloorView({
 
   const [tabId, setTabId] = useState(null);
   const [sheetLabel, setSheetLabel] = useState(null);
+  const [dockLabel, setDockLabel] = useState(null); // the table the side dock follows (last tap)
   const [movingParty, setMovingParty] = useState(null); // terrace CHANGE TABLE: the reservation being re-seated
   const [toast, setToast] = useState(null);
 
@@ -71,7 +76,7 @@ export default function FloorView({
   // Leaving the map (App's toggle) must drop the open sheet / pending CHANGE
   // TABLE, exactly like the old tab switch did.
   useEffect(() => {
-    if (mapKind) { setSheetLabel(null); setMovingParty(null); }
+    if (mapKind) { setSheetLabel(null); setDockLabel(null); setMovingParty(null); }
   }, [mapKind]);
   if (!map) return null;
 
@@ -79,7 +84,7 @@ export default function FloorView({
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
   };
-  const switchTab = (id) => { setTabId(id); setSheetLabel(null); setMovingParty(null); };
+  const switchTab = (id) => { setTabId(id); setSheetLabel(null); setDockLabel(null); setMovingParty(null); };
 
   const progressOf = (boardTable) => {
     if (!boardTable) return "";
@@ -187,6 +192,9 @@ export default function FloorView({
             sub: diningLabelOf(r),
             allergy: restr.length > 0,
             strip,
+            // announced to the kitchen (SET on a kitchen ticket, the board
+            // sheet, or here) → amber ring, whatever surface pressed it
+            sent: alreadySent(bt),
           }
         : { status: "free", strip };
       if (restr.length) restrictionsByLabel[t.label] = restr;
@@ -210,9 +218,14 @@ export default function FloorView({
           pax: bt.guests || undefined, // ticker covers; not rendered
           allergy: restr.length > 0,
           strip,
-          // SET and already announced to the kitchen for its next course →
-          // amber ring, and excluded from the next SEND (no duplicate).
-          sent: strip === "SET" && alreadySent(bt),
+          // the table's course readout ("C3/7") rides the tile like the
+          // kitchen floor's — the same information wherever you look
+          sub: progressOf(bt),
+          // announced to the kitchen for its next course → amber ring. NOT
+          // gated on the strip: a SET pressed on the kitchen ticket or the
+          // board sheet writes courseReady only, and the floor must show it
+          // all the same. Announced tables stay excluded from the next SEND.
+          sent: alreadySent(bt),
         };
         const notes = seatNotesOf(bt, positionKey);
         if (notes) seatNotesByLabel[t.label] = notes;
@@ -305,6 +318,27 @@ export default function FloorView({
   const sheetTable = sheetLabel ? (map.tables || []).find((t) => t.label === sheetLabel) : null;
   const sheetParty = sheetTable && map.kind === "terrace" ? occ[sheetLabel] : null;
   const sheetBoard = sheetTable && map.kind !== "terrace" ? boardTableOf(sheetTable) : null;
+
+  // ── dock content — the last tapped table, resolved to its merge-primary
+  // board table exactly the way the tiles themselves resolve it ─────────────
+  const dockTable = dockLabel ? (map.tables || []).find((t) => t.label === dockLabel) : null;
+  const dockBoard = dockTable
+    ? (map.kind === "terrace" ? terracePartyBoardTable(occ[dockLabel]) : boardTableOf(dockTable))
+    : null;
+  const dockStrip = dockTable ? floorStatusOf(floorStatus, map.id, dockLabel) : null;
+  // same restriction source rule as the tiles: the board table, falling back
+  // to the reservation blob for terrace parties not templated onto a board
+  // table yet — the dock must never disagree with the chair it sits beside
+  const dockRestrictions = map.kind === "terrace"
+    ? ((dockBoard?.restrictions?.length ? dockBoard.restrictions : occ[dockLabel]?.data?.restrictions) || [])
+    : (dockBoard?.restrictions || []);
+  // announce THIS table — same double write as the terrace sheet's
+  // SET → KITCHEN: the kitchen banner plus the local strip (when not on yet)
+  const announceDock = onSendSetToKitchen && dockBoard ? () => {
+    onSendSetToKitchen([dockBoard.id]);
+    if (dockStrip !== "SET") onCycleStatus(map.id, dockLabel);
+    flash(`${dockLabel} SET → KITCHEN ✓`);
+  } : undefined;
 
   const sheetBody = () => {
     if (map.kind === "terrace") {
@@ -519,35 +553,64 @@ export default function FloorView({
         </div>
       ))}
 
-      <FloorMap
-        map={map}
-        mode="service"
-        tableState={tableState}
-        restrictionsByLabel={restrictionsByLabel}
-        // The label ▲ read as a dead button (per Djan) — the restriction CODE
-        // in red at the exact chair replaces it on the FOH floor too.
-        seatCodes
-        seatNotesByLabel={seatNotesByLabel}
-        seatGendersByLabel={seatGendersByLabel}
-        onSeatSwap={onSwapSeats ? swapSeatPositions : undefined}
-        showPartyLines={false}
-        height={isMobile ? 380 : 480}
-        onTableTap={(t) => {
-          // CHANGE TABLE in flight: the next FREE terrace table tap re-seats
-          // the party there.
-          if (movingParty && map.kind === "terrace") {
-            if (tableState[t.label]?.status === "occupied") { flash("Table occupied"); return; }
-            onAssign(movingParty, t.label);
-            flash(`${t.label} → ${(movingParty.data?.resName || "—").toUpperCase()}`);
-            setMovingParty(null);
-            return;
-          }
-          // Terrace tables carry actions → sheet; every dining table is one
-          // big SET toggle.
-          if (map.kind === "terrace") setSheetLabel(t.label);
-          else onCycleStatus(map.id, t.label);
-        }}
-      />
+      {/* map + dock: the dock lives in the gutter the capped map leaves
+          free (below the map on mobile) and follows the last tapped table */}
+      <div style={{
+        display: "flex", flexDirection: isMobile ? "column" : "row",
+        gap: 16, alignItems: isMobile ? "stretch" : "flex-start",
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <FloorMap
+            map={map}
+            mode="service"
+            tableState={tableState}
+            restrictionsByLabel={restrictionsByLabel}
+            // The label ▲ read as a dead button (per Djan) — the restriction CODE
+            // in red at the exact chair replaces it on the FOH floor too.
+            seatCodes
+            seatNotesByLabel={seatNotesByLabel}
+            seatGendersByLabel={seatGendersByLabel}
+            onSeatSwap={onSwapSeats ? swapSeatPositions : undefined}
+            showPartyLines={false}
+            serviceSelectedLabel={dockLabel}
+            height={isMobile ? 380 : 480}
+            onTableTap={(t) => {
+              // CHANGE TABLE in flight: the next FREE terrace table tap re-seats
+              // the party there.
+              if (movingParty && map.kind === "terrace") {
+                if (tableState[t.label]?.status === "occupied") { flash("Table occupied"); return; }
+                onAssign(movingParty, t.label);
+                flash(`${t.label} → ${(movingParty.data?.resName || "—").toUpperCase()}`);
+                setMovingParty(null);
+                return;
+              }
+              // The dock follows every tap; the tap itself keeps its meaning:
+              // terrace tables carry actions → sheet; every dining table is
+              // one big SET toggle (per Djan — unchanged).
+              setDockLabel(t.label);
+              if (map.kind === "terrace") setSheetLabel(t.label);
+              else onCycleStatus(map.id, t.label);
+            }}
+          />
+        </div>
+        <FloorDock
+          label={dockLabel}
+          mapKind={map.kind === "terrace" ? "terrace" : "dining"}
+          boardTable={dockBoard}
+          restrictions={dockRestrictions}
+          strip={dockStrip}
+          menuCourses={menuCourses}
+          profiles={profiles}
+          assignments={assignments}
+          optionalExtras={optionalExtras}
+          optionalPairings={optionalPairings}
+          onToggleStrip={dockLabel ? () => onCycleStatus(map.id, dockLabel) : undefined}
+          onAnnounce={announceDock}
+          onOpenDetail={onOpenDetail}
+          upd={upd}
+          isMobile={isMobile}
+        />
+      </div>
 
       {/* table sheet — fixed bottom, thumb-first */}
       {sheetTable && (

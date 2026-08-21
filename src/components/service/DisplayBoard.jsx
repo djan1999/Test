@@ -3,7 +3,7 @@ import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { tokens } from "../../styles/tokens.js";
 import { restrCompact, restrLabel } from "../../constants/dietary.js";
 import { PAIRINGS, waterStyle, extraPairingForSeat } from "../../constants/pairings.js";
-import { kitchenSnapshot, kitchenDelta } from "../../utils/kitchenAlerts.js";
+import { kitchenSnapshot, kitchenDelta, mergeKitchenAlert } from "../../utils/kitchenAlerts.js";
 import { groupDrinks, qtySuffix } from "../../utils/drinkQuantities.js";
 import {
   resolveAperitifFromQuickAccessOption,
@@ -708,13 +708,15 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                   // the confirm flow unused, every Send re-sent everything.)
                   const deltaSeats = kitchenDelta(kitchenCurrent, t.kitchenSent || {});
                   if (deltaSeats.length === 0) return;
-                  upd(t.id, "kitchenAlert", {
+                  // merge, never overwrite: an unconfirmed SET banner in the
+                  // slot must survive this Send (and vice versa)
+                  upd(t.id, "kitchenAlert", mergeKitchenAlert(t.kitchenAlert, {
                     timestamp: new Date().toISOString(),
                     tableName: t.resName || null,
                     seats: deltaSeats,
                     confirmed: false,
                     snapshot: kitchenCurrent,
-                  });
+                  }));
                   upd(t.id, "kitchenSent", kitchenCurrent);
                   // a Send to an archived ticket proves it's still live —
                   // bring it back next to its alert (Archive mis-taps)

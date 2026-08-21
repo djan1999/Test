@@ -65,6 +65,7 @@ import {
   closeVisit as closeVisitData,
 } from "./utils/terraceFlow.js";
 import { getVisibleCoursesForTable, getCourseProgressState, isStaleCourseReady } from "./utils/courseProgress.js";
+import { mergeKitchenAlert } from "./utils/kitchenAlerts.js";
 import { useIsMobile, BP } from "./hooks/useIsMobile.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
 import {
@@ -2619,13 +2620,16 @@ export default function App() {
       const ready = { key: nextFire.key, index: nextFire.index, name: nextFire.name, at: fmt(new Date()) };
       updMany(id, {
         courseReady: ready,
-        kitchenAlert: {
+        // merge, never overwrite: a pending unconfirmed order delta (cheese,
+        // pairings) must survive a SET landing on the same slot — the popup
+        // shows both together
+        kitchenAlert: mergeKitchenAlert(t.kitchenAlert, {
           timestamp: new Date().toISOString(),
           tableName: t.resName || null,
           seats: [],
           confirmed: false,
           course: ready,
-        },
+        }),
         // a SET to an archived ticket proves it's still live — bring it back
         // next to its alert (Archive mis-taps)
         ...(t.kitchenArchived ? { kitchenArchived: false } : {}),
@@ -5786,6 +5790,8 @@ export default function App() {
               menuCourses={activeMenuCourses}
               profiles={profilesState.profiles}
               assignments={profilesState.assignments}
+              optionalExtras={dishes}
+              optionalPairings={pairings}
               onCycleStatus={(mapId, label) => updateFloorStatus(fs => cycleFloorStatus(fs, mapId, label))}
               onUpdateFloorMaps={updateFloorMaps}
               onAssign={assignTerraceTable}
@@ -5793,6 +5799,9 @@ export default function App() {
               onMove={moveTerracePartyIn}
               onSwapSeats={swapSeats}
               onSendSetToKitchen={sendSetToKitchen}
+              // the dock's DETAILS → raises the same table sheet the board uses
+              onOpenDetail={id => setSel(id)}
+              upd={upd}
               isMobile={appIsMobile}
             />
           ) : (
