@@ -89,20 +89,23 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).toContain("WP");
   });
 
-  it("a dining table is one big SET toggle — tap calls the status handler, no sheet", () => {
-    const { container, handlers } = setup();
-    fireEvent.click(findTable(container, "T1")); // occupied dining body — no sheet, toggles
-    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T1");
-    expect(handlers.onCycleStatus).toHaveBeenCalledTimes(1);
+  it("a dining tap SELECTS only — no SET toggle, no sheet; the dock follows (per Djan, 21.08)", () => {
+    const { container, handlers, getByText } = setup();
+    fireEvent.click(findTable(container, "T1")); // occupied dining body
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled(); // peeking can't flip SET
+    expect(getByText("[TABLE DOCK]").parentElement.textContent).toContain("T1");
   });
 
-  it("every dining table is a SET toggle — none of them opens a sheet", () => {
+  it("a free dining table's tap selects too, and its dock still offers the hands-call SET", () => {
     // The one dining tap that used to open a sheet was an ARRIVING table's
     // MARK SEATED. That state is gone, so the dining map has no sheet at all.
-    const { container, handlers } = setup();
+    const { container, handlers, getByText } = setup();
     fireEvent.click(findTable(container, "T8"));
-    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T8");
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled();
     expect(container.textContent).not.toContain("MARK SEATED");
+    // marking an EMPTY table set (dressed/ready) stays possible — from the dock
+    fireEvent.click(within(getByText("[TABLE DOCK]").parentElement).getByText("SET"));
+    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T8");
   });
 
   it("terrace tab: occupied sheet shows waters by position (no name) + MOVE; free table assigns", () => {
@@ -243,7 +246,9 @@ describe("terrace SET → KITCHEN (same handshake as the dining room)", () => {
     });
     fireEvent.click(getByText("TERRACE"));
     fireEvent.click(findTable(container, "T25"));
-    fireEvent.click(getByText("UNSET"));
+    // the sheet's UNSET (the dock offers its own for the same leftover strip)
+    const sheet = getByText("✕").parentElement.parentElement;
+    fireEvent.click(within(sheet).getByText("UNSET"));
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T25");
   });
 });
@@ -364,16 +369,17 @@ describe("seat swap — drag a chair onto another chair of the same table", () =
     expect(onSwapSeats).not.toHaveBeenCalled();
   });
 
-  it("a plain tap on a chair still resolves as the table tap (SET toggle intact)", () => {
+  it("a plain tap on a chair still resolves as the table tap (dock focus intact)", () => {
     const onSwapSeats = vi.fn();
-    const { container, handlers } = setup({ onSwapSeats });
+    const { container, handlers, getByText } = setup({ onSwapSeats });
     mockBox(container);
     const seat = findTable(container, "T1").querySelector('[data-seat="0"]');
     fireEvent.pointerDown(seat, { clientX: 22, clientY: 50 });
     fireEvent.pointerUp(seat, { clientX: 22, clientY: 50 });
     fireEvent.click(seat); // bubbles to the table group
     expect(onSwapSeats).not.toHaveBeenCalled();
-    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T1");
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled(); // taps never toggle now
+    expect(getByText("[TABLE DOCK]").parentElement.textContent).toContain("T1");
   });
 });
 
@@ -457,11 +463,13 @@ describe("FOH table dock (quick access beside the map)", () => {
     t.id === 1 ? { ...t, kitchenLog: { amuse: { firedAt: "19:47" } } } : t);
   const dockOf = (getByText) => getByText("[TABLE DOCK]").parentElement;
 
-  it("a dining tap keeps toggling SET and focuses the dock on that table", () => {
+  it("a dining tap focuses the dock without touching SET; the dock's SET button toggles the strip", () => {
     const { container, handlers, getByText } = setup({ tables: withFired, menuCourses });
     expect(container.textContent).toContain("TAP A TABLE");
     fireEvent.click(findTable(container, "T1"));
-    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T1"); // tap model unchanged
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled(); // select-only tap
+    fireEvent.click(within(dockOf(getByText)).getByText("SET"));
+    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T1"); // hands call from the dock
     const dock = dockOf(getByText);
     expect(dock.textContent).toContain("[COURSE · C1/2]");
     expect(dock.textContent).toContain("C01 / Amuse");   // NOW — what's on the table

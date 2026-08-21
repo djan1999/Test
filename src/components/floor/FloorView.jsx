@@ -19,10 +19,12 @@ const FONT = tokens.font;
 // layout + terrace), a ticker strip, and the shared FloorMap renderer in
 // `service` mode.
 //
-// Tap model (per Djan): a DINING table is one big SET toggle. The board
-// stays the place for guest details; no quick-access sheet on the floor.
-// The exception that DOES open a sheet, because it carries actions the tap
-// can't mean: every terrace table (assign / MOVE / CHANGE / CLEAR, plus the
+// Tap model (per Djan, 21.08): a tap SELECTS — the dock beside the map
+// follows it and carries every action (SET strip, SET → KITCHEN, UNSET,
+// extras, DETAILS). The tap itself changes nothing, so peeking at a table
+// can never flip its SET by accident (the old tap-toggles-SET model).
+// The exception that DOES open a sheet, because it carries actions the dock
+// doesn't: every terrace table (assign / MOVE / CHANGE / CLEAR, plus the
 // party's waters by seat position + pairings — the runner's crib sheet).
 //
 // STRICTLY service — geometry editing is an admin concern and lives in the
@@ -496,7 +498,7 @@ export default function FloorView({
             SEND SET → KITCHEN ({sendableIds.length})
           </button>
         ) : (
-          <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → SET / UNSET · TERRACE → SHEET</span>
+          <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → DOCK · SET LIVES IN THE DOCK</span>
         )}
       </div>
 
@@ -584,12 +586,11 @@ export default function FloorView({
                 setMovingParty(null);
                 return;
               }
-              // The dock follows every tap; the tap itself keeps its meaning:
-              // terrace tables carry actions → sheet; every dining table is
-              // one big SET toggle (per Djan — unchanged).
+              // A tap SELECTS (per Djan, 21.08) — the dock follows it and
+              // holds the SET controls; terrace tables also raise their
+              // action sheet. Nothing toggles on the tap itself.
               setDockLabel(t.label);
               if (map.kind === "terrace") setSheetLabel(t.label);
-              else onCycleStatus(map.id, t.label);
             }}
           />
         </div>

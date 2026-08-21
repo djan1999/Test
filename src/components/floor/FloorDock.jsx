@@ -159,8 +159,19 @@ export default function FloorDock({
       </div>
 
       {!live ? (
-        <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.10em", textTransform: "uppercase", color: tokens.ink[3], padding: "14px" }}>
-          {mapKind === "terrace" ? "NO PARTY ON THIS TABLE" : "NOT SEATED — THE BOARD SEATS TABLES"}
+        <div>
+          <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.10em", textTransform: "uppercase", color: tokens.ink[3], padding: "14px" }}>
+            {mapKind === "terrace" ? "NO PARTY ON THIS TABLE" : "NOT SEATED — THE BOARD SEATS TABLES"}
+          </div>
+          {/* the hands-call strip works on empty tables too (table dressed /
+              ready), and a leftover terrace strip must stay un-settable */}
+          {onToggleStrip && (mapKind === "dining" || strip === "SET") && (
+            <div style={{ padding: "0 14px 12px" }}>
+              <button onClick={() => onToggleStrip()} style={{ ...actionBtn(false, false), display: "block", width: "100%", textAlign: "center", fontWeight: 700 }}>
+                {strip === "SET" ? "UNSET" : "SET"}
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <>
@@ -328,11 +339,15 @@ export default function FloorDock({
               </button>
             )}
             <div style={{ display: "flex", gap: 0 }}>
-              {strip === "SET" && onToggleStrip && (
-                <button onClick={() => onToggleStrip()} style={{ ...actionBtn(false, false), flex: 1, textAlign: "center" }}>UNSET</button>
+              {onToggleStrip && (
+                // the hands-call strip toggle — since a tap only selects,
+                // this button IS how a table gets marked set on the floor
+                <button onClick={() => onToggleStrip()} style={{ ...actionBtn(false, false), flex: 1, textAlign: "center", fontWeight: 700 }}>
+                  {strip === "SET" ? "UNSET" : "SET"}
+                </button>
               )}
               {onOpenDetail && bt && (
-                <button onClick={() => onOpenDetail(bt.id)} style={{ ...actionBtn(false, false), flex: 1, textAlign: "center", marginLeft: strip === "SET" && onToggleStrip ? -1 : 0 }}>DETAILS →</button>
+                <button onClick={() => onOpenDetail(bt.id)} style={{ ...actionBtn(false, false), flex: 1, textAlign: "center", marginLeft: onToggleStrip ? -1 : 0 }}>DETAILS →</button>
               )}
             </div>
           </div>
