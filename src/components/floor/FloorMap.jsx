@@ -200,6 +200,9 @@ export default function FloorMap({
                             // chairs stay red-filled with the gender outline)
   seatPositionLabels = false, // chairs render as little P1/P2 blocks so the
                             // kitchen reads positions off the map directly
+  serviceSelectedLabel = null, // service mode: the table the FOH dock follows
+                            // — dashed focus outline; default off so the
+                            // picker/kitchen/editor consumers are untouched
   seatLabelsByLabel = {},   // { [label]: { [chairNo]: guestNo } } — keeps
                             // guest labels stable when P2 sits at chair 6
   onSeatSwap,               // (label, fromNo, toNo) — service mode: drag a
@@ -476,6 +479,7 @@ export default function FloorMap({
         const pickable = mode === "picker" ? st.selectable !== false && !occupied : false;
         const seatEditing = mode === "seats" && seatsEditLabel === t.label;
         const selected = editing && selectedLabel === t.label;
+        const dockFocused = mode === "service" && serviceSelectedLabel === t.label;
         const dimmed = (mode === "picker" && !pickable) || (mode === "seats" && seatsEditLabel && !seatEditing);
 
         // Seated tables read SOLID green with white type — the old pale-green
@@ -529,6 +533,10 @@ export default function FloorMap({
             {sent && (
               <TableShape t={{ ...t, x: t.x - 1.1, y: t.y - 1.1, w: t.w + 2.2, h: t.h + 2.2 }}
                 fill="none" stroke={tokens.signal.warn} strokeWidth={0.7} />
+            )}
+            {dockFocused && (
+              <TableShape t={{ ...t, x: t.x - 2, y: t.y - 2, w: t.w + 4, h: t.h + 4 }}
+                fill="none" stroke={tokens.ink[0]} strokeWidth={0.4} dash="1.6 1.2" />
             )}
             {selected && (
               <>
