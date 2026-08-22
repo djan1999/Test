@@ -5791,6 +5791,14 @@ export default function App() {
               assignments={profilesState.assignments}
               optionalExtras={dishes}
               optionalPairings={pairings}
+              // the chair-tap quick-access panel is the SAME card board mode
+              // expands — same catalogs, same writes
+              aperitifOptions={serviceAperitifOptions}
+              wines={wines}
+              cocktails={cocktails}
+              spirits={spirits}
+              beers={beers}
+              updSeat={updSeat}
               onCycleStatus={(mapId, label) => updateFloorStatus(fs => cycleFloorStatus(fs, mapId, label))}
               onUpdateFloorMaps={updateFloorMaps}
               onAssign={assignTerraceTable}
