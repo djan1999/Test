@@ -8,6 +8,7 @@ import {
   resolveReservationTable, floorStatusOf, mapTicker,
 } from "../../utils/floorMaps.js";
 import { visitStateOf } from "../../utils/terraceFlow.js";
+import useIsFullscreen from "../../hooks/useIsFullscreen.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 import {
   floorPositionKey, seatFloorPosition, restrictionsAtFloorPositions,
@@ -74,16 +75,19 @@ export default function FloorView({
 
   const [tabId, setTabId] = useState(null);
   const [dockLabel, setDockLabel] = useState(null); // the table the side dock follows (last tap)
-  const [quickOpen, setQuickOpen] = useState(false); // chair tap → the board's quick-access card
+  const [dockSeatNo, setDockSeatNo] = useState(null); // chair tap → that ONE seat's quick access, in the dock column
   const [movingParty, setMovingParty] = useState(null); // terrace CHANGE TABLE: the reservation being re-seated
   const [toast, setToast] = useState(null);
+  // Fullscreen (the gate toggle / F11 / the PWA's fullscreen display mode):
+  // the extra pixels go to the map and the dock, not to margins.
+  const isFullscreen = useIsFullscreen();
 
   const forcedMap = mapKind === "terrace" ? terraceMap : mapKind === "dining" ? diningMap : null;
   const map = forcedMap || tabs.find((m) => m.id === tabId) || tabs[0];
   // Leaving the map (App's toggle) must drop the dock focus / quick panel /
   // pending CHANGE TABLE, exactly like the old tab switch did.
   useEffect(() => {
-    if (mapKind) { setDockLabel(null); setQuickOpen(false); setMovingParty(null); }
+    if (mapKind) { setDockLabel(null); setDockSeatNo(null); setMovingParty(null); }
   }, [mapKind]);
   if (!map) return null;
 
@@ -91,7 +95,7 @@ export default function FloorView({
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
   };
-  const switchTab = (id) => { setTabId(id); setDockLabel(null); setQuickOpen(false); setMovingParty(null); };
+  const switchTab = (id) => { setTabId(id); setDockLabel(null); setDockSeatNo(null); setMovingParty(null); };
 
   const progressOf = (boardTable) => {
     if (!boardTable) return "";
@@ -335,6 +339,14 @@ export default function FloorView({
   const dockRestrictions = map.kind === "terrace"
     ? ((dockBoard?.restrictions?.length ? dockBoard.restrictions : dockParty?.data?.restrictions) || [])
     : (dockBoard?.restrictions || []);
+  // chair tap → the guest at that floor position; resolved with the same
+  // per-map mapping the swap drags use, so the panel can never show the
+  // wrong person after a seat swap
+  const dockSeat = dockSeatNo != null && dockBoard
+    ? (dockBoard.seats || []).find(
+        (s) => seatFloorPosition(s, floorPositionKey(map.id, dockLabel)) === Number(dockSeatNo),
+      ) || null
+    : null;
   // announce THIS table — the kitchen banner plus the local strip (when not
   // on yet); the dock is the ONE surface for it on both floors
   const announceDock = onSendSetToKitchen && dockBoard ? () => {
@@ -354,9 +366,9 @@ export default function FloorView({
   // sheet made every terrace tap two pop-ups).
   const partyActions = map.kind === "terrace" && dockParty ? {
     moveLabel: diningLabelOf(dockParty),
-    onMoveIn: onMove ? () => { onMove(dockParty); setDockLabel(null); setQuickOpen(false); } : undefined,
+    onMoveIn: onMove ? () => { onMove(dockParty); setDockLabel(null); setDockSeatNo(null); } : undefined,
     onChangeTable: () => setMovingParty(dockParty),
-    onClear: onClear ? () => { onClear(dockParty); setDockLabel(null); setQuickOpen(false); } : undefined,
+    onClear: onClear ? () => { onClear(dockParty); setDockLabel(null); setDockSeatNo(null); } : undefined,
   } : null;
   // Free terrace table → the assign picker, also in the dock.
   const assignOptions = map.kind === "terrace" && dockTable && !dockParty && onAssign
@@ -516,90 +528,88 @@ export default function FloorView({
             onSeatSwap={onSwapSeats ? swapSeatPositions : undefined}
             showPartyLines={false}
             serviceSelectedLabel={dockLabel}
-            // a chair tap opens the board's QUICK ACCESS card for the table
-            // (per Djan, 22.08) — the same editor as board mode, in a side
-            // panel; it does not bubble to the table tap
-            onServiceSeatTap={(label) => {
+            serviceSelectedSeat={dockSeatNo != null && dockLabel ? { label: dockLabel, no: dockSeatNo } : null}
+            // a chair tap swaps the dock column to that ONE seat's quick
+            // access (per Djan, 22.08) — the same editor as board mode,
+            // scoped to the tapped position; it does not bubble to the
+            // table tap
+            onServiceSeatTap={(label, no) => {
               if (resolveMovingTap(label)) return;
               setDockLabel(label);
-              setQuickOpen(true);
+              setDockSeatNo(Number(no));
             }}
-            // 560 on desktop (22.08): the slimmer dock gives the map the
-            // gutter back — ~610px wide instead of ~522
-            height={isMobile ? 380 : 560}
+            // fullscreen owns more pixels — the map takes them (22.08)
+            height={isMobile ? 380 : isFullscreen ? 680 : 560}
             onTableTap={(t) => {
               // CHANGE TABLE in flight: the tap lands the party (free) or
               // swaps the two parties (occupied).
               if (resolveMovingTap(t.label)) return;
               // A tap SELECTS (per Djan, 21.08) — the dock follows it and
               // holds every action, terrace party actions included. Nothing
-              // toggles on the tap itself.
+              // toggles on the tap itself; a table tap also returns the
+              // column from a seat's quick access to the table dock.
               setDockLabel(t.label);
-              setQuickOpen(false);
+              setDockSeatNo(null);
             }}
           />
         </div>
-        <FloorDock
-          label={dockLabel}
-          mapKind={map.kind === "terrace" ? "terrace" : "dining"}
-          boardTable={dockBoard}
-          restrictions={dockRestrictions}
-          strip={dockStrip}
-          menuCourses={menuCourses}
-          profiles={profiles}
-          assignments={assignments}
-          optionalExtras={optionalExtras}
-          optionalPairings={optionalPairings}
-          onToggleStrip={dockLabel ? () => onCycleStatus(map.id, dockLabel) : undefined}
-          onAnnounce={announceDock}
-          onUnannounce={unannounceDock}
-          onOpenDetail={onOpenDetail}
-          partyActions={partyActions}
-          assignOptions={assignOptions}
-          upd={upd}
-          isMobile={isMobile}
-        />
-      </div>
-
-      {/* quick access — the SAME card board mode expands, in a side panel;
-          raised by a chair tap, closed by scrim / ✕ / a table tap */}
-      {quickOpen && dockBoard && (
-        <>
-          <div onClick={() => setQuickOpen(false)}
-            style={{ position: "fixed", inset: 0, background: tokens.surface.overlay, zIndex: 40 }} />
-          <div style={{
-            position: "fixed", top: 0, right: 0, bottom: 0, zIndex: 50,
-            width: isMobile ? "100%" : 420, background: tokens.ink.bg,
-            borderLeft: `1px solid ${tokens.ink[4]}`, overflowY: "auto",
-            padding: isMobile ? "10px 10px 24px" : "12px 12px 28px",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.16em", textTransform: "uppercase", color: tokens.ink[3] }}>
-                [QUICK ACCESS · {dockLabel}]
-              </span>
-              <span style={{ flex: 1 }} />
-              <button onClick={() => setQuickOpen(false)} aria-label="Close quick access"
-                style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, border: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0], color: tokens.ink[2], width: 32, height: 32, cursor: "pointer", borderRadius: 0, touchAction: "manipulation" }}>
-                ✕
-              </button>
+        {/* the dock column — a chair tap swaps it to that ONE seat's quick
+            access (the real board editor, scoped by onlySeatId); a table
+            tap or ✕ brings the table dock back. Fullscreen widens it. */}
+        <div style={{ width: isMobile ? "100%" : isFullscreen ? 330 : 260, flexShrink: 0 }}>
+          {dockSeat && dockBoard ? (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.16em", textTransform: "uppercase", color: tokens.ink[3] }}>
+                  [QUICK ACCESS · {dockLabel} · P{dockSeat.id}]
+                </span>
+                <span style={{ flex: 1 }} />
+                <button onClick={() => setDockSeatNo(null)} aria-label="Back to table dock"
+                  style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, border: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0], color: tokens.ink[2], width: 26, height: 26, cursor: "pointer", borderRadius: 0, touchAction: "manipulation" }}>
+                  ✕
+                </button>
+              </div>
+              <DisplayBoardCard
+                t={dockBoard}
+                quickMode
+                onlySeatId={dockSeat.id}
+                upd={upd}
+                updSeat={updSeat}
+                onOpenDetail={onOpenDetail}
+                optionalExtras={optionalExtras}
+                optionalPairings={optionalPairings}
+                aperitifOptions={aperitifOptions}
+                wines={wines}
+                cocktails={cocktails}
+                spirits={spirits}
+                beers={beers}
+              />
             </div>
-            <DisplayBoardCard
-              t={dockBoard}
-              quickMode
-              upd={upd}
-              updSeat={updSeat}
-              onOpenDetail={onOpenDetail}
+          ) : (
+            <FloorDock
+              label={dockLabel}
+              mapKind={map.kind === "terrace" ? "terrace" : "dining"}
+              boardTable={dockBoard}
+              restrictions={dockRestrictions}
+              strip={dockStrip}
+              menuCourses={menuCourses}
+              profiles={profiles}
+              assignments={assignments}
               optionalExtras={optionalExtras}
               optionalPairings={optionalPairings}
-              aperitifOptions={aperitifOptions}
-              wines={wines}
-              cocktails={cocktails}
-              spirits={spirits}
-              beers={beers}
+              onToggleStrip={dockLabel ? () => onCycleStatus(map.id, dockLabel) : undefined}
+              onAnnounce={announceDock}
+              onUnannounce={unannounceDock}
+              onOpenDetail={onOpenDetail}
+              partyActions={partyActions}
+              assignOptions={assignOptions}
+              upd={upd}
+              isMobile={isMobile}
+              wide={isFullscreen && !isMobile}
             />
-          </div>
-        </>
-      )}
+          )}
+        </div>
+      </div>
     </div>
   );
 }

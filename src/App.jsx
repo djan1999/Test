@@ -67,6 +67,7 @@ import {
 import { getVisibleCoursesForTable, getCourseProgressState, isStaleCourseReady } from "./utils/courseProgress.js";
 import { mergeKitchenAlert } from "./utils/kitchenAlerts.js";
 import { useIsMobile, BP } from "./hooks/useIsMobile.js";
+import useIsFullscreen from "./hooks/useIsFullscreen.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
 import {
   DEFAULT_RESTRICTIONS,
@@ -321,6 +322,9 @@ export default function App() {
   const localBev = readLocalBeverages();
   const loadMenuCoursesRef = useRef(null);
   const appIsMobile = useIsMobile(BP.md);
+  // Fullscreen (gate toggle / F11 / the PWA's fullscreen display mode): the
+  // service column widens so the extra pixels reach the floor and board.
+  const appIsFullscreen = useIsFullscreen();
   const [restaurantConfig, setRestaurantConfig] = useState(DEFAULT_RESTAURANT_CONFIG);
   const restaurantConfigRef = useRef(restaurantConfig);
   restaurantConfigRef.current = restaurantConfig;
@@ -5674,7 +5678,7 @@ export default function App() {
       {/* The board is ALWAYS mounted. Opening a table raises a side sheet over
           it — nothing navigates away, so the room stays readable (and live)
           behind the scrim while one table is worked. */}
-      <div style={{ padding: appIsMobile ? "0 0 32px" : "0 0 48px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
+      <div style={{ padding: appIsMobile ? "0 0 32px" : "0 0 48px", maxWidth: appIsFullscreen ? 1440 : 1100, margin: "0 auto", overflowX: "hidden" }}>
           {/* [SERVICE READOUT] strip — stats + Quick Access toggle */}
           <div style={{
             borderBottom: `1px solid ${tokens.ink[4]}`,
