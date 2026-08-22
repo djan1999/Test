@@ -67,7 +67,7 @@ import {
 import { getVisibleCoursesForTable, getCourseProgressState, isStaleCourseReady } from "./utils/courseProgress.js";
 import { mergeKitchenAlert } from "./utils/kitchenAlerts.js";
 import { useIsMobile, BP } from "./hooks/useIsMobile.js";
-import useIsFullscreen from "./hooks/useIsFullscreen.js";
+import { useFullscreenBoost } from "./hooks/useIsFullscreen.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
 import {
   DEFAULT_RESTRICTIONS,
@@ -322,9 +322,11 @@ export default function App() {
   const localBev = readLocalBeverages();
   const loadMenuCoursesRef = useRef(null);
   const appIsMobile = useIsMobile(BP.md);
-  // Fullscreen (gate toggle / F11 / the PWA's fullscreen display mode): the
-  // service column widens so the extra pixels reach the floor and board.
-  const appIsFullscreen = useIsFullscreen();
+  // Fullscreen on a laptop-sized screen (gate toggle / F11 / the PWA's
+  // fullscreen display mode): the service column widens so the extra pixels
+  // reach the floor and board. Space-gated — the tablet PWA is always
+  // "fullscreen" but has no extra pixels to widen into (22.08).
+  const appIsFullscreen = useFullscreenBoost();
   const [restaurantConfig, setRestaurantConfig] = useState(DEFAULT_RESTAURANT_CONFIG);
   const restaurantConfigRef = useRef(restaurantConfig);
   restaurantConfigRef.current = restaurantConfig;

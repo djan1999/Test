@@ -8,7 +8,7 @@ import {
   resolveReservationTable, floorStatusOf, mapTicker,
 } from "../../utils/floorMaps.js";
 import { visitStateOf } from "../../utils/terraceFlow.js";
-import useIsFullscreen from "../../hooks/useIsFullscreen.js";
+import { useFullscreenBoost } from "../../hooks/useIsFullscreen.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 import {
   floorPositionKey, seatFloorPosition, restrictionsAtFloorPositions,
@@ -77,9 +77,11 @@ export default function FloorView({
   const [dockLabel, setDockLabel] = useState(null); // the table the side dock follows (last tap)
   const [dockSeatNo, setDockSeatNo] = useState(null); // chair tap → that ONE seat's quick access, in the dock column
   const [movingParty, setMovingParty] = useState(null); // terrace CHANGE TABLE: the reservation being re-seated
-  // Fullscreen (the gate toggle / F11 / the PWA's fullscreen display mode):
-  // the extra pixels go to the map and the dock, not to margins.
-  const isFullscreen = useIsFullscreen();
+  // Fullscreen WITH a laptop-sized screen behind it (the gate toggle / F11 /
+  // the PWA's fullscreen display mode): the extra pixels go to the map and
+  // the dock, not to margins. Space-gated, not flag-gated — the tablet PWA is
+  // always "fullscreen" but has no extra pixels to hand out (22.08).
+  const isFullscreen = useFullscreenBoost();
 
   const forcedMap = mapKind === "terrace" ? terraceMap : mapKind === "dining" ? diningMap : null;
   const map = forcedMap || tabs.find((m) => m.id === tabId) || tabs[0];
