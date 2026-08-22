@@ -96,16 +96,16 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(getByText("[TABLE DOCK]").parentElement.textContent).toContain("T1");
   });
 
-  it("a free dining table's tap selects too, and its dock still offers the hands-call SET", () => {
+  it("a free dining table's tap selects too — no set control on an empty table (22.08)", () => {
     // The one dining tap that used to open a sheet was an ARRIVING table's
     // MARK SEATED. That state is gone, so the dining map has no sheet at all.
     const { container, handlers, getByText } = setup();
     fireEvent.click(findTable(container, "T8"));
     expect(handlers.onCycleStatus).not.toHaveBeenCalled();
     expect(container.textContent).not.toContain("MARK SEATED");
-    // marking an EMPTY table set (dressed/ready) stays possible — from the dock
-    fireEvent.click(within(getByText("[TABLE DOCK]").parentElement).getByText("SET"));
-    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T8");
+    const dock = getByText("[TABLE DOCK]").parentElement;
+    expect(dock.textContent).toContain("NOT SEATED");
+    expect(within(dock).queryByText("SET")).toBeNull(); // the old strip SET is gone
   });
 
   it("terrace tab: occupied sheet shows waters by position (no name) + MOVE; free table assigns", () => {
@@ -463,21 +463,20 @@ describe("FOH table dock (quick access beside the map)", () => {
     t.id === 1 ? { ...t, kitchenLog: { amuse: { firedAt: "19:47" } } } : t);
   const dockOf = (getByText) => getByText("[TABLE DOCK]").parentElement;
 
-  it("a dining tap focuses the dock without touching SET; the dock's SET button toggles the strip", () => {
+  it("a dining tap focuses the dock: course readout, restriction tags, no drink rows, no names", () => {
     const { container, handlers, getByText } = setup({ tables: withFired, menuCourses });
     expect(container.textContent).toContain("TAP A TABLE");
     fireEvent.click(findTable(container, "T1"));
     expect(handlers.onCycleStatus).not.toHaveBeenCalled(); // select-only tap
-    fireEvent.click(within(dockOf(getByText)).getByText("SET"));
-    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T1"); // hands call from the dock
     const dock = dockOf(getByText);
     expect(dock.textContent).toContain("[COURSE · C1/2]");
     expect(dock.textContent).toContain("C01 / Amuse");   // NOW — what's on the table
     expect(dock.textContent).toContain("19:47");
     expect(dock.textContent).toContain("C02 / Brioche"); // NEXT
-    // seats travel with their restriction codes; names never reach the floor
-    expect(dock.textContent).toContain("P1");
+    // restriction tags stay; the per-seat drink rows are gone (the map's
+    // chair pills carry those — per Djan, 22.08), and names never reach the floor
     expect(dock.textContent).toContain("[SHF]");
+    expect(dock.textContent).not.toContain("[SEATS]");
     expect(dock.textContent).not.toContain("NOVAK");
   });
 
@@ -493,24 +492,29 @@ describe("FOH table dock (quick access beside the map)", () => {
     expect(findTable(container, "T1").querySelector('[stroke="#c49a4a"]')).toBeTruthy();
   });
 
-  it("dock SET → KITCHEN announces this table and turns its strip on", () => {
+  it("the ONE set button names the dish it announces, and turns the strip on", () => {
     const onSend = vi.fn();
     const { container, handlers, getByText } = setup({ tables: withFired, menuCourses, onSendSetToKitchen: onSend });
     fireEvent.click(findTable(container, "T1"));
     handlers.onCycleStatus.mockClear();
-    fireEvent.click(within(dockOf(getByText)).getByText("SET → KITCHEN"));
+    fireEvent.click(within(dockOf(getByText)).getByText(/SET → KITCHEN · Brioche/));
     expect(onSend).toHaveBeenCalledWith([1]);
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T1");
   });
 
-  it("an announced table's dock shows ANNOUNCED and refuses a re-send", () => {
+  it("once announced the button flips to UNSET — it clears the banner, never re-sends", () => {
     const announced = withFired.map((t) =>
       t.id === 1 ? { ...t, courseReady: { key: "brioche", index: 2, name: "Brioche" } } : t);
     const onSend = vi.fn();
-    const { container, getByText } = setup({ tables: announced, menuCourses, onSendSetToKitchen: onSend });
+    const onUnsetKitchen = vi.fn();
+    const { container, getByText, queryByText } = setup({
+      tables: announced, menuCourses, onSendSetToKitchen: onSend, onUnsetKitchen,
+    });
     fireEvent.click(findTable(container, "T1"));
-    const btn = within(dockOf(getByText)).getByText(/ANNOUNCED ✓ C02/);
-    fireEvent.click(btn);
+    const dock = dockOf(getByText);
+    expect(within(dock).queryByText(/SET → KITCHEN/)).toBeNull(); // no second set press
+    fireEvent.click(within(dock).getByText(/UNSET · Brioche/));
+    expect(onUnsetKitchen).toHaveBeenCalledWith(1);
     expect(onSend).not.toHaveBeenCalled();
   });
 

@@ -5801,6 +5801,8 @@ export default function App() {
               onSendSetToKitchen={sendSetToKitchen}
               // the dock's DETAILS → raises the same table sheet the board uses
               onOpenDetail={id => setSel(id)}
+              // the dock's UNSET mirrors the sheet's (App.jsx onUnsetKitchen)
+              onUnsetKitchen={id => upd(id, "courseReady", null)}
               upd={upd}
               isMobile={appIsMobile}
             />
