@@ -37,7 +37,10 @@ export default defineConfig({
         short_name: 'Service Board',
         description: 'Restaurant service & kitchen management',
         start_url: '/',
-        display: 'standalone',
+        // 'fullscreen' hides the status/title bar on the Android tablets;
+        // desktop Chrome ignores it and falls back down the display chain to
+        // standalone — there the gate screen's FULLSCREEN toggle covers it.
+        display: 'fullscreen',
         background_color: '#ffffff',
         theme_color: '#ffffff',
         orientation: 'any',

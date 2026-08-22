@@ -5364,7 +5364,6 @@ export default function App() {
 
   if (!renderMode) return <>{serviceDatePickerEl}{sandboxBannerEl}<LoginScreen
       onEnter={m => { if (canAccessMode(currentRole, m)) { changeMode(m); setSel(null); } }}
-      onSyncAll={canAdmin && canRunCatalogSync ? syncWines : undefined}
       role={currentRole}
       canAdmin={canAdmin}
       appName={effectiveAppName}
