@@ -28,3 +28,26 @@ export default function useIsFullscreen() {
   }, []);
   return fs;
 }
+
+// The fullscreen SCALE-UP is gated on the screen actually having the pixels,
+// not on the flag alone: the installed PWA runs in fullscreen display-mode
+// permanently, so on a tablet the flag is always true and the flag-only gate
+// handed a ~1280×800 slab the laptop-sized layout (too big — per Djan,
+// 22.08). The thresholds are the boosted layout's real needs: the 680px map
+// plus the app chrome wants ~860 rows, and 1360 columns is the first width
+// that is a laptop and not a tablet. Below them fullscreen keeps the normal
+// (already-fitting) desktop sizes.
+const hasRoom = () => typeof window !== "undefined"
+  && window.innerWidth >= 1360 && window.innerHeight >= 860;
+
+export function useFullscreenBoost() {
+  const fs = useIsFullscreen();
+  const [roomy, setRoomy] = useState(hasRoom);
+  useEffect(() => {
+    const on = () => setRoomy(hasRoom());
+    on();
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  return fs && roomy;
+}
